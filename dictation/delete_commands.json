@@ -1,0 +1,92 @@
+{
+  "en": {
+    "szusi": "buffer",
+    "sushi": "buffer",
+    "vegeta": "ctrl_backspace",
+    "vejita": "ctrl_backspace",
+    "goku": "ctrl_alt_backspace"
+  },
+  "hu": {
+    "szusi": "buffer",
+    "szushi": "buffer",
+    "sushi": "buffer",
+    "vedzsita": "ctrl_backspace",
+    "vegita": "ctrl_backspace",
+    "vegeta": "ctrl_backspace",
+    "goku": "ctrl_alt_backspace",
+    "gokú": "ctrl_alt_backspace"
+  },
+  "de": {
+    "szusi": "buffer",
+    "sushi": "buffer",
+    "vegeta": "ctrl_backspace",
+    "wegeta": "ctrl_backspace",
+    "goku": "ctrl_alt_backspace"
+  },
+  "fr": {
+    "szusi": "buffer",
+    "sushi": "buffer",
+    "vegeta": "ctrl_backspace",
+    "végéta": "ctrl_backspace",
+    "goku": "ctrl_alt_backspace"
+  },
+  "es": {
+    "szusi": "buffer",
+    "sushi": "buffer",
+    "vegeta": "ctrl_backspace",
+    "beyita": "ctrl_backspace",
+    "goku": "ctrl_alt_backspace"
+  },
+  "it": {
+    "szusi": "buffer",
+    "sushi": "buffer",
+    "vegeta": "ctrl_backspace",
+    "vegita": "ctrl_backspace",
+    "goku": "ctrl_alt_backspace"
+  },
+  "pt": {
+    "szusi": "buffer",
+    "sushi": "buffer",
+    "vegeta": "ctrl_backspace",
+    "vejita": "ctrl_backspace",
+    "goku": "ctrl_alt_backspace"
+  },
+  "ru": {
+    "szusi": "buffer",
+    "sushi": "buffer",
+    "суши": "buffer",
+    "vegeta": "ctrl_backspace",
+    "вегета": "ctrl_backspace",
+    "goku": "ctrl_alt_backspace",
+    "гоку": "ctrl_alt_backspace"
+  },
+  "zh": {
+    "szusi": "buffer",
+    "sushi": "buffer",
+    "寿司": "buffer",
+    "vegeta": "ctrl_backspace",
+    "贝吉塔": "ctrl_backspace",
+    "goku": "ctrl_alt_backspace",
+    "悟空": "ctrl_alt_backspace"
+  },
+  "ja": {
+    "szusi": "buffer",
+    "sushi": "buffer",
+    "すし": "buffer",
+    "寿司": "buffer",
+    "vegeta": "ctrl_backspace",
+    "ベジータ": "ctrl_backspace",
+    "goku": "ctrl_alt_backspace",
+    "ゴクウ": "ctrl_alt_backspace",
+    "悟空": "ctrl_alt_backspace"
+  },
+  "ko": {
+    "szusi": "buffer",
+    "sushi": "buffer",
+    "스시": "buffer",
+    "vegeta": "ctrl_backspace",
+    "베지터": "ctrl_backspace",
+    "goku": "ctrl_alt_backspace",
+    "고쿠": "ctrl_alt_backspace"
+  }
+}

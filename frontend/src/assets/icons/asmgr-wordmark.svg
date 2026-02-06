@@ -1,0 +1,11 @@
+<svg width="120" height="24" viewBox="0 0 120 24" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="textGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#c084fc"/>
+      <stop offset="100%" stop-color="#818cf8"/>
+    </linearGradient>
+  </defs>
+  <text x="0" y="18" font-family="Inter, -apple-system, sans-serif" font-size="16" font-weight="600" fill="url(#textGrad)">
+    ASMGR
+  </text>
+</svg>

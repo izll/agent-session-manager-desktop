@@ -1,0 +1,640 @@
+package session
+
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strconv"
+	"syscall"
+	"time"
+)
+
+type Storage struct {
+	configDir  string
+	configPath string
+	projectID  string // Active project ID ("" = default)
+	lockPath   string // Current lock file path
+}
+
+// Group represents a session group for organizing sessions
+type Group struct {
+	ID           string `json:"id"`
+	Name         string `json:"name"`
+	Collapsed    bool   `json:"collapsed"`
+	Color        string `json:"color,omitempty"`          // Group name color
+	BgColor      string `json:"bg_color,omitempty"`       // Background color
+	FullRowColor bool   `json:"full_row_color,omitempty"` // Extend background to full row
+}
+
+// Settings stores UI preferences
+type Settings struct {
+	CompactList       bool   `json:"compact_list"`
+	HideStatusLines   bool   `json:"hide_status_lines"`
+	ShowAgentIcons    bool   `json:"show_agent_icons,omitempty"`
+	SplitView         bool   `json:"split_view,omitempty"`
+	MarkedSessionID   string `json:"marked_session_id,omitempty"`
+	Cursor            int    `json:"cursor,omitempty"`
+	SplitFocus        int    `json:"split_focus,omitempty"`
+	AnthropicAPIKey   string `json:"anthropic_api_key,omitempty"`
+}
+
+type StorageData struct {
+	Instances []*Instance `json:"instances"`
+	Groups    []*Group    `json:"groups,omitempty"`
+	Settings  *Settings   `json:"settings,omitempty"`
+}
+
+func NewStorage() (*Storage, error) {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get home directory: %w", err)
+	}
+
+	configDir := filepath.Join(homeDir, ".config", "agent-session-manager-desktop")
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create config directory: %w", err)
+	}
+
+	return &Storage{
+		configDir:  configDir,
+		configPath: filepath.Join(configDir, "sessions.json"),
+		projectID:  "",
+	}, nil
+}
+
+// SetActiveProject switches to a different project
+func (s *Storage) SetActiveProject(projectID string) error {
+	s.projectID = projectID
+	if projectID == "" {
+		s.configPath = filepath.Join(s.configDir, "sessions.json")
+	} else {
+		projectDir := filepath.Join(s.configDir, "projects", projectID)
+		if err := os.MkdirAll(projectDir, 0755); err != nil {
+			return fmt.Errorf("failed to create project directory: %w", err)
+		}
+		s.configPath = filepath.Join(projectDir, "sessions.json")
+	}
+	return nil
+}
+
+// GetActiveProjectID returns the currently active project ID
+func (s *Storage) GetActiveProjectID() string {
+	return s.projectID
+}
+
+// getLockPath returns the lock file path for a project
+func (s *Storage) getLockPath(projectID string) string {
+	if projectID == "" {
+		return filepath.Join(s.configDir, "default.lock")
+	}
+	return filepath.Join(s.configDir, "projects", projectID, "project.lock")
+}
+
+// IsProjectLocked checks if a project is already running
+func (s *Storage) IsProjectLocked(projectID string) (bool, int) {
+	lockPath := s.getLockPath(projectID)
+	data, err := os.ReadFile(lockPath)
+	if os.IsNotExist(err) {
+		return false, 0
+	}
+	if err != nil {
+		return false, 0
+	}
+
+	pid, err := strconv.Atoi(string(data))
+	if err != nil {
+		// Invalid lock file, remove it
+		os.Remove(lockPath)
+		return false, 0
+	}
+
+	// Check if the process is still running
+	process, err := os.FindProcess(pid)
+	if err != nil {
+		os.Remove(lockPath)
+		return false, 0
+	}
+
+	// On Unix, FindProcess always succeeds, so we need to send signal 0 to check
+	err = process.Signal(syscall.Signal(0))
+	if err != nil {
+		// Process is not running, remove stale lock
+		os.Remove(lockPath)
+		return false, 0
+	}
+
+	return true, pid
+}
+
+// LockProject creates a lock file for the current project
+func (s *Storage) LockProject(projectID string) error {
+	lockPath := s.getLockPath(projectID)
+
+	// Ensure directory exists
+	dir := filepath.Dir(lockPath)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("failed to create lock directory: %w", err)
+	}
+
+	// Write current PID to lock file
+	pid := os.Getpid()
+	if err := os.WriteFile(lockPath, []byte(strconv.Itoa(pid)), 0644); err != nil {
+		return fmt.Errorf("failed to create lock file: %w", err)
+	}
+
+	s.lockPath = lockPath
+	return nil
+}
+
+// UnlockProject removes the lock file
+func (s *Storage) UnlockProject() {
+	if s.lockPath != "" {
+		os.Remove(s.lockPath)
+		s.lockPath = ""
+	}
+}
+
+// LoadProjects loads the list of projects
+func (s *Storage) LoadProjects() (*ProjectsData, error) {
+	projectsFile := filepath.Join(s.configDir, "projects.json")
+	data, err := os.ReadFile(projectsFile)
+	if os.IsNotExist(err) {
+		return &ProjectsData{Projects: []*Project{}}, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to read projects file: %w", err)
+	}
+
+	var projectsData ProjectsData
+	if err := json.Unmarshal(data, &projectsData); err != nil {
+		return nil, fmt.Errorf("failed to parse projects file: %w", err)
+	}
+
+	if projectsData.Projects == nil {
+		projectsData.Projects = []*Project{}
+	}
+
+	return &projectsData, nil
+}
+
+// SaveProjects saves the list of projects
+func (s *Storage) SaveProjects(projectsData *ProjectsData) error {
+	projectsFile := filepath.Join(s.configDir, "projects.json")
+	data, err := json.MarshalIndent(projectsData, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal projects: %w", err)
+	}
+
+	if err := os.WriteFile(projectsFile, data, 0644); err != nil {
+		return fmt.Errorf("failed to write projects file: %w", err)
+	}
+
+	return nil
+}
+
+// AddProject creates a new project
+func (s *Storage) AddProject(name string) (*Project, error) {
+	projectsData, err := s.LoadProjects()
+	if err != nil {
+		return nil, err
+	}
+
+	// Check for duplicate names
+	for _, p := range projectsData.Projects {
+		if p.Name == name {
+			return nil, fmt.Errorf("project with name '%s' already exists", name)
+		}
+	}
+
+	project := NewProject(name)
+	projectsData.Projects = append(projectsData.Projects, project)
+
+	if err := s.SaveProjects(projectsData); err != nil {
+		return nil, err
+	}
+
+	return project, nil
+}
+
+// RemoveProject removes a project and its data
+func (s *Storage) RemoveProject(id string) error {
+	projectsData, err := s.LoadProjects()
+	if err != nil {
+		return err
+	}
+
+	newProjects := make([]*Project, 0, len(projectsData.Projects))
+	found := false
+	for _, p := range projectsData.Projects {
+		if p.ID == id {
+			found = true
+			continue
+		}
+		newProjects = append(newProjects, p)
+	}
+
+	if !found {
+		return fmt.Errorf("project not found")
+	}
+
+	projectsData.Projects = newProjects
+
+	// Remove project directory
+	projectDir := filepath.Join(s.configDir, "projects", id)
+	os.RemoveAll(projectDir)
+
+	return s.SaveProjects(projectsData)
+}
+
+// RenameProject renames a project
+func (s *Storage) RenameProject(id, name string) error {
+	projectsData, err := s.LoadProjects()
+	if err != nil {
+		return err
+	}
+
+	for _, p := range projectsData.Projects {
+		if p.ID == id {
+			p.Name = name
+			return s.SaveProjects(projectsData)
+		}
+	}
+
+	return fmt.Errorf("project not found")
+}
+
+// GetProject returns a project by ID
+func (s *Storage) GetProject(id string) (*Project, error) {
+	projectsData, err := s.LoadProjects()
+	if err != nil {
+		return nil, err
+	}
+
+	for _, p := range projectsData.Projects {
+		if p.ID == id {
+			return p, nil
+		}
+	}
+
+	return nil, fmt.Errorf("project not found")
+}
+
+// ImportDefaultSessions moves sessions from default storage to a project
+func (s *Storage) ImportDefaultSessions(projectID string) (int, error) {
+	// Save current project
+	originalProject := s.projectID
+
+	// Load default sessions
+	s.projectID = ""
+	s.configPath = filepath.Join(s.configDir, "sessions.json")
+	defaultInstances, defaultGroups, _, err := s.LoadAllWithSettings()
+	if err != nil {
+		s.projectID = originalProject
+		return 0, err
+	}
+
+	if len(defaultInstances) == 0 {
+		s.projectID = originalProject
+		return 0, nil
+	}
+
+	// Switch to target project
+	if err := s.SetActiveProject(projectID); err != nil {
+		s.projectID = originalProject
+		return 0, err
+	}
+
+	// Load project's existing sessions
+	projectInstances, projectGroups, projectSettings, err := s.LoadAllWithSettings()
+	if err != nil {
+		s.projectID = originalProject
+		return 0, err
+	}
+
+	// Merge sessions and groups
+	projectInstances = append(projectInstances, defaultInstances...)
+	for _, g := range defaultGroups {
+		// Check if group with same name exists
+		exists := false
+		for _, pg := range projectGroups {
+			if pg.Name == g.Name {
+				exists = true
+				// Update instance group IDs to point to existing group
+				for _, inst := range defaultInstances {
+					if inst.GroupID == g.ID {
+						inst.GroupID = pg.ID
+					}
+				}
+				break
+			}
+		}
+		if !exists {
+			projectGroups = append(projectGroups, g)
+		}
+	}
+
+	// Save merged data to project
+	if err := s.SaveAll(projectInstances, projectGroups, projectSettings); err != nil {
+		s.projectID = originalProject
+		return 0, err
+	}
+
+	// Clear default sessions
+	s.projectID = ""
+	s.configPath = filepath.Join(s.configDir, "sessions.json")
+	if err := s.SaveAll([]*Instance{}, []*Group{}, &Settings{}); err != nil {
+		s.projectID = originalProject
+		return len(defaultInstances), err
+	}
+
+	// Restore original project
+	s.SetActiveProject(originalProject)
+
+	return len(defaultInstances), nil
+}
+
+func (s *Storage) Load() ([]*Instance, error) {
+	instances, _, err := s.LoadAll()
+	return instances, err
+}
+
+// LoadAll loads instances, groups, and settings
+func (s *Storage) LoadAll() ([]*Instance, []*Group, error) {
+	instances, groups, _, err := s.LoadAllWithSettings()
+	return instances, groups, err
+}
+
+// LoadAllWithSettings loads instances, groups, and settings
+func (s *Storage) LoadAllWithSettings() ([]*Instance, []*Group, *Settings, error) {
+	data, err := os.ReadFile(s.configPath)
+	if os.IsNotExist(err) {
+		return []*Instance{}, []*Group{}, &Settings{}, nil
+	}
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to read config file: %w", err)
+	}
+
+	var storageData StorageData
+	if err := json.Unmarshal(data, &storageData); err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to parse config file: %w", err)
+	}
+
+	// Update status for all instances
+	for _, instance := range storageData.Instances {
+		instance.UpdateStatus()
+	}
+
+	if storageData.Groups == nil {
+		storageData.Groups = []*Group{}
+	}
+
+	if storageData.Settings == nil {
+		storageData.Settings = &Settings{}
+	}
+
+	return storageData.Instances, storageData.Groups, storageData.Settings, nil
+}
+
+func (s *Storage) Save(instances []*Instance) error {
+	_, groups, settings, _ := s.LoadAllWithSettings()
+	return s.SaveAll(instances, groups, settings)
+}
+
+// SaveWithGroups saves instances and groups (preserves settings)
+func (s *Storage) SaveWithGroups(instances []*Instance, groups []*Group) error {
+	_, _, settings, _ := s.LoadAllWithSettings()
+	return s.SaveAll(instances, groups, settings)
+}
+
+// SaveSettings saves only the settings (preserves instances and groups)
+func (s *Storage) SaveSettings(settings *Settings) error {
+	instances, groups, _, _ := s.LoadAllWithSettings()
+	return s.SaveAll(instances, groups, settings)
+}
+
+// SaveAll saves instances, groups, and settings
+func (s *Storage) SaveAll(instances []*Instance, groups []*Group, settings *Settings) error {
+	storageData := StorageData{
+		Instances: instances,
+		Groups:    groups,
+		Settings:  settings,
+	}
+
+	data, err := json.MarshalIndent(storageData, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal config: %w", err)
+	}
+
+	if err := os.WriteFile(s.configPath, data, 0644); err != nil {
+		return fmt.Errorf("failed to write config file: %w", err)
+	}
+
+	return nil
+}
+
+func (s *Storage) AddInstance(instance *Instance) error {
+	instances, err := s.Load()
+	if err != nil {
+		return err
+	}
+
+	// Check for duplicate names
+	for _, inst := range instances {
+		if inst.Name == instance.Name {
+			return fmt.Errorf("instance with name '%s' already exists", instance.Name)
+		}
+	}
+
+	instances = append(instances, instance)
+	return s.Save(instances)
+}
+
+func (s *Storage) RemoveInstance(id string) error {
+	instances, err := s.Load()
+	if err != nil {
+		return err
+	}
+
+	newInstances := make([]*Instance, 0, len(instances))
+	found := false
+	for _, inst := range instances {
+		if inst.ID == id {
+			found = true
+			// Stop the instance if running
+			inst.Stop()
+			continue
+		}
+		newInstances = append(newInstances, inst)
+	}
+
+	if !found {
+		return fmt.Errorf("instance not found")
+	}
+
+	return s.Save(newInstances)
+}
+
+func (s *Storage) UpdateInstance(instance *Instance) error {
+	instances, err := s.Load()
+	if err != nil {
+		return err
+	}
+
+	for i, inst := range instances {
+		if inst.ID == instance.ID {
+			instances[i] = instance
+			return s.Save(instances)
+		}
+	}
+
+	return fmt.Errorf("instance not found")
+}
+
+func (s *Storage) GetInstance(id string) (*Instance, error) {
+	instances, err := s.Load()
+	if err != nil {
+		return nil, err
+	}
+
+	for _, inst := range instances {
+		if inst.ID == id {
+			return inst, nil
+		}
+	}
+
+	return nil, fmt.Errorf("instance not found")
+}
+
+func (s *Storage) GetInstanceByName(name string) (*Instance, error) {
+	instances, err := s.Load()
+	if err != nil {
+		return nil, err
+	}
+
+	for _, inst := range instances {
+		if inst.Name == name {
+			return inst, nil
+		}
+	}
+
+	return nil, fmt.Errorf("instance not found")
+}
+
+
+// GetGroups returns all groups
+func (s *Storage) GetGroups() ([]*Group, error) {
+	_, groups, err := s.LoadAll()
+	return groups, err
+}
+
+// AddGroup adds a new group
+func (s *Storage) AddGroup(name string) (*Group, error) {
+	instances, groups, err := s.LoadAll()
+	if err != nil {
+		return nil, err
+	}
+
+	// Check for duplicate names
+	for _, g := range groups {
+		if g.Name == name {
+			return nil, fmt.Errorf("group with name '%s' already exists", name)
+		}
+	}
+
+	group := &Group{
+		ID:        fmt.Sprintf("grp_%d", time.Now().UnixNano()),
+		Name:      name,
+		Collapsed: false,
+	}
+
+	groups = append(groups, group)
+	if err := s.SaveWithGroups(instances, groups); err != nil {
+		return nil, err
+	}
+
+	return group, nil
+}
+
+// RemoveGroup removes a group (sessions become ungrouped)
+func (s *Storage) RemoveGroup(id string) error {
+	instances, groups, err := s.LoadAll()
+	if err != nil {
+		return err
+	}
+
+	// Ungroup all sessions in this group
+	for _, inst := range instances {
+		if inst.GroupID == id {
+			inst.GroupID = ""
+		}
+	}
+
+	// Remove the group
+	newGroups := make([]*Group, 0, len(groups))
+	found := false
+	for _, g := range groups {
+		if g.ID == id {
+			found = true
+			continue
+		}
+		newGroups = append(newGroups, g)
+	}
+
+	if !found {
+		return fmt.Errorf("group not found")
+	}
+
+	return s.SaveWithGroups(instances, newGroups)
+}
+
+// RenameGroup renames a group
+func (s *Storage) RenameGroup(id, name string) error {
+	instances, groups, err := s.LoadAll()
+	if err != nil {
+		return err
+	}
+
+	for _, g := range groups {
+		if g.ID == id {
+			g.Name = name
+			return s.SaveWithGroups(instances, groups)
+		}
+	}
+
+	return fmt.Errorf("group not found")
+}
+
+// ToggleGroupCollapsed toggles the collapsed state of a group
+func (s *Storage) ToggleGroupCollapsed(id string) error {
+	instances, groups, err := s.LoadAll()
+	if err != nil {
+		return err
+	}
+
+	for _, g := range groups {
+		if g.ID == id {
+			g.Collapsed = !g.Collapsed
+			return s.SaveWithGroups(instances, groups)
+		}
+	}
+
+	return fmt.Errorf("group not found")
+}
+
+// SetInstanceGroup assigns an instance to a group
+func (s *Storage) SetInstanceGroup(instanceID, groupID string) error {
+	instances, groups, err := s.LoadAll()
+	if err != nil {
+		return err
+	}
+
+	for i := range instances {
+		if instances[i].ID == instanceID {
+			instances[i].GroupID = groupID
+			return s.SaveWithGroups(instances, groups)
+		}
+	}
+
+	return fmt.Errorf("instance not found")
+}

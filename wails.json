@@ -1,0 +1,14 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "asmgr-desktop",
+  "outputfilename": "asmgr-desktop",
+  "frontend:install": "npm install",
+  "frontend:build": "npm run build",
+  "frontend:dev:watcher": "npm run dev",
+  "frontend:dev:serverUrl": "auto",
+  "tags": "webkit2_41",
+  "author": {
+    "name": "izll",
+    "email": "antalizn@gmail.com"
+  }
+}
