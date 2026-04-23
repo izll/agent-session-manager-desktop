@@ -194,14 +194,18 @@ export async function attachToSession(
     let hiddenBytes = 0;
     let hiddenOverflow = false;
 
-    // rAF-batched visible writes. Collects incoming chunks and flushes them
-    // once per animation frame (~60Hz max). Without this, back-to-back WS
-    // messages trigger back-to-back xterm.write() calls, each of which forces
-    // DOM mutations that pin WebKit's main thread at 100% while agents paint.
+    // Timed batching for visible writes. Every WS chunk goes into a queue
+    // and gets flushed at a capped rate (see FLUSH_INTERVAL_MS). Using a
+    // plain setTimeout rather than requestAnimationFrame on purpose:
+    // - rAF runs at 60Hz and is still aggressive enough to keep WebKit's
+    //   main thread pegged when an agent paints continuously.
+    // - Terminals don't need 60fps; 20-25fps feels instant to humans and
+    //   halves the DOM-mutation storm that the xterm DOM renderer causes.
+    const FLUSH_INTERVAL_MS = 40; // ~25fps
     let visibleQueue: Uint8Array[] = [];
-    let rafHandle: number | null = null;
+    let timerHandle: ReturnType<typeof setTimeout> | null = null;
     const flushVisible = () => {
-      rafHandle = null;
+      timerHandle = null;
       if (visibleQueue.length === 0) return;
       // Concat and write in one call so xterm only runs one parse/layout cycle.
       let total = 0;
@@ -223,8 +227,8 @@ export async function attachToSession(
 
       if (terminalInstance.visible) {
         visibleQueue.push(chunk);
-        if (rafHandle === null) {
-          rafHandle = requestAnimationFrame(flushVisible);
+        if (timerHandle === null) {
+          timerHandle = setTimeout(flushVisible, FLUSH_INTERVAL_MS);
         }
         return;
       }
@@ -262,8 +266,8 @@ export async function attachToSession(
       }
       terminalInstance.hiddenBuffer = [];
       hiddenBytes = 0;
-      if (rafHandle === null) {
-        rafHandle = requestAnimationFrame(flushVisible);
+      if (timerHandle === null) {
+        timerHandle = setTimeout(flushVisible, FLUSH_INTERVAL_MS);
       }
     };
 

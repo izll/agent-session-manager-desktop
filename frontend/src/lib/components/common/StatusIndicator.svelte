@@ -67,17 +67,22 @@
   }
 
   /* Running + busy = orange (working) */
+  /* Animations use opacity only. Animating box-shadow forces WebKit to
+     repaint the layer every frame (non-GPU-compositable), which pins CPU
+     when many sessions are busy. Opacity animates on the compositor. */
   .status-busy {
     background: #FFA500;
     box-shadow: 0 0 8px rgba(255, 165, 0, 0.6);
-    animation: pulse-glow-orange 1.5s ease-in-out infinite;
+    animation: indicator-pulse 1.5s ease-in-out infinite;
+    will-change: opacity;
   }
 
   /* Running + waiting = cyan (waiting for input) */
   .status-waiting {
     background: #00CED1;
     box-shadow: 0 0 8px rgba(0, 206, 209, 0.6);
-    animation: pulse-glow-cyan 1s ease-in-out infinite;
+    animation: indicator-pulse 1s ease-in-out infinite;
+    will-change: opacity;
   }
 
   .status-paused {
@@ -91,23 +96,8 @@
     box-shadow: 0 0 4px rgba(255, 95, 135, 0.4);
   }
 
-  @keyframes pulse-glow-orange {
-    0%, 100% {
-      box-shadow: 0 0 8px rgba(255, 165, 0, 0.6);
-      opacity: 1;
-    }
-    50% {
-      box-shadow: 0 0 16px rgba(255, 165, 0, 0.8);
-      opacity: 0.8;
-    }
-  }
-
-  @keyframes pulse-glow-cyan {
-    0%, 100% {
-      box-shadow: 0 0 8px rgba(0, 206, 209, 0.6);
-    }
-    50% {
-      box-shadow: 0 0 14px rgba(0, 206, 209, 0.9);
-    }
+  @keyframes indicator-pulse {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: 0.55; }
   }
 </style>
