@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { autoFocusDialog } from '../../utils/dialogActions';
   import { createEventDispatcher } from 'svelte';
   import { selectedSessionId, selectedWindowIdx, selectWindow, loadSessions } from '../../stores/sessions';
   import { get } from 'svelte/store';
@@ -90,7 +91,7 @@
 
 {#if show}
   <div
-    class="dialog-overlay"
+    class="dialog-overlay" use:autoFocusDialog
     on:click|self={close}
     on:keydown={handleKeydown}
     role="dialog"

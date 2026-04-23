@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { autoFocusDialog } from '../../utils/dialogActions';
   import { createEventDispatcher } from 'svelte';
   import { settings, saveSettings } from '../../stores/settings';
   import * as DictationService from '../../../../wailsjs/go/main/DictationService';
@@ -229,7 +230,7 @@
 
 {#if show}
   <div
-    class="dialog-overlay"
+    class="dialog-overlay" use:autoFocusDialog
     on:click|self={close}
     on:keydown={handleKeydown}
     role="dialog"

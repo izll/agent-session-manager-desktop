@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { autoFocusDialog } from '../../utils/dialogActions';
   import { onMount } from 'svelte';
   import * as App from '../../../../wailsjs/go/main/App';
   import { t } from '../../i18n';
@@ -67,7 +68,7 @@
 
 {#if show}
   <div
-    class="dialog-overlay"
+    class="dialog-overlay" use:autoFocusDialog
     on:click|self={close}
     on:keydown={handleKeydown}
     role="dialog"
