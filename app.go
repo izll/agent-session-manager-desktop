@@ -1209,6 +1209,15 @@ func (a *App) GetSidebarUpdates() SidebarUpdate {
 		return result
 	}
 
+	// Phase 1: auto-detect + persist session IDs (sequential; touches storage).
+	// Phase 2 (below) runs the tmux capture + detection in parallel across
+	// sessions so total wall time scales with max-per-session work rather
+	// than sum-per-session work.
+	type detectJob struct {
+		inst *session.Instance
+	}
+	var jobs []detectJob
+
 	for _, inst := range instances {
 		if inst.Status != session.StatusRunning {
 			continue
@@ -1278,117 +1287,128 @@ func (a *App) GetSidebarUpdates() SidebarUpdate {
 			}
 		}
 
-		mainAgent := inst.Agent
-		if mainAgent == "" {
-			mainAgent = session.AgentClaude
-		}
-		mainWindowIdx := inst.GetMainWindowIndex()
+		jobs = append(jobs, detectJob{inst: inst})
+	}
 
-		// Build list of all windows to check
-		type windowInfo struct {
-			idx   int
-			agent session.AgentType
-			name  string
-		}
-		windows := []windowInfo{{idx: mainWindowIdx, agent: mainAgent, name: inst.Name}}
-		for _, fw := range inst.FollowedWindows {
-			if fw.Index != mainWindowIdx && !fw.Stopped {
-				name := fw.Name
-				if name == "" {
-					name = string(fw.Agent)
+	// Phase 2: run detection in parallel. isSpinnerAnimating() sleeps 60ms
+	// between two tmux captures to decide if a spinner is still rotating —
+	// that sleep serialised across many agents was the wall-time cost that
+	// made 1s ticks infeasible. Doing it per-session concurrently keeps
+	// total time roughly at the slowest single session.
+	type sessionResult struct {
+		instID       string
+		activity     string
+		statusLine   string
+		spinnerText  string
+		agentTabs    []TabStatusInfo
+	}
+	resultsCh := make(chan sessionResult, len(jobs))
+
+	var wg sync.WaitGroup
+	for _, job := range jobs {
+		wg.Add(1)
+		go func(inst *session.Instance) {
+			defer wg.Done()
+
+			mainAgent := inst.Agent
+			if mainAgent == "" {
+				mainAgent = session.AgentClaude
+			}
+			mainWindowIdx := inst.GetMainWindowIndex()
+
+			type windowInfo struct {
+				idx   int
+				agent session.AgentType
+				name  string
+			}
+			windows := []windowInfo{{idx: mainWindowIdx, agent: mainAgent, name: inst.Name}}
+			for _, fw := range inst.FollowedWindows {
+				if fw.Index != mainWindowIdx && !fw.Stopped {
+					name := fw.Name
+					if name == "" {
+						name = string(fw.Agent)
+					}
+					windows = append(windows, windowInfo{idx: fw.Index, agent: fw.Agent, name: name})
 				}
-				windows = append(windows, windowInfo{idx: fw.Index, agent: fw.Agent, name: name})
 			}
-		}
 
-		// Debug: log which windows are being checked (dev mode only)
-		if isDevMode {
-			var winIndices []int
-			for _, w := range windows {
-				winIndices = append(winIndices, w.idx)
+			var tabStatuses []TabStatusInfo
+			highestActivity := session.ActivityIdle
+			bestWindowIdx := 0
+
+			for wi, w := range windows {
+				activity := inst.DetectActivityForWindow(w.idx)
+				info := inst.GetStatusInfoForWindow(w.idx, w.agent)
+
+				actStr := "idle"
+				switch activity {
+				case session.ActivityBusy:
+					actStr = "busy"
+				case session.ActivityWaiting:
+					actStr = "waiting"
+				}
+
+				line := session.StripANSI(info.StatusLine)
+				line = strings.ReplaceAll(line, "\n", " ")
+				line = strings.ReplaceAll(line, "\r", "")
+				line = strings.TrimSpace(line)
+				if len(line) > 100 {
+					line = line[:97] + "..."
+				}
+
+				tabStatuses = append(tabStatuses, TabStatusInfo{
+					WindowIdx:   w.idx,
+					Agent:       string(w.agent),
+					Name:        w.name,
+					Activity:    actStr,
+					StatusLine:  line,
+					SpinnerText: info.SpinnerText,
+				})
+
+				if activity == session.ActivityWaiting {
+					highestActivity = session.ActivityWaiting
+					bestWindowIdx = wi
+				} else if activity == session.ActivityBusy && highestActivity != session.ActivityWaiting {
+					highestActivity = session.ActivityBusy
+					bestWindowIdx = wi
+				}
 			}
-			log.Printf("[WindowsDebug] session=%s mainWin=%d windows=%v followedCount=%d", inst.ID, mainWindowIdx, winIndices, len(inst.FollowedWindows))
-		}
 
-		// Detect activity and status info for each window
-		var tabStatuses []TabStatusInfo
-		highestActivity := session.ActivityIdle
-		bestWindowIdx := 0 // index into tabStatuses for the "primary" (busiest) window
-
-		var windowResults []string
-		for wi, w := range windows {
-			activity := inst.DetectActivityForWindow(w.idx)
-			info := inst.GetStatusInfoForWindow(w.idx, w.agent)
-
-			actStr := "idle"
-			switch activity {
+			activityStr := "idle"
+			switch highestActivity {
 			case session.ActivityBusy:
-				actStr = "busy"
+				activityStr = "busy"
 			case session.ActivityWaiting:
-				actStr = "waiting"
+				activityStr = "waiting"
 			}
 
-			windowResults = append(windowResults, fmt.Sprintf("win%d=%s", w.idx, actStr))
-
-			line := session.StripANSI(info.StatusLine)
-			line = strings.ReplaceAll(line, "\n", " ")
-			line = strings.ReplaceAll(line, "\r", "")
-			line = strings.TrimSpace(line)
-			if len(line) > 100 {
-				line = line[:97] + "..."
+			sr := sessionResult{instID: inst.ID, activity: activityStr}
+			if len(tabStatuses) > 0 {
+				best := tabStatuses[bestWindowIdx]
+				sr.statusLine = best.StatusLine
+				sr.spinnerText = best.SpinnerText
 			}
-
-			tabStatuses = append(tabStatuses, TabStatusInfo{
-				WindowIdx:   w.idx,
-				Agent:       string(w.agent),
-				Name:        w.name,
-				Activity:    actStr,
-				StatusLine:  line,
-				SpinnerText: info.SpinnerText,
-			})
-
-			// Track the busiest window for primary display
-			// Priority: Waiting > Busy > Idle
-			if activity == session.ActivityWaiting {
-				highestActivity = session.ActivityWaiting
-				bestWindowIdx = wi
-			} else if activity == session.ActivityBusy && highestActivity != session.ActivityWaiting {
-				highestActivity = session.ActivityBusy
-				bestWindowIdx = wi
+			for _, ts := range tabStatuses {
+				if ts.Agent != string(session.AgentTerminal) {
+					sr.agentTabs = append(sr.agentTabs, ts)
+				}
 			}
-		}
+			resultsCh <- sr
+		}(job.inst)
+	}
+	wg.Wait()
+	close(resultsCh)
 
-		// Set aggregated activity (backward compat)
-		activityStr := "idle"
-		switch highestActivity {
-		case session.ActivityBusy:
-			activityStr = "busy"
-		case session.ActivityWaiting:
-			activityStr = "waiting"
+	for sr := range resultsCh {
+		result.Activities[sr.instID] = sr.activity
+		if sr.statusLine != "" {
+			result.StatusLines[sr.instID] = sr.statusLine
 		}
-		result.Activities[inst.ID] = activityStr
-		if isDevMode && activityStr != "idle" {
-			log.Printf("[AggregateDebug] session=%s aggregate=%s windows=%v", inst.ID, activityStr, windowResults)
+		if sr.spinnerText != "" {
+			result.SpinnerTexts[sr.instID] = sr.spinnerText
 		}
-
-		// Set primary status/spinner from the busiest window (not hardcoded window 0)
-		if len(tabStatuses) > 0 {
-			best := tabStatuses[bestWindowIdx]
-			result.StatusLines[inst.ID] = best.StatusLine
-			if best.SpinnerText != "" {
-				result.SpinnerTexts[inst.ID] = best.SpinnerText
-			}
-		}
-
-		// Only include TabStatuses for multi-tab sessions, excluding terminal tabs
-		var agentTabs []TabStatusInfo
-		for _, ts := range tabStatuses {
-			if ts.Agent != string(session.AgentTerminal) {
-				agentTabs = append(agentTabs, ts)
-			}
-		}
-		if len(agentTabs) > 1 {
-			result.TabStatuses[inst.ID] = agentTabs
+		if len(sr.agentTabs) > 1 {
+			result.TabStatuses[sr.instID] = sr.agentTabs
 		}
 	}
 
@@ -1410,10 +1430,10 @@ func (a *App) GetStatusLines() map[string]string {
 func (a *App) startPreviewPolling() {
 	const typingCooldown = 1500 * time.Millisecond
 
-	// 2s is plenty for sidebar activity/status indicators. Faster ticks run
-	// `tmux capture-pane` on every session every cycle, which is expensive
-	// when many agents are active.
-	ticker := time.NewTicker(2 * time.Second)
+	// 1s tick feels "live" in the sidebar. GetSidebarUpdates parallelises
+	// per-session capture/detect work, so 1Hz scales even with many running
+	// agents.
+	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 
 	for {
