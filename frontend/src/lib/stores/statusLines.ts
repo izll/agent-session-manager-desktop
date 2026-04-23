@@ -4,6 +4,22 @@ import * as App from '../../../wailsjs/go/main/App';
 // Map of session ID to last output line
 export const statusLines = writable<Record<string, string>>({});
 
+// Map of session ID to spinner text (e.g. "Thinking...", "Puzzling...")
+export const spinnerTexts = writable<Record<string, string>>({});
+
+// Per-tab status info for multi-agent sessions
+export interface TabStatusInfo {
+  windowIdx: number;
+  agent: string;
+  name: string;
+  activity: 'idle' | 'busy' | 'waiting';
+  statusLine: string;
+  spinnerText: string;
+}
+
+// Map of session ID to array of tab statuses (only for multi-tab sessions)
+export const tabStatuses = writable<Record<string, TabStatusInfo[]>>({});
+
 let pollInterval: ReturnType<typeof setInterval> | null = null;
 
 export async function loadStatusLines() {

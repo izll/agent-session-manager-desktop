@@ -1,6 +1,6 @@
 <script lang="ts">
   export let agent: string;
-  export let size: 'sm' | 'md' | 'lg' = 'md';
+  export let size: 'xs' | 'sm' | 'md' | 'lg' = 'md';
 
   // Import all icon SVGs
   import claudeIcon from '../../../assets/icons/claude.svg';
@@ -25,6 +25,7 @@
 
   $: icon = icons[agent?.toLowerCase()] || customIcon;
   $: sizeValue = {
+    xs: 12,
     sm: 16,
     md: 20,
     lg: 28

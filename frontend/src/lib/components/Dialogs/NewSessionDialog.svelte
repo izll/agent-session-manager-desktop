@@ -5,6 +5,7 @@
   import { get } from 'svelte/store';
   import AgentIcon from '../common/AgentIcon.svelte';
   import * as App from '../../../../wailsjs/go/main/App';
+  import { t } from '../../i18n';
 
   export let show = false;
 
@@ -17,8 +18,9 @@
   let autoStart = true;
   let isSubmitting = false;
   let error = '';
-  let nameAutoFilled = false;
   let selectedGroupId = '';
+  let groupInitialized = false;
+  let extraArgs = '';
 
   // Resume session selection
   interface ResumeSession {
@@ -36,23 +38,27 @@
     loadAgents();
   }
 
-  // Set default group from selected session when dialog opens
-  $: if (show) {
+  // Set default group from selected session ONLY when dialog first opens
+  $: if (show && !groupInitialized) {
     selectedGroupId = $selectedSession?.groupId || '';
+    groupInitialized = true;
+  }
+  $: if (!show) {
+    groupInitialized = false;
   }
 
-  // Auto-fill name from path (only if name is empty or was auto-filled)
-  $: if (path && (!name || nameAutoFilled)) {
+  // Auto-fill name from path (only if user hasn't manually edited the name field)
+  let userTouchedName = false;
+  $: if (path && !userTouchedName) {
     const parts = path.replace(/\/+$/, '').split('/');
     const folderName = parts[parts.length - 1] || '';
     if (folderName) {
       name = folderName;
-      nameAutoFilled = true;
     }
   }
 
   function handleNameInput() {
-    nameAutoFilled = false;
+    userTouchedName = true;
   }
 
   // Debounced path change handler
@@ -136,8 +142,9 @@
     autoYes = false;
     autoStart = true;
     error = '';
-    nameAutoFilled = false;
+    userTouchedName = false;
     selectedGroupId = '';
+    extraArgs = '';
     availableSessions = [];
     selectedResumeId = '';
     showForkWarning = false;
@@ -146,7 +153,7 @@
 
   async function handleSubmit(fork: boolean = false) {
     if (!name.trim() || !path.trim()) {
-      error = 'Name and path are required';
+      error = $t('newSession.nameRequired');
       return;
     }
 
@@ -163,11 +170,15 @@
     isSubmitting = true;
     error = '';
 
+    // Save group selection before createSession changes selectedSessionId,
+    // which triggers the reactive statement and resets selectedGroupId to ''
+    const groupId = selectedGroupId;
+
     try {
-      const session = await createSession(name.trim(), path.trim(), selectedAgent, autoYes);
+      const session = await createSession(name.trim(), path.trim(), selectedAgent, autoYes, extraArgs.trim());
       if (session) {
-        if (selectedGroupId) {
-          await assignToGroup(session.id, selectedGroupId);
+        if (groupId) {
+          await assignToGroup(session.id, groupId);
         }
         // If resuming, start with resume ID
         if (selectedResumeId && autoStart) {
@@ -221,7 +232,7 @@
   >
     <div class="dialog-content">
       <div class="dialog-header">
-        <h2>New Session</h2>
+        <h2>{$t('newSession.title')}</h2>
         <button class="close-btn" on:click={close}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <line x1="18" y1="6" x2="6" y2="18"/>
@@ -244,7 +255,7 @@
       <form on:submit|preventDefault={handleSubmit}>
         <!-- Agent Type -->
         <div class="form-group">
-          <span class="form-label">Agent Type</span>
+          <span class="form-label">{$t('newSession.agentType')}</span>
           <div class="agent-grid">
             {#each $agents.filter(a => a.type !== 'terminal') as agent (agent.type)}
               <button
@@ -263,7 +274,7 @@
 
         <!-- Path -->
         <div class="form-group">
-          <label class="form-label" for="path">Project Path</label>
+          <label class="form-label" for="path">{$t('newSession.projectPath')}</label>
           <div class="path-input-group">
             <input
               id="path"
@@ -272,7 +283,7 @@
               placeholder="/home/user/project"
               class="form-input"
             />
-            <button type="button" class="browse-btn" on:click={browsePath} title="Browse...">
+            <button type="button" class="browse-btn" on:click={browsePath} title={$t('newSession.browse')}>
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
               </svg>
@@ -282,7 +293,7 @@
 
         <!-- Name -->
         <div class="form-group">
-          <label class="form-label" for="name">Session Name</label>
+          <label class="form-label" for="name">{$t('newSession.sessionName')}</label>
           <input
             id="name"
             type="text"
@@ -296,9 +307,9 @@
         <!-- Group -->
         {#if $groups.length > 0}
           <div class="form-group">
-            <label class="form-label" for="group">Group</label>
+            <label class="form-label" for="group">{$t('newSession.group')}</label>
             <select id="group" bind:value={selectedGroupId} class="form-input form-select">
-              <option value="">No Group</option>
+              <option value="">{$t('newSession.noGroup')}</option>
               {#each $groups as group (group.id)}
                 <option value={group.id}>{group.name}</option>
               {/each}
@@ -306,16 +317,31 @@
           </div>
         {/if}
 
+        <!-- Extra CLI Arguments (hidden for custom agent) -->
+        {#if selectedAgent !== 'custom' && selectedAgent !== 'terminal'}
+          <div class="form-group">
+            <label class="form-label" for="extra-args">{$t('newSession.extraArgs')}</label>
+            <input
+              id="extra-args"
+              type="text"
+              bind:value={extraArgs}
+              placeholder={$t('newSession.extraArgsPlaceholder')}
+              class="form-input"
+            />
+            <span class="form-hint">{$t('newSession.extraArgsHint')}</span>
+          </div>
+        {/if}
+
         <!-- Available Sessions to Resume -->
         {#if availableSessions.length > 0 || isLoadingSessions}
           <div class="form-group">
-            <span class="form-label">Resume Previous Session (optional)</span>
+            <span class="form-label">{$t('newSession.resumePrevious')}</span>
             {#if isLoadingSessions}
               <div class="loading-sessions">
                 <svg class="spinner" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
                 </svg>
-                Loading sessions...
+                {$t('newSession.loadingSessions')}
               </div>
             {:else}
               <div class="session-list">
@@ -326,8 +352,8 @@
                 >
                   <span class="session-icon new">+</span>
                   <span class="session-info">
-                    <span class="session-name">Start fresh</span>
-                    <span class="session-desc">New conversation</span>
+                    <span class="session-name">{$t('newSession.startFresh')}</span>
+                    <span class="session-desc">{$t('newSession.newConversation')}</span>
                   </span>
                 </button>
                 {#each availableSessions as sess (sess.id)}
@@ -343,7 +369,7 @@
                       <span class="session-desc">
                         {sess.timestamp}
                         {#if isConflict}
-                          <span class="conflict-badge">In use: {isConflict}</span>
+                          <span class="conflict-badge">{$t('newSession.inUse', { name: isConflict })}</span>
                         {/if}
                       </span>
                     </span>
@@ -365,18 +391,17 @@
               </svg>
             </div>
             <div class="warning-content">
-              <div class="warning-title">Session already in use</div>
+              <div class="warning-title">{$t('newSession.sessionInUse')}</div>
               <div class="warning-text">
-                This session is currently used by "<strong>{conflictingSessionName}</strong>".
-                Creating a new session with this will fork the conversation.
+                {$t('newSession.forkWarning', { name: conflictingSessionName })}
               </div>
             </div>
             <div class="warning-actions">
               <button type="button" class="btn-warning-cancel" on:click={() => { showForkWarning = false; selectedResumeId = ''; }}>
-                Cancel
+                {$t('newSession.forkCancel')}
               </button>
               <button type="button" class="btn-warning-fork" on:click={() => handleSubmit(true)}>
-                Fork & Create
+                {$t('newSession.forkCreate')}
               </button>
             </div>
           </div>
@@ -387,29 +412,29 @@
           <label class="checkbox-label">
             <input type="checkbox" bind:checked={autoYes} class="checkbox-input" />
             <span class="checkbox-custom"></span>
-            <span class="checkbox-text">Auto-approve (YOLO)</span>
+            <span class="checkbox-text">{$t('newSession.autoApprove')}</span>
           </label>
 
           <label class="checkbox-label">
             <input type="checkbox" bind:checked={autoStart} class="checkbox-input" />
             <span class="checkbox-custom"></span>
-            <span class="checkbox-text">Start immediately</span>
+            <span class="checkbox-text">{$t('newSession.startImmediately')}</span>
           </label>
         </div>
 
         <!-- Actions -->
         <div class="dialog-actions">
           <button type="button" class="btn-cancel" on:click={close}>
-            Cancel
+            {$t('newSession.cancel')}
           </button>
           <button type="submit" class="btn-primary" disabled={isSubmitting}>
             {#if isSubmitting}
               <svg class="spinner" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
               </svg>
-              Creating...
+              {$t('newSession.creating')}
             {:else}
-              Create Session
+              {$t('newSession.createSession')}
             {/if}
           </button>
         </div>
@@ -534,6 +559,13 @@
     font-size: 14px;
     color: white;
     transition: all 0.2s ease;
+  }
+
+  .form-hint {
+    display: block;
+    font-size: 11px;
+    color: #6b7280;
+    margin-top: 6px;
   }
 
   .form-input::placeholder {

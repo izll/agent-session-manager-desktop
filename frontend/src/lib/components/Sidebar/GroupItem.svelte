@@ -4,7 +4,9 @@
   import type { Group, Session } from '../../stores/sessions';
   import { toggleGroupCollapse, renameGroup, deleteGroup, sessions as allSessions, assignToGroup } from '../../stores/sessions';
   import { activities, getActivity } from '../../stores/activities';
-  import { statusLines, getStatusLine } from '../../stores/statusLines';
+  import { statusLines, spinnerTexts, tabStatuses, getStatusLine } from '../../stores/statusLines';
+  import { settings } from '../../stores/settings';
+  import { t } from '../../i18n';
 
   export let group: Group;
   export let sessions: Session[] = [];
@@ -134,7 +136,7 @@
   });
 </script>
 
-<div class="group-container">
+<div class="group-container" class:compact={$settings?.compactList}>
   <button
     class="group-header"
     class:drag-over={isDragOver}
@@ -196,14 +198,14 @@
           <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
           <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
         </svg>
-        Rename
+        {$t('group.rename')}
       </button>
       <button class="context-menu-item danger" on:click={handleDeleteGroup}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <polyline points="3 6 5 6 21 6"/>
           <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
         </svg>
-        Delete
+        {$t('group.delete')}
       </button>
     </div>
   {/if}
@@ -217,12 +219,12 @@
       on:drop={handleDrop}
     >
       {#each sessions as session (session.id)}
-        <SessionItem {session} index={$allSessions.findIndex(s => s.id === session.id)} activity={getActivity(session.id, $activities)} statusLine={getStatusLine(session.id, $statusLines)} on:drop={handleSessionDrop} />
+        <SessionItem {session} index={$allSessions.findIndex(s => s.id === session.id)} activity={getActivity(session.id, $activities)} statusLine={getStatusLine(session.id, $statusLines)} spinnerText={$spinnerTexts[session.id] || ''} tabStatuses={$tabStatuses[session.id] || []} on:drop={handleSessionDrop} />
       {/each}
 
       {#if sessions.length === 0}
         <div class="empty-group">
-          No sessions in this group
+          {$t('group.noSessions')}
         </div>
       {/if}
     </div>
@@ -377,5 +379,49 @@
 
   .context-menu-item.danger:hover {
     background: rgba(239, 68, 68, 0.15);
+  }
+
+  /* Compact mode */
+  .group-container.compact .group-header {
+    padding: 5px 10px;
+    gap: 6px;
+  }
+
+  .group-container.compact .group-name {
+    font-size: 12px;
+  }
+
+  .group-container.compact .session-count {
+    font-size: 10px;
+    padding: 1px 6px;
+  }
+
+  .group-container.compact .chevron {
+    width: 18px;
+    height: 18px;
+  }
+
+  .group-container.compact .chevron svg {
+    width: 14px;
+    height: 14px;
+  }
+
+  .group-container.compact .folder-icon svg {
+    width: 13px;
+    height: 13px;
+  }
+
+  .group-container.compact .group-content {
+    margin-left: 8px;
+    padding-left: 8px;
+  }
+
+  .group-container.compact {
+    margin-bottom: 4px;
+  }
+
+  .group-container.compact .empty-group {
+    padding: 6px 12px;
+    font-size: 11px;
   }
 </style>

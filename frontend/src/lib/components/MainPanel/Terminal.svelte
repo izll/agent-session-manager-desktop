@@ -2,22 +2,27 @@
   import { onMount, onDestroy } from 'svelte';
   import { sessions, selectedSessionId, selectedWindowIdx } from '../../stores/sessions';
   import { get } from 'svelte/store';
-  import { EventsOn, EventsOff } from '../../../../wailsjs/runtime/runtime';
-  import {
-    createTerminal,
-    attachToSession,
-    detachFromSession,
-    fitTerminal,
-    type TerminalInstance
-  } from '../../utils/terminal';
+  import { EventsOn } from '../../../../wailsjs/runtime/runtime';
+  import { TerminalPool } from '../../utils/terminalPool';
+  import { t } from '../../i18n';
   import '@xterm/xterm/css/xterm.css';
 
-  let containerEl: HTMLElement;
-  let terminalInstance: TerminalInstance | null = null;
+  let poolContainerEl: HTMLElement;
+  let pool: TerminalPool | null = null;
   let error = '';
 
   export let isAttached = false;
   export let active = false;
+
+  const terminalOptions = {
+    fontSize: 13,
+    theme: {
+      background: '#0a0a0f',
+      foreground: '#e4e4e7',
+      cursor: '#8b5cf6',
+      selection: 'rgba(139, 92, 246, 0.3)',
+    }
+  };
 
   // Get current session without reactive subscription
   function getCurrentSession() {
@@ -26,67 +31,80 @@
     return get(sessions).find(s => s.id === id) || null;
   }
 
-  onMount(() => {
-    terminalInstance = createTerminal(containerEl, {
-      fontSize: 13,
-      theme: {
-        background: '#0a0a0f',
-        foreground: '#e4e4e7',
-        cursor: '#8b5cf6',
-        selection: 'rgba(139, 92, 246, 0.3)',
-      }
-    });
+  // Focus the active terminal (called via 'terminal:focus' global event)
+  function focusActive() {
+    if (!pool || !active) return;
+    const entry = pool.getActive();
+    if (entry) {
+      entry.terminalInstance.terminal.focus();
+    }
+  }
 
-    // Debounced resize handler to prevent lag
+  function handleFocusEvent() {
+    // Use RAF so DOM/focus updates settle first (e.g., after a dialog closes)
+    requestAnimationFrame(focusActive);
+  }
+
+  onMount(() => {
+    pool = new TerminalPool(poolContainerEl, terminalOptions);
+
+    window.addEventListener('terminal:focus', handleFocusEvent);
+
+    // Debounced resize handler
     let resizeTimeout: ReturnType<typeof setTimeout>;
 
     function handleResize() {
       clearTimeout(resizeTimeout);
       resizeTimeout = setTimeout(() => {
-        if (terminalInstance) {
+        if (pool) {
+          // Skip resize when container is hidden (display: none) — prevents
+          // sending 0×0 resize to tmux which breaks the terminal session
+          const rect = poolContainerEl.getBoundingClientRect();
+          if (rect.width === 0 || rect.height === 0) return;
+
           requestAnimationFrame(() => {
-            fitTerminal(terminalInstance);
-            terminalInstance.terminal.refresh(0, terminalInstance.terminal.rows - 1);
+            pool!.fitActive();
+            const active = pool!.getActive();
+            if (active) {
+              active.terminalInstance.terminal.refresh(0, active.terminalInstance.terminal.rows - 1);
+            }
           });
         }
       }, 50);
     }
 
     const resizeObserver = new ResizeObserver(handleResize);
-    resizeObserver.observe(containerEl);
+    resizeObserver.observe(poolContainerEl);
 
-    // Window resize listener as fallback
     window.addEventListener('resize', handleResize);
 
     // Capture-phase handler for Shift+PageUp/Down → send to tmux via WebSocket
-    // xterm modifier encoding: ;2 = Shift
     function handleTerminalKeydown(e: KeyboardEvent) {
       if (e.shiftKey && (e.key === 'PageUp' || e.key === 'PageDown')) {
         e.preventDefault();
         e.stopPropagation();
-        if (terminalInstance?.ws?.readyState === WebSocket.OPEN) {
+        const activeEntry = pool?.getActive();
+        if (activeEntry?.terminalInstance.ws?.readyState === WebSocket.OPEN) {
           const seq = e.key === 'PageUp' ? '\x1b[5;2~' : '\x1b[6;2~';
-          terminalInstance.ws.send(seq);
+          activeEntry.terminalInstance.ws.send(seq);
         }
       }
     }
-    containerEl.addEventListener('keydown', handleTerminalKeydown, true);
+    poolContainerEl.addEventListener('keydown', handleTerminalKeydown, true);
 
     // Initial auto-attach if session is already selected and running
     const currentId = get(selectedSessionId);
     if (currentId) {
       const session = get(sessions).find(s => s.id === currentId);
       if (session && session.status === 'running') {
-        setTimeout(() => {
-          attachToSession(terminalInstance!, currentId, get(selectedWindowIdx))
-            .then(() => {
-              isAttached = true;
-              attachedSessionId = currentId;
-            })
-            .catch(e => {
-              console.error('Initial auto-attach failed:', e);
-              error = String(e);
-            });
+        setTimeout(async () => {
+          try {
+            await pool!.show(currentId, get(selectedWindowIdx));
+            isAttached = true;
+          } catch (e) {
+            console.error('Initial auto-attach failed:', e);
+            error = String(e);
+          }
         }, 100);
       }
     }
@@ -95,32 +113,28 @@
       clearTimeout(resizeTimeout);
       resizeObserver.disconnect();
       window.removeEventListener('resize', handleResize);
-      containerEl.removeEventListener('keydown', handleTerminalKeydown, true);
+      window.removeEventListener('terminal:focus', handleFocusEvent);
+      poolContainerEl.removeEventListener('keydown', handleTerminalKeydown, true);
     };
   });
 
-  // Listen for session restart events (e.g., YOLO toggle)
+  // Listen for session restart events
   let unsubRestarted: (() => void) | null = null;
   onMount(() => {
     unsubRestarted = EventsOn('session:restarted', async (sessionId: string) => {
       const currentId = get(selectedSessionId);
-      if (sessionId === currentId && terminalInstance) {
-        // Detach from old (dead) connection
-        if (isAttached) {
-          await detachFromSession(terminalInstance);
-          terminalInstance.terminal.clear();
-          isAttached = false;
-          attachedSessionId = null;
-        }
+      if (sessionId === currentId && pool) {
+        // Destroy old terminal for this session
+        await pool.destroy(sessionId);
+        isAttached = false;
+
         // Wait for new tmux session to be ready
         await new Promise(r => setTimeout(r, 800));
-        // Reattach
+
+        // Create fresh terminal and show it
         try {
-          await attachToSession(terminalInstance, sessionId, get(selectedWindowIdx));
+          await pool.show(sessionId, get(selectedWindowIdx));
           isAttached = true;
-          attachedSessionId = sessionId;
-          attachedWindowIdx = get(selectedWindowIdx);
-          setTimeout(() => fitTerminal(terminalInstance!), 100);
         } catch (e) {
           console.error('Reattach after restart failed:', e);
           error = String(e);
@@ -131,97 +145,125 @@
 
   onDestroy(async () => {
     if (unsubRestarted) unsubRestarted();
-    if (terminalInstance) {
-      await detachFromSession(terminalInstance);
-      terminalInstance.cleanup();
+    if (stopGraceTimer) clearTimeout(stopGraceTimer);
+    if (pool) {
+      await pool.destroyAll();
     }
   });
 
-  // Track which session and window we're attached to
-  let attachedSessionId: string | null = null;
-  let attachedWindowIdx: number = 0;
-
-  // Track last known status for detecting status changes
+  // Track last known status for detecting changes
   let lastKnownStatus: string | undefined = undefined;
+  let lastSessionId: string | null = null;
+  let lastWindowIdx: number = 0;
+  let stopGraceTimer: ReturnType<typeof setTimeout> | null = null;
 
-  // Handle session, window, or status change - detach from old, auto-attach to new if running
-  async function handleAttachmentChange(newSessionId: string | null, newWindowIdx: number, newStatus?: string) {
-    if (!terminalInstance) return;
+  // Handle session/window/status changes via pool show/destroy
+  async function handlePoolChange(newSessionId: string | null, newWindowIdx: number, newStatus?: string) {
+    if (!pool) return;
 
-    const sessionChanged = attachedSessionId !== newSessionId;
-    const windowChanged = attachedWindowIdx !== newWindowIdx;
     const statusChanged = lastKnownStatus !== newStatus;
-    const sessionJustStarted = statusChanged && newStatus === 'running' && lastKnownStatus !== 'running';
     const sessionJustStopped = statusChanged && newStatus !== 'running' && lastKnownStatus === 'running';
+    const sessionJustStarted = statusChanged && newStatus === 'running' && lastKnownStatus !== 'running';
+    const sessionChanged = lastSessionId !== newSessionId;
+    const windowChanged = lastWindowIdx !== newWindowIdx;
+
+    // If status came back to running, cancel any pending stop grace timer
+    if (sessionJustStarted && stopGraceTimer) {
+      clearTimeout(stopGraceTimer);
+      stopGraceTimer = null;
+    }
 
     lastKnownStatus = newStatus;
+    lastSessionId = newSessionId;
+    lastWindowIdx = newWindowIdx;
 
-    // If session stopped, mark as detached and clear terminal
-    if (sessionJustStopped && isAttached) {
-      await detachFromSession(terminalInstance);
-      terminalInstance.terminal.clear();
+    // Session stopped → wait grace period before destroying (protects against tmux status flicker)
+    if (sessionJustStopped && newSessionId) {
+      const stoppedSessionId = newSessionId;
+      stopGraceTimer = setTimeout(async () => {
+        stopGraceTimer = null;
+        // Re-check: is the session still stopped?
+        const currentSession = get(sessions).find(s => s.id === stoppedSessionId);
+        if (currentSession && currentSession.status !== 'running' && pool) {
+          pool.hideAll();
+          await pool.destroy(stoppedSessionId);
+          isAttached = false;
+        }
+      }, 3000);
+      // Don't destroy yet, just hide
+      pool.hideAll();
       isAttached = false;
-      attachedSessionId = null;
       return;
     }
 
-    // If session or window changed while attached, detach first
-    if (isAttached && (sessionChanged || windowChanged)) {
-      await detachFromSession(terminalInstance);
-      terminalInstance.terminal.clear();
-      isAttached = false;
-      attachedSessionId = null;
-    }
-
-    // Auto-attach to new session/window if session is running (or just started)
-    const shouldAttach = !isAttached || sessionJustStarted;
-    if (newSessionId && shouldAttach) {
-      const newSession = get(sessions).find(s => s.id === newSessionId);
-      if (newSession && newSession.status === 'running') {
-        // Small delay when session just started to let tmux initialize
-        if (sessionJustStarted) {
-          await new Promise(r => setTimeout(r, 500));
-        }
-        try {
-          await attachToSession(terminalInstance, newSessionId, newWindowIdx);
-          isAttached = true;
-          attachedSessionId = newSessionId;
-          attachedWindowIdx = newWindowIdx;
-          // Force refit after attach
-          setTimeout(() => fitTerminal(terminalInstance!), 100);
-        } catch (e) {
-          console.error('Auto-attach failed:', e);
-          error = String(e);
-        }
+    // Session is running → show (creates if needed)
+    if (newSessionId && newStatus === 'running' && (sessionChanged || windowChanged || sessionJustStarted)) {
+      // Small delay when session just started to let tmux initialize
+      if (sessionJustStarted) {
+        await new Promise(r => setTimeout(r, 500));
       }
+      try {
+        await pool.show(newSessionId, newWindowIdx);
+        isAttached = true;
+      } catch (e) {
+        console.error('Pool show failed:', e);
+        error = String(e);
+        isAttached = false;
+      }
+      return;
     }
 
-    // Always refit on session/window change
-    if (sessionChanged || windowChanged) {
-      setTimeout(() => {
-        if (terminalInstance) fitTerminal(terminalInstance);
-      }, 50);
+    // If session is not running or no session selected, hide all terminals
+    if (!newSessionId || newStatus !== 'running') {
+      pool.hideAll();
+      isAttached = false;
     }
   }
 
   // Get current session's status reactively
   $: currentSessionStatus = $sessions.find(s => s.id === $selectedSessionId)?.status;
 
-  // Watch for session, window, or status changes
-  $: handleAttachmentChange($selectedSessionId, $selectedWindowIdx, currentSessionStatus);
+  // Show placeholder when no running session is active
+  $: showPlaceholder = !isAttached;
 
-  // Fit terminal when tab becomes active (only once per activation)
+  const placeholderIcons = [
+    '\u{1F634}', '\u{1F60C}', '\u{1F3D6}\u{FE0F}', '\u{1F995}', '\u{1F47B}',
+    '\u{1F680}', '\u{1F319}', '\u{1F50C}', '\u{1F9CA}', '\u{1F916}',
+  ];
+  const placeholderKeys = [
+    'terminal.napping', 'terminal.waiting', 'terminal.vacation',
+    'terminal.noSession', 'terminal.crickets', 'terminal.launch',
+    'terminal.resting', 'terminal.plugIn', 'terminal.frozen', 'terminal.notFound',
+  ];
+
+  let placeholderIdx = 0;
+  $: if (showPlaceholder) {
+    placeholderIdx = Math.floor(Math.random() * placeholderKeys.length);
+  }
+
+  // Watch for session, window, or status changes
+  $: handlePoolChange($selectedSessionId, $selectedWindowIdx, currentSessionStatus);
+
+  // Fit and focus terminal when tab becomes active
   let wasActive = false;
-  $: if (active && terminalInstance && !wasActive) {
+  $: if (active && pool && !wasActive) {
     wasActive = true;
-    setTimeout(() => fitTerminal(terminalInstance!), 50);
+    // Use requestAnimationFrame to ensure DOM is visible before fitting/focusing
+    requestAnimationFrame(() => {
+      if (!pool || !active) return;
+      pool.fitActive();
+      const activeEntry = pool.getActive();
+      if (activeEntry) {
+        activeEntry.terminalInstance.terminal.focus();
+      }
+    });
   } else if (!active) {
     wasActive = false;
   }
 
   export async function attach() {
     const session = getCurrentSession();
-    if (!session || !terminalInstance) return;
+    if (!session || !pool) return;
     if (session.status !== 'running') {
       error = 'Session is not running';
       return;
@@ -230,32 +272,34 @@
     error = '';
     const windowIdx = get(selectedWindowIdx);
     try {
-      await attachToSession(terminalInstance, session.id, windowIdx);
+      await pool.show(session.id, windowIdx);
       isAttached = true;
-      attachedSessionId = session.id;
-      attachedWindowIdx = windowIdx;
-      terminalInstance.terminal.focus();
     } catch (e) {
       console.error('Failed to attach:', e);
       error = String(e);
       isAttached = false;
-      attachedSessionId = null;
     }
   }
 
   export async function detach() {
-    if (terminalInstance) {
-      await detachFromSession(terminalInstance);
+    if (pool) {
+      const currentId = get(selectedSessionId);
+      if (currentId) {
+        await pool.destroy(currentId);
+      }
       isAttached = false;
-      attachedSessionId = null;
-      attachedWindowIdx = 0;
-      terminalInstance.terminal.clear();
     }
   }
 </script>
 
 <div class="terminal-wrapper">
-  <div class="terminal-container" bind:this={containerEl}></div>
+  <div class="terminal-pool-container" bind:this={poolContainerEl}></div>
+  {#if showPlaceholder}
+    <div class="terminal-placeholder">
+      <span class="placeholder-icon">{placeholderIcons[placeholderIdx]}</span>
+      <p class="placeholder-msg">{$t(placeholderKeys[placeholderIdx])}</p>
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -266,35 +310,68 @@
     background: #0a0a0f;
   }
 
-  .terminal-container {
+  .terminal-pool-container {
     flex: 1;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .terminal-placeholder {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    pointer-events: none;
+    user-select: none;
+    z-index: 10;
+  }
+
+  .placeholder-icon {
+    font-size: 64px;
+    line-height: 1;
+    opacity: 0.5;
+    filter: grayscale(0.3);
+  }
+
+  .placeholder-msg {
+    font-family: 'JetBrains Mono', 'Menlo', 'Monaco', 'Consolas', monospace;
+    font-size: 13px;
+    color: rgba(228, 228, 231, 0.3);
+    margin: 0;
+    letter-spacing: 0.03em;
+  }
+
+  .terminal-pool-container :global(.terminal-pool-entry) {
     overflow: hidden;
   }
 
-  .terminal-container :global(.xterm) {
+  .terminal-pool-container :global(.xterm) {
     padding: 8px;
     height: 100% !important;
     box-sizing: border-box;
   }
 
-  .terminal-container :global(.xterm-screen) {
+  .terminal-pool-container :global(.xterm-screen) {
     height: calc(100% - 16px) !important;
   }
 
-  .terminal-container :global(.xterm-viewport) {
+  .terminal-pool-container :global(.xterm-viewport) {
     height: calc(100% - 16px) !important;
     overflow-y: auto !important;
   }
 
-  .terminal-container :global(.xterm-viewport::-webkit-scrollbar) {
+  .terminal-pool-container :global(.xterm-viewport::-webkit-scrollbar) {
     width: 6px;
   }
 
-  .terminal-container :global(.xterm-viewport::-webkit-scrollbar-track) {
+  .terminal-pool-container :global(.xterm-viewport::-webkit-scrollbar-track) {
     background: transparent;
   }
 
-  .terminal-container :global(.xterm-viewport::-webkit-scrollbar-thumb) {
+  .terminal-pool-container :global(.xterm-viewport::-webkit-scrollbar-thumb) {
     background: rgba(139, 92, 246, 0.3);
     border-radius: 3px;
   }

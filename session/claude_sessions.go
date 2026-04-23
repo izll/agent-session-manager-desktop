@@ -456,7 +456,7 @@ func GetClaudeStatusLine(lines []string, stripANSIFunc func(string) string) stri
 	var separatorIndices []int
 	for idx, line := range lines {
 		cleanLine := strings.TrimSpace(stripANSIFunc(line))
-		sepCount := strings.Count(cleanLine, "─") + strings.Count(cleanLine, "━")
+		sepCount := strings.Count(cleanLine, "─") + strings.Count(cleanLine, "━") + strings.Count(cleanLine, "╌")
 		if sepCount > 20 {
 			separatorIndices = append(separatorIndices, idx)
 		}
@@ -469,7 +469,23 @@ func GetClaudeStatusLine(lines []string, stripANSIFunc func(string) string) stri
 
 	// Get the last two separators (they form the input area boundary)
 	topSepIdx := separatorIndices[len(separatorIndices)-2]
-	_ = separatorIndices[len(separatorIndices)-1] // bottomSepIdx not needed, we only look above topSep
+	bottomSepIdx := separatorIndices[len(separatorIndices)-1]
+
+	// Check if these separators are stale (from a previous turn).
+	// In normal state, the bottom separator is near the end of the capture
+	// (only 0-3 lines below for buttons/status). If there are many lines
+	// below, it means the current output has pushed old separators up.
+	nonEmptyBelow := 0
+	for j := bottomSepIdx + 1; j < len(lines); j++ {
+		cleanLine := strings.TrimSpace(stripANSIFunc(lines[j]))
+		if cleanLine != "" {
+			nonEmptyBelow++
+		}
+	}
+	if nonEmptyBelow > 12 {
+		return "" // Separators are stale, let fallback handle it
+	}
+	_ = bottomSepIdx // used above
 
 	// Always look above the top separator for agent output.
 	// Content between separators is always user input (prompt area).
@@ -515,6 +531,7 @@ func GetClaudeStatusLine(lines []string, stripANSIFunc func(string) string) stri
 	}
 
 	// Search for meaningful content
+	var completionLine string // fallback: completion timing line (e.g., "✻ Worked for 4m 38s")
 	for j := startIdx; j >= 0 && j >= topSepIdx-15; j-- {
 		line := lines[j]
 		cleanLine := strings.TrimSpace(stripANSIFunc(line))
@@ -523,7 +540,7 @@ func GetClaudeStatusLine(lines []string, stripANSIFunc func(string) string) stri
 		}
 
 		// Skip separator lines
-		sepCount := strings.Count(cleanLine, "─") + strings.Count(cleanLine, "━")
+		sepCount := strings.Count(cleanLine, "─") + strings.Count(cleanLine, "━") + strings.Count(cleanLine, "╌")
 		if sepCount > 20 {
 			continue
 		}
@@ -549,9 +566,15 @@ func GetClaudeStatusLine(lines []string, stripANSIFunc func(string) string) stri
 			continue
 		}
 
-		// Skip completed timing lines (e.g. "Baked for", "Churned for")
+		// Completed timing lines (e.g. "✻ Worked for", "✻ Cogitated for") - save as fallback
 		cleanLineLower := strings.ToLower(cleanLine)
 		if strings.Contains(cleanLineLower, " for ") {
+			// Save completion timing line (✻/✽) as fallback, skip other "for" lines
+			if strings.HasPrefix(cleanLine, "✻") || strings.HasPrefix(cleanLine, "✽") {
+				if completionLine == "" {
+					completionLine = line
+				}
+			}
 			continue
 		}
 
@@ -559,6 +582,90 @@ func GetClaudeStatusLine(lines []string, stripANSIFunc func(string) string) stri
 		return line
 	}
 
+	// If no content found but we have a completion timing line, return it
+	if completionLine != "" {
+		return completionLine
+	}
+
 	// No content found - return empty for fallback processing
+	return ""
+}
+
+// ExtractSpinnerText finds the active spinner/thinking/tool-execution line text
+// and returns it without the spinner character prefix.
+// For Claude: looks above the input separator area.
+// For generic agents: looks from the bottom of the screen.
+func ExtractSpinnerText(lines []string, agentName string, stripANSIFunc func(string) string) string {
+	spinnerChars := "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏◐◑◒◓"
+
+	// For Claude, look above the separator (same area as GetClaudeStatusLine)
+	if agentName == "claude" {
+		// Find horizontal separators
+		var separatorIndices []int
+		for idx, line := range lines {
+			cleanLine := strings.TrimSpace(stripANSIFunc(line))
+			sepCount := strings.Count(cleanLine, "─") + strings.Count(cleanLine, "━") + strings.Count(cleanLine, "╌")
+			if sepCount > 20 {
+				separatorIndices = append(separatorIndices, idx)
+			}
+		}
+
+		endIdx := len(lines) - 1
+		if len(separatorIndices) >= 2 {
+			endIdx = separatorIndices[len(separatorIndices)-2] - 1
+		}
+
+		for j := endIdx; j >= 0 && j >= endIdx-15; j-- {
+			cleanLine := strings.TrimSpace(stripANSIFunc(lines[j]))
+			if cleanLine == "" {
+				continue
+			}
+
+			// Braille spinner: "⠋ Thinking..."
+			for _, r := range spinnerChars {
+				if strings.HasPrefix(cleanLine, string(r)) {
+					text := strings.TrimSpace(strings.TrimPrefix(cleanLine, string(r)))
+					// Skip completed lines like "Churned for 1m"
+					if strings.Contains(strings.ToLower(text), " for ") {
+						continue
+					}
+					if text != "" {
+						return text
+					}
+				}
+			}
+
+			// Extended thinking: "✽ Thinking… (22 tokens)"
+			for _, indicator := range []string{"✽", "✻"} {
+				if strings.HasPrefix(cleanLine, indicator) && strings.Contains(cleanLine, "…") {
+					text := strings.TrimSpace(strings.TrimPrefix(cleanLine, indicator))
+					return text
+				}
+			}
+
+			// Tool execution: "⎿  Running…"
+			if strings.HasPrefix(cleanLine, "⎿") && strings.HasSuffix(cleanLine, "…") {
+				text := strings.TrimSpace(strings.TrimPrefix(cleanLine, "⎿"))
+				return text
+			}
+		}
+		return ""
+	}
+
+	// Generic agents: look from the bottom
+	for j := len(lines) - 1; j >= 0 && j >= len(lines)-20; j-- {
+		cleanLine := strings.TrimSpace(stripANSIFunc(lines[j]))
+		if cleanLine == "" {
+			continue
+		}
+		for _, r := range spinnerChars {
+			if strings.HasPrefix(cleanLine, string(r)) {
+				text := strings.TrimSpace(strings.TrimPrefix(cleanLine, string(r)))
+				if text != "" {
+					return text
+				}
+			}
+		}
+	}
 	return ""
 }

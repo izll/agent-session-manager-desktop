@@ -9,6 +9,7 @@
   import { sessions, selectedSessionId, selectedWindowIdx, toggleAutoYes } from '../../stores/sessions';
   import { agents } from '../../stores/agents';
   import { get } from 'svelte/store';
+  import { t } from '../../i18n';
 
   const dispatch = createEventDispatcher();
 
@@ -31,6 +32,14 @@
   $: canFork = currentSession?.agent === 'claude' && currentSession?.status === 'running';
   $: agentConfig = $agents.find(a => a.type === currentSession?.agent);
   $: canAutoYes = agentConfig?.supportsAutoYes && currentSession?.status === 'running';
+
+  // Get current tab's resume session ID
+  $: currentResumeId = (() => {
+    if (!currentSession) return '';
+    if ($selectedWindowIdx === 0) return currentSession.resumeSessionId || '';
+    const fw = currentSession.followedWindows?.find(w => w.index === $selectedWindowIdx);
+    return fw?.resumeSessionId || '';
+  })();
 
   // Get current tab's notes (with local cache for immediate updates)
   $: currentTabNotes = (() => {
@@ -64,6 +73,7 @@
     <!-- Tab Bar - shows windows/tabs within a session -->
     <TabBar
       {fullDiffActive}
+      {activeView}
       on:openColorDialog={() => dispatch('openColorDialog')}
       on:openFullDiff={() => { fullDiffActive = true; diffMode = 'full'; }}
       on:closeFullDiff={() => { fullDiffActive = false; activeView = 'terminal'; }}
@@ -90,7 +100,7 @@
               <polyline points="4 17 10 11 4 5"/>
               <line x1="12" y1="19" x2="20" y2="19"/>
             </svg>
-            Terminal
+            {$t('mainPanel.terminal')}
           </button>
           <button
             class="view-tab {activeView === 'diff' ? 'active' : ''}"
@@ -101,7 +111,7 @@
               <polyline points="15 3 21 3 21 9"/>
               <line x1="10" y1="14" x2="21" y2="3"/>
             </svg>
-            Diff
+            {$t('mainPanel.diff')}
           </button>
           <button
             class="view-tab {activeView === 'notes' ? 'active' : ''}"
@@ -113,7 +123,7 @@
               <line x1="16" y1="13" x2="8" y2="13"/>
               <line x1="16" y1="17" x2="8" y2="17"/>
             </svg>
-            Notes
+            {$t('mainPanel.notes')}
           </button>
           <button
             class="view-tab {activeView === 'tasks' ? 'active' : ''}"
@@ -123,7 +133,7 @@
               <path d="M9 11l3 3L22 4"/>
               <path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
             </svg>
-            Tasks
+            {$t('mainPanel.tasks')}
           </button>
         </div>
         <div class="view-tabs-right">
@@ -139,16 +149,16 @@
                   console.error('YOLO toggle failed:', e);
                 }
               }}
-              title={currentSession?.autoYes ? 'YOLO mode ON - click to disable' : 'Enable YOLO mode (auto-approve)'}
+              title={currentSession?.autoYes ? $t('mainPanel.yoloOn') : $t('mainPanel.yoloEnable')}
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
               </svg>
-              {currentSession?.autoYes ? 'YOLO ⚡' : 'YOLO'}
+              {currentSession?.autoYes ? $t('mainPanel.yoloLabel') + ' ⚡' : $t('mainPanel.yoloLabel')}
             </button>
           {/if}
           {#if canFork}
-            <button class="fork-btn" on:click={() => showForkDialog = true} title="Fork this Claude session">
+            <button class="fork-btn" on:click={() => showForkDialog = true} title={$t('mainPanel.forkTitle')}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <circle cx="12" cy="18" r="3"/>
                 <circle cx="6" cy="6" r="3"/>
@@ -156,23 +166,23 @@
                 <path d="M6 9v3a3 3 0 003 3h6a3 3 0 003-3V9"/>
                 <path d="M12 12v3"/>
               </svg>
-              Fork
+              {$t('mainPanel.fork')}
             </button>
           {/if}
           {#if terminalAttached}
-            <button class="terminal-btn detach" on:click={() => terminalComponent?.detach()} title="Detach from terminal">
+            <button class="terminal-btn detach" on:click={() => terminalComponent?.detach()} title={$t('mainPanel.detachTitle')}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M18 6L6 18M6 6l12 12"/>
               </svg>
-              Detach
+              {$t('mainPanel.detach')}
             </button>
           {:else if currentSession?.status === 'running'}
-            <button class="terminal-btn attach" on:click={() => terminalComponent?.attach()} title="Attach to terminal">
+            <button class="terminal-btn attach" on:click={() => terminalComponent?.attach()} title={$t('mainPanel.attachTitle')}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <polyline points="4 17 10 11 4 5"/>
                 <line x1="12" y1="19" x2="20" y2="19"/>
               </svg>
-              Attach
+              {$t('mainPanel.attach')}
             </button>
           {/if}
         </div>
@@ -206,15 +216,15 @@
           <span class="status-path">{truncatePath(currentSession?.path || '')}</span>
         </div>
 
-        {#if currentSession?.resumeSessionId}
+        {#if currentResumeId}
           <span class="status-divider"></span>
           <!-- Session ID -->
-          <div class="status-item" title="Session ID: {currentSession.resumeSessionId}">
+          <div class="status-item" title="Session ID: {currentResumeId}">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
               <path d="M7 11V7a5 5 0 0110 0v4"/>
             </svg>
-            <span class="status-id">{currentSession.resumeSessionId.slice(0, 8)}...</span>
+            <span class="status-id">{currentResumeId.slice(0, 8)}...</span>
           </div>
         {/if}
 
@@ -253,8 +263,8 @@
             </defs>
           </svg>
         </div>
-        <h2>Select a session</h2>
-        <p>Choose a session from the sidebar to get started</p>
+        <h2>{$t('mainPanel.selectSession')}</h2>
+        <p>{$t('mainPanel.selectSessionHint')}</p>
       </div>
     </div>
   {/if}

@@ -25,6 +25,8 @@ func (h *PtyTextHandler) AppendText(text string) {
 	ts := h.termServer
 	h.mu.Unlock()
 
+	fmt.Printf("[Dictation] PtyTextHandler.AppendText: %q (sid=%s, wIdx=%d)\n", text, sid, wIdx)
+
 	if sid == "" || ts == nil {
 		return
 	}
@@ -120,6 +122,7 @@ type FieldTextHandler struct {
 }
 
 func (h *FieldTextHandler) AppendText(text string) {
+	fmt.Printf("[Dictation] FieldTextHandler.AppendText: %q (callback=%v)\n", text, h.onAppendText != nil)
 	if h.onAppendText != nil {
 		h.onAppendText(text)
 	}
@@ -299,16 +302,29 @@ func (d *DictationService) ToggleDictation() (bool, error) {
 			}
 		}
 
-		// Apply handler based on buffer mode setting
-		settings := d.app.GetSettings()
-		d.applyBufferMode(settings.Mode, settings.BufferMode)
+		// Apply handler based on current target and buffer mode setting
+		fmt.Printf("[Dictation] ToggleDictation auto-init: currentTarget=%q\n", d.currentTarget)
+		if d.currentTarget == "field" {
+			fmt.Println("[Dictation] ToggleDictation auto-init: setting fieldHandler")
+			d.app.SetKeyboardPopupHandler(d.fieldHandler)
+			d.app.SetKeyboardPopupDirect(false)
+		} else {
+			settings := d.app.GetSettings()
+			d.applyBufferMode(settings.Mode, settings.BufferMode)
+		}
 
 		d.initialized = true
 	}
 
-	// Always apply buffer mode before toggling (settings may have changed)
-	settings := d.app.GetSettings()
-	d.applyBufferMode(settings.Mode, settings.BufferMode)
+	// Only apply buffer mode if target is terminal (don't override field handler)
+	fmt.Printf("[Dictation] ToggleDictation pre-toggle: currentTarget=%q\n", d.currentTarget)
+	if d.currentTarget != "field" {
+		fmt.Println("[Dictation] ToggleDictation: applying buffer mode (target is not field)")
+		settings := d.app.GetSettings()
+		d.applyBufferMode(settings.Mode, settings.BufferMode)
+	} else {
+		fmt.Println("[Dictation] ToggleDictation: SKIPPING applyBufferMode (target is field)")
+	}
 
 	// Clear buffer when starting a new recording
 	if !d.app.IsListening() {
@@ -618,17 +634,21 @@ func (d *DictationService) SetDictationTarget(target string) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
+	fmt.Printf("[Dictation] SetDictationTarget: %q (app=%v)\n", target, d.app != nil)
 	d.currentTarget = target
 
 	if d.app == nil {
+		fmt.Println("[Dictation] SetDictationTarget: app is nil, only setting currentTarget")
 		return
 	}
 
 	switch target {
 	case "field":
+		fmt.Println("[Dictation] SetDictationTarget: setting fieldHandler")
 		d.app.SetKeyboardPopupHandler(d.fieldHandler)
 		d.app.SetKeyboardPopupDirect(false)
 	default:
+		fmt.Println("[Dictation] SetDictationTarget: restoring terminal/buffer mode")
 		// Restore terminal/buffer mode based on settings
 		settings := d.app.GetSettings()
 		d.applyBufferMode(settings.Mode, settings.BufferMode)

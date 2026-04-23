@@ -1,6 +1,7 @@
 <script lang="ts">
   import { createEventDispatcher, onMount } from 'svelte';
   import * as App from '../../../../wailsjs/go/main/App';
+  import { t } from '../../i18n';
 
   interface HistoryEntry {
     agent: string;
@@ -243,7 +244,7 @@
           </svg>
           <input
             type="text"
-            placeholder="Search history across all agents..."
+            placeholder={$t('search.placeholder')}
             bind:value={query}
             bind:this={searchInput}
             on:input={handleQueryChange}
@@ -258,7 +259,7 @@
             </button>
           {/if}
         </div>
-        <button class="fullscreen-btn" on:click={() => isFullscreen = !isFullscreen} title={isFullscreen ? 'Exit fullscreen (F11)' : 'Fullscreen (F11)'}>
+        <button class="fullscreen-btn" on:click={() => isFullscreen = !isFullscreen} title={isFullscreen ? $t('search.exitFullscreen') : $t('search.fullscreen')}>
           {#if isFullscreen}
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/>
@@ -286,7 +287,7 @@
               <svg class="spinner" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
               </svg>
-              <span>Searching...</span>
+              <span>{$t('search.searching')}</span>
             </div>
           {:else if error}
             <div class="error-state">
@@ -303,8 +304,8 @@
                 <circle cx="11" cy="11" r="8"/>
                 <path d="M21 21l-4.35-4.35"/>
               </svg>
-              <span>Search through your conversation history</span>
-              <span class="hint">Searches Claude, Aider, OpenCode, and Terminal history</span>
+              <span>{$t('search.noQuery')}</span>
+              <span class="hint">{$t('search.noQueryHint')}</span>
             </div>
           {:else if results.length === 0}
             <div class="empty-state">
@@ -314,8 +315,8 @@
                 <line x1="9" y1="9" x2="9.01" y2="9"/>
                 <line x1="15" y1="9" x2="15.01" y2="9"/>
               </svg>
-              <span>No results found</span>
-              <span class="hint">Try different keywords</span>
+              <span>{$t('search.noResults')}</span>
+              <span class="hint">{$t('search.noResultsHint')}</span>
             </div>
           {:else}
             <div class="results-list">
@@ -332,7 +333,7 @@
                     <span class="result-text">{truncate(entry.content, 100)}</span>
                     <span class="result-meta">
                       <span class="agent-name">{entry.agent}</span>
-                      <span class="score">Score: {entry.score}</span>
+                      <span class="score">{$t('search.score', { score: entry.score })}</span>
                     </span>
                   </div>
                 </button>
@@ -349,17 +350,17 @@
                 <span style="color: {getAgentColor(selectedEntry.agent)}">
                   {getAgentIcon(selectedEntry.agent)}
                 </span>
-                Conversation Preview
+                {$t('search.conversationPreview')}
               </span>
               <div class="preview-nav">
                 {#if matchCount > 0}
                   <span class="match-counter">{currentMatchIndex + 1} / {matchCount}</span>
-                  <button class="nav-btn" on:click={prevMatch} title="Previous match (Shift+F3)">
+                  <button class="nav-btn" on:click={prevMatch} title={$t('search.prevMatch')}>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                       <polyline points="18 15 12 9 6 15"/>
                     </svg>
                   </button>
-                  <button class="nav-btn" on:click={nextMatch} title="Next match (F3)">
+                  <button class="nav-btn" on:click={nextMatch} title={$t('search.nextMatch')}>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                       <polyline points="6 9 12 15 18 9"/>
                     </svg>
@@ -379,7 +380,7 @@
                   <svg class="spinner" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
                   </svg>
-                  <span>Loading preview...</span>
+                  <span>{$t('search.loadingPreview')}</span>
                 </div>
               {:else}
                 <pre class="preview-text">{@html highlightText(preview, query)}</pre>
@@ -393,9 +394,9 @@
       <div class="dialog-footer">
         <span class="result-count">
           {#if results.length > 0}
-            {results.length} result{results.length === 1 ? '' : 's'}
+            {results.length === 1 ? $t('search.resultCount', { count: results.length }) : $t('search.resultCountPlural', { count: results.length })}
           {:else}
-            Press Ctrl+F to search
+            {$t('search.pressToSearch')}
           {/if}
         </span>
         <span class="keyboard-hint">

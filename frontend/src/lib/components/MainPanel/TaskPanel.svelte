@@ -3,7 +3,11 @@
   import { get } from 'svelte/store';
   import { selectedSessionId } from '../../stores/sessions';
   import Select from '../common/Select.svelte';
+  import ConfirmDialog from '../Dialogs/ConfirmDialog.svelte';
   import { createFieldDictation } from '../../utils/dictationField';
+  import * as DictationService from '../../../../wailsjs/go/main/DictationService';
+  import { EventsOn } from '../../../../wailsjs/runtime/runtime';
+  import { t } from '../../i18n';
   import {
     tasks,
     taskFilter,
@@ -37,9 +41,14 @@
     setSubtaskStatus,
     addDependency,
     removeDependency,
+    taskSortBy,
+    setTaskSortBy,
+    hideDone,
+    toggleHideDone,
     type Task,
     type TaskStatus,
     type TaskPriority,
+    type TaskSortBy,
     type Subtask
   } from '../../stores/tasks';
 
@@ -78,6 +87,7 @@
   let editTaskDescription = '';
   let editTaskDetails = '';
   let editTaskPriority: TaskPriority = 'medium';
+  let editTaskError = '';
 
   // Add subtask modal
   let showAddSubtaskModal = false;
@@ -91,49 +101,128 @@
   let editSubtaskTitle = '';
   let editSubtaskDescription = '';
 
+  // Delete confirm dialog
+  let showDeleteConfirm = false;
+  let deleteTaskId = '';
+  let deleteTaskTitle = '';
+
+  // Remove subtask confirm dialog
+  let showRemoveSubtaskConfirm = false;
+  let removeSubtaskId = '';
+
   // Dependency modal
   let showDependencyModal = false;
   let dependencyTaskId = '';
   let newDependencyId = '';
 
-  // Dictation support - one controller, switches target textarea
-  let activeDictationEl: HTMLTextAreaElement | null = null;
-  const dictation = createFieldDictation(() => activeDictationEl);
+  // Dictation support - one controller, follows focused field in dialog
+  let activeDictationEl: HTMLTextAreaElement | HTMLInputElement | null = null;
+  const dictation = createFieldDictation(() => {
+    // Always prefer currently focused field in dialog (allows switching fields mid-dictation)
+    const active = document.activeElement;
+    if (active && (active instanceof HTMLTextAreaElement || (active instanceof HTMLInputElement && active.type === 'text'))) {
+      const inDialog = active.closest('.dialog-content');
+      if (inDialog) {
+        activeDictationEl = active as HTMLTextAreaElement | HTMLInputElement;
+        return activeDictationEl;
+      }
+    }
+    // Fallback to last known active field (e.g. when terminal steals focus)
+    return activeDictationEl;
+  });
   const dictationListening = dictation.listening;
 
-  // Textarea refs for dictation
+  // Element refs for dictation
+  let addTitleEl: HTMLInputElement;
   let addDescEl: HTMLTextAreaElement;
   let addDetailsEl: HTMLTextAreaElement;
   let addPromptEl: HTMLTextAreaElement;
+  let editTitleEl: HTMLInputElement;
   let editDescEl: HTMLTextAreaElement;
   let editDetailsEl: HTMLTextAreaElement;
+  let subtaskTitleEl: HTMLInputElement;
   let subtaskDescEl: HTMLTextAreaElement;
 
-  async function toggleDictationFor(el: HTMLTextAreaElement) {
-    if ($dictationListening && activeDictationEl === el) {
-      // Stop dictation for this field
+  // Track focused field during dictation for immediate visual feedback
+  function handleDialogFocusIn(e: FocusEvent) {
+    if (!$dictationListening) return;
+    const target = e.target;
+    if (target instanceof HTMLTextAreaElement || (target instanceof HTMLInputElement && target.type === 'text')) {
+      activeDictationEl = target;
+    }
+  }
+
+  async function toggleModalDictation() {
+    if ($dictationListening) {
       await dictation.stop();
       activeDictationEl = null;
     } else {
-      // Stop if running for another field
-      if ($dictationListening) {
-        await dictation.stop();
-      }
-      activeDictationEl = el;
       await dictation.toggle();
     }
   }
 
-  // Auto-stop dictation when modals close
-  $: if (!showAddTaskModal && !showEditTaskModal && !showAddSubtaskModal) {
+  // When a modal with form fields opens, preemptively set dictation target to 'field'
+  // so hotkey also routes to form fields. When modal closes, restore to 'terminal'.
+  let modalFieldCleanup: (() => void) | null = null;
+
+  function setupModalFieldTarget() {
+    if (modalFieldCleanup) return; // already set up
+    DictationService.SetDictationTarget('field').catch(() => {});
+
+    // Listen for hotkey-triggered dictation (state changes we didn't initiate)
+    const unsubState = EventsOn('dictation:state', (isListening: boolean) => {
+      if (isListening && !$dictationListening) {
+        // Hotkey started dictation while modal is open - set up field listeners
+        // Use the currently focused field; fallback to first field in modal
+        if (!activeDictationEl) {
+          const active = document.activeElement;
+          if (active && (active instanceof HTMLTextAreaElement || (active instanceof HTMLInputElement && active.type === 'text'))) {
+            const inDialog = active.closest('.dialog-content');
+            if (inDialog) activeDictationEl = active as HTMLTextAreaElement | HTMLInputElement;
+          }
+          if (!activeDictationEl) {
+            if (showAddTaskModal) activeDictationEl = addTitleEl || addDescEl;
+            else if (showEditTaskModal) activeDictationEl = editTitleEl || editDescEl;
+            else if (showAddSubtaskModal) activeDictationEl = subtaskTitleEl || subtaskDescEl;
+          }
+        }
+        dictation.startExternally();
+      } else if (!isListening && $dictationListening) {
+        // Stopped externally - clean up listeners without toggling
+        dictation.stopExternally();
+        activeDictationEl = null;
+        // Re-set field target since modal is still open (for next hotkey press)
+        DictationService.SetDictationTarget('field').catch(() => {});
+      }
+    });
+
+    modalFieldCleanup = () => {
+      unsubState();
+      DictationService.SetDictationTarget('terminal').catch(() => {});
+    };
+  }
+
+  function cleanupModalFieldTarget() {
     if ($dictationListening) {
       dictation.stop();
       activeDictationEl = null;
     }
+    if (modalFieldCleanup) {
+      modalFieldCleanup();
+      modalFieldCleanup = null;
+    }
+  }
+
+  // Set up / clean up field target when modals open/close
+  $: if (showAddTaskModal || showEditTaskModal || showAddSubtaskModal) {
+    setupModalFieldTarget();
+  } else {
+    cleanupModalFieldTarget();
   }
 
   onDestroy(() => {
     dictation.destroy();
+    cleanupModalFieldTarget();
   });
 
   onMount(() => {
@@ -269,13 +358,20 @@
   }
 
   // Delete task
-  async function handleDeleteTask(taskId: string) {
-    const sessionId = get(selectedSessionId);
-    if (!sessionId) return;
+  function handleDeleteTask(taskId: string) {
+    const task = $tasks.find(t => t.id === taskId);
+    deleteTaskId = taskId;
+    deleteTaskTitle = task?.title || taskId;
+    showDeleteConfirm = true;
+    contextMenuTask = null;
+  }
 
-    if (confirm('Are you sure you want to delete this task?')) {
-      await removeTask(sessionId, taskId);
-    }
+  async function confirmDeleteTask() {
+    const sessionId = get(selectedSessionId);
+    if (!sessionId || !deleteTaskId) return;
+    await removeTask(sessionId, deleteTaskId);
+    deleteTaskId = '';
+    deleteTaskTitle = '';
   }
 
   // Move task status
@@ -369,20 +465,27 @@
     editTaskDescription = task.description || '';
     editTaskDetails = task.details || '';
     editTaskPriority = task.priority;
+    editTaskError = '';
     showEditTaskModal = true;
     contextMenuTask = null;
   }
 
   // Save edited task
   async function handleSaveEditTask() {
+    console.log('[TaskPanel] handleSaveEditTask called');
     const sessionId = get(selectedSessionId);
+    console.log('[TaskPanel] sessionId:', sessionId, 'editTaskId:', editTaskId);
     if (!sessionId || !editTaskId) return;
 
+    editTaskError = '';
     try {
+      console.log('[TaskPanel] calling updateTaskDirect...', { editTaskTitle, editTaskDescription, editTaskDetails, editTaskPriority });
       await updateTaskDirect(sessionId, editTaskId, editTaskTitle, editTaskDescription, editTaskDetails, editTaskPriority);
+      console.log('[TaskPanel] updateTaskDirect success');
       showEditTaskModal = false;
     } catch (e) {
-      console.error('Failed to update task:', e);
+      console.error('[TaskPanel] Failed to update task:', e);
+      editTaskError = String(e);
     }
   }
 
@@ -421,17 +524,20 @@
   }
 
   // Remove subtask
-  async function handleRemoveSubtask(subtaskId: string) {
-    const sessionId = get(selectedSessionId);
-    if (!sessionId) return;
+  function handleRemoveSubtask(subtaskId: string) {
+    removeSubtaskId = subtaskId;
+    showRemoveSubtaskConfirm = true;
+  }
 
-    if (confirm('Are you sure you want to remove this subtask?')) {
-      try {
-        await removeSubtask(sessionId, subtaskId);
-      } catch (e) {
-        console.error('Failed to remove subtask:', e);
-      }
+  async function confirmRemoveSubtask() {
+    const sessionId = get(selectedSessionId);
+    if (!sessionId || !removeSubtaskId) return;
+    try {
+      await removeSubtask(sessionId, removeSubtaskId);
+    } catch (e) {
+      console.error('Failed to remove subtask:', e);
     }
+    removeSubtaskId = '';
   }
 
   // Open dependency modal
@@ -471,6 +577,21 @@
     return $tasks.find(t => t.id === id);
   }
 
+  function formatRelativeDate(dateStr: string): string {
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMin = Math.floor(diffMs / 60000);
+    const diffHr = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMin < 1) return $t('tasks.timeJustNow');
+    if (diffMin < 60) return $t('tasks.timeMinAgo', { n: diffMin });
+    if (diffHr < 24) return $t('tasks.timeHourAgo', { n: diffHr });
+    if (diffDays < 7) return $t('tasks.timeDayAgo', { n: diffDays });
+    return date.toLocaleDateString();
+  }
+
   function handleGlobalClick() {
     if (contextMenuTask) {
       closeContextMenu();
@@ -483,17 +604,44 @@
 <div class="task-panel">
   <div class="task-header">
     <div class="header-left">
-      <span class="task-title">Task Master</span>
+      <span class="task-title">{$t('tasks.title')}</span>
       {#if $taskStats.total > 0}
         <span class="task-count">
           {$taskStats.done}/{$taskStats.total}
         </span>
       {/if}
       {#if $taskMasterStatus.running}
-        <span class="mcp-badge">MCP</span>
+        <span class="mcp-badge">{$t('tasks.mcp')}</span>
       {/if}
     </div>
     <div class="header-right">
+      <button
+        class="hide-done-btn"
+        class:active={$hideDone}
+        on:click={toggleHideDone}
+        title={$hideDone ? $t('tasks.showDone') : $t('tasks.hideDone')}
+      >
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          {#if $hideDone}
+            <path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/>
+            <line x1="1" y1="1" x2="23" y2="23"/>
+          {:else}
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+            <circle cx="12" cy="12" r="3"/>
+          {/if}
+        </svg>
+      </button>
+      <Select
+        small
+        value={$taskSortBy}
+        options={[
+          { value: 'priority', label: $t('tasks.sortPriority') },
+          { value: 'status', label: $t('tasks.sortStatus') },
+          { value: 'created-desc', label: $t('tasks.sortCreatedDesc') },
+          { value: 'created-asc', label: $t('tasks.sortCreatedAsc') }
+        ]}
+        on:change={(e) => setTaskSortBy(e.detail)}
+      />
       <Select
         small
         value={$taskFilter.status}
@@ -513,23 +661,23 @@
   <div class="action-bar">
     {#if !$taskMasterStatus.running}
       <button class="action-btn init" on:click={handleInit} disabled={$isLoadingTasks}>
-        Initialize
+        {$t('tasks.initialize')}
       </button>
     {:else}
       <button class="action-btn" on:click={() => showPRDModal = true} disabled={$isLoadingTasks}>
-        Parse PRD
+        {$t('tasks.parsePRD')}
       </button>
       <button class="action-btn" on:click={() => showAddTaskModal = true} disabled={$isLoadingTasks}>
-        + Add Task
+        {$t('tasks.addTask')}
       </button>
       <button class="action-btn" on:click={handleExpandAll} disabled={$isLoadingTasks}>
-        Expand All
+        {$t('tasks.expandAll')}
       </button>
       <button class="action-btn" on:click={handleAnalyzeComplexity} disabled={$isLoadingTasks}>
-        Analyze
+        {$t('tasks.analyze')}
       </button>
       <button class="action-btn next" on:click={handleGetNextTask} disabled={$isLoadingTasks}>
-        Next Task
+        {$t('tasks.nextTask')}
       </button>
     {/if}
   </div>
@@ -542,15 +690,15 @@
 
   <div class="task-list">
     {#if $isLoadingTasks}
-      <div class="loading">Loading tasks...</div>
+      <div class="loading">{$t('tasks.loading')}</div>
     {:else if $sortedFilteredTasks.length === 0}
       <div class="empty">
         {#if !$taskMasterStatus.running}
-          Click "Initialize" to set up Task Master for this project.
+          {$t('tasks.initHint')}
         {:else if $tasks.length === 0}
-          No tasks yet. Use "Parse PRD" or "+ Add Task" to create tasks.
+          {$t('tasks.noTasks')}
         {:else}
-          No tasks match the current filter.
+          {$t('tasks.noMatch')}
         {/if}
       </div>
     {:else}
@@ -566,6 +714,18 @@
           tabindex="0"
         >
           <div class="task-main">
+            <button
+              class="task-checkbox"
+              class:checked={task.status === 'done'}
+              on:click|stopPropagation={() => handleMoveTask(task.id, task.status === 'done' ? 'pending' : 'done')}
+              title={task.status === 'done' ? 'Mark as pending' : 'Mark as done'}
+            >
+              {#if task.status === 'done'}
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+              {/if}
+            </button>
             <div class="task-id">{task.id}</div>
             <div class="task-content">
               <div class="task-title-row">
@@ -582,10 +742,15 @@
                 >
                   {statusLabels[task.status] || task.status}
                 </span>
+                {#if task.createdAt}
+                  <span class="created-at" title={new Date(task.createdAt).toLocaleString()}>
+                    {formatRelativeDate(task.createdAt)}
+                  </span>
+                {/if}
               </div>
 
               {#if task.complexity}
-                <span class="complexity-badge" title="Complexity score">
+                <span class="complexity-badge" title={$t('tasks.complexityScore')}>
                   C:{task.complexity}
                 </span>
               {/if}
@@ -613,9 +778,9 @@
               <!-- Subtasks Section -->
               <div class="subtasks-section">
                 <div class="subtasks-header">
-                  <span>Subtasks ({task.subtasks ? task.subtasks.filter(s => s.status === 'done').length : 0}/{task.subtasks ? task.subtasks.length : 0})</span>
+                  <span>{$t('tasks.subtasks')} ({task.subtasks ? task.subtasks.filter(s => s.status === 'done').length : 0}/{task.subtasks ? task.subtasks.length : 0})</span>
                   <button class="add-subtask-btn" on:click|stopPropagation={() => openAddSubtaskModal(task.id)}>
-                    + Add
+                    {$t('tasks.addSubtask')}
                   </button>
                 </div>
                 {#if task.subtasks && task.subtasks.length > 0}
@@ -632,7 +797,7 @@
                       <button
                         class="subtask-remove-btn"
                         on:click|stopPropagation={() => handleRemoveSubtask(`${task.id}.${subtask.id}`)}
-                        title="Remove subtask"
+                        title={$t('tasks.removeSubtask')}
                       >
                         ×
                       </button>
@@ -640,7 +805,7 @@
                   {/each}
                 {:else}
                   <button class="expand-btn" on:click|stopPropagation={() => handleExpandTask(task.id)}>
-                    Expand into Subtasks (AI)
+                    {$t('tasks.expandSubtasks')}
                   </button>
                 {/if}
               </div>
@@ -648,9 +813,9 @@
               <!-- Dependencies Section -->
               <div class="dependencies-section">
                 <div class="dependencies-header">
-                  <span>Dependencies</span>
+                  <span>{$t('tasks.dependencies')}</span>
                   <button class="add-dep-btn" on:click|stopPropagation={() => openDependencyModal(task.id)}>
-                    + Add
+                    {$t('tasks.addSubtask')}
                   </button>
                 </div>
                 {#if task.dependencies && task.dependencies.length > 0}
@@ -661,7 +826,7 @@
                         <button
                           class="dep-remove-btn"
                           on:click|stopPropagation={() => handleRemoveDependency(task.id, dep)}
-                          title="Remove dependency"
+                          title={$t('tasks.removeDependency')}
                         >
                           ×
                         </button>
@@ -669,22 +834,22 @@
                     {/each}
                   </div>
                 {:else}
-                  <span class="no-deps">No dependencies</span>
+                  <span class="no-deps">{$t('tasks.noDependencies')}</span>
                 {/if}
               </div>
 
               <div class="task-actions">
                 <button class="action-btn primary" on:click|stopPropagation={() => handleSendToAgent(task.id)}>
-                  Send to Agent
+                  {$t('tasks.sendToAgent')}
                 </button>
                 <button class="action-btn edit" on:click|stopPropagation={() => openEditTaskModal(task)}>
-                  Edit
+                  {$t('tasks.edit')}
                 </button>
                 <button class="action-btn" on:click|stopPropagation={() => handleExpandTask(task.id)}>
-                  Expand
+                  {$t('tasks.expand')}
                 </button>
                 <button class="action-btn danger" on:click|stopPropagation={() => handleDeleteTask(task.id)}>
-                  Delete
+                  {$t('common.delete')}
                 </button>
               </div>
             </div>
@@ -702,18 +867,18 @@
     style="left: {contextMenuX}px; top: {contextMenuY}px"
     on:click|stopPropagation
   >
-    <button on:click={() => handleSendToAgent(contextMenuTask.id)}>Send to Agent</button>
-    <button on:click={() => openEditTaskModal(contextMenuTask)}>Edit Task</button>
-    <button on:click={() => handleExpandTask(contextMenuTask.id)}>Expand Task</button>
-    <button on:click={() => openAddSubtaskModal(contextMenuTask.id)}>Add Subtask</button>
-    <button on:click={() => openDependencyModal(contextMenuTask.id)}>Manage Dependencies</button>
+    <button on:click={() => handleSendToAgent(contextMenuTask.id)}>{$t('tasks.sendToAgent')}</button>
+    <button on:click={() => openEditTaskModal(contextMenuTask)}>{$t('tasks.editTaskMenu')}</button>
+    <button on:click={() => handleExpandTask(contextMenuTask.id)}>{$t('tasks.expandTask')}</button>
+    <button on:click={() => openAddSubtaskModal(contextMenuTask.id)}>{$t('tasks.addSubtaskMenu')}</button>
+    <button on:click={() => openDependencyModal(contextMenuTask.id)}>{$t('tasks.manageDependencies')}</button>
     <div class="menu-divider"></div>
-    <button on:click={() => handleMoveTask(contextMenuTask.id, 'pending')}>Set Pending</button>
-    <button on:click={() => handleMoveTask(contextMenuTask.id, 'in-progress')}>Set In Progress</button>
-    <button on:click={() => handleMoveTask(contextMenuTask.id, 'done')}>Set Done</button>
-    <button on:click={() => handleMoveTask(contextMenuTask.id, 'blocked')}>Set Blocked</button>
+    <button on:click={() => handleMoveTask(contextMenuTask.id, 'pending')}>{$t('tasks.setPending')}</button>
+    <button on:click={() => handleMoveTask(contextMenuTask.id, 'in-progress')}>{$t('tasks.setInProgress')}</button>
+    <button on:click={() => handleMoveTask(contextMenuTask.id, 'done')}>{$t('tasks.setDone')}</button>
+    <button on:click={() => handleMoveTask(contextMenuTask.id, 'blocked')}>{$t('tasks.setBlocked')}</button>
     <div class="menu-divider"></div>
-    <button class="danger" on:click={() => handleDeleteTask(contextMenuTask.id)}>Delete</button>
+    <button class="danger" on:click={() => handleDeleteTask(contextMenuTask.id)}>{$t('tasks.deleteTask')}</button>
   </div>
 {/if}
 
@@ -722,15 +887,15 @@
   <div class="dialog-overlay" on:click={() => showPRDModal = false}>
     <div class="dialog-content large" on:click|stopPropagation>
       <div class="dialog-header">
-        <h2>Parse PRD into Tasks</h2>
+        <h2>{$t('tasks.parsePRDTitle')}</h2>
         <button class="close-btn" on:click={() => showPRDModal = false}>×</button>
       </div>
       <div class="dialog-body">
         <p class="dialog-hint">
-          Paste your Product Requirements Document (PRD) below. Task Master will use AI to analyze it and generate structured tasks.
+          {$t('tasks.parsePRDDesc')}
         </p>
         <label>
-          PRD Content
+          {$t('tasks.prdContent')}
           <textarea
             bind:value={prdContent}
             placeholder="# Project Title&#10;&#10;## Overview&#10;Describe your project...&#10;&#10;## Requirements&#10;- Feature 1&#10;- Feature 2&#10;..."
@@ -738,14 +903,14 @@
           ></textarea>
         </label>
         <label>
-          Number of Tasks
+          {$t('tasks.numberOfTasks')}
           <input type="number" bind:value={prdNumTasks} min="1" max="50" />
         </label>
       </div>
       <div class="dialog-footer">
-        <button class="btn-cancel" on:click={() => showPRDModal = false}>Cancel</button>
+        <button class="btn-cancel" on:click={() => showPRDModal = false}>{$t('common.cancel')}</button>
         <button class="btn-primary" on:click={handleParsePRD} disabled={!prdContent.trim() || $isLoadingTasks}>
-          {$isLoadingTasks ? 'Parsing...' : 'Parse PRD'}
+          {$isLoadingTasks ? $t('tasks.parsing') : $t('tasks.parsePRD')}
         </button>
       </div>
     </div>
@@ -755,10 +920,15 @@
 <!-- Add Task Modal -->
 {#if showAddTaskModal}
   <div class="dialog-overlay" on:click={() => showAddTaskModal = false}>
-    <div class="dialog-content" on:click|stopPropagation>
+    <div class="dialog-content large" on:click|stopPropagation on:focusin={handleDialogFocusIn}>
       <div class="dialog-header">
-        <h2>Add New Task</h2>
-        <button class="close-btn" on:click={() => showAddTaskModal = false}>×</button>
+        <h2>{$t('tasks.addNewTask')}</h2>
+        <div class="header-actions">
+          <button class="mic-btn" class:active={$dictationListening} on:click|preventDefault={toggleModalDictation} title={$t('tabBar.dictateToField')}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+          </button>
+          <button class="close-btn" on:click={() => showAddTaskModal = false}>×</button>
+        </div>
       </div>
       <div class="dialog-body">
         <!-- Mode toggle -->
@@ -768,87 +938,74 @@
             class:active={useManualMode}
             on:click={() => useManualMode = true}
           >
-            Manual
+            {$t('tasks.manual')}
           </button>
           <button
             class="mode-btn"
             class:active={!useManualMode}
             on:click={() => useManualMode = false}
           >
-            AI-Generated
+            {$t('tasks.aiGenerated')}
           </button>
         </div>
 
         {#if useManualMode}
           <p class="dialog-hint">
-            Create a task manually by filling in the fields below.
+            {$t('tasks.manualDesc')}
           </p>
           <label>
-            Title *
+            {$t('tasks.titleLabel')}
             <input
               type="text"
               bind:value={newTaskTitle}
-              placeholder="Task title..."
+              bind:this={addTitleEl}
+              class:dictating={$dictationListening && activeDictationEl === addTitleEl}
+              placeholder={$t('tasks.titlePlaceholder')}
             />
           </label>
           <label>
-            <span class="label-with-mic">
-              Description
-              <button class="mic-btn" class:active={$dictationListening && activeDictationEl === addDescEl} on:click|preventDefault={() => toggleDictationFor(addDescEl)} title="Dictation">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
-              </button>
-            </span>
+            {$t('tasks.description')}
             <textarea
               bind:value={newTaskDescription}
               bind:this={addDescEl}
               class:dictating={$dictationListening && activeDictationEl === addDescEl}
-              placeholder="Task description (optional)..."
+              placeholder={$t('tasks.descPlaceholder')}
               rows="3"
             ></textarea>
           </label>
           <label>
-            <span class="label-with-mic">
-              Implementation Details
-              <button class="mic-btn" class:active={$dictationListening && activeDictationEl === addDetailsEl} on:click|preventDefault={() => toggleDictationFor(addDetailsEl)} title="Dictation">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
-              </button>
-            </span>
+            {$t('tasks.implementationDetails')}
             <textarea
               bind:value={newTaskDetails}
               bind:this={addDetailsEl}
               class:dictating={$dictationListening && activeDictationEl === addDetailsEl}
-              placeholder="Implementation details (optional)..."
+              placeholder={$t('tasks.implPlaceholder')}
               rows="3"
             ></textarea>
           </label>
         {:else}
           <p class="dialog-hint">
-            Describe the task you want to add. Task Master will use AI to structure it properly.
-            <span class="api-info">Uses Claude Code (no API key required).</span>
+            {$t('tasks.aiDesc')}
+            <span class="api-info">{$t('tasks.aiNote')}</span>
           </p>
           <label>
-            <span class="label-with-mic">
-              Task Description
-              <button class="mic-btn" class:active={$dictationListening && activeDictationEl === addPromptEl} on:click|preventDefault={() => toggleDictationFor(addPromptEl)} title="Dictation">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
-              </button>
-            </span>
+            {$t('tasks.taskDescription')}
             <textarea
               bind:value={newTaskPrompt}
               bind:this={addPromptEl}
               class:dictating={$dictationListening && activeDictationEl === addPromptEl}
-              placeholder="Describe the task you want to add..."
+              placeholder={$t('tasks.aiPlaceholder')}
               rows="5"
             ></textarea>
           </label>
           <label class="checkbox-label">
             <input type="checkbox" bind:checked={newTaskResearch} />
-            Use research mode (more thorough analysis)
+            {$t('tasks.researchMode')}
           </label>
         {/if}
 
         <label>
-          Priority
+          {$t('tasks.priority')}
           <Select
             value={newTaskPriority}
             options={[
@@ -862,13 +1019,13 @@
         </label>
       </div>
       <div class="dialog-footer">
-        <button class="btn-cancel" on:click={() => showAddTaskModal = false}>Cancel</button>
+        <button class="btn-cancel" on:click={() => showAddTaskModal = false}>{$t('common.cancel')}</button>
         <button
           class="btn-primary"
           on:click={handleAddTask}
           disabled={(useManualMode ? !newTaskTitle.trim() : !newTaskPrompt.trim()) || $isLoadingTasks}
         >
-          {$isLoadingTasks ? 'Adding...' : 'Add Task'}
+          {$isLoadingTasks ? $t('tasks.adding') : $t('tasks.addTaskBtn')}
         </button>
       </div>
     </div>
@@ -880,14 +1037,14 @@
   <div class="dialog-overlay" on:click={() => showComplexityModal = false}>
     <div class="dialog-content large" on:click|stopPropagation>
       <div class="dialog-header">
-        <h2>Complexity Analysis</h2>
+        <h2>{$t('tasks.complexityAnalysis')}</h2>
         <button class="close-btn" on:click={() => showComplexityModal = false}>×</button>
       </div>
       <div class="dialog-body">
         <pre class="complexity-report">{complexityReport}</pre>
       </div>
       <div class="dialog-footer">
-        <button class="btn-primary" on:click={() => showComplexityModal = false}>Close</button>
+        <button class="btn-primary" on:click={() => showComplexityModal = false}>{$t('common.close')}</button>
       </div>
     </div>
   </div>
@@ -896,52 +1053,49 @@
 <!-- Edit Task Modal -->
 {#if showEditTaskModal}
   <div class="dialog-overlay" on:click={() => showEditTaskModal = false}>
-    <div class="dialog-content" on:click|stopPropagation>
+    <div class="dialog-content large" on:click|stopPropagation on:focusin={handleDialogFocusIn}>
       <div class="dialog-header">
-        <h2>Edit Task #{editTaskId}</h2>
-        <button class="close-btn" on:click={() => showEditTaskModal = false}>×</button>
+        <h2>{$t('tasks.editTask', { id: editTaskId })}</h2>
+        <div class="header-actions">
+          <button class="mic-btn" class:active={$dictationListening} on:click|preventDefault={toggleModalDictation} title={$t('tabBar.dictateToField')}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+          </button>
+          <button class="close-btn" on:click={() => showEditTaskModal = false}>×</button>
+        </div>
       </div>
       <div class="dialog-body">
         <label>
-          Title *
+          {$t('tasks.titleLabel')}
           <input
             type="text"
             bind:value={editTaskTitle}
-            placeholder="Task title..."
+            bind:this={editTitleEl}
+            class:dictating={$dictationListening && activeDictationEl === editTitleEl}
+            placeholder={$t('tasks.titlePlaceholder')}
           />
         </label>
         <label>
-          <span class="label-with-mic">
-            Description
-            <button class="mic-btn" class:active={$dictationListening && activeDictationEl === editDescEl} on:click|preventDefault={() => toggleDictationFor(editDescEl)} title="Dictation">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
-            </button>
-          </span>
+          {$t('tasks.description')}
           <textarea
             bind:value={editTaskDescription}
             bind:this={editDescEl}
             class:dictating={$dictationListening && activeDictationEl === editDescEl}
-            placeholder="Task description..."
+            placeholder={$t('tasks.descPlaceholder')}
             rows="3"
           ></textarea>
         </label>
         <label>
-          <span class="label-with-mic">
-            Implementation Details
-            <button class="mic-btn" class:active={$dictationListening && activeDictationEl === editDetailsEl} on:click|preventDefault={() => toggleDictationFor(editDetailsEl)} title="Dictation">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
-            </button>
-          </span>
+          {$t('tasks.implementationDetails')}
           <textarea
             bind:value={editTaskDetails}
             bind:this={editDetailsEl}
             class:dictating={$dictationListening && activeDictationEl === editDetailsEl}
-            placeholder="Implementation details..."
+            placeholder={$t('tasks.implPlaceholder')}
             rows="5"
           ></textarea>
         </label>
         <label>
-          Priority
+          {$t('tasks.priority')}
           <Select
             value={editTaskPriority}
             options={[
@@ -954,14 +1108,17 @@
           />
         </label>
       </div>
+      {#if editTaskError}
+        <div class="error-banner" style="margin: 0 16px;">{editTaskError}</div>
+      {/if}
       <div class="dialog-footer">
-        <button class="btn-cancel" on:click={() => showEditTaskModal = false}>Cancel</button>
+        <button class="btn-cancel" on:click={() => showEditTaskModal = false}>{$t('common.cancel')}</button>
         <button
           class="btn-primary"
           on:click={handleSaveEditTask}
           disabled={!editTaskTitle.trim() || $isLoadingTasks}
         >
-          {$isLoadingTasks ? 'Saving...' : 'Save Changes'}
+          {$isLoadingTasks ? $t('common.loading') : $t('common.save')}
         </button>
       </div>
     </div>
@@ -971,44 +1128,46 @@
 <!-- Add Subtask Modal -->
 {#if showAddSubtaskModal}
   <div class="dialog-overlay" on:click={() => showAddSubtaskModal = false}>
-    <div class="dialog-content small" on:click|stopPropagation>
+    <div class="dialog-content small" on:click|stopPropagation on:focusin={handleDialogFocusIn}>
       <div class="dialog-header">
-        <h2>Add Subtask to Task #{addSubtaskTaskId}</h2>
-        <button class="close-btn" on:click={() => showAddSubtaskModal = false}>×</button>
+        <h2>{$t('tasks.addSubtaskMenu')} - #{addSubtaskTaskId}</h2>
+        <div class="header-actions">
+          <button class="mic-btn" class:active={$dictationListening} on:click|preventDefault={toggleModalDictation} title={$t('tabBar.dictateToField')}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+          </button>
+          <button class="close-btn" on:click={() => showAddSubtaskModal = false}>×</button>
+        </div>
       </div>
       <div class="dialog-body">
         <label>
-          Title *
+          {$t('tasks.titleLabel')}
           <input
             type="text"
             bind:value={newSubtaskTitle}
-            placeholder="Subtask title..."
+            bind:this={subtaskTitleEl}
+            class:dictating={$dictationListening && activeDictationEl === subtaskTitleEl}
+            placeholder={$t('tasks.titlePlaceholder')}
           />
         </label>
         <label>
-          <span class="label-with-mic">
-            Description
-            <button class="mic-btn" class:active={$dictationListening && activeDictationEl === subtaskDescEl} on:click|preventDefault={() => toggleDictationFor(subtaskDescEl)} title="Dictation">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
-            </button>
-          </span>
+          {$t('tasks.description')}
           <textarea
             bind:value={newSubtaskDescription}
             bind:this={subtaskDescEl}
             class:dictating={$dictationListening && activeDictationEl === subtaskDescEl}
-            placeholder="Subtask description (optional)..."
+            placeholder={$t('tasks.descPlaceholder')}
             rows="2"
           ></textarea>
         </label>
       </div>
       <div class="dialog-footer">
-        <button class="btn-cancel" on:click={() => showAddSubtaskModal = false}>Cancel</button>
+        <button class="btn-cancel" on:click={() => showAddSubtaskModal = false}>{$t('common.cancel')}</button>
         <button
           class="btn-primary"
           on:click={handleAddSubtask}
           disabled={!newSubtaskTitle.trim() || $isLoadingTasks}
         >
-          {$isLoadingTasks ? 'Adding...' : 'Add Subtask'}
+          {$isLoadingTasks ? $t('tasks.adding') : $t('tasks.addSubtaskMenu')}
         </button>
       </div>
     </div>
@@ -1020,7 +1179,7 @@
   <div class="dialog-overlay" on:click={() => showDependencyModal = false}>
     <div class="dialog-content small" on:click|stopPropagation>
       <div class="dialog-header">
-        <h2>Manage Dependencies - Task #{dependencyTaskId}</h2>
+        <h2>{$t('tasks.manageDependencies')} - #{dependencyTaskId}</h2>
         <button class="close-btn" on:click={() => showDependencyModal = false}>×</button>
       </div>
       <div class="dialog-body">
@@ -1082,11 +1241,33 @@
         </div>
       </div>
       <div class="dialog-footer">
-        <button class="btn-primary" on:click={() => showDependencyModal = false}>Done</button>
+        <button class="btn-primary" on:click={() => showDependencyModal = false}>{$t('common.close')}</button>
       </div>
     </div>
   </div>
 {/if}
+
+<!-- Delete Task Confirm -->
+<ConfirmDialog
+  bind:show={showDeleteConfirm}
+  title={$t('tasks.deleteTask')}
+  message={$t('tasks.deleteMessage', { title: deleteTaskTitle })}
+  confirmText={$t('common.delete')}
+  cancelText={$t('common.cancel')}
+  variant="danger"
+  on:confirm={confirmDeleteTask}
+/>
+
+<!-- Remove Subtask Confirm -->
+<ConfirmDialog
+  bind:show={showRemoveSubtaskConfirm}
+  title={$t('tasks.removeSubtask')}
+  message={$t('tasks.removeSubtaskMessage')}
+  confirmText={$t('tasks.remove')}
+  cancelText={$t('common.cancel')}
+  variant="danger"
+  on:confirm={confirmRemoveSubtask}
+/>
 
 <style>
   .task-panel {
@@ -1140,6 +1321,32 @@
     display: flex;
     align-items: center;
     gap: 8px;
+  }
+
+  .hide-done-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+    color: #6b7280;
+    cursor: pointer;
+    transition: all 0.2s;
+    padding: 0;
+  }
+
+  .hide-done-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #9ca3af;
+  }
+
+  .hide-done-btn.active {
+    background: rgba(34, 197, 94, 0.15);
+    border-color: rgba(34, 197, 94, 0.3);
+    color: #4ade80;
   }
 
   .action-bar {
@@ -1235,6 +1442,38 @@
     gap: 12px;
   }
 
+  .task-checkbox {
+    width: 20px;
+    height: 20px;
+    border-radius: 6px;
+    border: 1.5px solid rgba(255, 255, 255, 0.15);
+    background: rgba(255, 255, 255, 0.03);
+    cursor: pointer;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    color: transparent;
+    transition: all 0.2s ease;
+  }
+
+  .task-checkbox:hover {
+    border-color: rgba(139, 92, 246, 0.5);
+    background: rgba(139, 92, 246, 0.1);
+  }
+
+  .task-checkbox.checked {
+    background: rgba(139, 92, 246, 0.3);
+    border-color: rgba(139, 92, 246, 0.6);
+    color: #e4e4e7;
+  }
+
+  .task-checkbox.checked:hover {
+    background: rgba(139, 92, 246, 0.4);
+    border-color: rgba(139, 92, 246, 0.7);
+  }
+
   .task-id {
     font-family: 'JetBrains Mono', monospace;
     font-size: 11px;
@@ -1276,6 +1515,14 @@
     text-transform: uppercase;
   }
 
+  .created-at {
+    font-size: 10px;
+    color: #6b7280;
+    margin-left: auto;
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+
   .complexity-badge {
     font-size: 10px;
     color: #a78bfa;
@@ -1290,6 +1537,7 @@
     font-size: 13px;
     color: #9ca3af;
     line-height: 1.5;
+    white-space: pre-wrap;
   }
 
   .task-tags {
@@ -1838,10 +2086,10 @@
     color: white;
   }
 
-  .label-with-mic {
+  .header-actions {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    gap: 8px;
   }
 
   .mic-btn {
@@ -1849,7 +2097,7 @@
     border: none;
     cursor: pointer;
     color: #6b7280;
-    padding: 2px 4px;
+    padding: 4px 6px;
     border-radius: 4px;
     display: flex;
     align-items: center;
@@ -1865,7 +2113,8 @@
     animation: mic-pulse 1.5s ease-in-out infinite;
   }
 
-  textarea.dictating {
+  textarea.dictating,
+  input.dictating {
     border-color: rgba(139, 92, 246, 0.5) !important;
     box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.15) !important;
   }

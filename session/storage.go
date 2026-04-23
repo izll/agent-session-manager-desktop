@@ -6,11 +6,13 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"sync"
 	"syscall"
 	"time"
 )
 
 type Storage struct {
+	mu         sync.Mutex
 	configDir  string
 	configPath string
 	projectID  string // Active project ID ("" = default)
@@ -37,12 +39,23 @@ type Settings struct {
 	Cursor            int    `json:"cursor,omitempty"`
 	SplitFocus        int    `json:"split_focus,omitempty"`
 	AnthropicAPIKey   string `json:"anthropic_api_key,omitempty"`
+	Language          string `json:"language,omitempty"`
 }
 
 type StorageData struct {
 	Instances []*Instance `json:"instances"`
 	Groups    []*Group    `json:"groups,omitempty"`
 	Settings  *Settings   `json:"settings,omitempty"`
+}
+
+// DefaultSettings returns the initial settings a brand-new install should have.
+// Called on first launch (when no sessions.json exists yet) so UI toggles that
+// are expected to be on by default (agent icons, English locale) actually are.
+func DefaultSettings() *Settings {
+	return &Settings{
+		ShowAgentIcons: true,
+		Language:       "en",
+	}
 }
 
 func NewStorage() (*Storage, error) {
@@ -56,15 +69,30 @@ func NewStorage() (*Storage, error) {
 		return nil, fmt.Errorf("failed to create config directory: %w", err)
 	}
 
-	return &Storage{
+	s := &Storage{
 		configDir:  configDir,
 		configPath: filepath.Join(configDir, "sessions.json"),
 		projectID:  "",
-	}, nil
+	}
+
+	// Seed sessions.json with default settings on first launch so that
+	// UI flags which should be "on" by default are actually persisted.
+	if _, err := os.Stat(s.configPath); os.IsNotExist(err) {
+		_ = s.saveAllLocked([]*Instance{}, []*Group{}, DefaultSettings())
+	}
+
+	return s, nil
 }
 
 // SetActiveProject switches to a different project
 func (s *Storage) SetActiveProject(projectID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.setActiveProjectLocked(projectID)
+}
+
+// setActiveProjectLocked is the internal version that assumes the mutex is held.
+func (s *Storage) setActiveProjectLocked(projectID string) error {
 	s.projectID = projectID
 	if projectID == "" {
 		s.configPath = filepath.Join(s.configDir, "sessions.json")
@@ -80,6 +108,8 @@ func (s *Storage) SetActiveProject(projectID string) error {
 
 // GetActiveProjectID returns the currently active project ID
 func (s *Storage) GetActiveProjectID() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	return s.projectID
 }
 
@@ -178,7 +208,7 @@ func (s *Storage) LoadProjects() (*ProjectsData, error) {
 	return &projectsData, nil
 }
 
-// SaveProjects saves the list of projects
+// SaveProjects saves the list of projects (atomic write).
 func (s *Storage) SaveProjects(projectsData *ProjectsData) error {
 	projectsFile := filepath.Join(s.configDir, "projects.json")
 	data, err := json.MarshalIndent(projectsData, "", "  ")
@@ -186,8 +216,13 @@ func (s *Storage) SaveProjects(projectsData *ProjectsData) error {
 		return fmt.Errorf("failed to marshal projects: %w", err)
 	}
 
-	if err := os.WriteFile(projectsFile, data, 0644); err != nil {
-		return fmt.Errorf("failed to write projects file: %w", err)
+	tmp := projectsFile + ".tmp"
+	if err := os.WriteFile(tmp, data, 0644); err != nil {
+		return fmt.Errorf("failed to write projects temp file: %w", err)
+	}
+	if err := os.Rename(tmp, projectsFile); err != nil {
+		os.Remove(tmp)
+		return fmt.Errorf("failed to rename projects file: %w", err)
 	}
 
 	return nil
@@ -282,33 +317,36 @@ func (s *Storage) GetProject(id string) (*Project, error) {
 
 // ImportDefaultSessions moves sessions from default storage to a project
 func (s *Storage) ImportDefaultSessions(projectID string) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	// Save current project
 	originalProject := s.projectID
 
 	// Load default sessions
 	s.projectID = ""
 	s.configPath = filepath.Join(s.configDir, "sessions.json")
-	defaultInstances, defaultGroups, _, err := s.LoadAllWithSettings()
+	defaultInstances, defaultGroups, _, err := s.loadAllWithSettingsLocked()
 	if err != nil {
-		s.projectID = originalProject
+		s.setActiveProjectLocked(originalProject)
 		return 0, err
 	}
 
 	if len(defaultInstances) == 0 {
-		s.projectID = originalProject
+		s.setActiveProjectLocked(originalProject)
 		return 0, nil
 	}
 
 	// Switch to target project
-	if err := s.SetActiveProject(projectID); err != nil {
-		s.projectID = originalProject
+	if err := s.setActiveProjectLocked(projectID); err != nil {
+		s.setActiveProjectLocked(originalProject)
 		return 0, err
 	}
 
 	// Load project's existing sessions
-	projectInstances, projectGroups, projectSettings, err := s.LoadAllWithSettings()
+	projectInstances, projectGroups, projectSettings, err := s.loadAllWithSettingsLocked()
 	if err != nil {
-		s.projectID = originalProject
+		s.setActiveProjectLocked(originalProject)
 		return 0, err
 	}
 
@@ -335,38 +373,49 @@ func (s *Storage) ImportDefaultSessions(projectID string) (int, error) {
 	}
 
 	// Save merged data to project
-	if err := s.SaveAll(projectInstances, projectGroups, projectSettings); err != nil {
-		s.projectID = originalProject
+	if err := s.saveAllLocked(projectInstances, projectGroups, projectSettings); err != nil {
+		s.setActiveProjectLocked(originalProject)
 		return 0, err
 	}
 
 	// Clear default sessions
 	s.projectID = ""
 	s.configPath = filepath.Join(s.configDir, "sessions.json")
-	if err := s.SaveAll([]*Instance{}, []*Group{}, &Settings{}); err != nil {
-		s.projectID = originalProject
+	if err := s.saveAllLocked([]*Instance{}, []*Group{}, &Settings{}); err != nil {
+		s.setActiveProjectLocked(originalProject)
 		return len(defaultInstances), err
 	}
 
 	// Restore original project
-	s.SetActiveProject(originalProject)
+	s.setActiveProjectLocked(originalProject)
 
 	return len(defaultInstances), nil
 }
 
 func (s *Storage) Load() ([]*Instance, error) {
-	instances, _, err := s.LoadAll()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	instances, _, _, err := s.loadAllWithSettingsLocked()
 	return instances, err
 }
 
 // LoadAll loads instances, groups, and settings
 func (s *Storage) LoadAll() ([]*Instance, []*Group, error) {
-	instances, groups, _, err := s.LoadAllWithSettings()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	instances, groups, _, err := s.loadAllWithSettingsLocked()
 	return instances, groups, err
 }
 
 // LoadAllWithSettings loads instances, groups, and settings
 func (s *Storage) LoadAllWithSettings() ([]*Instance, []*Group, *Settings, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.loadAllWithSettingsLocked()
+}
+
+// loadAllWithSettingsLocked is the internal version that assumes the mutex is held.
+func (s *Storage) loadAllWithSettingsLocked() ([]*Instance, []*Group, *Settings, error) {
 	data, err := os.ReadFile(s.configPath)
 	if os.IsNotExist(err) {
 		return []*Instance{}, []*Group{}, &Settings{}, nil
@@ -397,24 +446,47 @@ func (s *Storage) LoadAllWithSettings() ([]*Instance, []*Group, *Settings, error
 }
 
 func (s *Storage) Save(instances []*Instance) error {
-	_, groups, settings, _ := s.LoadAllWithSettings()
-	return s.SaveAll(instances, groups, settings)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_, groups, settings, err := s.loadAllWithSettingsLocked()
+	if err != nil {
+		return fmt.Errorf("failed to load existing data for merge: %w", err)
+	}
+	return s.saveAllLocked(instances, groups, settings)
 }
 
 // SaveWithGroups saves instances and groups (preserves settings)
 func (s *Storage) SaveWithGroups(instances []*Instance, groups []*Group) error {
-	_, _, settings, _ := s.LoadAllWithSettings()
-	return s.SaveAll(instances, groups, settings)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_, _, settings, err := s.loadAllWithSettingsLocked()
+	if err != nil {
+		return fmt.Errorf("failed to load existing data for merge: %w", err)
+	}
+	return s.saveAllLocked(instances, groups, settings)
 }
 
 // SaveSettings saves only the settings (preserves instances and groups)
 func (s *Storage) SaveSettings(settings *Settings) error {
-	instances, groups, _, _ := s.LoadAllWithSettings()
-	return s.SaveAll(instances, groups, settings)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	instances, groups, _, err := s.loadAllWithSettingsLocked()
+	if err != nil {
+		return fmt.Errorf("failed to load existing data for merge: %w", err)
+	}
+	return s.saveAllLocked(instances, groups, settings)
 }
 
 // SaveAll saves instances, groups, and settings
 func (s *Storage) SaveAll(instances []*Instance, groups []*Group, settings *Settings) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.saveAllLocked(instances, groups, settings)
+}
+
+// saveAllLocked is the internal version that assumes the mutex is held.
+// Uses atomic write (temp file + rename) to avoid corrupting config on crash.
+func (s *Storage) saveAllLocked(instances []*Instance, groups []*Group, settings *Settings) error {
 	storageData := StorageData{
 		Instances: instances,
 		Groups:    groups,
@@ -426,15 +498,24 @@ func (s *Storage) SaveAll(instances []*Instance, groups []*Group, settings *Sett
 		return fmt.Errorf("failed to marshal config: %w", err)
 	}
 
-	if err := os.WriteFile(s.configPath, data, 0644); err != nil {
-		return fmt.Errorf("failed to write config file: %w", err)
+	// Atomic write: write to temp file in same dir, then rename
+	tmpPath := s.configPath + ".tmp"
+	if err := os.WriteFile(tmpPath, data, 0644); err != nil {
+		return fmt.Errorf("failed to write temp config file: %w", err)
+	}
+	if err := os.Rename(tmpPath, s.configPath); err != nil {
+		os.Remove(tmpPath)
+		return fmt.Errorf("failed to rename temp config file: %w", err)
 	}
 
 	return nil
 }
 
 func (s *Storage) AddInstance(instance *Instance) error {
-	instances, err := s.Load()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	instances, groups, settings, err := s.loadAllWithSettingsLocked()
 	if err != nil {
 		return err
 	}
@@ -447,11 +528,14 @@ func (s *Storage) AddInstance(instance *Instance) error {
 	}
 
 	instances = append(instances, instance)
-	return s.Save(instances)
+	return s.saveAllLocked(instances, groups, settings)
 }
 
 func (s *Storage) RemoveInstance(id string) error {
-	instances, err := s.Load()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	instances, groups, settings, err := s.loadAllWithSettingsLocked()
 	if err != nil {
 		return err
 	}
@@ -472,11 +556,14 @@ func (s *Storage) RemoveInstance(id string) error {
 		return fmt.Errorf("instance not found")
 	}
 
-	return s.Save(newInstances)
+	return s.saveAllLocked(newInstances, groups, settings)
 }
 
 func (s *Storage) UpdateInstance(instance *Instance) error {
-	instances, err := s.Load()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	instances, groups, settings, err := s.loadAllWithSettingsLocked()
 	if err != nil {
 		return err
 	}
@@ -484,7 +571,7 @@ func (s *Storage) UpdateInstance(instance *Instance) error {
 	for i, inst := range instances {
 		if inst.ID == instance.ID {
 			instances[i] = instance
-			return s.Save(instances)
+			return s.saveAllLocked(instances, groups, settings)
 		}
 	}
 
@@ -492,7 +579,10 @@ func (s *Storage) UpdateInstance(instance *Instance) error {
 }
 
 func (s *Storage) GetInstance(id string) (*Instance, error) {
-	instances, err := s.Load()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	instances, _, _, err := s.loadAllWithSettingsLocked()
 	if err != nil {
 		return nil, err
 	}
@@ -507,7 +597,10 @@ func (s *Storage) GetInstance(id string) (*Instance, error) {
 }
 
 func (s *Storage) GetInstanceByName(name string) (*Instance, error) {
-	instances, err := s.Load()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	instances, _, _, err := s.loadAllWithSettingsLocked()
 	if err != nil {
 		return nil, err
 	}
@@ -524,13 +617,18 @@ func (s *Storage) GetInstanceByName(name string) (*Instance, error) {
 
 // GetGroups returns all groups
 func (s *Storage) GetGroups() ([]*Group, error) {
-	_, groups, err := s.LoadAll()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_, groups, _, err := s.loadAllWithSettingsLocked()
 	return groups, err
 }
 
 // AddGroup adds a new group
 func (s *Storage) AddGroup(name string) (*Group, error) {
-	instances, groups, err := s.LoadAll()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	instances, groups, settings, err := s.loadAllWithSettingsLocked()
 	if err != nil {
 		return nil, err
 	}
@@ -549,7 +647,7 @@ func (s *Storage) AddGroup(name string) (*Group, error) {
 	}
 
 	groups = append(groups, group)
-	if err := s.SaveWithGroups(instances, groups); err != nil {
+	if err := s.saveAllLocked(instances, groups, settings); err != nil {
 		return nil, err
 	}
 
@@ -558,7 +656,10 @@ func (s *Storage) AddGroup(name string) (*Group, error) {
 
 // RemoveGroup removes a group (sessions become ungrouped)
 func (s *Storage) RemoveGroup(id string) error {
-	instances, groups, err := s.LoadAll()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	instances, groups, settings, err := s.loadAllWithSettingsLocked()
 	if err != nil {
 		return err
 	}
@@ -585,12 +686,15 @@ func (s *Storage) RemoveGroup(id string) error {
 		return fmt.Errorf("group not found")
 	}
 
-	return s.SaveWithGroups(instances, newGroups)
+	return s.saveAllLocked(instances, newGroups, settings)
 }
 
 // RenameGroup renames a group
 func (s *Storage) RenameGroup(id, name string) error {
-	instances, groups, err := s.LoadAll()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	instances, groups, settings, err := s.loadAllWithSettingsLocked()
 	if err != nil {
 		return err
 	}
@@ -598,7 +702,7 @@ func (s *Storage) RenameGroup(id, name string) error {
 	for _, g := range groups {
 		if g.ID == id {
 			g.Name = name
-			return s.SaveWithGroups(instances, groups)
+			return s.saveAllLocked(instances, groups, settings)
 		}
 	}
 
@@ -607,7 +711,10 @@ func (s *Storage) RenameGroup(id, name string) error {
 
 // ToggleGroupCollapsed toggles the collapsed state of a group
 func (s *Storage) ToggleGroupCollapsed(id string) error {
-	instances, groups, err := s.LoadAll()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	instances, groups, settings, err := s.loadAllWithSettingsLocked()
 	if err != nil {
 		return err
 	}
@@ -615,7 +722,7 @@ func (s *Storage) ToggleGroupCollapsed(id string) error {
 	for _, g := range groups {
 		if g.ID == id {
 			g.Collapsed = !g.Collapsed
-			return s.SaveWithGroups(instances, groups)
+			return s.saveAllLocked(instances, groups, settings)
 		}
 	}
 
@@ -624,7 +731,10 @@ func (s *Storage) ToggleGroupCollapsed(id string) error {
 
 // SetInstanceGroup assigns an instance to a group
 func (s *Storage) SetInstanceGroup(instanceID, groupID string) error {
-	instances, groups, err := s.LoadAll()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	instances, groups, settings, err := s.loadAllWithSettingsLocked()
 	if err != nil {
 		return err
 	}
@@ -632,9 +742,27 @@ func (s *Storage) SetInstanceGroup(instanceID, groupID string) error {
 	for i := range instances {
 		if instances[i].ID == instanceID {
 			instances[i].GroupID = groupID
-			return s.SaveWithGroups(instances, groups)
+			return s.saveAllLocked(instances, groups, settings)
 		}
 	}
 
 	return fmt.Errorf("instance not found")
+}
+
+// LoadAllForProject temporarily switches to a different project, loads its data, and switches back.
+// This is atomic with respect to other storage operations.
+func (s *Storage) LoadAllForProject(projectID string) ([]*Instance, []*Group, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	originalProject := s.projectID
+	if err := s.setActiveProjectLocked(projectID); err != nil {
+		return nil, nil, err
+	}
+	instances, groups, _, err := s.loadAllWithSettingsLocked()
+	s.setActiveProjectLocked(originalProject)
+	if err != nil {
+		return nil, nil, err
+	}
+	return instances, groups, nil
 }

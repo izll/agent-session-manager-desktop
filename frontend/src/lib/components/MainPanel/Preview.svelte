@@ -5,6 +5,7 @@
   import { sessions, selectedSessionId, selectedWindowIdx } from '../../stores/sessions';
   import { get } from 'svelte/store';
   import * as App from '../../../../wailsjs/go/main/App';
+  import { t } from '../../i18n';
 
   let containerEl: HTMLElement;
   let terminal: Terminal | null = null;
@@ -116,16 +117,16 @@
 
 <div class="preview-container">
   <div class="preview-header">
-    <span class="preview-title">Live Preview</span>
+    <span class="preview-title">{$t('preview.livePreview')}</span>
     <span class="activity-badge {activity}">
       {#if activity === 'busy'}
         <span class="activity-dot"></span>
-        Working
+        {$t('preview.working')}
       {:else if activity === 'waiting'}
         <span class="activity-dot"></span>
-        Waiting
+        {$t('preview.waiting')}
       {:else}
-        Idle
+        {$t('preview.idle')}
       {/if}
     </span>
   </div>

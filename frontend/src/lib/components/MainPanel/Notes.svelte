@@ -4,6 +4,7 @@
   import { get } from 'svelte/store';
   import * as App from '../../../../wailsjs/go/main/App';
   import { createFieldDictation } from '../../utils/dictationField';
+  import { t } from '../../i18n';
 
   export let active = false;
 
@@ -116,18 +117,18 @@
 
 <div class="notes-container">
   <div class="notes-header">
-    <span class="notes-title">Session Notes</span>
+    <span class="notes-title">{$t('notes.title')}</span>
     <div class="header-actions">
       {#if saving}
-        <span class="save-indicator">Saving...</span>
+        <span class="save-indicator">{$t('notes.saving')}</span>
       {:else if notes !== lastSaved}
-        <span class="save-indicator unsaved">Unsaved</span>
+        <span class="save-indicator unsaved">{$t('notes.unsaved')}</span>
       {/if}
       <button
         class="mic-btn"
         class:active={$dictationListening}
         on:click={() => dictation.toggle()}
-        title={$dictationListening ? 'Stop dictation' : 'Start dictation'}
+        title={$dictationListening ? $t('tabBar.stopDictation') : $t('tabBar.startDictation')}
       >
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
@@ -142,7 +143,7 @@
     <textarea
       class="notes-textarea"
       class:dictating={$dictationListening}
-      placeholder="Add notes for this session tab..."
+      placeholder={$t('notes.placeholder')}
       bind:value={notes}
       bind:this={textareaEl}
       on:input={handleInput}

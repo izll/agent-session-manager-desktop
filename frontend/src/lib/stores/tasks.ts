@@ -24,6 +24,7 @@ export interface Task {
   dependencies: string[];
   complexity?: number;
   details?: string;
+  createdAt?: string;
 }
 
 export interface TaskFilter {
@@ -39,8 +40,12 @@ export interface TaskMasterStatus {
   tools?: number;
 }
 
+export type TaskSortBy = 'priority' | 'status' | 'created-asc' | 'created-desc';
+
 // Stores
 export const tasks = writable<Task[]>([]);
+export const taskSortBy = writable<TaskSortBy>('priority');
+export const hideDone = writable<boolean>(true);
 export const taskFilter = writable<TaskFilter>({
   status: 'all',
   priority: 'all',
@@ -64,9 +69,14 @@ export const selectedTask = derived(
 );
 
 export const filteredTasks = derived(
-  [tasks, taskFilter],
-  ([$tasks, $filter]) => {
+  [tasks, taskFilter, hideDone],
+  ([$tasks, $filter, $hideDone]) => {
     let filtered = [...$tasks];
+
+    // Hide done tasks if enabled (and status filter is not explicitly 'done')
+    if ($hideDone && $filter.status !== 'done') {
+      filtered = filtered.filter(t => t.status !== 'done');
+    }
 
     // Filter by status
     if ($filter.status !== 'all') {
@@ -128,19 +138,57 @@ const priorityOrder: Record<TaskPriority, number> = {
   'low': 3
 };
 
-export const sortedFilteredTasks = derived(filteredTasks, ($filtered) => {
-  return [...$filtered].sort((a, b) => {
-    // Sort by priority first
-    const pa = priorityOrder[a.priority] ?? 3;
-    const pb = priorityOrder[b.priority] ?? 3;
-    if (pa !== pb) return pa - pb;
+// Status order for sorting (done goes last)
+const statusOrder: Record<string, number> = {
+  'in-progress': 0,
+  'blocked': 1,
+  'pending': 2,
+  'deferred': 3,
+  'done': 4
+};
 
-    // Then by ID (numeric order)
-    const idA = parseFloat(a.id) || 0;
-    const idB = parseFloat(b.id) || 0;
-    return idA - idB;
-  });
-});
+export const sortedFilteredTasks = derived(
+  [filteredTasks, taskSortBy],
+  ([$filtered, $sortBy]) => {
+    return [...$filtered].sort((a, b) => {
+      if ($sortBy === 'status') {
+        // Sort by status first (done last)
+        const sa = statusOrder[a.status] ?? 2;
+        const sb = statusOrder[b.status] ?? 2;
+        if (sa !== sb) return sa - sb;
+        // Then by priority
+        const pa = priorityOrder[a.priority] ?? 3;
+        const pb = priorityOrder[b.priority] ?? 3;
+        if (pa !== pb) return pa - pb;
+        // Then by ID
+        const idA = parseFloat(a.id) || 0;
+        const idB = parseFloat(b.id) || 0;
+        return idA - idB;
+      }
+
+      if ($sortBy === 'created-desc' || $sortBy === 'created-asc') {
+        const ascending = $sortBy === 'created-asc';
+        const ca = a.createdAt || '';
+        const cb = b.createdAt || '';
+        if (ca && cb) return ascending ? ca.localeCompare(cb) : cb.localeCompare(ca);
+        if (ca) return -1;
+        if (cb) return 1;
+        // Fallback to ID
+        const idA = parseFloat(a.id) || 0;
+        const idB = parseFloat(b.id) || 0;
+        return idA - idB;
+      }
+
+      // Default: sort by priority
+      const pa = priorityOrder[a.priority] ?? 3;
+      const pb = priorityOrder[b.priority] ?? 3;
+      if (pa !== pb) return pa - pb;
+      const idA = parseFloat(a.id) || 0;
+      const idB = parseFloat(b.id) || 0;
+      return idA - idB;
+    });
+  }
+);
 
 // ============================================================================
 // Task Master MCP Actions
@@ -198,6 +246,20 @@ export async function parsePRD(sessionId: string, prdContent: string, numTasks: 
   }
 }
 
+// Preserve createdAt from existing tasks when merging with fresh data
+function mergeCreatedAt(newTasks: Task[]): Task[] {
+  const existing = get(tasks);
+  if (existing.length === 0) return newTasks;
+  const createdAtMap = new Map<string, string>();
+  for (const t of existing) {
+    if (t.createdAt) createdAtMap.set(t.id, t.createdAt);
+  }
+  return newTasks.map(t => ({
+    ...t,
+    createdAt: t.createdAt || createdAtMap.get(t.id)
+  }));
+}
+
 // Load tasks from Task Master
 export async function loadTasks(sessionId: string) {
   if (!sessionId) {
@@ -213,7 +275,7 @@ export async function loadTasks(sessionId: string) {
     if (get(useMCPMode)) {
       try {
         const result = await App.TaskMasterGetTasks(sessionId, '');
-        tasks.set(result || []);
+        tasks.set(mergeCreatedAt(result || []));
         return;
       } catch (e) {
         // Fall back to local mode if MCP fails
@@ -232,7 +294,7 @@ export async function loadTasks(sessionId: string) {
         status: st.done ? 'done' : 'pending'
       }))
     }));
-    tasks.set(converted);
+    tasks.set(mergeCreatedAt(converted));
   } catch (e) {
     console.error('Failed to load tasks:', e);
     taskError.set(String(e));
@@ -282,31 +344,25 @@ export async function setTaskStatus(sessionId: string, taskId: string, status: T
 
 // Add a new task (MCP mode with AI)
 export async function addTask(sessionId: string, prompt: string, research: boolean = false, priority: string = 'medium') {
-  console.log('[tasks.ts] addTask called:', { sessionId, prompt, research, priority, useMCPMode: get(useMCPMode) });
-  if (!sessionId || !prompt.trim()) {
-    console.log('[tasks.ts] addTask returning early - missing sessionId or prompt');
-    return;
-  }
+  if (!sessionId || !prompt.trim()) return;
 
   isLoadingTasks.set(true);
   taskError.set(null);
 
   try {
+    let newTask: any;
     if (get(useMCPMode)) {
-      console.log('[tasks.ts] Calling App.TaskMasterAddTask (MCP mode)...');
-      const result = await App.TaskMasterAddTask(sessionId, prompt, research, priority);
-      console.log('[tasks.ts] App.TaskMasterAddTask result:', result);
+      newTask = await App.TaskMasterAddTask(sessionId, prompt, research, priority);
     } else {
-      console.log('[tasks.ts] Calling App.CreateTask (local mode)...');
-      // Local mode - create task directly
-      const result = await App.CreateTask(sessionId, prompt, '', priority, []);
-      console.log('[tasks.ts] App.CreateTask result:', result);
+      await App.CreateTask(sessionId, prompt, '', priority, []);
     }
-    console.log('[tasks.ts] Reloading tasks...');
+    // Pre-inject createdAt so mergeCreatedAt preserves it across loadTasks
+    if (newTask?.id) {
+      const now = new Date().toISOString();
+      tasks.update(t => [...t, { ...newTask, createdAt: newTask.createdAt || now } as Task]);
+    }
     await loadTasks(sessionId);
-    console.log('[tasks.ts] Tasks reloaded');
   } catch (e) {
-    console.error('[tasks.ts] addTask error:', e);
     taskError.set(String(e));
     throw e;
   } finally {
@@ -316,31 +372,25 @@ export async function addTask(sessionId: string, prompt: string, research: boole
 
 // Add a new task manually (no AI required)
 export async function addManualTask(sessionId: string, title: string, description: string = '', details: string = '', priority: string = 'medium') {
-  console.log('[tasks.ts] addManualTask called:', { sessionId, title, description, details, priority, useMCPMode: get(useMCPMode) });
-  if (!sessionId || !title.trim()) {
-    console.log('[tasks.ts] addManualTask returning early - missing sessionId or title');
-    return;
-  }
+  if (!sessionId || !title.trim()) return;
 
   isLoadingTasks.set(true);
   taskError.set(null);
 
   try {
+    let newTask: any;
     if (get(useMCPMode)) {
-      console.log('[tasks.ts] Calling App.TaskMasterAddManualTask (MCP mode)...');
-      const result = await App.TaskMasterAddManualTask(sessionId, title, description, details, priority);
-      console.log('[tasks.ts] App.TaskMasterAddManualTask result:', result);
+      newTask = await App.TaskMasterAddManualTask(sessionId, title, description, details, priority);
     } else {
-      console.log('[tasks.ts] Calling App.CreateTask (local mode)...');
-      // Local mode - create task directly
-      const result = await App.CreateTask(sessionId, title, description, priority, []);
-      console.log('[tasks.ts] App.CreateTask result:', result);
+      await App.CreateTask(sessionId, title, description, priority, []);
     }
-    console.log('[tasks.ts] Reloading tasks...');
+    // Pre-inject createdAt so mergeCreatedAt preserves it across loadTasks
+    if (newTask?.id) {
+      const now = new Date().toISOString();
+      tasks.update(t => [...t, { ...newTask, createdAt: newTask.createdAt || now } as Task]);
+    }
     await loadTasks(sessionId);
-    console.log('[tasks.ts] Tasks reloaded');
   } catch (e) {
-    console.error('[tasks.ts] addManualTask error:', e);
     taskError.set(String(e));
     throw e;
   } finally {
@@ -570,6 +620,14 @@ export function selectTask(id: string | null) {
 
 export function setTaskFilter(filter: Partial<TaskFilter>) {
   taskFilter.update(f => ({ ...f, ...filter }));
+}
+
+export function setTaskSortBy(sortBy: TaskSortBy) {
+  taskSortBy.set(sortBy);
+}
+
+export function toggleHideDone() {
+  hideDone.update(v => !v);
 }
 
 export function clearTaskFilter() {

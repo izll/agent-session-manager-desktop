@@ -19,9 +19,9 @@ export function CreateGroup(arg1:string):Promise<main.GroupInfo>;
 
 export function CreateProject(arg1:string):Promise<main.ProjectInfo>;
 
-export function CreateSession(arg1:string,arg2:string,arg3:string,arg4:boolean):Promise<main.SessionInfo>;
+export function CreateSession(arg1:string,arg2:string,arg3:string,arg4:boolean,arg5:string):Promise<main.SessionInfo>;
 
-export function CreateTab(arg1:string,arg2:boolean,arg3:string,arg4:string):Promise<void>;
+export function CreateTab(arg1:string,arg2:boolean,arg3:string,arg4:string,arg5:string):Promise<void>;
 
 export function CreateTask(arg1:string,arg2:string,arg3:string,arg4:string,arg5:Array<string>):Promise<main.TaskInfo>;
 
@@ -32,6 +32,8 @@ export function DeleteProject(arg1:string):Promise<void>;
 export function DeleteSession(arg1:string):Promise<void>;
 
 export function DeleteSubtask(arg1:string,arg2:string,arg3:string):Promise<void>;
+
+export function DeleteTab(arg1:string,arg2:number):Promise<void>;
 
 export function DeleteTask(arg1:string,arg2:string):Promise<void>;
 
@@ -48,6 +50,8 @@ export function GetActiveProjectID():Promise<string>;
 export function GetActivities():Promise<Record<string, string>>;
 
 export function GetAgents():Promise<Array<main.AgentInfo>>;
+
+export function GetExtraArgs(arg1:string,arg2:number):Promise<string>;
 
 export function GetFullDiff(arg1:string):Promise<main.DiffData>;
 
@@ -79,6 +83,8 @@ export function GetStatusLines():Promise<Record<string, string>>;
 
 export function GetTabNotes(arg1:string,arg2:number):Promise<string>;
 
+export function GetTabOrder(arg1:string):Promise<Array<number>>;
+
 export function GetTasks(arg1:string):Promise<Array<main.TaskInfo>>;
 
 export function GetTasksByStatus(arg1:string,arg2:string):Promise<Array<main.TaskInfo>>;
@@ -103,6 +109,8 @@ export function MoveTask(arg1:string,arg2:string,arg3:string):Promise<void>;
 
 export function PerformUpdate(arg1:string):Promise<void>;
 
+export function RefreshWindow(arg1:string,arg2:number):Promise<void>;
+
 export function RenameGroup(arg1:string,arg2:string):Promise<void>;
 
 export function RenameSession(arg1:string,arg2:string):Promise<void>;
@@ -111,7 +119,13 @@ export function RenameTab(arg1:string,arg2:number,arg3:string):Promise<void>;
 
 export function ReorderSession(arg1:string,arg2:number):Promise<void>;
 
+export function ReorderTab(arg1:string,arg2:number,arg3:number):Promise<void>;
+
 export function ResizeTerminal(arg1:string,arg2:number,arg3:number):Promise<void>;
+
+export function RestartTab(arg1:string,arg2:number):Promise<void>;
+
+export function RestartTabWithResume(arg1:string,arg2:number,arg3:string):Promise<void>;
 
 export function SaveSettings(arg1:main.SettingsInfo):Promise<void>;
 
@@ -122,6 +136,8 @@ export function SendInput(arg1:string,arg2:string):Promise<void>;
 export function SendPrompt(arg1:string,arg2:string):Promise<void>;
 
 export function SendTaskToAgent(arg1:string,arg2:string):Promise<void>;
+
+export function SetExtraArgs(arg1:string,arg2:number,arg3:string):Promise<void>;
 
 export function SetGroupColor(arg1:string,arg2:string,arg3:string,arg4:boolean):Promise<void>;
 
@@ -138,6 +154,8 @@ export function StartSession(arg1:string):Promise<void>;
 export function StartSessionWithResume(arg1:string,arg2:string):Promise<void>;
 
 export function StopSession(arg1:string):Promise<void>;
+
+export function StopTab(arg1:string,arg2:number):Promise<void>;
 
 export function StopTaskMaster(arg1:string):Promise<void>;
 

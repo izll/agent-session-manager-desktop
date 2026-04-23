@@ -4,9 +4,11 @@
   import NewTabDialog from '../Dialogs/NewTabDialog.svelte';
   import ConfirmDialog from '../Dialogs/ConfirmDialog.svelte';
   import Toast from '../common/Toast.svelte';
-  import { sessions, selectedSessionId, selectedWindowIdx, selectWindow, selectedSession, startSession, stopSession, deleteSession, toggleFavorite, renameTab } from '../../stores/sessions';
+  import { sessions, selectedSessionId, selectedWindowIdx, selectWindow, selectedSession, startSession, stopSession, stopTab, restartTab, deleteSession, deleteTab, toggleFavorite, renameTab, reorderTab } from '../../stores/sessions';
   import { agents } from '../../stores/agents';
   import { get } from 'svelte/store';
+  import { t } from '../../i18n';
+  import { focusTerminal } from '../../utils/focus';
   import * as App from '../../../../wailsjs/go/main/App';
   import * as DictationService from '../../../../wailsjs/go/main/DictationService';
   import { EventsOn, EventsOff } from '../../../../wailsjs/runtime/runtime';
@@ -192,13 +194,51 @@
   let pollInterval: ReturnType<typeof setInterval> | null = null;
   let showNewTabDialog = false;
   let showDeleteConfirm = false;
+  let showDeleteTabConfirm = false;
+  let deleteTabIndex: number | null = null;
+  let showExtraArgsEditor = false;
+  let extraArgsValue = '';
+  let extraArgsWindowIdx: number | null = null;
   let showErrorToast = false;
   let errorMessage = '';
+
+  // Restore terminal focus when TabBar-local dialogs close
+  let prevTabBarDialogOpen = false;
+  $: {
+    const open = showNewTabDialog || showDeleteConfirm || showDeleteTabConfirm || showExtraArgsEditor;
+    if (prevTabBarDialogOpen && !open) {
+      focusTerminal();
+    }
+    prevTabBarDialogOpen = open;
+  }
 
   // Dictation event listeners
   let dictationCleanup: (() => void) | null = null;
 
+  // Ctrl+PageUp/PageDown to switch window tabs
+  function handleWindowTabKeydown(e: KeyboardEvent) {
+    if (!e.ctrlKey || e.shiftKey || e.altKey || e.metaKey) return;
+    if (e.key !== 'PageUp' && e.key !== 'PageDown') return;
+    if (windows.length <= 1) return;
+    if (document.querySelector('.dialog-overlay')) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    const currentIdx = windows.findIndex(w => w.Index === $selectedWindowIdx);
+    if (currentIdx === -1) return;
+
+    let newIdx: number;
+    if (e.key === 'PageDown') {
+      newIdx = (currentIdx + 1) % windows.length;
+    } else {
+      newIdx = (currentIdx - 1 + windows.length) % windows.length;
+    }
+    selectWindow(windows[newIdx].Index);
+  }
+
   onMount(async () => {
+    window.addEventListener('keydown', handleWindowTabKeydown, true);
     window.addEventListener('click', handleTabContextWindowClick);
 
     // Get initial dictation state
@@ -219,7 +259,13 @@
       dictationListening = listening;
       if (listening) {
         startVoiceLevelPoll();
-        if (bufferMode) {
+        if (notesFieldCleanup) {
+          // Notes field dictation active - focus notes textarea
+          tick().then(() => {
+            const notesTextarea = document.querySelector('.notes-textarea') as HTMLTextAreaElement;
+            notesTextarea?.focus();
+          });
+        } else if (bufferMode) {
           console.log('[Buffer] Starting buffer text poll');
           startBufferTextPoll();
           tick().then(() => bufferEditor?.focus());
@@ -233,6 +279,7 @@
       } else {
         stopVoiceLevelPoll();
         stopBufferTextPoll();
+        cleanupNotesField();
       }
     });
 
@@ -337,6 +384,7 @@
   });
 
   onDestroy(() => {
+    window.removeEventListener('keydown', handleWindowTabKeydown, true);
     window.removeEventListener('click', handleTabContextWindowClick);
     stopPolling();
     if (dictationCleanup) {
@@ -344,11 +392,55 @@
     }
   });
 
+  // Notes field dictation routing
+  let notesFieldCleanup: (() => void) | null = null;
+
+  function setupNotesFieldListeners() {
+    const unsubText = EventsOn('dictation:fieldText', (text: string) => {
+      const el = document.querySelector('.notes-textarea') as HTMLTextAreaElement;
+      if (el) {
+        const start = el.selectionStart ?? el.value.length;
+        const end = el.selectionEnd ?? el.value.length;
+        el.value = el.value.substring(0, start) + text + el.value.substring(end);
+        el.selectionStart = el.selectionEnd = start + text.length;
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+    });
+    const unsubDelete = EventsOn('dictation:fieldDelete', (count: number) => {
+      const el = document.querySelector('.notes-textarea') as HTMLTextAreaElement;
+      if (el && count > 0) {
+        const start = el.selectionStart ?? el.value.length;
+        const deleteFrom = Math.max(0, start - count);
+        el.value = el.value.substring(0, deleteFrom) + el.value.substring(start);
+        el.selectionStart = el.selectionEnd = deleteFrom;
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+    });
+    notesFieldCleanup = () => {
+      unsubText();
+      unsubDelete();
+    };
+  }
+
+  function cleanupNotesField() {
+    if (notesFieldCleanup) {
+      notesFieldCleanup();
+      notesFieldCleanup = null;
+      DictationService.SetDictationTarget('terminal').catch(() => {});
+    }
+  }
+
   async function toggleDictation() {
     if (!dictationEnabled) return;
     try {
+      // If starting dictation while notes view is active, target the notes field
+      if (!dictationListening && activeView === 'notes') {
+        await DictationService.SetDictationTarget('field');
+        setupNotesFieldListeners();
+      }
       await DictationService.ToggleDictation();
     } catch (e) {
+      cleanupNotesField();
       console.error('[Dictation] Toggle failed:', e);
       errorMessage = `Dictation error: ${e}`;
       showErrorToast = true;
@@ -439,6 +531,18 @@
     }
   }
 
+  // Sort windows by custom tab order
+  function sortWindowsByTabOrder(wins: any[], tabOrder: number[] | undefined): any[] {
+    if (!tabOrder || tabOrder.length === 0) return wins;
+    const indexMap = new Map<number, number>();
+    tabOrder.forEach((winIdx, pos) => indexMap.set(winIdx, pos));
+    return [...wins].sort((a, b) => {
+      const posA = indexMap.has(a.Index) ? indexMap.get(a.Index)! : 9999;
+      const posB = indexMap.has(b.Index) ? indexMap.get(b.Index)! : 9999;
+      return posA - posB;
+    });
+  }
+
   // Load windows when session changes or status changes
   async function loadWindowsForSession(sessionId: string | null, _status?: string) {
     if (!sessionId) {
@@ -474,7 +578,7 @@
           Agent: fw.agent || sess.agent,
           Dead: false
         }));
-        windows = [mainTab, ...followedTabs];
+        windows = sortWindowsByTabOrder([mainTab, ...followedTabs], sess.tabOrder);
       } else {
         windows = [mainTab];
       }
@@ -490,7 +594,7 @@
 
     try {
       const list = await App.GetWindowList(sessionId);
-      windows = list || [];
+      windows = sortWindowsByTabOrder(list || [], sess.tabOrder);
 
       // Start polling if not already
       if (!pollInterval) {
@@ -550,6 +654,67 @@
     selectWindow(index);
   }
 
+  // Tab drag & drop reordering
+  let draggingTabIndex: number | null = null;
+  let dragOverTabIndex: number | null = null;
+  let droppedTabWindowIdx: number | null = null;
+
+  function handleTabDragStart(e: DragEvent, arrayIdx: number) {
+    draggingTabIndex = arrayIdx;
+    if (e.dataTransfer) {
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', String(arrayIdx));
+    }
+  }
+
+  function handleTabDragEnd() {
+    draggingTabIndex = null;
+    dragOverTabIndex = null;
+  }
+
+  function handleTabDragOver(e: DragEvent, arrayIdx: number) {
+    if (draggingTabIndex === null) return;
+    e.preventDefault();
+    if (e.dataTransfer) {
+      e.dataTransfer.dropEffect = 'move';
+    }
+    dragOverTabIndex = arrayIdx;
+  }
+
+  function handleTabDragLeave(e: DragEvent, arrayIdx: number) {
+    if (dragOverTabIndex === arrayIdx) {
+      dragOverTabIndex = null;
+    }
+  }
+
+  async function handleTabDrop(e: DragEvent, arrayIdx: number) {
+    e.preventDefault();
+    if (draggingTabIndex === null || draggingTabIndex === arrayIdx) {
+      draggingTabIndex = null;
+      dragOverTabIndex = null;
+      return;
+    }
+    const sessionId = get(selectedSessionId);
+    if (!sessionId) return;
+
+    const fromPos = draggingTabIndex;
+    const toPos = arrayIdx;
+    // Remember which window was dragged for flash animation
+    const draggedWinIdx = windows[fromPos]?.Index;
+
+    draggingTabIndex = null;
+    dragOverTabIndex = null;
+
+    try {
+      await reorderTab(sessionId, fromPos, toPos);
+      // Trigger flash on the moved tab
+      droppedTabWindowIdx = draggedWinIdx;
+      setTimeout(() => { droppedTabWindowIdx = null; }, 500);
+    } catch (err) {
+      console.error('Failed to reorder tab:', err);
+    }
+  }
+
   function handleTabContextMenu(e: MouseEvent, index: number, name: string) {
     e.preventDefault();
     e.stopPropagation();
@@ -576,6 +741,80 @@
       startTabRename(tabContextMenuIndex, tabContextMenuName);
     }
     closeTabContextMenu();
+  }
+
+  async function tabContextStop() {
+    if (tabContextMenuIndex !== null && $selectedSessionId) {
+      await stopTab($selectedSessionId, tabContextMenuIndex);
+    }
+    closeTabContextMenu();
+  }
+
+  async function tabContextDelete() {
+    if (tabContextMenuIndex !== null && tabContextMenuIndex !== 0 && $selectedSessionId) {
+      deleteTabIndex = tabContextMenuIndex;
+      showDeleteTabConfirm = true;
+    }
+    closeTabContextMenu();
+  }
+
+  async function tabContextEditExtraArgs() {
+    if (tabContextMenuIndex !== null && $selectedSessionId) {
+      try {
+        const args = await App.GetExtraArgs($selectedSessionId, tabContextMenuIndex);
+        extraArgsValue = args || '';
+        extraArgsWindowIdx = tabContextMenuIndex;
+        showExtraArgsEditor = true;
+      } catch (e) {
+        console.error('Failed to get extra args:', e);
+      }
+    }
+    closeTabContextMenu();
+  }
+
+  async function saveExtraArgs() {
+    if (extraArgsWindowIdx !== null && $selectedSessionId) {
+      try {
+        await App.SetExtraArgs($selectedSessionId, extraArgsWindowIdx, extraArgsValue.trim());
+      } catch (e) {
+        console.error('Failed to save extra args:', e);
+        errorMessage = `Failed to save extra args: ${e}`;
+        showErrorToast = true;
+      }
+    }
+    showExtraArgsEditor = false;
+    extraArgsWindowIdx = null;
+  }
+
+  function cancelExtraArgs() {
+    showExtraArgsEditor = false;
+    extraArgsWindowIdx = null;
+  }
+
+  function handleExtraArgsKeydown(e: KeyboardEvent) {
+    e.stopPropagation();
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      saveExtraArgs();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      cancelExtraArgs();
+    }
+  }
+
+  async function confirmDeleteTab() {
+    if (deleteTabIndex !== null && $selectedSessionId) {
+      try {
+        await deleteTab($selectedSessionId, deleteTabIndex);
+        // Force refresh window list immediately
+        await loadWindowsForSession($selectedSessionId, currentSessionStatus);
+      } catch (e) {
+        errorMessage = `Failed to delete tab: ${e}`;
+        showErrorToast = true;
+      }
+    }
+    deleteTabIndex = null;
+    focusTerminal();
   }
 
   async function startTabRename(index: number, currentName: string) {
@@ -635,6 +874,15 @@
     return colors[agent?.toLowerCase()] || '#9ca3af';
   }
 
+  // Check if the currently selected tab is stopped (dead pane)
+  $: currentTabStopped = (() => {
+    if (!$selectedSession || $selectedSession.status !== 'running') return false;
+    const winIdx = $selectedWindowIdx;
+    if (winIdx === 0) return ($selectedSession as any).mainWindowStopped || false;
+    const fw = $selectedSession.followedWindows?.find(w => w.index === winIdx);
+    return fw?.stopped || false;
+  })();
+
   $: agentSupportsResume = (() => {
     if (!$selectedSession) return false;
     const agentConfig = $agents.find(a => a.type === $selectedSession.agent);
@@ -642,30 +890,50 @@
   })();
 
   function handleResume() {
-    if (!$selectedSession || $selectedSession.status === 'running') return;
+    if (!$selectedSession) return;
     dispatch('requestResume');
   }
 
   async function handleStartStop() {
     if (!$selectedSession) return;
-    try {
-      if ($selectedSession.status === 'running') {
-        // Dispatch event to parent to show stop dialog
-        dispatch('requestStop');
-      } else {
+    if (currentTabStopped) {
+      // Restart just this stopped tab
+      try {
+        await restartTab($selectedSession.id, $selectedWindowIdx);
+      } catch (e) {
+        console.error('Restart tab failed:', e);
+        errorMessage = `Failed to restart tab: ${e}`;
+        showErrorToast = true;
+      }
+    } else if ($selectedSession.status === 'running') {
+      // Show stop dialog so user can choose: stop tab or entire session
+      dispatch('requestStop');
+    } else {
+      try {
         // Dispatch event to parent to show start dialog (if has tabs)
         dispatch('requestStart');
+      } catch (e) {
+        console.error('Start failed:', e);
+        errorMessage = `Failed to start session: ${e}`;
+        showErrorToast = true;
       }
-    } catch (e) {
-      console.error('Start/Stop failed:', e);
-      errorMessage = `Failed to ${$selectedSession.status === 'running' ? 'stop' : 'start'} session: ${e}`;
-      showErrorToast = true;
     }
   }
 
   function handleDelete() {
     if (!$selectedSession) return;
     showDeleteConfirm = true;
+  }
+
+  async function handleRefresh() {
+    if (!$selectedSession) return;
+    try {
+      await App.RefreshWindow($selectedSession.id, $selectedWindowIdx);
+      focusTerminal();
+    } catch (e) {
+      errorMessage = `Failed to refresh: ${e}`;
+      showErrorToast = true;
+    }
   }
 
   async function confirmDelete() {
@@ -687,7 +955,15 @@
     await toggleFavorite($selectedSession.id);
   }
 
+  function hasExtraArgs(winIndex: number): boolean {
+    if (!$selectedSession) return false;
+    if (winIndex === 0) return !!$selectedSession.extraArgs;
+    const fw = $selectedSession.followedWindows?.find(w => w.index === winIndex);
+    return !!(fw?.extra_args);
+  }
+
   export let fullDiffActive = false;
+  export let activeView: 'terminal' | 'diff' | 'notes' | 'tasks' = 'terminal';
 
   function handleFullDiffClick() {
     dispatch('openFullDiff');
@@ -698,13 +974,23 @@
   <div class="tab-bar">
     {#if windows.length > 0}
       <div class="tabs-container">
-        {#each windows as win (win.Index)}
+        {#each windows as win, winArrayIdx (win.Index)}
           <button
             class="tab"
             class:active={$selectedWindowIdx === win.Index && !fullDiffActive}
             class:dead={win.Dead}
+            class:stopped={currentSessionStatus !== 'running'}
+            class:tab-dragging={draggingTabIndex === winArrayIdx}
+            class:tab-drag-over={dragOverTabIndex === winArrayIdx && draggingTabIndex !== winArrayIdx}
+            class:tab-dropped={droppedTabWindowIdx === win.Index}
+            draggable={true}
             on:click={() => { if (renamingTabIndex === null) { handleTabClick(win.Index); dispatch('closeFullDiff'); } }}
             on:contextmenu={(e) => handleTabContextMenu(e, win.Index, win.Name)}
+            on:dragstart={(e) => handleTabDragStart(e, winArrayIdx)}
+            on:dragend={handleTabDragEnd}
+            on:dragover={(e) => handleTabDragOver(e, winArrayIdx)}
+            on:dragleave={(e) => handleTabDragLeave(e, winArrayIdx)}
+            on:drop={(e) => handleTabDrop(e, winArrayIdx)}
           >
             <span class="tab-indicator" style="background: {getAgentColor(win.Agent)}"></span>
             <AgentIcon agent={win.Agent} size="sm" />
@@ -732,6 +1018,14 @@
                 </svg>
               </span>
             {/if}
+            {#if hasExtraArgs(win.Index)}
+              <span class="tab-extra-args-badge" title={$t('tabBar.editExtraArgs')}>
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                  <polyline points="4 17 10 11 4 5"/>
+                  <line x1="12" y1="19" x2="20" y2="19"/>
+                </svg>
+              </span>
+            {/if}
           </button>
         {/each}
       </div>
@@ -750,8 +1044,34 @@
             <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
             <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
           </svg>
-          Rename
+          {$t('tabBar.rename')}
         </button>
+        {#if tabContextMenuIndex !== null && windows.find(w => w.Index === tabContextMenuIndex)?.Agent !== 'terminal' && windows.find(w => w.Index === tabContextMenuIndex)?.Agent !== 'custom'}
+          <button class="tab-context-menu-item" on:click={tabContextEditExtraArgs}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="4 17 10 11 4 5"/>
+              <line x1="12" y1="19" x2="20" y2="19"/>
+            </svg>
+            {$t('tabBar.editExtraArgs')}
+          </button>
+        {/if}
+        {#if currentSessionStatus === 'running' && tabContextMenuIndex !== null && !windows.find(w => w.Index === tabContextMenuIndex)?.Dead}
+          <button class="tab-context-menu-item" on:click={tabContextStop}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="6" y="6" width="12" height="12" rx="1"/>
+            </svg>
+            {$t('tabBar.stopTab')}
+          </button>
+        {/if}
+        {#if tabContextMenuIndex !== 0}
+          <button class="tab-context-menu-item delete" on:click={tabContextDelete}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="3 6 5 6 21 6"/>
+              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+            </svg>
+            {$t('tabBar.deleteTab')}
+          </button>
+        {/if}
       </div>
     {/if}
 
@@ -763,12 +1083,12 @@
       class="tab diff-tab"
       class:active={fullDiffActive}
       on:click={handleFullDiffClick}
-      title="Full git diff (all uncommitted changes)"
+      title={$t('tabBar.fullDiff')}
     >
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M12 3v18M3 12h18"/>
       </svg>
-      <span class="tab-name">Diff</span>
+      <span class="tab-name">{$t('tabBar.diffLabel')}</span>
     </button>
 
     <!-- Spacer to push controls to right -->
@@ -778,7 +1098,7 @@
     <div class="session-controls">
       <!-- Add Tab Button (only for running sessions) -->
       {#if $selectedSession?.status === 'running'}
-        <button class="control-btn add-tab" on:click={handleNewTab} title="New tab">
+        <button class="control-btn add-tab" on:click={handleNewTab} title={$t('tabBar.newTab')}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <line x1="12" y1="5" x2="12" y2="19"/>
             <line x1="5" y1="12" x2="19" y2="12"/>
@@ -790,11 +1110,11 @@
 
       <!-- Start/Stop -->
       <button
-        class="control-btn {$selectedSession?.status === 'running' ? 'stop' : 'start'}"
+        class="control-btn {currentTabStopped ? 'start' : ($selectedSession?.status === 'running' ? 'stop' : 'start')}"
         on:click={handleStartStop}
-        title={$selectedSession?.status === 'running' ? 'Stop session' : 'Start session'}
+        title={currentTabStopped ? $t('tabBar.startSession') : ($selectedSession?.status === 'running' ? $t('tabBar.stopSession') : $t('tabBar.startSession'))}
       >
-        {#if $selectedSession?.status === 'running'}
+        {#if $selectedSession?.status === 'running' && !currentTabStopped}
           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
             <rect x="6" y="6" width="12" height="12" rx="1"/>
           </svg>
@@ -805,12 +1125,12 @@
         {/if}
       </button>
 
-      <!-- Resume (only for stopped sessions with resume support) -->
-      {#if $selectedSession?.status !== 'running' && agentSupportsResume}
+      <!-- Resume (for any session/tab with resume support) -->
+      {#if agentSupportsResume}
         <button
           class="control-btn resume"
           on:click={handleResume}
-          title="Resume previous conversation"
+          title={$t('tabBar.resumeConversation')}
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M1 4v6h6"/>
@@ -819,8 +1139,23 @@
         </button>
       {/if}
 
+      <!-- Refresh (redraw tmux pane to fix rendering glitches) -->
+      {#if $selectedSession?.status === 'running' && !currentTabStopped}
+        <button
+          class="control-btn refresh"
+          on:click={handleRefresh}
+          title={$t('tabBar.refreshWindow')}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="23 4 23 10 17 10"/>
+            <polyline points="1 20 1 14 7 14"/>
+            <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+          </svg>
+        </button>
+      {/if}
+
       <!-- Delete -->
-      <button class="control-btn delete" on:click={handleDelete} title="Delete session">
+      <button class="control-btn delete" on:click={handleDelete} title={$t('tabBar.deleteSession')}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
         </svg>
@@ -831,7 +1166,7 @@
         class="control-btn favorite"
         class:active={$selectedSession?.favorite}
         on:click={handleFavoriteClick}
-        title={$selectedSession?.favorite ? 'Remove from favorites' : 'Add to favorites'}
+        title={$selectedSession?.favorite ? $t('tabBar.removeFromFavorites') : $t('tabBar.addToFavorites')}
       >
         <svg width="14" height="14" viewBox="0 0 24 24" fill={$selectedSession?.favorite ? 'currentColor' : 'none'} stroke="currentColor" stroke-width="2">
           <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
@@ -839,7 +1174,7 @@
       </button>
 
       <!-- Color -->
-      <button class="control-btn color" on:click={handleColorClick} title="Set session color">
+      <button class="control-btn color" on:click={handleColorClick} title={$t('tabBar.setSessionColor')}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <circle cx="12" cy="12" r="10"/>
           <circle cx="12" cy="12" r="3" fill="currentColor"/>
@@ -853,8 +1188,8 @@
             <div class="dictation-buffer" class:dragging={isDragging} class:resizing={isResizing} class:live-preview={!bufferMode} bind:this={bufferPanel} style={bufferPanelStyle}>
               <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
               <div class="buffer-header" role="banner" on:mousedown={onHeaderMousedown}>
-                <span class="buffer-title">{bufferMode ? 'Dictation Buffer' : 'Live Preview'}</span>
-                <button class="buffer-close" on:click={() => { clearBuffer(); dictationListening = false; DictationService.ToggleDictation(); }} title="Close (stop dictation)">
+                <span class="buffer-title">{bufferMode ? $t('tabBar.dictationBuffer') : $t('tabBar.livePreview')}</span>
+                <button class="buffer-close" on:click={() => { clearBuffer(); dictationListening = false; DictationService.ToggleDictation(); }} title={$t('tabBar.closeDictation')}>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <line x1="18" y1="6" x2="6" y2="18"/>
                     <line x1="6" y1="6" x2="18" y2="18"/>
@@ -874,9 +1209,9 @@
               {#if bufferMode}
               <div class="buffer-actions">
                 <div class="buffer-left-actions">
-                  <span class="buffer-hint">Ctrl+S / Ctrl+Enter = Send, Escape = Clear</span>
+                  <span class="buffer-hint">{$t('tabBar.bufferHint')}</span>
                   <div class="buffer-toggles">
-                    <button class="buffer-setting-toggle" class:active={bufferSendEnter} title="Send Enter after text (submit to agent)" on:click={async () => {
+                    <button class="buffer-setting-toggle" class:active={bufferSendEnter} title={$t('tabBar.sendEnterTitle')} on:click={async () => {
                         bufferSendEnter = !bufferSendEnter;
                         try {
                           const settings = await DictationService.GetDictationSettings();
@@ -885,9 +1220,9 @@
                         } catch (_) {}
                       }}>
                       <span class="mini-toggle-track"><span class="mini-toggle-thumb"></span></span>
-                      <span class="buffer-toggle-label">Send Enter</span>
+                      <span class="buffer-toggle-label">{$t('tabBar.sendEnter')}</span>
                     </button>
-                    <button class="buffer-setting-toggle" class:active={bufferCloseOnSend} title="Close window after sending text" on:click={async () => {
+                    <button class="buffer-setting-toggle" class:active={bufferCloseOnSend} title={$t('tabBar.closeAfterSendTitle')} on:click={async () => {
                         bufferCloseOnSend = !bufferCloseOnSend;
                         try {
                           const settings = await DictationService.GetDictationSettings();
@@ -896,22 +1231,22 @@
                         } catch (_) {}
                       }}>
                       <span class="mini-toggle-track"><span class="mini-toggle-thumb"></span></span>
-                      <span class="buffer-toggle-label">Close after send</span>
+                      <span class="buffer-toggle-label">{$t('tabBar.closeAfterSend')}</span>
                     </button>
                   </div>
                 </div>
                 <div class="buffer-btn-group">
-                  <button class="buffer-btn trash" on:click={clearBuffer} title="Clear text">
+                  <button class="buffer-btn trash" on:click={clearBuffer} title={$t('tabBar.clearText')}>
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                       <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
                     </svg>
                   </button>
-                  <button class="buffer-btn send" on:click={sendBuffer} title="Send to terminal (Ctrl+Enter)" disabled={!bufferText.trim()}>
+                  <button class="buffer-btn send" on:click={sendBuffer} title={$t('tabBar.sendToTerminal')} disabled={!bufferText.trim()}>
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                       <line x1="22" y1="2" x2="11" y2="13"/>
                       <polygon points="22 2 15 22 11 13 2 9 22 2"/>
                     </svg>
-                    Send
+                    {$t('tabBar.send')}
                   </button>
                 </div>
               </div>
@@ -943,7 +1278,7 @@
             class:listening={dictationListening}
             class:voice-active={dictationListening && voiceLevel > 0.05}
             on:click={toggleDictation}
-            title={dictationListening ? 'Stop dictation' : 'Start dictation'}
+            title={dictationListening ? $t('tabBar.stopDictation') : $t('tabBar.startDictation')}
             style="--voice-glow: {6 + voiceLevel * 30}px; --voice-alpha: {0.4 + voiceLevel * 0.6}; --voice-scale: {1 + voiceLevel * 0.15};"
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill={dictationListening ? 'currentColor' : 'none'} stroke="currentColor" stroke-width="2">
@@ -963,13 +1298,52 @@
 
 <ConfirmDialog
   bind:show={showDeleteConfirm}
-  title="Delete Session"
-  message="Are you sure you want to delete &quot;{$selectedSession?.name}&quot;? This action cannot be undone."
-  confirmText="Delete"
-  cancelText="Cancel"
+  title={$t('tabBar.deleteTitle')}
+  message={$t('tabBar.deleteMessage', { name: $selectedSession?.name || '' })}
+  confirmText={$t('tabBar.deleteConfirm')}
+  cancelText={$t('common.cancel')}
   variant="danger"
   on:confirm={confirmDelete}
 />
+
+<ConfirmDialog
+  bind:show={showDeleteTabConfirm}
+  title={$t('tabBar.deleteTabTitle')}
+  message={$t('tabBar.deleteTabMessage')}
+  confirmText={$t('tabBar.deleteConfirm')}
+  cancelText={$t('common.cancel')}
+  variant="danger"
+  on:confirm={confirmDeleteTab}
+/>
+
+{#if showExtraArgsEditor}
+  <div class="dialog-overlay" on:click|self={cancelExtraArgs} on:keydown={handleExtraArgsKeydown} role="dialog" aria-modal="true">
+    <div class="extra-args-dialog">
+      <div class="extra-args-header">
+        <h3>{$t('tabBar.extraArgsTitle')}</h3>
+        <button class="close-btn" on:click={cancelExtraArgs}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"/>
+            <line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+      <input
+        class="extra-args-input"
+        type="text"
+        bind:value={extraArgsValue}
+        on:keydown={handleExtraArgsKeydown}
+        placeholder="--model opus --verbose"
+        autofocus
+      />
+      <span class="extra-args-hint">{$t('tabBar.extraArgsHint')}</span>
+      <div class="extra-args-actions">
+        <button class="btn-cancel" on:click={cancelExtraArgs}>{$t('common.cancel')}</button>
+        <button class="btn-primary" on:click={saveExtraArgs}>{$t('tabBar.extraArgsSave')}</button>
+      </div>
+    </div>
+  </div>
+{/if}
 
 <Toast bind:show={showErrorToast} message={errorMessage} variant="error" />
 
@@ -1026,12 +1400,51 @@
     box-shadow: 0 -4px 20px rgba(139, 92, 246, 0.15);
   }
 
-  .tab.dead {
-    opacity: 0.6;
+  .tab.tab-dragging {
+    opacity: 0.4;
+    transform: scale(0.95);
   }
 
-  .tab.dead .tab-name {
-    text-decoration: line-through;
+  .tab.tab-drag-over {
+    border-left: 2px solid #a78bfa;
+    background: rgba(139, 92, 246, 0.1);
+  }
+
+  .tab.tab-dropped {
+    animation: tab-drop-flash 0.5s ease-out;
+  }
+
+  @keyframes tab-drop-flash {
+    0% {
+      background: rgba(139, 92, 246, 0.4);
+      box-shadow: 0 0 12px rgba(139, 92, 246, 0.6);
+    }
+    100% {
+      background: rgba(255, 255, 255, 0.03);
+      box-shadow: none;
+    }
+  }
+
+  .tab.dead,
+  .tab.stopped {
+    opacity: 0.6;
+    filter: grayscale(1);
+    color: #6b7280;
+  }
+
+  .tab.dead.active,
+  .tab.stopped.active {
+    opacity: 0.8;
+    filter: grayscale(1);
+    background: linear-gradient(180deg, rgba(107, 114, 128, 0.15) 0%, rgba(107, 114, 128, 0.08) 100%);
+    border-color: rgba(107, 114, 128, 0.3);
+    box-shadow: none;
+    color: #9ca3af;
+  }
+
+  .tab.dead .tab-indicator,
+  .tab.stopped .tab-indicator {
+    opacity: 0.3;
   }
 
   .tab-indicator {
@@ -1106,10 +1519,30 @@
     background: rgba(139, 92, 246, 0.15);
   }
 
+  .tab-context-menu-item.delete {
+    color: #f87171;
+  }
+
+  .tab-context-menu-item.delete:hover {
+    background: rgba(239, 68, 68, 0.15);
+  }
+
   .tab-dead {
     display: flex;
     align-items: center;
     color: #f87171;
+  }
+
+  .tab-extra-args-badge {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    border-radius: 4px;
+    background: rgba(139, 92, 246, 0.2);
+    color: #a78bfa;
+    flex-shrink: 0;
   }
 
   .tab-separator {
@@ -1193,6 +1626,16 @@
     background: rgba(59, 130, 246, 0.15);
     border-color: rgba(59, 130, 246, 0.3);
     color: #60a5fa;
+  }
+
+  .control-btn.refresh {
+    color: #34d399;
+  }
+
+  .control-btn.refresh:hover {
+    background: rgba(16, 185, 129, 0.15);
+    border-color: rgba(16, 185, 129, 0.3);
+    color: #34d399;
   }
 
   .control-btn.stop {
@@ -1531,6 +1974,67 @@
     color: #f87171;
   }
 
+
+  /* Extra Args Editor */
+  .extra-args-dialog {
+    background: #1a1a2e;
+    border: 1px solid rgba(139, 92, 246, 0.3);
+    border-radius: 12px;
+    padding: 20px;
+    width: 400px;
+    max-width: 90vw;
+    box-shadow: 0 12px 48px rgba(0, 0, 0, 0.6);
+  }
+
+  .extra-args-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+  }
+
+  .extra-args-header h3 {
+    font-size: 15px;
+    font-weight: 600;
+    color: #e4e4e7;
+    margin: 0;
+  }
+
+  .extra-args-input {
+    width: 100%;
+    padding: 10px 14px;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    font-size: 14px;
+    font-family: 'JetBrains Mono', monospace;
+    color: #e4e4e7;
+    outline: none;
+    transition: border-color 0.2s ease;
+  }
+
+  .extra-args-input:focus {
+    border-color: rgba(139, 92, 246, 0.5);
+    box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.1);
+  }
+
+  .extra-args-input::placeholder {
+    color: #4b5563;
+  }
+
+  .extra-args-hint {
+    display: block;
+    font-size: 11px;
+    color: #6b7280;
+    margin-top: 8px;
+    margin-bottom: 16px;
+  }
+
+  .extra-args-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+  }
 
   /* Resize edges */
   .resize-edge, .resize-corner { position: absolute; z-index: 1; }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"embed"
 	_ "embed"
+	"os"
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
@@ -31,6 +32,13 @@ func main() {
 	if isDevMode {
 		appTitle = "[DEV] Agent Session Manager"
 		appIcon = addDevBadge(icon)
+	}
+
+	// Force X11 backend on Wayland to ensure frameless mode works correctly.
+	// Under native Wayland, compositors ignore gtk_window_set_decorated(FALSE)
+	// and add their own titlebar on top of our custom one. XWayland respects it.
+	if os.Getenv("GDK_BACKEND") == "" {
+		os.Setenv("GDK_BACKEND", "x11")
 	}
 
 	// Create application with options

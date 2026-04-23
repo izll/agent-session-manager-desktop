@@ -5,6 +5,7 @@
   import { get } from 'svelte/store';
   import * as App from '../../../../wailsjs/go/main/App';
   import AgentIcon from '../common/AgentIcon.svelte';
+  import { t } from '../../i18n';
 
   export let show = false;
 
@@ -13,10 +14,13 @@
   let tabType: 'agent' | 'terminal' = 'agent';
   let selectedAgent = 'claude';
   let name = '';
+  let extraArgs = '';
   let isSubmitting = false;
   let error = '';
+  let userTouchedName = false;
 
-  $: if (show) {
+  // Auto-fill name based on tab type / agent (only if user hasn't edited it)
+  $: if (show && !userTouchedName) {
     name = tabType === 'terminal' ? 'Terminal' : `${selectedAgent} tab`;
   }
 
@@ -30,18 +34,20 @@
     tabType = 'agent';
     selectedAgent = 'claude';
     name = '';
+    extraArgs = '';
     error = '';
+    userTouchedName = false;
   }
 
   async function handleSubmit() {
     if (!name.trim()) {
-      error = 'Name is required';
+      error = $t('newTab.nameRequired');
       return;
     }
 
     const sessionId = get(selectedSessionId);
     if (!sessionId) {
-      error = 'No session selected';
+      error = $t('newTab.noSession');
       return;
     }
 
@@ -51,7 +57,7 @@
     try {
       const isAgent = tabType === 'agent';
       const agent = isAgent ? selectedAgent : 'terminal';
-      await App.CreateTab(sessionId, isAgent, agent, name.trim());
+      await App.CreateTab(sessionId, isAgent, agent, name.trim(), extraArgs.trim());
       await loadSessions();
       close();
       dispatch('created', { name: name.trim(), type: tabType, agent });
@@ -86,7 +92,7 @@
   >
     <div class="dialog-content">
       <div class="dialog-header">
-        <h2>New Tab</h2>
+        <h2>{$t('newTab.title')}</h2>
         <button class="close-btn" on:click={close}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <line x1="18" y1="6" x2="6" y2="18"/>
@@ -109,7 +115,7 @@
       <form on:submit|preventDefault={handleSubmit}>
         <!-- Tab Type -->
         <div class="form-group">
-          <span class="form-label">Tab Type</span>
+          <span class="form-label">{$t('newTab.tabType')}</span>
           <div class="type-grid">
             <button
               type="button"
@@ -120,8 +126,8 @@
                 <circle cx="12" cy="8" r="4"/>
                 <path d="M20 21a8 8 0 10-16 0"/>
               </svg>
-              <span class="type-title">Agent</span>
-              <span class="type-desc">AI coding assistant</span>
+              <span class="type-title">{$t('newTab.agent')}</span>
+              <span class="type-desc">{$t('newTab.agentDesc')}</span>
             </button>
             <button
               type="button"
@@ -132,8 +138,8 @@
                 <polyline points="4 17 10 11 4 5"/>
                 <line x1="12" y1="19" x2="20" y2="19"/>
               </svg>
-              <span class="type-title">Terminal</span>
-              <span class="type-desc">Plain shell</span>
+              <span class="type-title">{$t('newTab.terminal')}</span>
+              <span class="type-desc">{$t('newTab.terminalDesc')}</span>
             </button>
           </div>
         </div>
@@ -141,7 +147,7 @@
         <!-- Agent Selection (if agent type) -->
         {#if tabType === 'agent'}
           <div class="form-group">
-            <span class="form-label">Agent</span>
+            <span class="form-label">{$t('newTab.agentLabel')}</span>
             <div class="agent-grid">
               {#each $agents.filter(a => a.type !== 'terminal') as agent}
                 <button
@@ -157,14 +163,29 @@
           </div>
         {/if}
 
+        <!-- Extra CLI Arguments (agent tab, not custom/terminal) -->
+        {#if tabType === 'agent' && selectedAgent !== 'custom'}
+          <div class="form-group">
+            <label class="form-label" for="tab-extra-args">{$t('newTab.extraArgs')}</label>
+            <input
+              id="tab-extra-args"
+              type="text"
+              bind:value={extraArgs}
+              placeholder={$t('newTab.extraArgsPlaceholder')}
+              class="form-input"
+            />
+          </div>
+        {/if}
+
         <!-- Name -->
         <div class="form-group">
-          <label class="form-label" for="tab-name">Tab Name</label>
+          <label class="form-label" for="tab-name">{$t('newTab.tabName')}</label>
           <input
             id="tab-name"
             type="text"
             bind:value={name}
-            placeholder="Tab name"
+            on:input={() => userTouchedName = true}
+            placeholder={$t('newTab.tabNamePlaceholder')}
             class="form-input"
           />
         </div>
@@ -172,20 +193,20 @@
         <!-- Actions -->
         <div class="dialog-actions">
           <button type="button" class="btn-cancel" on:click={close}>
-            Cancel
+            {$t('common.cancel')}
           </button>
           <button type="submit" class="btn-primary" disabled={isSubmitting}>
             {#if isSubmitting}
               <svg class="spinner" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
               </svg>
-              Creating...
+              {$t('newTab.creating')}
             {:else}
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <line x1="12" y1="5" x2="12" y2="19"/>
                 <line x1="5" y1="12" x2="19" y2="12"/>
               </svg>
-              Create Tab
+              {$t('newTab.create')}
             {/if}
           </button>
         </div>

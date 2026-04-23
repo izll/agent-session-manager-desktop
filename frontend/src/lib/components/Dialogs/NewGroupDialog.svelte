@@ -1,6 +1,7 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
   import { createGroup } from '../../stores/sessions';
+  import { t } from '../../i18n';
 
   export let show = false;
 
@@ -9,11 +10,14 @@
   let groupName = '';
   let loading = false;
   let error = '';
+  let lastShow = false;
 
-  $: if (show) {
+  // Reset form only when dialog transitions from hidden to shown
+  $: if (show && !lastShow) {
     groupName = '';
     error = '';
   }
+  $: lastShow = show;
 
   function close() {
     show = false;
@@ -55,7 +59,7 @@
   >
     <div class="dialog-content">
       <div class="dialog-header">
-        <h2>New Group</h2>
+        <h2>{$t('newGroup.title')}</h2>
         <button class="close-btn" on:click={close}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <line x1="18" y1="6" x2="6" y2="18"/>
@@ -66,12 +70,12 @@
 
       <div class="dialog-body">
         <div class="form-group">
-          <label for="group-name">Group Name</label>
+          <label for="group-name">{$t('newGroup.nameLabel')}</label>
           <input
             id="group-name"
             type="text"
             bind:value={groupName}
-            placeholder="Enter group name..."
+            placeholder={$t('newGroup.namePlaceholder')}
             class="text-input"
             autofocus
           />
@@ -83,13 +87,13 @@
       </div>
 
       <div class="dialog-footer">
-        <button class="btn-cancel" on:click={close}>Cancel</button>
+        <button class="btn-cancel" on:click={close}>{$t('common.cancel')}</button>
         <button
           class="btn-primary"
           on:click={handleCreate}
           disabled={!groupName.trim() || loading}
         >
-          {loading ? 'Creating...' : 'Create Group'}
+          {loading ? $t('newGroup.creating') : $t('newGroup.create')}
         </button>
       </div>
     </div>

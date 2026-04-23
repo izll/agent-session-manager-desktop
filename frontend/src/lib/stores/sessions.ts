@@ -18,6 +18,9 @@ export interface Session {
   favorite: boolean;
   resumeSessionId: string;
   followedWindows: any[];
+  tabOrder: number[];
+  mainWindowStopped: boolean;
+  extraArgs: string;
 }
 
 export interface Group {
@@ -34,6 +37,9 @@ export const sessions = writable<Session[]>([]);
 export const groups = writable<Group[]>([]);
 export const selectedSessionId = writable<string | null>(null);
 export const selectedWindowIdx = writable<number>(0);
+
+// Per-session tab memory (sessionId -> last active window index)
+const sessionTabMemory = new Map<string, number>();
 export const searchFilter = writable<string>('');
 export const isLoading = writable<boolean>(false);
 export const error = writable<string | null>(null);
@@ -104,9 +110,9 @@ export async function loadSessions() {
   }
 }
 
-export async function createSession(name: string, path: string, agent: string, autoYes: boolean = false) {
+export async function createSession(name: string, path: string, agent: string, autoYes: boolean = false, extraArgs: string = '') {
   try {
-    const session = await App.CreateSession(name, path, agent, autoYes);
+    const session = await App.CreateSession(name, path, agent, autoYes, extraArgs);
     if (session) {
       sessions.update(s => [...s, session as Session]);
       selectedSessionId.set(session.id);
@@ -141,6 +147,54 @@ export async function stopSession(id: string) {
     await App.StopSession(id);
     // Reset to window 0 when session stops
     if (get(selectedSessionId) === id) {
+      selectedWindowIdx.set(0);
+    }
+    await loadSessions();
+  } catch (e) {
+    error.set(String(e));
+    throw e;
+  }
+}
+
+export async function stopTab(id: string, windowIdx: number) {
+  try {
+    await App.StopTab(id, windowIdx);
+    // Reset to window 0 when main tab stops (kills entire session)
+    if (windowIdx === 0 && get(selectedSessionId) === id) {
+      selectedWindowIdx.set(0);
+    }
+    await loadSessions();
+  } catch (e) {
+    error.set(String(e));
+    throw e;
+  }
+}
+
+export async function restartTab(id: string, windowIdx: number) {
+  try {
+    await App.RestartTab(id, windowIdx);
+    await loadSessions();
+  } catch (e) {
+    error.set(String(e));
+    throw e;
+  }
+}
+
+export async function restartTabWithResume(id: string, windowIdx: number, resumeId: string) {
+  try {
+    await App.RestartTabWithResume(id, windowIdx, resumeId);
+    await loadSessions();
+  } catch (e) {
+    error.set(String(e));
+    throw e;
+  }
+}
+
+export async function deleteTab(id: string, windowIdx: number) {
+  try {
+    await App.DeleteTab(id, windowIdx);
+    // Switch to window 0 if the deleted tab was selected
+    if (get(selectedSessionId) === id && get(selectedWindowIdx) === windowIdx) {
       selectedWindowIdx.set(0);
     }
     await loadSessions();
@@ -285,8 +339,15 @@ export async function toggleGroupCollapse(id: string) {
 }
 
 export function selectSession(id: string | null) {
+  // Save current tab for the session we're leaving
+  const prevId = get(selectedSessionId);
+  if (prevId) {
+    sessionTabMemory.set(prevId, get(selectedWindowIdx));
+  }
+
   selectedSessionId.set(id);
-  selectedWindowIdx.set(0);
+  // Restore remembered tab for the session we're switching to
+  selectedWindowIdx.set(id ? (sessionTabMemory.get(id) ?? 0) : 0);
 }
 
 export function selectWindow(idx: number) {
@@ -296,6 +357,16 @@ export function selectWindow(idx: number) {
 export async function reorderSession(id: string, direction: number) {
   try {
     await App.ReorderSession(id, direction);
+    await loadSessions();
+  } catch (e) {
+    error.set(String(e));
+    throw e;
+  }
+}
+
+export async function reorderTab(sessionId: string, fromIdx: number, toIdx: number) {
+  try {
+    await App.ReorderTab(sessionId, fromIdx, toIdx);
     await loadSessions();
   } catch (e) {
     error.set(String(e));
@@ -320,7 +391,7 @@ export function selectPrevSession() {
 
   const currentIdx = currentSessions.findIndex(s => s.id === currentId);
   if (currentIdx > 0) {
-    selectedSessionId.set(currentSessions[currentIdx - 1].id);
+    selectSession(currentSessions[currentIdx - 1].id);
   }
 }
 
@@ -331,6 +402,6 @@ export function selectNextSession() {
 
   const currentIdx = currentSessions.findIndex(s => s.id === currentId);
   if (currentIdx < currentSessions.length - 1) {
-    selectedSessionId.set(currentSessions[currentIdx + 1].id);
+    selectSession(currentSessions[currentIdx + 1].id);
   }
 }

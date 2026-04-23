@@ -3,6 +3,8 @@
   import * as App from '../../../../wailsjs/go/main/App';
   import { loadSessions } from '../../stores/sessions';
   import AgentIcon from '../common/AgentIcon.svelte';
+  import Select from '../common/Select.svelte';
+  import { t } from '../../i18n';
 
   export let show = false;
 
@@ -32,9 +34,11 @@
   let error = '';
   let successMessage = '';
 
-  $: if (show) {
+  let lastShow = false;
+  $: if (show && !lastShow) {
     loadProjects();
   }
+  $: lastShow = show;
 
   async function loadProjects() {
     isLoading = true;
@@ -146,7 +150,7 @@
   >
     <div class="dialog-content">
       <div class="dialog-header">
-        <h2>Import Sessions</h2>
+        <h2>{$t('import.title')}</h2>
         <button class="close-btn" on:click={close}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <line x1="18" y1="6" x2="6" y2="18"/>
@@ -179,34 +183,29 @@
 
         <!-- Project Selection -->
         <div class="form-group">
-          <label for="project-select">Source Project</label>
-          <select
-            id="project-select"
-            bind:value={selectedProjectId}
-            on:change={handleProjectChange}
-            disabled={isLoading || isImporting}
-          >
-            <option value="">Select a project...</option>
-            {#each projects as project}
-              <option value={project.id}>
-                {project.name} {project.isLocked ? '(in use)' : ''}
-              </option>
-            {/each}
-          </select>
+          <label>{$t('import.sourceProject')}</label>
+          <Select
+            value={selectedProjectId}
+            options={[
+              { value: '', label: $t('import.selectProject') },
+              ...projects.map(p => ({ value: p.id, label: p.name + (p.isLocked ? ' (in use)' : '') }))
+            ]}
+            on:change={(e) => { selectedProjectId = e.detail; handleProjectChange(); }}
+          />
         </div>
 
         <!-- Sessions List -->
         {#if selectedProjectId}
           <div class="sessions-section">
             <div class="sessions-header">
-              <span class="sessions-label">Sessions ({sessions.length})</span>
+              <span class="sessions-label">{$t('import.sessions')} ({sessions.length})</span>
               <div class="sessions-actions">
                 <button class="link-btn" on:click={selectAll} disabled={sessions.length === 0}>
-                  Select All
+                  {$t('import.selectAll')}
                 </button>
                 <span class="separator">|</span>
                 <button class="link-btn" on:click={selectNone} disabled={selectedSessionIds.size === 0}>
-                  Select None
+                  {$t('import.selectNone')}
                 </button>
               </div>
             </div>
@@ -214,11 +213,11 @@
             {#if isLoading}
               <div class="loading">
                 <div class="spinner"></div>
-                <span>Loading sessions...</span>
+                <span>{$t('import.loading')}</span>
               </div>
             {:else if sessions.length === 0}
               <div class="empty-state">
-                No sessions in this project
+                {$t('import.noSessions')}
               </div>
             {:else}
               <div class="sessions-list">
@@ -247,15 +246,15 @@
             <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
               <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/>
             </svg>
-            <p>No other projects available</p>
-            <span class="hint">Create more projects to import sessions between them</span>
+            <p>{$t('import.noProjects')}</p>
+            <span class="hint">{$t('import.noProjectsHint')}</span>
           </div>
         {/if}
       </div>
 
       <div class="dialog-footer">
         <span class="selected-count">
-          {selectedSessionIds.size} session{selectedSessionIds.size !== 1 ? 's' : ''} selected
+          {$t('import.selectedCount', { count: selectedSessionIds.size })}
         </span>
         <div class="footer-buttons">
           <button
@@ -265,18 +264,18 @@
           >
             {#if isImporting}
               <div class="spinner small"></div>
-              Importing...
+              {$t('import.importing')}
             {:else}
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
                 <polyline points="17 8 12 3 7 8"/>
                 <line x1="12" y1="3" x2="12" y2="15"/>
               </svg>
-              Import Selected
+              {$t('import.importSelected')}
             {/if}
           </button>
           <button class="btn-cancel" on:click={close}>
-            Cancel
+            {$t('import.cancel')}
           </button>
         </div>
       </div>

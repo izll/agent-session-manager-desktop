@@ -2,12 +2,16 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"asmgr-desktop/mcp"
@@ -20,13 +24,14 @@ import (
 
 // App struct holds the application state
 type App struct {
-	ctx          context.Context
-	storage      *session.Storage
-	historyIndex *session.HistoryIndex
-	ptys         map[string]*ptySession
-	ptyMu        sync.RWMutex
-	termServer   *TerminalServer
-	dictation    *DictationService
+	ctx              context.Context
+	storage          *session.Storage
+	historyIndex     *session.HistoryIndex
+	ptys             map[string]*ptySession
+	ptyMu            sync.RWMutex
+	termServer       *TerminalServer
+	dictation        *DictationService
+	lastTypingSignal int64 // unix nano timestamp of last typing signal
 }
 
 // ptySession represents an active PTY connection
@@ -49,6 +54,9 @@ func NewApp() *App {
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 
+	// Enable verbose status detection logs only in dev builds
+	session.DebugLogging = isDevMode
+
 	// Initialize storage
 	storage, err := session.NewStorage()
 	if err != nil {
@@ -59,6 +67,7 @@ func (a *App) startup(ctx context.Context) {
 
 	// Start WebSocket terminal server for low-latency terminal I/O
 	a.termServer = NewTerminalServer(storage, 9753)
+	a.termServer.typingSignal = &a.lastTypingSignal
 	if err := a.termServer.Start(); err != nil {
 		runtime.LogError(ctx, fmt.Sprintf("Failed to start terminal server: %v", err))
 	}
@@ -94,6 +103,9 @@ func (a *App) startup(ctx context.Context) {
 		runtime.EventsEmit(ctx, "dictation:fieldDelete", count)
 	})
 
+	// Clean up orphaned GUI tmux sessions from previous runs
+	go a.cleanupOrphanedGUISessions()
+
 	// Start preview polling in background
 	go a.startPreviewPolling()
 }
@@ -105,6 +117,9 @@ func (a *App) IsDevMode() bool {
 
 // shutdown is called when the app is closing
 func (a *App) shutdown(ctx context.Context) {
+	// Clean up all GUI linked tmux sessions
+	a.cleanupAllGUISessions()
+
 	// Close all PTY sessions
 	a.ptyMu.Lock()
 	for id, ps := range a.ptys {
@@ -114,6 +129,9 @@ func (a *App) shutdown(ctx context.Context) {
 		if ps.ptmx != nil {
 			ps.ptmx.Close()
 		}
+		if ps.cmd != nil && ps.cmd.Process != nil {
+			go func(c *exec.Cmd) { _ = c.Wait() }(ps.cmd)
+		}
 		delete(a.ptys, id)
 	}
 	a.ptyMu.Unlock()
@@ -121,6 +139,55 @@ func (a *App) shutdown(ctx context.Context) {
 	// Shutdown dictation service
 	if a.dictation != nil {
 		a.dictation.Shutdown()
+	}
+}
+
+// cleanupOrphanedGUISessions removes GUI linked tmux sessions that belong to
+// sessions that are no longer running (e.g. from a previous app crash).
+func (a *App) cleanupOrphanedGUISessions() {
+	out, err := exec.Command("tmux", "list-sessions", "-F", "#{session_name}").Output()
+	if err != nil || len(out) == 0 {
+		return
+	}
+
+	// Collect running session IDs
+	instances, _, _, _ := a.storage.LoadAllWithSettings()
+	running := make(map[string]bool)
+	for _, inst := range instances {
+		if inst.Status == session.StatusRunning {
+			running[inst.ID] = true
+		}
+	}
+
+	for _, name := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		if !strings.Contains(name, "_gui_") {
+			continue
+		}
+		// Extract base session name (everything before first _gui_)
+		// Session IDs are asm_<agent>_<name>_<timestamp>, and GUI sessions
+		// are <sessionID>_gui_<windowIdx>_<timestamp>, so first match is safe
+		idx := strings.Index(name, "_gui_")
+		if idx <= 0 {
+			continue
+		}
+		baseName := name[:idx]
+		if !running[baseName] {
+			exec.Command("tmux", "kill-session", "-t", name).Run()
+		}
+	}
+}
+
+// cleanupAllGUISessions removes all GUI linked tmux sessions on app shutdown.
+func (a *App) cleanupAllGUISessions() {
+	out, err := exec.Command("tmux", "list-sessions", "-F", "#{session_name}").Output()
+	if err != nil || len(out) == 0 {
+		return
+	}
+
+	for _, name := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		if strings.Contains(name, "_gui_") {
+			exec.Command("tmux", "kill-session", "-t", name).Run()
+		}
 	}
 }
 
@@ -193,18 +260,9 @@ func (a *App) BrowseDirectory(defaultPath string) (string, error) {
 
 // GetProjectSessions returns sessions from a specific project (for import dialog)
 func (a *App) GetProjectSessions(projectID string) ([]SessionInfo, error) {
-	// Save current project
-	currentProject := a.storage.GetActiveProjectID()
-
-	// Switch to target project temporarily
-	if err := a.storage.SetActiveProject(projectID); err != nil {
-		return nil, err
-	}
-
-	// Load sessions from that project
-	instances, _, err := a.storage.LoadAll()
+	// Use atomic project-switching load to avoid race conditions
+	instances, _, err := a.storage.LoadAllForProject(projectID)
 	if err != nil {
-		a.storage.SetActiveProject(currentProject)
 		return nil, err
 	}
 
@@ -225,26 +283,14 @@ func (a *App) GetProjectSessions(projectID string) ([]SessionInfo, error) {
 		}
 	}
 
-	// Switch back to current project
-	a.storage.SetActiveProject(currentProject)
-
 	return result, nil
 }
 
 // ImportSessions imports selected sessions from another project
 func (a *App) ImportSessions(sourceProjectID string, sessionIDs []string) (int, error) {
-	// Save current project
-	currentProject := a.storage.GetActiveProjectID()
-
-	// Switch to source project
-	if err := a.storage.SetActiveProject(sourceProjectID); err != nil {
-		return 0, err
-	}
-
-	// Load sessions from source project
-	sourceInstances, sourceGroups, err := a.storage.LoadAll()
+	// Load source project data atomically
+	sourceInstances, sourceGroups, err := a.storage.LoadAllForProject(sourceProjectID)
 	if err != nil {
-		a.storage.SetActiveProject(currentProject)
 		return 0, err
 	}
 
@@ -269,11 +315,6 @@ func (a *App) ImportSessions(sourceProjectID string, sessionIDs []string) (int, 
 		if selectedGroupIDs[g.ID] {
 			selectedGroups = append(selectedGroups, g)
 		}
-	}
-
-	// Switch to current project
-	if err := a.storage.SetActiveProject(currentProject); err != nil {
-		return 0, err
 	}
 
 	// Load current project's data
@@ -345,8 +386,11 @@ type SessionInfo struct {
 	AutoYes         bool                     `json:"autoYes"`
 	Notes           string                   `json:"notes"`
 	Favorite        bool                     `json:"favorite"`
-	ResumeSessionID string                   `json:"resumeSessionId"`
-	FollowedWindows []session.FollowedWindow `json:"followedWindows"`
+	ResumeSessionID    string                   `json:"resumeSessionId"`
+	FollowedWindows    []session.FollowedWindow `json:"followedWindows"`
+	MainWindowStopped  bool                     `json:"mainWindowStopped"`
+	TabOrder           []int                    `json:"tabOrder"`
+	ExtraArgs          string                   `json:"extraArgs"`
 }
 
 // GetSessions returns all sessions
@@ -366,6 +410,14 @@ func (a *App) GetSessions() ([]SessionInfo, error) {
 }
 
 func (a *App) instanceToSessionInfo(inst *session.Instance) SessionInfo {
+	mainStopped := inst.MainWindowStopped
+	// Auto-detect dead main pane from tmux (handles pre-existing sessions)
+	if inst.Status == session.StatusRunning && !mainStopped {
+		if inst.IsMainWindowDead() {
+			mainStopped = true
+			inst.MainWindowStopped = true
+		}
+	}
 	return SessionInfo{
 		ID:              inst.ID,
 		Name:            inst.Name,
@@ -379,14 +431,17 @@ func (a *App) instanceToSessionInfo(inst *session.Instance) SessionInfo {
 		AutoYes:         inst.AutoYes,
 		Notes:           inst.Notes,
 		Favorite:        inst.Favorite,
-		ResumeSessionID: inst.ResumeSessionID,
-		FollowedWindows: inst.FollowedWindows,
+		ResumeSessionID:   inst.ResumeSessionID,
+		FollowedWindows:   inst.FollowedWindows,
+		MainWindowStopped: mainStopped,
+		TabOrder:           inst.GetTabOrder(),
+		ExtraArgs:          inst.ExtraArgs,
 	}
 }
 
 // CreateSession creates a new session
-func (a *App) CreateSession(name, path string, agent string, autoYes bool) (*SessionInfo, error) {
-	inst, err := session.NewInstance(name, path, autoYes, session.AgentType(agent))
+func (a *App) CreateSession(name, path string, agent string, autoYes bool, extraArgs string) (*SessionInfo, error) {
+	inst, err := session.NewInstance(name, path, autoYes, session.AgentType(agent), extraArgs)
 	if err != nil {
 		return nil, err
 	}
@@ -403,11 +458,19 @@ func (a *App) StartSession(id string) error {
 	if err != nil {
 		return err
 	}
+
+	// StartSession is called for NEW sessions (no resume).
+	// Clear any saved ResumeSessionID so it doesn't accidentally resume.
+	// StartWithResume("") will generate a fresh --session-id if supported.
+	log.Printf("[StartSession] id=%s agent=%s clearing old ResumeSessionID=%q", id, inst.Agent, inst.ResumeSessionID)
+	inst.ResumeSessionID = ""
+
 	if err := inst.Start(); err != nil {
 		return err
 	}
 	return a.storage.UpdateInstance(inst)
 }
+
 
 // StartSessionWithResume starts a session with resume
 func (a *App) StartSessionWithResume(id, resumeID string) error {
@@ -415,6 +478,7 @@ func (a *App) StartSessionWithResume(id, resumeID string) error {
 	if err != nil {
 		return err
 	}
+	log.Printf("[StartSessionWithResume] id=%s agent=%s resumeID=%q", id, inst.Agent, resumeID)
 	if err := inst.StartWithResume(resumeID); err != nil {
 		return err
 	}
@@ -429,6 +493,54 @@ func (a *App) StopSession(id string) error {
 		return err
 	}
 	if err := inst.Stop(); err != nil {
+		return err
+	}
+	return a.storage.UpdateInstance(inst)
+}
+
+// RestartTab restarts a stopped tab (dead pane) in a session
+func (a *App) RestartTab(id string, windowIdx int) error {
+	inst, err := a.storage.GetInstance(id)
+	if err != nil {
+		return err
+	}
+	if err := inst.RestartWindow(windowIdx); err != nil {
+		return err
+	}
+	return a.storage.UpdateInstance(inst)
+}
+
+// RestartTabWithResume restarts a stopped tab with a specific resume session ID
+func (a *App) RestartTabWithResume(id string, windowIdx int, resumeId string) error {
+	inst, err := a.storage.GetInstance(id)
+	if err != nil {
+		return err
+	}
+	if err := inst.RestartWindowWithResume(windowIdx, resumeId); err != nil {
+		return err
+	}
+	return a.storage.UpdateInstance(inst)
+}
+
+// StopTab stops a specific tab (tmux window) in a session
+func (a *App) StopTab(id string, windowIdx int) error {
+	inst, err := a.storage.GetInstance(id)
+	if err != nil {
+		return err
+	}
+	if err := inst.StopWindow(windowIdx); err != nil {
+		return err
+	}
+	return a.storage.UpdateInstance(inst)
+}
+
+// DeleteTab deletes a tab (followed window) from a session
+func (a *App) DeleteTab(id string, windowIdx int) error {
+	inst, err := a.storage.GetInstance(id)
+	if err != nil {
+		return err
+	}
+	if err := inst.DeleteWindow(windowIdx); err != nil {
 		return err
 	}
 	return a.storage.UpdateInstance(inst)
@@ -472,13 +584,26 @@ func (a *App) ToggleAutoYes(id string) error {
 
 	// Restart session if it's running so the flag takes effect
 	if inst.IsAlive() {
+		// Capture the current Claude session ID before stopping,
+		// so we can resume the same conversation after restart.
+		resumeID := inst.ResumeSessionID
+		if resumeID == "" && inst.Agent == session.AgentClaude {
+			// Try to get the session ID from the running Claude process args
+			resumeID = getClaudeSessionIDFromTmux(inst.TmuxSessionName())
+		}
+
+		log.Printf("[ToggleAutoYes] session=%s resumeID=%s", id, resumeID)
+
 		if err := inst.Stop(); err != nil {
 			return fmt.Errorf("failed to stop session for YOLO toggle: %w", err)
 		}
 		// Brief pause for tmux cleanup
 		time.Sleep(500 * time.Millisecond)
-		if err := inst.Start(); err != nil {
+		if err := inst.StartWithResume(resumeID); err != nil {
 			return fmt.Errorf("failed to restart session after YOLO toggle: %w", err)
+		}
+		if resumeID != "" {
+			inst.ResumeSessionID = resumeID
 		}
 		if err := a.storage.UpdateInstance(inst); err != nil {
 			return err
@@ -488,6 +613,51 @@ func (a *App) ToggleAutoYes(id string) error {
 		return nil
 	}
 	return nil
+}
+
+// getClaudeSessionIDFromTmux extracts the --resume or --session-id from the Claude process
+// running in the given tmux session's main window (window 0).
+func getClaudeSessionIDFromTmux(tmuxSession string) string {
+	return getClaudeSessionIDFromTmuxWindow(tmuxSession, 0)
+}
+
+// getClaudeSessionIDFromTmuxWindow extracts the --resume or --session-id from the Claude process
+// running in the given tmux session window by reading /proc/PID/cmdline.
+func getClaudeSessionIDFromTmuxWindow(tmuxSession string, windowIdx int) string {
+	// Get the PID of the process in the tmux pane
+	target := fmt.Sprintf("%s:%d", tmuxSession, windowIdx)
+	out, err := exec.Command("tmux", "display-message", "-t", target, "-p", "#{pane_pid}").Output()
+	if err != nil {
+		return ""
+	}
+	panePID := strings.TrimSpace(string(out))
+	if panePID == "" {
+		return ""
+	}
+
+	// The pane PID is the shell; find child processes (the actual claude process)
+	childOut, err := exec.Command("pgrep", "-P", panePID).Output()
+	if err != nil {
+		return ""
+	}
+
+	// Check each child process for --resume or --session-id flag
+	for _, pidStr := range strings.Fields(string(childOut)) {
+		cmdline, err := os.ReadFile(fmt.Sprintf("/proc/%s/cmdline", pidStr))
+		if err != nil {
+			continue
+		}
+		// cmdline is null-separated
+		args := strings.Split(string(cmdline), "\x00")
+		for i, arg := range args {
+			if (arg == "--resume" || arg == "--session-id") && i+1 < len(args) && args[i+1] != "" {
+				log.Printf("[getClaudeSessionIDFromTmux] found session ID from PID %s (flag %s): %s", pidStr, arg, args[i+1])
+				return args[i+1]
+			}
+		}
+	}
+
+	return ""
 }
 
 // SetSessionColor sets session colors
@@ -533,7 +703,7 @@ func (a *App) ReorderSession(sessionID string, direction int) error {
 		}
 	}
 	if currentIdx == -1 {
-		return fmt.Errorf("session not found")
+		return fmt.Errorf("error.sessionNotFound")
 	}
 
 	// Calculate new index
@@ -569,7 +739,7 @@ func (a *App) MoveSessionToIndex(sessionID string, targetIndex int) error {
 		}
 	}
 	if currentIdx == -1 {
-		return fmt.Errorf("session not found")
+		return fmt.Errorf("error.sessionNotFound")
 	}
 
 	// Clamp target index
@@ -626,7 +796,7 @@ func (a *App) ForkSession(id string) (*ForkResult, error) {
 	}
 
 	if inst.Agent != session.AgentClaude {
-		return nil, fmt.Errorf("fork is only supported for Claude sessions")
+		return nil, fmt.Errorf("error.forkClaudeOnly")
 	}
 
 	sessionID, err := inst.ForkSession()
@@ -657,7 +827,7 @@ func (a *App) ForkToNewSession(id, name, sessionID string) (*SessionInfo, error)
 	}
 
 	// Create new session with same settings
-	newInst, err := session.NewInstance(name, origInst.Path, origInst.AutoYes, session.AgentClaude)
+	newInst, err := session.NewInstance(name, origInst.Path, origInst.AutoYes, session.AgentClaude, origInst.ExtraArgs)
 	if err != nil {
 		return nil, err
 	}
@@ -766,7 +936,7 @@ func (a *App) SetGroupColor(id, color, bgColor string, fullRow bool) error {
 			return a.storage.SaveWithGroups(instances, groups)
 		}
 	}
-	return fmt.Errorf("group not found")
+	return fmt.Errorf("error.groupNotFound")
 }
 
 // ============================================================================
@@ -774,7 +944,7 @@ func (a *App) SetGroupColor(id, color, bgColor string, fullRow bool) error {
 // ============================================================================
 
 // CreateTab creates a new tab in session
-func (a *App) CreateTab(sessionID string, isAgent bool, agent string, name string) error {
+func (a *App) CreateTab(sessionID string, isAgent bool, agent string, name string, extraArgs string) error {
 	inst, err := a.storage.GetInstance(sessionID)
 	if err != nil {
 		return err
@@ -782,8 +952,7 @@ func (a *App) CreateTab(sessionID string, isAgent bool, agent string, name strin
 
 	if isAgent {
 		agentType := session.AgentType(agent)
-		_, err := inst.NewAgentWindow(name, agentType, "")
-		if err != nil {
+		if _, err := inst.NewAgentWindow(name, agentType, "", extraArgs); err != nil {
 			return err
 		}
 	} else {
@@ -822,6 +991,28 @@ func (a *App) RenameTab(sessionID string, windowIdx int, name string) error {
 	return a.storage.UpdateInstance(inst)
 }
 
+// ReorderTab reorders a tab within a session's display order.
+// fromPos and toPos are indices into the tab display order (0-based, including main window).
+func (a *App) ReorderTab(sessionID string, fromPos, toPos int) error {
+	inst, err := a.storage.GetInstance(sessionID)
+	if err != nil {
+		return err
+	}
+	if err := inst.ReorderTabs(fromPos, toPos); err != nil {
+		return err
+	}
+	return a.storage.UpdateInstance(inst)
+}
+
+// GetTabOrder returns the custom tab display order for a session.
+func (a *App) GetTabOrder(sessionID string) ([]int, error) {
+	inst, err := a.storage.GetInstance(sessionID)
+	if err != nil {
+		return nil, err
+	}
+	return inst.GetTabOrder(), nil
+}
+
 // SetTabNotes sets tab notes
 func (a *App) SetTabNotes(sessionID string, windowIdx int, notes string) error {
 	inst, err := a.storage.GetInstance(sessionID)
@@ -839,7 +1030,7 @@ func (a *App) SetTabNotes(sessionID string, windowIdx int, notes string) error {
 			return a.storage.UpdateInstance(inst)
 		}
 	}
-	return fmt.Errorf("window not found")
+	return fmt.Errorf("error.windowNotFound")
 }
 
 // GetTabNotes gets tab notes
@@ -904,7 +1095,43 @@ func (a *App) SetWindowAutoYes(sessionID string, windowIdx int, enabled bool) er
 			return a.storage.UpdateInstance(inst)
 		}
 	}
-	return fmt.Errorf("window not found")
+	return fmt.Errorf("error.windowNotFound")
+}
+
+// GetExtraArgs returns the extra CLI arguments for a session window
+func (a *App) GetExtraArgs(sessionID string, windowIdx int) (string, error) {
+	inst, err := a.storage.GetInstance(sessionID)
+	if err != nil {
+		return "", err
+	}
+	if windowIdx == 0 {
+		return inst.ExtraArgs, nil
+	}
+	for _, fw := range inst.FollowedWindows {
+		if fw.Index == windowIdx {
+			return fw.ExtraArgs, nil
+		}
+	}
+	return "", nil
+}
+
+// SetExtraArgs sets the extra CLI arguments for a session window
+func (a *App) SetExtraArgs(sessionID string, windowIdx int, extraArgs string) error {
+	inst, err := a.storage.GetInstance(sessionID)
+	if err != nil {
+		return err
+	}
+	if windowIdx == 0 {
+		inst.ExtraArgs = extraArgs
+		return a.storage.UpdateInstance(inst)
+	}
+	for i := range inst.FollowedWindows {
+		if inst.FollowedWindows[i].Index == windowIdx {
+			inst.FollowedWindows[i].ExtraArgs = extraArgs
+			return a.storage.UpdateInstance(inst)
+		}
+	}
+	return fmt.Errorf("error.windowNotFound")
 }
 
 // ============================================================================
@@ -950,17 +1177,31 @@ func (a *App) GetLastLine(id string) (string, error) {
 	return inst.GetLastLine(), nil
 }
 
+// TabStatusInfo contains per-tab status information for multi-agent sessions
+type TabStatusInfo struct {
+	WindowIdx   int    `json:"windowIdx"`
+	Agent       string `json:"agent"`
+	Name        string `json:"name"`
+	Activity    string `json:"activity"`
+	StatusLine  string `json:"statusLine"`
+	SpinnerText string `json:"spinnerText"`
+}
+
 // SidebarUpdate contains combined activity and status line data
 type SidebarUpdate struct {
-	Activities  map[string]string `json:"activities"`
-	StatusLines map[string]string `json:"statusLines"`
+	Activities   map[string]string          `json:"activities"`
+	StatusLines  map[string]string          `json:"statusLines"`
+	SpinnerTexts map[string]string          `json:"spinnerTexts"`
+	TabStatuses  map[string][]TabStatusInfo `json:"tabStatuses"`
 }
 
 // GetSidebarUpdates returns activity and status line data in one call (single LoadAll)
 func (a *App) GetSidebarUpdates() SidebarUpdate {
 	result := SidebarUpdate{
-		Activities:  make(map[string]string),
-		StatusLines: make(map[string]string),
+		Activities:   make(map[string]string),
+		StatusLines:  make(map[string]string),
+		SpinnerTexts: make(map[string]string),
+		TabStatuses:  make(map[string][]TabStatusInfo),
 	}
 
 	instances, _, err := a.storage.LoadAll()
@@ -969,28 +1210,185 @@ func (a *App) GetSidebarUpdates() SidebarUpdate {
 	}
 
 	for _, inst := range instances {
-		if inst.Status == session.StatusRunning {
-			// Activity detection
-			activity := inst.DetectAggregatedActivity()
-			activityStr := "idle"
+		if inst.Status != session.StatusRunning {
+			continue
+		}
+
+		// Auto-detect and persist Claude session ID from running process
+		// so that resume works correctly after app/machine restart
+		needSave := false
+		if inst.ResumeSessionID == "" && inst.Agent == session.AgentClaude {
+			if sid := getClaudeSessionIDFromTmux(inst.TmuxSessionName()); sid != "" {
+				inst.ResumeSessionID = sid
+				needSave = true
+				log.Printf("[SidebarPoll] auto-detected and saved ResumeSessionID=%s for session=%s", sid, inst.ID)
+			}
+		}
+
+		// Auto-detect Claude session ID for followed windows (tabs)
+		for idx := range inst.FollowedWindows {
+			fw := &inst.FollowedWindows[idx]
+			if fw.ResumeSessionID == "" && fw.Agent == session.AgentClaude {
+				if sid := getClaudeSessionIDFromTmuxWindow(inst.TmuxSessionName(), fw.Index); sid != "" {
+					fw.ResumeSessionID = sid
+					needSave = true
+					log.Printf("[SidebarPoll] auto-detected Claude sessionID=%s for tab=%s/%d", sid, inst.ID, fw.Index)
+				}
+			}
+		}
+
+		// Auto-detect Gemini session ID from filesystem
+		// Gemini creates session files at ~/.gemini/tmp/<hash>/chats/session-*.json on startup
+		// Collect already-assigned Gemini IDs to avoid giving the same ID to multiple tabs
+		var geminiExcludeIDs []string
+		if inst.Agent == session.AgentGemini && inst.ResumeSessionID != "" {
+			geminiExcludeIDs = append(geminiExcludeIDs, inst.ResumeSessionID)
+		}
+		for _, fw := range inst.FollowedWindows {
+			if fw.Agent == session.AgentGemini && fw.ResumeSessionID != "" {
+				geminiExcludeIDs = append(geminiExcludeIDs, fw.ResumeSessionID)
+			}
+		}
+
+		if inst.ResumeSessionID == "" && inst.Agent == session.AgentGemini {
+			if sid := session.DetectGeminiSessionID(inst.Path, geminiExcludeIDs...); sid != "" {
+				inst.ResumeSessionID = sid
+				geminiExcludeIDs = append(geminiExcludeIDs, sid)
+				needSave = true
+				log.Printf("[SidebarPoll] auto-detected Gemini sessionID=%s for session=%s", sid, inst.ID)
+			}
+		}
+
+		// Auto-detect Gemini session ID for followed windows (tabs)
+		for idx := range inst.FollowedWindows {
+			fw := &inst.FollowedWindows[idx]
+			if fw.ResumeSessionID == "" && fw.Agent == session.AgentGemini {
+				if sid := session.DetectGeminiSessionID(inst.Path, geminiExcludeIDs...); sid != "" {
+					fw.ResumeSessionID = sid
+					geminiExcludeIDs = append(geminiExcludeIDs, sid)
+					needSave = true
+					log.Printf("[SidebarPoll] auto-detected Gemini sessionID=%s for tab=%s/%d", sid, inst.ID, fw.Index)
+				}
+			}
+		}
+
+		if needSave {
+			if err := a.storage.UpdateInstance(inst); err != nil {
+				log.Printf("[SidebarPoll] failed to save auto-detected session IDs for session=%s: %v", inst.ID, err)
+			}
+		}
+
+		mainAgent := inst.Agent
+		if mainAgent == "" {
+			mainAgent = session.AgentClaude
+		}
+		mainWindowIdx := inst.GetMainWindowIndex()
+
+		// Build list of all windows to check
+		type windowInfo struct {
+			idx   int
+			agent session.AgentType
+			name  string
+		}
+		windows := []windowInfo{{idx: mainWindowIdx, agent: mainAgent, name: inst.Name}}
+		for _, fw := range inst.FollowedWindows {
+			if fw.Index != mainWindowIdx && !fw.Stopped {
+				name := fw.Name
+				if name == "" {
+					name = string(fw.Agent)
+				}
+				windows = append(windows, windowInfo{idx: fw.Index, agent: fw.Agent, name: name})
+			}
+		}
+
+		// Debug: log which windows are being checked (dev mode only)
+		if isDevMode {
+			var winIndices []int
+			for _, w := range windows {
+				winIndices = append(winIndices, w.idx)
+			}
+			log.Printf("[WindowsDebug] session=%s mainWin=%d windows=%v followedCount=%d", inst.ID, mainWindowIdx, winIndices, len(inst.FollowedWindows))
+		}
+
+		// Detect activity and status info for each window
+		var tabStatuses []TabStatusInfo
+		highestActivity := session.ActivityIdle
+		bestWindowIdx := 0 // index into tabStatuses for the "primary" (busiest) window
+
+		var windowResults []string
+		for wi, w := range windows {
+			activity := inst.DetectActivityForWindow(w.idx)
+			info := inst.GetStatusInfoForWindow(w.idx, w.agent)
+
+			actStr := "idle"
 			switch activity {
 			case session.ActivityBusy:
-				activityStr = "busy"
+				actStr = "busy"
 			case session.ActivityWaiting:
-				activityStr = "waiting"
+				actStr = "waiting"
 			}
-			result.Activities[inst.ID] = activityStr
 
-			// Status line
-			line := inst.GetLastLine()
-			line = session.StripANSI(line)
+			windowResults = append(windowResults, fmt.Sprintf("win%d=%s", w.idx, actStr))
+
+			line := session.StripANSI(info.StatusLine)
 			line = strings.ReplaceAll(line, "\n", " ")
 			line = strings.ReplaceAll(line, "\r", "")
 			line = strings.TrimSpace(line)
 			if len(line) > 100 {
 				line = line[:97] + "..."
 			}
-			result.StatusLines[inst.ID] = line
+
+			tabStatuses = append(tabStatuses, TabStatusInfo{
+				WindowIdx:   w.idx,
+				Agent:       string(w.agent),
+				Name:        w.name,
+				Activity:    actStr,
+				StatusLine:  line,
+				SpinnerText: info.SpinnerText,
+			})
+
+			// Track the busiest window for primary display
+			// Priority: Waiting > Busy > Idle
+			if activity == session.ActivityWaiting {
+				highestActivity = session.ActivityWaiting
+				bestWindowIdx = wi
+			} else if activity == session.ActivityBusy && highestActivity != session.ActivityWaiting {
+				highestActivity = session.ActivityBusy
+				bestWindowIdx = wi
+			}
+		}
+
+		// Set aggregated activity (backward compat)
+		activityStr := "idle"
+		switch highestActivity {
+		case session.ActivityBusy:
+			activityStr = "busy"
+		case session.ActivityWaiting:
+			activityStr = "waiting"
+		}
+		result.Activities[inst.ID] = activityStr
+		if isDevMode && activityStr != "idle" {
+			log.Printf("[AggregateDebug] session=%s aggregate=%s windows=%v", inst.ID, activityStr, windowResults)
+		}
+
+		// Set primary status/spinner from the busiest window (not hardcoded window 0)
+		if len(tabStatuses) > 0 {
+			best := tabStatuses[bestWindowIdx]
+			result.StatusLines[inst.ID] = best.StatusLine
+			if best.SpinnerText != "" {
+				result.SpinnerTexts[inst.ID] = best.SpinnerText
+			}
+		}
+
+		// Only include TabStatuses for multi-tab sessions, excluding terminal tabs
+		var agentTabs []TabStatusInfo
+		for _, ts := range tabStatuses {
+			if ts.Agent != string(session.AgentTerminal) {
+				agentTabs = append(agentTabs, ts)
+			}
+		}
+		if len(agentTabs) > 1 {
+			result.TabStatuses[inst.ID] = agentTabs
 		}
 	}
 
@@ -1007,10 +1405,36 @@ func (a *App) GetStatusLines() map[string]string {
 	return a.GetSidebarUpdates().StatusLines
 }
 
-// startPreviewPolling polls sessions and emits updates
+// startPreviewPolling runs a background goroutine that polls sidebar updates
+// and emits events to the frontend. This avoids blocking the JS main thread.
 func (a *App) startPreviewPolling() {
-	// Preview polling will be implemented with events
-	// For now, frontend will poll GetPreview
+	const typingCooldown = 1500 * time.Millisecond
+
+	// 2s is plenty for sidebar activity/status indicators. Faster ticks run
+	// `tmux capture-pane` on every session every cycle, which is expensive
+	// when many agents are active.
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			// Skip polling while user is actively typing
+			lastTyping := atomic.LoadInt64(&a.lastTypingSignal)
+			if lastTyping > 0 && time.Since(time.Unix(0, lastTyping)) < typingCooldown {
+				continue
+			}
+
+			data := a.GetSidebarUpdates()
+			if isDevMode {
+				log.Printf("[SidebarEmit] activities=%v", data.Activities)
+			}
+			runtime.EventsEmit(a.ctx, "sidebar:update", data)
+
+		case <-a.ctx.Done():
+			return
+		}
+	}
 }
 
 // GetTerminalWSPort returns the WebSocket terminal server port
@@ -1112,6 +1536,10 @@ func (a *App) DetachSession(ptyID string) error {
 	if ps.ptmx != nil {
 		ps.ptmx.Close()
 	}
+	// Reap the process to avoid zombies
+	if ps.cmd != nil && ps.cmd.Process != nil {
+		go func(c *exec.Cmd) { _ = c.Wait() }(ps.cmd)
+	}
 	delete(a.ptys, ptyID)
 
 	runtime.EventsEmit(a.ctx, "pty:closed:"+ptyID, nil)
@@ -1124,8 +1552,8 @@ func (a *App) SendInput(ptyID string, data string) error {
 	ps, exists := a.ptys[ptyID]
 	a.ptyMu.RUnlock()
 
-	if !exists {
-		return fmt.Errorf("PTY session not found")
+	if !exists || ps.ptmx == nil {
+		return fmt.Errorf("error.ptyNotFound")
 	}
 
 	_, err := ps.ptmx.WriteString(data)
@@ -1139,7 +1567,7 @@ func (a *App) ResizeTerminal(ptyID string, cols, rows int) error {
 	a.ptyMu.RUnlock()
 
 	if !exists {
-		return fmt.Errorf("PTY session not found")
+		return fmt.Errorf("error.ptyNotFound")
 	}
 
 	// Resize PTY
@@ -1162,6 +1590,31 @@ func (a *App) ResizeTerminal(ptyID string, cols, rows int) error {
 			exec.Command("tmux", "refresh-client", "-t", sessionName).Run()
 		}()
 	}
+
+	return nil
+}
+
+// RefreshWindow forces tmux to redraw the pane for the given session window.
+// Fixes occasional rendering glitches (garbled characters) by sending Ctrl+L
+// to the pane and refreshing all clients attached to the tmux session.
+func (a *App) RefreshWindow(sessionID string, windowIdx int) error {
+	inst, err := a.storage.GetInstance(sessionID)
+	if err != nil {
+		return err
+	}
+	if !inst.IsAlive() {
+		return fmt.Errorf("error.sessionNotRunning")
+	}
+
+	sessionName := inst.TmuxSessionName()
+	target := fmt.Sprintf("%s:%d", sessionName, windowIdx)
+
+	// Clear the pane's screen buffer and resize to match attached clients.
+	// send-keys C-l clears the screen (equivalent to "clear" in most shells/TUIs).
+	// Many TUI apps (Claude, Codex, etc.) redraw their UI on SIGWINCH/clear.
+	_ = exec.Command("tmux", "send-keys", "-t", target, "C-l").Run()
+	_ = exec.Command("tmux", "resize-window", "-t", target, "-A").Run()
+	_ = exec.Command("tmux", "refresh-client", "-t", sessionName).Run()
 
 	return nil
 }
@@ -1348,6 +1801,7 @@ type SettingsInfo struct {
 	ShowAgentIcons  bool   `json:"showAgentIcons"`
 	SplitView       bool   `json:"splitView"`
 	MarkedSessionID string `json:"markedSessionId"`
+	Language        string `json:"language"`
 }
 
 // GetSettings returns UI settings
@@ -1359,12 +1813,20 @@ func (a *App) GetSettings() (*SettingsInfo, error) {
 	if settings == nil {
 		settings = &session.Settings{}
 	}
+
+	// Language fallback so the i18n loader doesn't see an empty string.
+	lang := settings.Language
+	if lang == "" {
+		lang = "en"
+	}
+
 	return &SettingsInfo{
 		CompactList:     settings.CompactList,
 		HideStatusLines: settings.HideStatusLines,
 		ShowAgentIcons:  settings.ShowAgentIcons,
 		SplitView:       settings.SplitView,
 		MarkedSessionID: settings.MarkedSessionID,
+		Language:        lang,
 	}, nil
 }
 
@@ -1376,6 +1838,7 @@ func (a *App) SaveSettings(settings SettingsInfo) error {
 		ShowAgentIcons:  settings.ShowAgentIcons,
 		SplitView:       settings.SplitView,
 		MarkedSessionID: settings.MarkedSessionID,
+		Language:        settings.Language,
 	})
 }
 
@@ -1464,6 +1927,7 @@ type SubtaskInfo struct {
 
 // taskManagerCache caches task managers per project path
 var taskManagerCache = make(map[string]*session.TaskManager)
+var taskManagerMu sync.RWMutex
 
 // getTaskManager returns or creates a task manager for a session's project path
 func (a *App) getTaskManager(sessionID string) (*session.TaskManager, error) {
@@ -1474,9 +1938,20 @@ func (a *App) getTaskManager(sessionID string) (*session.TaskManager, error) {
 
 	projectPath := sess.Path
 	if projectPath == "" {
-		return nil, fmt.Errorf("session has no project path")
+		return nil, fmt.Errorf("error.sessionNoPath")
 	}
 
+	taskManagerMu.RLock()
+	if tm, ok := taskManagerCache[projectPath]; ok {
+		taskManagerMu.RUnlock()
+		return tm, nil
+	}
+	taskManagerMu.RUnlock()
+
+	taskManagerMu.Lock()
+	defer taskManagerMu.Unlock()
+
+	// Double-check after acquiring write lock
 	if tm, ok := taskManagerCache[projectPath]; ok {
 		return tm, nil
 	}
@@ -1683,6 +2158,7 @@ func (a *App) SendTaskToAgent(sessionID, taskID string) error {
 		return err
 	}
 
+	log.Printf("[TaskManager] SendToAgent taskID=%s prompt=%q", taskID, prompt)
 	// Send the prompt to the active terminal
 	return a.SendPrompt(sessionID, prompt)
 }
@@ -1704,7 +2180,7 @@ func (a *App) getTaskMasterMCP(sessionID string) (*mcp.TaskMaster, error) {
 
 	projectPath := sess.Path
 	if projectPath == "" {
-		return nil, fmt.Errorf("session has no project path")
+		return nil, fmt.Errorf("error.sessionNoPath")
 	}
 
 	taskMasterMu.RLock()
@@ -1745,6 +2221,7 @@ type MCPTaskInfo struct {
 	Dependencies []string         `json:"dependencies"`
 	Complexity   *int             `json:"complexity,omitempty"`
 	Details      string           `json:"details,omitempty"`
+	CreatedAt    string           `json:"createdAt,omitempty"`
 }
 
 // MCPSubtaskInfo represents a subtask for the frontend
@@ -1790,6 +2267,7 @@ func convertMCPTask(t mcp.Task) MCPTaskInfo {
 		Dependencies: deps,
 		Complexity:   t.Complexity,
 		Details:      t.Details,
+		CreatedAt:    t.CreatedAt,
 	}
 }
 
@@ -1933,6 +2411,7 @@ func (a *App) TaskMasterAddTask(sessionID, prompt string, research bool, priorit
 	}
 
 	info := convertMCPTask(*task)
+	info.CreatedAt = time.Now().Format(time.RFC3339)
 	return &info, nil
 }
 
@@ -1954,6 +2433,7 @@ func (a *App) TaskMasterAddManualTask(sessionID, title, description, details, pr
 	}
 
 	info := convertMCPTask(*task)
+	info.CreatedAt = time.Now().Format(time.RFC3339)
 	return &info, nil
 }
 
@@ -2034,7 +2514,10 @@ func (a *App) TaskMasterSendToAgent(sessionID, taskID string) error {
 		return err
 	}
 
+	log.Printf("[TaskMaster] SendToAgent taskID=%s task=%+v", taskID, task)
+
 	prompt := mcp.FormatTaskForPrompt(task)
+	log.Printf("[TaskMaster] Prompt to send: %q", prompt)
 	return a.SendPrompt(sessionID, prompt)
 }
 
@@ -2097,14 +2580,87 @@ func (a *App) TaskMasterSetSubtaskStatus(sessionID, subtaskID, status string) er
 	return tm.SetSubtaskStatus(subtaskID, status)
 }
 
-// TaskMasterUpdateTaskDirect updates a task with direct field values (no AI)
+// TaskMasterUpdateTaskDirect updates a task with direct field values (no AI).
+// Modifies the tasks.json file directly instead of using MCP to avoid slow AI calls.
 func (a *App) TaskMasterUpdateTaskDirect(sessionID, taskID, title, description, details, priority string) error {
-	tm, err := a.getTaskMasterMCP(sessionID)
+	sess, err := a.storage.GetInstance(sessionID)
 	if err != nil {
-		return err
+		return fmt.Errorf("session not found: %w", err)
 	}
 
-	return tm.UpdateTaskDirect(taskID, title, description, details, priority)
+	projectPath := sess.Path
+	if projectPath == "" {
+		return fmt.Errorf("error.sessionNoPath")
+	}
+
+	tasksFile := filepath.Join(projectPath, ".taskmaster", "tasks", "tasks.json")
+
+	data, err := os.ReadFile(tasksFile)
+	if err != nil {
+		return fmt.Errorf("failed to read tasks.json: %w", err)
+	}
+
+	var root map[string]json.RawMessage
+	if err := json.Unmarshal(data, &root); err != nil {
+		return fmt.Errorf("failed to parse tasks.json: %w", err)
+	}
+
+	// Find and update the task in each context
+	updated := false
+	for ctxKey, ctxRaw := range root {
+		var ctx struct {
+			Tasks    []map[string]interface{} `json:"tasks"`
+			Metadata json.RawMessage          `json:"metadata,omitempty"`
+		}
+		// Try parsing as context with tasks array
+		if err := json.Unmarshal(ctxRaw, &ctx); err != nil || ctx.Tasks == nil {
+			continue
+		}
+
+		for i, task := range ctx.Tasks {
+			tid := fmt.Sprintf("%v", task["id"])
+			if tid == taskID {
+				if title != "" {
+					ctx.Tasks[i]["title"] = title
+				}
+				if description != "" {
+					ctx.Tasks[i]["description"] = description
+				}
+				if details != "" {
+					ctx.Tasks[i]["details"] = details
+				}
+				if priority != "" {
+					ctx.Tasks[i]["priority"] = priority
+				}
+				updated = true
+				break
+			}
+		}
+
+		if updated {
+			ctxBytes, err := json.Marshal(ctx)
+			if err != nil {
+				return fmt.Errorf("failed to marshal context: %w", err)
+			}
+			root[ctxKey] = ctxBytes
+			break
+		}
+	}
+
+	if !updated {
+		return fmt.Errorf("task %s not found in tasks.json", taskID)
+	}
+
+	out, err := json.MarshalIndent(root, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal tasks.json: %w", err)
+	}
+
+	if err := os.WriteFile(tasksFile, out, 0644); err != nil {
+		return fmt.Errorf("failed to write tasks.json: %w", err)
+	}
+
+	return nil
 }
 
 // TaskMasterAddDependency adds a dependency to a task

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import * as App from '../../../../wailsjs/go/main/App';
+  import { t } from '../../i18n';
 
   export let show = false;
 
@@ -16,9 +17,11 @@
   let error = '';
   let success = '';
 
-  $: if (show) {
+  let lastShow = false;
+  $: if (show && !lastShow) {
     checkForUpdate();
   }
+  $: lastShow = show;
 
   async function checkForUpdate() {
     isChecking = true;
@@ -40,7 +43,7 @@
     error = '';
     try {
       await App.PerformUpdate(updateInfo.latestVersion);
-      success = 'Update installed successfully! Please restart the application.';
+      success = $t('update.success');
     } catch (e) {
       error = String(e);
     } finally {
@@ -72,7 +75,7 @@
   >
     <div class="dialog-content">
       <div class="dialog-header">
-        <h2>Check for Updates</h2>
+        <h2>{$t('update.title')}</h2>
         <button class="close-btn" on:click={close}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <line x1="18" y1="6" x2="6" y2="18"/>
@@ -85,7 +88,7 @@
         {#if isChecking}
           <div class="status-message">
             <div class="spinner"></div>
-            <span>Checking for updates...</span>
+            <span>{$t('update.checking')}</span>
           </div>
         {:else if error}
           <div class="error-message">
@@ -107,12 +110,12 @@
         {:else if updateInfo}
           <div class="version-info">
             <div class="version-row">
-              <span class="label">Current version:</span>
+              <span class="label">{$t('update.currentVersion')}</span>
               <span class="value">v{updateInfo.currentVersion}</span>
             </div>
             {#if updateInfo.available}
               <div class="version-row highlight">
-                <span class="label">Latest version:</span>
+                <span class="label">{$t('update.latestVersion')}</span>
                 <span class="value new">{updateInfo.latestVersion}</span>
               </div>
               <div class="update-available">
@@ -121,7 +124,7 @@
                   <polyline points="7 10 12 15 17 10"/>
                   <line x1="12" y1="15" x2="12" y2="3"/>
                 </svg>
-                <span>A new version is available!</span>
+                <span>{$t('update.available')}</span>
               </div>
             {:else}
               <div class="up-to-date">
@@ -129,7 +132,7 @@
                   <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
                   <polyline points="22 4 12 14.01 9 11.01"/>
                 </svg>
-                <span>You're up to date!</span>
+                <span>{$t('update.upToDate')}</span>
               </div>
             {/if}
           </div>
@@ -145,19 +148,19 @@
           >
             {#if isUpdating}
               <div class="spinner small"></div>
-              Updating...
+              {$t('update.updateNow')}...
             {:else}
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
                 <polyline points="7 10 12 15 17 10"/>
                 <line x1="12" y1="15" x2="12" y2="3"/>
               </svg>
-              Update Now
+              {$t('update.updateNow')}
             {/if}
           </button>
         {/if}
         <button class="btn btn-secondary" on:click={close}>
-          {success ? 'Close' : 'Cancel'}
+          {success ? $t('update.close') : $t('update.cancel')}
         </button>
       </div>
     </div>

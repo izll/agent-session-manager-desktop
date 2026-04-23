@@ -10,11 +10,19 @@ export interface TerminalInstance {
   cleanup: () => void;
   dataDisposable: IDisposable | null;
   resizeDisposable: IDisposable | null;
+  // When false, inbound WS messages are buffered instead of written to xterm.
+  // Flushed when the instance becomes visible again. Prevents hidden tabs
+  // from burning WebKit render cycles on off-screen canvases.
+  visible: boolean;
+  hiddenBuffer: Uint8Array[];
 }
 
 export function createTerminal(container: HTMLElement, options: Partial<Terminal['options']> = {}): TerminalInstance {
   const terminal = new Terminal({
-    cursorBlink: true,
+    // cursorBlink triggers a continuous render tick on the xterm canvas every
+    // ~500ms even when the terminal is idle — disabled to keep the WebKit
+    // renderer quiet when nothing is happening.
+    cursorBlink: false,
     fontSize: 14,
     scrollback: 1000,
     fontFamily: 'JetBrains Mono, Menlo, Monaco, Consolas, monospace',
@@ -40,8 +48,15 @@ export function createTerminal(container: HTMLElement, options: Partial<Terminal
 
   terminal.open(container);
 
-  // WebGL renderer disabled - causes lag in WebKit webview
-  // Using canvas renderer instead (default)
+  // Using the default DOM renderer — the canvas addon produced blurry glyphs
+  // on HiDPI displays, and the WebGL addon lags in WebKit. The real CPU work
+  // is throttled on the backend side (see terminal_ws.go) and by suppressing
+  // writes to hidden tabs (see terminalPool.ts).
+
+  // NOTE: fit() is called later by the pool once the container is visible.
+  // Calling it here while the container may be display:none produces a
+  // 0/tiny size that leaks into the initial WebSocket resize, leading to
+  // tmux rendering at ~5 cols wide until another resize happens.
 
   // Intercept keyboard shortcuts
   terminal.attachCustomKeyEventHandler((event) => {
@@ -62,10 +77,25 @@ export function createTerminal(container: HTMLElement, options: Partial<Terminal
       return false;
     }
 
+    // Shift+Enter: send newline (\n) instead of carriage return (\r)
+    // Most agents (Claude CLI, etc.) interpret \n as "new line" vs \r as "submit"
+    if (event.shiftKey && event.key === 'Enter' && event.type === 'keydown') {
+      (terminal as any)._core.coreService.triggerDataEvent('\n', true);
+      return false;
+    }
+
     return true;
   });
 
-  fitAddon.fit();
+  // Auto-copy selection to clipboard when user selects text
+  terminal.onSelectionChange(() => {
+    const selection = terminal.getSelection();
+    if (selection) {
+      navigator.clipboard.writeText(selection).catch(() => {
+        // Clipboard write may fail if not focused or no permission
+      });
+    }
+  });
 
   return {
     terminal,
@@ -75,6 +105,8 @@ export function createTerminal(container: HTMLElement, options: Partial<Terminal
     ws: null,
     dataDisposable: null,
     resizeDisposable: null,
+    visible: true,
+    hiddenBuffer: [],
     cleanup: () => {
       terminal.dispose();
     }
@@ -146,13 +178,92 @@ export async function attachToSession(
     terminalInstance.sessionId = sessionId;
     terminalInstance.windowIdx = windowIdx;
 
-    // Receive data from WebSocket
+    // Clear terminal BEFORE setting onmessage to avoid old content mixing with new
+    terminal.clear();
+
+    // Receive data from WebSocket.
+    // When this terminal is hidden (another tab is active) we avoid calling
+    // terminal.write() on every chunk — that triggers an xterm canvas render
+    // even though nothing is on screen, which drives WebKit CPU through the
+    // roof when several agents are producing output. Instead we buffer the
+    // raw bytes and flush them in one shot when the tab becomes visible.
+    // The buffer is capped so a very chatty hidden session can't balloon
+    // memory forever; when we overflow we drop everything and ask tmux to
+    // redraw on show.
+    const HIDDEN_BUFFER_CAP = 512 * 1024; // 512 KB
+    let hiddenBytes = 0;
+    let hiddenOverflow = false;
+
+    // rAF-batched visible writes. Collects incoming chunks and flushes them
+    // once per animation frame (~60Hz max). Without this, back-to-back WS
+    // messages trigger back-to-back xterm.write() calls, each of which forces
+    // DOM mutations that pin WebKit's main thread at 100% while agents paint.
+    let visibleQueue: Uint8Array[] = [];
+    let rafHandle: number | null = null;
+    const flushVisible = () => {
+      rafHandle = null;
+      if (visibleQueue.length === 0) return;
+      // Concat and write in one call so xterm only runs one parse/layout cycle.
+      let total = 0;
+      for (const c of visibleQueue) total += c.byteLength;
+      const merged = new Uint8Array(total);
+      let offset = 0;
+      for (const c of visibleQueue) {
+        merged.set(c, offset);
+        offset += c.byteLength;
+      }
+      visibleQueue = [];
+      terminal.write(merged);
+    };
+
     ws.onmessage = (event) => {
-      if (event.data instanceof ArrayBuffer) {
-        const data = new Uint8Array(event.data);
-        terminal.write(data);
-      } else {
-        terminal.write(event.data);
+      const chunk = event.data instanceof ArrayBuffer
+        ? new Uint8Array(event.data)
+        : new TextEncoder().encode(event.data as string);
+
+      if (terminalInstance.visible) {
+        visibleQueue.push(chunk);
+        if (rafHandle === null) {
+          rafHandle = requestAnimationFrame(flushVisible);
+        }
+        return;
+      }
+
+      if (hiddenOverflow) return;
+      hiddenBytes += chunk.byteLength;
+      if (hiddenBytes > HIDDEN_BUFFER_CAP) {
+        terminalInstance.hiddenBuffer = [];
+        hiddenBytes = 0;
+        hiddenOverflow = true;
+        return;
+      }
+      terminalInstance.hiddenBuffer.push(chunk);
+    };
+
+    // Expose a "become visible" hook via the instance so the pool can call it.
+    (terminalInstance as any)._flushHidden = () => {
+      if (hiddenOverflow) {
+        // Scrollback may have drifted — ask the server side to redraw.
+        hiddenOverflow = false;
+        hiddenBytes = 0;
+        terminalInstance.hiddenBuffer = [];
+        // A tmux refresh-client is cheaper than replaying the dropped bytes;
+        // sending a resize (0x01) with current size nudges tmux.
+        const { cols, rows } = terminal;
+        if (cols > 1 && rows > 1 && ws.readyState === WebSocket.OPEN) {
+          sendResize(ws, cols, rows);
+        }
+        return;
+      }
+      if (terminalInstance.hiddenBuffer.length === 0) return;
+      // Fold buffered bytes into the visible queue and schedule a flush.
+      for (const c of terminalInstance.hiddenBuffer) {
+        visibleQueue.push(c);
+      }
+      terminalInstance.hiddenBuffer = [];
+      hiddenBytes = 0;
+      if (rafHandle === null) {
+        rafHandle = requestAnimationFrame(flushVisible);
       }
     };
 
@@ -172,17 +283,17 @@ export async function attachToSession(
       }
     });
 
-    // Handle resize
+    // Handle resize - only forward sane sizes to avoid tmux rendering at
+    // 0/1/tiny widths if the xterm reports its default 80×24 while still
+    // hidden. The real resize lands via fitTerminal once the container is
+    // visible.
     terminalInstance.resizeDisposable = terminal.onResize(({ cols, rows }) => {
-      sendResize(ws, cols, rows);
+      if (cols > 1 && rows > 1) {
+        sendResize(ws, cols, rows);
+      }
     });
 
-    // Initial resize
-    const { cols, rows } = terminal;
-    sendResize(ws, cols, rows);
-
-    // Clear and refocus
-    terminal.clear();
+    // Focus terminal
     terminal.focus();
 
   } catch (e) {
@@ -203,6 +314,11 @@ export async function detachFromSession(terminalInstance: TerminalInstance): Pro
   }
 
   if (terminalInstance.ws) {
+    // Null out handlers BEFORE close to prevent buffered messages from old session
+    // leaking into the terminal during session switch
+    terminalInstance.ws.onmessage = null;
+    terminalInstance.ws.onclose = null;
+    terminalInstance.ws.onerror = null;
     terminalInstance.ws.close();
     terminalInstance.ws = null;
     terminalInstance.sessionId = null;
@@ -210,11 +326,23 @@ export async function detachFromSession(terminalInstance: TerminalInstance): Pro
 }
 
 export function fitTerminal(terminalInstance: TerminalInstance): void {
+  // Guard against fitting a detached/zero-sized container (would send bogus
+  // 1×1 or similar resize to tmux, which then renders the pane that way).
+  const el = (terminalInstance.terminal as any).element as HTMLElement | undefined;
+  if (el) {
+    const rect = el.getBoundingClientRect();
+    if (rect.width < 2 || rect.height < 2) return;
+  }
+
   terminalInstance.fitAddon.fit();
 
   // Send resize via WebSocket if connected
   if (terminalInstance.ws && terminalInstance.ws.readyState === WebSocket.OPEN) {
     const { cols, rows } = terminalInstance.terminal;
-    sendResize(terminalInstance.ws, cols, rows);
+    // Need realistic terminal dimensions; anything below 2 is almost certainly
+    // the result of measuring a hidden container.
+    if (cols > 1 && rows > 1) {
+      sendResize(terminalInstance.ws, cols, rows);
+    }
   }
 }

@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"asmgr-desktop/session"
@@ -26,10 +27,11 @@ var upgrader = websocket.Upgrader{
 
 // TerminalServer handles WebSocket connections for terminal I/O
 type TerminalServer struct {
-	storage *session.Storage
-	port    int
-	mu      sync.RWMutex
-	conns   map[string]*termConn
+	storage        *session.Storage
+	port           int
+	mu             sync.RWMutex
+	conns          map[string]*termConn
+	typingSignal   *int64 // pointer to App.lastTypingSignal for zero-overhead typing detection
 }
 
 type termConn struct {
@@ -141,12 +143,37 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 		fmt.Sscanf(windowIdx, "%d", &winIdx)
 	}
 
-	// Start PTY with tmux attach
+	// Start PTY with tmux attach.
+	// We create a grouped session per-connection so each WebSocket has its own
+	// active window, preventing window switches from affecting other connections.
 	tmuxSession := inst.TmuxSessionName()
-	cmd := exec.Command("tmux", "attach-session", "-t", fmt.Sprintf("%s:%d", tmuxSession, winIdx))
+	linkedName := fmt.Sprintf("%s_gui_%d_%d", tmuxSession, winIdx, time.Now().UnixMilli())
+
+	// Create a grouped (linked) tmux session targeting the specific window
+	attachTarget := linkedName
+	createCmd := exec.Command("tmux", "new-session", "-d", "-s", linkedName, "-t", tmuxSession)
+	if err := createCmd.Run(); err != nil {
+		// Fallback to direct attach if grouped session fails
+		log.Printf("Failed to create linked session %s: %v, falling back to direct attach", linkedName, err)
+		attachTarget = tmuxSession
+	}
+
+	// Hide tmux status bar in the session (the desktop app has its own UI)
+	exec.Command("tmux", "set-option", "-t", attachTarget, "status", "off").Run()
+
+	// Select the target window in the session
+	selectCmd := exec.Command("tmux", "select-window", "-t", fmt.Sprintf("%s:%d", attachTarget, winIdx))
+	selectCmd.Run()
+
+	// Attach to the session (linked sessions have their own active window state)
+	cmd := exec.Command("tmux", "attach-session", "-t", attachTarget)
 
 	ptmx, err := pty.Start(cmd)
 	if err != nil {
+		// Clean up linked session on error (only if it was created)
+		if attachTarget == linkedName {
+			exec.Command("tmux", "kill-session", "-t", linkedName).Run()
+		}
 		ws.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf("Error: %v", err)))
 		ws.Close()
 		return
@@ -179,7 +206,10 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 	go func() {
 		buf := make([]byte, 32768)
 		var pendingData []byte
-		flushTicker := time.NewTicker(8 * time.Millisecond) // ~120fps
+		// ~33 fps — more than enough for a terminal UI. Higher tick rates
+		// (we had 8ms ≈ 120 fps) caused WebKit renderer CPU to stay pinned
+		// because every flush is a canvas write on the frontend.
+		flushTicker := time.NewTicker(30 * time.Millisecond)
 		defer flushTicker.Stop()
 
 		dataCh := make(chan []byte, 64)
@@ -218,6 +248,21 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 				return
 			case chunk := <-dataCh:
 				pendingData = append(pendingData, chunk...)
+				// Only bypass the flush ticker when the buffer would otherwise
+				// grow unboundedly in a single tick window. 64 KB is high enough
+				// that normal bursty output (Claude redraws ~20–30 KB) still
+				// gets coalesced via the ticker instead of slamming the WebKit
+				// renderer with back-to-back canvas writes.
+				if len(pendingData) >= 65536 {
+					tc.writeMu.Lock()
+					err := ws.WriteMessage(websocket.BinaryMessage, pendingData)
+					tc.writeMu.Unlock()
+					pendingData = pendingData[:0]
+					if err != nil {
+						log.Printf("WebSocket write error: %v", err)
+						return
+					}
+				}
 			case <-flushTicker.C:
 				if len(pendingData) > 0 {
 					tc.writeMu.Lock()
@@ -246,6 +291,11 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 			ptmx.Close()
 			ws.Close()
 			cmd.Process.Kill()
+
+			// Clean up the linked tmux session (only if it was created)
+			if attachTarget == linkedName {
+				exec.Command("tmux", "kill-session", "-t", linkedName).Run()
+			}
 		}()
 
 		for {
@@ -265,15 +315,26 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 					if len(data) >= 5 {
 						cols := int(data[1])<<8 | int(data[2])
 						rows := int(data[3])<<8 | int(data[4])
+						// Ignore tiny/bogus sizes that would make tmux render
+						// the pane at ~5 columns wide. Usually caused by
+						// measuring a still-hidden container on the frontend.
+						if cols < 10 || rows < 3 {
+							continue
+						}
 						pty.Setsize(ptmx, &pty.Winsize{
 							Cols: uint16(cols),
 							Rows: uint16(rows),
 						})
-						// Refresh tmux
-						exec.Command("tmux", "refresh-client", "-t", tmuxSession).Run()
+						// Also resize the window (aggregate) so tmux picks up
+						// the biggest client and sends a full redraw.
+						exec.Command("tmux", "resize-window", "-t", attachTarget, "-A").Run()
+						exec.Command("tmux", "refresh-client", "-t", attachTarget).Run()
 					}
 				} else {
-					// Regular input
+					// Regular input - signal typing for polling suppression
+					if ts.typingSignal != nil {
+						atomic.StoreInt64(ts.typingSignal, time.Now().UnixNano())
+					}
 					ptmx.Write(data)
 				}
 			}

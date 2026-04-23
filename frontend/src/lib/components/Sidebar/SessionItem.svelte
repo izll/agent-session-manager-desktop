@@ -5,10 +5,15 @@
   import type { Session } from '../../stores/sessions';
   import { selectSession, selectedSessionId, renameSession, deleteSession, toggleFavorite } from '../../stores/sessions';
   import { settings } from '../../stores/settings';
+  import { t } from '../../i18n';
+  import { focusTerminal } from '../../utils/focus';
+  import type { TabStatusInfo } from '../../stores/statusLines';
 
   export let session: Session;
   export let activity: 'idle' | 'busy' | 'waiting' = 'idle';
   export let statusLine: string = '';
+  export let spinnerText: string = '';
+  export let tabStatuses: TabStatusInfo[] = [];
   export let index: number = 0;
 
   const dispatch = createEventDispatcher();
@@ -57,6 +62,16 @@
   $: isGradient = session.color?.startsWith('gradient-');
   $: displayColor = isGradient ? getGradientCSS(session.color) : session.color;
 
+  // Unique agent types for multi-agent sessions (only when 2+ different agents)
+  $: uniqueAgents = (() => {
+    if (tabStatuses.length <= 1) return [];
+    const agents = new Set<string>();
+    for (const tab of tabStatuses) {
+      if (tab.agent) agents.add(tab.agent);
+    }
+    return agents.size > 1 ? Array.from(agents) : [];
+  })();
+
   let isDragging = false;
   let isDragOver = false;
 
@@ -93,10 +108,12 @@
       await renameSession(session.id, trimmed);
     }
     isRenaming = false;
+    focusTerminal();
   }
 
   function cancelRename() {
     isRenaming = false;
+    focusTerminal();
   }
 
   function handleRenameKeydown(e: KeyboardEvent) {
@@ -173,6 +190,7 @@
   class:running={sessionStatus === 'running'}
   class:dragging={isDragging}
   class:drag-over={isDragOver}
+  class:compact={$settings?.compactList}
   on:click={() => selectSession(session.id)}
   on:contextmenu={handleContextMenu}
   on:keydown={(e) => e.key === 'Enter' && selectSession(session.id)}
@@ -191,10 +209,6 @@
       {activity}
       size="sm"
     />
-
-    {#if $settings?.showAgentIcons}
-      <AgentIcon agent={session.agent} size="sm" />
-    {/if}
 
     {#if isRenaming}
       <!-- svelte-ignore a11y-autofocus -->
@@ -217,9 +231,21 @@
       </span>
     {/if}
 
+    {#if $settings?.showAgentIcons && !(!$settings?.hideStatusLines && sessionStatus === 'running')}
+      <div class="multi-agent-icons">
+        {#if uniqueAgents.length > 0}
+          {#each uniqueAgents as agent}
+            <AgentIcon {agent} size="xs" />
+          {/each}
+        {:else}
+          <AgentIcon agent={session.agent} size="xs" />
+        {/if}
+      </div>
+    {/if}
+
     <div class="badges">
       {#if session.resumeSessionId}
-        <span class="badge resume" title="Resumed session">&#8635;</span>
+        <span class="badge resume" title={$t('sessionItem.resumed')}>&#8635;</span>
       {/if}
       {#if session.favorite}
         <span class="badge favorite">&#9733;</span>
@@ -231,9 +257,45 @@
   </div>
 
   {#if !$settings?.hideStatusLines && sessionStatus === 'running'}
-    <div class="status-text" class:busy={activity === 'busy'} class:waiting={activity === 'waiting'}>
-      {activity === 'waiting' ? 'Waiting (needs input)' : (statusLine || (activity === 'busy' ? 'Busy (working)' : 'Idle (ready)'))}
-    </div>
+    {#if tabStatuses.length > 1}
+      <!-- Multi-tab: show per-tab status lines -->
+      {#each tabStatuses as tab}
+        {#if tab.activity === 'busy'}
+          <div class="status-text busy tab-status">
+            <span>{tab.spinnerText || tab.statusLine || ''}</span>
+            {#if $settings?.showAgentIcons}<AgentIcon agent={tab.agent} size="xs" />{/if}
+          </div>
+        {:else if tab.activity === 'waiting'}
+          <div class="status-text waiting tab-status">
+            <span>{$t('sessionItem.waitingInput')}</span>
+            {#if $settings?.showAgentIcons}<AgentIcon agent={tab.agent} size="xs" />{/if}
+          </div>
+        {:else if tab.statusLine}
+          <div class="status-text tab-status">
+            <span>{tab.statusLine}</span>
+            {#if $settings?.showAgentIcons}<AgentIcon agent={tab.agent} size="xs" />{/if}
+          </div>
+        {/if}
+      {/each}
+    {:else}
+      <!-- Single tab: original behavior -->
+      {#if activity === 'busy'}
+        <div class="status-text busy tab-status">
+          <span>{spinnerText || statusLine || ''}</span>
+          {#if $settings?.showAgentIcons}<AgentIcon agent={session.agent} size="xs" />{/if}
+        </div>
+      {:else if activity === 'waiting'}
+        <div class="status-text waiting tab-status">
+          <span>{$t('sessionItem.waitingInput')}</span>
+          {#if $settings?.showAgentIcons}<AgentIcon agent={session.agent} size="xs" />{/if}
+        </div>
+      {:else if statusLine}
+        <div class="status-text tab-status">
+          <span>{statusLine}</span>
+          {#if $settings?.showAgentIcons}<AgentIcon agent={session.agent} size="xs" />{/if}
+        </div>
+      {/if}
+    {/if}
   {/if}
 </div>
 
@@ -367,6 +429,14 @@
     font-weight: 600;
   }
 
+  .multi-agent-icons {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    opacity: 0.7;
+    flex-shrink: 0;
+  }
+
   .badges {
     display: flex;
     align-items: center;
@@ -407,6 +477,8 @@
 
   .status-text {
     font-size: 10px;
+    line-height: 14px;
+    height: 14px;
     color: #888888;
     margin-top: 6px;
     margin-left: 18px;
@@ -414,6 +486,24 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+
+  .status-text.tab-status {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 3px;
+  }
+
+  .status-text.tab-status:first-child {
+    margin-top: 6px;
+  }
+
+  .status-text.tab-status span {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .status-text.busy {
@@ -499,5 +589,51 @@
 
   .context-menu-item.danger:hover {
     background: rgba(239, 68, 68, 0.15);
+  }
+
+  /* Compact mode */
+  .session-item.compact {
+    padding: 5px 10px;
+    margin: 1px 0;
+    border-radius: 6px;
+  }
+
+  .session-item.compact .session-main {
+    gap: 6px;
+  }
+
+  .session-item.compact .session-name {
+    font-size: 12px;
+  }
+
+  .session-item.compact .status-text {
+    margin-top: 2px;
+    margin-left: 14px;
+    font-size: 9px;
+    line-height: 12px;
+    height: 12px;
+  }
+
+  .session-item.compact .status-text.tab-status {
+    gap: 3px;
+    margin-top: 1px;
+  }
+
+  .session-item.compact .status-text.tab-status:first-child {
+    margin-top: 2px;
+  }
+
+  .session-item.compact .badge {
+    font-size: 7px;
+    padding: 1px 4px;
+  }
+
+  .session-item.compact .badge.favorite {
+    font-size: 10px;
+  }
+
+  .session-item.compact .badge.resume {
+    font-size: 8px;
+    padding: 0 3px;
   }
 </style>

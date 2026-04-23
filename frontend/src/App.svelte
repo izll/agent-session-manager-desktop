@@ -18,18 +18,25 @@
   import ResumeChoiceDialog from './lib/components/Dialogs/ResumeChoiceDialog.svelte';
   import ResumeSessionPickerDialog from './lib/components/Dialogs/ResumeSessionPickerDialog.svelte';
   import type { Session } from './lib/stores/sessions';
-  import { loadSessions, selectedSession, selectedSessionId, selectedWindowIdx, startSession, stopSession, deleteSession, toggleFavorite, reorderSession, selectPrevSession, selectNextSession } from './lib/stores/sessions';
+  import { loadSessions, selectedSession, selectedSessionId, selectedWindowIdx, startSession, stopSession, stopTab, restartTab, restartTabWithResume, deleteSession, toggleFavorite, reorderSession, selectPrevSession, selectNextSession } from './lib/stores/sessions';
   import { loadProjects } from './lib/stores/projects';
-  import { loadSettings } from './lib/stores/settings';
+  import { loadSettings, settings } from './lib/stores/settings';
   import { agents, loadAgents } from './lib/stores/agents';
   import { startSidebarPolling, stopSidebarPolling } from './lib/stores/sidebarPolling';
   import { WindowMinimise, WindowToggleMaximise, Quit, EventsOn, EventsOff, EventsEmit } from '../wailsjs/runtime/runtime';
   import * as DictationService from '../wailsjs/go/main/DictationService';
   import { IsDevMode } from '../wailsjs/go/main/App';
   import asmgrIcon from './assets/icons/asmgr.svg';
+  import { t, isRTL, loadTranslations } from './lib/i18n';
+  import { focusTerminal } from './lib/utils/focus';
 
   // Dev mode
   let devMode = false;
+
+  function openDevTools() {
+    // Wails internal message to open WebKit inspector
+    (window as any).WailsInvoke?.('wails:showInspector');
+  }
 
   // Dictation state
   let dictationEnabled = false;
@@ -52,14 +59,43 @@
   let showResumeChoice = false;
   let showResumeSessionPicker = false;
   let pendingResumeSession: Session | null = null;
+  let pendingResumeWindowIdx: number | null = null; // non-null means tab-level resume
+
+  // Track "any dialog open" to restore terminal focus after the last one closes.
+  // Without this, closing a dialog leaves focus on the dialog's overlay/buttons,
+  // so subsequent keystrokes don't reach the terminal.
+  let anyDialogOpen = false;
+  let prevAnyDialogOpen = false;
+  $: anyDialogOpen =
+    showNewSessionDialog || showNewGroupDialog || showGlobalSearch ||
+    showHelpDialog || showUpdateDialog || showImportDialog ||
+    showSettingsDialog || showColorDialog || showDeleteConfirm ||
+    showQuitConfirm || showStopDialog || showStartDialog ||
+    showResumeChoice || showResumeSessionPicker;
+  $: if (prevAnyDialogOpen && !anyDialogOpen) {
+    // Dialog just closed — return focus to the terminal
+    focusTerminal();
+  }
+  $: prevAnyDialogOpen = anyDialogOpen;
 
   // Sidebar state
   let sidebarWidth = 288; // default w-72 = 288px
   let sidebarCollapsed = false;
+  let sidebarOverlayOpen = false;
   let isResizing = false;
+  let collapseBlockUntil = 0;
+
+  function handleCollapsedHoverEnter() {
+    if (!sidebarCollapsed || Date.now() < collapseBlockUntil) return;
+    sidebarOverlayOpen = true;
+  }
+
+  function handleCollapsedHoverLeave() {
+    sidebarOverlayOpen = false;
+  }
   const SIDEBAR_MIN = 200;
   const SIDEBAR_MAX = 500;
-  const SIDEBAR_COLLAPSED = 56;
+  const SIDEBAR_COLLAPSED = 40;
 
   function startResize(e: MouseEvent) {
     isResizing = true;
@@ -84,13 +120,30 @@
   }
 
   function toggleSidebar() {
+    if (!sidebarCollapsed) {
+      collapseBlockUntil = Date.now() + 400;
+    }
     sidebarCollapsed = !sidebarCollapsed;
+    sidebarOverlayOpen = false;
   }
 
   $: actualSidebarWidth = sidebarCollapsed ? SIDEBAR_COLLAPSED : sidebarWidth;
 
+  // Auto-close overlay when session selection changes
+  let prevSelectedId = $selectedSessionId;
+  $: if (sidebarOverlayOpen && $selectedSessionId !== prevSelectedId) {
+    sidebarOverlayOpen = false;
+    prevSelectedId = $selectedSessionId;
+  }
+
   // Global keyboard shortcut handler
   function handleKeydown(e: KeyboardEvent) {
+    // Close sidebar overlay on Escape
+    if (e.key === 'Escape' && sidebarOverlayOpen) {
+      sidebarOverlayOpen = false;
+      return;
+    }
+
     // Don't handle shortcuts when typing in input fields or contenteditable
     const target = e.target as HTMLElement;
     if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
@@ -239,6 +292,10 @@
       loadAgents()
     ]);
 
+    // Load i18n translations from saved language setting
+    const currentSettings = get(settings);
+    await loadTranslations(currentSettings.language || 'en');
+
     // Check dev mode
     try { devMode = await IsDevMode(); } catch(_) {}
 
@@ -324,38 +381,24 @@
 
   async function handleStopSession() {
     if (!$selectedSession) return;
-    // Stop all followed windows first
-    if ($selectedSession.followedWindows && $selectedSession.followedWindows.length > 0) {
-      for (const window of $selectedSession.followedWindows) {
-        try {
-          await stopSession(window.id);
-        } catch (e) {
-          console.error('Failed to stop followed window:', e);
-        }
-      }
-    }
-    // Then stop the main session
+    // kill-session kills all tmux windows at once
     await stopSession($selectedSession.id);
   }
 
   async function handleStopTab() {
     if (!$selectedSession) return;
     const windowIdx = get(selectedWindowIdx);
-
-    if (windowIdx === 0) {
-      // Stopping main session window
-      await stopSession($selectedSession.id);
-    } else {
-      // Stopping followed window
-      const followedWindow = $selectedSession.followedWindows?.[windowIdx - 1];
-      if (followedWindow) {
-        await stopSession(followedWindow.id);
-      }
-    }
+    // StopTab kills the tmux window (or entire session for window 0)
+    await stopTab($selectedSession.id, windowIdx);
   }
 
   function handleStart() {
     if (!$selectedSession || $selectedSession.status === 'running') return;
+    // If session has a saved resume ID, restart with it directly (no dialog)
+    if ($selectedSession.resumeSessionId) {
+      startSession($selectedSession.id, $selectedSession.resumeSessionId);
+      return;
+    }
     // Check if agent supports resume
     const agentConfig = $agents.find(a => a.type === $selectedSession.agent);
     if (agentConfig?.supportsResume) {
@@ -380,28 +423,31 @@
   async function handleStartTab() {
     if (!$selectedSession) return;
     const windowIdx = get(selectedWindowIdx);
-
-    if (windowIdx === 0) {
-      // Starting main session window
-      await startSession($selectedSession.id);
-    } else {
-      // Starting specific followed window - for now just start the whole session
-      // TODO: implement individual tab start if needed
-      await startSession($selectedSession.id);
-    }
+    await restartTab($selectedSession.id, windowIdx);
   }
 
   function handleResume() {
-    if (!$selectedSession || $selectedSession.status === 'running') return;
+    if (!$selectedSession) return;
     pendingResumeSession = $selectedSession;
+    // Check if this is a tab-level resume (session running but tab stopped)
+    if ($selectedSession.status === 'running') {
+      pendingResumeWindowIdx = get(selectedWindowIdx);
+    } else {
+      pendingResumeWindowIdx = null;
+    }
     showResumeSessionPicker = true;
   }
 
   // Resume choice handlers
   function handleResumeNewSession() {
     if (!pendingResumeSession) return;
-    startSession(pendingResumeSession.id);
+    if (pendingResumeWindowIdx !== null) {
+      restartTab(pendingResumeSession.id, pendingResumeWindowIdx);
+    } else {
+      startSession(pendingResumeSession.id);
+    }
     pendingResumeSession = null;
+    pendingResumeWindowIdx = null;
   }
 
   function handleResumeContinueExisting() {
@@ -413,39 +459,47 @@
     if (!pendingResumeSession) return;
 
     const { resumeId } = event.detail;
-    await startSession(pendingResumeSession.id, resumeId);
+    if (pendingResumeWindowIdx !== null) {
+      // Tab-level resume: restart just this tab with the selected resume ID
+      await restartTabWithResume(pendingResumeSession.id, pendingResumeWindowIdx, resumeId);
+    } else {
+      await startSession(pendingResumeSession.id, resumeId);
+    }
     pendingResumeSession = null;
+    pendingResumeWindowIdx = null;
   }
 
   function handleResumeRestartWithTabs() {
     if (!pendingResumeSession) return;
-    // Start with existing tab layout (same as the start dialog flow)
-    startSession(pendingResumeSession.id);
+    if (pendingResumeWindowIdx !== null) {
+      restartTab(pendingResumeSession.id, pendingResumeWindowIdx);
+    } else {
+      // Start with existing tab layout, resuming the saved session
+      const savedResumeId = pendingResumeSession.resumeSessionId || '';
+      startSession(pendingResumeSession.id, savedResumeId || undefined);
+    }
     pendingResumeSession = null;
+    pendingResumeWindowIdx = null;
   }
 
   function handleResumeCancel() {
     pendingResumeSession = null;
+    pendingResumeWindowIdx = null;
   }
 </script>
 
-<main class="app-container h-screen flex flex-col text-white overflow-hidden" style="--sidebar-width: {actualSidebarWidth}px">
+<main class="app-container h-screen flex flex-col text-white overflow-hidden" style="--sidebar-width: {actualSidebarWidth}px" dir={$isRTL ? 'rtl' : 'ltr'}>
   <!-- Header (draggable titlebar) -->
-  <header class="header flex items-center justify-between px-5 py-3" style="--wails-draggable:drag">
+  <header class="header flex items-center justify-between py-3" style="--wails-draggable:drag; padding-left: 0; padding-right: 10px;"
+    on:contextmenu|preventDefault={devMode ? openDevTools : undefined}>
     <div class="header-left">
       <div class="header-logo-section" style="--wails-draggable:no-drag">
+        <div class="logo-icon">
+          <img src={asmgrIcon} alt="ASMGR" width={sidebarCollapsed ? 20 : 28} height={sidebarCollapsed ? 20 : 28} />
+        </div>
         {#if !sidebarCollapsed}
-          <div class="logo-icon">
-            <img src={asmgrIcon} alt="ASMGR" width="28" height="28" />
-          </div>
-          <span class="logo-text">Agent Session Manager<sup class="logo-suffix">desktop</sup></span>
+          <span class="logo-text">{$t('app.title')}<sup class="logo-suffix">{$t('app.titleSuffix')}</sup></span>
           {#if devMode}<span class="dev-badge">DEV&nbsp;</span>{/if}
-        {:else}
-          <button class="collapse-btn header-expand" on:click={toggleSidebar} title="Expand sidebar">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline points="9 18 15 12 9 6"/>
-            </svg>
-          </button>
         {/if}
       </div>
       <div class="header-divider-vertical"></div>
@@ -455,36 +509,36 @@
     </div>
 
     <div class="flex items-center gap-3" style="--wails-draggable:no-drag">
-      <button class="btn btn-ghost" on:click={() => showGlobalSearch = true} title="Global Search (Ctrl+F)">
+      <button class="btn btn-ghost" on:click={() => showGlobalSearch = true} title={$t('header.globalSearch')}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <circle cx="11" cy="11" r="8"/>
           <path d="M21 21l-4.35-4.35"/>
         </svg>
-        Search
+        {$t('app.search')}
       </button>
       <div class="header-icons">
-        <button class="btn btn-ghost btn-icon" on:click={() => showImportDialog = true} title="Import Sessions (I)">
+        <button class="btn btn-ghost btn-icon" on:click={() => showImportDialog = true} title={$t('header.importSessions')}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
             <polyline points="17 8 12 3 7 8"/>
             <line x1="12" y1="3" x2="12" y2="15"/>
           </svg>
         </button>
-        <button class="btn btn-ghost btn-icon" on:click={() => showUpdateDialog = true} title="Check for Updates (U)">
+        <button class="btn btn-ghost btn-icon" on:click={() => showUpdateDialog = true} title={$t('header.checkUpdates')}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
             <polyline points="7 10 12 15 17 10"/>
             <line x1="12" y1="15" x2="12" y2="3"/>
           </svg>
         </button>
-        <button class="btn btn-ghost btn-icon" on:click={() => showHelpDialog = true} title="Help (?)">
+        <button class="btn btn-ghost btn-icon" on:click={() => showHelpDialog = true} title={$t('header.help')}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="12" cy="12" r="10"/>
             <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
             <circle cx="12" cy="17" r="1" fill="currentColor"/>
           </svg>
         </button>
-        <button class="btn btn-ghost btn-icon" on:click={() => showSettingsDialog = true} title="Settings">
+        <button class="btn btn-ghost btn-icon" on:click={() => showSettingsDialog = true} title={$t('header.settings')}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="12" cy="12" r="3"/>
             <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
@@ -497,17 +551,17 @@
 
       <!-- Window controls -->
       <div class="window-controls">
-        <button class="window-btn minimize" on:click={WindowMinimise} title="Minimize">
+        <button class="window-btn minimize" on:click={WindowMinimise} title={$t('header.minimize')}>
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <line x1="5" y1="12" x2="19" y2="12"/>
           </svg>
         </button>
-        <button class="window-btn maximize" on:click={WindowToggleMaximise} title="Maximize">
+        <button class="window-btn maximize" on:click={WindowToggleMaximise} title={$t('header.maximize')}>
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <rect x="4" y="4" width="16" height="16" rx="2"/>
           </svg>
         </button>
-        <button class="window-btn close" on:click={handleQuit} title="Close">
+        <button class="window-btn close" on:click={handleQuit} title={$t('header.close')}>
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <line x1="18" y1="6" x2="6" y2="18"/>
             <line x1="6" y1="6" x2="18" y2="18"/>
@@ -518,28 +572,46 @@
   </header>
 
   <!-- Main Content -->
-  <div class="flex-1 flex overflow-hidden" class:resizing={isResizing}>
+  <div class="flex-1 flex overflow-hidden relative" class:resizing={isResizing}>
     <!-- Sidebar -->
-    <aside class="sidebar flex flex-col" class:collapsed={sidebarCollapsed} style="width: var(--sidebar-width)">
-      {#if !sidebarCollapsed}
+    {#if !sidebarCollapsed}
+      <aside class="sidebar flex flex-col" style="width: var(--sidebar-width)">
         <div class="p-3 border-b border-white/5">
           <ProjectSelector />
         </div>
         <div class="flex-1 overflow-hidden">
           <SessionTree onNewSession={handleNewSession} onNewGroup={handleNewGroup} onCollapse={toggleSidebar} />
         </div>
-      {:else}
-        <div class="collapsed-sidebar">
-          <button class="collapse-btn expand" on:click={toggleSidebar} title="Expand sidebar">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline points="9 18 15 12 9 6"/>
-            </svg>
-          </button>
-        </div>
+        <div class="resize-handle" on:mousedown={startResize}></div>
+      </aside>
+    {:else}
+      <!-- svelte-ignore a11y-no-static-element-interactions -->
+      <div class="collapsed-sidebar-wrapper" on:mouseenter={handleCollapsedHoverEnter} on:mouseleave={handleCollapsedHoverLeave}>
+        <aside class="sidebar collapsed" style="width: {SIDEBAR_COLLAPSED}px">
+          <div class="collapsed-strip">
+            <button class="expand-btn" on:click|stopPropagation={toggleSidebar} title={$t('sidebar.expandSidebar')}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="9 18 15 12 9 6"/>
+              </svg>
+            </button>
+          </div>
+        </aside>
+        {#if sidebarOverlayOpen}
+          <div class="sidebar-overlay" style="width: {sidebarWidth}px">
+            <div class="p-3 border-b border-white/5">
+              <ProjectSelector />
+            </div>
+            <div class="flex-1 overflow-hidden">
+              <SessionTree onNewSession={handleNewSession} onNewGroup={handleNewGroup} onCollapse={() => { sidebarOverlayOpen = false; toggleSidebar(); }} />
+            </div>
+          </div>
+        {/if}
+      </div>
+      {#if sidebarOverlayOpen}
+        <!-- svelte-ignore a11y-no-static-element-interactions -->
+        <div class="sidebar-overlay-backdrop" on:click={() => sidebarOverlayOpen = false}></div>
       {/if}
-      <!-- Resize Handle -->
-      <div class="resize-handle" on:mousedown={startResize}></div>
-    </aside>
+    {/if}
 
     <!-- Main Panel -->
     <div class="main-content flex-1 overflow-hidden">
@@ -563,19 +635,19 @@
   <SessionColorDialog bind:show={showColorDialog} session={colorDialogSession} />
   <ConfirmDialog
     bind:show={showDeleteConfirm}
-    title="Delete Session"
-    message="Are you sure you want to delete &quot;{$selectedSession?.name}&quot;? This action cannot be undone."
-    confirmText="Delete"
-    cancelText="Cancel"
+    title={$t('confirm.deleteSession')}
+    message={$t('confirm.deleteSessionMessage', { name: $selectedSession?.name || '' })}
+    confirmText={$t('confirm.deleteConfirm')}
+    cancelText={$t('common.cancel')}
     variant="danger"
     on:confirm={confirmDelete}
   />
   <ConfirmDialog
     bind:show={showQuitConfirm}
-    title="Quit Application"
-    message="Are you sure you want to quit? All running sessions will remain active in the background."
-    confirmText="Quit"
-    cancelText="Cancel"
+    title={$t('confirm.quitApp')}
+    message={$t('confirm.quitMessage')}
+    confirmText={$t('confirm.quitConfirm')}
+    cancelText={$t('common.cancel')}
     variant="warning"
     on:confirm={confirmQuit}
   />
@@ -656,7 +728,6 @@
     align-items: center;
     justify-content: center;
     filter: drop-shadow(0 0 8px rgba(168, 85, 247, 0.4));
-    margin-left: 4px;
   }
 
   .logo-text {
@@ -693,16 +764,19 @@
   .header-logo-section {
     display: flex;
     align-items: center;
-    gap: 12px;
-    width: calc(var(--sidebar-width) - 16px);
+    justify-content: center;
+    gap: 10px;
+    width: var(--sidebar-width);
+    padding-left: 0;
     flex-shrink: 0;
   }
+
 
   .header-divider-vertical {
     width: 1px;
     align-self: stretch;
     background: rgba(255, 255, 255, 0.1);
-    margin: 0 16px;
+    margin: 0 16px 0 0;
     flex-shrink: 0;
   }
 
@@ -771,22 +845,44 @@
     color: #a78bfa;
   }
 
-  .collapse-btn.expand {
-    position: static;
-    margin: 12px auto;
+  .collapsed-sidebar-wrapper {
+    position: relative;
+    display: flex;
+    height: 100%;
+    z-index: 50;
   }
 
-  .collapse-btn.header-expand {
-    position: static;
-    margin: 0;
-  }
-
-  .collapsed-sidebar {
+  .collapsed-strip {
     display: flex;
     flex-direction: column;
     align-items: center;
-    padding-top: 8px;
+    justify-content: center;
     height: 100%;
+  }
+
+  .expand-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+    color: #6b7280;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .expand-btn:hover {
+    background: rgba(139, 92, 246, 0.15);
+    border-color: rgba(139, 92, 246, 0.3);
+    color: #a78bfa;
+  }
+
+  .sidebar.collapsed {
+    overflow: hidden;
+    flex-shrink: 0;
   }
 
   .main-content {
@@ -868,6 +964,83 @@
   .window-btn.close:hover {
     background: rgba(239, 68, 68, 0.2);
     color: #f87171;
+  }
+
+  /* RTL support */
+  :global([dir="rtl"]) .header-left {
+    flex-direction: row-reverse;
+  }
+
+  :global([dir="rtl"]) .sidebar {
+    border-right: none;
+    border-left: 1px solid rgba(139, 92, 246, 0.1);
+    box-shadow: -4px 0 24px rgba(0, 0, 0, 0.3);
+  }
+
+  :global([dir="rtl"]) .resize-handle {
+    right: auto;
+    left: -3px;
+  }
+
+  :global([dir="rtl"]) .logo-icon {
+    margin-left: 0;
+    margin-right: 4px;
+  }
+
+  :global([dir="rtl"]) .logo-suffix {
+    margin-left: 0;
+    margin-right: 2px;
+  }
+
+  :global([dir="rtl"]) .dev-badge {
+    margin-left: 0;
+    margin-right: 4px;
+  }
+
+  :global([dir="rtl"]) .header-icons {
+    margin-left: 0;
+    margin-right: 12px;
+  }
+
+  :global([dir="rtl"]) .collapse-btn {
+    right: auto;
+    left: 12px;
+  }
+
+  :global([dir="rtl"]) .collapse-btn svg {
+    transform: scaleX(-1);
+  }
+
+  /* Sidebar overlay */
+  .sidebar-overlay-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+  }
+
+  .sidebar-overlay {
+    background: linear-gradient(180deg, rgba(15, 15, 26, 0.97) 0%, rgba(10, 10, 15, 0.99) 100%);
+    border-right: 1px solid rgba(139, 92, 246, 0.15);
+    box-shadow: 8px 0 32px rgba(0, 0, 0, 0.5);
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    animation: overlaySlideIn 0.15s ease-out;
+  }
+
+  @keyframes overlaySlideIn {
+    from { opacity: 0; transform: translateX(-8px); }
+    to   { opacity: 1; transform: translateX(0); }
+  }
+
+  :global([dir="rtl"]) .sidebar-overlay {
+    border-right: none;
+    border-left: 1px solid rgba(139, 92, 246, 0.15);
+    box-shadow: -8px 0 32px rgba(0, 0, 0, 0.5);
+  }
+
+  :global([dir="rtl"]) .expand-btn svg {
+    transform: scaleX(-1);
   }
 
 </style>

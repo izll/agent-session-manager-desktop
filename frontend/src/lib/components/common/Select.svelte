@@ -1,9 +1,10 @@
 <script lang="ts">
   import { createEventDispatcher, onMount, onDestroy, tick } from 'svelte';
+  import { t } from '../../i18n';
 
   export let value: string = '';
   export let options: { value: string; label: string }[] = [];
-  export let placeholder: string = 'Select...';
+  export let placeholder: string = '';
   export let small: boolean = false;
 
   const dispatch = createEventDispatcher<{ change: string }>();
@@ -13,7 +14,7 @@
   let dropdownRef: HTMLDivElement;
 
   $: selectedOption = options.find(o => o.value === value);
-  $: displayText = selectedOption?.label ?? placeholder;
+  $: displayText = selectedOption?.label ?? (placeholder || $t('common.select'));
 
   // Update dropdown position when open
   $: if (isOpen && triggerRef && dropdownRef) {

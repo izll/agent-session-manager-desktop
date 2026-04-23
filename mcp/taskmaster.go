@@ -3,8 +3,13 @@ package mcp
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"sync"
+	"time"
 )
+
+// aiTimeout is the timeout for AI-based MCP tool calls (add_task, update_task, expand, etc.)
+const aiTimeout = 5 * time.Minute
 
 // TaskMaster provides high-level Task Master MCP operations
 type TaskMaster struct {
@@ -25,6 +30,7 @@ type Task struct {
 	Dependencies []string   `json:"dependencies"`
 	Complexity   *int       `json:"complexity,omitempty"`
 	Details      string     `json:"details,omitempty"`
+	CreatedAt    string     `json:"createdAt,omitempty"`
 }
 
 // Subtask represents a subtask within a task
@@ -126,7 +132,7 @@ func (tm *TaskMaster) ParsePRD(prdPath string, numTasks int, force bool) error {
 		args["force"] = true
 	}
 
-	result, err := tm.client.CallTool("parse_prd", args)
+	result, err := tm.client.CallToolWithTimeout("parse_prd", args, aiTimeout)
 	if err != nil {
 		return err
 	}
@@ -153,6 +159,10 @@ func (tm *TaskMaster) GetTasks(status string, withSubtasks bool) (*TasksResponse
 	result, err := tm.client.CallTool("get_tasks", args)
 	if err != nil {
 		return nil, err
+	}
+
+	if result.IsError {
+		return nil, fmt.Errorf("get_tasks failed: %s", GetToolResultText(result))
 	}
 
 	text := GetToolResultText(result)
@@ -195,25 +205,145 @@ func (tm *TaskMaster) GetTask(taskID string) (*Task, error) {
 		return nil, err
 	}
 
+	if result.IsError {
+		return nil, fmt.Errorf("get_task failed: %s", GetToolResultText(result))
+	}
+
 	text := GetToolResultText(result)
 
-	// Try parsing as new format: {"data": {"task": {...}}}
-	var dataResponse struct {
-		Data struct {
-			Task *Task `json:"task"`
-		} `json:"data"`
-	}
-	if err := json.Unmarshal([]byte(text), &dataResponse); err == nil && dataResponse.Data.Task != nil {
-		return dataResponse.Data.Task, nil
+	// Parse into generic map first to handle numeric IDs and various formats
+	var raw map[string]interface{}
+	if err := json.Unmarshal([]byte(text), &raw); err != nil {
+		return nil, fmt.Errorf("failed to parse task response: %w", err)
 	}
 
-	// Try parsing as direct Task object
-	var task Task
-	if err := json.Unmarshal([]byte(text), &task); err != nil {
-		return nil, fmt.Errorf("failed to parse task: %w", err)
+	// Log top-level keys for debugging
+	keys := make([]string, 0, len(raw))
+	for k := range raw {
+		keys = append(keys, k)
+	}
+	log.Printf("[TaskMaster MCP] GetTask response top-level keys: %v", keys)
+
+	// Try to find the task in various response formats
+	taskMap := findTaskMap(raw)
+	if taskMap == nil {
+		log.Printf("[TaskMaster MCP] Could not find task data in response. Raw (first 1000): %.1000s", text)
+		return nil, fmt.Errorf("could not find task data in MCP response")
 	}
 
-	return &task, nil
+	task := taskFromMap(taskMap)
+	log.Printf("[TaskMaster MCP] Parsed task: ID=%s Title=%.50s Status=%s Priority=%s", task.ID, task.Title, task.Status, task.Priority)
+	return task, nil
+}
+
+// findTaskMap tries various response formats to locate the task data map
+func findTaskMap(raw map[string]interface{}) map[string]interface{} {
+	// Format 1: {"data": {"task": {...}}}
+	if data, ok := raw["data"].(map[string]interface{}); ok {
+		if t, ok := data["task"].(map[string]interface{}); ok {
+			log.Printf("[TaskMaster MCP] Found task in data.task format")
+			return t
+		}
+	}
+
+	// Format 2: {"task": {...}}
+	if t, ok := raw["task"].(map[string]interface{}); ok {
+		log.Printf("[TaskMaster MCP] Found task in task format")
+		return t
+	}
+
+	// Format 3: {"result": {"task": {...}}}
+	if result, ok := raw["result"].(map[string]interface{}); ok {
+		if t, ok := result["task"].(map[string]interface{}); ok {
+			log.Printf("[TaskMaster MCP] Found task in result.task format")
+			return t
+		}
+	}
+
+	// Format 4: direct task object (has "title" key at top level)
+	if _, hasTitle := raw["title"]; hasTitle {
+		log.Printf("[TaskMaster MCP] Found task at top level (has title)")
+		return raw
+	}
+
+	// Format 5: look for any nested map that has "title"
+	for k, v := range raw {
+		if nested, ok := v.(map[string]interface{}); ok {
+			if _, hasTitle := nested["title"]; hasTitle {
+				log.Printf("[TaskMaster MCP] Found task nested under key %q", k)
+				return nested
+			}
+		}
+	}
+
+	return nil
+}
+
+// taskFromMap extracts a Task from a generic map, handling numeric IDs etc.
+func taskFromMap(m map[string]interface{}) *Task {
+	task := &Task{}
+	task.ID = mapString(m, "id")
+	task.Title = mapString(m, "title")
+	task.Description = mapString(m, "description")
+	task.Status = mapString(m, "status")
+	task.Priority = mapString(m, "priority")
+	task.Details = mapString(m, "details")
+	task.CreatedAt = mapString(m, "createdAt")
+
+	if tags, ok := m["tags"].([]interface{}); ok {
+		for _, t := range tags {
+			if s, ok := t.(string); ok {
+				task.Tags = append(task.Tags, s)
+			}
+		}
+	}
+
+	if deps, ok := m["dependencies"].([]interface{}); ok {
+		for _, d := range deps {
+			task.Dependencies = append(task.Dependencies, fmt.Sprintf("%v", d))
+		}
+	}
+
+	if complexity, ok := m["complexity"].(float64); ok {
+		c := int(complexity)
+		task.Complexity = &c
+	}
+
+	if subtasks, ok := m["subtasks"].([]interface{}); ok {
+		for _, st := range subtasks {
+			if stMap, ok := st.(map[string]interface{}); ok {
+				sub := Subtask{
+					ID:          mapString(stMap, "id"),
+					Title:       mapString(stMap, "title"),
+					Description: mapString(stMap, "description"),
+					Status:      mapString(stMap, "status"),
+					Details:     mapString(stMap, "details"),
+				}
+				task.Subtasks = append(task.Subtasks, sub)
+			}
+		}
+	}
+
+	return task
+}
+
+// mapString extracts a string from a map, converting numbers to string if needed
+func mapString(m map[string]interface{}, key string) string {
+	v, ok := m[key]
+	if !ok || v == nil {
+		return ""
+	}
+	switch val := v.(type) {
+	case string:
+		return val
+	case float64:
+		if val == float64(int(val)) {
+			return fmt.Sprintf("%d", int(val))
+		}
+		return fmt.Sprintf("%v", val)
+	default:
+		return fmt.Sprintf("%v", val)
+	}
 }
 
 // NextTask returns the next task to work on
@@ -225,6 +355,10 @@ func (tm *TaskMaster) NextTask() (*Task, error) {
 	result, err := tm.client.CallTool("next_task", args)
 	if err != nil {
 		return nil, err
+	}
+
+	if result.IsError {
+		return nil, fmt.Errorf("next_task failed: %s", GetToolResultText(result))
 	}
 
 	text := GetToolResultText(result)
@@ -302,16 +436,31 @@ func (tm *TaskMaster) AddTask(prompt string, research bool, priority string, dep
 		args["dependencies"] = dependencies
 	}
 
-	result, err := tm.client.CallTool("add_task", args)
+	result, err := tm.client.CallToolWithTimeout("add_task", args, aiTimeout)
 	if err != nil {
 		return nil, err
 	}
 
+	if result.IsError {
+		return nil, fmt.Errorf("add_task failed: %s", GetToolResultText(result))
+	}
+
 	text := GetToolResultText(result)
+
+	// Try parsing as {"data": {"task": {...}}}
+	var dataResponse struct {
+		Data struct {
+			Task *Task `json:"task"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal([]byte(text), &dataResponse); err == nil && dataResponse.Data.Task != nil {
+		return dataResponse.Data.Task, nil
+	}
+
+	// Try parsing as direct Task object
 	var task Task
 	if err := json.Unmarshal([]byte(text), &task); err != nil {
-		// Task might just return success message
-		return nil, nil
+		return nil, fmt.Errorf("failed to parse add_task response: %w", err)
 	}
 
 	return &task, nil
@@ -338,16 +487,31 @@ func (tm *TaskMaster) AddManualTask(title, description, details, priority string
 		args["dependencies"] = dependencies
 	}
 
-	result, err := tm.client.CallTool("add_task", args)
+	result, err := tm.client.CallToolWithTimeout("add_task", args, aiTimeout)
 	if err != nil {
 		return nil, err
 	}
 
+	if result.IsError {
+		return nil, fmt.Errorf("add_task failed: %s", GetToolResultText(result))
+	}
+
 	text := GetToolResultText(result)
+
+	// Try parsing as {"data": {"task": {...}}}
+	var dataResponse struct {
+		Data struct {
+			Task *Task `json:"task"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal([]byte(text), &dataResponse); err == nil && dataResponse.Data.Task != nil {
+		return dataResponse.Data.Task, nil
+	}
+
+	// Try parsing as direct Task object
 	var task Task
 	if err := json.Unmarshal([]byte(text), &task); err != nil {
-		// Task might just return success message
-		return nil, nil
+		return nil, fmt.Errorf("failed to parse add_task response: %w", err)
 	}
 
 	return &task, nil
@@ -364,7 +528,7 @@ func (tm *TaskMaster) UpdateTask(taskID, prompt string, research bool) error {
 		args["research"] = true
 	}
 
-	result, err := tm.client.CallTool("update_task", args)
+	result, err := tm.client.CallToolWithTimeout("update_task", args, aiTimeout)
 	if err != nil {
 		return err
 	}
@@ -384,7 +548,7 @@ func (tm *TaskMaster) UpdateSubtask(taskID, prompt string) error {
 		"projectRoot": tm.projectRoot,
 	}
 
-	result, err := tm.client.CallTool("update_subtask", args)
+	result, err := tm.client.CallToolWithTimeout("update_subtask", args, aiTimeout)
 	if err != nil {
 		return err
 	}
@@ -412,7 +576,7 @@ func (tm *TaskMaster) ExpandTask(taskID string, research, force bool, numSubtask
 		args["num"] = numSubtasks
 	}
 
-	result, err := tm.client.CallTool("expand_task", args)
+	result, err := tm.client.CallToolWithTimeout("expand_task", args, aiTimeout)
 	if err != nil {
 		return err
 	}
@@ -436,7 +600,7 @@ func (tm *TaskMaster) ExpandAllTasks(research, force bool) error {
 		args["force"] = true
 	}
 
-	result, err := tm.client.CallTool("expand_all", args)
+	result, err := tm.client.CallToolWithTimeout("expand_all", args, aiTimeout)
 	if err != nil {
 		return err
 	}
@@ -457,9 +621,13 @@ func (tm *TaskMaster) AnalyzeComplexity(research bool) (*ComplexityReport, error
 		args["research"] = true
 	}
 
-	result, err := tm.client.CallTool("analyze_project_complexity", args)
+	result, err := tm.client.CallToolWithTimeout("analyze_project_complexity", args, aiTimeout)
 	if err != nil {
 		return nil, err
+	}
+
+	if result.IsError {
+		return nil, fmt.Errorf("analyze_project_complexity failed: %s", GetToolResultText(result))
 	}
 
 	text := GetToolResultText(result)
@@ -481,6 +649,10 @@ func (tm *TaskMaster) GetComplexityReport() (*ComplexityReport, error) {
 	result, err := tm.client.CallTool("complexity_report", args)
 	if err != nil {
 		return nil, err
+	}
+
+	if result.IsError {
+		return nil, fmt.Errorf("complexity_report failed: %s", GetToolResultText(result))
 	}
 
 	text := GetToolResultText(result)
@@ -541,6 +713,10 @@ func (tm *TaskMaster) ValidateDependencies() (string, error) {
 	result, err := tm.client.CallTool("validate_dependencies", args)
 	if err != nil {
 		return "", err
+	}
+
+	if result.IsError {
+		return "", fmt.Errorf("validate_dependencies failed: %s", GetToolResultText(result))
 	}
 
 	return GetToolResultText(result), nil
@@ -606,7 +782,7 @@ func (tm *TaskMaster) AddSubtask(taskID, title, description string) (*Subtask, e
 	text := GetToolResultText(result)
 	var subtask Subtask
 	if err := json.Unmarshal([]byte(text), &subtask); err != nil {
-		return nil, nil // Success but no subtask returned
+		return nil, fmt.Errorf("failed to parse add_subtask response: %w", err)
 	}
 
 	return &subtask, nil
@@ -670,32 +846,46 @@ func (tm *TaskMaster) SetSubtaskStatus(subtaskID, status string) error {
 	return nil
 }
 
-// UpdateTaskDirect updates a task with direct field values (no AI)
+// UpdateTaskDirect updates a task with direct field values.
+// Uses update_task with a structured prompt describing the changes.
 func (tm *TaskMaster) UpdateTaskDirect(taskID, title, description, details, priority string) error {
-	args := map[string]interface{}{
-		"id":          taskID,
-		"projectRoot": tm.projectRoot,
-	}
+	// Build a prompt describing the exact changes
+	var parts []string
 	if title != "" {
-		args["title"] = title
+		parts = append(parts, fmt.Sprintf("Set the title to: %s", title))
 	}
 	if description != "" {
-		args["description"] = description
+		parts = append(parts, fmt.Sprintf("Set the description to: %s", description))
 	}
 	if details != "" {
-		args["details"] = details
+		parts = append(parts, fmt.Sprintf("Set the details to: %s", details))
 	}
 	if priority != "" {
-		args["priority"] = priority
+		parts = append(parts, fmt.Sprintf("Set the priority to: %s", priority))
 	}
 
-	result, err := tm.client.CallTool("update", args)
+	if len(parts) == 0 {
+		return nil // Nothing to update
+	}
+
+	prompt := "Update this task with the following changes:\n"
+	for _, p := range parts {
+		prompt += "- " + p + "\n"
+	}
+
+	args := map[string]interface{}{
+		"id":          taskID,
+		"prompt":      prompt,
+		"projectRoot": tm.projectRoot,
+	}
+
+	result, err := tm.client.CallToolWithTimeout("update_task", args, aiTimeout)
 	if err != nil {
 		return err
 	}
 
 	if result.IsError {
-		return fmt.Errorf("update failed: %s", GetToolResultText(result))
+		return fmt.Errorf("update_task failed: %s", GetToolResultText(result))
 	}
 
 	return nil

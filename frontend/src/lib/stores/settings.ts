@@ -7,6 +7,7 @@ export interface Settings {
   showAgentIcons: boolean;
   splitView: boolean;
   markedSessionId: string;
+  language: string;
 }
 
 export const settings = writable<Settings>({
@@ -14,7 +15,8 @@ export const settings = writable<Settings>({
   hideStatusLines: false,
   showAgentIcons: true,
   splitView: false,
-  markedSessionId: ''
+  markedSessionId: '',
+  language: 'en'
 });
 
 export async function loadSettings() {

@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { t } from '../../i18n';
+
   export let status: 'running' | 'paused' | 'stopped' = 'stopped';
   export let activity: 'idle' | 'busy' | 'waiting' = 'idle';
   export let size: 'sm' | 'md' | 'lg' = 'md';
@@ -16,11 +18,31 @@
     md: 'w-3 h-3',
     lg: 'w-4 h-4'
   }[size];
+
+  const statusKeyMap: Record<string, Record<string, string>> = {
+    running: {
+      busy: 'status.runningBusy',
+      idle: 'status.runningIdle',
+      waiting: 'status.runningWaiting',
+    },
+    paused: {
+      idle: 'status.pausedIdle',
+      busy: 'status.pausedIdle',
+      waiting: 'status.pausedIdle',
+    },
+    stopped: {
+      idle: 'status.stoppedIdle',
+      busy: 'status.stoppedIdle',
+      waiting: 'status.stoppedIdle',
+    },
+  };
+
+  $: statusKey = statusKeyMap[status]?.[activity] ?? 'status.stoppedIdle';
 </script>
 
 <span
   class="status-indicator {colorClass} {sizeClass}"
-  title="{status} ({activity})"
+  title={$t(statusKey)}
 ></span>
 
 <style>

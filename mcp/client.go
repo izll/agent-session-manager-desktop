@@ -366,6 +366,11 @@ func (c *Client) readStderr() {
 
 // sendRequest sends a JSON-RPC request and waits for the response
 func (c *Client) sendRequest(method string, params interface{}) (*JSONRPCResponse, error) {
+	return c.sendRequestWithTimeout(method, params, 60*time.Second)
+}
+
+// sendRequestWithTimeout sends a JSON-RPC request with a custom timeout
+func (c *Client) sendRequestWithTimeout(method string, params interface{}, timeout time.Duration) (*JSONRPCResponse, error) {
 	id := atomic.AddInt64(&c.requestID, 1)
 
 	request := JSONRPCRequest{
@@ -409,8 +414,8 @@ func (c *Client) sendRequest(method string, params interface{}) (*JSONRPCRespons
 			return nil, response.Error
 		}
 		return response, nil
-	case <-time.After(60 * time.Second):
-		return nil, fmt.Errorf("request timeout after 60s for method %s", method)
+	case <-time.After(timeout):
+		return nil, fmt.Errorf("request timeout after %v for method %s", timeout, method)
 	}
 }
 
@@ -479,6 +484,11 @@ func (c *Client) GetTools() []Tool {
 
 // CallTool calls an MCP tool with the given arguments
 func (c *Client) CallTool(name string, args map[string]interface{}) (*ToolCallResult, error) {
+	return c.CallToolWithTimeout(name, args, 60*time.Second)
+}
+
+// CallToolWithTimeout calls an MCP tool with a custom timeout
+func (c *Client) CallToolWithTimeout(name string, args map[string]interface{}, timeout time.Duration) (*ToolCallResult, error) {
 	if !c.IsRunning() {
 		return nil, fmt.Errorf("MCP client not running")
 	}
@@ -495,7 +505,7 @@ func (c *Client) CallTool(name string, args map[string]interface{}) (*ToolCallRe
 		"arguments": args,
 	}
 
-	response, err := c.sendRequest("tools/call", params)
+	response, err := c.sendRequestWithTimeout("tools/call", params, timeout)
 	if err != nil {
 		return nil, fmt.Errorf("tool call failed: %w", err)
 	}

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
+  import { t } from '../../i18n';
 
   export let show = false;
   export let title = 'Confirm';

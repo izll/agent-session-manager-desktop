@@ -1,5 +1,6 @@
 <script lang="ts">
   import { projects, activeProjectId, selectProject, createProject } from '../../stores/projects';
+  import { t } from '../../i18n';
 
   let isOpen = false;
   let isCreating = false;
@@ -43,7 +44,7 @@
       <svg class="project-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M3 3h7l2 2h9a1 1 0 011 1v13a1 1 0 01-1 1H3a1 1 0 01-1-1V4a1 1 0 011-1z"/>
       </svg>
-      <span class="project-name">{currentProject?.name || 'Default'}</span>
+      <span class="project-name">{currentProject?.name || $t('project.default')}</span>
     </div>
     <svg class="chevron" class:open={isOpen} width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
       <polyline points="6 9 12 15 18 9"/>
@@ -61,7 +62,7 @@
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M3 3h7l2 2h9a1 1 0 011 1v13a1 1 0 01-1 1H3a1 1 0 01-1-1V4a1 1 0 011-1z"/>
         </svg>
-        <span>Default</span>
+        <span>{$t('project.default')}</span>
       </button>
 
       <!-- Other projects -->
@@ -76,7 +77,7 @@
           </svg>
           <span>{project.name}</span>
           {#if project.isLocked}
-            <span class="lock-icon" title="In use">
+            <span class="lock-icon" title={$t('project.inUse')}>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
                 <path d="M7 11V7a5 5 0 0110 0v4"/>
@@ -93,16 +94,16 @@
           <input
             type="text"
             bind:value={newProjectName}
-            placeholder="Project name..."
+            placeholder={$t('project.namePlaceholder')}
             class="create-input"
             on:keydown={(e) => e.key === 'Enter' && handleCreate()}
           />
           <div class="create-actions">
             <button class="btn-primary" on:click={handleCreate}>
-              Create
+              {$t('project.create')}
             </button>
             <button class="btn-cancel" on:click={() => isCreating = false}>
-              Cancel
+              {$t('project.cancel')}
             </button>
           </div>
         </div>
@@ -112,7 +113,7 @@
             <line x1="12" y1="5" x2="12" y2="19"/>
             <line x1="5" y1="12" x2="19" y2="12"/>
           </svg>
-          <span>New Project</span>
+          <span>{$t('project.new')}</span>
         </button>
       {/if}
     </div>

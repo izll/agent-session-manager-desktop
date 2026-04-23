@@ -1,5 +1,6 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
+  import { t } from '../../i18n';
 
   export let show = false;
   export let sessionName = '';
@@ -50,9 +51,9 @@
         </svg>
       </div>
 
-      <h2 class="dialog-title">Start Session</h2>
+      <h2 class="dialog-title">{$t('start.title')}</h2>
       <p class="dialog-message">
-        What would you like to start for "{sessionName}"?
+        {$t('start.message', { name: sessionName })}
       </p>
 
       <div class="dialog-actions">
@@ -62,7 +63,7 @@
             <line x1="9" y1="3" x2="9" y2="21"/>
             <line x1="15" y1="3" x2="15" y2="21"/>
           </svg>
-          <span>Entire Session{hasFollowedWindows ? ' (All Tabs)' : ''}</span>
+          <span>{hasFollowedWindows ? $t('start.entireSessionTabs') : $t('start.entireSession')}</span>
         </button>
         {#if hasFollowedWindows}
           <button class="btn-option tab" on:click={handleStartTab}>
@@ -70,11 +71,11 @@
               <rect x="3" y="3" width="18" height="18" rx="2"/>
               <polygon points="10 8 16 12 10 16 10 8"/>
             </svg>
-            <span>Current Tab Only</span>
+            <span>{$t('start.currentTab')}</span>
           </button>
         {/if}
         <button class="btn-cancel" on:click={handleCancel}>
-          Cancel
+          {$t('start.cancel')}
         </button>
       </div>
     </div>

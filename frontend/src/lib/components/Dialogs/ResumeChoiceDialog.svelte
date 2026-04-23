@@ -1,6 +1,7 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
   import type { Session } from '../../stores/sessions';
+  import { t } from '../../i18n';
 
   export let show = false;
   export let session: Session | null = null;
@@ -15,8 +16,8 @@
 
   $: maxCursor = hasTabs ? 2 : 1;
 
-  let cursor = hasTabs ? 2 : 0;
-  $: if (show) cursor = hasTabs ? 2 : 0;
+  let cursor = 0;
+  $: if (show) cursor = 0;
 
   function handleKeydown(e: KeyboardEvent) {
     if (e.key === 'Escape') {
@@ -33,19 +34,27 @@
     } else if (e.key === '1') {
       e.preventDefault();
       cursor = 0;
+      handleSelect();
     } else if (e.key === '2') {
       e.preventDefault();
       cursor = 1;
+      handleSelect();
     } else if (e.key === '3' && hasTabs) {
       e.preventDefault();
       cursor = 2;
+      handleSelect();
     }
   }
 
   function handleSelect() {
-    if (cursor === 0) handleNewSession();
-    else if (cursor === 1) handleContinueExisting();
-    else if (cursor === 2) handleRestartWithTabs();
+    if (hasTabs) {
+      if (cursor === 0) handleRestartWithTabs();
+      else if (cursor === 1) handleNewSession();
+      else if (cursor === 2) handleContinueExisting();
+    } else {
+      if (cursor === 0) handleNewSession();
+      else if (cursor === 1) handleContinueExisting();
+    }
   }
 
   function handleNewSession() {
@@ -86,67 +95,97 @@
         </svg>
       </div>
 
-      <h2 class="dialog-title">Resume Session</h2>
+      <h2 class="dialog-title">{$t('resume.title')}</h2>
       <p class="dialog-message">
-        How would you like to resume "{session?.name}"?
+        {$t('resume.message', { name: session?.name || '' })}
       </p>
 
       <div class="dialog-actions">
-        <button
-          class="btn-option new {cursor === 0 ? 'active' : ''}"
-          on:click={handleNewSession}
-          on:mouseenter={() => cursor = 0}
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M12 5v14M5 12h14"/>
-          </svg>
-          <div class="option-content">
-            <span class="option-title">New Session</span>
-            <span class="option-desc">Start fresh conversation</span>
-          </div>
-          <span class="option-shortcut">1</span>
-        </button>
-
-        <button
-          class="btn-option continue {cursor === 1 ? 'active' : ''}"
-          on:click={handleContinueExisting}
-          on:mouseenter={() => cursor = 1}
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/>
-          </svg>
-          <div class="option-content">
-            <span class="option-title">Continue Existing</span>
-            <span class="option-desc">Resume from session picker</span>
-          </div>
-          <span class="option-shortcut">2</span>
-        </button>
-
         {#if hasTabs}
           <button
-            class="btn-option tabs {cursor === 2 ? 'active' : ''}"
+            class="btn-option tabs {cursor === 0 ? 'active' : ''}"
             on:click={handleRestartWithTabs}
-            on:mouseenter={() => cursor = 2}
+            on:mouseenter={() => cursor = 0}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
               <line x1="9" y1="3" x2="9" y2="21"/>
             </svg>
             <div class="option-content">
-              <span class="option-title">Restart with Tabs</span>
-              <span class="option-desc">Start with existing tab layout ({session?.followedWindows?.length ?? 0} tab{(session?.followedWindows?.length ?? 0) !== 1 ? 's' : ''})</span>
+              <span class="option-title">{$t('resume.restartWithTabs')}</span>
+              <span class="option-desc">{$t('resume.restartWithTabsDesc')} ({$t('resume.tabs', { count: 1 + (session?.followedWindows?.length ?? 0) })})</span>
+            </div>
+            <span class="option-shortcut">1</span>
+          </button>
+
+          <button
+            class="btn-option new {cursor === 1 ? 'active' : ''}"
+            on:click={handleNewSession}
+            on:mouseenter={() => cursor = 1}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 5v14M5 12h14"/>
+            </svg>
+            <div class="option-content">
+              <span class="option-title">{$t('resume.newSession')}</span>
+              <span class="option-desc">{$t('resume.newSessionDesc')}</span>
+            </div>
+            <span class="option-shortcut">2</span>
+          </button>
+
+          <button
+            class="btn-option continue {cursor === 2 ? 'active' : ''}"
+            on:click={handleContinueExisting}
+            on:mouseenter={() => cursor = 2}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/>
+            </svg>
+            <div class="option-content">
+              <span class="option-title">{$t('resume.continueExisting')}</span>
+              <span class="option-desc">{$t('resume.continueExistingDesc')}</span>
             </div>
             <span class="option-shortcut">3</span>
+          </button>
+        {:else}
+          <button
+            class="btn-option new {cursor === 0 ? 'active' : ''}"
+            on:click={handleNewSession}
+            on:mouseenter={() => cursor = 0}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 5v14M5 12h14"/>
+            </svg>
+            <div class="option-content">
+              <span class="option-title">{$t('resume.newSession')}</span>
+              <span class="option-desc">{$t('resume.newSessionDesc')}</span>
+            </div>
+            <span class="option-shortcut">1</span>
+          </button>
+
+          <button
+            class="btn-option continue {cursor === 1 ? 'active' : ''}"
+            on:click={handleContinueExisting}
+            on:mouseenter={() => cursor = 1}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/>
+            </svg>
+            <div class="option-content">
+              <span class="option-title">{$t('resume.continueExisting')}</span>
+              <span class="option-desc">{$t('resume.continueExistingDesc')}</span>
+            </div>
+            <span class="option-shortcut">2</span>
           </button>
         {/if}
 
         <button class="btn-cancel" on:click={handleCancel}>
-          Cancel
+          {$t('resume.cancel')}
         </button>
       </div>
 
       <div class="dialog-hint">
-        Use ↑↓ or {hasTabs ? '1/2/3' : '1/2'} keys to navigate, Enter to select
+        {hasTabs ? $t('resume.navHint3') : $t('resume.navHint2')}
       </div>
     </div>
   </div>

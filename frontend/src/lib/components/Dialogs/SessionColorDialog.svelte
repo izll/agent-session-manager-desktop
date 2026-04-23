@@ -1,6 +1,7 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
   import { setSessionColor, type Session } from '../../stores/sessions';
+  import { t } from '../../i18n';
 
   export let show = false;
   export let session: Session | null = null;
@@ -63,12 +64,20 @@
   let selectedBgColor = '';
   let fullRowColor = false;
   let colorMode: 'text' | 'bg' = 'text'; // Which color we're editing
+  let lastInitKey = '';
 
-  $: if (show && session) {
-    selectedColor = session.color || '';
-    selectedBgColor = session.bgColor || '';
-    fullRowColor = session.fullRowColor || false;
-    colorMode = 'text';
+  // Initialize fields only when dialog opens for a (new) session, not on every session update
+  $: {
+    const key = show && session ? `${show}|${session.id}` : '';
+    if (key && key !== lastInitKey) {
+      selectedColor = session!.color || '';
+      selectedBgColor = session!.bgColor || '';
+      fullRowColor = session!.fullRowColor || false;
+      colorMode = 'text';
+      lastInitKey = key;
+    } else if (!show) {
+      lastInitKey = '';
+    }
   }
 
   // Get filtered options based on mode (gradients only for text)
@@ -162,7 +171,7 @@
   >
     <div class="dialog-content">
       <div class="dialog-header">
-        <h2>Session Color</h2>
+        <h2>{$t('color.title')}</h2>
         <button class="close-btn" on:click={close}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <line x1="18" y1="6" x2="6" y2="18"/>
@@ -174,7 +183,7 @@
       <div class="dialog-body">
         <!-- Preview -->
         <div class="preview-section">
-          <span class="label">Preview</span>
+          <span class="label">{$t('color.preview')}</span>
           <div
             class="session-preview"
             class:full-row={fullRowColor && selectedBgColor}
@@ -201,26 +210,26 @@
               class:active={colorMode === 'text'}
               on:click={() => colorMode = 'text'}
             >
-              Text: {selectedColor || 'none'}
+              {$t('color.textLabel', { color: selectedColor || $t('color.none') })}
             </button>
             <button
               class="mode-btn"
               class:active={colorMode === 'bg'}
               on:click={() => colorMode = 'bg'}
             >
-              Background: {selectedBgColor || 'none'}
+              {$t('color.bgLabel', { color: selectedBgColor || $t('color.none') })}
             </button>
           </div>
           <label class="full-row-toggle">
             <input type="checkbox" bind:checked={fullRowColor} />
-            <span>Full row</span>
+            <span>{$t('color.fullRow')}</span>
           </label>
-          <span class="hint">TAB: switch | F: full row</span>
+          <span class="hint">{$t('color.hint')}</span>
         </div>
 
         <!-- Color Grid -->
         <div class="color-section">
-          <span class="label">{colorMode === 'text' ? 'Text Colors' : 'Background Colors'}</span>
+          <span class="label">{colorMode === 'text' ? $t('color.textColors') : $t('color.bgColors')}</span>
           <div class="color-grid">
             {#each filteredOptions as option}
               {@const isSelected = currentValue === option.color}
@@ -258,8 +267,8 @@
       </div>
 
       <div class="dialog-footer">
-        <button class="btn-cancel" on:click={close}>Cancel</button>
-        <button class="btn-primary" on:click={applyColor}>Apply</button>
+        <button class="btn-cancel" on:click={close}>{$t('color.cancel')}</button>
+        <button class="btn-primary" on:click={applyColor}>{$t('color.apply')}</button>
       </div>
     </div>
   </div>

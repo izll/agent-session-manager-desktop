@@ -3,6 +3,7 @@
   import { selectedSessionId } from '../../stores/sessions';
   import { get } from 'svelte/store';
   import * as App from '../../../../wailsjs/go/main/App';
+  import { t } from '../../i18n';
 
   export let active = false;
   export let initialMode: 'session' | 'full' = 'session';
@@ -114,7 +115,7 @@
 <div class="diff-container">
   <div class="diff-header">
     <div class="header-left">
-      <span class="diff-title">{diffMode === 'session' ? 'Session' : 'Full'}</span>
+      <span class="diff-title">{diffMode === 'session' ? $t('diff.session') : $t('diff.full')}</span>
       {#if diff}
         <div class="diff-stats">
           <span class="stat added">+{diff.added}</span>
@@ -134,7 +135,7 @@
 
   <div class="diff-content">
     {#if loading && !diff}
-      <div class="loading">Loading diff...</div>
+      <div class="loading">{$t('diff.loading')}</div>
     {:else if error}
       <div class="error">{error}</div>
     {:else if !diff || !diff.content}
@@ -143,9 +144,9 @@
           <path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/>
           <path d="M8 12l2 2 4-4"/>
         </svg>
-        <span>No changes detected</span>
+        <span>{$t('diff.noChanges')}</span>
         <span class="no-diff-hint">
-          {diffMode === 'session' ? 'Changes since session started will appear here' : 'Uncommitted changes will appear here'}
+          {diffMode === 'session' ? $t('diff.sessionHint') : $t('diff.fullHint')}
         </span>
       </div>
     {:else}

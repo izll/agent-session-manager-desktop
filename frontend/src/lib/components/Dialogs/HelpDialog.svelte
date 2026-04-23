@@ -1,5 +1,6 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
+  import { t } from '../../i18n';
 
   export let show = false;
 
@@ -16,26 +17,32 @@
     }
   }
 
-  const shortcuts = [
-    { category: 'Navigation', items: [
-      { key: '↑ / ↓', desc: 'Select previous/next session' },
-      { key: 'Ctrl+↑ / Ctrl+↓', desc: 'Reorder session (move up/down)' },
-      { key: 'Enter', desc: 'Attach to selected session' },
+  $: shortcuts = [
+    { category: $t('help.navigation'), items: [
+      { key: '↑ / ↓', desc: $t('help.navSelectSession') },
+      { key: 'Alt+↑ / Alt+↓', desc: $t('help.navGlobalSession') },
+      { key: 'Ctrl+↑ / Ctrl+↓', desc: $t('help.navReorderSession') },
+      { key: 'Ctrl+PgUp / PgDn', desc: $t('help.navSwitchTab') },
+      { key: 'Enter', desc: $t('help.navAttach') },
     ]},
-    { category: 'Session Actions', items: [
-      { key: 'n', desc: 'New session' },
-      { key: 's', desc: 'Start session' },
-      { key: 'x', desc: 'Stop session' },
-      { key: 'd', desc: 'Delete session' },
-      { key: '*', desc: 'Toggle favorite' },
+    { category: $t('help.sessionActions'), items: [
+      { key: 'n', desc: $t('help.actionNewSession') },
+      { key: 'g', desc: $t('help.actionNewGroup') },
+      { key: 's', desc: $t('help.actionStartSession') },
+      { key: 'x', desc: $t('help.actionStopSession') },
+      { key: 'd', desc: $t('help.actionDeleteSession') },
+      { key: '*', desc: $t('help.actionToggleFavorite') },
     ]},
-    { category: 'Search', items: [
-      { key: 'Ctrl+F', desc: 'Global history search' },
-      { key: '/', desc: 'Filter sessions' },
+    { category: $t('help.searchCategory'), items: [
+      { key: 'Ctrl+F', desc: $t('help.actionGlobalSearch') },
+      { key: '/', desc: $t('help.actionFilterSessions') },
+      { key: 'Alt+F', desc: $t('help.actionFocusSearch') },
     ]},
-    { category: 'Other', items: [
-      { key: '?', desc: 'Show this help' },
-      { key: 'Esc', desc: 'Close dialogs' },
+    { category: $t('help.other'), items: [
+      { key: 'u', desc: $t('help.actionCheckUpdates') },
+      { key: 'i', desc: $t('help.actionImportSessions') },
+      { key: '?', desc: $t('help.actionShowHelp') },
+      { key: 'Esc', desc: $t('help.actionCloseDialogs') },
     ]},
   ];
 </script>
@@ -50,7 +57,7 @@
   >
     <div class="dialog-content">
       <div class="dialog-header">
-        <h2>Keyboard Shortcuts</h2>
+        <h2>{$t('help.title')}</h2>
         <button class="close-btn" on:click={close}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <line x1="18" y1="6" x2="6" y2="18"/>
@@ -75,8 +82,8 @@
         {/each}
 
         <div class="section about">
-          <h3 class="section-title">About</h3>
-          <p>Agent Session Manager Desktop</p>
+          <h3 class="section-title">{$t('help.about')}</h3>
+          <p>{$t('help.appName')}</p>
           <p class="version">Version 0.1.0</p>
           <p class="link">
             <a href="https://github.com/anthropics/claude-code" target="_blank" rel="noopener">
@@ -88,7 +95,7 @@
 
       <div class="dialog-footer">
         <button class="btn-close" on:click={close}>
-          Close
+          {$t('help.close')}
           <kbd>?</kbd>
         </button>
       </div>

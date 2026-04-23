@@ -12,6 +12,10 @@ export interface FieldDictation {
   toggle: () => Promise<void>;
   /** Stop dictation if running */
   stop: () => Promise<void>;
+  /** Set up listeners for externally started dictation (e.g. hotkey) without toggling */
+  startExternally: () => void;
+  /** Clean up listeners for externally stopped dictation without toggling */
+  stopExternally: () => void;
   /** Cleanup all listeners - call on component destroy */
   destroy: () => void;
   /** Whether dictation is currently active for this field */
@@ -31,6 +35,7 @@ export function createFieldDictation(
   let unsubFieldText: (() => void) | null = null;
   let unsubFieldDelete: (() => void) | null = null;
   let unsubState: (() => void) | null = null;
+  let externallyManaged = false;
 
   function insertAtCursor(el: HTMLTextAreaElement | HTMLInputElement, text: string) {
     const start = el.selectionStart ?? el.value.length;
@@ -50,6 +55,8 @@ export function createFieldDictation(
   }
 
   function setupListeners() {
+    if (unsubFieldText) return; // Already set up
+
     unsubFieldText = EventsOn('dictation:fieldText', (text: string) => {
       const el = getElement();
       if (el) {
@@ -71,8 +78,11 @@ export function createFieldDictation(
       if (!isListening && get(listening)) {
         listening.set(false);
         cleanup();
-        // Restore terminal target
-        DictationService.SetDictationTarget('terminal').catch(() => {});
+        // Only restore terminal target if not externally managed (modal manages its own target)
+        if (!externallyManaged) {
+          DictationService.SetDictationTarget('terminal').catch(() => {});
+        }
+        externallyManaged = false;
       }
     });
   }
@@ -112,15 +122,34 @@ export function createFieldDictation(
     }
   }
 
-  function destroy() {
-    if (get(listening)) {
-      // Fire-and-forget stop
-      DictationService.ToggleDictation().catch(() => {});
-      DictationService.SetDictationTarget('terminal').catch(() => {});
+  /** Set up listeners for externally started dictation (hotkey) without toggling */
+  function startExternally() {
+    if (!get(listening)) {
+      externallyManaged = true;
+      setupListeners();
+      listening.set(true);
     }
+  }
+
+  /** Clean up listeners for externally stopped dictation without toggling */
+  function stopExternally() {
+    externallyManaged = false;
     listening.set(false);
     cleanup();
   }
 
-  return { toggle, stop, destroy, listening };
+  function destroy() {
+    if (get(listening)) {
+      // Fire-and-forget stop
+      DictationService.ToggleDictation().catch(() => {});
+      if (!externallyManaged) {
+        DictationService.SetDictationTarget('terminal').catch(() => {});
+      }
+    }
+    externallyManaged = false;
+    listening.set(false);
+    cleanup();
+  }
+
+  return { toggle, stop, startExternally, stopExternally, destroy, listening };
 }

@@ -2,6 +2,7 @@
   import { createEventDispatcher } from 'svelte';
   import type { Session } from '../../stores/sessions';
   import * as App from '../../../../wailsjs/go/main/App';
+  import { t } from '../../i18n';
 
   export let show = false;
   export let session: Session | null = null;
@@ -21,9 +22,17 @@
   let isLoadingSessions = false;
   let cursor = 0; // 0 = new session, 1+ = existing sessions
   let error = '';
+  let lastLoadKey = '';
 
-  $: if (show && session) {
-    loadSessions();
+  // Load sessions once per dialog open for a given session
+  $: {
+    const key = show && session ? session.id : '';
+    if (key && key !== lastLoadKey) {
+      lastLoadKey = key;
+      loadSessions();
+    } else if (!show) {
+      lastLoadKey = '';
+    }
   }
 
   async function loadSessions() {
@@ -94,7 +103,7 @@
   >
     <div class="dialog-content">
       <div class="dialog-header">
-        <h2>Resume Session</h2>
+        <h2>{$t('resumePicker.title')}</h2>
         <button class="close-btn" on:click={handleCancel}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <line x1="18" y1="6" x2="6" y2="18"/>
@@ -125,7 +134,7 @@
             <svg class="spinner" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
             </svg>
-            Loading sessions...
+            {$t('resumePicker.loading')}
           </div>
         {:else}
           <div class="session-list">
@@ -137,8 +146,8 @@
             >
               <span class="session-icon new">+</span>
               <span class="session-info-inner">
-                <span class="session-name">Start fresh</span>
-                <span class="session-desc">New conversation</span>
+                <span class="session-name">{$t('resumePicker.startFresh')}</span>
+                <span class="session-desc">{$t('resumePicker.newConversation')}</span>
               </span>
             </button>
             {#each availableSessions as sess, i (sess.id)}
@@ -160,7 +169,7 @@
       </div>
 
       <div class="dialog-hint">
-        Use ↑↓ to navigate, Enter to select, Esc to cancel
+        {$t('resumePicker.navHint')}
       </div>
     </div>
   </div>

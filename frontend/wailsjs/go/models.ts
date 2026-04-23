@@ -201,6 +201,7 @@ export namespace main {
 	    dependencies: string[];
 	    complexity?: number;
 	    details?: string;
+	    createdAt?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new MCPTaskInfo(source);
@@ -218,6 +219,7 @@ export namespace main {
 	        this.dependencies = source["dependencies"];
 	        this.complexity = source["complexity"];
 	        this.details = source["details"];
+	        this.createdAt = source["createdAt"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -283,6 +285,9 @@ export namespace main {
 	    favorite: boolean;
 	    resumeSessionId: string;
 	    followedWindows: session.FollowedWindow[];
+	    mainWindowStopped: boolean;
+	    tabOrder: number[];
+	    extraArgs: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new SessionInfo(source);
@@ -304,6 +309,9 @@ export namespace main {
 	        this.favorite = source["favorite"];
 	        this.resumeSessionId = source["resumeSessionId"];
 	        this.followedWindows = this.convertValues(source["followedWindows"], session.FollowedWindow);
+	        this.mainWindowStopped = source["mainWindowStopped"];
+	        this.tabOrder = source["tabOrder"];
+	        this.extraArgs = source["extraArgs"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -330,6 +338,7 @@ export namespace main {
 	    showAgentIcons: boolean;
 	    splitView: boolean;
 	    markedSessionId: string;
+	    language: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new SettingsInfo(source);
@@ -342,11 +351,14 @@ export namespace main {
 	        this.showAgentIcons = source["showAgentIcons"];
 	        this.splitView = source["splitView"];
 	        this.markedSessionId = source["markedSessionId"];
+	        this.language = source["language"];
 	    }
 	}
 	export class SidebarUpdate {
 	    activities: Record<string, string>;
 	    statusLines: Record<string, string>;
+	    spinnerTexts: Record<string, string>;
+	    tabStatuses: Record<string, Array<TabStatusInfo>>;
 	
 	    static createFrom(source: any = {}) {
 	        return new SidebarUpdate(source);
@@ -356,7 +368,27 @@ export namespace main {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.activities = source["activities"];
 	        this.statusLines = source["statusLines"];
+	        this.spinnerTexts = source["spinnerTexts"];
+	        this.tabStatuses = this.convertValues(source["tabStatuses"], Array<TabStatusInfo>, true);
 	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class SubtaskInfo {
 	    id: string;
@@ -374,6 +406,28 @@ export namespace main {
 	        this.title = source["title"];
 	        this.done = source["done"];
 	        this.createdAt = source["createdAt"];
+	    }
+	}
+	export class TabStatusInfo {
+	    windowIdx: number;
+	    agent: string;
+	    name: string;
+	    activity: string;
+	    statusLine: string;
+	    spinnerText: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new TabStatusInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.windowIdx = source["windowIdx"];
+	        this.agent = source["agent"];
+	        this.name = source["name"];
+	        this.activity = source["activity"];
+	        this.statusLine = source["statusLine"];
+	        this.spinnerText = source["spinnerText"];
 	    }
 	}
 	export class TaskInfo {
@@ -467,6 +521,7 @@ export namespace session {
 	    auto_yes: boolean;
 	    resume_session_id: string;
 	    notes?: string;
+	    extra_args?: string;
 	    stopped?: boolean;
 	
 	    static createFrom(source: any = {}) {
@@ -482,6 +537,7 @@ export namespace session {
 	        this.auto_yes = source["auto_yes"];
 	        this.resume_session_id = source["resume_session_id"];
 	        this.notes = source["notes"];
+	        this.extra_args = source["extra_args"];
 	        this.stopped = source["stopped"];
 	    }
 	}

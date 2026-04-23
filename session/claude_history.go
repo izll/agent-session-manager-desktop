@@ -286,21 +286,10 @@ func ListAgentSessionsByHistory(projectPath string) ([]AgentSession, error) {
 		var sess *AgentSession
 
 		if _, err := os.Stat(sessionPath); os.IsNotExist(err) {
-			// Session file doesn't exist - create entry from history data only
-			// Claude Code still shows these in the resume list
-			// Priority: longDisplay (meaningful) > shortDisplay > empty
-			display := st.longDisplay
-			if display == "" && st.shortDisplay != "" {
-				display = st.shortDisplay
-			}
-			sess = &AgentSession{
-				SessionID:    st.id,
-				FirstPrompt:  display,
-				LastPrompt:   display,
-				MessageCount: 1, // Assume at least 1 message to show in list
-				UpdatedAt:    timeFromMillis(st.time),
-				ProjectPath:  st.project,
-			}
+			// Session file doesn't exist - skip it.
+			// Claude Code shows these in its resume list, but --resume will fail
+			// with "no conversation found" if the .jsonl file is missing.
+			continue
 		} else {
 			// Session file exists - parse it
 			session, err := parseSessionFile(sessionPath, st.id)

@@ -3,6 +3,7 @@
   import { selectedSessionId, selectedWindowIdx, selectWindow, loadSessions } from '../../stores/sessions';
   import { get } from 'svelte/store';
   import * as App from '../../../../wailsjs/go/main/App';
+  import { t } from '../../i18n';
 
   export let show = false;
 
@@ -12,10 +13,13 @@
   let isSubmitting = false;
   let error = '';
   let forkMode: 'tab' | 'session' = 'tab';
+  let lastShow = false;
 
-  $: if (show) {
+  // Generate default name only when dialog transitions from hidden to shown
+  $: if (show && !lastShow) {
     name = `Fork ${new Date().toLocaleTimeString()}`;
   }
+  $: lastShow = show;
 
   function close() {
     show = false;
@@ -31,13 +35,13 @@
 
   async function handleSubmit() {
     if (!name.trim()) {
-      error = 'Name is required';
+      error = $t('fork.nameRequired');
       return;
     }
 
     const sessionId = get(selectedSessionId);
     if (!sessionId) {
-      error = 'No session selected';
+      error = $t('fork.noSession');
       return;
     }
 
@@ -94,7 +98,7 @@
   >
     <div class="dialog-content">
       <div class="dialog-header">
-        <h2>Fork Session</h2>
+        <h2>{$t('fork.title')}</h2>
         <button class="close-btn" on:click={close}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <line x1="18" y1="6" x2="6" y2="18"/>
@@ -109,7 +113,7 @@
           <path d="M12 16v-4"/>
           <path d="M12 8h.01"/>
         </svg>
-        <span>Fork creates a branch of the current Claude conversation that you can continue independently.</span>
+        <span>{$t('fork.info')}</span>
       </div>
 
       {#if error}
@@ -126,7 +130,7 @@
       <form on:submit|preventDefault={handleSubmit}>
         <!-- Fork Mode -->
         <div class="form-group">
-          <span class="form-label">Fork To</span>
+          <span class="form-label">{$t('fork.forkTo')}</span>
           <div class="mode-grid">
             <button
               type="button"
@@ -137,8 +141,8 @@
                 <rect x="3" y="3" width="18" height="18" rx="2"/>
                 <line x1="9" y1="3" x2="9" y2="21"/>
               </svg>
-              <span class="mode-title">New Tab</span>
-              <span class="mode-desc">Add as tab in current session</span>
+              <span class="mode-title">{$t('fork.newTab')}</span>
+              <span class="mode-desc">{$t('fork.newTabDesc')}</span>
             </button>
             <button
               type="button"
@@ -149,20 +153,20 @@
                 <rect x="3" y="3" width="18" height="18" rx="2"/>
                 <path d="M3 9h18"/>
               </svg>
-              <span class="mode-title">New Session</span>
-              <span class="mode-desc">Create independent session</span>
+              <span class="mode-title">{$t('fork.newSession')}</span>
+              <span class="mode-desc">{$t('fork.newSessionDesc')}</span>
             </button>
           </div>
         </div>
 
         <!-- Name -->
         <div class="form-group">
-          <label class="form-label" for="fork-name">Fork Name</label>
+          <label class="form-label" for="fork-name">{$t('fork.forkName')}</label>
           <input
             id="fork-name"
             type="text"
             bind:value={name}
-            placeholder="My fork"
+            placeholder={$t('fork.namePlaceholder')}
             class="form-input"
           />
         </div>
@@ -170,14 +174,14 @@
         <!-- Actions -->
         <div class="dialog-actions">
           <button type="button" class="btn-cancel" on:click={close}>
-            Cancel
+            {$t('fork.cancel')}
           </button>
           <button type="submit" class="btn-primary" disabled={isSubmitting}>
             {#if isSubmitting}
               <svg class="spinner" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
               </svg>
-              Forking...
+              {$t('fork.forking')}
             {:else}
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <circle cx="12" cy="18" r="3"/>
@@ -186,7 +190,7 @@
                 <path d="M6 9v3a3 3 0 003 3h6a3 3 0 003-3V9"/>
                 <path d="M12 12v3"/>
               </svg>
-              Fork
+              {$t('fork.forkBtn')}
             {/if}
           </button>
         </div>

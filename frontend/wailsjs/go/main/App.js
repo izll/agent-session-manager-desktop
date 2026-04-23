@@ -34,12 +34,12 @@ export function CreateProject(arg1) {
   return window['go']['main']['App']['CreateProject'](arg1);
 }
 
-export function CreateSession(arg1, arg2, arg3, arg4) {
-  return window['go']['main']['App']['CreateSession'](arg1, arg2, arg3, arg4);
+export function CreateSession(arg1, arg2, arg3, arg4, arg5) {
+  return window['go']['main']['App']['CreateSession'](arg1, arg2, arg3, arg4, arg5);
 }
 
-export function CreateTab(arg1, arg2, arg3, arg4) {
-  return window['go']['main']['App']['CreateTab'](arg1, arg2, arg3, arg4);
+export function CreateTab(arg1, arg2, arg3, arg4, arg5) {
+  return window['go']['main']['App']['CreateTab'](arg1, arg2, arg3, arg4, arg5);
 }
 
 export function CreateTask(arg1, arg2, arg3, arg4, arg5) {
@@ -60,6 +60,10 @@ export function DeleteSession(arg1) {
 
 export function DeleteSubtask(arg1, arg2, arg3) {
   return window['go']['main']['App']['DeleteSubtask'](arg1, arg2, arg3);
+}
+
+export function DeleteTab(arg1, arg2) {
+  return window['go']['main']['App']['DeleteTab'](arg1, arg2);
 }
 
 export function DeleteTask(arg1, arg2) {
@@ -92,6 +96,10 @@ export function GetActivities() {
 
 export function GetAgents() {
   return window['go']['main']['App']['GetAgents']();
+}
+
+export function GetExtraArgs(arg1, arg2) {
+  return window['go']['main']['App']['GetExtraArgs'](arg1, arg2);
 }
 
 export function GetFullDiff(arg1) {
@@ -154,6 +162,10 @@ export function GetTabNotes(arg1, arg2) {
   return window['go']['main']['App']['GetTabNotes'](arg1, arg2);
 }
 
+export function GetTabOrder(arg1) {
+  return window['go']['main']['App']['GetTabOrder'](arg1);
+}
+
 export function GetTasks(arg1) {
   return window['go']['main']['App']['GetTasks'](arg1);
 }
@@ -202,6 +214,10 @@ export function PerformUpdate(arg1) {
   return window['go']['main']['App']['PerformUpdate'](arg1);
 }
 
+export function RefreshWindow(arg1, arg2) {
+  return window['go']['main']['App']['RefreshWindow'](arg1, arg2);
+}
+
 export function RenameGroup(arg1, arg2) {
   return window['go']['main']['App']['RenameGroup'](arg1, arg2);
 }
@@ -218,8 +234,20 @@ export function ReorderSession(arg1, arg2) {
   return window['go']['main']['App']['ReorderSession'](arg1, arg2);
 }
 
+export function ReorderTab(arg1, arg2, arg3) {
+  return window['go']['main']['App']['ReorderTab'](arg1, arg2, arg3);
+}
+
 export function ResizeTerminal(arg1, arg2, arg3) {
   return window['go']['main']['App']['ResizeTerminal'](arg1, arg2, arg3);
+}
+
+export function RestartTab(arg1, arg2) {
+  return window['go']['main']['App']['RestartTab'](arg1, arg2);
+}
+
+export function RestartTabWithResume(arg1, arg2, arg3) {
+  return window['go']['main']['App']['RestartTabWithResume'](arg1, arg2, arg3);
 }
 
 export function SaveSettings(arg1) {
@@ -240,6 +268,10 @@ export function SendPrompt(arg1, arg2) {
 
 export function SendTaskToAgent(arg1, arg2) {
   return window['go']['main']['App']['SendTaskToAgent'](arg1, arg2);
+}
+
+export function SetExtraArgs(arg1, arg2, arg3) {
+  return window['go']['main']['App']['SetExtraArgs'](arg1, arg2, arg3);
 }
 
 export function SetGroupColor(arg1, arg2, arg3, arg4) {
@@ -272,6 +304,10 @@ export function StartSessionWithResume(arg1, arg2) {
 
 export function StopSession(arg1) {
   return window['go']['main']['App']['StopSession'](arg1);
+}
+
+export function StopTab(arg1, arg2) {
+  return window['go']['main']['App']['StopTab'](arg1, arg2);
 }
 
 export function StopTaskMaster(arg1) {

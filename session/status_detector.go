@@ -2,6 +2,7 @@ package session
 
 import (
 	"fmt"
+	"log"
 	"os/exec"
 	"strings"
 	"sync"
@@ -12,6 +13,16 @@ import (
 // real busy detection. This smooths out brief gaps between phases
 // (e.g., thinking ends → tool execution starts).
 const busyGracePeriod = 6 * time.Second
+
+// DebugLogging controls whether status detection writes verbose debug logs.
+// Set to true from main (dev builds only) to enable [StatusDebug]/[WaitDebug] output.
+var DebugLogging = false
+
+func debugf(format string, args ...interface{}) {
+	if DebugLogging {
+		log.Printf(format, args...)
+	}
+}
 
 // lastBusyTime tracks the last time Busy was detected per target (session:window)
 var lastBusyTime sync.Map // map[string]time.Time
@@ -45,6 +56,7 @@ var agentPatterns = map[AgentType]AgentPatterns{
 	AgentClaude: {
 		WaitingPatterns: []string{
 			"do you want to proceed",
+			"would you like to proceed",
 			"esc to cancel",
 			"allow once",
 			"allow always",
@@ -132,8 +144,7 @@ func (i *Instance) DetectActivityForWindow(windowIdx int) SessionActivity {
 		return ActivityIdle
 	}
 
-	sessionName := i.TmuxSessionName()
-	target := fmt.Sprintf("%s:%d", sessionName, windowIdx)
+	target := i.GetCaptureTarget(windowIdx)
 
 	// Determine agent type for this window
 	agent := i.Agent
@@ -147,6 +158,11 @@ func (i *Instance) DetectActivityForWindow(windowIdx int) SessionActivity {
 				break
 			}
 		}
+	}
+
+	// Terminal tabs are not AI agents - skip activity detection entirely
+	if agent == AgentTerminal {
+		return ActivityIdle
 	}
 
 	cmd := exec.Command("tmux", "capture-pane", "-t", target, "-p", "-S", "-50")
@@ -229,39 +245,64 @@ func (i *Instance) DetectAggregatedActivity() SessionActivity {
 // and spinner animation + extended thinking check for busy detection.
 func detectClaudeActivity(lines []string, patterns AgentPatterns, target string) SessionActivity {
 	// --- Waiting detection: uses separator structure to avoid scrollback false positives ---
-	if checkClaudeWaiting(lines, patterns) {
+	waiting := checkClaudeWaiting(lines, patterns)
+	if waiting {
+		debugf("[StatusDebug] %s → WAITING", target)
 		return ActivityWaiting
 	}
 
-	// --- Busy detection 1: braille spinner is actively animating ---
-	if isSpinnerAnimating(lines, patterns.Spinners, 20, target) {
+	// --- Busy detection 0: "esc to interrupt" in status bar - FASTEST, most reliable ---
+	// Claude Code shows "esc to interrupt" in the bottom status bar while working
+	if hasEscToInterrupt(lines) {
+		debugf("[StatusDebug] %s → BUSY (esc to interrupt)", target)
 		return ActivityBusy
 	}
 
-	// --- Busy detection 2: extended thinking indicator (✽/✻ with …) ---
+	// --- Busy detection 1: extended thinking indicator (✽/✻ with …) - FAST, no delay ---
 	if hasActiveThinking(lines, 20) {
+		debugf("[StatusDebug] %s → BUSY (thinking)", target)
 		return ActivityBusy
 	}
 
-	// --- Busy detection 3: tool execution (⎿ ... ending with …) ---
+	// --- Busy detection 2: tool execution (⎿ ... ending with …) - FAST, no delay ---
 	if hasActiveToolExecution(lines, 10) {
+		debugf("[StatusDebug] %s → BUSY (tool exec)", target)
 		return ActivityBusy
 	}
 
+	// --- Busy detection 3: braille spinner animation - SLOW, needs 2 captures ---
+	if isSpinnerAnimating(lines, patterns.Spinners, 20, target) {
+		debugf("[StatusDebug] %s → BUSY (spinner)", target)
+		return ActivityBusy
+	}
+
+	debugf("[StatusDebug] %s → IDLE", target)
 	return ActivityIdle
 }
 
-// checkClaudeWaiting checks for waiting patterns in Claude's UI structure
-// Uses separator lines to identify the input area and permission dialogs
+// checkClaudeWaiting checks for waiting patterns in Claude's UI structure.
+// Uses separator lines to identify the input area and permission dialogs.
+// Claude's permission dialogs always show separator lines, so we require
+// fresh separators to detect waiting. This prevents false positives from
+// old permission text lingering in scrollback history.
 func checkClaudeWaiting(lines []string, patterns AgentPatterns) bool {
 	// Find separator line positions
 	var separatorIndices []int
 	for idx, line := range lines {
 		cleanLine := strings.TrimSpace(stripANSIForDetect(line))
-		sepCount := strings.Count(cleanLine, "─") + strings.Count(cleanLine, "━")
+		sepCount := strings.Count(cleanLine, "─") + strings.Count(cleanLine, "━") + strings.Count(cleanLine, "╌")
 		if sepCount > 20 {
 			separatorIndices = append(separatorIndices, idx)
 		}
+	}
+
+	debugf("[WaitDebug] totalLines=%d separators=%d at=%v", len(lines), len(separatorIndices), separatorIndices)
+
+	// Claude's permission dialogs always have separator lines.
+	// No separators = not in a permission state, never waiting.
+	if len(separatorIndices) == 0 {
+		debugf("[WaitDebug] no separators → false")
+		return false
 	}
 
 	var checkLines []string
@@ -269,6 +310,24 @@ func checkClaudeWaiting(lines []string, patterns AgentPatterns) bool {
 	if len(separatorIndices) >= 2 {
 		topSepIdx := separatorIndices[len(separatorIndices)-2]
 		bottomSepIdx := separatorIndices[len(separatorIndices)-1]
+
+		// Check if separators are stale (from a previous turn).
+		// In normal state, only 0-3 lines below the bottom separator.
+		nonEmptyBelow := 0
+		for j := bottomSepIdx + 1; j < len(lines); j++ {
+			cl := strings.TrimSpace(stripANSIForDetect(lines[j]))
+			if cl != "" {
+				nonEmptyBelow++
+			}
+		}
+		debugf("[WaitDebug] 2+ seps: top=%d bottom=%d nonEmptyBelow=%d", topSepIdx, bottomSepIdx, nonEmptyBelow)
+		if nonEmptyBelow > 12 {
+			// Separators are stale - Claude moved past the permission dialog.
+			// Threshold is 12 to accommodate permission prompts with multiple options
+			// (e.g., "Yes" / "Yes, allow X from this project" / "No" + context lines)
+			debugf("[WaitDebug] stale separators → false")
+			return false
+		}
 
 		// Lines between separators (input area)
 		for idx := topSepIdx + 1; idx < bottomSepIdx; idx++ {
@@ -285,35 +344,59 @@ func checkClaudeWaiting(lines []string, patterns AgentPatterns) bool {
 				checkLines = append(checkLines, cleanLine)
 			}
 		}
-	} else if len(separatorIndices) == 1 {
-		// Permission dialog: only 1 separator, check lines below it
+	} else {
+		// 1 separator - check proximity (must be near bottom of output)
 		sepIdx := separatorIndices[0]
+		debugf("[WaitDebug] 1 sep at=%d distFromBottom=%d", sepIdx, len(lines)-sepIdx)
+		if sepIdx < len(lines)-15 {
+			// Separator is too far from bottom, likely stale from old content
+			debugf("[WaitDebug] 1 sep too far from bottom → false")
+			return false
+		}
+
+		// Permission dialog: check lines below separator
 		for idx := sepIdx + 1; idx < len(lines); idx++ {
 			cleanLine := strings.TrimSpace(stripANSIForDetect(lines[idx]))
 			if cleanLine != "" {
 				checkLines = append(checkLines, cleanLine)
 			}
 		}
-	} else {
-		// No separators - check last lines
-		for j := len(lines) - 1; j >= 0 && j >= len(lines)-10; j-- {
-			cleanLine := strings.TrimSpace(stripANSIForDetect(lines[j]))
-			if cleanLine != "" {
-				checkLines = append(checkLines, cleanLine)
-			}
-		}
 	}
+
+	debugf("[WaitDebug] checkLines(%d): %v", len(checkLines), truncateLines(checkLines, 5))
 
 	for _, line := range checkLines {
 		lineLower := strings.ToLower(line)
 		for _, pattern := range patterns.WaitingPatterns {
 			if strings.Contains(lineLower, pattern) {
+				debugf("[WaitDebug] MATCH pattern=%q in line=%q → true", pattern, truncStr(line, 80))
 				return true
 			}
 		}
 	}
 
+	debugf("[WaitDebug] no pattern match → false")
 	return false
+}
+
+// truncStr truncates a string for debug logging
+func truncStr(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "..."
+}
+
+// truncateLines returns first N lines for debug logging
+func truncateLines(lines []string, max int) []string {
+	if len(lines) <= max {
+		return lines
+	}
+	result := make([]string, max)
+	for i := 0; i < max; i++ {
+		result[i] = truncStr(lines[i], 60)
+	}
+	return append(result, fmt.Sprintf("...+%d more", len(lines)-max))
 }
 
 // detectGenericActivity checks last lines for waiting patterns,
@@ -372,7 +455,7 @@ func isSpinnerAnimating(lines []string, spinners []string, maxLines int, target 
 	}
 
 	// Spinner found - wait briefly and re-capture to verify animation
-	time.Sleep(150 * time.Millisecond)
+	time.Sleep(60 * time.Millisecond)
 
 	cmd := exec.Command("tmux", "capture-pane", "-t", target, "-p", "-S", "-50")
 	output, err := cmd.Output()
@@ -387,6 +470,25 @@ func isSpinnerAnimating(lines []string, spinners []string, maxLines int, target 
 	return spinnerLine2 != "" && spinnerLine2 != spinnerLine1
 }
 
+// hasEscToInterrupt checks if the Claude Code status bar shows "esc to interrupt"
+// which is a reliable indicator that Claude is actively processing.
+// Only checks the last few non-empty lines to avoid false positives from scrollback.
+func hasEscToInterrupt(lines []string) bool {
+	nonEmptyCount := 0
+	for j := len(lines) - 1; j >= 0 && nonEmptyCount < 5; j-- {
+		cleanLine := strings.TrimSpace(stripANSIForDetect(lines[j]))
+		if cleanLine == "" {
+			continue
+		}
+		nonEmptyCount++
+		lineLower := strings.ToLower(cleanLine)
+		if strings.Contains(lineLower, "esc to interrupt") {
+			return true
+		}
+	}
+	return false
+}
+
 // hasActiveToolExecution checks for active tool execution by looking for
 // lines starting with ⎿ (tool output prefix) and ending with … (ellipsis).
 // During execution: "⎿  Running…". After completion, results replace this.
@@ -398,6 +500,11 @@ func hasActiveToolExecution(lines []string, maxLines int) bool {
 			continue
 		}
 		nonEmptyCount++
+		// Stop at separator boundary - anything above is from a previous turn
+		sepCount := strings.Count(cleanLine, "─") + strings.Count(cleanLine, "━") + strings.Count(cleanLine, "╌")
+		if sepCount > 20 {
+			return false
+		}
 		if strings.HasPrefix(cleanLine, "⎿") && strings.HasSuffix(cleanLine, "…") {
 			return true
 		}
@@ -416,6 +523,11 @@ func hasActiveThinking(lines []string, maxLines int) bool {
 			continue
 		}
 		nonEmptyCount++
+		// Stop at separator boundary - anything above is from a previous turn
+		sepCount := strings.Count(cleanLine, "─") + strings.Count(cleanLine, "━") + strings.Count(cleanLine, "╌")
+		if sepCount > 20 {
+			return false
+		}
 		for _, indicator := range thinkingIndicators {
 			if strings.HasPrefix(cleanLine, indicator) && strings.Contains(cleanLine, "…") {
 				return true

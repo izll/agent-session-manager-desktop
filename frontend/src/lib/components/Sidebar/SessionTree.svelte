@@ -13,7 +13,9 @@
   } from '../../stores/sessions';
   import { onDestroy } from 'svelte';
   import { activities, getActivity } from '../../stores/activities';
-  import { statusLines, getStatusLine } from '../../stores/statusLines';
+  import { statusLines, spinnerTexts, tabStatuses, getStatusLine } from '../../stores/statusLines';
+  import { settings } from '../../stores/settings';
+  import { t } from '../../i18n';
 
   export let onNewSession: () => void;
   export let onNewGroup: () => void;
@@ -134,23 +136,23 @@
   })();
 </script>
 
-<div class="session-tree">
+<div class="session-tree" class:compact={$settings?.compactList}>
   <!-- Status Summary -->
   {#if $sessions.length > 0}
     <div class="status-summary">
-      <span class="status-item busy" title="Busy - working" class:dimmed={statusCounts.busy === 0}>
+      <span class="status-item busy" title={$t('sidebar.statusBusy')} class:dimmed={statusCounts.busy === 0}>
         <span class="status-dot"></span>
         <span class="status-count">{statusCounts.busy}</span>
       </span>
-      <span class="status-item waiting" title="Waiting for input" class:dimmed={statusCounts.waiting === 0}>
+      <span class="status-item waiting" title={$t('sidebar.statusWaiting')} class:dimmed={statusCounts.waiting === 0}>
         <span class="status-dot"></span>
         <span class="status-count">{statusCounts.waiting}</span>
       </span>
-      <span class="status-item idle" title="Idle - running" class:dimmed={statusCounts.idle === 0}>
+      <span class="status-item idle" title={$t('sidebar.statusIdle')} class:dimmed={statusCounts.idle === 0}>
         <span class="status-dot"></span>
         <span class="status-count">{statusCounts.idle}</span>
       </span>
-      <span class="status-item stopped" title="Stopped" class:dimmed={statusCounts.stopped === 0}>
+      <span class="status-item stopped" title={$t('sidebar.statusStopped')} class:dimmed={statusCounts.stopped === 0}>
         <span class="status-dot"></span>
         <span class="status-count">{statusCounts.stopped}</span>
       </span>
@@ -166,7 +168,7 @@
       </svg>
       <input
         type="text"
-        placeholder="Search sessions..."
+        placeholder={$t('sidebar.searchPlaceholder')}
         class="search-input"
         bind:value={$searchFilter}
       />
@@ -181,10 +183,10 @@
       <div class="section">
         <div class="section-header favorites">
           <span class="star">★</span>
-          Favorites
+          {$t('sidebar.favorites')}
         </div>
         {#each $favorites as session, i (session.id)}
-          <SessionItem {session} index={$sessions.findIndex(s => s.id === session.id)} activity={getActivity(session.id, $activities)} statusLine={getStatusLine(session.id, $statusLines)} on:drop={handleSessionDrop} />
+          <SessionItem {session} index={$sessions.findIndex(s => s.id === session.id)} activity={getActivity(session.id, $activities)} statusLine={getStatusLine(session.id, $statusLines)} spinnerText={$spinnerTexts[session.id] || ''} tabStatuses={$tabStatuses[session.id] || []} on:drop={handleSessionDrop} />
         {/each}
       </div>
     {/if}
@@ -197,7 +199,7 @@
         on:dragleave={handleUngroupedDragLeave}
         on:drop={handleUngroupedDrop}
       >
-        Sessions
+        {$t('sidebar.sessions')}
       </div>
     {/if}
 
@@ -214,7 +216,7 @@
     {#if $ungroupedSessions.length > 0}
       <div class="section">
         {#each $ungroupedSessions as session (session.id)}
-          <SessionItem {session} index={$sessions.findIndex(s => s.id === session.id)} activity={getActivity(session.id, $activities)} statusLine={getStatusLine(session.id, $statusLines)} on:drop={handleSessionDrop} />
+          <SessionItem {session} index={$sessions.findIndex(s => s.id === session.id)} activity={getActivity(session.id, $activities)} statusLine={getStatusLine(session.id, $statusLines)} spinnerText={$spinnerTexts[session.id] || ''} tabStatuses={$tabStatuses[session.id] || []} on:drop={handleSessionDrop} />
         {/each}
       </div>
     {/if}
@@ -225,9 +227,9 @@
         <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
           <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
         </svg>
-        <p>No sessions yet</p>
+        <p>{$t('sidebar.noSessions')}</p>
         <button class="create-first-btn" on:click={onNewSession}>
-          Create your first session
+          {$t('sidebar.createFirst')}
         </button>
       </div>
     {/if}
@@ -236,20 +238,20 @@
   <!-- Footer Buttons -->
   <div class="footer">
     <div class="footer-buttons">
-      <button class="new-btn session" on:click={onNewSession} title="New Session (n)">
+      <button class="new-btn session" on:click={onNewSession} title={$t('sidebar.newSession')}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
           <line x1="12" y1="5" x2="12" y2="19"/>
           <line x1="5" y1="12" x2="19" y2="12"/>
         </svg>
-        Session
+        {$t('sidebar.session')}
       </button>
-      <button class="new-btn group" on:click={onNewGroup} title="New Group (g)">
+      <button class="new-btn group" on:click={onNewGroup} title={$t('sidebar.newGroup')}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/>
         </svg>
-        Group
+        {$t('sidebar.group')}
       </button>
-      <button class="collapse-btn" on:click={onCollapse} title="Collapse sidebar">
+      <button class="collapse-btn" on:click={onCollapse} title={$t('sidebar.collapseSidebar')}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <polyline points="15 18 9 12 15 6"/>
         </svg>
@@ -539,5 +541,47 @@
     background: rgba(139, 92, 246, 0.15);
     border-color: rgba(139, 92, 246, 0.3);
     color: #a78bfa;
+  }
+
+  /* Compact mode */
+  .session-tree.compact .search-container {
+    padding: 8px 12px;
+  }
+
+  .session-tree.compact .search-input {
+    padding: 5px 10px 5px 30px;
+    font-size: 12px;
+  }
+
+  .session-tree.compact .status-summary {
+    padding: 5px 12px;
+    gap: 8px;
+  }
+
+  .session-tree.compact .status-item {
+    font-size: 11px;
+  }
+
+  .session-tree.compact .status-dot {
+    width: 6px;
+    height: 6px;
+  }
+
+  .session-tree.compact .section {
+    margin-bottom: 8px;
+  }
+
+  .session-tree.compact .section-header {
+    padding: 4px 10px;
+    font-size: 10px;
+  }
+
+  .session-tree.compact .footer {
+    padding: 8px 12px;
+  }
+
+  .session-tree.compact .new-btn {
+    padding: 7px 10px;
+    font-size: 11px;
   }
 </style>

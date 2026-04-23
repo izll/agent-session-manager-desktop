@@ -5,8 +5,37 @@
   import type { main } from '../../../../wailsjs/go/models';
   import { EventsEmit } from '../../../../wailsjs/runtime/runtime';
   import Select from '../common/Select.svelte';
+  import { t, loadTranslations } from '../../i18n';
 
   export let show = false;
+
+  const languageOptions = [
+    { value: 'en', label: 'English' },
+    { value: 'hu', label: 'Magyar' },
+    { value: 'de', label: 'Deutsch' },
+    { value: 'es', label: 'Español' },
+    { value: 'fr', label: 'Français' },
+    { value: 'pt-br', label: 'Português (Brasil)' },
+    { value: 'it', label: 'Italiano' },
+    { value: 'ru', label: 'Русский' },
+    { value: 'zh-cn', label: '简体中文' },
+    { value: 'ja', label: '日本語' },
+    { value: 'ko', label: '한국어' },
+    { value: 'tr', label: 'Türkçe' },
+    { value: 'pl', label: 'Polski' },
+    { value: 'nl', label: 'Nederlands' },
+    { value: 'cs', label: 'Čeština' },
+    { value: 'uk', label: 'Українська' },
+    { value: 'ar', label: 'العربية' },
+    { value: 'th', label: 'ภาษาไทย' },
+    { value: 'vi', label: 'Tiếng Việt' },
+    { value: 'sv', label: 'Svenska' },
+  ];
+
+  async function changeLanguage(lang: string) {
+    await loadTranslations(lang);
+    saveSettings({ language: lang });
+  }
 
   const dispatch = createEventDispatcher();
 
@@ -107,22 +136,22 @@
     if (audioTestStatus !== 'idle' && audioTestStatus !== 'done' && audioTestStatus !== 'error') return;
 
     audioTestStatus = 'recording';
-    audioTestMessage = 'Recording for 5 seconds...';
+    audioTestMessage = $t('settings.audioTestRecordingStart');
 
     try {
       // Countdown
       for (let i = 5; i > 0; i--) {
-        audioTestMessage = `Recording... ${i}s`;
+        audioTestMessage = $t('settings.audioTestRecording', { seconds: i });
         await new Promise(r => setTimeout(r, 1000));
       }
 
       audioTestStatus = 'playing';
-      audioTestMessage = 'Playing back...';
+      audioTestMessage = $t('settings.audioTestPlaying');
 
       await DictationService.AudioTest();
 
       audioTestStatus = 'done';
-      audioTestMessage = 'Test completed!';
+      audioTestMessage = $t('settings.audioTestDone');
 
       // Reset after 3 seconds
       setTimeout(() => {
@@ -131,7 +160,7 @@
       }, 3000);
     } catch (e) {
       audioTestStatus = 'error';
-      audioTestMessage = `Error: ${e}`;
+      audioTestMessage = $t('settings.audioTestError', { error: String(e) });
 
       setTimeout(() => {
         audioTestStatus = 'idle';
@@ -190,9 +219,9 @@
 
   function formatDeleteAction(action: string): string {
     switch (action) {
-      case 'buffer': return 'Clear current dictation';
-      case 'ctrl_backspace': return 'Delete last word (Ctrl+Backspace)';
-      case 'ctrl_alt_backspace': return 'Delete all (Ctrl+Alt+Backspace)';
+      case 'buffer': return $t('settings.deleteAction.buffer');
+      case 'ctrl_backspace': return $t('settings.deleteAction.ctrlBackspace');
+      case 'ctrl_alt_backspace': return $t('settings.deleteAction.ctrlAltBackspace');
       default: return action;
     }
   }
@@ -208,7 +237,7 @@
   >
     <div class="dialog-content">
       <div class="dialog-header">
-        <h2>Settings</h2>
+        <h2>{$t('settings.title')}</h2>
         <button class="close-btn" on:click={close}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <line x1="18" y1="6" x2="6" y2="18"/>
@@ -224,14 +253,14 @@
           class:active={activeTab === 'general'}
           on:click={() => activeTab = 'general'}
         >
-          General
+          {$t('settings.general')}
         </button>
         <button
           class="tab"
           class:active={activeTab === 'dictation'}
           on:click={() => activeTab = 'dictation'}
         >
-          Dictation
+          {$t('settings.dictation')}
         </button>
       </div>
 
@@ -239,12 +268,28 @@
         <!-- General Tab -->
         {#if activeTab === 'general'}
           <div class="settings-section">
-            <h3>Session List</h3>
+            <h3>{$t('settings.language')}</h3>
+
+            <div class="setting-item input-item">
+              <span class="setting-info">
+                <span class="setting-label">{$t('settings.language')}</span>
+                <span class="setting-desc">{$t('settings.languageDesc')}</span>
+              </span>
+              <Select
+                value={$settings.language || 'en'}
+                options={languageOptions}
+                on:change={(e) => changeLanguage(e.detail)}
+              />
+            </div>
+          </div>
+
+          <div class="settings-section">
+            <h3>{$t('settings.sessionList')}</h3>
 
             <label class="setting-item">
               <span class="setting-info">
-                <span class="setting-label">Show status lines</span>
-                <span class="setting-desc">Display activity text below session name</span>
+                <span class="setting-label">{$t('settings.showStatusLines')}</span>
+                <span class="setting-desc">{$t('settings.showStatusLinesDesc')}</span>
               </span>
               <button
                 class="toggle-btn"
@@ -259,8 +304,8 @@
 
             <label class="setting-item">
               <span class="setting-info">
-                <span class="setting-label">Show agent icons</span>
-                <span class="setting-desc">Display agent icon next to session name</span>
+                <span class="setting-label">{$t('settings.showAgentIcons')}</span>
+                <span class="setting-desc">{$t('settings.showAgentIconsDesc')}</span>
               </span>
               <button
                 class="toggle-btn"
@@ -275,8 +320,8 @@
 
             <label class="setting-item">
               <span class="setting-info">
-                <span class="setting-label">Compact list</span>
-                <span class="setting-desc">Reduce padding in session list</span>
+                <span class="setting-label">{$t('settings.compactList')}</span>
+                <span class="setting-desc">{$t('settings.compactListDesc')}</span>
               </span>
               <button
                 class="toggle-btn"
@@ -294,15 +339,15 @@
         <!-- Dictation Tab -->
         {#if activeTab === 'dictation'}
           {#if loading}
-            <div class="loading">Loading...</div>
+            <div class="loading">{$t('settings.loading')}</div>
           {:else if dictationSettings}
             <div class="settings-section">
-              <h3>Configuration</h3>
+              <h3>{$t('settings.configuration')}</h3>
 
               <label class="setting-item">
                 <span class="setting-info">
-                  <span class="setting-label">Enable Dictation</span>
-                  <span class="setting-desc">Use voice input with global hotkey</span>
+                  <span class="setting-label">{$t('settings.enableDictation')}</span>
+                  <span class="setting-desc">{$t('settings.enableDictationDesc')}</span>
                 </span>
                 <button
                   class="toggle-btn"
@@ -318,15 +363,15 @@
               {#if dictationSettings.enabled}
                 <div class="setting-item input-item">
                   <span class="setting-info">
-                    <span class="setting-label">Mode</span>
-                    <span class="setting-desc">Free: no API key needed, API/Streaming: requires API key</span>
+                    <span class="setting-label">{$t('settings.mode')}</span>
+                    <span class="setting-desc">{$t('settings.modeDesc')}</span>
                   </span>
                   <Select
                     value={dictationSettings.mode}
                     options={[
-                      { value: 'free', label: 'Free (No API key)' },
-                      { value: 'api', label: 'API (Batch)' },
-                      { value: 'streaming', label: 'Streaming (Real-time)' }
+                      { value: 'free', label: $t('settings.modeFree') },
+                      { value: 'api', label: $t('settings.modeApi') },
+                      { value: 'streaming', label: $t('settings.modeStreaming') }
                     ]}
                     on:change={(e) => updateDictation('mode', e.detail)}
                   />
@@ -335,14 +380,14 @@
                 {#if dictationSettings.mode !== 'free'}
                   <div class="setting-item input-item">
                     <span class="setting-info">
-                      <span class="setting-label">Google API Key</span>
-                      <span class="setting-desc">Required for API/Streaming mode</span>
+                      <span class="setting-label">{$t('settings.googleApiKey')}</span>
+                      <span class="setting-desc">{$t('settings.googleApiKeyDesc')}</span>
                     </span>
                     <input
                       type="password"
                       class="setting-input"
                       value={dictationSettings.googleApiKey}
-                      placeholder="Enter API key..."
+                      placeholder={$t('settings.googleApiKeyPlaceholder')}
                       on:change={(e) => updateDictation('googleApiKey', e.currentTarget.value)}
                     />
                   </div>
@@ -351,8 +396,8 @@
                 {#if dictationSettings.mode === 'streaming'}
                   <label class="setting-item">
                     <span class="setting-info">
-                      <span class="setting-label">Buffer Mode</span>
-                      <span class="setting-desc">Review and edit text before sending to terminal</span>
+                      <span class="setting-label">{$t('settings.bufferMode')}</span>
+                      <span class="setting-desc">{$t('settings.bufferModeDesc')}</span>
                     </span>
                     <button
                       class="toggle-btn"
@@ -368,8 +413,8 @@
                   {#if dictationSettings.bufferMode}
                     <label class="setting-item">
                       <span class="setting-info">
-                        <span class="setting-label">Close after send</span>
-                        <span class="setting-desc">Close buffer window and stop dictation after sending</span>
+                        <span class="setting-label">{$t('settings.closeAfterSend')}</span>
+                        <span class="setting-desc">{$t('settings.closeAfterSendDesc')}</span>
                       </span>
                       <button
                         class="toggle-btn"
@@ -386,8 +431,8 @@
 
                 <div class="setting-item input-item">
                   <span class="setting-info">
-                    <span class="setting-label">Language</span>
-                    <span class="setting-desc">Speech recognition language</span>
+                    <span class="setting-label">{$t('settings.dictLanguage')}</span>
+                    <span class="setting-desc">{$t('settings.dictLanguageDesc')}</span>
                   </span>
                   <Select
                     value={dictationSettings.language}
@@ -398,8 +443,8 @@
 
                 <div class="setting-item input-item">
                   <span class="setting-info">
-                    <span class="setting-label">Input Device</span>
-                    <span class="setting-desc">Microphone to use for recording</span>
+                    <span class="setting-label">{$t('settings.inputDevice')}</span>
+                    <span class="setting-desc">{$t('settings.inputDeviceDesc')}</span>
                   </span>
                   <Select
                     value={dictationSettings.inputDevice || ''}
@@ -410,8 +455,8 @@
 
                 <div class="setting-item hotkey-item">
                   <span class="setting-info">
-                    <span class="setting-label">Hotkey</span>
-                    <span class="setting-desc">Global shortcut to toggle dictation</span>
+                    <span class="setting-label">{$t('settings.hotkey')}</span>
+                    <span class="setting-desc">{$t('settings.hotkeyDesc')}</span>
                   </span>
                   <div class="hotkey-config">
                     <label class="modifier-checkbox">
@@ -451,8 +496,8 @@
 
                 <label class="setting-item">
                   <span class="setting-info">
-                    <span class="setting-label">Mute output during recording</span>
-                    <span class="setting-desc">Prevents audio feedback</span>
+                    <span class="setting-label">{$t('settings.muteOutput')}</span>
+                    <span class="setting-desc">{$t('settings.muteOutputDesc')}</span>
                   </span>
                   <button
                     class="toggle-btn"
@@ -467,8 +512,8 @@
 
                 <label class="setting-item">
                   <span class="setting-info">
-                    <span class="setting-label">Auto-stop on silence</span>
-                    <span class="setting-desc">Automatically stop recording after silence</span>
+                    <span class="setting-label">{$t('settings.autoStop')}</span>
+                    <span class="setting-desc">{$t('settings.autoStopDesc')}</span>
                   </span>
                   <button
                     class="toggle-btn"
@@ -484,8 +529,8 @@
                 {#if dictationSettings.autoStopOnSilence}
                   <div class="setting-item input-item">
                     <span class="setting-info">
-                      <span class="setting-label">Silence duration</span>
-                      <span class="setting-desc">Seconds of silence before auto-stop</span>
+                      <span class="setting-label">{$t('settings.silenceDuration')}</span>
+                      <span class="setting-desc">{$t('settings.silenceDurationDesc')}</span>
                     </span>
                     <input
                       type="number"
@@ -500,8 +545,8 @@
 
                   <div class="setting-item input-item">
                     <span class="setting-info">
-                      <span class="setting-label">Noise threshold</span>
-                      <span class="setting-desc">Filter out background noise (0-100%)</span>
+                      <span class="setting-label">{$t('settings.noiseThreshold')}</span>
+                      <span class="setting-desc">{$t('settings.noiseThresholdDesc')}</span>
                     </span>
                     <div class="slider-row">
                       <input
@@ -520,8 +565,8 @@
 
                 <label class="setting-item">
                   <span class="setting-info">
-                    <span class="setting-label">Enable logging</span>
-                    <span class="setting-desc">Save logs to file for debugging</span>
+                    <span class="setting-label">{$t('settings.enableLogging')}</span>
+                    <span class="setting-desc">{$t('settings.enableLoggingDesc')}</span>
                   </span>
                   <button
                     class="toggle-btn"
@@ -537,8 +582,8 @@
                 {#if dictationSettings.enableLogging}
                   <label class="setting-item">
                     <span class="setting-info">
-                      <span class="setting-label">Debug logging</span>
-                      <span class="setting-desc">Include detailed debug information</span>
+                      <span class="setting-label">{$t('settings.debugLogging')}</span>
+                      <span class="setting-desc">{$t('settings.debugLoggingDesc')}</span>
                     </span>
                     <button
                       class="toggle-btn"
@@ -554,8 +599,8 @@
 
                 <div class="setting-item audio-test-item">
                   <span class="setting-info">
-                    <span class="setting-label">Audio test</span>
-                    <span class="setting-desc">Test microphone (records 5s, plays back)</span>
+                    <span class="setting-label">{$t('settings.audioTest')}</span>
+                    <span class="setting-desc">{$t('settings.audioTestDesc')}</span>
                   </span>
                   <button
                     class="audio-test-btn"
@@ -569,7 +614,7 @@
                         <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
                         <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
                       </svg>
-                      Test
+                      {$t('settings.audioTestBtn')}
                     {:else if audioTestStatus === 'recording'}
                       <span class="recording-dot"></span>
                       {audioTestMessage}
@@ -598,8 +643,8 @@
 
             {#if dictationSettings.enabled}
               <div class="settings-section">
-                <h3>Punctuation Commands</h3>
-                <p class="section-desc">Say these words to insert punctuation</p>
+                <h3>{$t('settings.punctuationCommands')}</h3>
+                <p class="section-desc">{$t('settings.punctuationCommandsDesc')}</p>
                 <div class="commands-list">
                   {#each Object.entries(punctuationCommands) as [command, value]}
                     <div class="command-item">
@@ -612,8 +657,8 @@
               </div>
 
               <div class="settings-section">
-                <h3>Delete Commands</h3>
-                <p class="section-desc">Say these words to delete or undo</p>
+                <h3>{$t('settings.deleteCommands')}</h3>
+                <p class="section-desc">{$t('settings.deleteCommandsDesc')}</p>
                 <div class="commands-list">
                   {#each Object.entries(deleteCommands) as [command, action]}
                     <div class="command-item">
@@ -630,7 +675,7 @@
       </div>
 
       <div class="dialog-footer">
-        <span class="hint">Settings are saved automatically</span>
+        <span class="hint">{$t('settings.savedAutomatically')}</span>
       </div>
     </div>
   </div>

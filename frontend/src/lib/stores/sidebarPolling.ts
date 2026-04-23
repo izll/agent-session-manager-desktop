@@ -1,56 +1,33 @@
 import { activities } from './activities';
-import { statusLines } from './statusLines';
-import * as App from '../../../wailsjs/go/main/App';
+import { statusLines, spinnerTexts, tabStatuses } from './statusLines';
+import { EventsOn, EventsOff } from '../../../wailsjs/runtime/runtime';
 
-let pollInterval: ReturnType<typeof setInterval> | null = null;
-let isVisible = true;
+let listening = false;
+let cancelFn: (() => void) | null = null;
 
-async function loadSidebarUpdates() {
-  if (!isVisible) return;
-  try {
-    const data = await (App as any).GetSidebarUpdates();
-    if (data) {
-      activities.set(data.activities || {});
-      statusLines.set(data.statusLines || {});
-    }
-  } catch (e) {
-    // Fallback to separate calls if combined endpoint not available yet
-    try {
-      const [acts, lines] = await Promise.all([
-        App.GetActivities(),
-        App.GetStatusLines()
-      ]);
-      activities.set(acts as Record<string, string>);
-      statusLines.set(lines as Record<string, string>);
-    } catch (e2) {
-      console.error('Failed to load sidebar updates:', e2);
-    }
-  }
-}
-
-function handleVisibilityChange() {
-  isVisible = !document.hidden;
-  if (isVisible) {
-    loadSidebarUpdates();
+function handleUpdate(data: any) {
+  if (data) {
+    activities.set(data.activities || {});
+    statusLines.set(data.statusLines || {});
+    spinnerTexts.set(data.spinnerTexts || {});
+    tabStatuses.set(data.tabStatuses || {});
   }
 }
 
 export function startSidebarPolling() {
-  if (pollInterval) return;
+  if (listening) return;
+  listening = true;
 
-  document.addEventListener('visibilitychange', handleVisibilityChange);
-
-  // Initial load
-  loadSidebarUpdates();
-
-  // Single poll for both activities and status lines
-  pollInterval = setInterval(loadSidebarUpdates, 2000);
+  cancelFn = EventsOn('sidebar:update', handleUpdate);
 }
 
 export function stopSidebarPolling() {
-  if (pollInterval) {
-    clearInterval(pollInterval);
-    pollInterval = null;
+  if (cancelFn) {
+    cancelFn();
+    cancelFn = null;
   }
-  document.removeEventListener('visibilitychange', handleVisibilityChange);
+  if (listening) {
+    EventsOff('sidebar:update');
+    listening = false;
+  }
 }
