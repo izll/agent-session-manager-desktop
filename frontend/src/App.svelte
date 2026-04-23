@@ -136,7 +136,12 @@
     prevSelectedId = $selectedSessionId;
   }
 
-  // Global keyboard shortcut handler
+  // Global keyboard shortcut handler.
+  // All app shortcuts use Ctrl+Shift+<Letter> so they work everywhere —
+  // including while the terminal has focus — without clashing with tmux
+  // bindings (Ctrl+<x>) or shell bindings (Ctrl+N/P/etc.). The listener
+  // is registered in the capture phase so the terminal doesn't swallow
+  // these combos before we see them.
   function handleKeydown(e: KeyboardEvent) {
     // Close sidebar overlay on Escape
     if (e.key === 'Escape' && sidebarOverlayOpen) {
@@ -144,131 +149,100 @@
       return;
     }
 
-    // Don't handle shortcuts when typing in input fields or contenteditable
-    const target = e.target as HTMLElement;
-    if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
-      return;
-    }
-
-    // Don't handle shortcuts when any dialog is open (check for dialog-overlay in DOM)
+    // Don't handle shortcuts when any dialog is open
     const dialogOpen = document.querySelector('.dialog-overlay') !== null;
-    if (dialogOpen) {
-      return; // Let the dialog handle its own keyboard events
-    }
+    if (dialogOpen) return;
 
     // Don't handle shortcuts when dictation buffer panel is visible
-    if (document.querySelector('.dictation-buffer')) {
-      return;
-    }
+    if (document.querySelector('.dictation-buffer')) return;
 
-    // Ctrl+F for global search
-    if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
-      e.preventDefault();
-      showGlobalSearch = true;
-      return;
-    }
+    // Everything below requires Ctrl+Shift (or Cmd+Shift on macOS).
+    const mod = (e.ctrlKey || e.metaKey) && e.shiftKey;
 
-    // Ctrl+Up/Down for reordering sessions
-    if (e.ctrlKey && e.key === 'ArrowUp') {
-      e.preventDefault();
-      if ($selectedSessionId) {
-        reorderSession($selectedSessionId, -1);
-      }
-      return;
-    }
-    if (e.ctrlKey && e.key === 'ArrowDown') {
-      e.preventDefault();
-      if ($selectedSessionId) {
-        reorderSession($selectedSessionId, 1);
-      }
-      return;
-    }
+    // --- Navigation (work even inside input fields) ---
 
-    // Alt+Arrow Up/Down for session navigation (works even with terminal focus)
-    if (e.altKey && e.key === 'ArrowUp') {
+    // Ctrl+Shift+↑/↓ — session navigation
+    if (mod && e.key === 'ArrowUp') {
       e.preventDefault();
       selectPrevSession();
       return;
     }
-    if (e.altKey && e.key === 'ArrowDown') {
+    if (mod && e.key === 'ArrowDown') {
       e.preventDefault();
       selectNextSession();
       return;
     }
 
-    // Alt+F for search focus
-    if (e.altKey && e.key === 'f') {
+    // Alt+↑/↓ kept as an additional way to navigate (no modifier conflict
+    // with Ctrl+Shift+arrows some users map to word-wise selection).
+    if (e.altKey && !e.ctrlKey && !e.shiftKey && e.key === 'ArrowUp') {
       e.preventDefault();
-      const searchInput = document.querySelector('.search-input') as HTMLInputElement;
-      searchInput?.focus();
+      selectPrevSession();
+      return;
+    }
+    if (e.altKey && !e.ctrlKey && !e.shiftKey && e.key === 'ArrowDown') {
+      e.preventDefault();
+      selectNextSession();
       return;
     }
 
-    // n for new session
-    if (e.key === 'n' && !e.ctrlKey) {
-      e.preventDefault();
-      showNewSessionDialog = true;
-      return;
-    }
+    if (!mod) return;
 
-    // g for new group
-    if (e.key === 'g' && !e.ctrlKey) {
-      e.preventDefault();
-      showNewGroupDialog = true;
-      return;
-    }
+    // Normalise the letter — Ctrl+Shift+N gives e.key === 'N' (uppercase).
+    // e.code is layout-dependent; use the lowercased key instead.
+    const key = e.key.toLowerCase();
 
-    // * for toggle favorite
-    if (e.key === '*' || (e.key === '8' && e.shiftKey)) {
-      e.preventDefault();
-      if ($selectedSessionId) {
-        toggleFavorite($selectedSessionId);
-      }
-      return;
-    }
-
-    // s for start session
-    if (e.key === 's' && !e.ctrlKey) {
-      e.preventDefault();
-      handleStart();
-      return;
-    }
-
-    // x for stop session
-    if (e.key === 'x') {
-      e.preventDefault();
-      if ($selectedSession && $selectedSession.status === 'running') {
-        handleStop();
-      }
-      return;
-    }
-
-    // d for delete session
-    if (e.key === 'd' && !e.ctrlKey) {
-      e.preventDefault();
-      handleDelete();
-      return;
-    }
-
-    // ? for help
-    if (e.key === '?') {
-      e.preventDefault();
-      showHelpDialog = true;
-      return;
-    }
-
-    // u for update check
-    if (e.key === 'u' || e.key === 'U') {
-      e.preventDefault();
-      showUpdateDialog = true;
-      return;
-    }
-
-    // i for import sessions
-    if (e.key === 'i' || e.key === 'I') {
-      e.preventDefault();
-      showImportDialog = true;
-      return;
+    switch (key) {
+      case 'f': // global search
+        e.preventDefault();
+        showGlobalSearch = true;
+        return;
+      case 'n': // new session
+        e.preventDefault();
+        showNewSessionDialog = true;
+        return;
+      case 'g': // new group
+        e.preventDefault();
+        showNewGroupDialog = true;
+        return;
+      case 's': // start / resume selected
+        e.preventDefault();
+        handleStart();
+        return;
+      case 'x': // stop selected
+        e.preventDefault();
+        if ($selectedSession && $selectedSession.status === 'running') {
+          handleStop();
+        }
+        return;
+      case 'd': // delete selected
+        e.preventDefault();
+        handleDelete();
+        return;
+      case '8': // '*' on many layouts — toggle favorite
+        e.preventDefault();
+        if ($selectedSessionId) toggleFavorite($selectedSessionId);
+        return;
+      case 'h': // help
+        e.preventDefault();
+        showHelpDialog = true;
+        return;
+      case 'u': // update check
+        e.preventDefault();
+        showUpdateDialog = true;
+        return;
+      case 'i': // import sessions
+        e.preventDefault();
+        showImportDialog = true;
+        return;
+      case 'k': // reorder selected up
+        e.preventDefault();
+        if ($selectedSessionId) reorderSession($selectedSessionId, -1);
+        return;
+      case 'j': // reorder selected down
+        e.preventDefault();
+        if ($selectedSessionId) reorderSession($selectedSessionId, 1);
+        return;
     }
   }
 
@@ -282,7 +256,8 @@
   }
 
   onMount(async () => {
-    window.addEventListener('keydown', handleKeydown);
+    // Capture phase so the terminal (xterm) can't swallow Ctrl+Shift combos.
+    window.addEventListener('keydown', handleKeydown, true);
     window.addEventListener('terminal-nav', handleTerminalNav as EventListener);
 
     await Promise.all([
@@ -307,7 +282,7 @@
   });
 
   onDestroy(() => {
-    window.removeEventListener('keydown', handleKeydown);
+    window.removeEventListener('keydown', handleKeydown, true);
     window.removeEventListener('terminal-nav', handleTerminalNav as EventListener);
     stopSidebarPolling();
     EventsOff('dictation:state');

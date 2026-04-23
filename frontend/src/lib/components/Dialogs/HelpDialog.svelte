@@ -12,36 +12,35 @@
   }
 
   function handleKeydown(e: KeyboardEvent) {
-    if (e.key === 'Escape' || e.key === '?') {
+    if (e.key === 'Escape') {
       close();
     }
   }
 
   $: shortcuts = [
     { category: $t('help.navigation'), items: [
-      { key: '↑ / ↓', desc: $t('help.navSelectSession') },
-      { key: 'Alt+↑ / Alt+↓', desc: $t('help.navGlobalSession') },
-      { key: 'Ctrl+↑ / Ctrl+↓', desc: $t('help.navReorderSession') },
+      { key: 'Ctrl+Shift+↑ / ↓', desc: $t('help.navGlobalSession') },
+      { key: 'Alt+↑ / ↓', desc: $t('help.navGlobalSession') },
+      { key: 'Ctrl+Shift+K / J', desc: $t('help.navReorderSession') },
       { key: 'Ctrl+PgUp / PgDn', desc: $t('help.navSwitchTab') },
       { key: 'Enter', desc: $t('help.navAttach') },
     ]},
     { category: $t('help.sessionActions'), items: [
-      { key: 'n', desc: $t('help.actionNewSession') },
-      { key: 'g', desc: $t('help.actionNewGroup') },
-      { key: 's', desc: $t('help.actionStartSession') },
-      { key: 'x', desc: $t('help.actionStopSession') },
-      { key: 'd', desc: $t('help.actionDeleteSession') },
-      { key: '*', desc: $t('help.actionToggleFavorite') },
+      { key: 'Ctrl+Shift+N', desc: $t('help.actionNewSession') },
+      { key: 'Ctrl+Shift+G', desc: $t('help.actionNewGroup') },
+      { key: 'Ctrl+Shift+S', desc: $t('help.actionStartSession') },
+      { key: 'Ctrl+Shift+X', desc: $t('help.actionStopSession') },
+      { key: 'Ctrl+Shift+D', desc: $t('help.actionDeleteSession') },
+      { key: 'Ctrl+Shift+8', desc: $t('help.actionToggleFavorite') },
     ]},
     { category: $t('help.searchCategory'), items: [
-      { key: 'Ctrl+F', desc: $t('help.actionGlobalSearch') },
+      { key: 'Ctrl+Shift+F', desc: $t('help.actionGlobalSearch') },
       { key: '/', desc: $t('help.actionFilterSessions') },
-      { key: 'Alt+F', desc: $t('help.actionFocusSearch') },
     ]},
     { category: $t('help.other'), items: [
-      { key: 'u', desc: $t('help.actionCheckUpdates') },
-      { key: 'i', desc: $t('help.actionImportSessions') },
-      { key: '?', desc: $t('help.actionShowHelp') },
+      { key: 'Ctrl+Shift+H', desc: $t('help.actionShowHelp') },
+      { key: 'Ctrl+Shift+U', desc: $t('help.actionCheckUpdates') },
+      { key: 'Ctrl+Shift+I', desc: $t('help.actionImportSessions') },
       { key: 'Esc', desc: $t('help.actionCloseDialogs') },
     ]},
   ];
