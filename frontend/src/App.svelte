@@ -60,6 +60,10 @@
   let showResumeSessionPicker = false;
   let pendingResumeSession: Session | null = null;
   let pendingResumeWindowIdx: number | null = null; // non-null means tab-level resume
+  // Agent type to feed into the resume picker. For tab-level resumes this is
+  // the tab's own agent (might differ from the main session agent), otherwise
+  // it stays null and the dialog falls back to session.agent.
+  let pendingResumeAgent: string | null = null;
 
   // Track "any dialog open" to restore terminal focus after the last one closes.
   // Without this, closing a dialog leaves focus on the dialog's overlay/buttons,
@@ -406,9 +410,22 @@
     pendingResumeSession = $selectedSession;
     // Check if this is a tab-level resume (session running but tab stopped)
     if ($selectedSession.status === 'running') {
-      pendingResumeWindowIdx = get(selectedWindowIdx);
+      const winIdx = get(selectedWindowIdx);
+      pendingResumeWindowIdx = winIdx;
+      // Pick the agent of the tab being resumed, not the parent session.
+      // Otherwise a Codex tab inside a Claude session would list Claude
+      // conversations in the picker.
+      let agent: string | null = null;
+      if (winIdx === 0) {
+        agent = $selectedSession.agent;
+      } else if ($selectedSession.followedWindows) {
+        const fw = $selectedSession.followedWindows.find((f: any) => f.index === winIdx);
+        if (fw?.agent) agent = fw.agent;
+      }
+      pendingResumeAgent = agent;
     } else {
       pendingResumeWindowIdx = null;
+      pendingResumeAgent = null;
     }
     showResumeSessionPicker = true;
   }
@@ -442,6 +459,7 @@
     }
     pendingResumeSession = null;
     pendingResumeWindowIdx = null;
+    pendingResumeAgent = null;
   }
 
   function handleResumeRestartWithTabs() {
@@ -460,6 +478,7 @@
   function handleResumeCancel() {
     pendingResumeSession = null;
     pendingResumeWindowIdx = null;
+    pendingResumeAgent = null;
   }
 </script>
 
@@ -652,6 +671,7 @@
   <ResumeSessionPickerDialog
     bind:show={showResumeSessionPicker}
     session={pendingResumeSession}
+    agentOverride={pendingResumeAgent}
     on:select={handleResumeSessionSelect}
     on:cancel={handleResumeCancel}
   />

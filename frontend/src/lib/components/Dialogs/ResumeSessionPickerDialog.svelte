@@ -7,6 +7,11 @@
 
   export let show = false;
   export let session: Session | null = null;
+  // Optional overrides used when resuming a specific tab whose agent
+  // differs from the parent session's main agent (e.g. a Codex tab inside
+  // a Claude-led session). Defaults to the session's own values.
+  export let agentOverride: string | null = null;
+  export let pathOverride: string | null = null;
 
   const dispatch = createEventDispatcher<{
     select: { resumeId: string };
@@ -25,9 +30,13 @@
   let error = '';
   let lastLoadKey = '';
 
-  // Load sessions once per dialog open for a given session
+  // Load sessions once per dialog open for a given (session, agent override)
+  // pair. The override is part of the key so a Codex tab and a Claude main
+  // session don't collide in the cache.
   $: {
-    const key = show && session ? session.id : '';
+    const key = show && session
+      ? `${session.id}|${agentOverride ?? ''}|${pathOverride ?? ''}`
+      : '';
     if (key && key !== lastLoadKey) {
       lastLoadKey = key;
       loadSessions();
@@ -39,10 +48,13 @@
   async function loadSessions() {
     if (!session) return;
 
+    const agent = agentOverride || session.agent;
+    const path = pathOverride || session.path;
+
     isLoadingSessions = true;
     error = '';
     try {
-      const result = await App.GetResumeSessions(session.agent, session.path);
+      const result = await App.GetResumeSessions(agent, path);
       availableSessions = result || [];
       cursor = 0;
     } catch (e) {
