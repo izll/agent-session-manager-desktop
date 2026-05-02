@@ -87,7 +87,10 @@ var AgentConfigs = map[AgentType]AgentConfig{
 		Command:            "codex",
 		SupportsResume:     true,
 		SupportsAutoYes:    true,
-		AutoYesFlag:        "--full-auto",
+		// Codex CLI removed `--full-auto`. The closest replacement (skips
+		// all confirmations and runs commands without sandboxing) is
+		// `--dangerously-bypass-approvals-and-sandbox`.
+		AutoYesFlag:        "--dangerously-bypass-approvals-and-sandbox",
 		ResumeFlag:         "resume",
 		ResumeIsSubcommand: true,
 	},
