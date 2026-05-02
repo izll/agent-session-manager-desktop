@@ -472,13 +472,26 @@ func (a *App) StartSession(id string) error {
 }
 
 
-// StartSessionWithResume starts a session with resume
+// StartSessionWithResume starts a session with resume.
+// If the supplied resume ID no longer exists on disk (Claude/Codex deleted
+// the conversation file, moved machine, etc.), we drop it and start fresh
+// instead of letting the CLI boot into a "No conversation found" error.
 func (a *App) StartSessionWithResume(id, resumeID string) error {
 	inst, err := a.storage.GetInstance(id)
 	if err != nil {
 		return err
 	}
 	log.Printf("[StartSessionWithResume] id=%s agent=%s resumeID=%q", id, inst.Agent, resumeID)
+
+	if resumeID != "" && !session.ResumeIDExists(inst.Agent, resumeID) {
+		log.Printf("[StartSessionWithResume] resume ID %q no longer exists for agent=%s — starting fresh", resumeID, inst.Agent)
+		// Wipe persisted ID too — next start should also be clean.
+		if inst.ResumeSessionID == resumeID {
+			inst.ResumeSessionID = ""
+		}
+		resumeID = ""
+	}
+
 	if err := inst.StartWithResume(resumeID); err != nil {
 		return err
 	}
@@ -516,6 +529,37 @@ func (a *App) RestartTabWithResume(id string, windowIdx int, resumeId string) er
 	if err != nil {
 		return err
 	}
+
+	// Validate the resume ID exists for whichever agent owns this tab.
+	if resumeId != "" {
+		tabAgent := inst.Agent
+		if windowIdx != 0 {
+			for _, fw := range inst.FollowedWindows {
+				if fw.Index == windowIdx {
+					tabAgent = fw.Agent
+					break
+				}
+			}
+		}
+		if !session.ResumeIDExists(tabAgent, resumeId) {
+			log.Printf("[RestartTabWithResume] resume ID %q no longer exists for agent=%s — starting fresh", resumeId, tabAgent)
+			resumeId = ""
+			// Also clear any persisted ID for this tab so future starts don't try again.
+			if windowIdx == 0 {
+				if inst.ResumeSessionID == "" || inst.ResumeSessionID != "" {
+					inst.ResumeSessionID = ""
+				}
+			} else {
+				for i := range inst.FollowedWindows {
+					if inst.FollowedWindows[i].Index == windowIdx {
+						inst.FollowedWindows[i].ResumeSessionID = ""
+						break
+					}
+				}
+			}
+		}
+	}
+
 	if err := inst.RestartWindowWithResume(windowIdx, resumeId); err != nil {
 		return err
 	}

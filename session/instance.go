@@ -550,6 +550,14 @@ func (i *Instance) restoreFollowedWindows() {
 		var cmd *exec.Cmd
 		resumeID := fw.ResumeSessionID
 
+		// Drop the saved resume ID if it no longer exists on disk so the
+		// tab boots fresh instead of dying with "No conversation found".
+		if resumeID != "" && !ResumeIDExists(fw.Agent, resumeID) {
+			log.Printf("[restoreFollowedWindows] resume ID %q gone for agent=%s tab=%q — starting fresh", resumeID, fw.Agent, fw.Name)
+			resumeID = ""
+			fw.ResumeSessionID = ""
+		}
+
 		if fw.Agent == AgentTerminal {
 			// Terminal window - just create empty shell
 			cmd = exec.Command("tmux", "new-window", "-t", sessionName, "-c", i.Path, "-n", fw.Name)
