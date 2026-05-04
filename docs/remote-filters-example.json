@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "filters": {
+    "claude": {
+      "skip_contains": ["? for", "Context left", "accept edits"],
+      "skip_prefixes": ["╭", "╰", "> ", ">"],
+      "skip_exact": [">"],
+      "min_separators": 20
+    },
+    "codex": {
+      "skip_contains": [
+        "context left",
+        "? for",
+        "esc to interrupt",
+        "Implement {feature}",
+        "Find and fix a bug"
+      ],
+      "skip_prefixes": [
+        ">", "codex>", "›",
+        "╭", "╰", "│",
+        "Tip:",
+        "gpt-5", "gpt-4", "gpt-3",
+        "o1", "o3", "o4"
+      ],
+      "min_separators": 20
+    },
+    "gemini": {
+      "skip_contains": ["Type your message", "no sandbox", "/model", "Auto (Gemini"],
+      "skip_prefixes": ["╭", "╰", "│", ">", "~/", "~"],
+      "min_separators": 20
+    }
+  }
+}

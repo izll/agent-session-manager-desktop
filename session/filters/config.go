@@ -26,13 +26,27 @@ type AgentFilters map[string]*FilterConfig
 var loadedFilters AgentFilters
 var filtersLoaded bool
 
-// GetFiltersPath returns the path to the filters config file
+// GetFiltersPath returns the path to the user-local override filters file.
+// Highest precedence; lets a user tweak filters by hand without rebuilding.
 func GetFiltersPath() string {
 	homeDir, _ := os.UserHomeDir()
 	return filepath.Join(homeDir, ".config", "agent-session-manager", "filters.json")
 }
 
-// LoadFilters loads filter configurations from file
+// GetRemoteCachePath returns the on-disk cache for the remote filter config
+// fetched via the updater. Used as the middle layer of the priority stack.
+func GetRemoteCachePath() string {
+	homeDir, _ := os.UserHomeDir()
+	return filepath.Join(homeDir, ".cache", "agent-session-manager", "filters-remote.json")
+}
+
+// LoadFilters returns the merged filter set with this priority:
+//   1. User overrides (~/.config/agent-session-manager/filters.json)
+//   2. Cached remote bundle (~/.cache/agent-session-manager/filters-remote.json)
+//   3. Compiled-in defaults
+//
+// Each layer overrides the previous one per agent key, so a partial override
+// only changes that agent's filter — the rest fall through to the layer below.
 func LoadFilters() AgentFilters {
 	if filtersLoaded {
 		return loadedFilters
@@ -41,23 +55,51 @@ func LoadFilters() AgentFilters {
 	loadedFilters = getDefaultFilters()
 	filtersLoaded = true
 
-	data, err := os.ReadFile(GetFiltersPath())
-	if err != nil {
-		// No custom config, use defaults
-		return loadedFilters
+	// Layer 2: cached remote bundle.
+	if remote, ok := readFiltersFile(GetRemoteCachePath()); ok {
+		for agent, cfg := range remote {
+			loadedFilters[agent] = cfg
+		}
 	}
 
-	var customFilters AgentFilters
-	if err := json.Unmarshal(data, &customFilters); err != nil {
-		return loadedFilters
-	}
-
-	// Merge custom filters with defaults
-	for agent, config := range customFilters {
-		loadedFilters[agent] = config
+	// Layer 1: user override (highest priority).
+	if user, ok := readFiltersFile(GetFiltersPath()); ok {
+		for agent, cfg := range user {
+			loadedFilters[agent] = cfg
+		}
 	}
 
 	return loadedFilters
+}
+
+// readFiltersFile reads and unmarshals an AgentFilters JSON file.
+// Returns (nil, false) if the file is missing, oversized, or malformed —
+// the caller falls through to the next layer.
+func readFiltersFile(path string) (AgentFilters, bool) {
+	const maxBytes = 64 * 1024
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, false
+	}
+	if info.Size() > maxBytes {
+		return nil, false
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, false
+	}
+	var f AgentFilters
+	if err := json.Unmarshal(data, &f); err != nil {
+		return nil, false
+	}
+	return f, true
+}
+
+// ResetCache forces the next LoadFilters call to re-read every layer.
+// Intended for the remote updater to call after a successful refresh.
+func ResetCache() {
+	filtersLoaded = false
+	loadedFilters = nil
 }
 
 // SaveDefaultFilters saves the default filters to config file

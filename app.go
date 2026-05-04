@@ -16,6 +16,7 @@ import (
 
 	"asmgr-desktop/mcp"
 	"asmgr-desktop/session"
+	"asmgr-desktop/session/filters"
 	"asmgr-desktop/updater"
 
 	"github.com/creack/pty"
@@ -108,6 +109,11 @@ func (a *App) startup(ctx context.Context) {
 
 	// Start preview polling in background
 	go a.startPreviewPolling()
+
+	// Pull remote agent filters periodically. Hard-coded URL + host
+	// allowlist; refuses to run until session/filters/remote.go has a
+	// real RemoteFiltersURL set, so this is a no-op for now.
+	filters.StartRemoteUpdater(ctx)
 }
 
 // IsDevMode returns whether the app is running in dev mode
