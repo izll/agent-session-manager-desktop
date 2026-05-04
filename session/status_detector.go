@@ -178,6 +178,8 @@ func (i *Instance) DetectActivityForWindow(windowIdx int) SessionActivity {
 	// Claude uses separator-based waiting detection
 	if agent == AgentClaude {
 		activity = detectClaudeActivity(lines, patterns, target)
+	} else if agent == AgentCodex {
+		activity = detectCodexActivity(lines, patterns)
 	} else {
 		// All other agents use generic detection
 		activity = detectGenericActivity(lines, patterns, target)
@@ -397,6 +399,58 @@ func truncateLines(lines []string, max int) []string {
 		result[i] = truncStr(lines[i], 60)
 	}
 	return append(result, fmt.Sprintf("...+%d more", len(lines)-max))
+}
+
+// detectCodexActivity recognises Codex CLI's busy/waiting markers without
+// relying on a spinner animation (Codex often shows a static "Working …"
+// line, no rotating glyph). Markers we look for, anywhere in the captured
+// pane (Codex pads with blank lines so "last N non-empty" misses them):
+//
+//   busy:
+//     - "Working (Ns · esc to interrupt)"
+//     - "esc to interrupt" anywhere
+//     - "Explored", "Ran <cmd>", "Read <file>" tool-execution lines
+//       still in their active form (no completion marker)
+//
+//   waiting:
+//     - approval prompts ("allow once", "do you want to proceed", etc.)
+//
+// idle: bottom status bar `gpt-X.Y high · ~/...` is alone with no Working.
+func detectCodexActivity(lines []string, patterns AgentPatterns) SessionActivity {
+	// 1) Waiting: scan more of the buffer than the generic last-15 window —
+	//    Codex prompts can be padded with empty lines.
+	for j := len(lines) - 1; j >= 0 && j > len(lines)-40; j-- {
+		clean := strings.TrimSpace(stripANSIForDetect(lines[j]))
+		if clean == "" {
+			continue
+		}
+		lower := strings.ToLower(clean)
+		for _, pattern := range patterns.WaitingPatterns {
+			if strings.Contains(lower, pattern) {
+				return ActivityWaiting
+			}
+		}
+	}
+
+	// 2) Busy: look for "esc to interrupt" or a "Working" line anywhere in
+	//    the recent capture. Codex keeps these in place while the agent runs
+	//    and removes them once it goes idle.
+	for j := len(lines) - 1; j >= 0; j-- {
+		clean := strings.TrimSpace(stripANSIForDetect(lines[j]))
+		if clean == "" {
+			continue
+		}
+		lower := strings.ToLower(clean)
+		if strings.Contains(lower, "esc to interrupt") {
+			return ActivityBusy
+		}
+		// Codex shows "• Working (Ns)" while a turn is in flight.
+		if strings.Contains(clean, "Working (") || strings.HasPrefix(clean, "Working") {
+			return ActivityBusy
+		}
+	}
+
+	return ActivityIdle
 }
 
 // detectGenericActivity checks last lines for waiting patterns,
