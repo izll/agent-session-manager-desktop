@@ -158,8 +158,30 @@ func getDefaultFilters() AgentFilters {
 			MinSeparators: 20,
 		},
 		"codex": {
-			SkipContains:  []string{"context left", "? for"},
-			SkipPrefixes:  []string{">", "codex>", "›", "╭", "╰", "│"},
+			// Skip the bottom idle status bar ("gpt-5.5 high · ~/..."), the
+			// "Tip: ..." line, the placeholder example shown in the input
+			// area, and the "context left" / shortcut hint chrome.
+			SkipContains: []string{
+				"context left",
+				"? for",
+				"esc to interrupt",
+				"Implement {feature}",
+				"Find and fix a bug",
+			},
+			SkipPrefixes: []string{
+				">",
+				"codex>",
+				"›",
+				"╭", "╰", "│",
+				"Tip:",
+				// Idle status bar starts with the model id followed by " high · ".
+				// Match the common GPT-x.y prefixes Codex prints. New models can
+				// be added here as they ship.
+				"gpt-5",
+				"gpt-4",
+				"gpt-3",
+				"o1", "o3", "o4",
+			},
 			MinSeparators: 20,
 		},
 		"amazonq": {
