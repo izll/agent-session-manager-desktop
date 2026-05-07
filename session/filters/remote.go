@@ -20,6 +20,8 @@ import (
 // RemoteFiltersURL is the canonical location of the curated filter bundle.
 // It is hard-coded on purpose — accepting a URL from user config or env
 // would let a malicious actor redirect the loader to their own server.
+// In `-tags devremote` builds it can be set to a local test server (see
+// remote_devremote.go).
 //
 // TODO: replace with the real GitHub raw URL once the repo exists, e.g.
 //   https://raw.githubusercontent.com/<owner>/<repo>/main/filters/v1.json
@@ -28,10 +30,15 @@ var RemoteFiltersURL = ""
 // RemoteFiltersHostAllowlist limits which hosts the loader will accept,
 // even if RemoteFiltersURL is changed by a future release. Prevents an
 // unintentional typo from pointing the app at an arbitrary host.
+// `-tags devremote` builds add `127.0.0.1` and `localhost` for testing.
 var RemoteFiltersHostAllowlist = []string{
 	"raw.githubusercontent.com",
 	"objects.githubusercontent.com", // GitHub redirects raw.* there sometimes
 }
+
+// remoteTLSInsecure is true only in `-tags devremote` builds, to allow the
+// self-signed certificate of the local test server.
+var remoteTLSInsecure = false
 
 // SchemaVersion is the contract between this client and the published JSON.
 // The remote bundle MUST have a "schema_version" field that matches; any
@@ -134,14 +141,17 @@ func fetchRemoteFilters(ctx context.Context, raw string) (*remoteBundle, error) 
 	if u.Scheme != "https" {
 		return nil, errors.New("only https is allowed")
 	}
-	if !hostAllowed(u.Host) {
-		return nil, fmt.Errorf("host %q is not in the allowlist", u.Host)
+	if !hostAllowed(u.Hostname()) {
+		return nil, fmt.Errorf("host %q is not in the allowlist", u.Hostname())
 	}
 
 	client := &http.Client{
 		Timeout: remoteFetchTimeout,
 		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS12},
+			TLSClientConfig: &tls.Config{
+				MinVersion:         tls.VersionTLS12,
+				InsecureSkipVerify: remoteTLSInsecure, // dev override only
+			},
 		},
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, raw, nil)
