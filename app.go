@@ -1171,13 +1171,16 @@ func (a *App) SetExtraArgs(sessionID string, windowIdx int, extraArgs string) er
 	if err != nil {
 		return err
 	}
+	log.Printf("[SetExtraArgs] sessionID=%s windowIdx=%d newExtraArgs=%q", sessionID, windowIdx, extraArgs)
 	if windowIdx == 0 {
 		inst.ExtraArgs = extraArgs
 		return a.storage.UpdateInstance(inst)
 	}
 	for i := range inst.FollowedWindows {
 		if inst.FollowedWindows[i].Index == windowIdx {
+			oldVal := inst.FollowedWindows[i].ExtraArgs
 			inst.FollowedWindows[i].ExtraArgs = extraArgs
+			log.Printf("[SetExtraArgs] tab %d: old=%q -> new=%q", windowIdx, oldVal, extraArgs)
 			return a.storage.UpdateInstance(inst)
 		}
 	}

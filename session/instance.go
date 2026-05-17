@@ -881,7 +881,7 @@ func (i *Instance) RestartWindowWithResume(windowIdx int, resumeID string) error
 		return fmt.Errorf("window %d not found in followed windows", windowIdx)
 	}
 
-	log.Printf("[RestartWindow] found fw: index=%d agent=%s name=%q resumeID=%q stopped=%v", fw.Index, fw.Agent, fw.Name, fw.ResumeSessionID, fw.Stopped)
+	log.Printf("[RestartWindow] found fw: index=%d agent=%s name=%q resumeID=%q stopped=%v extraArgs=%q", fw.Index, fw.Agent, fw.Name, fw.ResumeSessionID, fw.Stopped, fw.ExtraArgs)
 
 	var agentCmd string
 	if fw.Agent == AgentTerminal {
