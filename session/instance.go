@@ -323,8 +323,9 @@ func CheckAgentCommand(inst *Instance) error {
 	var cmdToCheck string
 
 	if inst.Agent == AgentCustom {
-		// Extract the base command (first word) from custom command
-		parts := strings.Fields(inst.CustomCommand)
+		// Extract the base command (first token) from custom command,
+		// using the same quote-aware splitter the launcher uses.
+		parts := customCommandArgv(inst.CustomCommand)
 		if len(parts) > 0 {
 			cmdToCheck = parts[0]
 		}
@@ -368,16 +369,14 @@ func (i *Instance) StartWithResume(resumeID string) error {
 	if !sessionExists {
 		// Build command based on agent type
 		config := i.GetAgentConfig()
-		var agentCmd string
+		var argv []string // tmux command in argv form (no shell layer)
 		var cmdToCheck string
 
 		if i.Agent == AgentCustom {
-			// Use custom command directly
-			agentCmd = i.CustomCommand
-			// Extract the base command (first word) to check
-			parts := strings.Fields(i.CustomCommand)
-			if len(parts) > 0 {
-				cmdToCheck = parts[0]
+			// Use custom command directly, split into argv tokens.
+			argv = customCommandArgv(i.CustomCommand)
+			if len(argv) > 0 {
+				cmdToCheck = argv[0]
 			}
 		} else {
 			cmdToCheck = config.Command
@@ -431,11 +430,7 @@ func (i *Instance) StartWithResume(resumeID string) error {
 				}
 			}
 
-			agentCmd = config.Command + " " + strings.Join(args, " ")
-			// Append extra CLI arguments if specified
-			if i.ExtraArgs != "" {
-				agentCmd = agentCmd + " " + i.ExtraArgs
-			}
+			argv = buildAgentArgv(config.Command, args, i.ExtraArgs)
 		}
 
 		// Check if the command exists
@@ -445,9 +440,12 @@ func (i *Instance) StartWithResume(resumeID string) error {
 			}
 		}
 
-		// Create new tmux session
-		log.Printf("[StartWithResume] final command: tmux new-session -d -s %s -c %s %s", sessionName, i.Path, agentCmd)
-		cmd := exec.Command("tmux", "new-session", "-d", "-s", sessionName, "-c", i.Path, agentCmd)
+		// Create new tmux session. Pass the agent command as SEPARATE argv
+		// elements so tmux execs it directly instead of via `sh -c` — this
+		// is what makes ExtraArgs/CustomCommand shell-metachars inert.
+		log.Printf("[StartWithResume] final argv: tmux new-session -d -s %s -c %s -- %v", sessionName, i.Path, argv)
+		tmuxArgs := append([]string{"new-session", "-d", "-s", sessionName, "-c", i.Path}, argv...)
+		cmd := exec.Command("tmux", tmuxArgs...)
 		if err := cmd.Run(); err != nil {
 			return fmt.Errorf("failed to create tmux session: %w", err)
 		}
@@ -562,12 +560,12 @@ func (i *Instance) restoreFollowedWindows() {
 			// Terminal window - just create empty shell
 			cmd = exec.Command("tmux", "new-window", "-t", sessionName, "-c", i.Path, "-n", fw.Name)
 		} else {
-			// Agent window - build agent command
+			// Agent window - build agent command (argv form, no shell)
 			config := AgentConfigs[fw.Agent]
-			var agentCmd string
+			var argv []string
 
 			if fw.Agent == AgentCustom {
-				agentCmd = fw.CustomCommand
+				argv = customCommandArgv(fw.CustomCommand)
 			} else {
 				args := []string{}
 				autoYes := fw.AutoYes || i.AutoYes
@@ -597,18 +595,13 @@ func (i *Instance) restoreFollowedWindows() {
 						log.Printf("[restoreFollowedWindows] generated session-id=%s for tab %q agent=%s", resumeID, fw.Name, fw.Agent)
 					}
 				}
-				agentCmd = config.Command
-				if len(args) > 0 {
-					agentCmd = agentCmd + " " + strings.Join(args, " ")
-				}
-				// Append extra CLI arguments if specified
-				if fw.ExtraArgs != "" {
-					agentCmd = agentCmd + " " + fw.ExtraArgs
-				}
+				argv = buildAgentArgv(config.Command, args, fw.ExtraArgs)
 			}
 
-			// Create new window with agent command
-			cmd = exec.Command("tmux", "new-window", "-t", sessionName, "-c", i.Path, "-n", fw.Name, agentCmd)
+			// Create new window with the agent command as separate argv
+			// elements (tmux execs directly, no `sh -c`).
+			tmuxArgs := append([]string{"new-window", "-t", sessionName, "-c", i.Path, "-n", fw.Name}, argv...)
+			cmd = exec.Command("tmux", tmuxArgs...)
 		}
 
 		if err := cmd.Run(); err != nil {
@@ -810,7 +803,6 @@ func (i *Instance) RestartWindowWithResume(windowIdx int, resumeID string) error
 	if windowIdx == 0 {
 		// Main window: restart the main agent
 		config := AgentConfigs[i.Agent]
-		agentCmd := config.Command
 		args := []string{}
 		// Use provided resume ID or saved one
 		if resumeID == "" {
@@ -851,14 +843,10 @@ func (i *Instance) RestartWindowWithResume(windowIdx int, resumeID string) error
 				log.Printf("[RestartWindow] generated new session-id=%s for main window of session=%s", newID, i.ID)
 			}
 		}
-		if len(args) > 0 {
-			agentCmd = agentCmd + " " + strings.Join(args, " ")
-		}
-		if i.ExtraArgs != "" {
-			agentCmd = agentCmd + " " + i.ExtraArgs
-		}
-		log.Printf("[RestartWindow] win0 instance.ExtraArgs=%q final cmd: %s", i.ExtraArgs, agentCmd)
-		if err := exec.Command("tmux", "respawn-pane", "-k", "-t", target, agentCmd).Run(); err != nil {
+		argv := buildAgentArgv(config.Command, args, i.ExtraArgs)
+		log.Printf("[RestartWindow] win0 instance.ExtraArgs=%q final argv: %v", i.ExtraArgs, argv)
+		tmuxArgs := append([]string{"respawn-pane", "-k", "-t", target}, argv...)
+		if err := exec.Command("tmux", tmuxArgs...).Run(); err != nil {
 			return fmt.Errorf("failed to restart main window: %w", err)
 		}
 		i.MainWindowStopped = false
@@ -883,7 +871,7 @@ func (i *Instance) RestartWindowWithResume(windowIdx int, resumeID string) error
 
 	log.Printf("[RestartWindow] found fw: index=%d agent=%s name=%q resumeID=%q stopped=%v extraArgs=%q", fw.Index, fw.Agent, fw.Name, fw.ResumeSessionID, fw.Stopped, fw.ExtraArgs)
 
-	var agentCmd string
+	var argv []string
 	if fw.Agent == AgentTerminal {
 		// Use $SHELL or fallback to bash — respawn-pane without a command
 		// re-runs the pane's original start command, which is "exit 0" for stopped tabs
@@ -891,12 +879,11 @@ func (i *Instance) RestartWindowWithResume(windowIdx int, resumeID string) error
 		if shell == "" {
 			shell = "bash"
 		}
-		agentCmd = shell
+		argv = []string{shell}
 	} else if fw.Agent == AgentCustom {
-		agentCmd = fw.CustomCommand
+		argv = customCommandArgv(fw.CustomCommand)
 	} else {
 		config := AgentConfigs[fw.Agent]
-		agentCmd = config.Command
 		args := []string{}
 		autoYes := fw.AutoYes || i.AutoYes
 		// Use provided resume ID, or saved one from the tab
@@ -933,24 +920,21 @@ func (i *Instance) RestartWindowWithResume(windowIdx int, resumeID string) error
 				log.Printf("[RestartWindow] generated new session-id=%s for tab %s/%d", newID, i.ID, fw.Index)
 			}
 		}
-		if len(args) > 0 {
-			agentCmd = agentCmd + " " + strings.Join(args, " ")
-		}
-		if fw.ExtraArgs != "" {
-			agentCmd = agentCmd + " " + fw.ExtraArgs
-		}
+		argv = buildAgentArgv(config.Command, args, fw.ExtraArgs)
 	}
 
 	// Ensure we always have an explicit command — respawn-pane without one
 	// re-runs the pane's original start command ("exit 0" for stopped tabs)
-	if agentCmd == "" {
-		agentCmd = os.Getenv("SHELL")
-		if agentCmd == "" {
-			agentCmd = "bash"
+	if len(argv) == 0 {
+		shell := os.Getenv("SHELL")
+		if shell == "" {
+			shell = "bash"
 		}
+		argv = []string{shell}
 	}
-	log.Printf("[RestartWindow] followed win final cmd: tmux respawn-pane -k -t %s %s", target, agentCmd)
-	if err := exec.Command("tmux", "respawn-pane", "-k", "-t", target, agentCmd).Run(); err != nil {
+	log.Printf("[RestartWindow] followed win final argv: tmux respawn-pane -k -t %s -- %v", target, argv)
+	tmuxArgs := append([]string{"respawn-pane", "-k", "-t", target}, argv...)
+	if err := exec.Command("tmux", tmuxArgs...).Run(); err != nil {
 		return fmt.Errorf("failed to restart window %d: %w", windowIdx, err)
 	}
 
@@ -1293,13 +1277,13 @@ func (i *Instance) NewAgentWindow(name string, agent AgentType, customCmd string
 
 	sessionName := i.TmuxSessionName()
 
-	// Build agent command based on agent type
+	// Build agent command based on agent type (argv form, no shell)
 	config := AgentConfigs[agent]
-	var agentCmd string
+	var argv []string
 	var generatedSessionID string
 
 	if agent == AgentCustom {
-		agentCmd = customCmd
+		argv = customCommandArgv(customCmd)
 	} else {
 		args := []string{}
 		// Use instance's AutoYes setting for the new agent too
@@ -1311,18 +1295,13 @@ func (i *Instance) NewAgentWindow(name string, agent AgentType, customCmd string
 			generatedSessionID = uuid.New().String()
 			args = append(args, config.SessionIDFlag, generatedSessionID)
 		}
-		agentCmd = config.Command
-		if len(args) > 0 {
-			agentCmd = agentCmd + " " + strings.Join(args, " ")
-		}
-		// Append extra CLI arguments if specified
-		if extraArgs != "" {
-			agentCmd = agentCmd + " " + extraArgs
-		}
+		argv = buildAgentArgv(config.Command, args, extraArgs)
 	}
 
-	// Create new window with agent command
-	cmd := exec.Command("tmux", "new-window", "-t", sessionName, "-c", i.Path, "-n", name, agentCmd)
+	// Create new window with the agent command as separate argv elements
+	// (tmux execs directly, no `sh -c`).
+	tmuxArgs := append([]string{"new-window", "-t", sessionName, "-c", i.Path, "-n", name}, argv...)
+	cmd := exec.Command("tmux", tmuxArgs...)
 	if err := cmd.Run(); err != nil {
 		return -1, err
 	}
@@ -1410,10 +1389,11 @@ func (i *Instance) NewForkedTab(name string, sessionID string) error {
 	// Add resume flag with forked session ID
 	args = append(args, config.ResumeFlag, sessionID)
 
-	agentCmd := config.Command + " " + strings.Join(args, " ")
+	argv := buildAgentArgv(config.Command, args, "")
 
-	// Create new window with forked agent
-	cmd := exec.Command("tmux", "new-window", "-t", sessionName, "-c", i.Path, "-n", name, agentCmd)
+	// Create new window with forked agent (argv form, no shell layer).
+	tmuxArgs := append([]string{"new-window", "-t", sessionName, "-c", i.Path, "-n", name}, argv...)
+	cmd := exec.Command("tmux", tmuxArgs...)
 	if err := cmd.Run(); err != nil {
 		return err
 	}
