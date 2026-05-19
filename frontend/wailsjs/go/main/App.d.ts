@@ -91,6 +91,8 @@ export function GetTasksByStatus(arg1:string,arg2:string):Promise<Array<main.Tas
 
 export function GetTerminalWSPort():Promise<number>;
 
+export function GetTerminalWSToken():Promise<string>;
+
 export function GetWindowAutoYes(arg1:string,arg2:number):Promise<boolean>;
 
 export function GetWindowList(arg1:string):Promise<Array<session.WindowInfo>>;

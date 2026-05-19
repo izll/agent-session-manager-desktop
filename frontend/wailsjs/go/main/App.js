@@ -178,6 +178,10 @@ export function GetTerminalWSPort() {
   return window['go']['main']['App']['GetTerminalWSPort']();
 }
 
+export function GetTerminalWSToken() {
+  return window['go']['main']['App']['GetTerminalWSToken']();
+}
+
 export function GetWindowAutoYes(arg1, arg2) {
   return window['go']['main']['App']['GetWindowAutoYes'](arg1, arg2);
 }

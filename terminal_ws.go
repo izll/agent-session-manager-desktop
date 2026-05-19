@@ -1,11 +1,15 @@
 package main
 
 import (
+	"crypto/rand"
+	"crypto/subtle"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"sync"
@@ -21,18 +25,45 @@ import (
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  32768,
 	WriteBufferSize: 32768,
-	CheckOrigin: func(r *http.Request) bool {
-		return true // Allow all origins for local dev
-	},
+	CheckOrigin:     checkTerminalOrigin,
+}
+
+// checkTerminalOrigin only permits the Wails webview itself. The webview
+// either sends no Origin header or one under the wails:// scheme / the
+// wails.localhost asset host. A real browser tab on any site sends an
+// http(s):// Origin with a real host — those are rejected so a visited
+// web page cannot hijack the terminal socket (CSWSH). The per-launch
+// token (checked in handleTerminal) is the primary defense; this is
+// belt-and-braces and also blocks the no-token-needed browser probe.
+func checkTerminalOrigin(r *http.Request) bool {
+	origin := r.Header.Get("Origin")
+	if origin == "" {
+		return true // native webview / non-browser client
+	}
+	u, err := url.Parse(origin)
+	if err != nil {
+		return false
+	}
+	switch u.Scheme {
+	case "wails":
+		return true
+	case "http", "https":
+		// Wails serves assets from wails.localhost; allow only that host.
+		h := u.Hostname()
+		return h == "wails.localhost" || h == "localhost" || h == "127.0.0.1"
+	default:
+		return false
+	}
 }
 
 // TerminalServer handles WebSocket connections for terminal I/O
 type TerminalServer struct {
-	storage        *session.Storage
-	port           int
-	mu             sync.RWMutex
-	conns          map[string]*termConn
-	typingSignal   *int64 // pointer to App.lastTypingSignal for zero-overhead typing detection
+	storage      *session.Storage
+	port         int
+	authToken    string // per-launch secret; required on every /terminal connect
+	mu           sync.RWMutex
+	conns        map[string]*termConn
+	typingSignal *int64 // pointer to App.lastTypingSignal for zero-overhead typing detection
 }
 
 type termConn struct {
@@ -89,13 +120,28 @@ func (ts *TerminalServer) SendBackspace(sessionID string, windowIdx int, count i
 	return err
 }
 
-// NewTerminalServer creates a new terminal WebSocket server
+// NewTerminalServer creates a new terminal WebSocket server with a fresh
+// random auth token. The token lives only in memory for this process, so
+// other local processes / visited web pages cannot guess or read it.
 func NewTerminalServer(storage *session.Storage, port int) *TerminalServer {
-	return &TerminalServer{
-		storage: storage,
-		port:    port,
-		conns:   make(map[string]*termConn),
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		// Extremely unlikely; fall back to a time-seeded value so we never
+		// run with an empty (always-accept) token.
+		b = []byte(fmt.Sprintf("fallback-%d", time.Now().UnixNano()))
 	}
+	return &TerminalServer{
+		storage:   storage,
+		port:      port,
+		authToken: hex.EncodeToString(b),
+		conns:     make(map[string]*termConn),
+	}
+}
+
+// AuthToken returns the per-launch terminal auth token. Exposed to the
+// frontend via a Wails-bound App method so the WebSocket URL can carry it.
+func (ts *TerminalServer) AuthToken() string {
+	return ts.authToken
 }
 
 // Start starts the WebSocket server.
@@ -151,6 +197,19 @@ func (ts *TerminalServer) Start() error {
 func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request) {
 	sessionID := r.URL.Query().Get("session")
 	windowIdx := r.URL.Query().Get("window")
+
+	// Require the per-launch token before doing anything else (and before
+	// the WS upgrade). Constant-time compare to avoid a timing oracle.
+	// This is the primary defense against CSWSH and other local processes:
+	// neither a visited web page nor another process can read the in-memory
+	// token, so they cannot forge a valid connection.
+	token := r.URL.Query().Get("token")
+	if ts.authToken == "" ||
+		subtle.ConstantTimeCompare([]byte(token), []byte(ts.authToken)) != 1 {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		log.Printf("[terminal] rejected connection: bad/missing token (origin=%q)", r.Header.Get("Origin"))
+		return
+	}
 
 	if sessionID == "" {
 		http.Error(w, "session required", http.StatusBadRequest)
@@ -249,17 +308,28 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 		dataCh := make(chan []byte, 64)
 		errCh := make(chan error, 1)
 
-		// PTY reader goroutine
+		// PTY reader goroutine. The send must select on tc.done as well:
+		// when the connection closes the consumer loop below returns, and
+		// if dataCh happens to be full at that moment a plain `dataCh <-`
+		// would block this goroutine (and its buffer) forever — a leak that
+		// accumulates across reconnects.
 		go func() {
 			for {
 				n, err := ptmx.Read(buf)
 				if n > 0 {
 					chunk := make([]byte, n)
 					copy(chunk, buf[:n])
-					dataCh <- chunk
+					select {
+					case dataCh <- chunk:
+					case <-tc.done:
+						return
+					}
 				}
 				if err != nil {
-					errCh <- err
+					select {
+					case errCh <- err:
+					case <-tc.done:
+					}
 					return
 				}
 			}
