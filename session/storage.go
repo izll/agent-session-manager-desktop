@@ -392,26 +392,55 @@ func (s *Storage) ImportDefaultSessions(projectID string) (int, error) {
 	return len(defaultInstances), nil
 }
 
+// refreshInstanceStatuses updates each instance's Status by probing tmux,
+// concurrently and WITHOUT holding s.mu. Called by the public Load* entry
+// points after the lock is released so the per-instance `tmux has-session`
+// subprocesses don't serialize the storage mutex.
+func refreshInstanceStatuses(instances []*Instance) {
+	if len(instances) == 0 {
+		return
+	}
+	var wg sync.WaitGroup
+	for _, inst := range instances {
+		wg.Add(1)
+		go func(in *Instance) {
+			defer wg.Done()
+			in.UpdateStatus()
+		}(inst)
+	}
+	wg.Wait()
+}
+
 func (s *Storage) Load() ([]*Instance, error) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	instances, _, _, err := s.loadAllWithSettingsLocked()
+	s.mu.Unlock()
+	if err == nil {
+		refreshInstanceStatuses(instances)
+	}
 	return instances, err
 }
 
 // LoadAll loads instances, groups, and settings
 func (s *Storage) LoadAll() ([]*Instance, []*Group, error) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	instances, groups, _, err := s.loadAllWithSettingsLocked()
+	s.mu.Unlock()
+	if err == nil {
+		refreshInstanceStatuses(instances)
+	}
 	return instances, groups, err
 }
 
 // LoadAllWithSettings loads instances, groups, and settings
 func (s *Storage) LoadAllWithSettings() ([]*Instance, []*Group, *Settings, error) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.loadAllWithSettingsLocked()
+	instances, groups, settings, err := s.loadAllWithSettingsLocked()
+	s.mu.Unlock()
+	if err == nil {
+		refreshInstanceStatuses(instances)
+	}
+	return instances, groups, settings, err
 }
 
 // loadAllWithSettingsLocked is the internal version that assumes the mutex is held.
@@ -429,10 +458,15 @@ func (s *Storage) loadAllWithSettingsLocked() ([]*Instance, []*Group, *Settings,
 		return nil, nil, nil, fmt.Errorf("failed to parse config file: %w", err)
 	}
 
-	// Update status for all instances
-	for _, instance := range storageData.Instances {
-		instance.UpdateStatus()
-	}
+	// NOTE: deliberately NOT calling instance.UpdateStatus() here.
+	// UpdateStatus() shells out to `tmux has-session` per instance, and this
+	// function runs with s.mu held — so every load (1Hz sidebar poll, every
+	// terminal connect, every RPC mutate) would serialize on the storage
+	// mutex while spawning N tmux subprocesses, stalling the UI.
+	// Status is refreshed concurrently AFTER the lock is released by the
+	// public Load* entry points via refreshInstanceStatuses(). Internal
+	// callers that immediately re-persist don't need live status anyway —
+	// they keep the persisted value.
 
 	if storageData.Groups == nil {
 		storageData.Groups = []*Group{}
