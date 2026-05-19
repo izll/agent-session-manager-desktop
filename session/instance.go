@@ -857,7 +857,7 @@ func (i *Instance) RestartWindowWithResume(windowIdx int, resumeID string) error
 		if i.ExtraArgs != "" {
 			agentCmd = agentCmd + " " + i.ExtraArgs
 		}
-		log.Printf("[RestartWindow] win0 final cmd: %s", agentCmd)
+		log.Printf("[RestartWindow] win0 instance.ExtraArgs=%q final cmd: %s", i.ExtraArgs, agentCmd)
 		if err := exec.Command("tmux", "respawn-pane", "-k", "-t", target, agentCmd).Run(); err != nil {
 			return fmt.Errorf("failed to restart main window: %w", err)
 		}

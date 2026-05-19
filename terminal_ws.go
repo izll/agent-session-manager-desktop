@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -97,15 +98,48 @@ func NewTerminalServer(storage *session.Storage, port int) *TerminalServer {
 	}
 }
 
-// Start starts the WebSocket server
+// Start starts the WebSocket server.
+//
+// It binds the listener synchronously so a port conflict is detected before
+// the frontend tries to connect. If the preferred port is taken (e.g. another
+// asmgr-desktop instance is already running), it walks upward to the next
+// free port instead of silently failing — which previously left the terminal
+// pane blank with no obvious cause. The actually-bound port is stored back
+// in ts.port so GetPort() (exposed to the frontend) returns the right value.
 func (ts *TerminalServer) Start() error {
 	http.HandleFunc("/terminal", ts.handleTerminal)
 
-	addr := fmt.Sprintf("127.0.0.1:%d", ts.port)
-	log.Printf("Terminal WebSocket server starting on %s", addr)
+	const maxAttempts = 20
+	requested := ts.port
+	var ln net.Listener
+	var lastErr error
+
+	for p := requested; p < requested+maxAttempts; p++ {
+		addr := fmt.Sprintf("127.0.0.1:%d", p)
+		l, err := net.Listen("tcp", addr)
+		if err != nil {
+			lastErr = err
+			log.Printf("Terminal server: port %d unavailable (%v), trying next", p, err)
+			continue
+		}
+		ln = l
+		ts.port = p
+		break
+	}
+
+	if ln == nil {
+		return fmt.Errorf("terminal server: no free port in range %d-%d: %w",
+			requested, requested+maxAttempts-1, lastErr)
+	}
+
+	if ts.port != requested {
+		log.Printf("Terminal WebSocket server bound to fallback port %d (preferred %d was busy)", ts.port, requested)
+	} else {
+		log.Printf("Terminal WebSocket server starting on 127.0.0.1:%d", ts.port)
+	}
 
 	go func() {
-		if err := http.ListenAndServe(addr, nil); err != nil {
+		if err := http.Serve(ln, nil); err != nil {
 			log.Printf("Terminal server error: %v", err)
 		}
 	}()

@@ -4,6 +4,7 @@ import (
 	"context"
 	"embed"
 	_ "embed"
+	"log"
 	"os"
 
 	"github.com/wailsapp/wails/v2"
@@ -20,6 +21,13 @@ var assets embed.FS
 var icon []byte
 
 func main() {
+	// Route logs: full output to a per-launch log file, only whitelisted
+	// prefixes mirrored to stderr (keeps the console readable).
+	if lf := setupLogging(); lf != nil {
+		defer lf.Close()
+	}
+	log.SetOutput(logOut)
+
 	// Create an instance of the app structure
 	app := NewApp()
 

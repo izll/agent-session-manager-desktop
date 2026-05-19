@@ -1,5 +1,18 @@
 import { Terminal, type IDisposable } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
+import { GetTerminalWSPort } from '../../../wailsjs/go/main/App';
+
+// The backend may bind a fallback port if 9753 is taken (e.g. a second
+// instance running alongside). Resolve it once and cache it.
+let wsPortPromise: Promise<number> | null = null;
+function getTerminalWSPort(): Promise<number> {
+  if (!wsPortPromise) {
+    wsPortPromise = GetTerminalWSPort()
+      .then((p) => (typeof p === 'number' && p > 0 ? p : 9753))
+      .catch(() => 9753);
+  }
+  return wsPortPromise;
+}
 
 export interface TerminalInstance {
   terminal: Terminal;
@@ -150,8 +163,9 @@ export async function attachToSession(
   }
 
   try {
-    // WebSocket port (hardcoded for now, matches terminal_ws.go)
-    const port = 9753;
+    // Ask the backend which port it actually bound (may differ from 9753
+    // if a fallback was used because the preferred port was busy).
+    const port = await getTerminalWSPort();
     const wsUrl = `ws://127.0.0.1:${port}/terminal?session=${sessionId}&window=${windowIdx}`;
 
     const ws = new WebSocket(wsUrl);
