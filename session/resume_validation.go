@@ -5,8 +5,33 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
+
+// safeResumeIDRe matches the only shapes Claude/Codex/etc. ever use for a
+// session/resume ID: UUIDs and similar opaque tokens. Everything is built
+// from [A-Za-z0-9._-]; notably it forbids whitespace, quotes, ';', '|',
+// '$', '`', '&', '(', ')' and path separators.
+//
+// This matters because a resume ID is not always typed by the user — it is
+// also harvested from /proc/<pid>/cmdline of the process running inside an
+// agent's tmux pane (getClaudeSessionIDFromTmux*). A compromised/hostile
+// agent could spawn a child with a crafted --session-id, and that string
+// would later be concatenated into a `tmux respawn-pane ... <cmd>` shell
+// string. Rejecting anything that isn't this safe shape closes that
+// agent-to-host command-injection vector cheaply.
+var safeResumeIDRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
+
+// IsSafeResumeID reports whether resumeID is safe to place on a command
+// line. Empty is considered "safe" (means: no resume) so callers can use
+// it as a gate without special-casing the empty string.
+func IsSafeResumeID(resumeID string) bool {
+	if resumeID == "" {
+		return true
+	}
+	return safeResumeIDRe.MatchString(resumeID)
+}
 
 // ResumeIDExists reports whether a saved resume session ID still exists on disk.
 // We check this before invoking `claude --resume <id>` or `codex resume <id>`,
@@ -19,6 +44,12 @@ import (
 // don't break their existing flow.
 func ResumeIDExists(agent AgentType, resumeID string) bool {
 	if resumeID == "" {
+		return false
+	}
+	// A syntactically unsafe ID can never be a legitimate on-disk session
+	// and must never reach a command line — treat it as "does not exist"
+	// so callers fall back to a clean start.
+	if !IsSafeResumeID(resumeID) {
 		return false
 	}
 	switch agent {

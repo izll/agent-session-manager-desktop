@@ -489,6 +489,17 @@ func (a *App) StartSessionWithResume(id, resumeID string) error {
 	}
 	log.Printf("[StartSessionWithResume] id=%s agent=%s resumeID=%q", id, inst.Agent, resumeID)
 
+	// Hard reject any resume ID that isn't a safe shape, regardless of agent
+	// (ResumeIDExists only file-checks Claude/Codex and returns true for
+	// others). This stops a crafted ID from reaching the tmux command line.
+	if resumeID != "" && !session.IsSafeResumeID(resumeID) {
+		log.Printf("[StartSessionWithResume] rejected unsafe resumeID=%q — starting fresh", resumeID)
+		resumeID = ""
+		if !session.IsSafeResumeID(inst.ResumeSessionID) {
+			inst.ResumeSessionID = ""
+		}
+	}
+
 	if resumeID != "" && !session.ResumeIDExists(inst.Agent, resumeID) {
 		log.Printf("[StartSessionWithResume] resume ID %q no longer exists for agent=%s — starting fresh", resumeID, inst.Agent)
 		// Wipe persisted ID too — next start should also be clean.
@@ -701,8 +712,17 @@ func getClaudeSessionIDFromTmuxWindow(tmuxSession string, windowIdx int) string 
 		args := strings.Split(string(cmdline), "\x00")
 		for i, arg := range args {
 			if (arg == "--resume" || arg == "--session-id") && i+1 < len(args) && args[i+1] != "" {
-				log.Printf("[getClaudeSessionIDFromTmux] found session ID from PID %s (flag %s): %s", pidStr, arg, args[i+1])
-				return args[i+1]
+				candidate := args[i+1]
+				// This value comes from the argv of a process running INSIDE
+				// the agent's pane — it is not trusted input. Reject anything
+				// that isn't a safe ID shape so a hostile agent can't smuggle
+				// shell metacharacters into a later respawn-pane command.
+				if !session.IsSafeResumeID(candidate) {
+					log.Printf("[getClaudeSessionIDFromTmux] PID %s %s value rejected (unsafe shape): %q", pidStr, arg, candidate)
+					continue
+				}
+				log.Printf("[getClaudeSessionIDFromTmux] found session ID from PID %s (flag %s): %s", pidStr, arg, candidate)
+				return candidate
 			}
 		}
 	}
@@ -1516,6 +1536,15 @@ func (a *App) GetTerminalWSPort() int {
 		return a.termServer.GetPort()
 	}
 	return 9753
+}
+
+// GetTerminalWSToken returns the per-launch auth token the frontend must
+// include when opening the terminal WebSocket. Empty if the server isn't up.
+func (a *App) GetTerminalWSToken() string {
+	if a.termServer != nil {
+		return a.termServer.AuthToken()
+	}
+	return ""
 }
 
 // ============================================================================
