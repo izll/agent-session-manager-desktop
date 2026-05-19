@@ -1,17 +1,67 @@
 import { Terminal, type IDisposable } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
-import { GetTerminalWSPort } from '../../../wailsjs/go/main/App';
+import { GetTerminalWSPort, GetTerminalWSToken } from '../../../wailsjs/go/main/App';
 
 // The backend may bind a fallback port if 9753 is taken (e.g. a second
-// instance running alongside). Resolve it once and cache it.
-let wsPortPromise: Promise<number> | null = null;
-function getTerminalWSPort(): Promise<number> {
-  if (!wsPortPromise) {
-    wsPortPromise = GetTerminalWSPort()
-      .then((p) => (typeof p === 'number' && p > 0 ? p : 9753))
-      .catch(() => 9753);
+// instance running alongside). Resolve it from the backend, but ONLY cache
+// a definitive success. If the Wails bridge isn't ready yet (early startup)
+// the call can fail/return garbage; caching the 9753 fallback permanently
+// would then break every terminal for the whole session when the backend
+// actually bound a different port. So on any non-definitive result we drop
+// the cache and let the next attach retry.
+let cachedWSPort: number | null = null;
+let wsPortInflight: Promise<number> | null = null;
+async function getTerminalWSPort(): Promise<number> {
+  if (cachedWSPort !== null) return cachedWSPort;
+  if (wsPortInflight) return wsPortInflight;
+
+  wsPortInflight = (async () => {
+    try {
+      const p = await GetTerminalWSPort();
+      if (typeof p === 'number' && p > 0) {
+        cachedWSPort = p; // definitive — safe to memoize
+        return p;
+      }
+    } catch {
+      // bridge not ready / transient — fall through
+    }
+    return 9753; // best-effort for THIS attempt; not cached
+  })();
+
+  try {
+    return await wsPortInflight;
+  } finally {
+    wsPortInflight = null; // allow a fresh attempt next time if uncached
   }
-  return wsPortPromise;
+}
+
+// Per-launch terminal auth token. Same caching discipline as the port:
+// only memoize a definitive non-empty value, so a transient early-startup
+// failure doesn't permanently wedge every terminal with an empty token.
+let cachedWSToken: string | null = null;
+let wsTokenInflight: Promise<string> | null = null;
+async function getTerminalWSToken(): Promise<string> {
+  if (cachedWSToken) return cachedWSToken;
+  if (wsTokenInflight) return wsTokenInflight;
+
+  wsTokenInflight = (async () => {
+    try {
+      const t = await GetTerminalWSToken();
+      if (typeof t === 'string' && t.length > 0) {
+        cachedWSToken = t;
+        return t;
+      }
+    } catch {
+      // bridge not ready / transient — fall through, do not cache
+    }
+    return '';
+  })();
+
+  try {
+    return await wsTokenInflight;
+  } finally {
+    wsTokenInflight = null;
+  }
 }
 
 export interface TerminalInstance {
@@ -166,7 +216,9 @@ export async function attachToSession(
     // Ask the backend which port it actually bound (may differ from 9753
     // if a fallback was used because the preferred port was busy).
     const port = await getTerminalWSPort();
-    const wsUrl = `ws://127.0.0.1:${port}/terminal?session=${sessionId}&window=${windowIdx}`;
+    const token = await getTerminalWSToken();
+    const wsUrl = `ws://127.0.0.1:${port}/terminal?session=${encodeURIComponent(sessionId)}` +
+      `&window=${windowIdx}&token=${encodeURIComponent(token)}`;
 
     const ws = new WebSocket(wsUrl);
     ws.binaryType = 'arraybuffer';
