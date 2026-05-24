@@ -16,6 +16,7 @@
   "sidebar.favorites": "Обране",
   "sidebar.sessions": "Сеанси",
   "sidebar.noSessions": "Сеансів ще немає",
+  "sidebar.noMatches": "Немає відповідних сеансів",
   "sidebar.createFirst": "Створіть свій перший сеанс",
   "sidebar.session": "Сеанс",
   "sidebar.group": "Група",

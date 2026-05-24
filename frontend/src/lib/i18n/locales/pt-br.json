@@ -16,6 +16,7 @@
   "sidebar.favorites": "Favoritos",
   "sidebar.sessions": "Sessões",
   "sidebar.noSessions": "Nenhuma sessão ainda",
+  "sidebar.noMatches": "Nenhuma sessão correspondente",
   "sidebar.createFirst": "Crie sua primeira sessão",
   "sidebar.session": "Sessão",
   "sidebar.group": "Grupo",

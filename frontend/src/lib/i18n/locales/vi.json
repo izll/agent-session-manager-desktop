@@ -16,6 +16,7 @@
   "sidebar.favorites": "Yêu thích",
   "sidebar.sessions": "Phiên",
   "sidebar.noSessions": "Chưa có phiên nào",
+  "sidebar.noMatches": "Không có phiên khớp",
   "sidebar.createFirst": "Tạo phiên đầu tiên của bạn",
   "sidebar.session": "Phiên",
   "sidebar.group": "Nhóm",

@@ -16,6 +16,7 @@
   "sidebar.favorites": "Kedvencek",
   "sidebar.sessions": "Munkamenetek",
   "sidebar.noSessions": "Még nincsenek munkamenetek",
+  "sidebar.noMatches": "Nincs egyező munkamenet",
   "sidebar.createFirst": "Hozd létre az első munkamenetet",
   "sidebar.session": "Munkamenet",
   "sidebar.group": "Csoport",

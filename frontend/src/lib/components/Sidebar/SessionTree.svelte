@@ -203,13 +203,20 @@
       </div>
     {/if}
 
-    <!-- Groups -->
+    <!-- Groups.
+         When a search filter is active, hide groups that have no matches —
+         otherwise the one group that DOES have a hit gets buried among
+         empty headers and is hard to find. Without a filter we still show
+         every group (the user wants to see the structure). -->
     {#each $groups as group (group.id)}
-      <GroupItem
-        {group}
-        sessions={$sessionsByGroup.get(group.id) || []}
-        on:sessionDrop={handleSessionDrop}
-      />
+      {@const groupSessions = $sessionsByGroup.get(group.id) || []}
+      {#if !$searchFilter.trim() || groupSessions.length > 0}
+        <GroupItem
+          {group}
+          sessions={groupSessions}
+          on:sessionDrop={handleSessionDrop}
+        />
+      {/if}
     {/each}
 
     <!-- Ungrouped -->
@@ -231,6 +238,13 @@
         <button class="create-first-btn" on:click={onNewSession}>
           {$t('sidebar.createFirst')}
         </button>
+      </div>
+    {:else if $searchFilter.trim() && $favorites.length === 0 && $ungroupedSessions.length === 0 && Array.from($sessionsByGroup.values()).every((arr) => arr.length === 0)}
+      <!-- Filter is active but nothing matches anywhere. Without this the
+           sidebar looks blankly empty and the user can't tell whether the
+           filter wiped everything out or the project is actually empty. -->
+      <div class="no-matches">
+        {$t('sidebar.noMatches')}
       </div>
     {/if}
   </div>
@@ -451,6 +465,14 @@
   .empty-state p {
     margin: 0 0 16px;
     font-size: 14px;
+  }
+
+  .no-matches {
+    padding: 16px 12px;
+    color: #6b7280;
+    font-size: 12px;
+    text-align: center;
+    font-style: italic;
   }
 
   .create-first-btn {

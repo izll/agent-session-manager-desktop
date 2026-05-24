@@ -16,6 +16,7 @@
   "sidebar.favorites": "Favorites",
   "sidebar.sessions": "Sessions",
   "sidebar.noSessions": "No sessions yet",
+  "sidebar.noMatches": "No matching sessions",
   "sidebar.createFirst": "Create your first session",
   "sidebar.session": "Session",
   "sidebar.group": "Group",

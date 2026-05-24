@@ -16,6 +16,7 @@
   "sidebar.favorites": "Favoriler",
   "sidebar.sessions": "Oturumlar",
   "sidebar.noSessions": "Henüz oturum yok",
+  "sidebar.noMatches": "Eşleşen oturum yok",
   "sidebar.createFirst": "İlk oturumunuzu oluşturun",
   "sidebar.session": "Oturum",
   "sidebar.group": "Grup",

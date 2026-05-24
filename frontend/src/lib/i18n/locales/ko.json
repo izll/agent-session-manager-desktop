@@ -16,6 +16,7 @@
   "sidebar.favorites": "즐겨찾기",
   "sidebar.sessions": "세션",
   "sidebar.noSessions": "세션이 없습니다",
+  "sidebar.noMatches": "일치하는 세션 없음",
   "sidebar.createFirst": "첫 번째 세션을 만드세요",
   "sidebar.session": "세션",
   "sidebar.group": "그룹",

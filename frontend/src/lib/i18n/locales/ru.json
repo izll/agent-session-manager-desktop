@@ -16,6 +16,7 @@
   "sidebar.favorites": "Избранное",
   "sidebar.sessions": "Сессии",
   "sidebar.noSessions": "Сессий пока нет",
+  "sidebar.noMatches": "Нет совпадающих сеансов",
   "sidebar.createFirst": "Создайте свою первую сессию",
   "sidebar.session": "Сессия",
   "sidebar.group": "Группа",

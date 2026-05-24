@@ -16,6 +16,7 @@
   "sidebar.favorites": "Favoriter",
   "sidebar.sessions": "Sessioner",
   "sidebar.noSessions": "Inga sessioner ännu",
+  "sidebar.noMatches": "Inga matchande sessioner",
   "sidebar.createFirst": "Skapa din första session",
   "sidebar.session": "Session",
   "sidebar.group": "Grupp",

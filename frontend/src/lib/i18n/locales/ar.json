@@ -16,6 +16,7 @@
   "sidebar.favorites": "المفضلة",
   "sidebar.sessions": "الجلسات",
   "sidebar.noSessions": "لا توجد جلسات بعد",
+  "sidebar.noMatches": "لا توجد جلسات مطابقة",
   "sidebar.createFirst": "أنشئ جلستك الأولى",
   "sidebar.session": "جلسة",
   "sidebar.group": "مجموعة",

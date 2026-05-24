@@ -16,6 +16,7 @@
   "sidebar.favorites": "รายการโปรด",
   "sidebar.sessions": "เซสชัน",
   "sidebar.noSessions": "ยังไม่มีเซสชัน",
+  "sidebar.noMatches": "ไม่มีเซสชันที่ตรงกัน",
   "sidebar.createFirst": "สร้างเซสชันแรกของคุณ",
   "sidebar.session": "เซสชัน",
   "sidebar.group": "กลุ่ม",

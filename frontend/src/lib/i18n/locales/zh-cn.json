@@ -16,6 +16,7 @@
   "sidebar.favorites": "收藏夹",
   "sidebar.sessions": "会话",
   "sidebar.noSessions": "暂无会话",
+  "sidebar.noMatches": "没有匹配的会话",
   "sidebar.createFirst": "创建你的第一个会话",
   "sidebar.session": "会话",
   "sidebar.group": "分组",

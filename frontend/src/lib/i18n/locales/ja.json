@@ -16,6 +16,7 @@
   "sidebar.favorites": "お気に入り",
   "sidebar.sessions": "セッション",
   "sidebar.noSessions": "セッションがありません",
+  "sidebar.noMatches": "一致するセッションがありません",
   "sidebar.createFirst": "最初のセッションを作成しましょう",
   "sidebar.session": "セッション",
   "sidebar.group": "グループ",
