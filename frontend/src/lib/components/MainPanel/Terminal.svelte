@@ -45,10 +45,20 @@
     requestAnimationFrame(focusActive);
   }
 
+  // Drop a single window's cached PoolEntry. Triggered after a tab is
+  // deleted so that a later tab reusing the same window index doesn't
+  // inherit the killed pane's stale WebSocket + xterm DOM.
+  function handleDestroyWindow(e: Event) {
+    const ev = e as CustomEvent<{ sessionId: string; windowIdx: number }>;
+    if (!pool || !ev.detail) return;
+    pool.destroyWindow(ev.detail.sessionId, ev.detail.windowIdx);
+  }
+
   onMount(() => {
     pool = new TerminalPool(poolContainerEl, terminalOptions);
 
     window.addEventListener('terminal:focus', handleFocusEvent);
+    window.addEventListener('terminal:destroy-window', handleDestroyWindow as EventListener);
 
     // Debounced resize handler
     let resizeTimeout: ReturnType<typeof setTimeout>;
@@ -114,6 +124,7 @@
       resizeObserver.disconnect();
       window.removeEventListener('resize', handleResize);
       window.removeEventListener('terminal:focus', handleFocusEvent);
+      window.removeEventListener('terminal:destroy-window', handleDestroyWindow as EventListener);
       poolContainerEl.removeEventListener('keydown', handleTerminalKeydown, true);
     };
   });

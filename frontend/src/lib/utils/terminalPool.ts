@@ -136,6 +136,26 @@ export class TerminalPool {
     });
   }
 
+  /**
+   * Destroy a single (sessionId, windowIdx) entry. Used when a tab is
+   * deleted and another tab will later reuse the same window index — without
+   * this the pool would hand back the cached WebSocket bound to the old
+   * (now-killed) pane, leaving the user staring at a blank, unresponsive
+   * terminal.
+   */
+  async destroyWindow(sessionId: string, windowIdx: number): Promise<void> {
+    const key = this.makeKey(sessionId, windowIdx);
+    const entry = this.entries.get(key);
+    if (!entry) return;
+    await detachFromSession(entry.terminalInstance);
+    entry.terminalInstance.cleanup();
+    entry.containerEl.remove();
+    if (this.activeKey === key) {
+      this.activeKey = null;
+    }
+    this.entries.delete(key);
+  }
+
   async destroy(sessionId: string): Promise<void> {
     const keysToDelete: string[] = [];
     for (const [key, entry] of this.entries) {

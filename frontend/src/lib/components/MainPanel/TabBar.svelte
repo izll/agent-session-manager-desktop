@@ -804,8 +804,17 @@
 
   async function confirmDeleteTab() {
     if (deleteTabIndex !== null && $selectedSessionId) {
+      const killedSession = $selectedSessionId;
+      const killedIdx = deleteTabIndex;
       try {
-        await deleteTab($selectedSessionId, deleteTabIndex);
+        await deleteTab(killedSession, killedIdx);
+        // Tell the Terminal pool to drop the cached PoolEntry for that
+        // (session, window) — otherwise a new tab created later that reuses
+        // the same tmux window index would inherit the deleted tab's stale
+        // WebSocket + xterm DOM and appear blank/unresponsive.
+        window.dispatchEvent(new CustomEvent('terminal:destroy-window', {
+          detail: { sessionId: killedSession, windowIdx: killedIdx },
+        }));
         // Force refresh window list immediately
         await loadWindowsForSession($selectedSessionId, currentSessionStatus);
       } catch (e) {
