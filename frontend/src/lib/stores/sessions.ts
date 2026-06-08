@@ -124,8 +124,27 @@ export async function createSession(name: string, path: string, agent: string, a
   }
 }
 
+// Tell the Terminal pool that every cached PoolEntry for this session is
+// stale and must be dropped. Necessary on every start/stop because the
+// backend kills/recreates the whole tmux session (which also wipes any
+// grouped gui_* mirrors); a cached WebSocket would point at nothing.
+// The 3-second grace-period in Terminal.svelte's handlePoolChange can
+// race against a quick stop+start and leave the old entry in place,
+// which is the bug this guards against.
+function dropPoolForSession(id: string) {
+  try {
+    window.dispatchEvent(new CustomEvent('terminal:destroy-session', {
+      detail: { sessionId: id },
+    }));
+  } catch { /* no-op outside browser context */ }
+}
+
 export async function startSession(id: string, resumeId?: string) {
   try {
+    // Drop BEFORE the backend call: by the time it returns the new tmux
+    // session is up, and any subsequent pool.show() must create a fresh
+    // WebSocket against it.
+    dropPoolForSession(id);
     if (resumeId) {
       await App.StartSessionWithResume(id, resumeId);
     } else {
@@ -145,6 +164,7 @@ export async function startSession(id: string, resumeId?: string) {
 export async function stopSession(id: string) {
   try {
     await App.StopSession(id);
+    dropPoolForSession(id);
     // Reset to window 0 when session stops
     if (get(selectedSessionId) === id) {
       selectedWindowIdx.set(0);
@@ -170,9 +190,21 @@ export async function stopTab(id: string, windowIdx: number) {
   }
 }
 
+// Drop the cached PoolEntry for a specific (sessionId, windowIdx) — used
+// after the backend respawns the pane in that window so the next
+// pool.show() builds a fresh WebSocket + xterm against the new process.
+function dropPoolForWindow(id: string, windowIdx: number) {
+  try {
+    window.dispatchEvent(new CustomEvent('terminal:destroy-window', {
+      detail: { sessionId: id, windowIdx },
+    }));
+  } catch { /* no-op */ }
+}
+
 export async function restartTab(id: string, windowIdx: number) {
   try {
     await App.RestartTab(id, windowIdx);
+    dropPoolForWindow(id, windowIdx);
     await loadSessions();
   } catch (e) {
     error.set(String(e));
@@ -183,6 +215,7 @@ export async function restartTab(id: string, windowIdx: number) {
 export async function restartTabWithResume(id: string, windowIdx: number, resumeId: string) {
   try {
     await App.RestartTabWithResume(id, windowIdx, resumeId);
+    dropPoolForWindow(id, windowIdx);
     await loadSessions();
   } catch (e) {
     error.set(String(e));

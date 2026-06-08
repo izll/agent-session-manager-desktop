@@ -54,11 +54,24 @@
     pool.destroyWindow(ev.detail.sessionId, ev.detail.windowIdx);
   }
 
+  // Drop every PoolEntry belonging to a session. Triggered by start/stop
+  // because the backend tears down the whole tmux session (and its
+  // grouped gui_* mirrors) — a cached WebSocket would point at a dead
+  // mirror after start/stop. Required in addition to the status-change
+  // grace-period handler below: a fast Stop→Start sequence never sees a
+  // sustained 'stopped' state and slips through that guard.
+  function handleDestroySession(e: Event) {
+    const ev = e as CustomEvent<{ sessionId: string }>;
+    if (!pool || !ev.detail) return;
+    pool.destroy(ev.detail.sessionId);
+  }
+
   onMount(() => {
     pool = new TerminalPool(poolContainerEl, terminalOptions);
 
     window.addEventListener('terminal:focus', handleFocusEvent);
     window.addEventListener('terminal:destroy-window', handleDestroyWindow as EventListener);
+    window.addEventListener('terminal:destroy-session', handleDestroySession as EventListener);
 
     // Debounced resize handler
     let resizeTimeout: ReturnType<typeof setTimeout>;
@@ -125,6 +138,7 @@
       window.removeEventListener('resize', handleResize);
       window.removeEventListener('terminal:focus', handleFocusEvent);
       window.removeEventListener('terminal:destroy-window', handleDestroyWindow as EventListener);
+      window.removeEventListener('terminal:destroy-session', handleDestroySession as EventListener);
       poolContainerEl.removeEventListener('keydown', handleTerminalKeydown, true);
     };
   });
