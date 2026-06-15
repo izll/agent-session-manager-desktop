@@ -113,16 +113,6 @@ export class TerminalPool {
     // If another show() was called while we were awaiting, bail out
     if (this.showGeneration !== gen) return;
 
-    // Tear down entries belonging to OTHER sessions. Each entry holds a live
-    // WebSocket + its own grouped gui_* tmux mirror, and every mirror mirrors
-    // the WHOLE session group — so N background tabs of another session make
-    // tmux re-render every change N times. Keeping only the active session's
-    // tabs alive removes that cost (the tmux/agent keeps running in the
-    // background; sidebar status still polls it; switching back reconnects
-    // in ~0.3s). Done AFTER getOrCreate so the new session's entry already
-    // exists — no flash of an empty pane.
-    this.destroyOtherSessions(sessionId);
-
     // Apply visibility with the active key
     this.applyVisibility();
 
@@ -164,33 +154,6 @@ export class TerminalPool {
       this.activeKey = null;
     }
     this.entries.delete(key);
-  }
-
-  /**
-   * Tear down every entry that does NOT belong to keepSessionId. Used on
-   * session switch so background sessions don't each keep a live WebSocket
-   * + grouped tmux mirror (which mirrors the whole session group and makes
-   * tmux re-render every change once per mirror). Fire-and-forget: we don't
-   * await the detaches so switching stays snappy; the tmux/agent process is
-   * untouched and reconnects on next visit.
-   */
-  destroyOtherSessions(keepSessionId: string): void {
-    const prefix = keepSessionId + ':';
-    const keysToDelete: string[] = [];
-    for (const [key, entry] of this.entries) {
-      if (key.startsWith(prefix)) continue; // keep active session's tabs
-      keysToDelete.push(key);
-      // Detach (closes WS, kills the gui mirror) without blocking.
-      void detachFromSession(entry.terminalInstance);
-      entry.terminalInstance.cleanup();
-      entry.containerEl.remove();
-      if (this.activeKey === key) {
-        this.activeKey = null;
-      }
-    }
-    for (const key of keysToDelete) {
-      this.entries.delete(key);
-    }
   }
 
   async destroy(sessionId: string): Promise<void> {
