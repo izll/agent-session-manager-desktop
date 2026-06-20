@@ -62,6 +62,11 @@
   $: isGradient = session.color?.startsWith('gradient-');
   $: displayColor = isGradient ? getGradientCSS(session.color) : session.color;
 
+  // Live YOLO (bypass-permissions) state, read per-tab from the pane.
+  //  - single tab  → "Y" next to the session NAME (in the badges)
+  //  - multi tab   → "Y" at the end of the specific tab's status row
+  $: singleTabYolo = tabStatuses.length === 1 ? !!tabStatuses[0]?.yolo : false;
+
   // Unique agent types for multi-agent sessions (only when 2+ different agents)
   $: uniqueAgents = (() => {
     if (tabStatuses.length <= 1) return [];
@@ -250,8 +255,11 @@
       {#if session.favorite}
         <span class="badge favorite">&#9733;</span>
       {/if}
-      {#if session.autoYes}
-        <span class="badge yolo">Y</span>
+      <!-- YOLO next to the name ONLY for a single-tab session. When running we
+           use the live pane state; when not running fall back to the stored
+           launch flag so the marker is still visible while stopped. -->
+      {#if (sessionStatus === 'running' ? singleTabYolo : session.autoYes)}
+        <span class="badge yolo" title="Bypass permissions (YOLO)">Y</span>
       {/if}
     </div>
   </div>
@@ -264,21 +272,25 @@
           <div class="status-text busy tab-status">
             <span>{tab.spinnerText || tab.statusLine || ''}</span>
             {#if $settings?.showAgentIcons}<AgentIcon agent={tab.agent} size="xs" />{/if}
+            {#if tab.yolo}<span class="badge yolo" title="Bypass permissions (YOLO)">Y</span>{/if}
           </div>
         {:else if tab.activity === 'waiting'}
           <div class="status-text waiting tab-status">
             <span>{$t('sessionItem.waitingInput')}</span>
             {#if $settings?.showAgentIcons}<AgentIcon agent={tab.agent} size="xs" />{/if}
+            {#if tab.yolo}<span class="badge yolo" title="Bypass permissions (YOLO)">Y</span>{/if}
           </div>
-        {:else if tab.statusLine}
+        {:else if tab.statusLine || tab.yolo}
           <div class="status-text tab-status">
             <span>{tab.statusLine}</span>
             {#if $settings?.showAgentIcons}<AgentIcon agent={tab.agent} size="xs" />{/if}
+            {#if tab.yolo}<span class="badge yolo" title="Bypass permissions (YOLO)">Y</span>{/if}
           </div>
         {/if}
       {/each}
     {:else}
-      <!-- Single tab: original behavior -->
+      <!-- Single tab: original behavior. YOLO shows next to the name (badges),
+           not in the status line. -->
       {#if activity === 'busy'}
         <div class="status-text busy tab-status">
           <span>{spinnerText || statusLine || ''}</span>
@@ -493,6 +505,11 @@
     align-items: center;
     gap: 4px;
     margin-top: 3px;
+    /* Override the fixed 14px height + clip from .status-text so a slightly
+       taller badge (the YOLO "Y") isn't cut off at the top/bottom. */
+    height: auto;
+    min-height: 14px;
+    overflow: visible;
   }
 
   .status-text.tab-status:first-child {
@@ -504,6 +521,17 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  /* The YOLO "Y" badge at the end of a tab row must stay compact, not stretch
+     like the status text span above, and must fit the short row height. */
+  .status-text.tab-status .badge.yolo {
+    flex: 0 0 auto;
+    overflow: visible;
+    padding: 0 4px;
+    line-height: 13px;
+    font-size: 8px;
+    align-self: center;
   }
 
   .status-text.busy {

@@ -1,6 +1,8 @@
 import { writable } from 'svelte/store';
 import * as App from '../../../wailsjs/go/main/App';
 
+export type TerminalRenderer = 'canvas' | 'webgl' | 'dom';
+
 export interface Settings {
   compactList: boolean;
   hideStatusLines: boolean;
@@ -8,6 +10,7 @@ export interface Settings {
   splitView: boolean;
   markedSessionId: string;
   language: string;
+  terminalRenderer: TerminalRenderer;
 }
 
 export const settings = writable<Settings>({
@@ -16,7 +19,8 @@ export const settings = writable<Settings>({
   showAgentIcons: true,
   splitView: false,
   markedSessionId: '',
-  language: 'en'
+  language: 'en',
+  terminalRenderer: 'canvas'
 });
 
 export async function loadSettings() {

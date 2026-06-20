@@ -8,6 +8,7 @@
   import ForkDialog from '../Dialogs/ForkDialog.svelte';
   import { sessions, selectedSessionId, selectedWindowIdx, toggleAutoYes } from '../../stores/sessions';
   import { agents } from '../../stores/agents';
+  import { tabStatuses } from '../../stores/statusLines';
   import { get } from 'svelte/store';
   import { t } from '../../i18n';
 
@@ -32,6 +33,18 @@
   $: canFork = currentSession?.agent === 'claude' && currentSession?.status === 'running';
   $: agentConfig = $agents.find(a => a.type === currentSession?.agent);
   $: canAutoYes = agentConfig?.supportsAutoYes && currentSession?.status === 'running';
+
+  // Live YOLO (bypass-permissions) state for the CURRENTLY SELECTED tab, read
+  // from the pane status bar. When the session RUNS we trust ONLY this live
+  // value — never the stored launch flag — so a Shift+Tab toggle to auto mode
+  // turns the indicator off even though the session was launched with --yolo.
+  // When NOT running there's no pane to read, so fall back to the stored flag.
+  $: liveYolo = (() => {
+    if (currentSession?.status !== 'running') return !!currentSession?.autoYes;
+    const list = $selectedSessionId ? $tabStatuses[$selectedSessionId] : undefined;
+    const ts = list?.find(t => t.windowIdx === ($selectedWindowIdx ?? 0));
+    return !!ts?.yolo; // running → live only (no stored-flag fallback)
+  })();
 
   // Get current tab's resume session ID
   $: currentResumeId = (() => {
@@ -140,7 +153,7 @@
           {#if canAutoYes}
             <button
               class="yolo-btn"
-              class:active={currentSession?.autoYes}
+              class:active={liveYolo}
               on:click|stopPropagation={async () => {
                 if (!currentSession) return;
                 try {
@@ -149,12 +162,12 @@
                   console.error('YOLO toggle failed:', e);
                 }
               }}
-              title={currentSession?.autoYes ? $t('mainPanel.yoloOn') : $t('mainPanel.yoloEnable')}
+              title={liveYolo ? $t('mainPanel.yoloOn') : $t('mainPanel.yoloEnable')}
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
               </svg>
-              {currentSession?.autoYes ? $t('mainPanel.yoloLabel') + ' ⚡' : $t('mainPanel.yoloLabel')}
+              {liveYolo ? $t('mainPanel.yoloLabel') + ' ⚡' : $t('mainPanel.yoloLabel')}
             </button>
           {/if}
           {#if canFork}

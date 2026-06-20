@@ -27,6 +27,11 @@ func debugf(format string, args ...interface{}) {
 // lastBusyTime tracks the last time Busy was detected per target (session:window)
 var lastBusyTime sync.Map // map[string]time.Time
 
+// lastYoloState caches the last DEFINITIVE yolo reading per target. While the
+// agent shows a permission/question dialog the mode bar is hidden, so we can't
+// read the mode — we then return this cached value instead of flickering off.
+var lastYoloState sync.Map // map[string]bool
+
 // SessionActivity represents the activity state of a session
 type SessionActivity int
 
@@ -241,6 +246,78 @@ func (i *Instance) DetectAggregatedActivity() SessionActivity {
 	}
 
 	return highestActivity
+}
+
+// DetectYoloForWindow reports whether the agent in this window is currently in a
+// non-interactive ("YOLO") mode, read live from the pane's status bar.
+//
+// Claude Code's Shift+Tab cycle shows one of these in the bottom bar:
+//   "⏵⏵ bypass permissions on (shift+tab to cycle)"  → YOLO (skips ALL checks)
+//   "⏵⏵ auto mode on (shift+tab to cycle) ..."        → YOLO (auto-approves via a
+//        risk classifier — still runs without prompting the user)
+//   "⏵⏵ accept edits on ..."                          → NOT yolo (edits only;
+//        other commands still prompt)
+// Both bypass and auto count as YOLO here because the user asked the badge to
+// flag any "runs without asking me" mode. This follows a Shift+Tab toggle inside
+// Claude, not just the stored launch flag.
+// Returns false for non-Claude agents (only Claude has this status line).
+func (i *Instance) DetectYoloForWindow(windowIdx int) bool {
+	if !i.IsAlive() {
+		return false
+	}
+	agent := i.Agent
+	if agent == "" {
+		agent = AgentClaude
+	}
+	if windowIdx > 0 {
+		for _, fw := range i.FollowedWindows {
+			if fw.Index == windowIdx {
+				agent = fw.Agent
+				break
+			}
+		}
+	}
+	if agent != AgentClaude {
+		return false
+	}
+
+	target := fmt.Sprintf("%s:%d", i.TmuxSessionName(), windowIdx)
+	// The mode line ("⏵⏵ bypass permissions on") lives near the bottom, but while
+	// the agent is BUSY extra rows appear below it (spinner, separators, the
+	// input box, a running-agents/token list). A 6-line window was too small —
+	// the mode line scrolled out of it during work, so the YOLO badge flickered
+	// off whenever the tab was busy. Capture more rows so it stays in view. Still
+	// cheap (one capture per tab per poll).
+	out, err := exec.Command("tmux", "capture-pane", "-t", target, "-p", "-S", "-16").Output()
+	if err != nil {
+		return cachedYolo(target)
+	}
+	lower := strings.ToLower(string(out))
+
+	yoloOn := strings.Contains(lower, "bypass permissions on") ||
+		strings.Contains(lower, "auto mode on")
+	// A NON-yolo mode is definitively shown: plain default (no marker but the
+	// mode bar is present) or accept-edits. We detect "the mode bar is present"
+	// via the shift+tab hint that always accompanies it.
+	nonYolo := strings.Contains(lower, "accept edits on")
+	modeBarVisible := yoloOn || nonYolo || strings.Contains(lower, "shift+tab to cycle")
+
+	if modeBarVisible {
+		// Definitive reading — cache and return it.
+		lastYoloState.Store(target, yoloOn)
+		return yoloOn
+	}
+	// Mode bar hidden (e.g. a permission/question dialog is up). Keep the last
+	// known state instead of flickering the badge off.
+	return cachedYolo(target)
+}
+
+// cachedYolo returns the last definitive yolo reading for target, or false.
+func cachedYolo(target string) bool {
+	if v, ok := lastYoloState.Load(target); ok {
+		return v.(bool)
+	}
+	return false
 }
 
 // detectClaudeActivity uses Claude Code's UI structure for waiting detection,

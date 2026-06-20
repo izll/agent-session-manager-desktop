@@ -9,6 +9,8 @@
   import { get } from 'svelte/store';
   import { t } from '../../i18n';
   import { focusTerminal } from '../../utils/focus';
+  import { tabStatuses } from '../../stores/statusLines';
+  import StatusIndicator from '../common/StatusIndicator.svelte';
   import * as App from '../../../../wailsjs/go/main/App';
   import * as DictationService from '../../../../wailsjs/go/main/DictationService';
   import { EventsOn, EventsOff } from '../../../../wailsjs/runtime/runtime';
@@ -628,6 +630,18 @@
   $: currentSessionStatus = $sessions.find(s => s.id === $selectedSessionId)?.status;
   $: loadWindowsForSession($selectedSessionId, currentSessionStatus);
 
+  // Per-tab activity (busy/waiting/idle) for the current session, so each tab
+  // header shows its own status dot — you can see at a glance WHICH tab is
+  // waiting/working without opening it. Keyed by window index.
+  $: tabActivityByIdx = (() => {
+    const map: Record<number, 'idle' | 'busy' | 'waiting'> = {};
+    const list = $selectedSessionId ? $tabStatuses[$selectedSessionId] : undefined;
+    if (list) {
+      for (const ts of list) map[ts.windowIdx] = ts.activity;
+    }
+    return map;
+  })();
+
   // Force reload when status changes to running
   $: if (currentSessionStatus === 'running' && $selectedSessionId) {
     loadWindowsForSession($selectedSessionId, currentSessionStatus);
@@ -1002,6 +1016,12 @@
             on:drop={(e) => handleTabDrop(e, winArrayIdx)}
           >
             <span class="tab-indicator" style="background: {getAgentColor(win.Agent)}"></span>
+            {#if currentSessionStatus === 'running' && !win.Dead && tabActivityByIdx[win.Index] && tabActivityByIdx[win.Index] !== 'idle'}
+              <!-- Live per-tab status dot: orange = busy, cyan = waiting input -->
+              <span class="tab-status-dot" title={tabActivityByIdx[win.Index] === 'waiting' ? 'Bemenetre vár' : 'Dolgozik'}>
+                <StatusIndicator status="running" activity={tabActivityByIdx[win.Index]} size="sm" />
+              </span>
+            {/if}
             <AgentIcon agent={win.Agent} size="sm" />
             {#if renamingTabIndex === win.Index}
               <!-- svelte-ignore a11y-autofocus -->
@@ -1466,6 +1486,14 @@
     border-radius: 0 0 3px 3px;
     opacity: 0;
     transition: opacity 0.2s ease;
+  }
+
+  /* Inline per-tab activity dot (busy/waiting), shown before the agent icon. */
+  .tab-status-dot {
+    display: inline-flex;
+    align-items: center;
+    flex-shrink: 0;
+    margin-right: 1px;
   }
 
   .tab.active .tab-indicator {

@@ -15,6 +15,7 @@ export interface TabStatusInfo {
   activity: 'idle' | 'busy' | 'waiting';
   statusLine: string;
   spinnerText: string;
+  yolo: boolean;
 }
 
 // Map of session ID to array of tab statuses (only for multi-tab sessions)

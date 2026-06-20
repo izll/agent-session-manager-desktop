@@ -1,6 +1,7 @@
 import { Terminal, type IDisposable } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { CanvasAddon } from '@xterm/addon-canvas';
+import { WebglAddon } from '@xterm/addon-webgl';
 import { GetTerminalWSPort, GetTerminalWSToken } from '../../../wailsjs/go/main/App';
 
 // The backend may bind a fallback port if 9753 is taken (e.g. a second
@@ -81,30 +82,44 @@ export interface TerminalInstance {
   hiddenBuffer: Uint8Array[];
 }
 
-// Load the CANVAS renderer addon, defensively. We tried WebGL first but on this
-// WebKitGTK the WebGL canvas did not repaint reliably — typed characters only
-// appeared after a manual window resize forced a redraw (a known WebGL-in-
-// WebKitGTK dirty-region issue), which read as input lag + apparent glyph
-// shift. The canvas addon renders to a 2D canvas that WebKit repaints normally,
-// so it avoids that, while still being much cheaper than the DOM renderer
-// (which Paint-dominated the profile on every Claude prompt redraw).
+// The terminal renderer is chosen in Settings (gear icon): 'canvas' (default),
+// 'webgl' (fastest; can be flaky on some WebKitGTK — glyphs/repaint), or 'dom'
+// (most compatible, but Paint-heavy). Set via setTerminalRenderer() from the
+// settings store so a new terminal picks up the current choice.
 //
-// xterm measures glyph metrics synchronously when the renderer initialises;
-// if the monospace font isn't loaded yet those metrics are wrong and glyphs can
-// blur or mis-align. So we wait for document.fonts.ready first.
-// Set localStorage 'noCanvas'='1' to force the DOM renderer for A/B.
-function loadCanvasRenderer(terminal: Terminal): void {
-  try {
-    if (typeof localStorage !== 'undefined' && localStorage.getItem('noCanvas') === '1') return;
-  } catch { /* ignore */ }
+// Background: the DOM renderer Paint-dominated WebKitGTK CPU on every Claude
+// prompt redraw. Canvas renders to a 2D canvas WebKit repaints normally and is
+// much cheaper. WebGL is fastest but on this stack sometimes only repainted
+// after a manual resize — kept available so users can try it on their hardware.
+let __terminalRenderer: 'canvas' | 'webgl' | 'dom' = 'canvas';
+export function setTerminalRenderer(r: 'canvas' | 'webgl' | 'dom'): void {
+  if (r === 'canvas' || r === 'webgl' || r === 'dom') __terminalRenderer = r;
+}
+
+// Load the configured renderer addon, defensively. xterm measures glyph metrics
+// synchronously when the renderer initialises; if the monospace font isn't
+// loaded yet those metrics are wrong and glyphs can blur/mis-align — so we wait
+// for document.fonts.ready first. Any failure falls back to the DOM renderer.
+function loadRenderer(terminal: Terminal): void {
+  const mode = __terminalRenderer;
+  if (mode === 'dom') return; // no addon = xterm's built-in DOM renderer
 
   const attach = () => {
     // Terminal may have been disposed while we awaited fonts.
     if (!(terminal as any).element) return;
     try {
-      terminal.loadAddon(new CanvasAddon());
+      if (mode === 'webgl') {
+        const addon = new WebglAddon();
+        addon.onContextLoss(() => {
+          console.warn('[terminal] WebGL context lost, falling back to DOM');
+          try { addon.dispose(); } catch { /* ignore */ }
+        });
+        terminal.loadAddon(addon);
+      } else {
+        terminal.loadAddon(new CanvasAddon());
+      }
     } catch (e) {
-      console.warn('[terminal] Canvas addon failed, using DOM renderer:', e);
+      console.warn(`[terminal] ${mode} addon failed, using DOM renderer:`, e);
     }
   };
 
@@ -162,13 +177,8 @@ export function createTerminal(container: HTMLElement, options: Partial<Terminal
 
   terminal.open(container);
 
-  // Renderer: Canvas. The DOM renderer (xterm default) Paint-dominated the
-  // profile — every Claude prompt redraw on each keystroke forced a full Paint.
-  // WebGL was cheaper but didn't repaint reliably in this WebKitGTK (needed a
-  // manual resize to show typed text). The canvas renderer is the middle
-  // ground: far cheaper than DOM, and it repaints normally. Loaded after fonts
-  // are ready so glyph metrics are correct.
-  loadCanvasRenderer(terminal);
+  // Renderer chosen in Settings (canvas | webgl | dom). See loadRenderer().
+  loadRenderer(terminal);
 
   // NOTE: fit() is called later by the pool once the container is visible.
   // Calling it here while the container may be display:none produces a

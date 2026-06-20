@@ -1258,6 +1258,10 @@ type TabStatusInfo struct {
 	Activity    string `json:"activity"`
 	StatusLine  string `json:"statusLine"`
 	SpinnerText string `json:"spinnerText"`
+	// Yolo: live bypass-permissions (real YOLO) state read from the pane status
+	// bar, so the sidebar follows a Shift+Tab toggle inside Claude, not just the
+	// stored launch flag. "auto mode" is NOT yolo and reports false here.
+	Yolo bool `json:"yolo"`
 }
 
 // SidebarUpdate contains combined activity and status line data
@@ -1436,6 +1440,7 @@ func (a *App) GetSidebarUpdates() SidebarUpdate {
 					Activity:    actStr,
 					StatusLine:  line,
 					SpinnerText: info.SpinnerText,
+					Yolo:        inst.DetectYoloForWindow(w.idx),
 				})
 
 				if activity == session.ActivityWaiting {
@@ -1898,12 +1903,13 @@ func (a *App) GetResumeSessions(agent string, path string) ([]AgentSessionInfo, 
 
 // SettingsInfo represents settings for frontend
 type SettingsInfo struct {
-	CompactList     bool   `json:"compactList"`
-	HideStatusLines bool   `json:"hideStatusLines"`
-	ShowAgentIcons  bool   `json:"showAgentIcons"`
-	SplitView       bool   `json:"splitView"`
-	MarkedSessionID string `json:"markedSessionId"`
-	Language        string `json:"language"`
+	CompactList      bool   `json:"compactList"`
+	HideStatusLines  bool   `json:"hideStatusLines"`
+	ShowAgentIcons   bool   `json:"showAgentIcons"`
+	SplitView        bool   `json:"splitView"`
+	MarkedSessionID  string `json:"markedSessionId"`
+	Language         string `json:"language"`
+	TerminalRenderer string `json:"terminalRenderer"`
 }
 
 // GetSettings returns UI settings
@@ -1922,25 +1928,33 @@ func (a *App) GetSettings() (*SettingsInfo, error) {
 		lang = "en"
 	}
 
+	// Default the terminal renderer to canvas if unset.
+	renderer := settings.TerminalRenderer
+	if renderer == "" {
+		renderer = "canvas"
+	}
+
 	return &SettingsInfo{
-		CompactList:     settings.CompactList,
-		HideStatusLines: settings.HideStatusLines,
-		ShowAgentIcons:  settings.ShowAgentIcons,
-		SplitView:       settings.SplitView,
-		MarkedSessionID: settings.MarkedSessionID,
-		Language:        lang,
+		CompactList:      settings.CompactList,
+		HideStatusLines:  settings.HideStatusLines,
+		ShowAgentIcons:   settings.ShowAgentIcons,
+		SplitView:        settings.SplitView,
+		MarkedSessionID:  settings.MarkedSessionID,
+		Language:         lang,
+		TerminalRenderer: renderer,
 	}, nil
 }
 
 // SaveSettings saves UI settings
 func (a *App) SaveSettings(settings SettingsInfo) error {
 	return a.storage.SaveSettings(&session.Settings{
-		CompactList:     settings.CompactList,
-		HideStatusLines: settings.HideStatusLines,
-		ShowAgentIcons:  settings.ShowAgentIcons,
-		SplitView:       settings.SplitView,
-		MarkedSessionID: settings.MarkedSessionID,
-		Language:        settings.Language,
+		CompactList:      settings.CompactList,
+		HideStatusLines:  settings.HideStatusLines,
+		ShowAgentIcons:   settings.ShowAgentIcons,
+		SplitView:        settings.SplitView,
+		MarkedSessionID:  settings.MarkedSessionID,
+		Language:         settings.Language,
+		TerminalRenderer: settings.TerminalRenderer,
 	})
 }
 

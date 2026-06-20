@@ -339,6 +339,7 @@ export namespace main {
 	    splitView: boolean;
 	    markedSessionId: string;
 	    language: string;
+	    terminalRenderer: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new SettingsInfo(source);
@@ -352,6 +353,7 @@ export namespace main {
 	        this.splitView = source["splitView"];
 	        this.markedSessionId = source["markedSessionId"];
 	        this.language = source["language"];
+	        this.terminalRenderer = source["terminalRenderer"];
 	    }
 	}
 	export class SidebarUpdate {
@@ -415,6 +417,7 @@ export namespace main {
 	    activity: string;
 	    statusLine: string;
 	    spinnerText: string;
+	    yolo: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new TabStatusInfo(source);
@@ -428,6 +431,7 @@ export namespace main {
 	        this.activity = source["activity"];
 	        this.statusLine = source["statusLine"];
 	        this.spinnerText = source["spinnerText"];
+	        this.yolo = source["yolo"];
 	    }
 	}
 	export class TaskInfo {

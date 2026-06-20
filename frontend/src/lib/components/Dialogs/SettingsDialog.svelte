@@ -38,6 +38,16 @@
     saveSettings({ language: lang });
   }
 
+  const rendererOptions = [
+    { value: 'canvas', label: 'Canvas (ajánlott)' },
+    { value: 'webgl', label: 'WebGL (leggyorsabb, kísérleti)' },
+    { value: 'dom', label: 'DOM (legkompatibilisebb)' },
+  ];
+
+  function changeRenderer(r: string) {
+    saveSettings({ terminalRenderer: r as 'canvas' | 'webgl' | 'dom' });
+  }
+
   const dispatch = createEventDispatcher();
 
   // Tab state
@@ -280,6 +290,18 @@
                 value={$settings.language || 'en'}
                 options={languageOptions}
                 on:change={(e) => changeLanguage(e.detail)}
+              />
+            </div>
+
+            <div class="setting-item input-item">
+              <span class="setting-info">
+                <span class="setting-label">Terminál renderer</span>
+                <span class="setting-desc">Új terminálokra érvényes. Canvas = ajánlott; WebGL = leggyorsabb, de egyes gépeken hibás lehet; DOM = legkompatibilisebb, de lassabb.</span>
+              </span>
+              <Select
+                value={$settings.terminalRenderer || 'canvas'}
+                options={rendererOptions}
+                on:change={(e) => changeRenderer(e.detail)}
               />
             </div>
           </div>

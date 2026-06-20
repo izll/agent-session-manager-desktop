@@ -37,19 +37,18 @@ export class TerminalPool {
       if (isActive) {
         entry.containerEl.style.display = 'block';
         entry.containerEl.style.zIndex = '1';
-        // Re-enable rendering for the visible terminal.
         entry.containerEl.style.contentVisibility = 'visible';
       } else {
         entry.containerEl.style.display = 'none';
         entry.containerEl.style.zIndex = '0';
-        // content-visibility: hidden takes the (thousands of) xterm cell
-        // <span>s of every background terminal OUT of the browser's
-        // style/layout/render tree. With plain display:none, WebKit was
-        // still doing a document-wide Style Recalc across all hidden
-        // terminals on every change anywhere — the cause of the main-thread
-        // blocks while a background tab produces output. This makes the
-        // recalc cost independent of how many tabs are open.
-        entry.containerEl.style.contentVisibility = 'hidden';
+        // NOTE: we deliberately do NOT use `content-visibility: hidden` here.
+        // It took hidden terminals out of the render tree for a perf win, but on
+        // this WebKit toggling it back to visible sometimes failed to repaint —
+        // the tab stayed permanently BLACK after switching to it. The perf
+        // reason is moot now anyway: a hidden tab's PTY output is dropped at the
+        // backend (see sendVisibility), so it does no rendering work regardless.
+        // Plain display:none reliably repaints on show.
+        entry.containerEl.style.contentVisibility = 'visible';
       }
       // Pair the DOM visibility with the xterm write gate — keeps hidden
       // tabs from spending CPU on off-screen canvas renders.
@@ -154,24 +153,41 @@ export class TerminalPool {
     // Apply visibility with the active key
     this.applyVisibility();
 
-    // Fit + refresh after display. We need two rAFs: the first lets the browser
-    // compute layout for the newly-visible container (display:none→block), the
-    // second runs once the dimensions are real so fitAddon measures correctly.
-    requestAnimationFrame(() => {
-      if (this.showGeneration !== gen) return;
-      requestAnimationFrame(() => {
-        if (this.showGeneration !== gen) return;
-        // Bail out if the container somehow still has no size; we'll retry
-        // on the next ResizeObserver callback.
-        const rect = entry.containerEl.getBoundingClientRect();
-        if (rect.width < 2 || rect.height < 2) return;
-
+    // Fit + refresh after display. The newly-visible container goes from
+    // display:none→block, so its real size may not be available for a frame or
+    // two. The OLD code did a single check and, if the size wasn't ready yet,
+    // skipped fit+refresh entirely — leaving the terminal BLACK until something
+    // else (a resize) forced a redraw. That was the intermittent "black tab on
+    // switch". Now we RETRY across several frames until the container has a real
+    // size, then fit + force a full repaint. Focus happens immediately and
+    // unconditionally (it doesn't depend on layout).
+    entry.terminalInstance.terminal.focus();
+    const term = entry.terminalInstance.terminal;
+    let tries = 0;
+    const settle = () => {
+      if (this.showGeneration !== gen) return; // a newer show() superseded us
+      const rect = entry.containerEl.getBoundingClientRect();
+      if (rect.width >= 2 && rect.height >= 2) {
         fitTerminal(entry.terminalInstance);
-        const term = entry.terminalInstance.terminal;
+        // Force a full repaint of the viewport — without this the DOM/canvas
+        // renderer can stay blank after display:none→block on some WebKit builds.
         term.refresh(0, term.rows - 1);
         term.focus();
-      });
+        return;
+      }
+      if (++tries < 30) requestAnimationFrame(settle); // ~0.5s of retries max
+    };
+    requestAnimationFrame(() => {
+      if (this.showGeneration !== gen) return;
+      requestAnimationFrame(settle);
     });
+  }
+
+  /** Focus the active terminal's input. Safe to call any time. */
+  focusActive(): void {
+    if (!this.activeKey) return;
+    const entry = this.entries.get(this.activeKey);
+    if (entry) entry.terminalInstance.terminal.focus();
   }
 
   /**
@@ -220,6 +236,39 @@ export class TerminalPool {
     }
     this.entries.clear();
     this.activeKey = null;
+  }
+
+  /**
+   * Recreate the pooled terminals so a renderer change (canvas/webgl/dom) from
+   * Settings takes effect — an xterm's renderer is fixed at open(), so the only
+   * way to apply a new one is to rebuild the instance. The tmux session keeps
+   * running; the re-show re-attaches and tmux redraws (~0.3s).
+   *
+   * Implemented carefully: xterm.dispose() can throw from its internal linkifier
+   * if anything touches the instance mid-teardown (the "_linkifier2" error). We
+   * isolate each teardown in try/catch so one failure can't abort the whole
+   * recreate and leave a half-built, BLACK terminal. We also remember the active
+   * key, fully tear down, then re-show — bumping showGeneration first so any
+   * in-flight settle()/rAF from the old terminals can't write to the new ones.
+   */
+  async recreateActiveForRenderer(): Promise<void> {
+    const key = this.activeKey;
+    if (!key) return;
+    const sessionId = key.slice(0, key.lastIndexOf(':'));
+    const widx = parseInt(key.slice(key.lastIndexOf(':') + 1), 10);
+
+    // Invalidate any pending async work tied to current entries.
+    this.showGeneration++;
+
+    for (const [, entry] of this.entries) {
+      try { await detachFromSession(entry.terminalInstance); } catch { /* ignore */ }
+      try { entry.terminalInstance.cleanup(); } catch { /* ignore (linkifier dispose race) */ }
+      try { entry.containerEl.remove(); } catch { /* ignore */ }
+    }
+    this.entries.clear();
+    this.activeKey = null;
+
+    await this.show(sessionId, widx);
   }
 
   hideAll(): void {

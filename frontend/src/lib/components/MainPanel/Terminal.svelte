@@ -1,9 +1,11 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { sessions, selectedSessionId, selectedWindowIdx } from '../../stores/sessions';
+  import { settings } from '../../stores/settings';
   import { get } from 'svelte/store';
   import { EventsOn } from '../../../../wailsjs/runtime/runtime';
   import { TerminalPool } from '../../utils/terminalPool';
+  import { setTerminalRenderer } from '../../utils/terminal';
   import { t } from '../../i18n';
   import '@xterm/xterm/css/xterm.css';
 
@@ -230,6 +232,13 @@
       try {
         await pool.show(newSessionId, newWindowIdx);
         isAttached = true;
+        // Ensure the freshly-shown terminal grabs focus on session/tab switch.
+        // pool.show() focuses internally, but a couple of rAFs later we focus
+        // again in case layout/visibility wasn't settled the first time — this
+        // is what was missing when the terminal lost focus on switch.
+        if (active) {
+          requestAnimationFrame(() => requestAnimationFrame(() => pool?.focusActive()));
+        }
       } catch (e) {
         console.error('Pool show failed:', e);
         error = String(e);
@@ -268,6 +277,19 @@
 
   // Watch for session, window, or status changes
   $: handlePoolChange($selectedSessionId, $selectedWindowIdx, currentSessionStatus);
+
+  // Apply a renderer change (canvas/webgl/dom) from Settings immediately:
+  // update the factory default for new terminals AND recreate the currently
+  // open one so the switch takes effect without restarting the app.
+  let lastRenderer: string | undefined;
+  $: {
+    const r = $settings?.terminalRenderer || 'canvas';
+    setTerminalRenderer(r as 'canvas' | 'webgl' | 'dom');
+    if (lastRenderer !== undefined && lastRenderer !== r && pool) {
+      pool.recreateActiveForRenderer();
+    }
+    lastRenderer = r;
+  }
 
   // Fit and focus terminal when tab becomes active
   let wasActive = false;
