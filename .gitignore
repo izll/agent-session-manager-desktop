@@ -1,3 +1,10 @@
 build/bin
 node_modules
 frontend/dist
+
+# Local dev / personal — not part of the published project
+.taskmaster/
+.playwright-mcp/
+CLAUDE.md
+TASKMASTER_INTEGRATION_PLAN.md
+energott.html
