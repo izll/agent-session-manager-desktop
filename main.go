@@ -6,6 +6,7 @@ import (
 	_ "embed"
 	"log"
 	"os"
+	"strings"
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
@@ -49,6 +50,17 @@ func main() {
 		os.Setenv("GDK_BACKEND", "x11")
 	}
 
+	// NOTE: an earlier experiment forced SOFTWARE rendering here
+	// (LIBGL_ALWAYS_SOFTWARE / GALLIUM_DRIVER=llvmpipe / Mesa EGL vendor) to get
+	// WebKit off the NVIDIA GPU. It DID move rendering to software (no more
+	// /dev/nvidia0 handles) — but made things WORSE: idle WebKitWebProcess CPU
+	// rose to ~51% because the app's continuous CSS animations (infinite status
+	// "pulse" dots, spinners) then repaint on the CPU every frame instead of the
+	// GPU compositor. The real idle-CPU fix is to stop those animations from
+	// running forever (see StatusIndicator/SessionTree/Preview), NOT to disable
+	// the GPU. So we leave GPU rendering ON by default and only keep the env
+	// overridable for per-machine A/B (ASMGR_GPU / WEBKIT_DISABLE_* still work).
+
 	// Create application with options
 	err := wails.Run(&options.App{
 		Title:            appTitle,
@@ -89,11 +101,36 @@ func main() {
 		Linux: &linux.Options{
 			Icon:             appIcon,
 			ProgramName:      "asmgr-desktop",
-			WebviewGpuPolicy: linux.WebviewGpuPolicyAlways, // Force GPU acceleration
+			// GPU acceleration policy. Profiling pointed at the WebKit
+			// compositor (the main thread is blocked 50–480ms per frame while
+			// typing, but our JS — terminal.write/raf/timeouts — measures
+			// near zero). On many WebKitGTK + driver combos "force GPU" is
+			// actually slower than software rendering because every frame is
+			// synced to the GPU. Override via ASMGR_GPU=never|ondemand|always
+			// (default: ondemand) to find the fastest for this machine.
+			WebviewGpuPolicy: gpuPolicyFromEnv(),
 		},
 	})
 
 	if err != nil {
 		println("Error:", err.Error())
+	}
+}
+
+// gpuPolicyFromEnv lets us A/B the WebView hardware-acceleration policy at
+// launch without rebuilding: ASMGR_GPU=never|ondemand|always.
+// Default is OnDemand, which lets WebKit pick per-content and avoids the
+// always-sync-to-GPU cost that "always" imposes on slow driver stacks.
+func gpuPolicyFromEnv() linux.WebviewGpuPolicy {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("ASMGR_GPU"))) {
+	case "never", "off", "software":
+		return linux.WebviewGpuPolicyNever
+	case "always", "force":
+		return linux.WebviewGpuPolicyAlways
+	default:
+		// Default: OnDemand. Keeps GPU compositing available so the app's CSS
+		// animations stay off the CPU. (Forcing software rendering was tried and
+		// raised idle CPU to ~51%.) Override with ASMGR_GPU=never|always.
+		return linux.WebviewGpuPolicyOnDemand
 	}
 }

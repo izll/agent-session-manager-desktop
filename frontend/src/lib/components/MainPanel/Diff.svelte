@@ -20,6 +20,13 @@
   let lastSessionId: string | null = null;
   let pollInterval: ReturnType<typeof setInterval> | null = null;
   let diffMode: 'session' | 'full' = 'session';
+  // When a diff is very large we DON'T render it automatically — we warn first
+  // and let the user opt in, because rendering a huge diff is heavy. `forceShow`
+  // is set by the "show anyway" button; reset whenever the diff content changes.
+  let forceShow = false;
+  // ~6000 lines (or ~600 KB) counts as "large" — above this we warn first.
+  const LARGE_DIFF_LINES = 6000;
+  const LARGE_DIFF_BYTES = 600 * 1024;
 
   // Start/stop polling based on active state
   function startPolling() {
@@ -80,8 +87,13 @@
     loading = false;
   }
 
-  // Reload when session changes
-  $: if ($selectedSessionId !== lastSessionId) {
+  // Reload when session changes — but ONLY while the Diff tab is actually
+  // visible. Previously this ran on EVERY session switch even when the Diff tab
+  // was hidden, so switching to a session with a huge repo (WebErp) fetched and
+  // parsed its enormous diff in the background — freezing the UI on a plain tab
+  // switch. Gating on `active` means the diff only ever runs when you're looking
+  // at it.
+  $: if (active && $selectedSessionId !== lastSessionId) {
     loadDiff();
   }
 
@@ -89,6 +101,15 @@
   function handleModeChange(mode: 'session' | 'full') {
     diffMode = mode;
     loadDiff();
+  }
+
+  // Cheap line count: counts newlines without allocating a big array (split()).
+  function countLines(content: string): number {
+    let n = 1;
+    for (let i = 0; i < content.length; i++) {
+      if (content.charCodeAt(i) === 10) n++;
+    }
+    return n;
   }
 
   // Parse diff content into lines with colors
@@ -109,7 +130,35 @@
     });
   }
 
-  $: diffLines = diff?.content ? parseDiff(diff.content) : [];
+  // Cap how many diff lines we render. The diff view renders one <div><code>
+  // per line with NO virtualisation, so a huge repo's diff (e.g. WebErp, tens
+  // of thousands of lines) would insert tens of thousands of DOM nodes
+  // synchronously on every session/tab switch — freezing the entire main thread
+  // (the UI, even the profiler, locked up). A diff that large is not human-
+  // readable inline anyway; we render the first MAX_DIFF_LINES and show a notice
+  // with the real total. This is what made WebErp 2 "freeze on typing/switching"
+  // while small-diff sessions (asmgr-desktop) stayed fluid.
+  const MAX_DIFF_LINES = 2000;
+
+  // Detect a large diff from the raw content WITHOUT parsing it (cheap: a length
+  // check + one newline count). If it's large we show a warning instead of
+  // rendering, until the user clicks "show anyway".
+  $: diffContent = diff?.content || '';
+  $: isLargeDiff =
+    diffContent.length > LARGE_DIFF_BYTES ||
+    (diffContent ? countLines(diffContent) : 0) > LARGE_DIFF_LINES;
+  // Reset the opt-in whenever the underlying content changes.
+  $: { diffContent; forceShow = false; }
+
+  // Only parse when the tab is active AND (the diff is small OR the user opted
+  // in). Parsing a huge diff string is itself expensive, so we skip it entirely
+  // while showing the warning.
+  $: shouldRender = active && !!diffContent && (!isLargeDiff || forceShow);
+  $: allDiffLines = shouldRender ? parseDiff(diffContent) : [];
+  $: diffLines = allDiffLines.length > MAX_DIFF_LINES
+    ? allDiffLines.slice(0, MAX_DIFF_LINES)
+    : allDiffLines;
+  $: diffTruncated = allDiffLines.length > MAX_DIFF_LINES;
 </script>
 
 <div class="diff-container">
@@ -149,6 +198,22 @@
           {diffMode === 'session' ? $t('diff.sessionHint') : $t('diff.fullHint')}
         </span>
       </div>
+    {:else if isLargeDiff && !forceShow}
+      <div class="large-diff-warning">
+        <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+          <line x1="12" y1="9" x2="12" y2="13"/>
+          <line x1="12" y1="17" x2="12.01" y2="17"/>
+        </svg>
+        <span class="large-diff-title">Nagy diff ({diff.added + diff.removed} változás)</span>
+        <span class="large-diff-hint">
+          A diff túl nagy az automatikus megjelenítéshez (megfagyaszthatja a felületet).
+          Csak akkor jelenítsd meg, ha tényleg szükséges.
+        </span>
+        <button class="large-diff-show" on:click={() => (forceShow = true)}>
+          Mégis megjelenítés (első {MAX_DIFF_LINES} sor)
+        </button>
+      </div>
     {:else}
       <div class="diff-lines">
         {#each diffLines as line}
@@ -156,12 +221,53 @@
             <code>{line.text}</code>
           </div>
         {/each}
+        {#if diffTruncated}
+          <div class="diff-line meta diff-truncated">
+            <code>… {allDiffLines.length - MAX_DIFF_LINES} további sor elrejtve (a diff túl nagy az inline megjelenítéshez)</code>
+          </div>
+        {/if}
       </div>
     {/if}
   </div>
 </div>
 
 <style>
+  .large-diff-warning {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    height: 100%;
+    padding: 24px;
+    text-align: center;
+    color: #fbbf24;
+  }
+  .large-diff-title {
+    font-size: 15px;
+    font-weight: 600;
+  }
+  .large-diff-hint {
+    font-size: 12px;
+    color: #a1a1aa;
+    max-width: 360px;
+    line-height: 1.5;
+  }
+  .large-diff-show {
+    margin-top: 6px;
+    background: rgba(251, 191, 36, 0.15);
+    color: #fbbf24;
+    border: 1px solid rgba(251, 191, 36, 0.4);
+    border-radius: 6px;
+    padding: 6px 14px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: background 0.15s ease;
+  }
+  .large-diff-show:hover {
+    background: rgba(251, 191, 36, 0.25);
+  }
+
   .diff-container {
     height: 100%;
     display: flex;

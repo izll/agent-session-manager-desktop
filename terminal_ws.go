@@ -73,6 +73,14 @@ type termConn struct {
 	done      chan struct{}
 	writeMu   sync.Mutex
 	closeOnce sync.Once
+	// hidden: when 1, this tab is in the background. We keep reading the PTY
+	// (so tmux never blocks) but DROP the output instead of sending WS frames.
+	// On WebKitGTK every WS frame is dispatched on the single webview main
+	// thread; a background agent flooding output would otherwise starve the
+	// FOREGROUND tab's keystroke handling — the user-visible asymmetry where a
+	// heavy background agent made typing in the visible tab unbearably laggy.
+	// The agent keeps running; on un-hide the frontend asks tmux to redraw.
+	hidden int32
 }
 
 // WriteToTerminal writes data directly to a PTY connection (for dictation)
@@ -242,13 +250,56 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 	tmuxSession := inst.TmuxSessionName()
 	linkedName := fmt.Sprintf("%s_gui_%d_%d", tmuxSession, winIdx, time.Now().UnixMilli())
 
-	// Create a grouped (linked) tmux session targeting the specific window
+	// Create an ISOLATED single-window mirror session.
+	//
+	// We used to create a GROUPED session (`new-session -t base`), which shares
+	// ALL of the base session's windows. That has a fatal flaw for multi-tab
+	// sessions: tmux pushes the BASE SESSION'S ACTIVE-WINDOW redraw to every
+	// grouped client, regardless of which window that client is actually
+	// viewing. So when one WebErp tab's agent worked in window 6, EVERY other
+	// WebErp mirror — including the one showing an idle window 0 that the user
+	// was typing in — received window 6's full redraw (~8 KB/s, measured via
+	// the [send] diag). That continuous off-screen redraw drove the xterm DOM
+	// renderer and made foreground typing stutter. asmgr-desktop (2 tabs) hurt
+	// less than WebErp (5 tabs) purely because it had fewer mirrors sharing the
+	// group — the exact asymmetry the user reported.
+	//
+	// Fix: instead of grouping, create an empty session and LINK only the one
+	// target window into it. The linked window is the SAME tmux window object
+	// (fully live/interactive — the agent's pane is unchanged), but this session
+	// contains ONLY that window, so no other window's activity can ever reach
+	// this mirror. Each tab is now truly isolated.
 	attachTarget := linkedName
-	createCmd := exec.Command("tmux", "new-session", "-d", "-s", linkedName, "-t", tmuxSession)
+	// Empty placeholder session (its own throwaway window 0).
+	createCmd := exec.Command("tmux", "new-session", "-d", "-s", linkedName, "-x", "221", "-y", "44")
 	if err := createCmd.Run(); err != nil {
-		// Fallback to direct attach if grouped session fails
-		log.Printf("Failed to create linked session %s: %v, falling back to direct attach", linkedName, err)
+		log.Printf("Failed to create mirror session %s: %v, falling back to direct attach", linkedName, err)
 		attachTarget = tmuxSession
+	}
+
+	if attachTarget == linkedName {
+		// Link the target window from the base into this session at the same
+		// index (-k replaces our placeholder if it collides). Same window
+		// object → the agent keeps running; only THIS window is in the mirror.
+		linkErr := exec.Command("tmux", "link-window", "-k",
+			"-s", fmt.Sprintf("%s:%d", tmuxSession, winIdx),
+			"-t", fmt.Sprintf("%s:%d", linkedName, winIdx)).Run()
+		if linkErr != nil {
+			// Link failed — clean up and fall back to grouped behaviour so the
+			// tab still works (just without the isolation win).
+			log.Printf("link-window failed for %s win %d: %v, falling back to grouped", tmuxSession, winIdx, linkErr)
+			exec.Command("tmux", "kill-session", "-t", linkedName).Run()
+			exec.Command("tmux", "new-session", "-d", "-s", linkedName, "-t", tmuxSession).Run()
+		} else {
+			// Drop the placeholder window 0 if it's a different index than the
+			// linked one, so the mirror contains exactly the target window.
+			if winIdx != 0 {
+				exec.Command("tmux", "kill-window", "-t", fmt.Sprintf("%s:0", linkedName)).Run()
+			}
+		}
+		// Window sizing stays manual so a resize on one mirror can't ripple.
+		exec.Command("tmux", "set-option", "-t", attachTarget, "window-size", "manual").Run()
+		exec.Command("tmux", "set-window-option", "-t", attachTarget, "aggressive-resize", "off").Run()
 	}
 
 	// Hide tmux status bar in the session (the desktop app has its own UI)
@@ -258,7 +309,7 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 	selectCmd := exec.Command("tmux", "select-window", "-t", fmt.Sprintf("%s:%d", attachTarget, winIdx))
 	selectCmd.Run()
 
-	// Attach to the session (linked sessions have their own active window state)
+	// Attach to the session
 	cmd := exec.Command("tmux", "attach-session", "-t", attachTarget)
 
 	ptmx, err := pty.Start(cmd)
@@ -351,6 +402,15 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 				}
 				return
 			case chunk := <-dataCh:
+				// Hidden (background) tab: keep draining the PTY so tmux never
+				// blocks, but DROP the bytes — sending WS frames to a hidden tab
+				// only burns the webview's single main thread and starves the
+				// foreground tab's input. On un-hide the frontend triggers a
+				// tmux redraw, so nothing is permanently lost.
+				if atomic.LoadInt32(&tc.hidden) == 1 {
+					pendingData = pendingData[:0]
+					continue
+				}
 				pendingData = append(pendingData, chunk...)
 				// Only bypass the flush ticker when the buffer would otherwise
 				// grow unboundedly in a single tick window. 64 KB is high enough
@@ -368,7 +428,7 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 					}
 				}
 			case <-flushTicker.C:
-				if len(pendingData) > 0 {
+				if len(pendingData) > 0 && atomic.LoadInt32(&tc.hidden) == 0 {
 					tc.writeMu.Lock()
 					err := ws.WriteMessage(websocket.BinaryMessage, pendingData)
 					tc.writeMu.Unlock()
@@ -377,6 +437,8 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 						log.Printf("WebSocket write error: %v", err)
 						return
 					}
+				} else if atomic.LoadInt32(&tc.hidden) == 1 {
+					pendingData = pendingData[:0]
 				}
 			}
 		}
@@ -429,10 +491,40 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 							Cols: uint16(cols),
 							Rows: uint16(rows),
 						})
-						// Also resize the window (aggregate) so tmux picks up
-						// the biggest client and sends a full redraw.
-						exec.Command("tmux", "resize-window", "-t", attachTarget, "-A").Run()
-						exec.Command("tmux", "refresh-client", "-t", attachTarget).Run()
+						// Resize this mirror's window to EXACTLY this client's
+						// size. We deliberately do NOT use `-A` (aggregate =
+						// largest client): with grouped per-tab mirrors, `-A`
+						// would size the shared window to the biggest of all
+						// attached mirrors, letting a background tab drag the
+						// active window's size and trigger redraw churn. Pinning
+						// to this client's own cols×rows (paired with the
+						// `window-size manual` set at attach) keeps each tab's
+						// view independent. Only meaningful on our linked
+						// session; on a fallback direct attach we skip it so we
+						// don't resize the shared base session under the user.
+						if attachTarget == linkedName {
+							exec.Command("tmux", "resize-window", "-t",
+								fmt.Sprintf("%s:%d", attachTarget, winIdx),
+								"-x", fmt.Sprintf("%d", cols),
+								"-y", fmt.Sprintf("%d", rows)).Run()
+							exec.Command("tmux", "refresh-client", "-t", attachTarget).Run()
+						}
+					}
+				} else if len(data) >= 2 && data[0] == 0x02 {
+					// Visibility: 0x02 + (1 = visible, 0 = hidden). A hidden tab
+					// has its PTY output dropped at the backend (see the pump
+					// loop) so a background agent can't starve the foreground
+					// tab's input on the single webview main thread.
+					if data[1] == 0 {
+						atomic.StoreInt32(&tc.hidden, 1)
+					} else {
+						atomic.StoreInt32(&tc.hidden, 0)
+						// Coming back to the foreground: force tmux to repaint the
+						// pane so we recover everything that was dropped while
+						// hidden, in a single redraw.
+						if attachTarget == linkedName {
+							exec.Command("tmux", "refresh-client", "-t", attachTarget).Run()
+						}
 					}
 				} else {
 					// Regular input - signal typing for polling suppression

@@ -3,6 +3,7 @@ import {
   attachToSession,
   detachFromSession,
   fitTerminal,
+  sendVisibility,
   type TerminalInstance
 } from './terminal';
 import type { Terminal } from '@xterm/xterm';
@@ -36,15 +37,34 @@ export class TerminalPool {
       if (isActive) {
         entry.containerEl.style.display = 'block';
         entry.containerEl.style.zIndex = '1';
+        // Re-enable rendering for the visible terminal.
+        entry.containerEl.style.contentVisibility = 'visible';
       } else {
         entry.containerEl.style.display = 'none';
         entry.containerEl.style.zIndex = '0';
+        // content-visibility: hidden takes the (thousands of) xterm cell
+        // <span>s of every background terminal OUT of the browser's
+        // style/layout/render tree. With plain display:none, WebKit was
+        // still doing a document-wide Style Recalc across all hidden
+        // terminals on every change anywhere — the cause of the main-thread
+        // blocks while a background tab produces output. This makes the
+        // recalc cost independent of how many tabs are open.
+        entry.containerEl.style.contentVisibility = 'hidden';
       }
       // Pair the DOM visibility with the xterm write gate — keeps hidden
       // tabs from spending CPU on off-screen canvas renders.
       const ti = entry.terminalInstance;
       const wasVisible = ti.visible;
       ti.visible = isActive;
+      // Tell the BACKEND too, so a hidden tab's PTY output is dropped at the
+      // source. Without this the backend keeps streaming a background agent's
+      // flood over the WebSocket, and every frame is dispatched on the webview's
+      // single main thread — starving the foreground tab's keystrokes (the
+      // user-visible asymmetry: a busy background agent made typing in the
+      // visible tab unbearably laggy). Only notify on an actual change.
+      if (isActive !== wasVisible) {
+        sendVisibility(ti, isActive);
+      }
       if (isActive && !wasVisible) {
         const flush = (ti as any)._flushHidden as (() => void) | undefined;
         if (flush) flush();
@@ -67,6 +87,14 @@ export class TerminalPool {
     containerEl.style.top = '0';
     containerEl.style.left = '0';
     containerEl.style.zIndex = '0';
+    // Isolate this subtree's layout & paint so an xterm update repaints only
+    // the terminal region instead of the whole 2560×1085 window (profiling
+    // showed every keystroke echo doing a full-window Paint ~27ms). We use
+    // `layout paint` (NOT `strict`, which also adds `size` containment and
+    // would zero out the explicit 100% height). The translateZ promotes it
+    // to its own compositor layer so the paint stays local.
+    containerEl.style.contain = 'layout paint';
+    containerEl.style.transform = 'translateZ(0)';
     this.parentEl.appendChild(containerEl);
 
     // Create xterm instance
@@ -112,6 +140,16 @@ export class TerminalPool {
 
     // If another show() was called while we were awaiting, bail out
     if (this.showGeneration !== gen) return;
+
+    // NOTE: we intentionally keep EVERY opened tab's WebSocket + tmux mirror
+    // live (we do NOT tear down inactive tabs). An earlier experiment tore
+    // them down to leave only the active tab connected, on the theory that the
+    // number of parallel mirrors drove the stutter — but the real cause turned
+    // out to be the frontend flush throttle, and the teardown only hurt UX
+    // (a ~0.3s reconnect + tmux redraw on every tab switch, and background
+    // tabs stopped reflecting live output). Hidden tabs are cheap: their
+    // inbound bytes are buffered (not written to xterm) until the tab is shown
+    // again — see the hiddenBuffer path in terminal.ts.
 
     // Apply visibility with the active key
     this.applyVisibility();

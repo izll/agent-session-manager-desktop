@@ -1,5 +1,6 @@
 import { Terminal, type IDisposable } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
+import { CanvasAddon } from '@xterm/addon-canvas';
 import { GetTerminalWSPort, GetTerminalWSToken } from '../../../wailsjs/go/main/App';
 
 // The backend may bind a fallback port if 9753 is taken (e.g. a second
@@ -80,6 +81,42 @@ export interface TerminalInstance {
   hiddenBuffer: Uint8Array[];
 }
 
+// Load the CANVAS renderer addon, defensively. We tried WebGL first but on this
+// WebKitGTK the WebGL canvas did not repaint reliably — typed characters only
+// appeared after a manual window resize forced a redraw (a known WebGL-in-
+// WebKitGTK dirty-region issue), which read as input lag + apparent glyph
+// shift. The canvas addon renders to a 2D canvas that WebKit repaints normally,
+// so it avoids that, while still being much cheaper than the DOM renderer
+// (which Paint-dominated the profile on every Claude prompt redraw).
+//
+// xterm measures glyph metrics synchronously when the renderer initialises;
+// if the monospace font isn't loaded yet those metrics are wrong and glyphs can
+// blur or mis-align. So we wait for document.fonts.ready first.
+// Set localStorage 'noCanvas'='1' to force the DOM renderer for A/B.
+function loadCanvasRenderer(terminal: Terminal): void {
+  try {
+    if (typeof localStorage !== 'undefined' && localStorage.getItem('noCanvas') === '1') return;
+  } catch { /* ignore */ }
+
+  const attach = () => {
+    // Terminal may have been disposed while we awaited fonts.
+    if (!(terminal as any).element) return;
+    try {
+      terminal.loadAddon(new CanvasAddon());
+    } catch (e) {
+      console.warn('[terminal] Canvas addon failed, using DOM renderer:', e);
+    }
+  };
+
+  // Wait for fonts so glyph metrics are correct, then attach. Guard the API.
+  const fonts: FontFaceSet | undefined = (document as any).fonts;
+  if (fonts && fonts.ready && typeof fonts.ready.then === 'function') {
+    fonts.ready.then(attach).catch(attach);
+  } else {
+    attach();
+  }
+}
+
 export function createTerminal(container: HTMLElement, options: Partial<Terminal['options']> = {}): TerminalInstance {
   const terminal = new Terminal({
     // cursorBlink triggers a continuous render tick on the xterm canvas every
@@ -88,6 +125,20 @@ export function createTerminal(container: HTMLElement, options: Partial<Terminal
     cursorBlink: false,
     fontSize: 14,
     scrollback: 1000,
+    // Low-risk render-cost trims for the DOM renderer on WebKitGTK (no renderer
+    // change). Each one removes work from the per-update style/layout/paint
+    // pipeline that profiling pinned as the real cost (WebKitWebProcess high
+    // CPU while bytes/JS time were ~0):
+    //  - smoothScrollDuration 0: a scroll repaints once, not over N animation
+    //    frames (an agent that scrolls its panel every redraw would otherwise
+    //    multiply repaints).
+    //  - allowTransparency false: lets WebKit use the opaque fast path and skip
+    //    per-cell alpha compositing (must be set before open()).
+    //  - minimumContrastRatio 1: the default, but pinned explicitly — any value
+    //    >1 forces a per-fg/bg contrast recompute on every cell render.
+    smoothScrollDuration: 0,
+    allowTransparency: false,
+    minimumContrastRatio: 1,
     fontFamily: 'JetBrains Mono, Menlo, Monaco, Consolas, monospace',
     theme: {
       background: '#1a1a2e',
@@ -111,10 +162,13 @@ export function createTerminal(container: HTMLElement, options: Partial<Terminal
 
   terminal.open(container);
 
-  // Using the default DOM renderer — the canvas addon produced blurry glyphs
-  // on HiDPI displays, and the WebGL addon lags in WebKit. The real CPU work
-  // is throttled on the backend side (see terminal_ws.go) and by suppressing
-  // writes to hidden tabs (see terminalPool.ts).
+  // Renderer: Canvas. The DOM renderer (xterm default) Paint-dominated the
+  // profile — every Claude prompt redraw on each keystroke forced a full Paint.
+  // WebGL was cheaper but didn't repaint reliably in this WebKitGTK (needed a
+  // manual resize to show typed text). The canvas renderer is the middle
+  // ground: far cheaper than DOM, and it repaints normally. Loaded after fonts
+  // are ready so glyph metrics are correct.
+  loadCanvasRenderer(terminal);
 
   // NOTE: fit() is called later by the pool once the container is visible.
   // Calling it here while the container may be display:none produces a
@@ -150,15 +204,27 @@ export function createTerminal(container: HTMLElement, options: Partial<Terminal
     return true;
   });
 
-  // Auto-copy selection to clipboard when user selects text
-  terminal.onSelectionChange(() => {
-    const selection = terminal.getSelection();
-    if (selection) {
-      navigator.clipboard.writeText(selection).catch(() => {
-        // Clipboard write may fail if not focused or no permission
-      });
+  // Shift+selection → copy to clipboard, the SAFE way.
+  //
+  // The old approach used terminal.onSelectionChange, which fired on EVERY
+  // buffer shift — so a chatty pane (e.g. a task-master MCP dumping JSON) made
+  // it call navigator.clipboard.writeText() continuously, and WebKit's
+  // document-wide clipboard machinery froze the whole UI. Instead we copy only
+  // on an explicit user gesture: a mouseup that ENDED a Shift-held drag. Output
+  // can never trigger it, so no freeze. Normal (non-Shift) selection does not
+  // auto-copy (use the OS/context menu), matching the requested behaviour.
+  let shiftSelecting = false;
+  const onMouseDown = (e: MouseEvent) => { shiftSelecting = e.shiftKey; };
+  const onMouseUp = () => {
+    if (!shiftSelecting) return;
+    shiftSelecting = false;
+    const sel = terminal.getSelection();
+    if (sel && sel.length > 0 && navigator.clipboard) {
+      navigator.clipboard.writeText(sel).catch(() => { /* ignore */ });
     }
-  });
+  };
+  container.addEventListener('mousedown', onMouseDown, true);
+  container.addEventListener('mouseup', onMouseUp, true);
 
   return {
     terminal,
@@ -171,6 +237,8 @@ export function createTerminal(container: HTMLElement, options: Partial<Terminal
     visible: true,
     hiddenBuffer: [],
     cleanup: () => {
+      container.removeEventListener('mousedown', onMouseDown, true);
+      container.removeEventListener('mouseup', onMouseUp, true);
       terminal.dispose();
     }
   };
@@ -187,6 +255,17 @@ function sendResize(ws: WebSocket, cols: number, rows: number) {
     buf[3] = (rows >> 8) & 0xff;
     buf[4] = rows & 0xff;
     ws.send(buf);
+  }
+}
+
+// Tell the backend whether this tab is visible. A hidden tab has its PTY
+// output DROPPED at the backend so a background agent's flood can't starve the
+// foreground tab's keystrokes on the webview's single main thread. Message
+// format: 0x02 + (1 visible | 0 hidden).
+export function sendVisibility(terminalInstance: TerminalInstance, visible: boolean): void {
+  const ws = terminalInstance.ws;
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(new Uint8Array([0x02, visible ? 1 : 0]));
   }
 }
 
@@ -244,6 +323,12 @@ export async function attachToSession(
     terminalInstance.sessionId = sessionId;
     terminalInstance.windowIdx = windowIdx;
 
+    // Sync the backend's hidden/visible state to this instance's current value
+    // as soon as the socket is open. A background tab restored at startup may
+    // attach while already hidden; without this the backend would default to
+    // "visible" and stream its agent's output, starving the foreground tab.
+    sendVisibility(terminalInstance, terminalInstance.visible);
+
     // Clear terminal BEFORE setting onmessage to avoid old content mixing with new
     terminal.clear();
 
@@ -260,22 +345,22 @@ export async function attachToSession(
     let hiddenBytes = 0;
     let hiddenOverflow = false;
 
-    // Timed batching for visible writes. Every WS chunk goes into a queue
-    // and gets flushed at a capped rate (see FLUSH_INTERVAL_MS). Using a
-    // plain setTimeout rather than requestAnimationFrame on purpose:
-    // - rAF runs at 60Hz and is still aggressive enough to keep WebKit's
-    //   main thread pegged when an agent paints continuously.
-    // - Terminals don't need 60fps; 20-25fps feels instant to humans and
-    //   halves the DOM-mutation storm that the xterm DOM renderer causes.
-    const FLUSH_INTERVAL_MS = 40; // ~25fps
     let visibleQueue: Uint8Array[] = [];
+    // Low-latency leading-edge flush (the version that tested best): if we
+    // haven't written for >= MIN_INTERVAL, flush on the next microtask so an
+    // isolated keystroke echo lands essentially immediately; otherwise coalesce
+    // a burst with one short timer capped at MIN_INTERVAL (~60fps). No rAF (it
+    // added a one-frame input delay) and no burst ramp (it bunched echoes).
+    const MIN_INTERVAL_MS = 16;
     let timerHandle: ReturnType<typeof setTimeout> | null = null;
-    const flushVisible = () => {
-      timerHandle = null;
+    let microQueued = false;
+    let lastFlush = 0;
+    const doWrite = () => {
       if (visibleQueue.length === 0) return;
       // Concat and write in one call so xterm only runs one parse/layout cycle.
       let total = 0;
       for (const c of visibleQueue) total += c.byteLength;
+      if (total === 0) { visibleQueue = []; return; } // nothing real → no Paint
       const merged = new Uint8Array(total);
       let offset = 0;
       for (const c of visibleQueue) {
@@ -283,7 +368,23 @@ export async function attachToSession(
         offset += c.byteLength;
       }
       visibleQueue = [];
+      lastFlush = performance.now();
       terminal.write(merged);
+    };
+    const flushVisible = () => {
+      timerHandle = null;
+      microQueued = false;
+      doWrite();
+    };
+    const scheduleFlush = () => {
+      if (timerHandle !== null || microQueued) return;
+      const since = performance.now() - lastFlush;
+      if (since >= MIN_INTERVAL_MS) {
+        microQueued = true;
+        queueMicrotask(flushVisible);
+      } else {
+        timerHandle = setTimeout(flushVisible, MIN_INTERVAL_MS - since);
+      }
     };
 
     ws.onmessage = (event) => {
@@ -293,9 +394,7 @@ export async function attachToSession(
 
       if (terminalInstance.visible) {
         visibleQueue.push(chunk);
-        if (timerHandle === null) {
-          timerHandle = setTimeout(flushVisible, FLUSH_INTERVAL_MS);
-        }
+        scheduleFlush();
         return;
       }
 
@@ -332,9 +431,7 @@ export async function attachToSession(
       }
       terminalInstance.hiddenBuffer = [];
       hiddenBytes = 0;
-      if (timerHandle === null) {
-        timerHandle = setTimeout(flushVisible, FLUSH_INTERVAL_MS);
-      }
+      scheduleFlush();
     };
 
     ws.onclose = () => {

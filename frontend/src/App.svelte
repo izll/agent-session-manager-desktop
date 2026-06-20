@@ -153,15 +153,24 @@
       return;
     }
 
+    // FAST PATH: this handler runs in the capture phase on EVERY keystroke,
+    // including ordinary typing into the terminal. All our shortcuts need a
+    // modifier (Ctrl/Cmd+Shift) or Alt+Arrow. Bail out immediately for plain
+    // keys BEFORE doing any DOM work — the two querySelector() calls below
+    // walk a document that contains thousands of xterm cell spans and were
+    // running on every character, which dominated the per-keystroke JS cost
+    // (profiling: ~48 keydown/s while typing pegged the main thread).
+    const mod = (e.ctrlKey || e.metaKey) && e.shiftKey;
+    const altArrow = e.altKey && !e.ctrlKey && !e.shiftKey &&
+      (e.key === 'ArrowUp' || e.key === 'ArrowDown');
+    if (!mod && !altArrow) return;
+
     // Don't handle shortcuts when any dialog is open
     const dialogOpen = document.querySelector('.dialog-overlay') !== null;
     if (dialogOpen) return;
 
     // Don't handle shortcuts when dictation buffer panel is visible
     if (document.querySelector('.dictation-buffer')) return;
-
-    // Everything below requires Ctrl+Shift (or Cmd+Shift on macOS).
-    const mod = (e.ctrlKey || e.metaKey) && e.shiftKey;
 
     // --- Navigation (work even inside input fields) ---
 
@@ -715,7 +724,10 @@
   .header {
     background: linear-gradient(180deg, rgba(139, 92, 246, 0.08) 0%, transparent 100%);
     border-bottom: 1px solid rgba(139, 92, 246, 0.15);
-    backdrop-filter: blur(10px);
+    /* No backdrop-filter: an always-visible blurred region forces WebKit to
+       re-gaussian-blur (and full-window repaint) on every frame anything
+       behind it changes — the dominant cause of ~90% renderer CPU with
+       several running sessions. The header's own gradient is enough. */
   }
 
   .logo-icon {
