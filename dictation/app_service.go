@@ -306,14 +306,24 @@ func (a *AppService) NotifyUploading(isUploading bool) {
 	}
 }
 
-// getConfigDir returns the configuration directory path (cross-platform)
+// getConfigDir returns the dictation configuration directory. It lives UNDER
+// the app's single config root so everything is in one place:
+//
+//	~/.config/agent-session-manager-desktop/dictation/
+//
+// Previously dictation used its own ~/.config/ai-dictate/ directory, which was
+// inconsistent with the rest of the app (and is how a personal key once ended
+// up tracked). migrateLegacyDictationConfig() moves an existing ai-dictate dir
+// here once, so users don't lose their settings.
 func getConfigDir() (string, error) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return "", err
 	}
 
-	configDir := filepath.Join(homeDir, ".config", "ai-dictate")
+	configDir := filepath.Join(homeDir, ".config", "agent-session-manager-desktop", "dictation")
+
+	migrateLegacyDictationConfig(homeDir, configDir)
 
 	// Create directory if it doesn't exist
 	err = os.MkdirAll(configDir, 0755)
@@ -322,6 +332,42 @@ func getConfigDir() (string, error) {
 	}
 
 	return configDir, nil
+}
+
+// migrateLegacyDictationConfig moves the old ~/.config/ai-dictate/ contents to
+// the new location once. No-op if the new dir already exists or the old one
+// doesn't. Best-effort: failures are ignored (the app falls back to defaults).
+func migrateLegacyDictationConfig(homeDir, newDir string) {
+	legacyDir := filepath.Join(homeDir, ".config", "ai-dictate")
+	if legacyDir == newDir {
+		return
+	}
+	// Only migrate if the new dir doesn't exist yet but the legacy one does.
+	if _, err := os.Stat(newDir); err == nil {
+		return // already migrated / new config present
+	}
+	entries, err := os.ReadDir(legacyDir)
+	if err != nil {
+		return // no legacy config to migrate
+	}
+	if err := os.MkdirAll(newDir, 0755); err != nil {
+		return
+	}
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(legacyDir, e.Name()))
+		if err != nil {
+			continue
+		}
+		// Preserve 0600 for settings (it may hold an API key); others 0644.
+		mode := os.FileMode(0644)
+		if e.Name() == "settings.json" {
+			mode = 0600
+		}
+		_ = os.WriteFile(filepath.Join(newDir, e.Name()), data, mode)
+	}
 }
 
 // getConfigPath returns the path for a config file (settings.json, etc.)

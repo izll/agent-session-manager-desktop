@@ -137,7 +137,7 @@ func (sr *SpeechRecognizer) recognitionLoop() {
 	// Warn if silence_duration is too short (can cause words to be cut in half)
 	if minSilenceDuration < 0.3 {
 		logToFile("⚠️  WARNING: silence_duration is very short (%.2fs) - words may be cut in half!\n", minSilenceDuration)
-		logToFile("⚠️  Recommended: 0.4-0.6 seconds for best results. Edit ~/.config/ai-dictate/settings.json\n")
+		logToFile("⚠️  Recommended: 0.4-0.6 seconds for best results. Edit ~/.config/agent-session-manager-desktop/dictation/settings.json\n")
 	}
 
 	logToFile("🎚️  Silence detection: threshold=%.6f (%.0f%%), duration=%.2fs\n",
