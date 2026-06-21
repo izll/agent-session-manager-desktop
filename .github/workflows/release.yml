@@ -70,8 +70,8 @@ jobs:
             libwebkit2gtk-4.1-dev \
             build-essential pkg-config \
             portaudio19-dev \
-            libx11-dev libxtst-dev libxcb1-dev libxkbcommon-dev \
-            libxcb-xkb-dev xorg-dev
+            libx11-dev libx11-xcb-dev libxtst-dev libxcb1-dev \
+            libxkbcommon-dev libxcb-xkb-dev xorg-dev
 
       - name: Install Wails CLI
         run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.11.0
