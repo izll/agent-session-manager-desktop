@@ -157,19 +157,18 @@ jobs:
       - name: Install Wails CLI
         run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.11.0
 
-      - name: Build (Wails, macOS universal)
+      - name: Build (Wails, macOS arm64)
+        # Build arm64 only: the macos-14 runner is Apple Silicon and Homebrew's
+        # portaudio is arm64-only, so a universal build fails to link the x86_64
+        # slice. Intel Macs run the arm64 build under Rosetta 2.
         run: |
           export PATH="$PATH:$(go env GOPATH)/bin"
-          wails build -platform darwin/universal -clean
+          wails build -platform darwin/arm64 -clean
 
-      - name: Package .tar.gz (both arch names — it's a universal binary)
+      - name: Package .tar.gz (name matches the in-app updater)
         run: |
           V="${{ steps.ver.outputs.num }}"
-          # The build is darwin/universal (runs on both arm64 and amd64), but the
-          # updater looks up an arch-specific name. Publish under both so either
-          # Mac finds its asset.
           tar -C build/bin -czf "asmgr-desktop_${V}_darwin_arm64.tar.gz" "asmgr-desktop.app"
-          cp "asmgr-desktop_${V}_darwin_arm64.tar.gz" "asmgr-desktop_${V}_darwin_amd64.tar.gz"
           ls -la *.tar.gz
 
       - name: Upload to GitHub Release
@@ -178,6 +177,5 @@ jobs:
           tag_name: ${{ steps.ver.outputs.tag }}
           files: |
             asmgr-desktop_${{ steps.ver.outputs.num }}_darwin_arm64.tar.gz
-            asmgr-desktop_${{ steps.ver.outputs.num }}_darwin_amd64.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
