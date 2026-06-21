@@ -1,6 +1,6 @@
 {
   "app.title": "Agent Session Manager",
-  "app.titleSuffix": "desktop",
+  "app.titleSuffix": "Desktop",
   "app.search": "Пошук",
   "header.globalSearch": "Глобальний пошук (Ctrl+F)",
   "header.importSessions": "Імпортувати сеанси (I)",

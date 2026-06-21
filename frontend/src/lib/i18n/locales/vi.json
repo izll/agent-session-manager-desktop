@@ -1,6 +1,6 @@
 {
   "app.title": "Agent Session Manager",
-  "app.titleSuffix": "desktop",
+  "app.titleSuffix": "Desktop",
   "app.search": "Tìm kiếm",
   "header.globalSearch": "Tìm kiếm toàn cục (Ctrl+F)",
   "header.importSessions": "Nhập phiên (I)",

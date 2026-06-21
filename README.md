@@ -1,11 +1,27 @@
-# ASMGR Desktop — Agent Session Manager
+<div align="center">
 
-A desktop GUI for managing multiple AI coding-agent sessions side by side, built
-with [Wails](https://wails.io) (Go) + Svelte + TypeScript + [xterm.js](https://xtermjs.org).
-Each session runs in its own `tmux` session, so agents keep working in the
-background even when the window is closed, and you can reattach any time.
+<img src="build/logo-readme.png" alt="ASMGR Desktop" width="180">
 
-It is the desktop port of the ASMGR TUI.
+# Agent Session Manager — Desktop
+
+The **desktop GUI** for managing multiple AI coding-agent sessions side by side.
+The graphical counterpart of the
+[**ASMGR TUI**](https://github.com/izll/agent-session-manager).
+
+[![Release](https://img.shields.io/github/v/release/izll/agent-session-manager-desktop?style=flat)](https://github.com/izll/agent-session-manager-desktop/releases)
+[![Go](https://img.shields.io/badge/Go-1.24+-00ADD8?style=flat&logo=go)](https://go.dev)
+[![Wails](https://img.shields.io/badge/Wails-v2-DF0000?style=flat)](https://wails.io)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+
+</div>
+
+Built with [Wails](https://wails.io) (Go) + Svelte + TypeScript +
+[xterm.js](https://xtermjs.org). Each session runs in its own `tmux` session, so
+agents keep working in the background even when the window is closed, and you can
+reattach any time.
+
+> Prefer the terminal? The original TUI version lives at
+> [izll/agent-session-manager](https://github.com/izll/agent-session-manager).
 
 ## Features
 
@@ -25,6 +41,22 @@ It is the desktop port of the ASMGR TUI.
   they never freeze the UI); per-tab notes.
 - **Selectable terminal renderer** — canvas (default), WebGL, or DOM, switchable
   at runtime from Settings.
+
+## Install
+
+Download the latest `.deb` from the
+[**Releases**](https://github.com/izll/agent-session-manager-desktop/releases)
+page and install it:
+
+```bash
+sudo dpkg -i asmgr-desktop_*_linux_x86_64.deb
+```
+
+It installs to `/usr/bin/asmgr-desktop` and adds an app-menu entry. Runtime
+dependencies (`libwebkit2gtk-4.1-0`, `tmux`) are pulled in automatically. The app
+checks for new releases and can update itself in place.
+
+To build from source instead, see [Build](#build) below.
 
 ## Requirements
 

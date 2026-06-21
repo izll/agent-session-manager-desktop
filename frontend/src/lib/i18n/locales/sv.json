@@ -1,6 +1,6 @@
 {
   "app.title": "Agent Session Manager",
-  "app.titleSuffix": "desktop",
+  "app.titleSuffix": "Desktop",
   "app.search": "Sök",
   "header.globalSearch": "Global sökning (Ctrl+F)",
   "header.importSessions": "Importera sessioner (I)",

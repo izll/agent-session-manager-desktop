@@ -1,6 +1,6 @@
 {
   "app.title": "Agent Session Manager",
-  "app.titleSuffix": "desktop",
+  "app.titleSuffix": "Desktop",
   "app.search": "搜索",
   "header.globalSearch": "全局搜索 (Ctrl+F)",
   "header.importSessions": "导入会话 (I)",

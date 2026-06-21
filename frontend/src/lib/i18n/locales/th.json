@@ -1,6 +1,6 @@
 {
   "app.title": "Agent Session Manager",
-  "app.titleSuffix": "desktop",
+  "app.titleSuffix": "Desktop",
   "app.search": "ค้นหา",
   "header.globalSearch": "ค้นหาทั้งหมด (Ctrl+F)",
   "header.importSessions": "นำเข้าเซสชัน (I)",

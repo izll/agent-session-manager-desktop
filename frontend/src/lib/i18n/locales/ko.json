@@ -1,6 +1,6 @@
 {
   "app.title": "Agent Session Manager",
-  "app.titleSuffix": "desktop",
+  "app.titleSuffix": "Desktop",
   "app.search": "검색",
   "header.globalSearch": "전체 검색 (Ctrl+F)",
   "header.importSessions": "세션 가져오기 (I)",
