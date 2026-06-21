@@ -73,15 +73,20 @@ jobs:
             xorg-dev \
             libx11-dev libx11-xcb-dev libxtst-dev libxcb1-dev \
             libxkbcommon-dev libxkbcommon-x11-dev libxcb-xkb-dev \
-            libxinerama-dev libxrandr-dev libxt-dev
+            libxinerama-dev libxrandr-dev libxt-dev \
+            xvfb
 
       - name: Install Wails CLI
         run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.11.0
 
       - name: Build (Wails, webkit2_41)
+        # Wails' "generating bindings" step runs the app's Go init() code, and a
+        # dependency (robotn/gohook, global hotkey) calls XOpenDisplay on init —
+        # which segfaults on a headless runner. Run the build under a virtual X
+        # server (Xvfb) so a display exists during binding generation.
         run: |
           export PATH="$PATH:$(go env GOPATH)/bin"
-          wails build -tags webkit2_41 -clean
+          xvfb-run -a wails build -tags webkit2_41 -clean
 
       - name: Install nfpm
         run: go install github.com/goreleaser/nfpm/v2/cmd/nfpm@latest
