@@ -122,8 +122,9 @@ func ClearAvailableUpdate() {
 
 // IsPackageManaged checks if the binary was installed via a package manager
 func IsPackageManaged() bool {
-	// Check if installed via dpkg (Debian/Ubuntu)
-	if _, err := os.Stat("/var/lib/dpkg/info/asmgr.list"); err == nil {
+	// Check if installed via dpkg (Debian/Ubuntu). The package is named after
+	// BinaryName (asmgr-desktop), not the TUI's "asmgr".
+	if _, err := os.Stat("/var/lib/dpkg/info/" + BinaryName + ".list"); err == nil {
 		return true
 	}
 

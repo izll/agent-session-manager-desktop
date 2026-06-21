@@ -12,3 +12,5 @@ energott.html
 # User-specific dictation config (contains personal API key / usage)
 dictation/settings.json
 dictation/api_usage_log.json
+*.deb
+*.rpm

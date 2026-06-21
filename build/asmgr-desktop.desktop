@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Agent Session Manager
+Comment=Manage multiple AI coding-agent sessions
+Exec=asmgr-desktop
+Icon=asmgr-desktop
+Terminal=false
+Categories=Development;Utility;
+StartupNotify=true
