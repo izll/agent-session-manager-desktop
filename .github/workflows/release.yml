@@ -179,3 +179,76 @@ jobs:
             asmgr-desktop_${{ steps.ver.outputs.num }}_darwin_arm64.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Windows build. Wails uses the native WebView2 (no webkit2_41 tag). CGO is
+  # required (portaudio); we get a gcc toolchain + portaudio via MSYS2.
+  # NOTE: the app shells out to `tmux` at runtime, which native Windows does not
+  # have — users need it on PATH (e.g. via WSL/MSYS2/Git Bash). This build makes
+  # the binary available; full functionality still depends on tmux.
+  release-windows:
+    name: Build & Release (Windows)
+    needs: release
+    runs-on: windows-2022
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup MSYS2 (gcc + portaudio)
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-pkgconf
+            mingw-w64-ucrt-x86_64-portaudio
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Resolve version
+        id: ver
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ github.event.inputs.version }}"
+          else
+            TAG="${GITHUB_REF#refs/tags/}"
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "num=${TAG#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Install Wails CLI
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.11.0
+
+      - name: Build (Wails, Windows amd64)
+        run: |
+          export PATH="$PATH:$(go env GOPATH)/bin"
+          export CGO_ENABLED=1
+          wails build -platform windows/amd64 -clean
+
+      - name: Package .tar.gz (name matches the in-app updater)
+        run: |
+          V="${{ steps.ver.outputs.num }}"
+          tar -C build/bin -czf "asmgr-desktop_${V}_windows_amd64.tar.gz" "asmgr-desktop.exe"
+          ls -la *.tar.gz
+
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.ver.outputs.tag }}
+          files: |
+            asmgr-desktop_${{ steps.ver.outputs.num }}_windows_amd64.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

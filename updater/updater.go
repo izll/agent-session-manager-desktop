@@ -315,11 +315,11 @@ func DownloadAndInstallRpm(version string) error {
 func DownloadAndInstall(version string) error {
 	// Check if installed via package manager
 	if IsPackageManaged() {
-		// Check if dpkg - use deb update
-		if _, err := os.Stat("/var/lib/dpkg/info/asmgr.list"); err == nil {
+		// dpkg (Debian/Ubuntu) → .deb; otherwise assume rpm. The dpkg list is
+		// named after BinaryName (asmgr-desktop.list), not the TUI's asmgr.list.
+		if _, err := os.Stat("/var/lib/dpkg/info/" + BinaryName + ".list"); err == nil {
 			return DownloadAndInstallDeb(version)
 		}
-		// Otherwise assume rpm
 		return DownloadAndInstallRpm(version)
 	}
 
