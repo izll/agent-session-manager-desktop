@@ -44,12 +44,16 @@ reattach any time.
 
 ## Install
 
-Download the latest `.deb` from the
+Download the latest package from the
 [**Releases**](https://github.com/izll/agent-session-manager-desktop/releases)
 page and install it:
 
 ```bash
+# Debian / Ubuntu
 sudo dpkg -i asmgr-desktop_*_linux_x86_64.deb
+
+# Fedora / RHEL
+sudo rpm -i asmgr-desktop_*_linux_x86_64.rpm
 ```
 
 It installs to `/usr/bin/asmgr-desktop` and adds an app-menu entry. Runtime

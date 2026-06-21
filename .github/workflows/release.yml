@@ -114,3 +114,70 @@ jobs:
             asmgr-desktop_${{ steps.ver.outputs.num }}_linux_x86_64.rpm
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # macOS build. Wails uses the native WKWebView here (NO webkit2_41 tag).
+  # CGO is required (portaudio/CoreAudio, gohook/Cocoa). The Linux job owns the
+  # tag; this job only builds and uploads its assets to the same release.
+  # NOTE: tmux is still required at runtime (install via Homebrew). Dictation
+  # bits that are Linux-only (PulseAudio, uinput) fall back to no-op stubs.
+  release-macos:
+    name: Build & Release (macOS)
+    needs: release
+    runs-on: macos-14
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve version
+        id: ver
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ github.event.inputs.version }}"
+          else
+            TAG="${GITHUB_REF#refs/tags/}"
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "num=${TAG#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies (PortAudio)
+        run: brew install portaudio
+
+      - name: Install Wails CLI
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.11.0
+
+      - name: Build (Wails, macOS universal)
+        run: |
+          export PATH="$PATH:$(go env GOPATH)/bin"
+          wails build -platform darwin/universal -clean
+
+      - name: Package .tar.gz (both arch names — it's a universal binary)
+        run: |
+          V="${{ steps.ver.outputs.num }}"
+          # The build is darwin/universal (runs on both arm64 and amd64), but the
+          # updater looks up an arch-specific name. Publish under both so either
+          # Mac finds its asset.
+          tar -C build/bin -czf "asmgr-desktop_${V}_darwin_arm64.tar.gz" "asmgr-desktop.app"
+          cp "asmgr-desktop_${V}_darwin_arm64.tar.gz" "asmgr-desktop_${V}_darwin_amd64.tar.gz"
+          ls -la *.tar.gz
+
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.ver.outputs.tag }}
+          files: |
+            asmgr-desktop_${{ steps.ver.outputs.num }}_darwin_arm64.tar.gz
+            asmgr-desktop_${{ steps.ver.outputs.num }}_darwin_amd64.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
