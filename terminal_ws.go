@@ -473,8 +473,23 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 				return
 			}
 
+			// Control messages (resize 0x01, visibility 0x02) are sent by the
+			// frontend as BINARY frames; raw keystroke input arrives as TEXT
+			// frames (xterm.onData → ws.send(string)). Routing by frame type —
+			// not by the first byte — is essential: otherwise a keystroke whose
+			// first byte happens to be 0x01 (Ctrl+A) or 0x02 (Ctrl+B, the tmux
+			// prefix!) would be swallowed as a control message and never reach
+			// the PTY. Text frames are therefore ALWAYS written to the PTY.
+			if msgType == websocket.TextMessage {
+				if ts.typingSignal != nil {
+					atomic.StoreInt64(ts.typingSignal, time.Now().UnixNano())
+				}
+				ptmx.Write(data)
+				continue
+			}
+
 			switch msgType {
-			case websocket.TextMessage, websocket.BinaryMessage:
+			case websocket.BinaryMessage:
 				// Check for resize message
 				if len(data) > 0 && data[0] == 0x01 {
 					// Resize: 0x01 + cols (2 bytes) + rows (2 bytes)
@@ -527,7 +542,9 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 						}
 					}
 				} else {
-					// Regular input - signal typing for polling suppression
+					// A binary frame that isn't a known control message — treat
+					// as raw input (defensive; the frontend sends keystrokes as
+					// text frames, which are handled before this switch).
 					if ts.typingSignal != nil {
 						atomic.StoreInt64(ts.typingSignal, time.Now().UnixNano())
 					}

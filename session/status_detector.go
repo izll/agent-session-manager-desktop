@@ -252,11 +252,13 @@ func (i *Instance) DetectAggregatedActivity() SessionActivity {
 // non-interactive ("YOLO") mode, read live from the pane's status bar.
 //
 // Claude Code's Shift+Tab cycle shows one of these in the bottom bar:
-//   "⏵⏵ bypass permissions on (shift+tab to cycle)"  → YOLO (skips ALL checks)
-//   "⏵⏵ auto mode on (shift+tab to cycle) ..."        → YOLO (auto-approves via a
-//        risk classifier — still runs without prompting the user)
-//   "⏵⏵ accept edits on ..."                          → NOT yolo (edits only;
-//        other commands still prompt)
+//
+//	"⏵⏵ bypass permissions on (shift+tab to cycle)"  → YOLO (skips ALL checks)
+//	"⏵⏵ auto mode on (shift+tab to cycle) ..."        → YOLO (auto-approves via a
+//	     risk classifier — still runs without prompting the user)
+//	"⏵⏵ accept edits on ..."                          → NOT yolo (edits only;
+//	     other commands still prompt)
+//
 // Both bypass and auto count as YOLO here because the user asked the badge to
 // flag any "runs without asking me" mode. This follows a Shift+Tab toggle inside
 // Claude, not just the stored launch flag.
@@ -483,14 +485,14 @@ func truncateLines(lines []string, max int) []string {
 // line, no rotating glyph). Markers we look for, anywhere in the captured
 // pane (Codex pads with blank lines so "last N non-empty" misses them):
 //
-//   busy:
-//     - "Working (Ns · esc to interrupt)"
-//     - "esc to interrupt" anywhere
-//     - "Explored", "Ran <cmd>", "Read <file>" tool-execution lines
-//       still in their active form (no completion marker)
+//	busy:
+//	  - "Working (Ns · esc to interrupt)"
+//	  - "esc to interrupt" anywhere
+//	  - "Explored", "Ran <cmd>", "Read <file>" tool-execution lines
+//	    still in their active form (no completion marker)
 //
-//   waiting:
-//     - approval prompts ("allow once", "do you want to proceed", etc.)
+//	waiting:
+//	  - approval prompts ("allow once", "do you want to proceed", etc.)
 //
 // idle: bottom status bar `gpt-X.Y high · ~/...` is alone with no Working.
 func detectCodexActivity(lines []string, patterns AgentPatterns) SessionActivity {

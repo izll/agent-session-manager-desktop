@@ -16,11 +16,11 @@ import (
 
 // SpeechRecognizer handles speech recognition
 type SpeechRecognizer struct {
-	app               *AppService
-	isRunning         bool
-	stopChannel       chan bool
-	mu                sync.Mutex
-	recognitionMux    sync.Mutex
+	app                 *AppService
+	isRunning           bool
+	stopChannel         chan bool
+	mu                  sync.Mutex
+	recognitionMux      sync.Mutex
 	streamingRecognizer *StreamingRecognizer // For streaming mode
 }
 
@@ -124,7 +124,6 @@ func (sr *SpeechRecognizer) recognitionLoop() {
 		sr.streamingRecognitionLoop()
 		return
 	}
-
 
 	// Get silence detection settings
 	// threshold: stored as percentage (0-100), convert to actual value (0.0001-0.01)
@@ -338,9 +337,9 @@ func (sr *SpeechRecognizer) trimPreSpeechSilence(audioData []byte) []byte {
 	}
 
 	// Find where speech starts by analyzing audio in frames
-	const frameSize = 160 // 10ms at 16kHz (160 samples)
+	const frameSize = 160          // 10ms at 16kHz (160 samples)
 	const silenceThreshold = 0.002 // Same as audio_capture.go silenceThreshold
-	const preSpeechSeconds = 1.0 // Keep 1 second of silence before speech
+	const preSpeechSeconds = 1.0   // Keep 1 second of silence before speech
 	const samplesPerSecond = 16000
 
 	speechStartFrame := -1
@@ -493,8 +492,8 @@ func (sr *SpeechRecognizer) recognizeWithGoogleCloud(audioData []byte, language 
 		// Check for authentication/billing errors
 		// Status codes: 400 (Bad Request), 401 (Unauthorized), 403 (Forbidden)
 		if resp.StatusCode == http.StatusBadRequest ||
-		   resp.StatusCode == http.StatusUnauthorized ||
-		   resp.StatusCode == http.StatusForbidden {
+			resp.StatusCode == http.StatusUnauthorized ||
+			resp.StatusCode == http.StatusForbidden {
 
 			bodyStr := string(body)
 
@@ -512,8 +511,8 @@ func (sr *SpeechRecognizer) recognizeWithGoogleCloud(audioData []byte, language 
 
 			// Check if error message contains API key related error
 			isAPIKeyError := strings.Contains(bodyStr, "API key") ||
-			                strings.Contains(bodyStr, "API_KEY_INVALID") ||
-			                strings.Contains(bodyStr, "INVALID_ARGUMENT")
+				strings.Contains(bodyStr, "API_KEY_INVALID") ||
+				strings.Contains(bodyStr, "INVALID_ARGUMENT")
 
 			if isAPIKeyError {
 				// Notify user about invalid API key
@@ -772,11 +771,11 @@ func (sr *SpeechRecognizer) ProcessText(text string, language string) (string, i
 				"goku":   "ctrl_alt_backspace",
 			},
 			"hu": {
-				"szusi":   "buffer",
-				"szushi":  "buffer",
-				"sushi":   "buffer",
-				"vegeta":  "ctrl_backspace",
-				"goku":    "ctrl_alt_backspace",
+				"szusi":  "buffer",
+				"szushi": "buffer",
+				"sushi":  "buffer",
+				"vegeta": "ctrl_backspace",
+				"goku":   "ctrl_alt_backspace",
 			},
 		}
 	}

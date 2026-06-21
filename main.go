@@ -63,17 +63,17 @@ func main() {
 
 	// Create application with options
 	err := wails.Run(&options.App{
-		Title:            appTitle,
-		Width:            1280,
-		Height:           800,
-		MinWidth:         800,
-		MinHeight:        600,
-		DisableResize:    false,
-		Fullscreen:       false,
-		Frameless:        true,
-		StartHidden:      false,
+		Title:             appTitle,
+		Width:             1280,
+		Height:            800,
+		MinWidth:          800,
+		MinHeight:         600,
+		DisableResize:     false,
+		Fullscreen:        false,
+		Frameless:         true,
+		StartHidden:       false,
 		HideWindowOnClose: false,
-		BackgroundColour: &options.RGBA{R: 26, G: 26, B: 46, A: 255},
+		BackgroundColour:  &options.RGBA{R: 26, G: 26, B: 46, A: 255},
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
@@ -99,8 +99,8 @@ func main() {
 			dictationService,
 		},
 		Linux: &linux.Options{
-			Icon:             appIcon,
-			ProgramName:      "asmgr-desktop",
+			Icon:        appIcon,
+			ProgramName: "asmgr-desktop",
 			// GPU acceleration policy. Profiling pointed at the WebKit
 			// compositor (the main thread is blocked 50–480ms per frame while
 			// typing, but our JS — terminal.write/raf/timeouts — measures

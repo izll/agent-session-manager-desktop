@@ -31,15 +31,15 @@ type Group struct {
 
 // Settings stores UI preferences
 type Settings struct {
-	CompactList       bool   `json:"compact_list"`
-	HideStatusLines   bool   `json:"hide_status_lines"`
-	ShowAgentIcons    bool   `json:"show_agent_icons,omitempty"`
-	SplitView         bool   `json:"split_view,omitempty"`
-	MarkedSessionID   string `json:"marked_session_id,omitempty"`
-	Cursor            int    `json:"cursor,omitempty"`
-	SplitFocus        int    `json:"split_focus,omitempty"`
-	AnthropicAPIKey   string `json:"anthropic_api_key,omitempty"`
-	Language          string `json:"language,omitempty"`
+	CompactList     bool   `json:"compact_list"`
+	HideStatusLines bool   `json:"hide_status_lines"`
+	ShowAgentIcons  bool   `json:"show_agent_icons,omitempty"`
+	SplitView       bool   `json:"split_view,omitempty"`
+	MarkedSessionID string `json:"marked_session_id,omitempty"`
+	Cursor          int    `json:"cursor,omitempty"`
+	SplitFocus      int    `json:"split_focus,omitempty"`
+	AnthropicAPIKey string `json:"anthropic_api_key,omitempty"`
+	Language        string `json:"language,omitempty"`
 	// TerminalRenderer selects the xterm.js renderer: "canvas" (default),
 	// "webgl" (fastest but flaky on some WebKitGTK), or "dom" (most compatible).
 	TerminalRenderer string `json:"terminal_renderer,omitempty"`
@@ -535,9 +535,10 @@ func (s *Storage) saveAllLocked(instances []*Instance, groups []*Group, settings
 		return fmt.Errorf("failed to marshal config: %w", err)
 	}
 
-	// Atomic write: write to temp file in same dir, then rename
+	// Atomic write: write to temp file in same dir, then rename.
+	// 0600: the config can hold an Anthropic API key — owner-only.
 	tmpPath := s.configPath + ".tmp"
-	if err := os.WriteFile(tmpPath, data, 0644); err != nil {
+	if err := os.WriteFile(tmpPath, data, 0600); err != nil {
 		return fmt.Errorf("failed to write temp config file: %w", err)
 	}
 	if err := os.Rename(tmpPath, s.configPath); err != nil {
@@ -650,7 +651,6 @@ func (s *Storage) GetInstanceByName(name string) (*Instance, error) {
 
 	return nil, fmt.Errorf("instance not found")
 }
-
 
 // GetGroups returns all groups
 func (s *Storage) GetGroups() ([]*Group, error) {

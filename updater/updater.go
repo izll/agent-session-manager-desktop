@@ -16,9 +16,11 @@ import (
 )
 
 const (
-	RepoOwner           = "izll"
-	RepoName            = "agent-session-manager"
-	BinaryName          = "asmgr"
+	RepoOwner = "izll"
+	// This is the DESKTOP app — update from the desktop repo/binary, not the
+	// TUI's (agent-session-manager / asmgr), which would install the wrong app.
+	RepoName            = "agent-session-manager-desktop"
+	BinaryName          = "asmgr-desktop"
 	CheckTimeout        = 5 * time.Second
 	CheckInterval       = 24 * time.Hour // Check for updates once per day
 	LastCheckFile       = "last_update_check"

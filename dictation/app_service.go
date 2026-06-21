@@ -39,8 +39,8 @@ type AppService struct {
 	silenceMonitorDone chan bool
 
 	// PulseAudio source management (Linux)
-	originalPulseSource  string // Original PulseAudio source before recording
-	selectedPulseSource  string // User-selected PulseAudio source for recording
+	originalPulseSource string // Original PulseAudio source before recording
+	selectedPulseSource string // User-selected PulseAudio source for recording
 }
 
 // Settings represents application settings
@@ -69,9 +69,9 @@ type Settings struct {
 	InstantSendShift bool   `json:"instant_send_shift"`
 	InstantSendKey   string `json:"instant_send_key"`
 	// Recording mode: "popup" (window-based) or "direct" (type directly to active window)
-	RecordingMode string `json:"recording_mode"`
-	BufferMode         bool `json:"buffer_mode"`          // Show text in editable buffer before sending (streaming mode, default: true)
-	BufferCloseOnSend  bool `json:"buffer_close_on_send"` // Close buffer window after sending text (default: true)
+	RecordingMode     string `json:"recording_mode"`
+	BufferMode        bool   `json:"buffer_mode"`          // Show text in editable buffer before sending (streaming mode, default: true)
+	BufferCloseOnSend bool   `json:"buffer_close_on_send"` // Close buffer window after sending text (default: true)
 }
 
 // UsageStats represents API usage statistics
@@ -105,21 +105,21 @@ func NewAppService() *AppService {
 			MuteOutputDuringRecording: true,
 			AutoStopOnSilence:         true,
 			SilenceTimeoutSeconds:     60,
-			SilenceThreshold:          30,     // Default noise threshold (30% = ~0.003 actual value)
-			SilenceDuration:           0.5,    // Default: 0.5 seconds of silence needed
-			CountFreeTier:             true,   // Count 60 min free tier by default
-			EnableLogging:             false,  // Disable logging by default
-			EnableDebugLogging:        false,  // Disable debug logging by default
-			InputDeviceIndex:          -1,     // Use default input device
+			SilenceThreshold:          30,    // Default noise threshold (30% = ~0.003 actual value)
+			SilenceDuration:           0.5,   // Default: 0.5 seconds of silence needed
+			CountFreeTier:             true,  // Count 60 min free tier by default
+			EnableLogging:             false, // Disable logging by default
+			EnableDebugLogging:        false, // Disable debug logging by default
+			InputDeviceIndex:          -1,    // Use default input device
 			// Default instant send hotkey: Alt+S
 			InstantSendCtrl:  false,
 			InstantSendAlt:   true,
 			InstantSendShift: false,
 			InstantSendKey:   "s",
 			// Default recording mode: popup (window-based)
-			RecordingMode: "popup",
-			BufferMode:         true,
-			BufferCloseOnSend:  true,
+			RecordingMode:     "popup",
+			BufferMode:        true,
+			BufferCloseOnSend: true,
 		},
 		isListening: false,
 	}
@@ -416,9 +416,9 @@ func (a *AppService) LoadSettings() error {
 // SaveSettings saves settings to file
 func (a *AppService) SaveSettings(settings Settings) error {
 	a.mu.Lock()
-	oldMode := a.settings.Mode  // Save BEFORE updating settings
+	oldMode := a.settings.Mode // Save BEFORE updating settings
 	wasListening := a.isListening
-	newMode := settings.Mode    // Get new mode from incoming settings
+	newMode := settings.Mode // Get new mode from incoming settings
 	a.settings = &settings
 	a.mu.Unlock()
 
@@ -432,7 +432,9 @@ func (a *AppService) SaveSettings(settings Settings) error {
 		return err
 	}
 
-	err = os.WriteFile(settingsPath, data, 0644)
+	// 0600: settings.json holds the Google API key — keep it readable only by
+	// the owner, not world-readable.
+	err = os.WriteFile(settingsPath, data, 0600)
 	if err != nil {
 		return fmt.Errorf("failed to write settings: %w", err)
 	}
@@ -601,11 +603,11 @@ func (a *AppService) LoadDeleteCommands() (DeleteCommands, error) {
 				"goku":   "ctrl_alt_backspace",
 			},
 			"hu": {
-				"szusi":   "buffer",
-				"szushi":  "buffer",
-				"sushi":   "buffer",
-				"vegeta":  "ctrl_backspace",
-				"goku":    "ctrl_alt_backspace",
+				"szusi":  "buffer",
+				"szushi": "buffer",
+				"sushi":  "buffer",
+				"vegeta": "ctrl_backspace",
+				"goku":   "ctrl_alt_backspace",
 			},
 		}, nil
 	}
@@ -622,11 +624,11 @@ func (a *AppService) LoadDeleteCommands() (DeleteCommands, error) {
 					"goku":   "ctrl_alt_backspace",
 				},
 				"hu": {
-					"szusi":   "buffer",
-					"szushi":  "buffer",
-					"sushi":   "buffer",
-					"vegeta":  "ctrl_backspace",
-					"goku":    "ctrl_alt_backspace",
+					"szusi":  "buffer",
+					"szushi": "buffer",
+					"sushi":  "buffer",
+					"vegeta": "ctrl_backspace",
+					"goku":   "ctrl_alt_backspace",
 				},
 			}, nil
 		}

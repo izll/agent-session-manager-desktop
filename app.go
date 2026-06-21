@@ -380,23 +380,23 @@ func (a *App) ImportSessions(sourceProjectID string, sessionIDs []string) (int, 
 
 // SessionInfo represents session data for frontend
 type SessionInfo struct {
-	ID              string                   `json:"id"`
-	Name            string                   `json:"name"`
-	Path            string                   `json:"path"`
-	Status          string                   `json:"status"`
-	Agent           string                   `json:"agent"`
-	Color           string                   `json:"color"`
-	BgColor         string                   `json:"bgColor"`
-	FullRowColor    bool                     `json:"fullRowColor"`
-	GroupID         string                   `json:"groupId"`
-	AutoYes         bool                     `json:"autoYes"`
-	Notes           string                   `json:"notes"`
-	Favorite        bool                     `json:"favorite"`
-	ResumeSessionID    string                   `json:"resumeSessionId"`
-	FollowedWindows    []session.FollowedWindow `json:"followedWindows"`
-	MainWindowStopped  bool                     `json:"mainWindowStopped"`
-	TabOrder           []int                    `json:"tabOrder"`
-	ExtraArgs          string                   `json:"extraArgs"`
+	ID                string                   `json:"id"`
+	Name              string                   `json:"name"`
+	Path              string                   `json:"path"`
+	Status            string                   `json:"status"`
+	Agent             string                   `json:"agent"`
+	Color             string                   `json:"color"`
+	BgColor           string                   `json:"bgColor"`
+	FullRowColor      bool                     `json:"fullRowColor"`
+	GroupID           string                   `json:"groupId"`
+	AutoYes           bool                     `json:"autoYes"`
+	Notes             string                   `json:"notes"`
+	Favorite          bool                     `json:"favorite"`
+	ResumeSessionID   string                   `json:"resumeSessionId"`
+	FollowedWindows   []session.FollowedWindow `json:"followedWindows"`
+	MainWindowStopped bool                     `json:"mainWindowStopped"`
+	TabOrder          []int                    `json:"tabOrder"`
+	ExtraArgs         string                   `json:"extraArgs"`
 }
 
 // GetSessions returns all sessions
@@ -425,23 +425,23 @@ func (a *App) instanceToSessionInfo(inst *session.Instance) SessionInfo {
 		}
 	}
 	return SessionInfo{
-		ID:              inst.ID,
-		Name:            inst.Name,
-		Path:            inst.Path,
-		Status:          string(inst.Status),
-		Agent:           string(inst.Agent),
-		Color:           inst.Color,
-		BgColor:         inst.BgColor,
-		FullRowColor:    inst.FullRowColor,
-		GroupID:         inst.GroupID,
-		AutoYes:         inst.AutoYes,
-		Notes:           inst.Notes,
-		Favorite:        inst.Favorite,
+		ID:                inst.ID,
+		Name:              inst.Name,
+		Path:              inst.Path,
+		Status:            string(inst.Status),
+		Agent:             string(inst.Agent),
+		Color:             inst.Color,
+		BgColor:           inst.BgColor,
+		FullRowColor:      inst.FullRowColor,
+		GroupID:           inst.GroupID,
+		AutoYes:           inst.AutoYes,
+		Notes:             inst.Notes,
+		Favorite:          inst.Favorite,
 		ResumeSessionID:   inst.ResumeSessionID,
 		FollowedWindows:   inst.FollowedWindows,
 		MainWindowStopped: mainStopped,
-		TabOrder:           inst.GetTabOrder(),
-		ExtraArgs:          inst.ExtraArgs,
+		TabOrder:          inst.GetTabOrder(),
+		ExtraArgs:         inst.ExtraArgs,
 	}
 }
 
@@ -476,7 +476,6 @@ func (a *App) StartSession(id string) error {
 	}
 	return a.storage.UpdateInstance(inst)
 }
-
 
 // StartSessionWithResume starts a session with resume.
 // If the supplied resume ID no longer exists on disk (Claude/Codex deleted
@@ -1373,11 +1372,11 @@ func (a *App) GetSidebarUpdates() SidebarUpdate {
 	// made 1s ticks infeasible. Doing it per-session concurrently keeps
 	// total time roughly at the slowest single session.
 	type sessionResult struct {
-		instID       string
-		activity     string
-		statusLine   string
-		spinnerText  string
-		agentTabs    []TabStatusInfo
+		instID      string
+		activity    string
+		statusLine  string
+		spinnerText string
+		agentTabs   []TabStatusInfo
 	}
 	resultsCh := make(chan sessionResult, len(jobs))
 

@@ -147,8 +147,15 @@
   $: isLargeDiff =
     diffContent.length > LARGE_DIFF_BYTES ||
     (diffContent ? countLines(diffContent) : 0) > LARGE_DIFF_LINES;
-  // Reset the opt-in whenever the underlying content changes.
-  $: { diffContent; forceShow = false; }
+  // Reset the "show anyway" opt-in only when the SESSION changes, not on every
+  // content update. The diff polls every 5s and its content changes as the
+  // agent works; resetting on content (the old behaviour) snapped the user back
+  // to the warning every few seconds while they were reading the diff.
+  let forceShowSessionId: string | null = null;
+  $: if ($selectedSessionId !== forceShowSessionId) {
+    forceShowSessionId = $selectedSessionId;
+    forceShow = false;
+  }
 
   // Only parse when the tab is active AND (the diff is small OR the user opted
   // in). Parsing a huge diff string is itself expensive, so we skip it entirely
