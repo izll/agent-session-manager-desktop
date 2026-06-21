@@ -296,6 +296,18 @@ export async function toggleAutoYes(id: string) {
   }
 }
 
+// Cycle the YOLO/permission mode of a running Claude window by sending Shift+Tab
+// to its pane (no restart). The live indicator updates on the next poll. Falls
+// back to ToggleAutoYes (stored flag + restart) for stopped/non-Claude windows.
+export async function cycleYoloMode(id: string, windowIdx: number) {
+  try {
+    await App.CycleYoloMode(id, windowIdx);
+  } catch (e) {
+    error.set(String(e));
+    throw e;
+  }
+}
+
 export async function setSessionColor(id: string, color: string, bgColor: string, fullRow: boolean) {
   try {
     await App.SetSessionColor(id, color, bgColor, fullRow);

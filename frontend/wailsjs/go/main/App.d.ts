@@ -25,6 +25,8 @@ export function CreateTab(arg1:string,arg2:boolean,arg3:string,arg4:string,arg5:
 
 export function CreateTask(arg1:string,arg2:string,arg3:string,arg4:string,arg5:Array<string>):Promise<main.TaskInfo>;
 
+export function CycleYoloMode(arg1:string,arg2:number):Promise<void>;
+
 export function DeleteGroup(arg1:string):Promise<void>;
 
 export function DeleteProject(arg1:string):Promise<void>;
@@ -92,6 +94,8 @@ export function GetTasksByStatus(arg1:string,arg2:string):Promise<Array<main.Tas
 export function GetTerminalWSPort():Promise<number>;
 
 export function GetTerminalWSToken():Promise<string>;
+
+export function GetVersion():Promise<string>;
 
 export function GetWindowAutoYes(arg1:string,arg2:number):Promise<boolean>;
 

@@ -84,9 +84,9 @@ var AgentConfigs = map[AgentType]AgentConfig{
 		AutoYesFlag:     "--yes",
 	},
 	AgentCodex: {
-		Command:            "codex",
-		SupportsResume:     true,
-		SupportsAutoYes:    true,
+		Command:         "codex",
+		SupportsResume:  true,
+		SupportsAutoYes: true,
 		// Codex CLI removed `--full-auto`. The closest replacement (skips
 		// all confirmations and runs commands without sandboxing) is
 		// `--dangerously-bypass-approvals-and-sandbox`.
@@ -121,27 +121,27 @@ var AgentConfigs = map[AgentType]AgentConfig{
 }
 
 type Instance struct {
-	ID              string    `json:"id"`
-	Name            string    `json:"name"`
-	Path            string    `json:"path"`
-	Status          Status    `json:"status"`
-	CreatedAt       time.Time `json:"created_at"`
-	UpdatedAt       time.Time `json:"updated_at"`
-	AutoYes         bool      `json:"auto_yes"`
-	ResumeSessionID string    `json:"resume_session_id,omitempty"` // Claude session ID to resume
-	Color           string    `json:"color,omitempty"`             // Foreground color
-	BgColor         string    `json:"bg_color,omitempty"`          // Background color
-	FullRowColor    bool      `json:"full_row_color,omitempty"`    // Extend background to full row
-	GroupID         string    `json:"group_id,omitempty"`          // Session group ID
-	Agent           AgentType `json:"agent,omitempty"`             // Agent type (claude, gemini, aider, custom)
-	CustomCommand   string    `json:"custom_command,omitempty"`    // Custom command for AgentCustom
-	ExtraArgs       string    `json:"extra_args,omitempty"`        // Extra CLI arguments appended to agent command
-	Notes           string           `json:"notes,omitempty"`             // User notes/comments for this session
-	FollowedWindows []FollowedWindow `json:"followed_windows,omitempty"`  // Windows tracked as agents (window 0 is main agent)
-	BaseCommitSHA   string           `json:"base_commit_sha,omitempty"`   // Git HEAD commit at session start (for diff)
-	Favorite           bool             `json:"favorite,omitempty"`              // Whether session is marked as favorite
-	MainWindowStopped  bool             `json:"main_window_stopped,omitempty"`   // Main window (0) is stopped but session still running
-	TabOrder           []int            `json:"tab_order,omitempty"`             // Custom tab display order (tmux window indices); if empty, default order is used
+	ID                string           `json:"id"`
+	Name              string           `json:"name"`
+	Path              string           `json:"path"`
+	Status            Status           `json:"status"`
+	CreatedAt         time.Time        `json:"created_at"`
+	UpdatedAt         time.Time        `json:"updated_at"`
+	AutoYes           bool             `json:"auto_yes"`
+	ResumeSessionID   string           `json:"resume_session_id,omitempty"`   // Claude session ID to resume
+	Color             string           `json:"color,omitempty"`               // Foreground color
+	BgColor           string           `json:"bg_color,omitempty"`            // Background color
+	FullRowColor      bool             `json:"full_row_color,omitempty"`      // Extend background to full row
+	GroupID           string           `json:"group_id,omitempty"`            // Session group ID
+	Agent             AgentType        `json:"agent,omitempty"`               // Agent type (claude, gemini, aider, custom)
+	CustomCommand     string           `json:"custom_command,omitempty"`      // Custom command for AgentCustom
+	ExtraArgs         string           `json:"extra_args,omitempty"`          // Extra CLI arguments appended to agent command
+	Notes             string           `json:"notes,omitempty"`               // User notes/comments for this session
+	FollowedWindows   []FollowedWindow `json:"followed_windows,omitempty"`    // Windows tracked as agents (window 0 is main agent)
+	BaseCommitSHA     string           `json:"base_commit_sha,omitempty"`     // Git HEAD commit at session start (for diff)
+	Favorite          bool             `json:"favorite,omitempty"`            // Whether session is marked as favorite
+	MainWindowStopped bool             `json:"main_window_stopped,omitempty"` // Main window (0) is stopped but session still running
+	TabOrder          []int            `json:"tab_order,omitempty"`           // Custom tab display order (tmux window indices); if empty, default order is used
 }
 
 // DiffStats contains git diff statistics and content
@@ -161,10 +161,10 @@ func (d *DiffStats) IsEmpty() bool {
 type FollowedWindow struct {
 	Index           int       `json:"index"`
 	Agent           AgentType `json:"agent"`
-	Name            string    `json:"name"`              // Tab name for display
-	CustomCommand   string    `json:"custom_command"`    // For custom agents
-	AutoYes         bool      `json:"auto_yes"`          // YOLO mode for this tab
-	ResumeSessionID string    `json:"resume_session_id"` // Resume session ID for this tab
+	Name            string    `json:"name"`                 // Tab name for display
+	CustomCommand   string    `json:"custom_command"`       // For custom agents
+	AutoYes         bool      `json:"auto_yes"`             // YOLO mode for this tab
+	ResumeSessionID string    `json:"resume_session_id"`    // Resume session ID for this tab
 	Notes           string    `json:"notes,omitempty"`      // User notes for this tab
 	ExtraArgs       string    `json:"extra_args,omitempty"` // Extra CLI arguments for this tab
 	Stopped         bool      `json:"stopped,omitempty"`    // Tab is stopped (window killed but can resume)
@@ -1447,7 +1447,6 @@ func (i *Instance) UpdateDetachBinding(previewWidth, previewHeight int) {
 	exec.Command("tmux", "bind-key", "-n", "C-q", "if-shell", "tmux display -p '#{session_name}' | grep -q '^asm_'", resizeAndDetach, "").Run()
 }
 
-
 func (i *Instance) GetPreview(lines int) (string, error) {
 	if !i.IsAlive() {
 		return "(session not running)", nil
@@ -1740,6 +1739,15 @@ func (i *Instance) SendKeys(keys string) error {
 	sessionName := i.TmuxSessionName()
 	cmd := exec.Command("tmux", "send-keys", "-t", sessionName, keys)
 	return cmd.Run()
+}
+
+// SendKeysToWindow sends a tmux key name to a specific window of this session.
+func (i *Instance) SendKeysToWindow(windowIdx int, keys string) error {
+	if !i.IsAlive() {
+		return fmt.Errorf("session not running")
+	}
+	target := fmt.Sprintf("%s:%d", i.TmuxSessionName(), windowIdx)
+	return exec.Command("tmux", "send-keys", "-t", target, keys).Run()
 }
 
 // SendText sends text literally (not interpreted as key names)

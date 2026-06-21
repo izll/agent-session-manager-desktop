@@ -7,8 +7,11 @@
   "frontend:dev:watcher": "npm run dev",
   "frontend:dev:serverUrl": "auto",
   "tags": "webkit2_41",
+  "info": {
+    "productName": "Agent Session Manager",
+    "productVersion": "0.5.0"
+  },
   "author": {
-    "name": "izll",
-    "email": "antalizn@gmail.com"
+    "name": "izll"
   }
 }

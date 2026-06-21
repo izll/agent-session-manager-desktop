@@ -6,7 +6,7 @@
   import Diff from './Diff.svelte';
   import TaskPanel from './TaskPanel.svelte';
   import ForkDialog from '../Dialogs/ForkDialog.svelte';
-  import { sessions, selectedSessionId, selectedWindowIdx, toggleAutoYes } from '../../stores/sessions';
+  import { sessions, selectedSessionId, selectedWindowIdx, toggleAutoYes, cycleYoloMode } from '../../stores/sessions';
   import { agents } from '../../stores/agents';
   import { tabStatuses } from '../../stores/statusLines';
   import { get } from 'svelte/store';
@@ -157,9 +157,11 @@
               on:click|stopPropagation={async () => {
                 if (!currentSession) return;
                 try {
-                  await toggleAutoYes(currentSession.id);
+                  // Cycle the live mode via Shift+Tab (no restart); the
+                  // indicator updates from the pane on the next poll.
+                  await cycleYoloMode(currentSession.id, $selectedWindowIdx ?? 0);
                 } catch (e) {
-                  console.error('YOLO toggle failed:', e);
+                  console.error('YOLO cycle failed:', e);
                 }
               }}
               title={liveYolo ? $t('mainPanel.yoloOn') : $t('mainPanel.yoloEnable')}

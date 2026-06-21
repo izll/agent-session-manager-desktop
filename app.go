@@ -631,6 +631,34 @@ func (a *App) ToggleFavorite(id string) error {
 	return a.storage.UpdateInstance(inst)
 }
 
+// CycleYoloMode cycles the permission mode of a RUNNING Claude window by sending
+// Shift+Tab (tmux key "BTab") to its pane — exactly what pressing Shift+Tab in
+// the terminal does (default → auto mode → bypass → ...). This keeps the YOLO
+// button consistent with the live indicator (which reads the pane), with no
+// session restart. Falls back to the stored-flag toggle (+restart) when the
+// session isn't running or isn't Claude, so YOLO can still be preset offline.
+func (a *App) CycleYoloMode(id string, windowIdx int) error {
+	inst, err := a.storage.GetInstance(id)
+	if err != nil {
+		return err
+	}
+	// Determine the agent of the targeted window.
+	agent := inst.Agent
+	if windowIdx > 0 {
+		for _, fw := range inst.FollowedWindows {
+			if fw.Index == windowIdx {
+				agent = fw.Agent
+				break
+			}
+		}
+	}
+	if inst.IsAlive() && agent == session.AgentClaude {
+		return inst.SendKeysToWindow(windowIdx, "BTab") // Shift+Tab
+	}
+	// Not running / not Claude: preset via the stored flag (restarts if alive).
+	return a.ToggleAutoYes(id)
+}
+
 // ToggleAutoYes toggles YOLO mode and restarts the session if running
 func (a *App) ToggleAutoYes(id string) error {
 	inst, err := a.storage.GetInstance(id)
@@ -1968,9 +1996,14 @@ type UpdateInfo struct {
 	LatestVersion  string `json:"latestVersion"`
 }
 
+// GetVersion returns the current application version (for the UI/about).
+func (a *App) GetVersion() string {
+	return Version
+}
+
 // CheckForUpdate checks for updates
 func (a *App) CheckForUpdate() *UpdateInfo {
-	current := "0.1.0" // TODO: embed version
+	current := Version
 	latest := updater.CheckForUpdate(current)
 
 	return &UpdateInfo{

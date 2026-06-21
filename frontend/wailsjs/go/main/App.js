@@ -46,6 +46,10 @@ export function CreateTask(arg1, arg2, arg3, arg4, arg5) {
   return window['go']['main']['App']['CreateTask'](arg1, arg2, arg3, arg4, arg5);
 }
 
+export function CycleYoloMode(arg1, arg2) {
+  return window['go']['main']['App']['CycleYoloMode'](arg1, arg2);
+}
+
 export function DeleteGroup(arg1) {
   return window['go']['main']['App']['DeleteGroup'](arg1);
 }
@@ -180,6 +184,10 @@ export function GetTerminalWSPort() {
 
 export function GetTerminalWSToken() {
   return window['go']['main']['App']['GetTerminalWSToken']();
+}
+
+export function GetVersion() {
+  return window['go']['main']['App']['GetVersion']();
 }
 
 export function GetWindowAutoYes(arg1, arg2) {
