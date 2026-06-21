@@ -198,11 +198,14 @@ jobs:
         with:
           fetch-depth: 0
 
+      # Go and Node are installed on the Windows PATH below; path-type 'inherit'
+      # makes the MSYS2 shell see the full Windows PATH so `go`/`npx` are found.
       - name: Setup MSYS2 (gcc + portaudio)
         uses: msys2/setup-msys2@v2
         with:
           msystem: UCRT64
           update: true
+          path-type: inherit
           install: >-
             mingw-w64-ucrt-x86_64-gcc
             mingw-w64-ucrt-x86_64-pkgconf
