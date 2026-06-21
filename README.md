@@ -44,9 +44,11 @@ reattach any time.
 
 ## Install
 
-Download the latest package from the
+Grab the latest build for your platform from the
 [**Releases**](https://github.com/izll/agent-session-manager-desktop/releases)
-page and install it:
+page.
+
+**Linux**
 
 ```bash
 # Debian / Ubuntu
@@ -56,9 +58,23 @@ sudo dpkg -i asmgr-desktop_*_linux_x86_64.deb
 sudo rpm -i asmgr-desktop_*_linux_x86_64.rpm
 ```
 
-It installs to `/usr/bin/asmgr-desktop` and adds an app-menu entry. Runtime
-dependencies (`libwebkit2gtk-4.1-0`, `tmux`) are pulled in automatically. The app
-checks for new releases and can update itself in place.
+Installs to `/usr/bin/asmgr-desktop` with an app-menu entry; runtime deps
+(`libwebkit2gtk-4.1-0`/`webkit2gtk4.1`, `tmux`) are pulled in automatically.
+
+**macOS** (Apple Silicon; Intel via Rosetta 2)
+
+```bash
+tar -xzf asmgr-desktop_*_darwin_arm64.tar.gz   # → asmgr-desktop.app
+# move it to /Applications, then: brew install tmux
+```
+
+**Windows** (x64) — extract `asmgr-desktop_*_windows_amd64.tar.gz` and run
+`asmgr-desktop.exe`.
+
+> ⚠️ **`tmux` is required at runtime on every platform.** It ships in the Linux
+> packages. On macOS install it with `brew install tmux`. On **Windows** native
+> tmux isn't available — run it via WSL / MSYS2 / Git Bash and make sure `tmux`
+> is on `PATH`. The app checks for new releases and can update itself in place.
 
 To build from source instead, see [Build](#build) below.
 
