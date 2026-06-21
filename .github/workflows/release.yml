@@ -91,15 +91,17 @@ jobs:
       - name: Install nfpm
         run: go install github.com/goreleaser/nfpm/v2/cmd/nfpm@latest
 
-      - name: Package .deb (name matches the in-app updater)
+      - name: Package .deb and .rpm (names match the in-app updater)
         run: |
           export PATH="$PATH:$(go env GOPATH)/bin"
           export VERSION="${{ steps.ver.outputs.num }}"
-          # nfpm uses arch 'amd64' but we rename the OUTPUT to x86_64 to match
-          # updater/updater.go (BinaryName_version_linux_x86_64.deb).
+          # nfpm's arch is 'amd64', but the OUTPUT names use x86_64 to match
+          # updater/updater.go (BinaryName_version_linux_x86_64.{deb,rpm}).
           nfpm package -f build/nfpm.yaml -p deb -t \
             "asmgr-desktop_${VERSION}_linux_x86_64.deb"
-          ls -la *.deb
+          nfpm package -f build/nfpm.yaml -p rpm -t \
+            "asmgr-desktop_${VERSION}_linux_x86_64.rpm"
+          ls -la *.deb *.rpm
 
       - name: Create / update GitHub Release
         uses: softprops/action-gh-release@v2
@@ -109,5 +111,6 @@ jobs:
           generate_release_notes: true
           files: |
             asmgr-desktop_${{ steps.ver.outputs.num }}_linux_x86_64.deb
+            asmgr-desktop_${{ steps.ver.outputs.num }}_linux_x86_64.rpm
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -17,10 +17,20 @@ description: |
   sessions (Claude, Gemini, Aider, Codex, …) side by side. Wails + Svelte +
   xterm.js.
 
-# Runtime dependencies. WebKitGTK 4.1 (Ubuntu 24.04+) + tmux are required.
+# Runtime dependencies. WebKitGTK 4.1 + tmux are required. The WebKit package is
+# named differently per distro, so override per format (deb vs rpm).
 depends:
-  - libwebkit2gtk-4.1-0
   - tmux
+
+overrides:
+  deb:
+    depends:
+      - libwebkit2gtk-4.1-0
+      - tmux
+  rpm:
+    depends:
+      - webkit2gtk4.1
+      - tmux
 
 contents:
   - src: ./build/bin/asmgr-desktop
