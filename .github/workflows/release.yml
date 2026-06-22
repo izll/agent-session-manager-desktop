@@ -108,7 +108,20 @@ jobs:
         with:
           tag_name: ${{ steps.ver.outputs.tag }}
           name: ${{ steps.ver.outputs.tag }}
-          generate_release_notes: true
+          # A fixed body (no generate_release_notes) so re-running the workflow
+          # for the same tag does NOT append the changelog again and again.
+          body: |
+            Cross-platform desktop GUI for managing multiple AI coding-agent sessions.
+
+            **Downloads**
+            - Linux (Debian/Ubuntu): `.deb`
+            - Linux (Fedora/RHEL): `.rpm`
+            - macOS (Apple Silicon; Intel via Rosetta 2): `darwin_arm64.tar.gz`
+            - Windows x64: `windows_amd64.tar.gz`
+
+            `tmux` is required at runtime on every platform (see the README).
+
+            **Full Changelog**: https://github.com/izll/agent-session-manager-desktop/commits/${{ steps.ver.outputs.tag }}
           files: |
             asmgr-desktop_${{ steps.ver.outputs.num }}_linux_x86_64.deb
             asmgr-desktop_${{ steps.ver.outputs.num }}_linux_x86_64.rpm
