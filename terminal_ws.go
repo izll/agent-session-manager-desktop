@@ -309,8 +309,13 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 	selectCmd := exec.Command("tmux", "select-window", "-t", fmt.Sprintf("%s:%d", attachTarget, winIdx))
 	selectCmd.Run()
 
-	// Attach to the session
+	// Attach to the session.
 	cmd := exec.Command("tmux", "attach-session", "-t", attachTarget)
+	// Force a sane TERM. When the app is launched from a desktop menu / KRunner
+	// instead of a shell, it inherits TERM=dumb (or empty), and tmux refuses to
+	// attach with "open terminal failed: terminal does not support clear".
+	// xterm.js speaks xterm-256color, so pin that for the attach PTY.
+	cmd.Env = append(os.Environ(), "TERM=xterm-256color")
 
 	ptmx, err := pty.Start(cmd)
 	if err != nil {

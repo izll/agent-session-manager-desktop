@@ -446,6 +446,10 @@ func (i *Instance) StartWithResume(resumeID string) error {
 		log.Printf("[StartWithResume] final argv: tmux new-session -d -s %s -c %s -- %v", sessionName, i.Path, argv)
 		tmuxArgs := append([]string{"new-session", "-d", "-s", sessionName, "-c", i.Path}, argv...)
 		cmd := exec.Command("tmux", tmuxArgs...)
+		// Pin a sane TERM for the session's child processes. Launched from a
+		// desktop menu / KRunner the app inherits TERM=dumb (or empty), which
+		// would propagate into the agent running inside tmux.
+		cmd.Env = append(os.Environ(), "TERM=xterm-256color")
 		if err := cmd.Run(); err != nil {
 			return fmt.Errorf("failed to create tmux session: %w", err)
 		}

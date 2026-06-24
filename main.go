@@ -22,6 +22,17 @@ var assets embed.FS
 var icon []byte
 
 func main() {
+	// Normalize TERM for everything we spawn. Launched from a desktop menu /
+	// KRunner (rather than a shell) the process inherits TERM=dumb or an empty
+	// TERM, which makes tmux refuse to attach with
+	//   "open terminal failed: terminal does not support clear".
+	// Set a sane value once here so every child (tmux new-session/new-window,
+	// attach-session) inherits it. A real terminal launch already exports a
+	// usable TERM, which we leave untouched.
+	if t := os.Getenv("TERM"); t == "" || t == "dumb" {
+		os.Setenv("TERM", "xterm-256color")
+	}
+
 	// Route logs: full output to a per-launch log file, only whitelisted
 	// prefixes mirrored to stderr (keeps the console readable).
 	if lf := setupLogging(); lf != nil {
