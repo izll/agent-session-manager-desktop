@@ -112,12 +112,15 @@ select option {
    GLOBAL DIALOG STYLES
    ============================================ */
 
-/* Dialog overlay */
+/* Dialog overlay.
+   NO backdrop-filter here: WebKit re-blurs (and repaints) the whole covered
+   region whenever anything under the overlay changes — the same cost that
+   got backdrop-filter removed from the header. The 70% dim is visually
+   sufficient. */
 .dialog-overlay {
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.7);
-  backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
   justify-content: center;

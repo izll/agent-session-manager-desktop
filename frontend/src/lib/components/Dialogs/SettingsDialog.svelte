@@ -709,7 +709,8 @@
     position: fixed;
     inset: 0;
     background: rgba(0, 0, 0, 0.7);
-    backdrop-filter: blur(4px);
+    /* no backdrop-filter — WebKit repaints the whole blurred region on any
+       change beneath it (same reason it was removed from the header) */
     display: flex;
     align-items: center;
     justify-content: center;

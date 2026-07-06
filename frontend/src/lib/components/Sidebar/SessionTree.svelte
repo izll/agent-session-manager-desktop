@@ -398,6 +398,15 @@
     flex: 1;
     overflow-y: auto;
     padding: 0 8px;
+    /* Pin this scroll container to its own, explicitly-positioned compositor
+       layer. Without it WebKitGTK sometimes composites the scroll layer's
+       first tile at the WINDOW origin instead of the sidebar: a small black
+       rectangle (containing the top group-header's chevron) stuck in the
+       window's top-left corner after a resize or a session-tree re-render.
+       Collapsing the sidebar destroyed the layer and the artifact with it —
+       that was the diagnostic tell. */
+    transform: translateZ(0);
+    contain: paint;
   }
 
   .section {
