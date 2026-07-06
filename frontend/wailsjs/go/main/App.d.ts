@@ -109,6 +109,8 @@ export function InitHistorySearch():Promise<void>;
 
 export function IsDevMode():Promise<boolean>;
 
+export function LogFrontend(arg1:string):Promise<void>;
+
 export function MoveSessionToIndex(arg1:string,arg2:number):Promise<void>;
 
 export function MoveTask(arg1:string,arg2:string,arg3:string):Promise<void>;

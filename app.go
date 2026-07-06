@@ -2001,6 +2001,14 @@ func (a *App) GetVersion() string {
 	return Version
 }
 
+// LogFrontend drops a frontend message into the app's log file. The packaged
+// build has no devtools console, so frontend-side failures (terminal pool /
+// WebSocket attach errors) were invisible — this makes them diagnosable from
+// ~/.config/agent-session-manager-desktop/asmgr-desktop.log.
+func (a *App) LogFrontend(msg string) {
+	log.Printf("[frontend] %s", msg)
+}
+
 // CheckForUpdate checks for updates
 func (a *App) CheckForUpdate() *UpdateInfo {
 	current := Version

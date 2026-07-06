@@ -4,6 +4,7 @@
   import { settings } from '../../stores/settings';
   import { get } from 'svelte/store';
   import { EventsOn } from '../../../../wailsjs/runtime/runtime';
+  import { LogFrontend } from '../../../../wailsjs/go/main/App';
   import { TerminalPool } from '../../utils/terminalPool';
   import { setTerminalRenderer } from '../../utils/terminal';
   import { t } from '../../i18n';
@@ -50,10 +51,19 @@
   // Drop a single window's cached PoolEntry. Triggered after a tab is
   // deleted so that a later tab reusing the same window index doesn't
   // inherit the killed pane's stale WebSocket + xterm DOM.
-  function handleDestroyWindow(e: Event) {
+  async function handleDestroyWindow(e: Event) {
     const ev = e as CustomEvent<{ sessionId: string; windowIdx: number }>;
     if (!pool || !ev.detail) return;
-    pool.destroyWindow(ev.detail.sessionId, ev.detail.windowIdx);
+    // Await the teardown so the re-show can't overlap it: getOrCreate must
+    // build a FRESH entry, not revive the one being destroyed. The re-show
+    // must be scheduled even if the teardown throws (xterm dispose race) —
+    // an uncaught await here once silently killed the re-show entirely.
+    try {
+      await pool.destroyWindow(ev.detail.sessionId, ev.detail.windowIdx);
+    } catch (err) {
+      LogFrontend(`destroyWindow FAILED session=${ev.detail.sessionId} win=${ev.detail.windowIdx}: ${err}`);
+    }
+    scheduleReshowIfViewing(ev.detail.sessionId, ev.detail.windowIdx);
   }
 
   // Drop every PoolEntry belonging to a session. Triggered by start/stop
@@ -62,10 +72,54 @@
   // mirror after start/stop. Required in addition to the status-change
   // grace-period handler below: a fast Stop→Start sequence never sees a
   // sustained 'stopped' state and slips through that guard.
-  function handleDestroySession(e: Event) {
+  async function handleDestroySession(e: Event) {
     const ev = e as CustomEvent<{ sessionId: string }>;
     if (!pool || !ev.detail) return;
-    pool.destroy(ev.detail.sessionId);
+    try {
+      await pool.destroy(ev.detail.sessionId);
+    } catch (err) {
+      LogFrontend(`destroySession FAILED session=${ev.detail.sessionId}: ${err}`);
+    }
+    scheduleReshowIfViewing(ev.detail.sessionId, null);
+  }
+
+  // Rebuild the PoolEntry the user is currently looking at after a destroy
+  // event removed it. Tab restart (respawn-pane) keeps the session 'running'
+  // and the window index unchanged, so handlePoolChange sees no transition to
+  // react to and nothing re-creates the WebSocket — the pane just goes black
+  // until a manual detach/attach. Same for StartSession on an already-running
+  // session (StartDialog's "Entire Session" while only a tab was stopped):
+  // the pool is dropped up-front and the backend errors out with "already
+  // running". The delay lets loadSessions() land first, so a genuinely
+  // stopped session reads 'stopped' here and stays owned by the
+  // status-change grace-period path.
+  function scheduleReshowIfViewing(sessionId: string, windowIdx: number | null) {
+    const attempt = (delay: number, remaining: number) => {
+      setTimeout(async () => {
+        if (!pool) return;
+        if (get(selectedSessionId) !== sessionId) return;
+        if (windowIdx !== null && get(selectedWindowIdx) !== windowIdx) return;
+        const session = get(sessions).find(s => s.id === sessionId);
+        if (session?.status !== 'running') return;
+        try {
+          await pool.show(sessionId, get(selectedWindowIdx));
+          isAttached = true;
+          if (active) {
+            requestAnimationFrame(() => requestAnimationFrame(() => pool?.focusActive()));
+          }
+          LogFrontend(`reshow ok session=${sessionId} win=${get(selectedWindowIdx)}`);
+        } catch (err) {
+          console.error('Re-show after pool destroy failed:', err);
+          LogFrontend(`reshow FAILED session=${sessionId} win=${get(selectedWindowIdx)} remaining=${remaining}: ${err}`);
+          // A transient WebSocket failure right after a respawn used to leave
+          // the pane black until a manual detach/attach — retry with backoff.
+          if (remaining > 0) {
+            attempt(Math.min(delay * 2, 3000), remaining - 1);
+          }
+        }
+      }, delay);
+    };
+    attempt(300, 3);
   }
 
   onMount(() => {
@@ -241,6 +295,7 @@
         }
       } catch (e) {
         console.error('Pool show failed:', e);
+        LogFrontend(`pool show FAILED session=${newSessionId} win=${newWindowIdx}: ${e}`);
         error = String(e);
         isAttached = false;
       }

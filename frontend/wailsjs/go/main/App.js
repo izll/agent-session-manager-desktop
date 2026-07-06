@@ -214,6 +214,10 @@ export function IsDevMode() {
   return window['go']['main']['App']['IsDevMode']();
 }
 
+export function LogFrontend(arg1) {
+  return window['go']['main']['App']['LogFrontend'](arg1);
+}
+
 export function MoveSessionToIndex(arg1, arg2) {
   return window['go']['main']['App']['MoveSessionToIndex'](arg1, arg2);
 }

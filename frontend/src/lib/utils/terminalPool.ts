@@ -7,6 +7,14 @@ import {
   type TerminalInstance
 } from './terminal';
 import type { Terminal } from '@xterm/xterm';
+import { LogFrontend } from '../../../wailsjs/go/main/App';
+
+// Surface pool errors in the backend log file too — the packaged build has
+// no devtools console, so console.error alone is invisible.
+function logPoolError(msg: string, e: unknown): void {
+  console.error(msg, e);
+  try { LogFrontend(`${msg}: ${e}`); } catch { /* bridge not ready */ }
+}
 
 export interface PoolEntry {
   terminalInstance: TerminalInstance;
@@ -104,8 +112,21 @@ export class TerminalPool {
     entry = { terminalInstance, containerEl, key };
     this.entries.set(key, entry);
 
-    // Attach WebSocket
-    await attachToSession(terminalInstance, sessionId, windowIdx);
+    // Attach WebSocket. On failure EVICT the entry: leaving it in the map
+    // would poison the pool — every later show()/getOrCreate() would return
+    // this dead, never-connected entry (permanently black terminal) until a
+    // manual detach/attach happened to rebuild it.
+    try {
+      await attachToSession(terminalInstance, sessionId, windowIdx);
+    } catch (err) {
+      this.entries.delete(key);
+      if (this.activeKey === key) {
+        this.activeKey = null;
+      }
+      try { terminalInstance.cleanup(); } catch { /* already torn down */ }
+      containerEl.remove();
+      throw err;
+    }
 
     return entry;
   }
@@ -197,45 +218,61 @@ export class TerminalPool {
    * (now-killed) pane, leaving the user staring at a blank, unresponsive
    * terminal.
    */
+  // IMPORTANT (all destroy* methods): the entry must leave `entries` (and
+  // `activeKey`) SYNCHRONOUSLY, before the first await. destroyWindow used to
+  // delete the map entry only after `await detachFromSession(...)` — a
+  // concurrent show()/getOrCreate() running in that window (e.g. the
+  // automatic re-show 300ms after a tab restart) would still FIND the dying
+  // entry, return it as "alive", and then the tail of the destroy ripped its
+  // DOM out from under the user: permanently black terminal.
+  //
+  // ALSO: every teardown step is isolated in try/catch. xterm's dispose()
+  // can throw mid-teardown (the "_linkifier2" race, same one
+  // recreateActiveForRenderer guards against). An uncaught throw here used
+  // to abort the destroy BEFORE containerEl.remove(), leaving a dead,
+  // visible, click-eating container in the DOM (terminal wouldn't focus),
+  // and it rejected the caller's await so the automatic re-show never ran.
+  private teardownEntry(entry: PoolEntry): void {
+    detachFromSession(entry.terminalInstance).catch(e => logPoolError('pool teardown: detach failed', e));
+    try { entry.terminalInstance.cleanup(); } catch (e) { logPoolError('pool teardown: cleanup failed (linkifier race?)', e); }
+    try { entry.containerEl.remove(); } catch (e) { logPoolError('pool teardown: container remove failed', e); }
+  }
+
   async destroyWindow(sessionId: string, windowIdx: number): Promise<void> {
     const key = this.makeKey(sessionId, windowIdx);
     const entry = this.entries.get(key);
     if (!entry) return;
-    await detachFromSession(entry.terminalInstance);
-    entry.terminalInstance.cleanup();
-    entry.containerEl.remove();
+    this.entries.delete(key);
     if (this.activeKey === key) {
       this.activeKey = null;
     }
-    this.entries.delete(key);
+    this.teardownEntry(entry);
   }
 
   async destroy(sessionId: string): Promise<void> {
-    const keysToDelete: string[] = [];
+    // Detach map state synchronously first (see note above), then tear down.
+    const doomed: PoolEntry[] = [];
     for (const [key, entry] of this.entries) {
       if (key.startsWith(sessionId + ':')) {
-        keysToDelete.push(key);
-        await detachFromSession(entry.terminalInstance);
-        entry.terminalInstance.cleanup();
-        entry.containerEl.remove();
+        doomed.push(entry);
+        this.entries.delete(key);
         if (this.activeKey === key) {
           this.activeKey = null;
         }
       }
     }
-    for (const key of keysToDelete) {
-      this.entries.delete(key);
+    for (const entry of doomed) {
+      this.teardownEntry(entry);
     }
   }
 
   async destroyAll(): Promise<void> {
-    for (const entry of this.entries.values()) {
-      await detachFromSession(entry.terminalInstance);
-      entry.terminalInstance.cleanup();
-      entry.containerEl.remove();
-    }
+    const doomed = [...this.entries.values()];
     this.entries.clear();
     this.activeKey = null;
+    for (const entry of doomed) {
+      this.teardownEntry(entry);
+    }
   }
 
   /**

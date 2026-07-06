@@ -347,6 +347,7 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 	}
 	ts.conns[connID] = tc
 	ts.mu.Unlock()
+	log.Printf("[ws] attach session=%s win=%d target=%s", sessionID, winIdx, attachTarget)
 
 	// Read from PTY, write to WebSocket with output throttling.
 	// Without throttling, rapid terminal output (Claude Code spinners, etc.)
@@ -453,7 +454,14 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 	go func() {
 		defer func() {
 			ts.mu.Lock()
-			delete(ts.conns, connID)
+			// Only remove the map entry if it still points at THIS conn. A
+			// fast reconnect (tab-restart re-show) registers a NEW conn under
+			// the same connID before the old conn's cleanup runs — an
+			// unconditional delete would silently unregister the new
+			// connection and break dictation writes (conns[connID] lookups).
+			if cur, ok := ts.conns[connID]; ok && cur == tc {
+				delete(ts.conns, connID)
+			}
 			ts.mu.Unlock()
 
 			tc.closeOnce.Do(func() {
@@ -467,6 +475,7 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 			if attachTarget == linkedName {
 				exec.Command("tmux", "kill-session", "-t", linkedName).Run()
 			}
+			log.Printf("[ws] detach session=%s win=%d target=%s", sessionID, winIdx, attachTarget)
 		}()
 
 		for {
