@@ -2,6 +2,7 @@
   import { onMount, onDestroy, createEventDispatcher, tick } from 'svelte';
   import AgentIcon from '../common/AgentIcon.svelte';
   import NewTabDialog from '../Dialogs/NewTabDialog.svelte';
+  import TabColorDialog from '../Dialogs/TabColorDialog.svelte';
   import ConfirmDialog from '../Dialogs/ConfirmDialog.svelte';
   import Toast from '../common/Toast.svelte';
   import { sessions, selectedSessionId, selectedWindowIdx, selectWindow, selectedSession, startSession, stopSession, stopTab, restartTab, deleteSession, deleteTab, toggleFavorite, renameTab, reorderTab } from '../../stores/sessions';
@@ -15,6 +16,13 @@
   import * as DictationService from '../../../../wailsjs/go/main/DictationService';
   import { EventsOn, EventsOff } from '../../../../wailsjs/runtime/runtime';
   import type { session } from '../../../../wailsjs/go/models';
+
+  interface TabColorTarget {
+    Index: number;
+    Name: string;
+    TextColor?: string;
+    BackgroundColor?: string;
+  }
 
   // Dictation state
   export let dictationEnabled = false;
@@ -199,6 +207,8 @@
   let showDeleteTabConfirm = false;
   let deleteTabIndex: number | null = null;
   let showExtraArgsEditor = false;
+  let showTabColorDialog = false;
+  let tabColorTarget: TabColorTarget | null = null;
   let extraArgsValue = '';
   let extraArgsWindowIdx: number | null = null;
   let showErrorToast = false;
@@ -207,7 +217,7 @@
   // Restore terminal focus when TabBar-local dialogs close
   let prevTabBarDialogOpen = false;
   $: {
-    const open = showNewTabDialog || showDeleteConfirm || showDeleteTabConfirm || showExtraArgsEditor;
+    const open = showNewTabDialog || showDeleteConfirm || showDeleteTabConfirm || showExtraArgsEditor || showTabColorDialog;
     if (prevTabBarDialogOpen && !open) {
       focusTerminal();
     }
@@ -570,7 +580,9 @@
         Agent: sess.agent,
         Dead: false,
         Active: true,
-        Followed: false
+        Followed: false,
+        TextColor: sess.tabTextColor || '',
+        BackgroundColor: sess.tabBackgroundColor || ''
       };
 
       if (sess.followedWindows && sess.followedWindows.length > 0) {
@@ -581,7 +593,9 @@
           Agent: fw.agent || sess.agent,
           Dead: false,
           Active: false,
-          Followed: true
+          Followed: true,
+          TextColor: fw.text_color || '',
+          BackgroundColor: fw.background_color || ''
         }));
         windows = sortWindowsByTabOrder([mainTab, ...followedTabs], sess.tabOrder);
       } else {
@@ -760,6 +774,63 @@
       startTabRename(tabContextMenuIndex, tabContextMenuName);
     }
     closeTabContextMenu();
+  }
+
+  function tabContextSetColor() {
+    if (tabContextMenuIndex !== null && $selectedSessionId) {
+      const win = windows.find(w => w.Index === tabContextMenuIndex);
+      if (win) {
+        tabColorTarget = {
+          Index: win.Index,
+          Name: win.Name,
+          TextColor: win.TextColor || '',
+          BackgroundColor: win.BackgroundColor || ''
+        };
+        showTabColorDialog = true;
+      }
+    }
+    closeTabContextMenu();
+  }
+
+  function handleTabColorApplied(event: CustomEvent<{ index: number; textColor: string; backgroundColor: string }>) {
+    const { index, textColor, backgroundColor } = event.detail;
+    windows = windows.map(win => win.Index === index
+      ? { ...win, TextColor: textColor, BackgroundColor: backgroundColor }
+      : win);
+
+    // Keep the stopped-session representation in sync without waiting for the
+    // next full reload. The backend remains the source of truth.
+    sessions.update(items => items.map(sess => {
+      if (sess.id !== $selectedSessionId) return sess;
+      if (index === 0) {
+        return { ...sess, tabTextColor: textColor, tabBackgroundColor: backgroundColor };
+      }
+      return {
+        ...sess,
+        followedWindows: (sess.followedWindows || []).map((fw: any) => fw.index === index
+          ? { ...fw, text_color: textColor, background_color: backgroundColor }
+          : fw)
+      };
+    }));
+    tabColorTarget = null;
+  }
+
+  function tabStyle(win: session.WindowInfo): string {
+    const styles: string[] = [];
+    if (win.BackgroundColor) styles.push(`background: ${win.BackgroundColor}`);
+    if (win.TextColor === 'auto' && win.BackgroundColor) {
+      const hex = win.BackgroundColor.slice(1);
+      const normalized = hex.length === 3 ? hex.split('').map(c => c + c).join('') : hex.slice(0, 6);
+      if (/^[0-9a-fA-F]{6}$/.test(normalized)) {
+        const r = parseInt(normalized.slice(0, 2), 16);
+        const g = parseInt(normalized.slice(2, 4), 16);
+        const b = parseInt(normalized.slice(4, 6), 16);
+        styles.push(`color: ${(0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.55 ? '#111111' : '#FFFFFF'}`);
+      }
+    } else if (win.TextColor) {
+      styles.push(`color: ${win.TextColor}`);
+    }
+    return styles.join('; ');
   }
 
   async function tabContextStop() {
@@ -1011,6 +1082,7 @@
             class:tab-dragging={draggingTabIndex === winArrayIdx}
             class:tab-drag-over={dragOverTabIndex === winArrayIdx && draggingTabIndex !== winArrayIdx}
             class:tab-dropped={droppedTabWindowIdx === win.Index}
+            style={tabStyle(win)}
             draggable={true}
             on:click={() => { if (renamingTabIndex === null) { handleTabClick(win.Index); dispatch('closeFullDiff'); } }}
             on:contextmenu={(e) => handleTabContextMenu(e, win.Index, win.Name)}
@@ -1079,6 +1151,16 @@
             <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
           </svg>
           {$t('tabBar.rename')}
+        </button>
+        <button class="tab-context-menu-item" on:click={tabContextSetColor}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 22a1 1 0 0 0 0-20 10 10 0 0 0 0 20z"/>
+            <circle cx="7.5" cy="10.5" r="1" fill="currentColor" stroke="none"/>
+            <circle cx="10.5" cy="6.5" r="1" fill="currentColor" stroke="none"/>
+            <circle cx="15.5" cy="7.5" r="1" fill="currentColor" stroke="none"/>
+            <circle cx="16.5" cy="12.5" r="1" fill="currentColor" stroke="none"/>
+          </svg>
+          {$t('tabBar.setTabColor')}
         </button>
         {#if tabContextMenuIndex !== null && windows.find(w => w.Index === tabContextMenuIndex)?.Agent !== 'terminal' && windows.find(w => w.Index === tabContextMenuIndex)?.Agent !== 'custom'}
           <button class="tab-context-menu-item" on:click={tabContextEditExtraArgs}>
@@ -1318,6 +1400,14 @@
 {/if}
 
 <NewTabDialog bind:show={showNewTabDialog} />
+
+<TabColorDialog
+  bind:show={showTabColorDialog}
+  sessionId={$selectedSessionId || ''}
+  tab={tabColorTarget}
+  on:applied={handleTabColorApplied}
+  on:close={() => tabColorTarget = null}
+/>
 
 <ConfirmDialog
   bind:show={showDeleteConfirm}

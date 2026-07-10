@@ -21,6 +21,8 @@ export interface Session {
   tabOrder: number[];
   mainWindowStopped: boolean;
   extraArgs: string;
+  tabTextColor: string;
+  tabBackgroundColor: string;
 }
 
 export interface Group {

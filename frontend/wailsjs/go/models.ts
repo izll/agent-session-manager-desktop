@@ -288,6 +288,8 @@ export namespace main {
 	    mainWindowStopped: boolean;
 	    tabOrder: number[];
 	    extraArgs: string;
+	    tabTextColor: string;
+	    tabBackgroundColor: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new SessionInfo(source);
@@ -312,6 +314,8 @@ export namespace main {
 	        this.mainWindowStopped = source["mainWindowStopped"];
 	        this.tabOrder = source["tabOrder"];
 	        this.extraArgs = source["extraArgs"];
+	        this.tabTextColor = source["tabTextColor"];
+	        this.tabBackgroundColor = source["tabBackgroundColor"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -527,6 +531,8 @@ export namespace session {
 	    notes?: string;
 	    extra_args?: string;
 	    stopped?: boolean;
+	    text_color?: string;
+	    background_color?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new FollowedWindow(source);
@@ -543,6 +549,8 @@ export namespace session {
 	        this.notes = source["notes"];
 	        this.extra_args = source["extra_args"];
 	        this.stopped = source["stopped"];
+	        this.text_color = source["text_color"];
+	        this.background_color = source["background_color"];
 	    }
 	}
 	export class WindowInfo {
@@ -552,6 +560,8 @@ export namespace session {
 	    Followed: boolean;
 	    Agent: string;
 	    Dead: boolean;
+	    TextColor: string;
+	    BackgroundColor: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new WindowInfo(source);
@@ -565,6 +575,8 @@ export namespace session {
 	        this.Followed = source["Followed"];
 	        this.Agent = source["Agent"];
 	        this.Dead = source["Dead"];
+	        this.TextColor = source["TextColor"];
+	        this.BackgroundColor = source["BackgroundColor"];
 	    }
 	}
 

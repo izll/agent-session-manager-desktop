@@ -393,23 +393,25 @@ func (a *App) ImportSessions(sourceProjectID string, sessionIDs []string) (int, 
 
 // SessionInfo represents session data for frontend
 type SessionInfo struct {
-	ID                string                   `json:"id"`
-	Name              string                   `json:"name"`
-	Path              string                   `json:"path"`
-	Status            string                   `json:"status"`
-	Agent             string                   `json:"agent"`
-	Color             string                   `json:"color"`
-	BgColor           string                   `json:"bgColor"`
-	FullRowColor      bool                     `json:"fullRowColor"`
-	GroupID           string                   `json:"groupId"`
-	AutoYes           bool                     `json:"autoYes"`
-	Notes             string                   `json:"notes"`
-	Favorite          bool                     `json:"favorite"`
-	ResumeSessionID   string                   `json:"resumeSessionId"`
-	FollowedWindows   []session.FollowedWindow `json:"followedWindows"`
-	MainWindowStopped bool                     `json:"mainWindowStopped"`
-	TabOrder          []int                    `json:"tabOrder"`
-	ExtraArgs         string                   `json:"extraArgs"`
+	ID                 string                   `json:"id"`
+	Name               string                   `json:"name"`
+	Path               string                   `json:"path"`
+	Status             string                   `json:"status"`
+	Agent              string                   `json:"agent"`
+	Color              string                   `json:"color"`
+	BgColor            string                   `json:"bgColor"`
+	FullRowColor       bool                     `json:"fullRowColor"`
+	GroupID            string                   `json:"groupId"`
+	AutoYes            bool                     `json:"autoYes"`
+	Notes              string                   `json:"notes"`
+	Favorite           bool                     `json:"favorite"`
+	ResumeSessionID    string                   `json:"resumeSessionId"`
+	FollowedWindows    []session.FollowedWindow `json:"followedWindows"`
+	MainWindowStopped  bool                     `json:"mainWindowStopped"`
+	TabOrder           []int                    `json:"tabOrder"`
+	ExtraArgs          string                   `json:"extraArgs"`
+	TabTextColor       string                   `json:"tabTextColor"`
+	TabBackgroundColor string                   `json:"tabBackgroundColor"`
 }
 
 // GetSessions returns all sessions
@@ -438,23 +440,25 @@ func (a *App) instanceToSessionInfo(inst *session.Instance) SessionInfo {
 		}
 	}
 	return SessionInfo{
-		ID:                inst.ID,
-		Name:              inst.Name,
-		Path:              inst.Path,
-		Status:            string(inst.Status),
-		Agent:             string(inst.Agent),
-		Color:             inst.Color,
-		BgColor:           inst.BgColor,
-		FullRowColor:      inst.FullRowColor,
-		GroupID:           inst.GroupID,
-		AutoYes:           inst.AutoYes,
-		Notes:             inst.Notes,
-		Favorite:          inst.Favorite,
-		ResumeSessionID:   inst.ResumeSessionID,
-		FollowedWindows:   inst.FollowedWindows,
-		MainWindowStopped: mainStopped,
-		TabOrder:          inst.GetTabOrder(),
-		ExtraArgs:         inst.ExtraArgs,
+		ID:                 inst.ID,
+		Name:               inst.Name,
+		Path:               inst.Path,
+		Status:             string(inst.Status),
+		Agent:              string(inst.Agent),
+		Color:              inst.Color,
+		BgColor:            inst.BgColor,
+		FullRowColor:       inst.FullRowColor,
+		GroupID:            inst.GroupID,
+		AutoYes:            inst.AutoYes,
+		Notes:              inst.Notes,
+		Favorite:           inst.Favorite,
+		ResumeSessionID:    inst.ResumeSessionID,
+		FollowedWindows:    inst.FollowedWindows,
+		MainWindowStopped:  mainStopped,
+		TabOrder:           inst.GetTabOrder(),
+		ExtraArgs:          inst.ExtraArgs,
+		TabTextColor:       inst.TabTextColor,
+		TabBackgroundColor: inst.TabBackgroundColor,
 	}
 }
 
@@ -1148,6 +1152,19 @@ func (a *App) SetTabNotes(sessionID string, windowIdx int, notes string) error {
 		}
 	}
 	return fmt.Errorf("error.windowNotFound")
+}
+
+// SetTabColor sets the optional text and background colors for a tab.
+// Empty values clear an override; textColor also supports "auto".
+func (a *App) SetTabColor(sessionID string, windowIdx int, textColor, backgroundColor string) error {
+	inst, err := a.storage.GetInstance(sessionID)
+	if err != nil {
+		return err
+	}
+	if err := inst.SetTabColors(windowIdx, textColor, backgroundColor); err != nil {
+		return err
+	}
+	return a.storage.UpdateInstance(inst)
 }
 
 // GetTabNotes gets tab notes

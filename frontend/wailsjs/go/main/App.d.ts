@@ -153,6 +153,8 @@ export function SetSessionColor(arg1:string,arg2:string,arg3:string,arg4:boolean
 
 export function SetSessionNotes(arg1:string,arg2:string):Promise<void>;
 
+export function SetTabColor(arg1:string,arg2:number,arg3:string,arg4:string):Promise<void>;
+
 export function SetTabNotes(arg1:string,arg2:number,arg3:string):Promise<void>;
 
 export function SetWindowAutoYes(arg1:string,arg2:number,arg3:boolean):Promise<void>;

@@ -18,7 +18,10 @@ import (
 )
 
 // ansiRegex matches ANSI escape sequences
-var ansiRegex = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
+var (
+	ansiRegex        = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
+	cssHexColorRegex = regexp.MustCompile(`^(?:#[0-9a-fA-F]{3}|#[0-9a-fA-F]{4}|#[0-9a-fA-F]{6}|#[0-9a-fA-F]{8})$`)
+)
 
 // StripANSI removes ANSI escape codes from a string
 func StripANSI(s string) string {
@@ -121,27 +124,29 @@ var AgentConfigs = map[AgentType]AgentConfig{
 }
 
 type Instance struct {
-	ID                string           `json:"id"`
-	Name              string           `json:"name"`
-	Path              string           `json:"path"`
-	Status            Status           `json:"status"`
-	CreatedAt         time.Time        `json:"created_at"`
-	UpdatedAt         time.Time        `json:"updated_at"`
-	AutoYes           bool             `json:"auto_yes"`
-	ResumeSessionID   string           `json:"resume_session_id,omitempty"`   // Claude session ID to resume
-	Color             string           `json:"color,omitempty"`               // Foreground color
-	BgColor           string           `json:"bg_color,omitempty"`            // Background color
-	FullRowColor      bool             `json:"full_row_color,omitempty"`      // Extend background to full row
-	GroupID           string           `json:"group_id,omitempty"`            // Session group ID
-	Agent             AgentType        `json:"agent,omitempty"`               // Agent type (claude, gemini, aider, custom)
-	CustomCommand     string           `json:"custom_command,omitempty"`      // Custom command for AgentCustom
-	ExtraArgs         string           `json:"extra_args,omitempty"`          // Extra CLI arguments appended to agent command
-	Notes             string           `json:"notes,omitempty"`               // User notes/comments for this session
-	FollowedWindows   []FollowedWindow `json:"followed_windows,omitempty"`    // Windows tracked as agents (window 0 is main agent)
-	BaseCommitSHA     string           `json:"base_commit_sha,omitempty"`     // Git HEAD commit at session start (for diff)
-	Favorite          bool             `json:"favorite,omitempty"`            // Whether session is marked as favorite
-	MainWindowStopped bool             `json:"main_window_stopped,omitempty"` // Main window (0) is stopped but session still running
-	TabOrder          []int            `json:"tab_order,omitempty"`           // Custom tab display order (tmux window indices); if empty, default order is used
+	ID                 string           `json:"id"`
+	Name               string           `json:"name"`
+	Path               string           `json:"path"`
+	Status             Status           `json:"status"`
+	CreatedAt          time.Time        `json:"created_at"`
+	UpdatedAt          time.Time        `json:"updated_at"`
+	AutoYes            bool             `json:"auto_yes"`
+	ResumeSessionID    string           `json:"resume_session_id,omitempty"`    // Claude session ID to resume
+	Color              string           `json:"color,omitempty"`                // Foreground color
+	BgColor            string           `json:"bg_color,omitempty"`             // Background color
+	FullRowColor       bool             `json:"full_row_color,omitempty"`       // Extend background to full row
+	GroupID            string           `json:"group_id,omitempty"`             // Session group ID
+	Agent              AgentType        `json:"agent,omitempty"`                // Agent type (claude, gemini, aider, custom)
+	CustomCommand      string           `json:"custom_command,omitempty"`       // Custom command for AgentCustom
+	ExtraArgs          string           `json:"extra_args,omitempty"`           // Extra CLI arguments appended to agent command
+	Notes              string           `json:"notes,omitempty"`                // User notes/comments for this session
+	FollowedWindows    []FollowedWindow `json:"followed_windows,omitempty"`     // Windows tracked as agents (window 0 is main agent)
+	BaseCommitSHA      string           `json:"base_commit_sha,omitempty"`      // Git HEAD commit at session start (for diff)
+	Favorite           bool             `json:"favorite,omitempty"`             // Whether session is marked as favorite
+	MainWindowStopped  bool             `json:"main_window_stopped,omitempty"`  // Main window (0) is stopped but session still running
+	TabOrder           []int            `json:"tab_order,omitempty"`            // Custom tab display order (tmux window indices); if empty, default order is used
+	TabTextColor       string           `json:"tab_text_color,omitempty"`       // Main tab text color (empty uses the theme default)
+	TabBackgroundColor string           `json:"tab_background_color,omitempty"` // Main tab background color (empty uses the theme default)
 }
 
 // DiffStats contains git diff statistics and content
@@ -161,13 +166,15 @@ func (d *DiffStats) IsEmpty() bool {
 type FollowedWindow struct {
 	Index           int       `json:"index"`
 	Agent           AgentType `json:"agent"`
-	Name            string    `json:"name"`                 // Tab name for display
-	CustomCommand   string    `json:"custom_command"`       // For custom agents
-	AutoYes         bool      `json:"auto_yes"`             // YOLO mode for this tab
-	ResumeSessionID string    `json:"resume_session_id"`    // Resume session ID for this tab
-	Notes           string    `json:"notes,omitempty"`      // User notes for this tab
-	ExtraArgs       string    `json:"extra_args,omitempty"` // Extra CLI arguments for this tab
-	Stopped         bool      `json:"stopped,omitempty"`    // Tab is stopped (window killed but can resume)
+	Name            string    `json:"name"`                       // Tab name for display
+	CustomCommand   string    `json:"custom_command"`             // For custom agents
+	AutoYes         bool      `json:"auto_yes"`                   // YOLO mode for this tab
+	ResumeSessionID string    `json:"resume_session_id"`          // Resume session ID for this tab
+	Notes           string    `json:"notes,omitempty"`            // User notes for this tab
+	ExtraArgs       string    `json:"extra_args,omitempty"`       // Extra CLI arguments for this tab
+	Stopped         bool      `json:"stopped,omitempty"`          // Tab is stopped (window killed but can resume)
+	TextColor       string    `json:"text_color,omitempty"`       // Tab text color (empty uses the theme default)
+	BackgroundColor string    `json:"background_color,omitempty"` // Tab background color (empty uses the theme default)
 }
 
 // GetAgentConfig returns the agent configuration for this instance
@@ -631,6 +638,8 @@ func (i *Instance) restoreFollowedWindows() {
 			ResumeSessionID: resumeID,
 			Notes:           fw.Notes,
 			ExtraArgs:       fw.ExtraArgs,
+			TextColor:       fw.TextColor,
+			BackgroundColor: fw.BackgroundColor,
 		})
 	}
 
@@ -1113,18 +1122,25 @@ func (i *Instance) RenameCurrentWindow(name string) error {
 
 // WindowInfo contains information about a tmux window
 type WindowInfo struct {
-	Index    int
-	Name     string
-	Active   bool
-	Followed bool      // Whether this window is tracked as an agent
-	Agent    AgentType // Agent type if followed
-	Dead     bool      // Whether the window's pane has exited (command finished)
+	Index           int
+	Name            string
+	Active          bool
+	Followed        bool      // Whether this window is tracked as an agent
+	Agent           AgentType // Agent type if followed
+	Dead            bool      // Whether the window's pane has exited (command finished)
+	TextColor       string    // Tab text color (empty uses the theme default)
+	BackgroundColor string    // Tab background color (empty uses the theme default)
 }
 
 // IsWindowFollowed checks if a window index is being tracked as an agent
 func (i *Instance) IsWindowFollowed(index int) bool {
-	// Window 0 is always followed (main agent)
-	if index == 0 {
+	return i.isWindowFollowed(index, i.GetMainWindowIndex())
+}
+
+func (i *Instance) isWindowFollowed(index, mainWindowIdx int) bool {
+	// The first tmux window is always the main agent. Its index may be non-zero
+	// when tmux base-index/renumbering is configured.
+	if index == mainWindowIdx {
 		return true
 	}
 	for _, fw := range i.FollowedWindows {
@@ -1137,15 +1153,20 @@ func (i *Instance) IsWindowFollowed(index int) bool {
 
 // GetFollowedWindow returns the FollowedWindow for a given index, or nil if not followed
 func (i *Instance) GetFollowedWindow(index int) *FollowedWindow {
-	// Window 0 is the main agent
-	if index == 0 {
+	return i.getFollowedWindow(index, i.GetMainWindowIndex())
+}
+
+func (i *Instance) getFollowedWindow(index, mainWindowIdx int) *FollowedWindow {
+	if index == mainWindowIdx {
 		return &FollowedWindow{
-			Index:           0,
+			Index:           mainWindowIdx,
 			Agent:           i.Agent,
 			Name:            i.Name,
 			AutoYes:         i.AutoYes,
 			ResumeSessionID: i.ResumeSessionID,
 			Notes:           i.Notes,
+			TextColor:       i.TabTextColor,
+			BackgroundColor: i.TabBackgroundColor,
 		}
 	}
 	for idx := range i.FollowedWindows {
@@ -1158,8 +1179,8 @@ func (i *Instance) GetFollowedWindow(index int) *FollowedWindow {
 
 // ToggleWindowFollow toggles the follow status of a window
 func (i *Instance) ToggleWindowFollow(index int) bool {
-	// Can't unfollow window 0
-	if index == 0 {
+	// Can't unfollow the main window.
+	if index == i.GetMainWindowIndex() {
 		return true
 	}
 
@@ -1196,6 +1217,42 @@ func (i *Instance) GetTabOrder() []int {
 	return order
 }
 
+// SetTabColors stores presentation colors for one tracked tab. An empty color
+// clears the override. Text color additionally accepts "auto" so the frontend
+// can choose a contrasting color for the configured background.
+func (i *Instance) SetTabColors(windowIdx int, textColor, backgroundColor string) error {
+	return i.setTabColors(windowIdx, i.GetMainWindowIndex(), textColor, backgroundColor)
+}
+
+func (i *Instance) setTabColors(windowIdx, mainWindowIdx int, textColor, backgroundColor string) error {
+	if !validTabColor(textColor, true) {
+		return fmt.Errorf("invalid tab text color")
+	}
+	if !validTabColor(backgroundColor, false) {
+		return fmt.Errorf("invalid tab background color")
+	}
+
+	if windowIdx == mainWindowIdx {
+		i.TabTextColor = textColor
+		i.TabBackgroundColor = backgroundColor
+		return nil
+	}
+
+	for idx := range i.FollowedWindows {
+		if i.FollowedWindows[idx].Index == windowIdx {
+			i.FollowedWindows[idx].TextColor = textColor
+			i.FollowedWindows[idx].BackgroundColor = backgroundColor
+			return nil
+		}
+	}
+
+	return fmt.Errorf("error.windowNotFound")
+}
+
+func validTabColor(color string, allowAuto bool) bool {
+	return color == "" || (allowAuto && color == "auto") || cssHexColorRegex.MatchString(color)
+}
+
 // ReorderTabs moves a tab from one display position to another.
 // fromPos and toPos are indices into the tab display order (0-based, including main window).
 func (i *Instance) ReorderTabs(fromPos, toPos int) error {
@@ -1220,7 +1277,13 @@ func (i *Instance) ReorderTabs(fromPos, toPos int) error {
 // GetAllFollowedAgents returns info about all followed agents (including main window 0)
 func (i *Instance) GetAllFollowedAgents() []FollowedWindow {
 	result := []FollowedWindow{
-		{Index: 0, Agent: i.Agent, Name: i.Name},
+		{
+			Index:           0,
+			Agent:           i.Agent,
+			Name:            i.Name,
+			TextColor:       i.TabTextColor,
+			BackgroundColor: i.TabBackgroundColor,
+		},
 	}
 	result = append(result, i.FollowedWindows...)
 	return result
@@ -1242,6 +1305,10 @@ func (i *Instance) GetWindowList() []WindowInfo {
 
 	var windows []WindowInfo
 	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
+	mainWindowIdx := 0
+	if len(lines) > 0 {
+		fmt.Sscanf(strings.SplitN(lines[0], ":", 2)[0], "%d", &mainWindowIdx)
+	}
 	for _, line := range lines {
 		if line == "" {
 			continue
@@ -1253,20 +1320,25 @@ func (i *Instance) GetWindowList() []WindowInfo {
 
 			// Get agent type if followed
 			var agent AgentType
-			followed := i.IsWindowFollowed(idx)
+			var textColor, backgroundColor string
+			followed := i.isWindowFollowed(idx, mainWindowIdx)
 			if followed {
-				if fw := i.GetFollowedWindow(idx); fw != nil {
+				if fw := i.getFollowedWindow(idx, mainWindowIdx); fw != nil {
 					agent = fw.Agent
+					textColor = fw.TextColor
+					backgroundColor = fw.BackgroundColor
 				}
 			}
 
 			windows = append(windows, WindowInfo{
-				Index:    idx,
-				Name:     parts[1],
-				Active:   parts[2] == "1",
-				Followed: followed,
-				Agent:    agent,
-				Dead:     parts[3] == "1",
+				Index:           idx,
+				Name:            parts[1],
+				Active:          parts[2] == "1",
+				Followed:        followed,
+				Agent:           agent,
+				Dead:            parts[3] == "1",
+				TextColor:       textColor,
+				BackgroundColor: backgroundColor,
 			})
 		}
 	}
