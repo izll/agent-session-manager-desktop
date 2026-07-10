@@ -18,12 +18,13 @@ type AudioCapture struct {
 	stream          *portaudio.Stream
 	audioBuffer     *bytes.Buffer
 	isRecording     bool
-	streamClosing   bool                  // Flag to indicate stream is being closed (prevents SIGSEGV)
-	readInProgress  bool                  // Flag to indicate Read() is currently blocking
+	streamClosing   bool // Flag to indicate stream is being closed (prevents SIGSEGV)
+	readInProgress  bool // Flag to indicate Read() is currently blocking
 	silenceDetector *SilenceDetector
 	vad             *webrtcvad.VAD
+	vadMu           sync.Mutex
 	mu              sync.Mutex
-	recordDone      chan bool // Signal that recordLoop has exited
+	recordDone      chan bool             // Signal that recordLoop has exited
 	selectedDevice  *portaudio.DeviceInfo // Selected input device (nil = default)
 	onVoiceLevel    func(level float64)   // Callback for voice level (0.0-1.0)
 }
@@ -207,7 +208,7 @@ func (ac *AudioCapture) StartRecording(silenceTimeout int) error {
 	ac.silenceDetector.timeoutDuration = time.Duration(silenceTimeout) * time.Second
 	ac.silenceDetector.lastSoundTime = time.Now()
 	ac.isRecording = true
-	ac.streamClosing = false // Reset flag for new recording session
+	ac.streamClosing = false           // Reset flag for new recording session
 	ac.recordDone = make(chan bool, 1) // Create new channel for this recording session
 	selectedDevice := ac.selectedDevice
 	ac.mu.Unlock()
@@ -252,7 +253,11 @@ func (ac *AudioCapture) StartRecording(silenceTimeout int) error {
 
 	err = stream.Start()
 	if err != nil {
+		// OpenStream succeeded, so we own the stream even if Start fails.
+		// Closing it here avoids leaking the native PortAudio resources.
+		_ = stream.Close()
 		ac.mu.Lock()
+		ac.stream = nil
 		ac.isRecording = false
 		ac.streamClosing = false // Reset on error
 		ac.mu.Unlock()
@@ -330,14 +335,15 @@ func (ac *AudioCapture) recordLoop(buffer []int16) {
 			return
 		}
 
-		// Write to buffer
-		for _, sample := range buffer {
-			err := binary.Write(ac.audioBuffer, binary.LittleEndian, sample)
-			if err != nil {
-				logToFile("Error writing to buffer: %v\n", err)
-				continue
-			}
+		// Convert and append the whole callback buffer while holding the same
+		// mutex used by the consumers. This makes bytes.Buffer ownership explicit.
+		audioBytes := make([]byte, len(buffer)*2)
+		for i, sample := range buffer {
+			binary.LittleEndian.PutUint16(audioBytes[i*2:], uint16(sample))
 		}
+		ac.mu.Lock()
+		_, _ = ac.audioBuffer.Write(audioBytes)
+		ac.mu.Unlock()
 
 		// Check for silence
 		if ac.detectSilence(buffer) {
@@ -368,11 +374,14 @@ func (ac *AudioCapture) detectSilence(buffer []int16) bool {
 	rms := math.Sqrt(sum / float64(len(buffer)))
 
 	// Notify voice level callback (0.0-1.0 range, clamped)
-	if ac.onVoiceLevel != nil {
+	ac.mu.Lock()
+	onVoiceLevel := ac.onVoiceLevel
+	ac.mu.Unlock()
+	if onVoiceLevel != nil {
 		// Normalize RMS to 0-1 range (typical speech is 0.01-0.3 RMS)
 		// Scale it so 0.1 RMS = 1.0 level (100% indicator)
 		level := math.Min(1.0, rms*10.0)
-		ac.onVoiceLevel(level)
+		onVoiceLevel(level)
 	}
 
 	// Adaptive noise floor: continuously track background noise level
@@ -447,7 +456,9 @@ func (ac *AudioCapture) detectSilence(buffer []int16) bool {
 		// Process the first 10ms chunk only for quick detection
 		frameSize := 160 * 2 // 160 samples * 2 bytes per sample = 320 bytes
 		if len(audioBytes) >= frameSize {
+			ac.vadMu.Lock()
 			isVoice, err := ac.vad.Process(sampleRate, audioBytes[:frameSize])
+			ac.vadMu.Unlock()
 			if err != nil {
 				logToFile("⚠️  VAD error: %v (falling back to RMS only)\n", err)
 				return false // If VAD fails, assume there might be speech
@@ -561,14 +572,27 @@ func (ac *AudioCapture) StopRecording() error {
 func (ac *AudioCapture) GetAudioData() []byte {
 	ac.mu.Lock()
 	defer ac.mu.Unlock()
-	return ac.audioBuffer.Bytes()
+	return bytes.Clone(ac.audioBuffer.Bytes())
 }
 
 // GetAndClearAudioData returns the recorded audio data and clears the buffer
 func (ac *AudioCapture) GetAndClearAudioData() []byte {
 	ac.mu.Lock()
 	defer ac.mu.Unlock()
-	data := ac.audioBuffer.Bytes()
+	data := bytes.Clone(ac.audioBuffer.Bytes())
+	ac.audioBuffer.Reset()
+	return data
+}
+
+// GetAndClearAudioDataIfAtLeast atomically transfers ownership of the current
+// PCM buffer when it is large enough. A nil result leaves the buffer intact.
+func (ac *AudioCapture) GetAndClearAudioDataIfAtLeast(minBytes int) []byte {
+	ac.mu.Lock()
+	defer ac.mu.Unlock()
+	if ac.audioBuffer.Len() < minBytes {
+		return nil
+	}
+	data := bytes.Clone(ac.audioBuffer.Bytes())
 	ac.audioBuffer.Reset()
 	return data
 }
@@ -597,9 +621,13 @@ func (ac *AudioCapture) GetTimeSinceLastSound() time.Duration {
 // HasSoundInBuffer checks if the current audio buffer contains actual sound (not just silence)
 func (ac *AudioCapture) HasSoundInBuffer() bool {
 	ac.mu.Lock()
-	defer ac.mu.Unlock()
+	audioData := bytes.Clone(ac.audioBuffer.Bytes())
+	ac.mu.Unlock()
+	return ac.HasSound(audioData)
+}
 
-	audioData := ac.audioBuffer.Bytes()
+// HasSound checks an immutable PCM chunk.
+func (ac *AudioCapture) HasSound(audioData []byte) bool {
 	if len(audioData) == 0 {
 		return false
 	}
@@ -621,13 +649,18 @@ func (ac *AudioCapture) HasSoundInBuffer() bool {
 	rms := math.Sqrt(sum / float64(len(samples)))
 
 	// First check: RMS threshold
-	if rms < ac.silenceDetector.threshold {
+	ac.silenceDetector.mu.Lock()
+	threshold := ac.silenceDetector.threshold
+	ac.silenceDetector.mu.Unlock()
+	if rms < threshold {
 		return false // Definitely silence
 	}
 
 	// Second check: Use WebRTC VAD if available
 	// Check multiple frames throughout the buffer to ensure there's real speech
 	if ac.vad != nil {
+		ac.vadMu.Lock()
+		defer ac.vadMu.Unlock()
 		frameSize := 160 * 2 // 10ms at 16kHz = 320 bytes
 		voiceFrameCount := 0
 		totalFrames := 0

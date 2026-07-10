@@ -26,6 +26,8 @@ jobs:
   release:
     name: Build & Release (Linux)
     runs-on: ubuntu-24.04
+    outputs:
+      tag: ${{ steps.ver.outputs.tag }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -35,19 +37,44 @@ jobs:
       # For a manual run, create and push the tag first so the release attaches to it.
       - name: Create tag (manual dispatch only)
         if: github.event_name == 'workflow_dispatch'
+        env:
+          RELEASE_TAG: ${{ github.event.inputs.version }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          if [[ ! "$RELEASE_TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "Invalid stable SemVer tag: $RELEASE_TAG" >&2
+            exit 1
+          fi
+          if git rev-parse -q --verify "refs/tags/$RELEASE_TAG" >/dev/null; then
+            if [ "$(git rev-list -n 1 "$RELEASE_TAG")" != "$(git rev-parse HEAD)" ]; then
+              echo "Tag $RELEASE_TAG exists on a different commit" >&2
+              exit 1
+            fi
+            if release_draft=$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft 2>/dev/null) && [ "$release_draft" != "true" ]; then
+              echo "Published release already exists for $RELEASE_TAG" >&2
+              exit 1
+            fi
+            echo "Reusing same-commit tag for a failed/draft release retry: $RELEASE_TAG"
+            exit 0
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag -a "${{ github.event.inputs.version }}" -m "Release ${{ github.event.inputs.version }}" || true
-          git push origin "${{ github.event.inputs.version }}" || true
+          git tag -a "$RELEASE_TAG" -m "Release $RELEASE_TAG"
+          git push origin "$RELEASE_TAG"
 
       - name: Resolve version
         id: ver
+        env:
+          MANUAL_TAG: ${{ github.event.inputs.version }}
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            TAG="${{ github.event.inputs.version }}"
+            TAG="$MANUAL_TAG"
           else
             TAG="${GITHUB_REF#refs/tags/}"
+          fi
+          if [[ ! "$TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "Invalid stable SemVer tag: $TAG" >&2
+            exit 1
           fi
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "num=${TAG#v}" >> "$GITHUB_OUTPUT"
@@ -79,17 +106,33 @@ jobs:
       - name: Install Wails CLI
         run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.11.0
 
+      - name: Test and type-check
+        run: |
+          xvfb-run -a go test ./...
+          go vet ./...
+          npm ci --prefix frontend
+          npm run check --prefix frontend
+
+      - name: Set release metadata
+        env:
+          VERSION: ${{ steps.ver.outputs.num }}
+        run: |
+          jq --arg version "$VERSION" '.info.productVersion = $version' wails.json > wails.json.tmp
+          mv wails.json.tmp wails.json
+
       - name: Build (Wails, webkit2_41)
         # Wails' "generating bindings" step runs the app's Go init() code, and a
         # dependency (robotn/gohook, global hotkey) calls XOpenDisplay on init —
         # which segfaults on a headless runner. Run the build under a virtual X
         # server (Xvfb) so a display exists during binding generation.
+        env:
+          VERSION: ${{ steps.ver.outputs.num }}
         run: |
           export PATH="$PATH:$(go env GOPATH)/bin"
-          xvfb-run -a wails build -tags webkit2_41 -clean
+          xvfb-run -a wails build -tags webkit2_41 -clean -ldflags "-X main.Version=$VERSION"
 
       - name: Install nfpm
-        run: go install github.com/goreleaser/nfpm/v2/cmd/nfpm@latest
+        run: go install github.com/goreleaser/nfpm/v2/cmd/nfpm@v2.41.3
 
       - name: Package .deb and .rpm (names match the in-app updater)
         run: |
@@ -101,11 +144,16 @@ jobs:
             "asmgr-desktop_${VERSION}_linux_x86_64.deb"
           nfpm package -f build/nfpm.yaml -p rpm -t \
             "asmgr-desktop_${VERSION}_linux_x86_64.rpm"
-          ls -la *.deb *.rpm
+          tar -C build/bin -czf "asmgr-desktop_${VERSION}_linux_amd64.tar.gz" asmgr-desktop
+          for asset in *.deb *.rpm *.tar.gz; do
+            sha256sum "$asset" > "$asset.sha256"
+          done
+          ls -la *.deb *.rpm *.tar.gz *.sha256
 
       - name: Create / update GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          draft: true
           tag_name: ${{ steps.ver.outputs.tag }}
           name: ${{ steps.ver.outputs.tag }}
           # A fixed body (no generate_release_notes) so re-running the workflow
@@ -116,15 +164,22 @@ jobs:
             **Downloads**
             - Linux (Debian/Ubuntu): `.deb`
             - Linux (Fedora/RHEL): `.rpm`
+            - Linux user-local install: `linux_amd64.tar.gz`
             - macOS (Apple Silicon; Intel via Rosetta 2): `darwin_arm64.tar.gz`
             - Windows x64: `windows_amd64.tar.gz`
 
-            `tmux` is required at runtime on every platform (see the README).
+            `tmux` is required at runtime on every platform. macOS and Windows
+            updates replace the complete app/archive manually; in-app binary
+            replacement is intentionally Linux-only.
 
             **Full Changelog**: https://github.com/izll/agent-session-manager-desktop/commits/${{ steps.ver.outputs.tag }}
           files: |
             asmgr-desktop_${{ steps.ver.outputs.num }}_linux_x86_64.deb
+            asmgr-desktop_${{ steps.ver.outputs.num }}_linux_x86_64.deb.sha256
             asmgr-desktop_${{ steps.ver.outputs.num }}_linux_x86_64.rpm
+            asmgr-desktop_${{ steps.ver.outputs.num }}_linux_x86_64.rpm.sha256
+            asmgr-desktop_${{ steps.ver.outputs.num }}_linux_amd64.tar.gz
+            asmgr-desktop_${{ steps.ver.outputs.num }}_linux_amd64.tar.gz.sha256
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -145,11 +200,17 @@ jobs:
 
       - name: Resolve version
         id: ver
+        env:
+          MANUAL_TAG: ${{ github.event.inputs.version }}
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            TAG="${{ github.event.inputs.version }}"
+            TAG="$MANUAL_TAG"
           else
             TAG="${GITHUB_REF#refs/tags/}"
+          fi
+          if [[ ! "$TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "Invalid stable SemVer tag: $TAG" >&2
+            exit 1
           fi
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "num=${TAG#v}" >> "$GITHUB_OUTPUT"
@@ -170,26 +231,58 @@ jobs:
       - name: Install Wails CLI
         run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.11.0
 
+      - name: Set release metadata
+        env:
+          VERSION: ${{ steps.ver.outputs.num }}
+        run: |
+          jq --arg version "$VERSION" '.info.productVersion = $version' wails.json > wails.json.tmp
+          mv wails.json.tmp wails.json
+
       - name: Build (Wails, macOS arm64)
         # Build arm64 only: the macos-14 runner is Apple Silicon and Homebrew's
         # portaudio is arm64-only, so a universal build fails to link the x86_64
         # slice. Intel Macs run the arm64 build under Rosetta 2.
+        env:
+          VERSION: ${{ steps.ver.outputs.num }}
         run: |
           export PATH="$PATH:$(go env GOPATH)/bin"
-          wails build -platform darwin/arm64 -clean
+          wails build -platform darwin/arm64 -clean -ldflags "-X main.Version=$VERSION"
+
+      - name: Bundle PortAudio runtime
+        run: |
+          APP="build/bin/asmgr-desktop.app"
+          EXE="$APP/Contents/MacOS/asmgr-desktop"
+          FRAMEWORKS="$APP/Contents/Frameworks"
+          PORTAUDIO=$(otool -L "$EXE" | awk '/libportaudio/{print $1; exit}')
+          if [ -z "$PORTAUDIO" ] || [ ! -f "$PORTAUDIO" ]; then
+            echo "PortAudio dylib dependency was not found" >&2
+            exit 1
+          fi
+          mkdir -p "$FRAMEWORKS"
+          cp "$PORTAUDIO" "$FRAMEWORKS/libportaudio.2.dylib"
+          install_name_tool -change "$PORTAUDIO" '@executable_path/../Frameworks/libportaudio.2.dylib' "$EXE"
+          if otool -L "$EXE" | grep -q '/opt/homebrew.*libportaudio'; then
+            echo "App still references Homebrew PortAudio" >&2
+            exit 1
+          fi
+          codesign --force --deep --sign - "$APP"
+          codesign --verify --deep --strict "$APP"
 
       - name: Package .tar.gz (name matches the in-app updater)
         run: |
           V="${{ steps.ver.outputs.num }}"
           tar -C build/bin -czf "asmgr-desktop_${V}_darwin_arm64.tar.gz" "asmgr-desktop.app"
-          ls -la *.tar.gz
+          shasum -a 256 "asmgr-desktop_${V}_darwin_arm64.tar.gz" > "asmgr-desktop_${V}_darwin_arm64.tar.gz.sha256"
+          ls -la *.tar.gz *.sha256
 
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          draft: true
           tag_name: ${{ steps.ver.outputs.tag }}
           files: |
             asmgr-desktop_${{ steps.ver.outputs.num }}_darwin_arm64.tar.gz
+            asmgr-desktop_${{ steps.ver.outputs.num }}_darwin_arm64.tar.gz.sha256
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -236,11 +329,17 @@ jobs:
 
       - name: Resolve version
         id: ver
+        env:
+          MANUAL_TAG: ${{ github.event.inputs.version }}
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            TAG="${{ github.event.inputs.version }}"
+            TAG="$MANUAL_TAG"
           else
             TAG="${GITHUB_REF#refs/tags/}"
+          fi
+          if [[ ! "$TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "Invalid stable SemVer tag: $TAG" >&2
+            exit 1
           fi
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "num=${TAG#v}" >> "$GITHUB_OUTPUT"
@@ -248,23 +347,63 @@ jobs:
       - name: Install Wails CLI
         run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.11.0
 
+      - name: Set release metadata
+        env:
+          VERSION: ${{ steps.ver.outputs.num }}
+        run: |
+          node -e 'const fs=require("fs"); const p="wails.json"; const c=JSON.parse(fs.readFileSync(p)); c.info.productVersion=process.env.VERSION; fs.writeFileSync(p, JSON.stringify(c, null, 2)+"\n")'
+
       - name: Build (Wails, Windows amd64)
+        env:
+          VERSION: ${{ steps.ver.outputs.num }}
         run: |
           export PATH="$PATH:$(go env GOPATH)/bin"
           export CGO_ENABLED=1
-          wails build -platform windows/amd64 -clean
+          wails build -platform windows/amd64 -clean -ldflags "-X main.Version=$VERSION"
+
+      - name: Bundle UCRT64 runtime DLLs
+        run: |
+          EXE="build/bin/asmgr-desktop.exe"
+          mapfile -t DLLS < <(ldd "$EXE" | awk '$3 ~ /^\/ucrt64\/bin\// {print $3}')
+          if [ "${#DLLS[@]}" -eq 0 ]; then
+            echo "No UCRT64 runtime DLL dependencies detected" >&2
+            exit 1
+          fi
+          printf '%s\n' "${DLLS[@]}"
+          cp "${DLLS[@]}" build/bin/
+          if ! ls build/bin/*portaudio*.dll >/dev/null 2>&1; then
+            echo "PortAudio runtime DLL was not bundled" >&2
+            exit 1
+          fi
 
       - name: Package .tar.gz (name matches the in-app updater)
         run: |
           V="${{ steps.ver.outputs.num }}"
-          tar -C build/bin -czf "asmgr-desktop_${V}_windows_amd64.tar.gz" "asmgr-desktop.exe"
-          ls -la *.tar.gz
+          (cd build/bin && tar -czf "../../asmgr-desktop_${V}_windows_amd64.tar.gz" "asmgr-desktop.exe" ./*.dll)
+          sha256sum "asmgr-desktop_${V}_windows_amd64.tar.gz" > "asmgr-desktop_${V}_windows_amd64.tar.gz.sha256"
+          ls -la *.tar.gz *.sha256
 
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          draft: true
           tag_name: ${{ steps.ver.outputs.tag }}
           files: |
             asmgr-desktop_${{ steps.ver.outputs.num }}_windows_amd64.tar.gz
+            asmgr-desktop_${{ steps.ver.outputs.num }}_windows_amd64.tar.gz.sha256
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  publish-release:
+    name: Publish complete release
+    needs:
+      - release
+      - release-macos
+      - release-windows
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Publish only after every platform and checksum is uploaded
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ needs.release.outputs.tag }}
+        run: gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false

@@ -136,7 +136,7 @@ func (a *App) shutdown(ctx context.Context) {
 			ps.ptmx.Close()
 		}
 		if ps.cmd != nil && ps.cmd.Process != nil {
-			go func(c *exec.Cmd) { _ = c.Wait() }(ps.cmd)
+			_ = ps.cmd.Wait()
 		}
 		delete(a.ptys, id)
 	}
@@ -145,6 +145,19 @@ func (a *App) shutdown(ctx context.Context) {
 	// Shutdown dictation service
 	if a.dictation != nil {
 		a.dictation.Shutdown()
+	}
+
+	// Stop and reap every cached MCP child. Copy the values out before Stop so
+	// no potentially blocking process shutdown runs while the global lock is held.
+	taskMasterMu.Lock()
+	taskMasters := make([]*mcp.TaskMaster, 0, len(taskMasterCache))
+	for path, tm := range taskMasterCache {
+		taskMasters = append(taskMasters, tm)
+		delete(taskMasterCache, path)
+	}
+	taskMasterMu.Unlock()
+	for _, tm := range taskMasters {
+		_ = tm.Stop()
 	}
 }
 
@@ -1041,23 +1054,30 @@ func (a *App) SetGroupColor(id, color, bgColor string, fullRow bool) error {
 // ============================================================================
 
 // CreateTab creates a new tab in session
-func (a *App) CreateTab(sessionID string, isAgent bool, agent string, name string, extraArgs string) error {
+// CreateTab creates a new tab and returns the new tmux window index so the
+// frontend can switch to (and focus) it immediately.
+func (a *App) CreateTab(sessionID string, isAgent bool, agent string, name string, extraArgs string) (int, error) {
 	inst, err := a.storage.GetInstance(sessionID)
 	if err != nil {
-		return err
+		return -1, err
 	}
 
+	newIdx := -1
 	if isAgent {
 		agentType := session.AgentType(agent)
-		if _, err := inst.NewAgentWindow(name, agentType, "", extraArgs); err != nil {
-			return err
+		idx, err := inst.NewAgentWindow(name, agentType, "", extraArgs)
+		if err != nil {
+			return -1, err
 		}
+		newIdx = idx
 	} else {
 		if err := inst.NewWindowWithName(name); err != nil {
-			return err
+			return -1, err
 		}
+		// tmux new-window selects the created window, so this is its index.
+		newIdx = inst.GetCurrentWindowIndex()
 	}
-	return a.storage.UpdateInstance(inst)
+	return newIdx, a.storage.UpdateInstance(inst)
 }
 
 // CloseTab closes a tab
@@ -1593,13 +1613,14 @@ func (a *App) AttachSession(id string, windowIdx int) (string, error) {
 	// Create PTY ID
 	ptyID := fmt.Sprintf("%s-%d", id, windowIdx)
 
-	// Check if already attached
-	a.ptyMu.RLock()
+	// Serialize check-and-create for a PTY ID. Holding the write lock until the
+	// process is registered prevents two concurrent attaches from leaking one
+	// of two tmux children under the same map key.
+	a.ptyMu.Lock()
 	if _, exists := a.ptys[ptyID]; exists {
-		a.ptyMu.RUnlock()
+		a.ptyMu.Unlock()
 		return ptyID, nil
 	}
-	a.ptyMu.RUnlock()
 
 	// Get tmux session name
 	tmuxSession := inst.TmuxSessionName()
@@ -1611,6 +1632,7 @@ func (a *App) AttachSession(id string, windowIdx int) (string, error) {
 	ptmx, err := pty.Start(cmd)
 	if err != nil {
 		cancel()
+		a.ptyMu.Unlock()
 		return "", fmt.Errorf("failed to start PTY: %w", err)
 	}
 
@@ -1622,7 +1644,6 @@ func (a *App) AttachSession(id string, windowIdx int) (string, error) {
 		cancel:   cancel,
 	}
 
-	a.ptyMu.Lock()
 	a.ptys[ptyID] = ps
 	a.ptyMu.Unlock()
 
@@ -2353,6 +2374,10 @@ func (a *App) getTaskMasterMCP(sessionID string) (*mcp.TaskMaster, error) {
 	// Double-check after acquiring write lock
 	if tm, ok := taskMasterCache[projectPath]; ok && tm.IsRunning() {
 		return tm, nil
+	}
+	if stale, ok := taskMasterCache[projectPath]; ok {
+		_ = stale.Stop()
+		delete(taskMasterCache, projectPath)
 	}
 
 	// Uses Claude Code provider - no API key required

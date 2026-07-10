@@ -469,7 +469,8 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 			})
 			ptmx.Close()
 			ws.Close()
-			cmd.Process.Kill()
+			_ = cmd.Process.Kill()
+			_ = cmd.Wait()
 
 			// Clean up the linked tmux session (only if it was created)
 			if attachTarget == linkedName {

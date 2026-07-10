@@ -1,7 +1,7 @@
 <script lang="ts">
   import { autoFocusDialog } from '../../utils/dialogActions';
   import { createEventDispatcher } from 'svelte';
-  import { selectedSessionId, loadSessions } from '../../stores/sessions';
+  import { selectedSessionId, loadSessions, selectWindow } from '../../stores/sessions';
   import { agents } from '../../stores/agents';
   import { get } from 'svelte/store';
   import * as App from '../../../../wailsjs/go/main/App';
@@ -58,9 +58,17 @@
     try {
       const isAgent = tabType === 'agent';
       const agent = isAgent ? selectedAgent : 'terminal';
-      await App.CreateTab(sessionId, isAgent, agent, name.trim(), extraArgs.trim());
+      const newIdx = await App.CreateTab(sessionId, isAgent, agent, name.trim(), extraArgs.trim());
       await loadSessions();
       close();
+      // Switch to the freshly created tab and put the keyboard focus into
+      // its terminal (the window-change triggers the pool to attach; the
+      // focus event lands after the dialog teardown released focus).
+      if (typeof newIdx === 'number' && newIdx >= 0) {
+        selectWindow(newIdx);
+        requestAnimationFrame(() =>
+          window.dispatchEvent(new CustomEvent('terminal:focus')));
+      }
       dispatch('created', { name: name.trim(), type: tabType, agent });
     } catch (e) {
       error = String(e);

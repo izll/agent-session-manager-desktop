@@ -25,6 +25,7 @@ type AppService struct {
 	hotkeyManager    *HotkeyManagerReal
 	audioMuteManager *AudioMuteManager
 	mu               sync.Mutex
+	usageMu          sync.Mutex
 	onStateChange    func(bool)                  // Callback for UI updates
 	onError          func(title, message string) // Callback for error dialogs
 	onUploading      func(bool)                  // Callback for uploading state (free/api mode)
@@ -438,6 +439,9 @@ func (a *AppService) SaveSettings(settings Settings) error {
 	if err != nil {
 		return fmt.Errorf("failed to write settings: %w", err)
 	}
+	if err := os.Chmod(settingsPath, 0600); err != nil {
+		return fmt.Errorf("failed to secure settings permissions: %w", err)
+	}
 
 	fmt.Printf("✅ Settings saved to: %s\n", settingsPath)
 
@@ -657,6 +661,12 @@ func (a *AppService) SaveDeleteCommands(commands DeleteCommands) error {
 
 // LoadUsageStats loads API usage statistics
 func (a *AppService) LoadUsageStats() (*UsageStats, error) {
+	a.usageMu.Lock()
+	defer a.usageMu.Unlock()
+	return a.loadUsageStats()
+}
+
+func (a *AppService) loadUsageStats() (*UsageStats, error) {
 	statsPath, err := getConfigPath("api_usage_log.json")
 	if err != nil {
 		return &UsageStats{}, nil
@@ -677,6 +687,12 @@ func (a *AppService) LoadUsageStats() (*UsageStats, error) {
 
 // SaveUsageStats saves API usage statistics
 func (a *AppService) SaveUsageStats(stats UsageStats) error {
+	a.usageMu.Lock()
+	defer a.usageMu.Unlock()
+	return a.saveUsageStats(stats)
+}
+
+func (a *AppService) saveUsageStats(stats UsageStats) error {
 	statsPath, err := getConfigPath("api_usage_log.json")
 	if err != nil {
 		return err
@@ -688,6 +704,21 @@ func (a *AppService) SaveUsageStats(stats UsageStats) error {
 	}
 
 	return os.WriteFile(statsPath, data, 0644)
+}
+
+// AddUsage performs the usage-stat read/modify/write as one synchronized
+// operation, preventing concurrent recognizers from losing increments.
+func (a *AppService) AddUsage(requests int, audioSeconds float64) error {
+	a.usageMu.Lock()
+	defer a.usageMu.Unlock()
+
+	stats, err := a.loadUsageStats()
+	if err != nil {
+		return err
+	}
+	stats.TotalRequests += requests
+	stats.TotalAudioSeconds += audioSeconds
+	return a.saveUsageStats(*stats)
 }
 
 // ToggleListening starts or stops speech recognition

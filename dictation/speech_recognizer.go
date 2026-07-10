@@ -2,6 +2,7 @@ package dictation
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
@@ -22,6 +23,9 @@ type SpeechRecognizer struct {
 	mu                  sync.Mutex
 	recognitionMux      sync.Mutex
 	streamingRecognizer *StreamingRecognizer // For streaming mode
+	httpClient          *http.Client
+	requestCtx          context.Context
+	cancelRequests      context.CancelFunc
 }
 
 // GoogleCloudSpeechRequest represents the request structure for Google Cloud Speech API
@@ -56,10 +60,14 @@ type GoogleCloudSpeechResponse struct {
 
 // NewSpeechRecognizer creates a new SpeechRecognizer
 func NewSpeechRecognizer(app *AppService) *SpeechRecognizer {
+	requestCtx, cancelRequests := context.WithCancel(context.Background())
 	return &SpeechRecognizer{
-		app:         app,
-		isRunning:   false,
-		stopChannel: make(chan bool, 1), // Buffered channel to prevent blocking
+		app:            app,
+		isRunning:      false,
+		stopChannel:    make(chan bool, 1), // Buffered channel to prevent blocking
+		httpClient:     &http.Client{Timeout: 30 * time.Second},
+		requestCtx:     requestCtx,
+		cancelRequests: cancelRequests,
 	}
 }
 
@@ -86,11 +94,18 @@ func (sr *SpeechRecognizer) Start() error {
 // Stop stops the speech recognition
 func (sr *SpeechRecognizer) Stop() {
 	sr.mu.Lock()
-	defer sr.mu.Unlock()
-
 	if sr.isRunning {
-		sr.stopChannel <- true
+		select {
+		case sr.stopChannel <- true:
+		default:
+		}
 		sr.isRunning = false
+	}
+	cancelRequests := sr.cancelRequests
+	sr.mu.Unlock()
+
+	if cancelRequests != nil {
+		cancelRequests()
 	}
 }
 
@@ -203,12 +218,6 @@ func (sr *SpeechRecognizer) recognitionLoop() {
 // processAudioChunk processes a chunk of audio during streaming
 func (sr *SpeechRecognizer) processAudioChunk() {
 	sr.recognitionMux.Lock()
-	defer sr.recognitionMux.Unlock()
-
-	// Get audio chunk WITHOUT clearing buffer first - we'll only clear if we successfully process it
-	// NOTE: This buffer contains ALL audio since last clear, including pre-speech silence
-	// which helps catch word beginnings that might be missed otherwise
-	audioData := sr.app.audioCapture.GetAudioData()
 
 	// Skip if chunk is too small
 	// Reduced minimum for faster, more fluid recognition (Android-like behavior)
@@ -220,37 +229,25 @@ func (sr *SpeechRecognizer) processAudioChunk() {
 		minSeconds = 0.2 // Very responsive in free mode
 	}
 	minChunkSize := int(minSeconds * 16000 * 2) // at 16kHz, 2 bytes per sample
-	if len(audioData) < minChunkSize {
-		if len(audioData) > 0 {
-			logToFile("Chunk too small (%d bytes = %.2f sec), waiting for more audio...\n",
-				len(audioData), float64(len(audioData))/(16000*2))
-		}
+	audioDataCopy := sr.app.audioCapture.GetAndClearAudioDataIfAtLeast(minChunkSize)
+	if audioDataCopy == nil {
+		sr.recognitionMux.Unlock()
 		return
 	}
+	// Buffer ownership has already transferred; concurrent processing may now
+	// select the next chunk while this one is analyzed/uploaded.
+	sr.recognitionMux.Unlock()
 
 	// Check if buffer actually contains sound (not just silence)
-	hasSound := sr.app.audioCapture.HasSoundInBuffer()
+	hasSound := sr.app.audioCapture.HasSound(audioDataCopy)
 	if !hasSound {
 		logToFile("⚪ Buffer contains only silence, skipping API call to save costs\n")
-		// Clear the silent buffer so we don't accumulate silent data
-		sr.app.audioCapture.GetAndClearAudioData()
 		return
 	}
 
 	// Update last speech time since we detected sound in the buffer
 	// This prevents auto-stop from triggering while user is speaking
 	sr.app.UpdateLastSpeechTime()
-
-	// Make a copy of the audio data before sending
-	// IMPORTANT: We copy the data here so that the recording can continue in the background
-	// while we're sending to the API. The recordLoop keeps running and writing to the buffer.
-	audioDataCopy := make([]byte, len(audioData))
-	copy(audioDataCopy, audioData)
-
-	// Clear the buffer IMMEDIATELY after copying, BEFORE sending to API
-	// This is critical: if we clear AFTER the API call (which can take 5-10 seconds),
-	// we would lose all the audio that accumulated during the API call!
-	sr.app.audioCapture.GetAndClearAudioData()
 
 	// Trim excessive pre-speech silence (keep only last 1 second before speech)
 	// This reduces API costs and processing time while still catching word beginnings
@@ -470,7 +467,12 @@ func (sr *SpeechRecognizer) recognizeWithGoogleCloud(audioData []byte, language 
 	url := fmt.Sprintf("https://speech.googleapis.com/v1/speech:recognize?key=%s", apiKey)
 	logToFile("📤 [API] Sending POST request...\n")
 
-	resp, err := http.Post(url, "application/json", bytes.NewBuffer(requestBody))
+	req, err := http.NewRequestWithContext(sr.requestCtx, http.MethodPost, url, bytes.NewReader(requestBody))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := sr.httpClient.Do(req)
 	if err != nil {
 		logToFile("❌ [API] Request failed: %v\n", err)
 		return "", err
@@ -595,8 +597,7 @@ func (sr *SpeechRecognizer) recognizeWithFreeMode(audioData []byte, language str
 	req.Header.Set("User-Agent", "Mozilla/5.0")
 
 	// Send request
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := sr.httpClient.Do(req.WithContext(sr.requestCtx))
 	if err != nil {
 		logToFile("❌ [FREE] Request failed: %v\n", err)
 		return "", err
@@ -722,27 +723,17 @@ func (sr *SpeechRecognizer) convertToWAV(pcmData []byte) ([]byte, error) {
 
 // updateUsageStats updates API usage statistics
 func (sr *SpeechRecognizer) updateUsageStats(audioDataLen int) {
-	stats, err := sr.app.LoadUsageStats()
-	if err != nil {
-		fmt.Printf("Error loading usage stats: %v\n", err)
-		return
-	}
-
-	stats.TotalRequests++
 	// Estimate audio duration (2 bytes per sample, 16kHz)
 	audioDuration := float64(audioDataLen) / (2 * 16000)
-	stats.TotalAudioSeconds += audioDuration
 
 	// Calculate cost for this request
 	// Batch API pricing: $0.006 per 15 seconds = $0.024 per minute
 	costPerMinute := 0.024
 	estimatedCost := (audioDuration / 60.0) * costPerMinute
 
-	logToFile("💰 [API] Audio: %.2fs, Estimated cost: $%.6f (Total: %.1fs, $%.4f)\n",
-		audioDuration, estimatedCost, stats.TotalAudioSeconds, stats.TotalAudioSeconds/60.0*costPerMinute)
+	logToFile("💰 [API] Audio: %.2fs, Estimated cost: $%.6f\n", audioDuration, estimatedCost)
 
-	err = sr.app.SaveUsageStats(*stats)
-	if err != nil {
+	if err := sr.app.AddUsage(1, audioDuration); err != nil {
 		fmt.Printf("Error saving usage stats: %v\n", err)
 	}
 }
@@ -882,8 +873,8 @@ func (sr *SpeechRecognizer) streamingRecognitionLoop() {
 			return
 
 		case <-ticker.C:
-			// Get audio data (without clearing - streaming needs continuous data)
-			audioData := sr.app.audioCapture.GetAudioData()
+			// Atomically transfer buffer ownership to the streaming sender.
+			audioData := sr.app.audioCapture.GetAndClearAudioData()
 
 			// Send even small chunks to ensure low latency
 			// Google's API can handle frequent small chunks
@@ -894,8 +885,6 @@ func (sr *SpeechRecognizer) streamingRecognitionLoop() {
 					logToFile("⚠️  Error sending audio to stream: %v\n", err)
 				}
 
-				// Clear the buffer after sending
-				sr.app.audioCapture.GetAndClearAudioData()
 			}
 		}
 	}

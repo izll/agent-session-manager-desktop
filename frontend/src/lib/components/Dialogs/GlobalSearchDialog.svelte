@@ -1,6 +1,6 @@
 <script lang="ts">
   import { autoFocusDialog } from '../../utils/dialogActions';
-  import { createEventDispatcher, onMount } from 'svelte';
+  import { createEventDispatcher } from 'svelte';
   import * as App from '../../../../wailsjs/go/main/App';
   import { t } from '../../i18n';
 
@@ -29,12 +29,16 @@
   let matchCount = 0;
   let currentMatchIndex = 0;
   let isFullscreen = false;
+  let searchGeneration = 0;
+  let previewGeneration = 0;
 
   $: if (show && searchInput) {
     setTimeout(() => searchInput?.focus(), 100);
   }
 
   function close() {
+    searchGeneration++;
+    previewGeneration++;
     show = false;
     query = '';
     results = [];
@@ -45,6 +49,10 @@
   }
 
   function handleQueryChange() {
+    searchGeneration++;
+    previewGeneration++;
+    loading = false;
+    previewLoading = false;
     if (searchTimeout) {
       clearTimeout(searchTimeout);
     }
@@ -60,31 +68,40 @@
   }
 
   async function doSearch() {
-    if (!query.trim()) return;
+    const searchQuery = query.trim();
+    if (!searchQuery) return;
+    const generation = ++searchGeneration;
 
     loading = true;
     error = '';
 
     try {
-      results = await App.GlobalSearch(query);
+      const response = await App.GlobalSearch(searchQuery);
+      if (generation !== searchGeneration || searchQuery !== query.trim() || !show) return;
+      results = response;
     } catch (e) {
+      if (generation !== searchGeneration || searchQuery !== query.trim() || !show) return;
       error = String(e);
       results = [];
     }
-    loading = false;
+    if (generation === searchGeneration) loading = false;
   }
 
   async function selectEntry(entry: HistoryEntry) {
+    const generation = ++previewGeneration;
     selectedEntry = entry;
     previewLoading = true;
     preview = '';
 
     try {
-      preview = await App.GetHistoryPreview(entry);
+      const response = await App.GetHistoryPreview(entry);
+      if (generation !== previewGeneration || selectedEntry !== entry || !show) return;
+      preview = response;
     } catch (e) {
+      if (generation !== previewGeneration || selectedEntry !== entry || !show) return;
       preview = `Error loading preview: ${e}`;
     }
-    previewLoading = false;
+    if (generation === previewGeneration) previewLoading = false;
   }
 
   function handleKeydown(e: KeyboardEvent) {

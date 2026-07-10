@@ -25,7 +25,7 @@ func (h *PtyTextHandler) AppendText(text string) {
 	ts := h.termServer
 	h.mu.Unlock()
 
-	fmt.Printf("[Dictation] PtyTextHandler.AppendText: %q (sid=%s, wIdx=%d)\n", text, sid, wIdx)
+	fmt.Printf("[Dictation] PtyTextHandler.AppendText: %d chars (sid=%s, wIdx=%d)\n", len([]rune(text)), sid, wIdx)
 
 	if sid == "" || ts == nil {
 		return
@@ -72,7 +72,7 @@ type BufferTextHandler struct {
 }
 
 func (h *BufferTextHandler) AppendText(text string) {
-	fmt.Printf("[Buffer] AppendText: %q\n", text)
+	fmt.Printf("[Buffer] AppendText: %d chars\n", len([]rune(text)))
 	h.mu.Lock()
 	h.text += text
 	t := h.text
@@ -122,7 +122,7 @@ type FieldTextHandler struct {
 }
 
 func (h *FieldTextHandler) AppendText(text string) {
-	fmt.Printf("[Dictation] FieldTextHandler.AppendText: %q (callback=%v)\n", text, h.onAppendText != nil)
+	fmt.Printf("[Dictation] FieldTextHandler.AppendText: %d chars (callback=%v)\n", len([]rune(text)), h.onAppendText != nil)
 	if h.onAppendText != nil {
 		h.onAppendText(text)
 	}

@@ -14,6 +14,7 @@
   let lastSessionId: string | null = null;
   let lastWindowIdx: number = 0;
   let saveTimeout: ReturnType<typeof setTimeout> | null = null;
+  let loadGeneration = 0;
   let saving = false;
   let lastSaved = '';
   let textareaEl: HTMLTextAreaElement;
@@ -33,7 +34,7 @@
     // Save any pending changes
     if (saveTimeout) {
       clearTimeout(saveTimeout);
-      saveNow();
+      saveNow(lastSessionId, lastWindowIdx, notes);
     }
     dictation.destroy();
   });
@@ -44,6 +45,8 @@
     const windowIdx = get(selectedWindowIdx);
 
     if (!sessionId) {
+      loadGeneration++;
+      lastSessionId = null;
       notes = '';
       lastSaved = '';
       return;
@@ -56,12 +59,16 @@
 
     lastSessionId = sessionId;
     lastWindowIdx = windowIdx;
+    saving = false;
+    const generation = ++loadGeneration;
 
     try {
       const content = await App.GetTabNotes(sessionId, windowIdx);
+      if (generation !== loadGeneration || sessionId !== lastSessionId || windowIdx !== lastWindowIdx) return;
       notes = content || '';
       lastSaved = notes;
     } catch (e) {
+      if (generation !== loadGeneration || sessionId !== lastSessionId || windowIdx !== lastWindowIdx) return;
       console.error('Failed to load notes:', e);
       notes = '';
       lastSaved = '';
@@ -82,7 +89,7 @@
     // Save current notes before loading new ones
     if (saveTimeout) {
       clearTimeout(saveTimeout);
-      saveNow();
+      saveNow(lastSessionId, lastWindowIdx, notes);
     }
     loadNotes();
   }
@@ -92,26 +99,28 @@
     if (saveTimeout) {
       clearTimeout(saveTimeout);
     }
-    saveTimeout = setTimeout(saveNow, 500);
+    const sessionId = lastSessionId;
+    const windowIdx = lastWindowIdx;
+    const snapshot = notes;
+    saveTimeout = setTimeout(() => saveNow(sessionId, windowIdx, snapshot), 500);
   }
 
-  async function saveNow() {
-    const sessionId = get(selectedSessionId);
-    const windowIdx = get(selectedWindowIdx);
-
-    if (!sessionId || notes === lastSaved) return;
+  async function saveNow(sessionId: string | null, windowIdx: number, snapshot: string) {
+    saveTimeout = null;
+    if (!sessionId || (sessionId === lastSessionId && windowIdx === lastWindowIdx && snapshot === lastSaved)) return;
 
     saving = true;
     try {
-      await App.SetTabNotes(sessionId, windowIdx, notes);
-      lastSaved = notes;
+      await App.SetTabNotes(sessionId, windowIdx, snapshot);
+      if (sessionId === lastSessionId && windowIdx === lastWindowIdx && notes === snapshot) {
+        lastSaved = snapshot;
+      }
       // Notify parent to update status bar preview
-      dispatch('notesChange', { sessionId, windowIdx, notes });
+      dispatch('notesChange', { sessionId, windowIdx, notes: snapshot });
     } catch (e) {
       console.error('Failed to save notes:', e);
     }
-    saving = false;
-    saveTimeout = null;
+    if (sessionId === lastSessionId && windowIdx === lastWindowIdx) saving = false;
   }
 </script>
 

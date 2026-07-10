@@ -1854,8 +1854,36 @@ func (i *Instance) getDiff(baseRef string) *DiffStats {
 		return stats
 	}
 
-	// Stage untracked files with intent-to-add for diff visibility
-	i.stageUntrackedFiles()
+	// Use a private temporary index so intent-to-add can make untracked files
+	// visible without mutating the user's real staging area.
+	tmpIndex, err := os.CreateTemp("", "asmgr-git-index-*")
+	if err != nil {
+		stats.Error = fmt.Errorf("failed to create temporary git index: %w", err)
+		return stats
+	}
+	tmpIndexPath := tmpIndex.Name()
+	tmpIndex.Close()
+	os.Remove(tmpIndexPath) // Git expects a missing or valid index, not an empty file.
+	defer os.Remove(tmpIndexPath)
+
+	gitEnv := append(os.Environ(), "GIT_INDEX_FILE="+tmpIndexPath)
+	readTree := exec.Command("git", "-C", i.Path, "read-tree", "HEAD")
+	readTree.Env = gitEnv
+	if err := readTree.Run(); err != nil {
+		// An unborn repository has no HEAD yet; start from an empty index.
+		readEmpty := exec.Command("git", "-C", i.Path, "read-tree", "--empty")
+		readEmpty.Env = gitEnv
+		if emptyErr := readEmpty.Run(); emptyErr != nil {
+			stats.Error = fmt.Errorf("failed to prepare temporary git index: %w", err)
+			return stats
+		}
+	}
+	intentToAdd := exec.Command("git", "-C", i.Path, "add", "-N", ".")
+	intentToAdd.Env = gitEnv
+	if err := intentToAdd.Run(); err != nil {
+		stats.Error = fmt.Errorf("failed to include untracked files in diff: %w", err)
+		return stats
+	}
 
 	// Build git diff command
 	args := []string{"-C", i.Path, "--no-pager", "diff"}
@@ -1864,6 +1892,7 @@ func (i *Instance) getDiff(baseRef string) *DiffStats {
 	}
 
 	cmd := exec.Command("git", args...)
+	cmd.Env = gitEnv
 	output, err := cmd.Output()
 	if err != nil {
 		stats.Error = fmt.Errorf("git diff failed: %w", err)
@@ -1880,11 +1909,6 @@ func (i *Instance) getDiff(baseRef string) *DiffStats {
 func (i *Instance) isGitRepo() bool {
 	cmd := exec.Command("git", "-C", i.Path, "rev-parse", "--git-dir")
 	return cmd.Run() == nil
-}
-
-// stageUntrackedFiles adds untracked files with --intent-to-add for diff visibility
-func (i *Instance) stageUntrackedFiles() {
-	exec.Command("git", "-C", i.Path, "add", "-N", ".").Run()
 }
 
 // countDiffLines counts added and removed lines in diff content

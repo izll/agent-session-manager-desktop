@@ -26,10 +26,16 @@ overrides:
   deb:
     depends:
       - libwebkit2gtk-4.1-0
+      - libportaudio2
+      - libxtst6
+      - libxkbcommon-x11-0
       - tmux
   rpm:
     depends:
       - webkit2gtk4.1
+      - portaudio
+      - libXtst
+      - libxkbcommon-x11
       - tmux
 
 contents:

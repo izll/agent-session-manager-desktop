@@ -61,6 +61,38 @@ export const taskMasterStatus = writable<TaskMasterStatus>({
 });
 export const useMCPMode = writable<boolean>(true); // Default to MCP mode
 
+let activeTasksSessionId = '';
+let activeStatusSessionId = '';
+let tasksLoadGeneration = 0;
+let statusLoadGeneration = 0;
+
+function normalizeStatus(status: string): TaskStatus {
+  const normalized = status === 'backlog' ? 'pending' : status;
+  return ['pending', 'in-progress', 'done', 'blocked', 'deferred'].includes(normalized)
+    ? normalized as TaskStatus
+    : 'pending';
+}
+
+function normalizePriority(priority: string): TaskPriority {
+  return ['low', 'medium', 'high', 'critical'].includes(priority)
+    ? priority as TaskPriority
+    : 'medium';
+}
+
+function normalizeTask(task: any): Task {
+  return {
+    ...task,
+    status: normalizeStatus(task.status),
+    priority: normalizePriority(task.priority),
+    tags: task.tags || [],
+    dependencies: task.dependencies || [],
+    subtasks: (task.subtasks || []).map((subtask: any) => ({
+      ...subtask,
+      status: normalizeStatus(subtask.status || (subtask.done ? 'done' : 'pending'))
+    }))
+  };
+}
+
 // Derived stores
 export const selectedTask = derived(
   [tasks, selectedTaskId],
@@ -196,6 +228,8 @@ export const sortedFilteredTasks = derived(
 
 // Check Task Master status
 export async function checkTaskMasterStatus(sessionId: string) {
+  activeStatusSessionId = sessionId;
+  const generation = ++statusLoadGeneration;
   if (!sessionId) {
     taskMasterStatus.set({ initialized: false, running: false, error: 'No session selected' });
     return;
@@ -203,8 +237,10 @@ export async function checkTaskMasterStatus(sessionId: string) {
 
   try {
     const status = await App.TaskMasterStatus(sessionId);
+    if (generation !== statusLoadGeneration || sessionId !== activeStatusSessionId) return;
     taskMasterStatus.set(status as TaskMasterStatus);
   } catch (e) {
+    if (generation !== statusLoadGeneration || sessionId !== activeStatusSessionId) return;
     taskMasterStatus.set({ initialized: false, running: false, error: String(e) });
   }
 }
@@ -262,8 +298,12 @@ function mergeCreatedAt(newTasks: Task[]): Task[] {
 
 // Load tasks from Task Master
 export async function loadTasks(sessionId: string) {
+  activeTasksSessionId = sessionId;
+  const generation = ++tasksLoadGeneration;
   if (!sessionId) {
     tasks.set([]);
+    taskError.set(null);
+    isLoadingTasks.set(false);
     return;
   }
 
@@ -275,7 +315,8 @@ export async function loadTasks(sessionId: string) {
     if (get(useMCPMode)) {
       try {
         const result = await App.TaskMasterGetTasks(sessionId, '');
-        tasks.set(mergeCreatedAt(result || []));
+        if (generation !== tasksLoadGeneration || sessionId !== activeTasksSessionId) return;
+        tasks.set(mergeCreatedAt((result || []).map(normalizeTask)));
         return;
       } catch (e) {
         // Fall back to local mode if MCP fails
@@ -286,21 +327,18 @@ export async function loadTasks(sessionId: string) {
     // Local mode fallback (using our session/tasks.go)
     const result = await App.GetTasks(sessionId);
     // Convert local task format to MCP format
-    const converted = (result || []).map((t: any) => ({
-      ...t,
-      status: t.status === 'backlog' ? 'pending' : t.status,
-      subtasks: (t.subtasks || []).map((st: any) => ({
-        ...st,
-        status: st.done ? 'done' : 'pending'
-      }))
-    }));
+    if (generation !== tasksLoadGeneration || sessionId !== activeTasksSessionId) return;
+    const converted = (result || []).map(normalizeTask);
     tasks.set(mergeCreatedAt(converted));
   } catch (e) {
+    if (generation !== tasksLoadGeneration || sessionId !== activeTasksSessionId) return;
     console.error('Failed to load tasks:', e);
     taskError.set(String(e));
     tasks.set([]);
   } finally {
-    isLoadingTasks.set(false);
+    if (generation === tasksLoadGeneration && sessionId === activeTasksSessionId) {
+      isLoadingTasks.set(false);
+    }
   }
 }
 
@@ -311,10 +349,10 @@ export async function getNextTask(sessionId: string): Promise<Task | null> {
   try {
     if (get(useMCPMode)) {
       const task = await App.TaskMasterNextTask(sessionId);
-      return task as Task | null;
+      return task ? normalizeTask(task) : null;
     } else {
       const task = await App.GetNextTask(sessionId);
-      return task as Task | null;
+      return task ? normalizeTask(task) : null;
     }
   } catch (e) {
     taskError.set(String(e));
@@ -333,9 +371,11 @@ export async function setTaskStatus(sessionId: string, taskId: string, status: T
       await App.MoveTask(sessionId, taskId, status);
     }
 
-    tasks.update(t => t.map(task =>
-      task.id === taskId ? { ...task, status } : task
-    ));
+    if (sessionId === activeTasksSessionId) {
+      tasks.update(t => t.map(task =>
+        task.id === taskId ? { ...task, status } : task
+      ));
+    }
   } catch (e) {
     taskError.set(String(e));
     throw e;

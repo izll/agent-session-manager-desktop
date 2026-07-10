@@ -13,6 +13,7 @@ import (
 
 type Storage struct {
 	mu         sync.Mutex
+	projectsMu sync.Mutex
 	configDir  string
 	configPath string
 	projectID  string // Active project ID ("" = default)
@@ -89,6 +90,9 @@ func NewStorage() (*Storage, error) {
 
 // SetActiveProject switches to a different project
 func (s *Storage) SetActiveProject(projectID string) error {
+	if !validProjectID(projectID) {
+		return fmt.Errorf("invalid project ID")
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.setActiveProjectLocked(projectID)
@@ -96,6 +100,9 @@ func (s *Storage) SetActiveProject(projectID string) error {
 
 // setActiveProjectLocked is the internal version that assumes the mutex is held.
 func (s *Storage) setActiveProjectLocked(projectID string) error {
+	if !validProjectID(projectID) {
+		return fmt.Errorf("invalid project ID")
+	}
 	s.projectID = projectID
 	if projectID == "" {
 		s.configPath = filepath.Join(s.configDir, "sessions.json")
@@ -124,8 +131,30 @@ func (s *Storage) getLockPath(projectID string) string {
 	return filepath.Join(s.configDir, "projects", projectID, "project.lock")
 }
 
+// validProjectID ensures a caller-controlled ID can never escape the projects
+// directory. Existing IDs only use this conservative portable character set.
+func validProjectID(projectID string) bool {
+	if projectID == "" {
+		return true
+	}
+	if projectID == "." || projectID == ".." || filepath.Base(projectID) != projectID {
+		return false
+	}
+	for _, r := range projectID {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') ||
+			(r >= '0' && r <= '9') || r == '-' || r == '_' || r == '.' {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
 // IsProjectLocked checks if a project is already running
 func (s *Storage) IsProjectLocked(projectID string) (bool, int) {
+	if !validProjectID(projectID) {
+		return false, 0
+	}
 	lockPath := s.getLockPath(projectID)
 	data, err := os.ReadFile(lockPath)
 	if os.IsNotExist(err) {
@@ -162,6 +191,9 @@ func (s *Storage) IsProjectLocked(projectID string) (bool, int) {
 
 // LockProject creates a lock file for the current project
 func (s *Storage) LockProject(projectID string) error {
+	if !validProjectID(projectID) {
+		return fmt.Errorf("invalid project ID")
+	}
 	lockPath := s.getLockPath(projectID)
 
 	// Ensure directory exists
@@ -190,6 +222,12 @@ func (s *Storage) UnlockProject() {
 
 // LoadProjects loads the list of projects
 func (s *Storage) LoadProjects() (*ProjectsData, error) {
+	s.projectsMu.Lock()
+	defer s.projectsMu.Unlock()
+	return s.loadProjectsLocked()
+}
+
+func (s *Storage) loadProjectsLocked() (*ProjectsData, error) {
 	projectsFile := filepath.Join(s.configDir, "projects.json")
 	data, err := os.ReadFile(projectsFile)
 	if os.IsNotExist(err) {
@@ -213,6 +251,12 @@ func (s *Storage) LoadProjects() (*ProjectsData, error) {
 
 // SaveProjects saves the list of projects (atomic write).
 func (s *Storage) SaveProjects(projectsData *ProjectsData) error {
+	s.projectsMu.Lock()
+	defer s.projectsMu.Unlock()
+	return s.saveProjectsLocked(projectsData)
+}
+
+func (s *Storage) saveProjectsLocked(projectsData *ProjectsData) error {
 	projectsFile := filepath.Join(s.configDir, "projects.json")
 	data, err := json.MarshalIndent(projectsData, "", "  ")
 	if err != nil {
@@ -233,7 +277,9 @@ func (s *Storage) SaveProjects(projectsData *ProjectsData) error {
 
 // AddProject creates a new project
 func (s *Storage) AddProject(name string) (*Project, error) {
-	projectsData, err := s.LoadProjects()
+	s.projectsMu.Lock()
+	defer s.projectsMu.Unlock()
+	projectsData, err := s.loadProjectsLocked()
 	if err != nil {
 		return nil, err
 	}
@@ -248,7 +294,7 @@ func (s *Storage) AddProject(name string) (*Project, error) {
 	project := NewProject(name)
 	projectsData.Projects = append(projectsData.Projects, project)
 
-	if err := s.SaveProjects(projectsData); err != nil {
+	if err := s.saveProjectsLocked(projectsData); err != nil {
 		return nil, err
 	}
 
@@ -257,7 +303,12 @@ func (s *Storage) AddProject(name string) (*Project, error) {
 
 // RemoveProject removes a project and its data
 func (s *Storage) RemoveProject(id string) error {
-	projectsData, err := s.LoadProjects()
+	if !validProjectID(id) {
+		return fmt.Errorf("invalid project ID")
+	}
+	s.projectsMu.Lock()
+	defer s.projectsMu.Unlock()
+	projectsData, err := s.loadProjectsLocked()
 	if err != nil {
 		return err
 	}
@@ -280,14 +331,21 @@ func (s *Storage) RemoveProject(id string) error {
 
 	// Remove project directory
 	projectDir := filepath.Join(s.configDir, "projects", id)
-	os.RemoveAll(projectDir)
+	if err := os.RemoveAll(projectDir); err != nil {
+		return fmt.Errorf("failed to remove project data: %w", err)
+	}
 
-	return s.SaveProjects(projectsData)
+	return s.saveProjectsLocked(projectsData)
 }
 
 // RenameProject renames a project
 func (s *Storage) RenameProject(id, name string) error {
-	projectsData, err := s.LoadProjects()
+	if !validProjectID(id) {
+		return fmt.Errorf("invalid project ID")
+	}
+	s.projectsMu.Lock()
+	defer s.projectsMu.Unlock()
+	projectsData, err := s.loadProjectsLocked()
 	if err != nil {
 		return err
 	}
@@ -295,7 +353,7 @@ func (s *Storage) RenameProject(id, name string) error {
 	for _, p := range projectsData.Projects {
 		if p.ID == id {
 			p.Name = name
-			return s.SaveProjects(projectsData)
+			return s.saveProjectsLocked(projectsData)
 		}
 	}
 
@@ -304,7 +362,12 @@ func (s *Storage) RenameProject(id, name string) error {
 
 // GetProject returns a project by ID
 func (s *Storage) GetProject(id string) (*Project, error) {
-	projectsData, err := s.LoadProjects()
+	if !validProjectID(id) {
+		return nil, fmt.Errorf("invalid project ID")
+	}
+	s.projectsMu.Lock()
+	defer s.projectsMu.Unlock()
+	projectsData, err := s.loadProjectsLocked()
 	if err != nil {
 		return nil, err
 	}
@@ -320,6 +383,9 @@ func (s *Storage) GetProject(id string) (*Project, error) {
 
 // ImportDefaultSessions moves sessions from default storage to a project
 func (s *Storage) ImportDefaultSessions(projectID string) (int, error) {
+	if !validProjectID(projectID) || projectID == "" {
+		return 0, fmt.Errorf("invalid project ID")
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 

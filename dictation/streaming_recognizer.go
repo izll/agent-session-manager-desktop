@@ -6,6 +6,7 @@ import (
 	"io"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	speech "cloud.google.com/go/speech/apiv1"
 	"cloud.google.com/go/speech/apiv1/speechpb"
@@ -14,18 +15,19 @@ import (
 
 // StreamingRecognizer handles real-time streaming speech recognition using Google Cloud Speech API
 type StreamingRecognizer struct {
-	app                      *AppService
-	client                   *speech.Client
-	stream                   speechpb.Speech_StreamingRecognizeClient
-	isRunning                bool
-	stopChan                 chan bool
-	audioChan                chan []byte
-	mu                       sync.Mutex
-	ctx                      context.Context
-	cancel                   context.CancelFunc
-	lastFinalText            string // Track cumulative finalized text
-	lastInterimText          string // Last interim for quick typing corrections
-	typedTextOnScreen        string // EXACT text currently on screen (PROCESSED - with punctuation substitutions)
+	app                        *AppService
+	client                     *speech.Client
+	stream                     speechpb.Speech_StreamingRecognizeClient
+	isRunning                  bool
+	audioChan                  chan []byte
+	mu                         sync.Mutex
+	ctx                        context.Context
+	cancel                     context.CancelFunc
+	audioBytes                 int64
+	usageOnce                  sync.Once
+	lastFinalText              string // Track cumulative finalized text
+	lastInterimText            string // Last interim for quick typing corrections
+	typedTextOnScreen          string // EXACT text currently on screen (PROCESSED - with punctuation substitutions)
 	originalTranscriptOnScreen string // Original transcript (BEFORE processing - for comparison with new interim)
 }
 
@@ -46,7 +48,6 @@ func NewStreamingRecognizer(app *AppService, apiKey string) (*StreamingRecognize
 		app:       app,
 		client:    client,
 		isRunning: false,
-		stopChan:  make(chan bool, 1),
 		audioChan: make(chan []byte, 200), // Larger buffer for faster streaming (200 chunks)
 		ctx:       streamCtx,
 		cancel:    cancel,
@@ -83,17 +84,8 @@ func (sr *StreamingRecognizer) Stop() {
 
 	logToFile("🛑 Stopping streaming recognition...\n")
 
-	// Signal stop
-	select {
-	case sr.stopChan <- true:
-	default:
-	}
-
 	// Cancel context
 	sr.cancel()
-
-	// Close audio channel
-	close(sr.audioChan)
 
 	// Close client
 	if sr.client != nil {
@@ -113,9 +105,15 @@ func (sr *StreamingRecognizer) SendAudio(audioData []byte) error {
 		return fmt.Errorf("streaming recognizer not running")
 	}
 
-	// Send to audio channel (non-blocking)
+	// Copy before enqueueing: callers may immediately reuse their capture buffer.
+	chunk := append([]byte(nil), audioData...)
+
+	// The channel is deliberately never closed. Cancellation is the single
+	// shutdown signal, so concurrent SendAudio cannot panic on a closed channel.
 	select {
-	case sr.audioChan <- audioData:
+	case <-sr.ctx.Done():
+		return fmt.Errorf("streaming recognizer not running")
+	case sr.audioChan <- chunk:
 		return nil
 	default:
 		logToFile("⚠️  Audio channel full, dropping audio chunk\n")
@@ -126,6 +124,7 @@ func (sr *StreamingRecognizer) SendAudio(audioData []byte) error {
 // streamingLoop is the main streaming recognition loop
 func (sr *StreamingRecognizer) streamingLoop() {
 	defer func() {
+		sr.recordUsage()
 		sr.mu.Lock()
 		sr.isRunning = false
 		sr.mu.Unlock()
@@ -163,9 +162,9 @@ func (sr *StreamingRecognizer) streamingLoop() {
 	}
 
 	streamingConfig := &speechpb.StreamingRecognitionConfig{
-		Config:              config,
-		InterimResults:      true, // Enable interim results for real-time feedback
-		SingleUtterance:     false,
+		Config:                    config,
+		InterimResults:            true, // Enable interim results for real-time feedback
+		SingleUtterance:           false,
 		EnableVoiceActivityEvents: false,
 	}
 
@@ -195,7 +194,7 @@ func (sr *StreamingRecognizer) streamingLoop() {
 	// Main loop: send audio chunks
 	for {
 		select {
-		case <-sr.stopChan:
+		case <-sr.ctx.Done():
 			logToFile("📡 Streaming loop stopped by signal\n")
 			// Close the send direction
 			if err := stream.CloseSend(); err != nil {
@@ -203,12 +202,7 @@ func (sr *StreamingRecognizer) streamingLoop() {
 			}
 			return
 
-		case audioData, ok := <-sr.audioChan:
-			if !ok {
-				logToFile("📡 Audio channel closed\n")
-				return
-			}
-
+		case audioData := <-sr.audioChan:
 			// Send audio data to stream
 			if err := stream.Send(&speechpb.StreamingRecognizeRequest{
 				StreamingRequest: &speechpb.StreamingRecognizeRequest_AudioContent{
@@ -218,6 +212,7 @@ func (sr *StreamingRecognizer) streamingLoop() {
 				logToFile("❌ Error sending audio to stream: %v\n", err)
 				return
 			}
+			atomic.AddInt64(&sr.audioBytes, int64(len(audioData)))
 		}
 	}
 }
@@ -375,7 +370,6 @@ func (sr *StreamingRecognizer) processFinalResult(transcript string) {
 		sr.lastInterimText = ""
 		sr.typedTextOnScreen = ""
 		sr.originalTranscriptOnScreen = ""
-		go sr.updateUsageStats(len(transcript))
 		return
 	}
 
@@ -425,7 +419,6 @@ func (sr *StreamingRecognizer) processFinalResult(transcript string) {
 		sr.typedTextOnScreen = ""
 		sr.lastFinalText = transcript
 
-		go sr.updateUsageStats(len(transcript))
 		return
 	}
 
@@ -442,10 +435,9 @@ func (sr *StreamingRecognizer) processFinalResult(transcript string) {
 		}
 
 		sr.lastFinalText = transcript
-		sr.typedTextOnScreen = "" // Reset for next utterance
+		sr.typedTextOnScreen = ""          // Reset for next utterance
 		sr.originalTranscriptOnScreen = "" // Reset original tracking too
 
-		go sr.updateUsageStats(len(transcript))
 		return
 	}
 
@@ -552,7 +544,7 @@ func (sr *StreamingRecognizer) processFinalResult(transcript string) {
 
 	// Update state
 	sr.lastFinalText = transcript
-	sr.typedTextOnScreen = "" // Reset for next utterance
+	sr.typedTextOnScreen = ""          // Reset for next utterance
 	sr.originalTranscriptOnScreen = "" // Reset original tracking too
 
 	// NOTE: We do NOT clear keyboard history here anymore!
@@ -560,8 +552,6 @@ func (sr *StreamingRecognizer) processFinalResult(transcript string) {
 	// The keyboard history will be cleared when we start typing NEW regular words (not delete commands).
 	logToFile("📝 Keyboard history NOT cleared - delete commands can still delete from this utterance\n")
 
-	// Update usage stats
-	go sr.updateUsageStats(len(transcript))
 }
 
 // processInterimResult handles interim (temporary) results with real-time typing and correction
@@ -815,31 +805,25 @@ func (sr *StreamingRecognizer) processInterimResult(transcript string, stability
 	sr.lastInterimText = transcript
 }
 
-// updateUsageStats updates API usage statistics
-func (sr *StreamingRecognizer) updateUsageStats(audioDataLen int) {
-	stats, err := sr.app.LoadUsageStats()
-	if err != nil {
-		logToFile("⚠️  Error loading usage stats: %v\n", err)
-		return
-	}
+// recordUsage accounts for a streaming session exactly once, based on the
+// accepted 16-bit mono PCM bytes rather than transcript character counts.
+func (sr *StreamingRecognizer) recordUsage() {
+	sr.usageOnce.Do(func() {
+		audioDuration := float64(atomic.LoadInt64(&sr.audioBytes)) / (2 * 16000)
+		if audioDuration == 0 {
+			return
+		}
 
-	stats.TotalRequests++
-	// Estimate audio duration (streaming sends in small chunks, so we accumulate)
-	audioDuration := float64(audioDataLen) / 16000.0 // Rough estimate
-	stats.TotalAudioSeconds += audioDuration
+		costPerMinute := 0.036
+		estimatedCost := (audioDuration / 60.0) * costPerMinute
 
-	// Calculate cost for this request
-	// Streaming API pricing: ~$0.009 per 15 seconds = $0.036 per minute
-	costPerMinute := 0.036
-	estimatedCost := (audioDuration / 60.0) * costPerMinute
+		if err := sr.app.AddUsage(1, audioDuration); err != nil {
+			logToFile("⚠️  Error saving usage stats: %v\n", err)
+			return
+		}
 
-	logToFile("💰 [STREAMING] Audio: %.2fs, Estimated cost: $%.6f (Total: %.1fs, $%.4f)\n",
-		audioDuration, estimatedCost, stats.TotalAudioSeconds, stats.TotalAudioSeconds/60.0*costPerMinute)
-
-	err = sr.app.SaveUsageStats(*stats)
-	if err != nil {
-		logToFile("⚠️  Error saving usage stats: %v\n", err)
-	}
+		logToFile("💰 [STREAMING] Audio: %.2fs, Estimated cost: $%.6f\n", audioDuration, estimatedCost)
+	})
 }
 
 // IsRunning returns whether streaming is active

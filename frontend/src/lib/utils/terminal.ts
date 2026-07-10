@@ -159,7 +159,7 @@ export function createTerminal(container: HTMLElement, options: Partial<Terminal
       background: '#1a1a2e',
       foreground: '#eee',
       cursor: '#7d56f4',
-      selection: 'rgba(125, 86, 244, 0.3)',
+      selectionBackground: 'rgba(125, 86, 244, 0.3)',
       black: '#000000',
       red: '#ff5555',
       green: '#50fa7b',

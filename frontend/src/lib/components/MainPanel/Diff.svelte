@@ -18,7 +18,8 @@
   let loading = false;
   let error = '';
   let lastSessionId: string | null = null;
-  let pollInterval: ReturnType<typeof setInterval> | null = null;
+  let pollTimeout: ReturnType<typeof setTimeout> | null = null;
+  let loadGeneration = 0;
   let diffMode: 'session' | 'full' = 'session';
   // When a diff is very large we DON'T render it automatically — we warn first
   // and let the user opt in, because rendering a huge diff is heavy. `forceShow`
@@ -30,16 +31,14 @@
 
   // Start/stop polling based on active state
   function startPolling() {
-    if (!pollInterval) {
-      loadDiff();
-      pollInterval = setInterval(loadDiff, 5000); // Increased to 5 seconds
-    }
+    if (!pollTimeout) void loadDiff();
   }
 
   function stopPolling() {
-    if (pollInterval) {
-      clearInterval(pollInterval);
-      pollInterval = null;
+    loadGeneration++;
+    if (pollTimeout) {
+      clearTimeout(pollTimeout);
+      pollTimeout = null;
     }
   }
 
@@ -64,6 +63,8 @@
 
   async function loadDiff() {
     const sessionId = get(selectedSessionId);
+    const mode = diffMode;
+    const generation = ++loadGeneration;
     if (!sessionId) {
       diff = null;
       error = '';
@@ -75,16 +76,26 @@
     error = '';
 
     try {
-      if (diffMode === 'session') {
-        diff = await App.GetSessionDiff(sessionId);
+      let result: DiffData;
+      if (mode === 'session') {
+        result = await App.GetSessionDiff(sessionId);
       } else {
-        diff = await App.GetFullDiff(sessionId);
+        result = await App.GetFullDiff(sessionId);
       }
+      if (generation !== loadGeneration || sessionId !== get(selectedSessionId) || mode !== diffMode || !active) return;
+      diff = result;
     } catch (e) {
+      if (generation !== loadGeneration || sessionId !== get(selectedSessionId) || mode !== diffMode || !active) return;
       error = String(e);
       diff = null;
     }
-    loading = false;
+    if (generation === loadGeneration) loading = false;
+    if (generation === loadGeneration && active && !pollTimeout) {
+      pollTimeout = setTimeout(() => {
+        pollTimeout = null;
+        void loadDiff();
+      }, 5000);
+    }
   }
 
   // Reload when session changes — but ONLY while the Diff tab is actually
@@ -180,7 +191,7 @@
       {/if}
     </div>
     <div class="header-right">
-      <button class="refresh-btn" on:click={loadDiff} disabled={loading}>
+      <button class="refresh-btn" on:click={() => loadDiff()} disabled={loading}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class:spinning={loading}>
           <path d="M23 4v6h-6M1 20v-6h6"/>
           <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>

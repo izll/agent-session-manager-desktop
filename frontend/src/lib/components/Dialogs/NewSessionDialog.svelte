@@ -153,6 +153,7 @@
   }
 
   async function handleSubmit(fork: boolean = false) {
+    if (isSubmitting) return;
     if (!name.trim() || !path.trim()) {
       error = $t('newSession.nameRequired');
       return;
@@ -206,8 +207,6 @@
       } else {
         close();
       }
-    } else if (e.key === 'Enter' && !e.shiftKey && !showForkWarning) {
-      handleSubmit();
     }
   }
 
@@ -253,7 +252,7 @@
         </div>
       {/if}
 
-      <form on:submit|preventDefault={handleSubmit}>
+      <form on:submit|preventDefault={() => handleSubmit(false)}>
         <!-- Agent Type -->
         <div class="form-group">
           <span class="form-label">{$t('newSession.agentType')}</span>

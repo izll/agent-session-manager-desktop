@@ -1,9 +1,9 @@
 package session
 
 import (
-	"fmt"
-	"strings"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // Project represents a workspace containing sessions and groups
@@ -33,11 +33,7 @@ func NewProject(name string) *Project {
 
 // generateProjectID creates a sanitized ID from the project name
 func generateProjectID(name string) string {
-	sanitized := strings.ToLower(name)
-	sanitized = strings.ReplaceAll(sanitized, " ", "-")
-	sanitized = strings.ReplaceAll(sanitized, "_", "-")
-	timestamp := time.Now().UnixNano()
-	return fmt.Sprintf("proj_%s_%d", sanitized, timestamp)
+	return "proj_" + uuid.NewString()
 }
 
 // GetSessionCount returns the number of sessions in a project

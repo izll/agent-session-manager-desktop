@@ -57,6 +57,7 @@
   const dispatch = createEventDispatcher();
 
   let lastSessionId: string | null = null;
+  let taskPanelLoadGeneration = 0;
   let showPRDModal = false;
   let showAddTaskModal = false;
   let showComplexityModal = false;
@@ -114,6 +115,22 @@
   let showDependencyModal = false;
   let dependencyTaskId = '';
   let newDependencyId = '';
+
+  function handleSortChange(event: CustomEvent<string>) {
+    setTaskSortBy(event.detail as TaskSortBy);
+  }
+
+  function handleStatusFilterChange(event: CustomEvent<string>) {
+    setTaskFilter({ status: event.detail as TaskStatus | 'all' });
+  }
+
+  function handleNewPriorityChange(event: CustomEvent<string>) {
+    newTaskPriority = event.detail as TaskPriority;
+  }
+
+  function handleEditPriorityChange(event: CustomEvent<string>) {
+    editTaskPriority = event.detail as TaskPriority;
+  }
 
   // Dictation support - one controller, follows focused field in dialog
   let activeDictationEl: HTMLTextAreaElement | HTMLInputElement | null = null;
@@ -232,14 +249,17 @@
   async function loadTasksIfNeeded(force = false) {
     const sessionId = get(selectedSessionId);
     if (!sessionId) {
-      tasks.set([]);
+      taskPanelLoadGeneration++;
+      await loadTasks('');
       return;
     }
 
     if (!force && sessionId === lastSessionId) return;
+    const generation = ++taskPanelLoadGeneration;
     lastSessionId = sessionId;
 
     await checkTaskMasterStatus(sessionId);
+    if (generation !== taskPanelLoadGeneration || sessionId !== get(selectedSessionId)) return;
     await loadTasks(sessionId);
   }
 
@@ -640,7 +660,7 @@
           { value: 'created-desc', label: $t('tasks.sortCreatedDesc') },
           { value: 'created-asc', label: $t('tasks.sortCreatedAsc') }
         ]}
-        on:change={(e) => setTaskSortBy(e.detail)}
+        on:change={handleSortChange}
       />
       <Select
         small
@@ -652,7 +672,7 @@
           { value: 'done', label: 'Done' },
           { value: 'blocked', label: 'Blocked' }
         ]}
-        on:change={(e) => setTaskFilter({ status: e.detail })}
+        on:change={handleStatusFilterChange}
       />
     </div>
   </div>
@@ -1014,7 +1034,7 @@
               { value: 'high', label: 'High' },
               { value: 'critical', label: 'Critical' }
             ]}
-            on:change={(e) => newTaskPriority = e.detail}
+            on:change={handleNewPriorityChange}
           />
         </label>
       </div>
@@ -1104,7 +1124,7 @@
               { value: 'high', label: 'High' },
               { value: 'critical', label: 'Critical' }
             ]}
-            on:change={(e) => editTaskPriority = e.detail}
+            on:change={handleEditPriorityChange}
           />
         </label>
       </div>

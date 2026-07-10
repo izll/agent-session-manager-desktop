@@ -45,7 +45,7 @@ export class TerminalPool {
       if (isActive) {
         entry.containerEl.style.display = 'block';
         entry.containerEl.style.zIndex = '1';
-        entry.containerEl.style.contentVisibility = 'visible';
+        entry.containerEl.style.setProperty('content-visibility', 'visible');
       } else {
         entry.containerEl.style.display = 'none';
         entry.containerEl.style.zIndex = '0';
@@ -56,7 +56,7 @@ export class TerminalPool {
         // reason is moot now anyway: a hidden tab's PTY output is dropped at the
         // backend (see sendVisibility), so it does no rendering work regardless.
         // Plain display:none reliably repaints on show.
-        entry.containerEl.style.contentVisibility = 'visible';
+        entry.containerEl.style.setProperty('content-visibility', 'visible');
       }
       // Pair the DOM visibility with the xterm write gate — keeps hidden
       // tabs from spending CPU on off-screen canvas renders.

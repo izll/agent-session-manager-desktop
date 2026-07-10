@@ -21,7 +21,7 @@ export function CreateProject(arg1:string):Promise<main.ProjectInfo>;
 
 export function CreateSession(arg1:string,arg2:string,arg3:string,arg4:boolean,arg5:string):Promise<main.SessionInfo>;
 
-export function CreateTab(arg1:string,arg2:boolean,arg3:string,arg4:string,arg5:string):Promise<void>;
+export function CreateTab(arg1:string,arg2:boolean,arg3:string,arg4:string,arg5:string):Promise<number>;
 
 export function CreateTask(arg1:string,arg2:string,arg3:string,arg4:string,arg5:Array<string>):Promise<main.TaskInfo>;
 

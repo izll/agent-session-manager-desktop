@@ -24,7 +24,6 @@
   let bufferMode = false;
   let streamingMode = false;
   let bufferCloseOnSend = true;
-  let bufferSendEnter = true;
   let bufferText = '';
   let bufferEditor: HTMLDivElement;
   let bufferPanel: HTMLDivElement;
@@ -193,7 +192,8 @@
 
   let windows: session.WindowInfo[] = [];
   let lastSessionId: string | null = null;
-  let pollInterval: ReturnType<typeof setInterval> | null = null;
+  let pollTimeout: ReturnType<typeof setTimeout> | null = null;
+  let windowsLoadGeneration = 0;
   let showNewTabDialog = false;
   let showDeleteConfirm = false;
   let showDeleteTabConfirm = false;
@@ -250,7 +250,6 @@
       bufferMode = settings.bufferMode && settings.mode === 'streaming';
       streamingMode = settings.mode === 'streaming';
       bufferCloseOnSend = settings.bufferCloseOnSend !== false;
-      bufferSendEnter = settings.bufferSendEnter !== false;
     } catch (e) {
       console.error('[Dictation] Failed to get settings:', e);
     }
@@ -349,7 +348,6 @@
         bufferMode = settings.bufferMode && settings.mode === 'streaming';
         streamingMode = settings.mode === 'streaming';
         bufferCloseOnSend = settings.bufferCloseOnSend !== false;
-        bufferSendEnter = settings.bufferSendEnter !== false;
       } catch (_) {}
     });
 
@@ -547,6 +545,7 @@
 
   // Load windows when session changes or status changes
   async function loadWindowsForSession(sessionId: string | null, _status?: string) {
+    const generation = ++windowsLoadGeneration;
     if (!sessionId) {
       windows = [];
       stopPolling();
@@ -569,7 +568,9 @@
         Index: 0,
         Name: sess.name,
         Agent: sess.agent,
-        Dead: false
+        Dead: false,
+        Active: true,
+        Followed: false
       };
 
       if (sess.followedWindows && sess.followedWindows.length > 0) {
@@ -578,7 +579,9 @@
           Index: fw.index,
           Name: fw.name || `Tab ${fw.index}`,
           Agent: fw.agent || sess.agent,
-          Dead: false
+          Dead: false,
+          Active: false,
+          Followed: true
         }));
         windows = sortWindowsByTabOrder([mainTab, ...followedTabs], sess.tabOrder);
       } else {
@@ -592,17 +595,20 @@
     const wasRunningBefore = lastSessionId === sessionId && windows.length > 0;
     if (!wasRunningBefore) {
       await new Promise(r => setTimeout(r, 300));
+      if (generation !== windowsLoadGeneration || sessionId !== get(selectedSessionId)) return;
     }
 
     try {
       const list = await App.GetWindowList(sessionId);
+      if (generation !== windowsLoadGeneration || sessionId !== get(selectedSessionId)) return;
       windows = sortWindowsByTabOrder(list || [], sess.tabOrder);
 
       // Start polling if not already
-      if (!pollInterval) {
+      if (!pollTimeout) {
         startPolling();
       }
     } catch (e) {
+      if (generation !== windowsLoadGeneration || sessionId !== get(selectedSessionId)) return;
       console.error('Failed to load windows:', e);
       windows = [];
     }
@@ -611,18 +617,22 @@
   }
 
   function startPolling() {
-    pollInterval = setInterval(() => {
+    if (pollTimeout) return;
+    pollTimeout = setTimeout(async () => {
+      pollTimeout = null;
       const sessionId = get(selectedSessionId);
       if (sessionId) {
-        loadWindowsForSession(sessionId);
+        await loadWindowsForSession(sessionId);
       }
+      if (get(selectedSessionId)) startPolling();
     }, 5000); // 5 seconds to reduce CPU usage
   }
 
   function stopPolling() {
-    if (pollInterval) {
-      clearInterval(pollInterval);
-      pollInterval = null;
+    windowsLoadGeneration++;
+    if (pollTimeout) {
+      clearTimeout(pollTimeout);
+      pollTimeout = null;
     }
   }
 
@@ -641,11 +651,6 @@
     }
     return map;
   })();
-
-  // Force reload when status changes to running
-  $: if (currentSessionStatus === 'running' && $selectedSessionId) {
-    loadWindowsForSession($selectedSessionId, currentSessionStatus);
-  }
 
   // Update active tmux session for dictation text output
   $: if ($selectedSessionId && dictationEnabled) {
@@ -1240,17 +1245,6 @@
                 <div class="buffer-left-actions">
                   <span class="buffer-hint">{$t('tabBar.bufferHint')}</span>
                   <div class="buffer-toggles">
-                    <button class="buffer-setting-toggle" class:active={bufferSendEnter} title={$t('tabBar.sendEnterTitle')} on:click={async () => {
-                        bufferSendEnter = !bufferSendEnter;
-                        try {
-                          const settings = await DictationService.GetDictationSettings();
-                          settings.bufferSendEnter = bufferSendEnter;
-                          await DictationService.SetDictationSettings(JSON.stringify(settings));
-                        } catch (_) {}
-                      }}>
-                      <span class="mini-toggle-track"><span class="mini-toggle-thumb"></span></span>
-                      <span class="buffer-toggle-label">{$t('tabBar.sendEnter')}</span>
-                    </button>
                     <button class="buffer-setting-toggle" class:active={bufferCloseOnSend} title={$t('tabBar.closeAfterSendTitle')} on:click={async () => {
                         bufferCloseOnSend = !bufferCloseOnSend;
                         try {

@@ -32,8 +32,8 @@ type JSONRPCResponse struct {
 // JSONRPCMessage represents any JSON-RPC 2.0 message (request, response, or notification)
 type JSONRPCMessage struct {
 	JSONRPC string          `json:"jsonrpc"`
-	ID      *int64          `json:"id,omitempty"`      // nil for notifications
-	Method  string          `json:"method,omitempty"`  // empty for responses
+	ID      *int64          `json:"id,omitempty"`     // nil for notifications
+	Method  string          `json:"method,omitempty"` // empty for responses
 	Params  json.RawMessage `json:"params,omitempty"`
 	Result  json.RawMessage `json:"result,omitempty"`
 	Error   *JSONRPCError   `json:"error,omitempty"`
@@ -71,21 +71,31 @@ type ContentBlock struct {
 
 // Client represents an MCP client that communicates with a server via stdio
 type Client struct {
-	cmd           *exec.Cmd
-	stdin         io.WriteCloser
-	stdout        io.ReadCloser
-	stderr        io.ReadCloser
-	scanner       *bufio.Scanner
-	requestID     int64
-	tools         []Tool
-	stateMu       sync.Mutex // protects running state
-	stdinMu       sync.Mutex // protects stdin writes
-	responseChan  map[int64]chan *JSONRPCResponse
-	responseMu    sync.RWMutex
-	running       bool
-	projectRoot   string
-	serverReady   chan struct{}
+	cmd          *exec.Cmd
+	stdin        io.WriteCloser
+	stdout       io.ReadCloser
+	stderr       io.ReadCloser
+	scanner      *bufio.Scanner
+	requestID    int64
+	tools        []Tool
+	stateMu      sync.Mutex // protects running state
+	stdinMu      sync.Mutex // protects stdin writes
+	responseChan map[int64]chan *JSONRPCResponse
+	responseMu   sync.RWMutex
+	running      bool
+	runID        uint64
+	projectRoot  string
+	serverReady  chan struct{}
+	readyOnce    sync.Once
+	processDone  chan struct{}
+	doneOnce     sync.Once
 }
+
+const maxMCPMessageSize = 16 * 1024 * 1024
+
+// Keep runtime execution reproducible. Upgrades should be deliberate and
+// validated with the MCP integration tests instead of silently following latest.
+const taskMasterPackage = "task-master-ai@0.43.1"
 
 // NewClient creates a new MCP client
 // Uses Claude Code provider by default (no API key required)
@@ -104,10 +114,16 @@ func (c *Client) Start() error {
 		c.stateMu.Unlock()
 		return nil
 	}
+	c.serverReady = make(chan struct{})
+	c.readyOnce = sync.Once{}
+	c.processDone = make(chan struct{})
+	c.doneOnce = sync.Once{}
+	c.runID++
+	runID := c.runID
 
 	// Start the task-master-ai MCP server via npx
 	// Uses Claude Code provider by default - no API key required
-	c.cmd = exec.Command("npx", "-y", "task-master-ai")
+	c.cmd = exec.Command("npx", "-y", taskMasterPackage)
 	c.cmd.Env = append(os.Environ(),
 		"TASK_MASTER_TOOLS=all",
 		"TASK_MASTER_AI_PROVIDER=claude-code",
@@ -142,23 +158,29 @@ func (c *Client) Start() error {
 		return fmt.Errorf("failed to start MCP server: %w", err)
 	}
 
-	c.scanner = bufio.NewScanner(c.stdout)
+	c.scanner = newMCPScanner(c.stdout)
+	scanner := c.scanner
+	stderr := c.stderr
+	serverReady := c.serverReady
+	processDone := c.processDone
 	c.running = true
 	c.stateMu.Unlock() // Release lock before starting goroutines
 
 	// Start response reader goroutine - must start BEFORE waiting
 	// This allows us to respond to server probes (ping, roots/list)
-	go c.readResponses()
+	go c.readResponses(runID, scanner)
 
 	// Start stderr reader goroutine (for debugging)
-	go c.readStderr()
+	go c.readStderr(runID, stderr, serverReady)
 
 	// Wait for the server to start up (or timeout after 30 seconds)
 	// During this time, readResponses() handles any server probes
 	fmt.Println("MCP: waiting for server to start...")
 	select {
-	case <-c.serverReady:
+	case <-serverReady:
 		fmt.Println("MCP: server is ready, initializing...")
+	case <-processDone:
+		return fmt.Errorf("MCP server stopped before initialization")
 	case <-time.After(30 * time.Second):
 		fmt.Println("MCP: timeout waiting for server, trying to initialize anyway...")
 	}
@@ -172,33 +194,49 @@ func (c *Client) Start() error {
 	return nil
 }
 
+func newMCPScanner(reader io.Reader) *bufio.Scanner {
+	scanner := bufio.NewScanner(reader)
+	scanner.Buffer(make([]byte, 64*1024), maxMCPMessageSize)
+	return scanner
+}
+
 // Stop stops the MCP server process
 func (c *Client) Stop() error {
 	c.stateMu.Lock()
-	defer c.stateMu.Unlock()
-
-	if !c.running {
-		return nil
-	}
-
+	wasRunning := c.running
 	c.running = false
+	c.runID++ // make reader completion from this process stale
+	stdin, stdout, stderr, cmd := c.stdin, c.stdout, c.stderr, c.cmd
+	c.stdin, c.stdout, c.stderr, c.cmd = nil, nil, nil, nil
+	c.doneOnce.Do(func() {
+		if c.processDone != nil {
+			close(c.processDone)
+		}
+	})
+	c.stateMu.Unlock()
 
-	if c.stdin != nil {
-		c.stdin.Close()
+	if wasRunning {
+		c.failPending(fmt.Errorf("MCP client stopped"))
 	}
-	if c.stdout != nil {
-		c.stdout.Close()
-	}
-	if c.stderr != nil {
-		c.stderr.Close()
-	}
-
-	if c.cmd != nil && c.cmd.Process != nil {
-		c.cmd.Process.Kill()
-		c.cmd.Wait()
-	}
-
+	closeProcess(stdin, stdout, stderr, cmd)
 	return nil
+}
+
+func closeProcess(stdin io.WriteCloser, stdout, stderr io.ReadCloser, cmd *exec.Cmd) {
+	if stdin != nil {
+		_ = stdin.Close()
+	}
+	if stdout != nil {
+		_ = stdout.Close()
+	}
+	if stderr != nil {
+		_ = stderr.Close()
+	}
+
+	if cmd != nil && cmd.Process != nil {
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+	}
 }
 
 // IsRunning returns true if the MCP server is running
@@ -209,9 +247,9 @@ func (c *Client) IsRunning() bool {
 }
 
 // readResponses reads JSON-RPC messages from the server (responses and requests)
-func (c *Client) readResponses() {
-	for c.scanner.Scan() {
-		line := c.scanner.Text()
+func (c *Client) readResponses(runID uint64, scanner *bufio.Scanner) {
+	for scanner.Scan() {
+		line := scanner.Text()
 		if line == "" {
 			continue
 		}
@@ -260,10 +298,55 @@ func (c *Client) readResponses() {
 			c.responseMu.RUnlock()
 
 			if ok {
-				ch <- response
+				select {
+				case ch <- response:
+				default:
+				}
 			} else {
 				fmt.Printf("MCP: received response for unknown request ID %d\n", response.ID)
 			}
+		}
+	}
+
+	err := scanner.Err()
+	if err == nil {
+		err = io.EOF
+	}
+	c.failRun(runID, fmt.Errorf("MCP response stream ended: %w", err))
+}
+
+// failRun transitions the current process to a failed state and wakes all
+// requests immediately. A stale reader from an earlier process cannot fail a
+// newly started run.
+func (c *Client) failRun(runID uint64, err error) {
+	c.stateMu.Lock()
+	if c.runID != runID || !c.running {
+		c.stateMu.Unlock()
+		return
+	}
+	c.running = false
+	stdin, stdout, stderr, cmd := c.stdin, c.stdout, c.stderr, c.cmd
+	c.stdin, c.stdout, c.stderr, c.cmd = nil, nil, nil, nil
+	c.doneOnce.Do(func() {
+		if c.processDone != nil {
+			close(c.processDone)
+		}
+	})
+	c.stateMu.Unlock()
+
+	fmt.Printf("MCP: %v\n", err)
+	c.failPending(err)
+	closeProcess(stdin, stdout, stderr, cmd)
+}
+
+func (c *Client) failPending(err error) {
+	response := &JSONRPCResponse{Error: &JSONRPCError{Code: -32000, Message: err.Error()}}
+	c.responseMu.RLock()
+	defer c.responseMu.RUnlock()
+	for _, ch := range c.responseChan {
+		select {
+		case ch <- response:
+		default:
 		}
 	}
 }
@@ -348,8 +431,8 @@ func (c *Client) sendErrorResponse(id int64, code int, message string) {
 }
 
 // readStderr reads and logs stderr from the server
-func (c *Client) readStderr() {
-	scanner := bufio.NewScanner(c.stderr)
+func (c *Client) readStderr(runID uint64, stderr io.Reader, serverReady chan struct{}) {
+	scanner := newMCPScanner(stderr)
 	serverReadySignaled := false
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -358,7 +441,12 @@ func (c *Client) readStderr() {
 		// Signal when server is ready (look for "Registered X tools successfully")
 		if !serverReadySignaled && (strings.Contains(line, "tools successfully") || strings.Contains(line, "Registered") && strings.Contains(line, "tools")) {
 			serverReadySignaled = true
-			close(c.serverReady)
+			c.stateMu.Lock()
+			current := c.runID == runID && c.running && c.serverReady == serverReady
+			if current {
+				c.readyOnce.Do(func() { close(serverReady) })
+			}
+			c.stateMu.Unlock()
 			fmt.Println("MCP: server ready signal received")
 		}
 	}
@@ -371,6 +459,14 @@ func (c *Client) sendRequest(method string, params interface{}) (*JSONRPCRespons
 
 // sendRequestWithTimeout sends a JSON-RPC request with a custom timeout
 func (c *Client) sendRequestWithTimeout(method string, params interface{}, timeout time.Duration) (*JSONRPCResponse, error) {
+	c.stateMu.Lock()
+	if !c.running || c.stdin == nil {
+		c.stateMu.Unlock()
+		return nil, fmt.Errorf("MCP client not running")
+	}
+	stdin := c.stdin
+	runID := c.runID
+	c.stateMu.Unlock()
 	id := atomic.AddInt64(&c.requestID, 1)
 
 	request := JSONRPCRequest{
@@ -400,10 +496,11 @@ func (c *Client) sendRequestWithTimeout(method string, params interface{}, timeo
 	// Send request
 	fmt.Printf("MCP >>> sending request: %s\n", string(data))
 	c.stdinMu.Lock()
-	_, err = fmt.Fprintf(c.stdin, "%s\n", data)
+	_, err = fmt.Fprintf(stdin, "%s\n", data)
 	c.stdinMu.Unlock()
 
 	if err != nil {
+		c.failRun(runID, fmt.Errorf("failed to write MCP request: %w", err))
 		return nil, fmt.Errorf("failed to send request: %w", err)
 	}
 

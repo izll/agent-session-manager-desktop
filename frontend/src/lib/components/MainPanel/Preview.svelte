@@ -2,7 +2,7 @@
   import { onMount, onDestroy } from 'svelte';
   import { Terminal } from '@xterm/xterm';
   import { FitAddon } from '@xterm/addon-fit';
-  import { sessions, selectedSessionId, selectedWindowIdx } from '../../stores/sessions';
+  import { selectedSessionId } from '../../stores/sessions';
   import { get } from 'svelte/store';
   import * as App from '../../../../wailsjs/go/main/App';
   import { t } from '../../i18n';
@@ -10,7 +10,8 @@
   let containerEl: HTMLElement;
   let terminal: Terminal | null = null;
   let fitAddon: FitAddon | null = null;
-  let pollInterval: ReturnType<typeof setInterval> | null = null;
+  let pollTimeout: ReturnType<typeof setTimeout> | null = null;
+  let previewGeneration = 0;
   let lastContent = '';
   let lastSessionId = '';
 
@@ -70,6 +71,7 @@
   // Handle session change
   function handleSessionChange(sessionId: string | null) {
     if (sessionId && sessionId !== lastSessionId) {
+      previewGeneration++;
       lastSessionId = sessionId;
       lastContent = '';
       // Reset and refit terminal on session change
@@ -77,30 +79,32 @@
         terminal.clear();
         setTimeout(() => fitAddon?.fit(), 50);
       }
-      updatePreview();
+      void updatePreview(true);
     }
   }
 
   $: handleSessionChange($selectedSessionId);
 
   function startPolling() {
-    pollInterval = setInterval(updatePreview, 500);
+    if (!pollTimeout) void updatePreview(true);
   }
 
   function stopPolling() {
-    if (pollInterval) {
-      clearInterval(pollInterval);
-      pollInterval = null;
+    previewGeneration++;
+    if (pollTimeout) {
+      clearTimeout(pollTimeout);
+      pollTimeout = null;
     }
   }
 
-  async function updatePreview() {
+  async function updatePreview(scheduleNext = false) {
     const sessionId = get(selectedSessionId);
     if (!sessionId || !terminal) return;
+    const generation = ++previewGeneration;
 
     try {
       const data = await App.GetPreview(sessionId, 100);
-      if (data) {
+      if (generation === previewGeneration && sessionId === get(selectedSessionId) && data && terminal) {
         // Only update terminal if content actually changed
         if (data.content !== lastContent) {
           lastContent = data.content;
@@ -110,7 +114,16 @@
         activity = data.activity as 'idle' | 'busy' | 'waiting';
       }
     } catch (e) {
-      console.error('Preview update failed:', e);
+      if (generation === previewGeneration && sessionId === get(selectedSessionId)) {
+        console.error('Preview update failed:', e);
+      }
+    } finally {
+      if (scheduleNext && generation === previewGeneration && terminal) {
+        pollTimeout = setTimeout(() => {
+          pollTimeout = null;
+          void updatePreview(true);
+        }, 500);
+      }
     }
   }
 </script>
