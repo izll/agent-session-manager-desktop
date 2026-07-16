@@ -4,6 +4,7 @@
   import SessionTree from './lib/components/Sidebar/SessionTree.svelte';
   import ProjectSelector from './lib/components/Sidebar/ProjectSelector.svelte';
   import MainPanel from './lib/components/MainPanel/MainPanel.svelte';
+  import ProjectDashboard from './lib/components/Dashboard/ProjectDashboard.svelte';
   import NewSessionDialog from './lib/components/Dialogs/NewSessionDialog.svelte';
   import NewGroupDialog from './lib/components/Dialogs/NewGroupDialog.svelte';
   import GlobalSearchDialog from './lib/components/Dialogs/GlobalSearchDialog.svelte';
@@ -20,6 +21,7 @@
   import type { Session } from './lib/stores/sessions';
   import { loadSessions, selectedSession, selectedSessionId, selectedWindowIdx, startSession, stopSession, stopTab, restartTab, restartTabWithResume, deleteSession, toggleFavorite, reorderSession, selectPrevSession, selectNextSession } from './lib/stores/sessions';
   import { loadProjects } from './lib/stores/projects';
+  import { appView, showDashboard } from './lib/stores/navigation';
   import { loadSettings, settings } from './lib/stores/settings';
   import { agents, loadAgents } from './lib/stores/agents';
   import { startSidebarPolling, stopSidebarPolling } from './lib/stores/sidebarPolling';
@@ -506,12 +508,23 @@
         {/if}
       </div>
       <div class="header-divider-vertical"></div>
-      {#if $selectedSession}
+      {#if $appView === 'dashboard'}
+        <span class="header-session-name">{$t('dashboard.title')}</span>
+      {:else if $selectedSession}
         <span class="header-session-name" style={$selectedSession.color ? `color: ${$selectedSession.color}` : ''}>{$selectedSession.name}</span>
       {/if}
     </div>
 
     <div class="flex items-center gap-3" style="--wails-draggable:no-drag">
+      <button class="btn btn-ghost" class:active-view={$appView === 'dashboard'} on:click={showDashboard} title={$t('dashboard.open')}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="3" width="7" height="7" rx="1"/>
+          <rect x="14" y="3" width="7" height="7" rx="1"/>
+          <rect x="3" y="14" width="7" height="7" rx="1"/>
+          <rect x="14" y="14" width="7" height="7" rx="1"/>
+        </svg>
+        {$t('dashboard.title')}
+      </button>
       <button class="btn btn-ghost" on:click={() => showGlobalSearch = true} title={$t('header.globalSearch')}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <circle cx="11" cy="11" r="8"/>
@@ -618,12 +631,20 @@
 
     <!-- Main Panel -->
     <div class="main-content flex-1 overflow-hidden">
-      <MainPanel
-        on:openColorDialog={() => { colorDialogSession = $selectedSession; showColorDialog = true; }}
-        on:requestStop={handleStop}
-        on:requestStart={handleStart}
-        on:requestResume={handleResume}
-      />
+      <div class="main-view" class:hidden-view={$appView !== 'session'}>
+        <MainPanel
+          visible={$appView === 'session'}
+          on:openColorDialog={() => { colorDialogSession = $selectedSession; showColorDialog = true; }}
+          on:requestStop={handleStop}
+          on:requestStart={handleStart}
+          on:requestResume={handleResume}
+        />
+      </div>
+      {#if $appView === 'dashboard'}
+        <div class="main-view">
+          <ProjectDashboard on:newSession={handleNewSession} />
+        </div>
+      {/if}
     </div>
   </div>
 
@@ -719,6 +740,27 @@
 
   .app-container {
     background: linear-gradient(135deg, #0a0a0f 0%, #0f0f1a 50%, #0a0a0f 100%);
+  }
+
+  .main-content {
+    position: relative;
+  }
+
+  .main-view {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+  }
+
+  .hidden-view {
+    visibility: hidden;
+    pointer-events: none;
+  }
+
+  .btn.active-view {
+    color: #c4b5fd;
+    background: rgba(139, 92, 246, 0.15);
+    border-color: rgba(139, 92, 246, 0.3);
   }
 
   .header {

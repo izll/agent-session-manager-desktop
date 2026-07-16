@@ -67,6 +67,8 @@ export function GetNextTask(arg1:string):Promise<main.TaskInfo>;
 
 export function GetPreview(arg1:string,arg2:number):Promise<main.PreviewData>;
 
+export function GetProjectGitSummaries(arg1:string):Promise<Array<main.ProjectGitSummary>>;
+
 export function GetProjectSessions(arg1:string):Promise<Array<main.SessionInfo>>;
 
 export function GetProjects():Promise<Array<main.ProjectInfo>>;

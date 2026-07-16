@@ -1,9 +1,11 @@
 <script lang="ts">
   import { projects, activeProjectId, selectProject, createProject } from '../../stores/projects';
+  import { showDashboard } from '../../stores/navigation';
   import { t } from '../../i18n';
 
   let isOpen = false;
   let isCreating = false;
+  let isSelecting = false;
   let newProjectName = '';
 
   $: currentProject = $projects.find(p => p.id === $activeProjectId);
@@ -17,28 +19,54 @@
   }
 
   async function handleSelect(id: string) {
-    await selectProject(id);
+    if (isSelecting) return;
+    isSelecting = true;
+    try {
+      await selectProject(id);
+      showDashboard();
+      isOpen = false;
+    } finally {
+      isSelecting = false;
+    }
+  }
+
+  function handleOpenDashboard() {
     isOpen = false;
+    isCreating = false;
+    newProjectName = '';
+    showDashboard();
   }
 
   async function handleCreate() {
-    if (!newProjectName.trim()) return;
+    if (!newProjectName.trim() || isSelecting) return;
 
+    isSelecting = true;
     try {
       const project = await createProject(newProjectName.trim());
       if (project) {
         await selectProject(project.id);
+        showDashboard();
       }
       newProjectName = '';
       isCreating = false;
       isOpen = false;
     } catch (e) {
       console.error('Failed to create project:', e);
+    } finally {
+      isSelecting = false;
     }
   }
 </script>
 
 <div class="project-selector">
+  <button class="dashboard-button" on:click={handleOpenDashboard} title={$t('dashboard.open')}>
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <rect x="3" y="3" width="7" height="7" rx="1"/>
+      <rect x="14" y="3" width="7" height="7" rx="1"/>
+      <rect x="3" y="14" width="7" height="7" rx="1"/>
+      <rect x="14" y="14" width="7" height="7" rx="1"/>
+    </svg>
+  </button>
   <button class="selector-button" on:click={toggle}>
     <div class="project-info">
       <svg class="project-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -57,6 +85,7 @@
       <button
         class="dropdown-item"
         class:active={$activeProjectId === ''}
+        disabled={isSelecting}
         on:click={() => handleSelect('')}
       >
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -70,6 +99,7 @@
         <button
           class="dropdown-item"
           class:active={$activeProjectId === project.id}
+          disabled={isSelecting}
           on:click={() => handleSelect(project.id)}
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -123,10 +153,33 @@
 <style>
   .project-selector {
     position: relative;
+    display: flex;
+    gap: 6px;
+  }
+
+  .dashboard-button {
+    width: 38px;
+    flex: 0 0 38px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #a78bfa;
+    background: rgba(139, 92, 246, 0.08);
+    border: 1px solid rgba(139, 92, 246, 0.18);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .dashboard-button:hover {
+    color: #c4b5fd;
+    background: rgba(139, 92, 246, 0.18);
+    border-color: rgba(139, 92, 246, 0.4);
   }
 
   .selector-button {
-    width: 100%;
+    flex: 1;
+    min-width: 0;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -171,7 +224,7 @@
   .dropdown {
     position: absolute;
     top: calc(100% + 4px);
-    left: 0;
+    left: 44px;
     right: 0;
     background: #1a1a2e;
     border: 1px solid rgba(139, 92, 246, 0.2);
@@ -198,6 +251,11 @@
 
   .dropdown-item:hover {
     background: rgba(139, 92, 246, 0.1);
+  }
+
+  .dropdown-item:disabled {
+    opacity: 0.55;
+    cursor: wait;
   }
 
   .dropdown-item.active {

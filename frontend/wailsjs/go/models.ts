@@ -254,6 +254,46 @@ export namespace main {
 	        this.activity = source["activity"];
 	    }
 	}
+	export class ProjectGitSummary {
+	    sessionId: string;
+	    path: string;
+	    repository: boolean;
+	    repositoryRoot: string;
+	    branch: string;
+	    upstream: string;
+	    dirty: boolean;
+	    modifiedFiles: number;
+	    ahead: number;
+	    behind: number;
+	    lastCommitHash: string;
+	    lastCommitMessage: string;
+	    lastCommitAuthor: string;
+	    lastCommitAt: string;
+	    error?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ProjectGitSummary(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.sessionId = source["sessionId"];
+	        this.path = source["path"];
+	        this.repository = source["repository"];
+	        this.repositoryRoot = source["repositoryRoot"];
+	        this.branch = source["branch"];
+	        this.upstream = source["upstream"];
+	        this.dirty = source["dirty"];
+	        this.modifiedFiles = source["modifiedFiles"];
+	        this.ahead = source["ahead"];
+	        this.behind = source["behind"];
+	        this.lastCommitHash = source["lastCommitHash"];
+	        this.lastCommitMessage = source["lastCommitMessage"];
+	        this.lastCommitAuthor = source["lastCommitAuthor"];
+	        this.lastCommitAt = source["lastCommitAt"];
+	        this.error = source["error"];
+	    }
+	}
 	export class ProjectInfo {
 	    id: string;
 	    name: string;

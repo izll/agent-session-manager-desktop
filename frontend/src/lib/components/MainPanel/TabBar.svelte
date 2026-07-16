@@ -27,6 +27,7 @@
   // Dictation state
   export let dictationEnabled = false;
   export let dictationListening = false;
+  export let visible = true;
   let voiceLevel = 0;
   let interimText = '';
   let bufferMode = false;
@@ -229,6 +230,7 @@
 
   // Ctrl+PageUp/PageDown to switch window tabs
   function handleWindowTabKeydown(e: KeyboardEvent) {
+    if (!visible) return;
     if (!e.ctrlKey || e.shiftKey || e.altKey || e.metaKey) return;
     if (e.key !== 'PageUp' && e.key !== 'PageDown') return;
     if (windows.length <= 1) return;
@@ -554,8 +556,12 @@
   }
 
   // Load windows when session changes or status changes
-  async function loadWindowsForSession(sessionId: string | null, _status?: string) {
+  async function loadWindowsForSession(sessionId: string | null, _status?: string, panelVisible = true) {
     const generation = ++windowsLoadGeneration;
+    if (!panelVisible) {
+      stopPolling();
+      return;
+    }
     if (!sessionId) {
       windows = [];
       stopPolling();
@@ -631,14 +637,14 @@
   }
 
   function startPolling() {
-    if (pollTimeout) return;
+    if (pollTimeout || !visible) return;
     pollTimeout = setTimeout(async () => {
       pollTimeout = null;
       const sessionId = get(selectedSessionId);
-      if (sessionId) {
-        await loadWindowsForSession(sessionId);
+      if (sessionId && visible) {
+        await loadWindowsForSession(sessionId, undefined, visible);
       }
-      if (get(selectedSessionId)) startPolling();
+      if (get(selectedSessionId) && visible) startPolling();
     }, 5000); // 5 seconds to reduce CPU usage
   }
 
@@ -652,7 +658,7 @@
 
   // React to session changes AND status changes
   $: currentSessionStatus = $sessions.find(s => s.id === $selectedSessionId)?.status;
-  $: loadWindowsForSession($selectedSessionId, currentSessionStatus);
+  $: loadWindowsForSession($selectedSessionId, currentSessionStatus, visible);
 
   // Per-tab activity (busy/waiting/idle) for the current session, so each tab
   // header shows its own status dot — you can see at a glance WHICH tab is
@@ -906,7 +912,7 @@
           detail: { sessionId: killedSession, windowIdx: killedIdx },
         }));
         // Force refresh window list immediately
-        await loadWindowsForSession($selectedSessionId, currentSessionStatus);
+        await loadWindowsForSession($selectedSessionId, currentSessionStatus, visible);
       } catch (e) {
         errorMessage = `Failed to delete tab: ${e}`;
         showErrorToast = true;

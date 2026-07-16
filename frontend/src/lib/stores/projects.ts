@@ -32,7 +32,12 @@ export async function selectProject(id: string) {
     await App.SelectProject(id);
     activeProjectId.set(id);
     // Reload sessions for new project
-    const { loadSessions } = await import('./sessions');
+    const { loadSessions, sessions, groups, selectSession } = await import('./sessions');
+    // Do not render the old project's session cards under the new project's
+    // heading while its data is still being loaded.
+    sessions.set([]);
+    groups.set([]);
+    selectSession(null);
     await loadSessions();
   } catch (e) {
     console.error('Failed to select project:', e);

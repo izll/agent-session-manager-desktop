@@ -1,6 +1,7 @@
 import { writable, derived, get } from 'svelte/store';
 import * as App from '../../../wailsjs/go/main/App';
 import type { main } from '../../../wailsjs/go/models';
+import { showSessionView } from './navigation';
 
 // Types
 export interface Session {
@@ -118,6 +119,8 @@ export async function createSession(name: string, path: string, agent: string, a
     if (session) {
       sessions.update(s => [...s, session as Session]);
       selectedSessionId.set(session.id);
+      selectedWindowIdx.set(0);
+      showSessionView();
     }
     return session;
   } catch (e) {
@@ -395,6 +398,7 @@ export function selectSession(id: string | null) {
   selectedSessionId.set(id);
   // Restore remembered tab for the session we're switching to
   selectedWindowIdx.set(id ? (sessionTabMemory.get(id) ?? 0) : 0);
+  if (id) showSessionView();
 }
 
 export function selectWindow(idx: number) {

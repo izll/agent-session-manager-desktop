@@ -430,6 +430,17 @@ func (a *App) GetSessions() ([]SessionInfo, error) {
 	return result, nil
 }
 
+// GetProjectGitSummaries returns an isolated Git snapshot for every session in
+// the requested project. Using an explicit project ID avoids cross-project
+// snapshots when the user switches projects while a refresh is in flight.
+func (a *App) GetProjectGitSummaries(projectID string) ([]ProjectGitSummary, error) {
+	instances, _, err := a.storage.LoadAllForProject(projectID)
+	if err != nil {
+		return nil, err
+	}
+	return collectProjectGitSummaries(a.ctx, instances), nil
+}
+
 func (a *App) instanceToSessionInfo(inst *session.Instance) SessionInfo {
 	mainStopped := inst.MainWindowStopped
 	// Auto-detect dead main pane from tmux (handles pre-existing sessions)

@@ -130,6 +130,10 @@ export function GetPreview(arg1, arg2) {
   return window['go']['main']['App']['GetPreview'](arg1, arg2);
 }
 
+export function GetProjectGitSummaries(arg1) {
+  return window['go']['main']['App']['GetProjectGitSummaries'](arg1);
+}
+
 export function GetProjectSessions(arg1) {
   return window['go']['main']['App']['GetProjectSessions'](arg1);
 }

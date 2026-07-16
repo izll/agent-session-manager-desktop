@@ -14,6 +14,8 @@
 
   const dispatch = createEventDispatcher();
 
+  export let visible = true;
+
   let activeView: 'terminal' | 'diff' | 'notes' | 'tasks' = 'terminal';
   let terminalAttached = false;
   let showForkDialog = false;
@@ -87,6 +89,7 @@
     <TabBar
       {fullDiffActive}
       {activeView}
+      {visible}
       on:openColorDialog={() => dispatch('openColorDialog')}
       on:openFullDiff={() => { fullDiffActive = true; diffMode = 'full'; }}
       on:closeFullDiff={() => { fullDiffActive = false; activeView = 'terminal'; }}
@@ -99,7 +102,7 @@
     {#if fullDiffActive}
       <!-- Full Diff View -->
       <div class="flex-1 overflow-hidden content-area">
-        <Diff active={true} initialMode="full" />
+        <Diff active={visible} initialMode="full" />
       </div>
     {:else}
       <!-- View Selector -->
@@ -206,16 +209,16 @@
       <!-- Content Area - Keep components mounted, use CSS to show/hide -->
       <div class="flex-1 overflow-hidden content-area">
         <div class="view-panel" class:active={activeView === 'terminal'}>
-          <Terminal bind:this={terminalComponent} bind:isAttached={terminalAttached} active={activeView === 'terminal'} />
+          <Terminal bind:this={terminalComponent} bind:isAttached={terminalAttached} active={visible && activeView === 'terminal'} />
         </div>
         <div class="view-panel" class:active={activeView === 'diff'}>
-          <Diff active={activeView === 'diff'} initialMode={diffMode} />
+          <Diff active={visible && activeView === 'diff'} initialMode={diffMode} />
         </div>
         <div class="view-panel" class:active={activeView === 'notes'}>
-          <Notes active={activeView === 'notes'} on:notesChange={handleNotesChange} />
+          <Notes active={visible && activeView === 'notes'} on:notesChange={handleNotesChange} />
         </div>
         <div class="view-panel" class:active={activeView === 'tasks'}>
-          <TaskPanel active={activeView === 'tasks'} on:taskSent={() => activeView = 'terminal'} />
+          <TaskPanel active={visible && activeView === 'tasks'} on:taskSent={() => activeView = 'terminal'} />
         </div>
       </div>
     {/if}
