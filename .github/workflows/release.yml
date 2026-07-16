@@ -107,10 +107,14 @@ jobs:
         run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.11.0
 
       - name: Test and type-check
+        # The frontend must be built BEFORE `go test`: main.go embeds
+        # frontend/dist (go:embed), which doesn't exist on a fresh checkout,
+        # so the Go package fails to even load without it.
         run: |
+          npm ci --prefix frontend
+          npm run build --prefix frontend
           xvfb-run -a go test ./...
           go vet ./...
-          npm ci --prefix frontend
           npm run check --prefix frontend
 
       - name: Set release metadata
