@@ -204,10 +204,14 @@ export function createTerminal(container: HTMLElement, options: Partial<Terminal
       return false;
     }
 
-    // Shift+Enter: send newline (\n) instead of carriage return (\r)
-    // Most agents (Claude CLI, etc.) interpret \n as "new line" vs \r as "submit"
+    // Shift+Enter: insert a newline instead of submitting.
+    // A bare \n does NOT work — agent CLIs (Claude Code's ink included)
+    // normalize LF and CR to the same "return" action, so it just submits.
+    // Send backslash+CR instead: that's the line-continuation sequence the
+    // agents treat as "insert newline", and it's exactly what Claude Code's
+    // own /terminal-setup binds Shift+Enter to in VSCode/iTerm2.
     if (event.shiftKey && event.key === 'Enter' && event.type === 'keydown') {
-      (terminal as any)._core.coreService.triggerDataEvent('\n', true);
+      (terminal as any)._core.coreService.triggerDataEvent('\\\r', true);
       return false;
     }
 
