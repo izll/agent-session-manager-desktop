@@ -1,5 +1,6 @@
 import { Terminal, type IDisposable } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
+import { SearchAddon } from '@xterm/addon-search';
 import { CanvasAddon } from '@xterm/addon-canvas';
 import { WebglAddon } from '@xterm/addon-webgl';
 import { GetTerminalWSPort, GetTerminalWSToken } from '../../../wailsjs/go/main/App';
@@ -69,6 +70,7 @@ async function getTerminalWSToken(): Promise<string> {
 export interface TerminalInstance {
   terminal: Terminal;
   fitAddon: FitAddon;
+  searchAddon: SearchAddon;
   sessionId: string | null;
   windowIdx: number;
   ws: WebSocket | null;
@@ -175,6 +177,10 @@ export function createTerminal(container: HTMLElement, options: Partial<Terminal
   const fitAddon = new FitAddon();
   terminal.loadAddon(fitAddon);
 
+  // Scrollback search (Ctrl+Shift+L overlay in Terminal.svelte)
+  const searchAddon = new SearchAddon();
+  terminal.loadAddon(searchAddon);
+
   terminal.open(container);
 
   // Renderer chosen in Settings (canvas | webgl | dom). See loadRenderer().
@@ -251,6 +257,7 @@ export function createTerminal(container: HTMLElement, options: Partial<Terminal
   return {
     terminal,
     fitAddon,
+    searchAddon,
     sessionId: null,
     windowIdx: 0,
     ws: null,

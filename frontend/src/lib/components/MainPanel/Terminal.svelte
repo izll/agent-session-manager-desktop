@@ -48,6 +48,56 @@
     requestAnimationFrame(focusActive);
   }
 
+  // --- Scrollback search (Ctrl+Shift+L) -------------------------------
+  let searchOpen = false;
+  let searchQuery = '';
+  let searchInputEl: HTMLInputElement | null = null;
+
+  function handleSearchToggle() {
+    searchOpen = !searchOpen;
+    if (searchOpen) {
+      requestAnimationFrame(() => searchInputEl?.focus());
+    } else {
+      closeSearch();
+    }
+  }
+
+  function activeSearchAddon() {
+    return pool?.getActive()?.terminalInstance.searchAddon || null;
+  }
+
+  function runSearch(incremental: boolean) {
+    const addon = activeSearchAddon();
+    if (!addon || !searchQuery) return;
+    try { addon.findNext(searchQuery, { incremental }); } catch { /* addon not ready */ }
+  }
+
+  function searchStep(forward: boolean) {
+    const addon = activeSearchAddon();
+    if (!addon || !searchQuery) return;
+    try {
+      if (forward) addon.findNext(searchQuery); else addon.findPrevious(searchQuery);
+    } catch { /* addon not ready */ }
+  }
+
+  function closeSearch() {
+    searchOpen = false;
+    searchQuery = '';
+    try { activeSearchAddon()?.clearDecorations(); } catch { /* no-op */ }
+    pool?.focusActive();
+  }
+
+  function handleSearchKeydown(e: KeyboardEvent) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      searchStep(!e.shiftKey);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      closeSearch();
+    }
+    e.stopPropagation();
+  }
+
   // Drop a single window's cached PoolEntry. Triggered after a tab is
   // deleted so that a later tab reusing the same window index doesn't
   // inherit the killed pane's stale WebSocket + xterm DOM.
@@ -126,6 +176,7 @@
     pool = new TerminalPool(poolContainerEl, terminalOptions);
 
     window.addEventListener('terminal:focus', handleFocusEvent);
+    window.addEventListener('terminal:search-toggle', handleSearchToggle);
     window.addEventListener('terminal:destroy-window', handleDestroyWindow as EventListener);
     window.addEventListener('terminal:destroy-session', handleDestroySession as EventListener);
 
@@ -193,6 +244,7 @@
       resizeObserver.disconnect();
       window.removeEventListener('resize', handleResize);
       window.removeEventListener('terminal:focus', handleFocusEvent);
+      window.removeEventListener('terminal:search-toggle', handleSearchToggle);
       window.removeEventListener('terminal:destroy-window', handleDestroyWindow as EventListener);
       window.removeEventListener('terminal:destroy-session', handleDestroySession as EventListener);
       poolContainerEl.removeEventListener('keydown', handleTerminalKeydown, true);
@@ -396,6 +448,21 @@
 
 <div class="terminal-wrapper">
   <div class="terminal-pool-container" bind:this={poolContainerEl}></div>
+  {#if searchOpen}
+    <div class="terminal-search">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+      <input
+        bind:this={searchInputEl}
+        bind:value={searchQuery}
+        placeholder={$t('terminal.searchPlaceholder')}
+        on:input={() => runSearch(true)}
+        on:keydown={handleSearchKeydown}
+      />
+      <button class="search-nav" title={$t('terminal.searchPrev')} on:click={() => searchStep(false)}>▲</button>
+      <button class="search-nav" title={$t('terminal.searchNext')} on:click={() => searchStep(true)}>▼</button>
+      <button class="search-nav close" title="Esc" on:click={closeSearch}>×</button>
+    </div>
+  {/if}
   {#if showPlaceholder}
     <div class="terminal-placeholder">
       <span class="placeholder-icon">{placeholderIcons[placeholderIdx]}</span>
@@ -410,7 +477,45 @@
     display: flex;
     flex-direction: column;
     background: #0a0a0f;
+    /* positioning context for the floating search bar */
+    position: relative;
   }
+
+  .terminal-search {
+    position: absolute;
+    top: 8px;
+    right: 14px;
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 8px;
+    border-radius: 8px;
+    border: 1px solid rgba(139, 92, 246, 0.35);
+    background: rgba(15, 15, 26, 0.95);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+    color: #71717a;
+  }
+  .terminal-search input {
+    width: 200px;
+    background: transparent;
+    border: 0;
+    outline: 0;
+    color: #e4e4e7;
+    font-size: 12px;
+  }
+  .terminal-search input::placeholder { color: #52525b; }
+  .search-nav {
+    border: 0;
+    background: transparent;
+    color: #a1a1aa;
+    cursor: pointer;
+    font-size: 11px;
+    padding: 2px 4px;
+    border-radius: 4px;
+  }
+  .search-nav:hover { color: #e4e4e7; background: rgba(139, 92, 246, 0.15); }
+  .search-nav.close { font-size: 15px; line-height: 1; }
 
   .terminal-pool-container {
     flex: 1;
