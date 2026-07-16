@@ -205,13 +205,21 @@ export function createTerminal(container: HTMLElement, options: Partial<Terminal
     }
 
     // Shift+Enter: insert a newline instead of submitting.
-    // A bare \n does NOT work — agent CLIs (Claude Code's ink included)
-    // normalize LF and CR to the same "return" action, so it just submits.
-    // Send backslash+CR instead: that's the line-continuation sequence the
-    // agents treat as "insert newline", and it's exactly what Claude Code's
-    // own /terminal-setup binds Shift+Enter to in VSCode/iTerm2.
-    if (event.shiftKey && event.key === 'Enter' && event.type === 'keydown') {
-      (terminal as any)._core.coreService.triggerDataEvent('\\\r', true);
+    // Send the CSI-u (kitty keyboard protocol) encoding of Shift+Enter.
+    // Verified end-to-end on this exact path (xterm → WS → tmux attach
+    // client PTY → pane running Claude Code): the pane receives it intact
+    // and Claude inserts a newline without submitting. The alternatives all
+    // failed: bare \n and ESC+CR submit (ink normalizes them to "return"),
+    // backslash+CR was chunk-timing dependent (flaky).
+    //
+    // IMPORTANT: this handler is invoked for keydown, keypress AND keyup of
+    // the same physical keystroke. Swallow ALL of them — returning true for
+    // the keypress lets xterm ALSO emit its default "\r", so the pane got
+    // "newline, then submit", which looked exactly like a plain submit.
+    if (event.shiftKey && event.key === 'Enter') {
+      if (event.type === 'keydown') {
+        (terminal as any)._core.coreService.triggerDataEvent('\x1b[13;2u', true);
+      }
       return false;
     }
 
