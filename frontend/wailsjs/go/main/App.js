@@ -102,6 +102,14 @@ export function GetAgents() {
   return window['go']['main']['App']['GetAgents']();
 }
 
+export function GetClaudeUsage() {
+  return window['go']['main']['App']['GetClaudeUsage']();
+}
+
+export function GetCodexUsage() {
+  return window['go']['main']['App']['GetCodexUsage']();
+}
+
 export function GetExtraArgs(arg1, arg2) {
   return window['go']['main']['App']['GetExtraArgs'](arg1, arg2);
 }

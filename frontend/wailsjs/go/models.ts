@@ -40,6 +40,120 @@ export namespace main {
 	        this.timestamp = source["timestamp"];
 	    }
 	}
+	export class ClaudeUsageWindow {
+	    utilization: number;
+	    resetsAt: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ClaudeUsageWindow(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.utilization = source["utilization"];
+	        this.resetsAt = source["resetsAt"];
+	    }
+	}
+	export class ClaudeUsageInfo {
+	    available: boolean;
+	    fiveHour: ClaudeUsageWindow;
+	    sevenDay: ClaudeUsageWindow;
+	    sevenDaySonnet: ClaudeUsageWindow;
+	    sevenDayOpus: ClaudeUsageWindow;
+	    fetchedAt: string;
+	    error?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ClaudeUsageInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.available = source["available"];
+	        this.fiveHour = this.convertValues(source["fiveHour"], ClaudeUsageWindow);
+	        this.sevenDay = this.convertValues(source["sevenDay"], ClaudeUsageWindow);
+	        this.sevenDaySonnet = this.convertValues(source["sevenDaySonnet"], ClaudeUsageWindow);
+	        this.sevenDayOpus = this.convertValues(source["sevenDayOpus"], ClaudeUsageWindow);
+	        this.fetchedAt = source["fetchedAt"];
+	        this.error = source["error"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
+	export class CodexUsageWindow {
+	    usedPercent: number;
+	    windowMinutes: number;
+	    resetsAt: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new CodexUsageWindow(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.usedPercent = source["usedPercent"];
+	        this.windowMinutes = source["windowMinutes"];
+	        this.resetsAt = source["resetsAt"];
+	    }
+	}
+	export class CodexUsageInfo {
+	    available: boolean;
+	    primary?: CodexUsageWindow;
+	    secondary?: CodexUsageWindow;
+	    planType?: string;
+	    snapshotAt?: string;
+	    error?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new CodexUsageInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.available = source["available"];
+	        this.primary = this.convertValues(source["primary"], CodexUsageWindow);
+	        this.secondary = this.convertValues(source["secondary"], CodexUsageWindow);
+	        this.planType = source["planType"];
+	        this.snapshotAt = source["snapshotAt"];
+	        this.error = source["error"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
 	export class DictationSettings {
 	    enabled: boolean;
 	    googleApiKey: string;
@@ -384,6 +498,10 @@ export namespace main {
 	    markedSessionId: string;
 	    language: string;
 	    terminalRenderer: string;
+	    notifyOnWaiting: boolean;
+	    notifyDesktop: boolean;
+	    notifyNtfy: boolean;
+	    ntfyUrl: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new SettingsInfo(source);
@@ -398,6 +516,10 @@ export namespace main {
 	        this.markedSessionId = source["markedSessionId"];
 	        this.language = source["language"];
 	        this.terminalRenderer = source["terminalRenderer"];
+	        this.notifyOnWaiting = source["notifyOnWaiting"];
+	        this.notifyDesktop = source["notifyDesktop"];
+	        this.notifyNtfy = source["notifyNtfy"];
+	        this.ntfyUrl = source["ntfyUrl"];
 	    }
 	}
 	export class SidebarUpdate {

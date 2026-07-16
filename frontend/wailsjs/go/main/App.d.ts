@@ -53,6 +53,10 @@ export function GetActivities():Promise<Record<string, string>>;
 
 export function GetAgents():Promise<Array<main.AgentInfo>>;
 
+export function GetClaudeUsage():Promise<main.ClaudeUsageInfo>;
+
+export function GetCodexUsage():Promise<main.CodexUsageInfo>;
+
 export function GetExtraArgs(arg1:string,arg2:number):Promise<string>;
 
 export function GetFullDiff(arg1:string):Promise<main.DiffData>;

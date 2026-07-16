@@ -32,6 +32,58 @@
   const dispatch = createEventDispatcher();
   const GIT_REFRESH_INTERVAL = 15_000;
 
+  // Claude subscription utilization (5h/7d rate-limit windows) — same data
+  // the user's KDE usage widget shows. Backend caches for 60s, so fetching
+  // on the git refresh cadence is free.
+  interface UsageWindow { utilization: number; resetsAt: string }
+  interface ClaudeUsage {
+    available: boolean;
+    fiveHour: UsageWindow;
+    sevenDay: UsageWindow;
+    sevenDaySonnet: UsageWindow;
+    sevenDayOpus: UsageWindow;
+  }
+  let claudeUsage: ClaudeUsage | null = null;
+
+  // Codex (GPT) usage: newest rate-limit snapshot from the Codex CLI's own
+  // session logs. Windows vary by plan (e.g. weekly only, or 5h + weekly).
+  interface CodexWindow { usedPercent: number; windowMinutes: number; resetsAt: number }
+  interface CodexUsage {
+    available: boolean;
+    primary?: CodexWindow;
+    secondary?: CodexWindow;
+    planType?: string;
+  }
+  let codexUsage: CodexUsage | null = null;
+
+  async function refreshUsage() {
+    try {
+      claudeUsage = (await App.GetClaudeUsage()) as ClaudeUsage;
+    } catch { /* usage is optional decoration */ }
+    try {
+      codexUsage = (await App.GetCodexUsage()) as CodexUsage;
+    } catch { /* optional */ }
+  }
+
+  function formatReset(value: string): string {
+    if (!value) return '';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '';
+    return date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+  }
+
+  // "300 → 5h", "10080 → 7d" — plan-dependent Codex window labels.
+  function windowLabel(minutes: number): string {
+    if (!minutes) return '';
+    if (minutes < 1440) return `${Math.round(minutes / 60)}h`;
+    return `${Math.round(minutes / 1440)}d`;
+  }
+
+  function formatResetUnix(ts: number): string {
+    if (!ts) return '';
+    return new Date(ts * 1000).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+  }
+
   let filter = '';
   let gitSummaries: ProjectGitSummary[] = [];
   let loading = true;
@@ -104,7 +156,11 @@
     mounted = true;
     loadedProjectId = $activeProjectId;
     void refreshGit();
-    refreshTimer = setInterval(() => void refreshGit(), GIT_REFRESH_INTERVAL);
+    void refreshUsage();
+    refreshTimer = setInterval(() => {
+      void refreshGit();
+      void refreshUsage();
+    }, GIT_REFRESH_INTERVAL);
   });
 
   onDestroy(() => {
@@ -278,6 +334,69 @@
       <div class="summary-card dirty"><span class="summary-label">{$t('dashboard.dirtyRepositories')}</span><strong>{summary.dirtyRepositories}</strong></div>
     </section>
 
+    {#if claudeUsage?.available || codexUsage?.available}
+      <section class="usage-strip">
+        {#if claudeUsage?.available}
+          <div class="usage-row">
+            <span class="usage-brand">{$t('dashboard.claudeUsage')}</span>
+            <div class="usage-window">
+              <span class="usage-label">{$t('dashboard.usage5h')}</span>
+              <div class="usage-bar">
+                <div class="usage-fill" class:warn={claudeUsage.fiveHour.utilization >= 70} class:hot={claudeUsage.fiveHour.utilization >= 90}
+                  style="width:{Math.min(100, claudeUsage.fiveHour.utilization)}%"></div>
+              </div>
+              <span class="usage-pct">{Math.round(claudeUsage.fiveHour.utilization)}%</span>
+              {#if claudeUsage.fiveHour.resetsAt}
+                <span class="usage-reset">{$t('dashboard.usageResets', { time: formatReset(claudeUsage.fiveHour.resetsAt) })}</span>
+              {/if}
+            </div>
+            <div class="usage-window">
+              <span class="usage-label">{$t('dashboard.usage7d')}</span>
+              <div class="usage-bar">
+                <div class="usage-fill" class:warn={claudeUsage.sevenDay.utilization >= 70} class:hot={claudeUsage.sevenDay.utilization >= 90}
+                  style="width:{Math.min(100, claudeUsage.sevenDay.utilization)}%"></div>
+              </div>
+              <span class="usage-pct">{Math.round(claudeUsage.sevenDay.utilization)}%</span>
+            </div>
+            <span class="usage-models" title="Sonnet / Opus (7d)">
+              S {Math.round(claudeUsage.sevenDaySonnet.utilization)}% · O {Math.round(claudeUsage.sevenDayOpus.utilization)}%
+            </span>
+          </div>
+        {/if}
+        {#if codexUsage?.available}
+          <div class="usage-row">
+            <span class="usage-brand gpt">{$t('dashboard.codexUsage')}</span>
+            {#if codexUsage.primary}
+              <div class="usage-window">
+                <span class="usage-label">{windowLabel(codexUsage.primary.windowMinutes)}</span>
+                <div class="usage-bar">
+                  <div class="usage-fill" class:warn={codexUsage.primary.usedPercent >= 70} class:hot={codexUsage.primary.usedPercent >= 90}
+                    style="width:{Math.min(100, codexUsage.primary.usedPercent)}%"></div>
+                </div>
+                <span class="usage-pct">{Math.round(codexUsage.primary.usedPercent)}%</span>
+                {#if codexUsage.primary.resetsAt}
+                  <span class="usage-reset">{$t('dashboard.usageResets', { time: formatResetUnix(codexUsage.primary.resetsAt) })}</span>
+                {/if}
+              </div>
+            {/if}
+            {#if codexUsage.secondary}
+              <div class="usage-window">
+                <span class="usage-label">{windowLabel(codexUsage.secondary.windowMinutes)}</span>
+                <div class="usage-bar">
+                  <div class="usage-fill" class:warn={codexUsage.secondary.usedPercent >= 70} class:hot={codexUsage.secondary.usedPercent >= 90}
+                    style="width:{Math.min(100, codexUsage.secondary.usedPercent)}%"></div>
+                </div>
+                <span class="usage-pct">{Math.round(codexUsage.secondary.usedPercent)}%</span>
+              </div>
+            {/if}
+            {#if codexUsage.planType}
+              <span class="usage-models">{codexUsage.planType}</span>
+            {/if}
+          </div>
+        {/if}
+      </section>
+    {/if}
+
     <div class="toolbar">
       <div class="filter-box">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
@@ -444,6 +563,20 @@
   .summary-card.stopped .summary-dot { background:#ff5f87; }
   .summary-card.repositories svg { color:#a78bfa; }
   .summary-card.dirty strong { color:#fbbf24; }
+
+  .usage-strip { display:flex; flex-direction:column; gap:7px; margin:-6px 0 15px; padding:9px 14px; border:1px solid rgba(255,255,255,.065); border-radius:10px; background:rgba(20,20,32,.72); }
+  .usage-row { display:flex; align-items:center; gap:14px; flex-wrap:wrap; }
+  .usage-brand { color:#a78bfa; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; min-width:120px; }
+  .usage-brand.gpt { color:#4ade80; }
+  .usage-window { display:flex; align-items:center; gap:8px; min-width:0; }
+  .usage-label { color:#71717a; font-size:11px; white-space:nowrap; }
+  .usage-bar { width:120px; height:6px; border-radius:999px; background:rgba(255,255,255,.07); overflow:hidden; }
+  .usage-fill { height:100%; border-radius:999px; background:linear-gradient(90deg,#7c3aed,#a78bfa); transition:width .4s ease; }
+  .usage-fill.warn { background:linear-gradient(90deg,#d97706,#fbbf24); }
+  .usage-fill.hot { background:linear-gradient(90deg,#dc2626,#fb7185); }
+  .usage-pct { color:#e4e4e7; font-size:12px; font-weight:650; min-width:34px; }
+  .usage-reset { color:#52525b; font-size:10px; white-space:nowrap; }
+  .usage-models { margin-left:auto; color:#71717a; font-size:11px; white-space:nowrap; }
 
   .toolbar { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:15px; }
   .filter-box { flex:1; max-width:540px; display:flex; align-items:center; gap:9px; padding:0 12px; height:38px; border-radius:8px; border:1px solid rgba(255,255,255,.075); background:rgba(8,8,14,.68); color:#52525b; }
