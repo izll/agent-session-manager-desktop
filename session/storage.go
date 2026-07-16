@@ -44,6 +44,13 @@ type Settings struct {
 	// TerminalRenderer selects the xterm.js renderer: "canvas" (default),
 	// "webgl" (fastest but flaky on some WebKitGTK), or "dom" (most compatible).
 	TerminalRenderer string `json:"terminal_renderer,omitempty"`
+	// Attention notifications: fire when an agent flips to "waiting"
+	// (needs user input). Desktop uses notify-send/osascript; ntfy POSTs
+	// to NtfyURL (e.g. https://ntfy.sh/my-topic) for mobile push.
+	NotifyOnWaiting bool   `json:"notify_on_waiting,omitempty"`
+	NotifyDesktop   bool   `json:"notify_desktop,omitempty"`
+	NotifyNtfy      bool   `json:"notify_ntfy,omitempty"`
+	NtfyURL         string `json:"ntfy_url,omitempty"`
 }
 
 type StorageData struct {

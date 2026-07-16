@@ -11,6 +11,10 @@ export interface Settings {
   markedSessionId: string;
   language: string;
   terminalRenderer: TerminalRenderer;
+  notifyOnWaiting: boolean;
+  notifyDesktop: boolean;
+  notifyNtfy: boolean;
+  ntfyUrl: string;
 }
 
 export const settings = writable<Settings>({
@@ -20,7 +24,11 @@ export const settings = writable<Settings>({
   splitView: false,
   markedSessionId: '',
   language: 'en',
-  terminalRenderer: 'canvas'
+  terminalRenderer: 'canvas',
+  notifyOnWaiting: false,
+  notifyDesktop: true,
+  notifyNtfy: false,
+  ntfyUrl: ''
 });
 
 export async function loadSettings() {

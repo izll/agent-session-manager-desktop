@@ -73,6 +73,10 @@ func (a *App) startup(ctx context.Context) {
 		runtime.LogError(ctx, fmt.Sprintf("Failed to start terminal server: %v", err))
 	}
 
+	// Attention notifications (desktop/ntfy when an agent starts waiting).
+	// Backend-side so it keeps working while the window is unfocused.
+	a.startAttentionWatcher()
+
 	// Set dictation callbacks (instance created in main.go)
 	a.dictation.SetTerminalServer(a.termServer)
 	a.dictation.SetStateChangeCallback(func(listening bool) {
@@ -1986,6 +1990,10 @@ type SettingsInfo struct {
 	MarkedSessionID  string `json:"markedSessionId"`
 	Language         string `json:"language"`
 	TerminalRenderer string `json:"terminalRenderer"`
+	NotifyOnWaiting  bool   `json:"notifyOnWaiting"`
+	NotifyDesktop    bool   `json:"notifyDesktop"`
+	NotifyNtfy       bool   `json:"notifyNtfy"`
+	NtfyURL          string `json:"ntfyUrl"`
 }
 
 // GetSettings returns UI settings
@@ -2018,6 +2026,10 @@ func (a *App) GetSettings() (*SettingsInfo, error) {
 		MarkedSessionID:  settings.MarkedSessionID,
 		Language:         lang,
 		TerminalRenderer: renderer,
+		NotifyOnWaiting:  settings.NotifyOnWaiting,
+		NotifyDesktop:    settings.NotifyDesktop,
+		NotifyNtfy:       settings.NotifyNtfy,
+		NtfyURL:          settings.NtfyURL,
 	}, nil
 }
 
@@ -2031,6 +2043,10 @@ func (a *App) SaveSettings(settings SettingsInfo) error {
 		MarkedSessionID:  settings.MarkedSessionID,
 		Language:         settings.Language,
 		TerminalRenderer: settings.TerminalRenderer,
+		NotifyOnWaiting:  settings.NotifyOnWaiting,
+		NotifyDesktop:    settings.NotifyDesktop,
+		NotifyNtfy:       settings.NotifyNtfy,
+		NtfyURL:          settings.NtfyURL,
 	})
 }
 

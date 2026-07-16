@@ -19,7 +19,8 @@
   import ResumeChoiceDialog from './lib/components/Dialogs/ResumeChoiceDialog.svelte';
   import ResumeSessionPickerDialog from './lib/components/Dialogs/ResumeSessionPickerDialog.svelte';
   import type { Session } from './lib/stores/sessions';
-  import { loadSessions, selectedSession, selectedSessionId, selectedWindowIdx, startSession, stopSession, stopTab, restartTab, restartTabWithResume, deleteSession, toggleFavorite, reorderSession, selectPrevSession, selectNextSession } from './lib/stores/sessions';
+  import { sessions, loadSessions, selectSession, selectedSession, selectedSessionId, selectedWindowIdx, startSession, stopSession, stopTab, restartTab, restartTabWithResume, deleteSession, toggleFavorite, reorderSession, selectPrevSession, selectNextSession } from './lib/stores/sessions';
+  import { activities } from './lib/stores/activities';
   import { loadProjects } from './lib/stores/projects';
   import { appView, showDashboard } from './lib/stores/navigation';
   import { loadSettings, settings } from './lib/stores/settings';
@@ -135,6 +136,17 @@
 
   $: actualSidebarWidth = sidebarCollapsed ? SIDEBAR_COLLAPSED : sidebarWidth;
 
+  // Sessions currently waiting for user input — drives the header ⏳ badge.
+  $: waitingSessions = $sessions.filter(s => s.status === 'running' && $activities[s.id] === 'waiting');
+
+  function jumpToNextWaiting() {
+    if (waitingSessions.length === 0) return;
+    const idx = waitingSessions.findIndex(s => s.id === $selectedSessionId);
+    const next = waitingSessions[(idx + 1) % waitingSessions.length];
+    selectSession(next.id);
+    focusTerminal();
+  }
+
   // Auto-close overlay when session selection changes
   let prevSelectedId = $selectedSessionId;
   $: if (sidebarOverlayOpen && $selectedSessionId !== prevSelectedId) {
@@ -211,6 +223,10 @@
       case 'f': // global search
         e.preventDefault();
         showGlobalSearch = true;
+        return;
+      case 'l': // Locate in terminal scrollback (search overlay)
+        e.preventDefault();
+        window.dispatchEvent(new CustomEvent('terminal:search-toggle'));
         return;
       case 'n': // new session
         e.preventDefault();
@@ -516,6 +532,14 @@
     </div>
 
     <div class="flex items-center gap-3" style="--wails-draggable:no-drag">
+      {#if waitingSessions.length > 0}
+        <!-- Attention badge: sessions waiting for user input. Click cycles
+             through them so none gets forgotten. -->
+        <button class="btn waiting-badge" on:click={jumpToNextWaiting}
+          title={$t('header.waitingSessions', { n: waitingSessions.length })}>
+          ⏳ {waitingSessions.length}
+        </button>
+      {/if}
       <button class="btn btn-ghost" class:active-view={$appView === 'dashboard'} on:click={showDashboard} title={$t('dashboard.open')}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <rect x="3" y="3" width="7" height="7" rx="1"/>
@@ -708,6 +732,21 @@
 </main>
 
 <style>
+  .waiting-badge {
+    color: #67e8f9;
+    background: rgba(0, 206, 209, 0.12);
+    border: 1px solid rgba(0, 206, 209, 0.3);
+    border-radius: 8px;
+    padding: 5px 10px;
+    font-size: 12px;
+    font-weight: 650;
+    cursor: pointer;
+    transition: background 0.15s ease;
+  }
+  .waiting-badge:hover {
+    background: rgba(0, 206, 209, 0.22);
+  }
+
   :global(body) {
     margin: 0;
     padding: 0;

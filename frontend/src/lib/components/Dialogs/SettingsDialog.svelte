@@ -217,7 +217,7 @@
     }
   }
 
-  function toggle(key: 'hideStatusLines' | 'showAgentIcons' | 'compactList') {
+  function toggle(key: 'hideStatusLines' | 'showAgentIcons' | 'compactList' | 'notifyOnWaiting' | 'notifyDesktop' | 'notifyNtfy') {
     saveSettings({ [key]: !$settings[key] });
   }
 
@@ -356,6 +356,76 @@
                 </span>
               </button>
             </label>
+          </div>
+
+          <div class="settings-section">
+            <h3>{$t('settings.notifications')}</h3>
+
+            <label class="setting-item">
+              <span class="setting-info">
+                <span class="setting-label">{$t('settings.notifyOnWaiting')}</span>
+                <span class="setting-desc">{$t('settings.notifyOnWaitingDesc')}</span>
+              </span>
+              <button
+                class="toggle-btn"
+                class:active={$settings.notifyOnWaiting}
+                on:click={() => toggle('notifyOnWaiting')}
+              >
+                <span class="toggle-track">
+                  <span class="toggle-thumb"></span>
+                </span>
+              </button>
+            </label>
+
+            {#if $settings.notifyOnWaiting}
+              <label class="setting-item">
+                <span class="setting-info">
+                  <span class="setting-label">{$t('settings.notifyDesktop')}</span>
+                  <span class="setting-desc">{$t('settings.notifyDesktopDesc')}</span>
+                </span>
+                <button
+                  class="toggle-btn"
+                  class:active={$settings.notifyDesktop}
+                  on:click={() => toggle('notifyDesktop')}
+                >
+                  <span class="toggle-track">
+                    <span class="toggle-thumb"></span>
+                  </span>
+                </button>
+              </label>
+
+              <label class="setting-item">
+                <span class="setting-info">
+                  <span class="setting-label">{$t('settings.notifyNtfy')}</span>
+                  <span class="setting-desc">{$t('settings.notifyNtfyDesc')}</span>
+                </span>
+                <button
+                  class="toggle-btn"
+                  class:active={$settings.notifyNtfy}
+                  on:click={() => toggle('notifyNtfy')}
+                >
+                  <span class="toggle-track">
+                    <span class="toggle-thumb"></span>
+                  </span>
+                </button>
+              </label>
+
+              {#if $settings.notifyNtfy}
+                <div class="setting-item input-item">
+                  <span class="setting-info">
+                    <span class="setting-label">{$t('settings.ntfyUrl')}</span>
+                    <span class="setting-desc">{$t('settings.ntfyUrlDesc')}</span>
+                  </span>
+                  <input
+                    type="text"
+                    class="setting-input"
+                    placeholder="https://ntfy.sh/my-topic"
+                    value={$settings.ntfyUrl}
+                    on:change={(e) => saveSettings({ ntfyUrl: e.currentTarget.value.trim() })}
+                  />
+                </div>
+              {/if}
+            {/if}
           </div>
         {/if}
 
