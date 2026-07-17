@@ -77,6 +77,8 @@ export function GetNextTask(arg1:string):Promise<main.TaskInfo>;
 
 export function GetPreview(arg1:string,arg2:number):Promise<main.PreviewData>;
 
+export function GetProjectActivityStatistics(arg1:string,arg2:number):Promise<main.ProjectActivityStatistics>;
+
 export function GetProjectGitSummaries(arg1:string):Promise<Array<main.ProjectGitSummary>>;
 
 export function GetProjectSessions(arg1:string):Promise<Array<main.SessionInfo>>;
@@ -131,8 +133,6 @@ export function MoveTask(arg1:string,arg2:string,arg3:string):Promise<void>;
 
 export function PerformUpdate(arg1:string):Promise<void>;
 
-export function SetTabStatusLineVisibility(arg1:string,arg2:number,arg3:boolean):Promise<void>;
-
 export function QuickReplyTab(arg1:string,arg2:number,arg3:string):Promise<void>;
 
 export function RefreshWindow(arg1:string,arg2:number):Promise<void>;
@@ -174,6 +174,8 @@ export function SetSessionNotes(arg1:string,arg2:string):Promise<void>;
 export function SetTabColor(arg1:string,arg2:number,arg3:string,arg4:string):Promise<void>;
 
 export function SetTabNotes(arg1:string,arg2:number,arg3:string):Promise<void>;
+
+export function SetTabStatusLineVisibility(arg1:string,arg2:number,arg3:boolean):Promise<void>;
 
 export function SetWindowAutoYes(arg1:string,arg2:number,arg3:boolean):Promise<void>;
 

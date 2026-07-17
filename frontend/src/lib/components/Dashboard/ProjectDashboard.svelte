@@ -3,6 +3,7 @@
   import * as App from '../../../../wailsjs/go/main/App';
   import AgentIcon from '../common/AgentIcon.svelte';
   import StatusIndicator from '../common/StatusIndicator.svelte';
+  import ProjectStatistics from './ProjectStatistics.svelte';
   import { sessions, selectSession, selectWindow, toggleGroupCollapse, type Session, type Group } from '../../stores/sessions';
   import { groups } from '../../stores/sessions';
   import { activities, type Activity } from '../../stores/activities';
@@ -85,6 +86,8 @@
   }
 
   let filter = '';
+  let dashboardTab: 'overview' | 'statistics' = 'overview';
+  let previousDashboardTab: 'overview' | 'statistics' = 'overview';
   let gitSummaries: ProjectGitSummary[] = [];
   let loading = true;
   let refreshing = false;
@@ -143,6 +146,7 @@
   // flash over the newly-selected project's sessions.
   $: if (mounted && $activeProjectId !== loadedProjectId) {
     loadedProjectId = $activeProjectId;
+    dashboardTab = 'overview';
     loadGeneration++;
     refreshing = false;
     gitSummaries = [];
@@ -152,14 +156,22 @@
     void refreshGit();
   }
 
+  $: if (mounted && dashboardTab === 'overview' && previousDashboardTab === 'statistics') {
+    void refreshGit();
+    void refreshUsage();
+  }
+  $: previousDashboardTab = dashboardTab;
+
   onMount(() => {
     mounted = true;
     loadedProjectId = $activeProjectId;
     void refreshGit();
     void refreshUsage();
     refreshTimer = setInterval(() => {
-      void refreshGit();
-      void refreshUsage();
+      if (dashboardTab === 'overview') {
+        void refreshGit();
+        void refreshUsage();
+      }
     }, GIT_REFRESH_INTERVAL);
   });
 
@@ -301,26 +313,38 @@
     <header class="dashboard-header">
       <div>
         <div class="eyebrow">{currentProject?.name || $t('project.default')}</div>
-        <h1>{$t('dashboard.title')}</h1>
-        <p>{$t('dashboard.subtitle')}</p>
+        <h1>{dashboardTab === 'overview' ? $t('dashboard.title') : $t('statistics.title')}</h1>
+        <p>{dashboardTab === 'overview' ? $t('dashboard.subtitle') : $t('statistics.subtitle')}</p>
       </div>
-      <div class="header-actions">
-        <button class="secondary-button" class:spinning={refreshing} on:click={() => refreshGit()} disabled={refreshing} title={$t('dashboard.refresh')}>
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M23 4v6h-6M1 20v-6h6"/>
-            <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
-          </svg>
-          {$t('dashboard.refresh')}
-        </button>
-        <button class="primary-button" on:click={() => dispatch('newSession')}>
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-            <path d="M12 5v14M5 12h14"/>
-          </svg>
-          {$t('dashboard.newSession')}
-        </button>
-      </div>
+      {#if dashboardTab === 'overview'}
+        <div class="header-actions">
+          <button class="secondary-button" class:spinning={refreshing} on:click={() => refreshGit()} disabled={refreshing} title={$t('dashboard.refresh')}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M23 4v6h-6M1 20v-6h6"/>
+              <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+            </svg>
+            {$t('dashboard.refresh')}
+          </button>
+          <button class="primary-button" on:click={() => dispatch('newSession')}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <path d="M12 5v14M5 12h14"/>
+            </svg>
+            {$t('dashboard.newSession')}
+          </button>
+        </div>
+      {/if}
     </header>
 
+    <div class="dashboard-tabs" role="tablist" aria-label={$t('statistics.navigation')}>
+      <button role="tab" aria-selected={dashboardTab === 'overview'} class:active={dashboardTab === 'overview'} on:click={() => dashboardTab = 'overview'}>
+        {$t('statistics.overview')}
+      </button>
+      <button role="tab" aria-selected={dashboardTab === 'statistics'} class:active={dashboardTab === 'statistics'} on:click={() => dashboardTab = 'statistics'}>
+        {$t('statistics.tab')}
+      </button>
+    </div>
+
+    {#if dashboardTab === 'overview'}
     <section class="summary-grid">
       <div class="summary-card total"><span class="summary-label">{$t('dashboard.totalSessions')}</span><strong>{summary.total}</strong></div>
       <div class="summary-card running"><span class="summary-dot"></span><span class="summary-label">{$t('dashboard.running')}</span><strong>{summary.running}</strong></div>
@@ -531,6 +555,9 @@
       {/if}
       {/each}
     {/if}
+    {:else}
+      <ProjectStatistics projectId={$activeProjectId} onOpenSession={openSession} />
+    {/if}
   </div>
 </div>
 
@@ -551,6 +578,11 @@
   .secondary-button:disabled { opacity:.55; cursor:default; transform:none; }
   .spinning svg { animation:spin 1s linear infinite; }
   @keyframes spin { to { transform:rotate(360deg); } }
+
+  .dashboard-tabs { display:inline-flex; gap:3px; margin:-5px 0 18px; padding:3px; border:1px solid rgba(255,255,255,.065); border-radius:9px; background:rgba(12,12,20,.72); }
+  .dashboard-tabs button { padding:7px 13px; border:0; border-radius:6px; color:#71717a; background:transparent; cursor:pointer; font-size:11px; font-weight:650; transition:.15s ease; }
+  .dashboard-tabs button:hover { color:#d4d4d8; }
+  .dashboard-tabs button.active { color:#ede9fe; background:rgba(139,92,246,.18); box-shadow:inset 0 0 0 1px rgba(139,92,246,.2); }
 
   .summary-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(125px,1fr)); gap:9px; margin-bottom:18px; }
   .summary-card { min-width:0; display:grid; grid-template-columns:auto 1fr auto; align-items:center; gap:7px; padding:13px 14px; border:1px solid rgba(255,255,255,.065); border-radius:10px; background:rgba(20,20,32,.72); color:#71717a; }

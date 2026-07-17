@@ -145,8 +145,16 @@ func (i *Instance) DetectActivity() SessionActivity {
 
 // DetectActivityForWindow analyzes a specific tmux window to determine activity
 func (i *Instance) DetectActivityForWindow(windowIdx int) SessionActivity {
+	activity, _ := i.DetectActivityForWindowWithValidity(windowIdx)
+	return activity
+}
+
+// DetectActivityForWindowWithValidity distinguishes a real idle detection from
+// a failed tmux probe. Callers collecting statistics must not turn capture
+// errors into idle time.
+func (i *Instance) DetectActivityForWindowWithValidity(windowIdx int) (SessionActivity, bool) {
 	if !i.IsAlive() {
-		return ActivityIdle
+		return ActivityIdle, false
 	}
 
 	target := i.GetCaptureTarget(windowIdx)
@@ -167,13 +175,13 @@ func (i *Instance) DetectActivityForWindow(windowIdx int) SessionActivity {
 
 	// Terminal tabs are not AI agents - skip activity detection entirely
 	if agent == AgentTerminal {
-		return ActivityIdle
+		return ActivityIdle, true
 	}
 
 	cmd := exec.Command("tmux", "capture-pane", "-t", target, "-p", "-S", "-50")
 	output, err := cmd.Output()
 	if err != nil {
-		return ActivityIdle
+		return ActivityIdle, false
 	}
 
 	lines := strings.Split(string(output), "\n")
@@ -194,12 +202,12 @@ func (i *Instance) DetectActivityForWindow(windowIdx int) SessionActivity {
 	// If we got idle but were busy recently, keep reporting busy.
 	if activity == ActivityBusy {
 		lastBusyTime.Store(target, time.Now())
-		return ActivityBusy
+		return ActivityBusy, true
 	}
 	if activity == ActivityIdle {
 		if lastTime, ok := lastBusyTime.Load(target); ok {
 			if time.Since(lastTime.(time.Time)) < busyGracePeriod {
-				return ActivityBusy
+				return ActivityBusy, true
 			}
 			// Grace period expired, clean up
 			lastBusyTime.Delete(target)
@@ -210,7 +218,7 @@ func (i *Instance) DetectActivityForWindow(windowIdx int) SessionActivity {
 		lastBusyTime.Delete(target)
 	}
 
-	return activity
+	return activity, true
 }
 
 // DetectAggregatedActivity checks all followed windows and returns highest priority activity

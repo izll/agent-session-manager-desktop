@@ -150,6 +150,10 @@ export function GetPreview(arg1, arg2) {
   return window['go']['main']['App']['GetPreview'](arg1, arg2);
 }
 
+export function GetProjectActivityStatistics(arg1, arg2) {
+  return window['go']['main']['App']['GetProjectActivityStatistics'](arg1, arg2);
+}
+
 export function GetProjectGitSummaries(arg1) {
   return window['go']['main']['App']['GetProjectGitSummaries'](arg1);
 }
@@ -258,10 +262,6 @@ export function PerformUpdate(arg1) {
   return window['go']['main']['App']['PerformUpdate'](arg1);
 }
 
-export function SetTabStatusLineVisibility(arg1, arg2, arg3) {
-  return window['go']['main']['App']['SetTabStatusLineVisibility'](arg1, arg2, arg3);
-}
-
 export function QuickReplyTab(arg1, arg2, arg3) {
   return window['go']['main']['App']['QuickReplyTab'](arg1, arg2, arg3);
 }
@@ -344,6 +344,10 @@ export function SetTabColor(arg1, arg2, arg3, arg4) {
 
 export function SetTabNotes(arg1, arg2, arg3) {
   return window['go']['main']['App']['SetTabNotes'](arg1, arg2, arg3);
+}
+
+export function SetTabStatusLineVisibility(arg1, arg2, arg3) {
+  return window['go']['main']['App']['SetTabStatusLineVisibility'](arg1, arg2, arg3);
 }
 
 export function SetWindowAutoYes(arg1, arg2, arg3) {

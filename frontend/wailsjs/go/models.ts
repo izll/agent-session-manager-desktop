@@ -1,5 +1,95 @@
 export namespace main {
 	
+	export class ActivityStatsAgent {
+	    agent: string;
+	    observedMs: number;
+	    busyMs: number;
+	    waitingMs: number;
+	    idleMs: number;
+	    waitingEvents: number;
+	    sharePercent: number;
+
+	    static createFrom(source: any = {}) {
+	        return new ActivityStatsAgent(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.agent = source["agent"];
+	        this.observedMs = source["observedMs"];
+	        this.busyMs = source["busyMs"];
+	        this.waitingMs = source["waitingMs"];
+	        this.idleMs = source["idleMs"];
+	        this.waitingEvents = source["waitingEvents"];
+	        this.sharePercent = source["sharePercent"];
+	    }
+	}
+	export class ActivityStatsDay {
+	    date: string;
+	    busyMs: number;
+	    waitingMs: number;
+	    idleMs: number;
+
+	    static createFrom(source: any = {}) {
+	        return new ActivityStatsDay(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.date = source["date"];
+	        this.busyMs = source["busyMs"];
+	        this.waitingMs = source["waitingMs"];
+	        this.idleMs = source["idleMs"];
+	    }
+	}
+	export class ActivityStatsSession {
+	    sessionId: string;
+	    sessionName: string;
+	    agents: string;
+	    observedMs: number;
+	    busyMs: number;
+	    waitingMs: number;
+	    idleMs: number;
+	    waitingEvents: number;
+
+	    static createFrom(source: any = {}) {
+	        return new ActivityStatsSession(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.sessionId = source["sessionId"];
+	        this.sessionName = source["sessionName"];
+	        this.agents = source["agents"];
+	        this.observedMs = source["observedMs"];
+	        this.busyMs = source["busyMs"];
+	        this.waitingMs = source["waitingMs"];
+	        this.idleMs = source["idleMs"];
+	        this.waitingEvents = source["waitingEvents"];
+	    }
+	}
+	export class ActivityStatsSummary {
+	    observedMs: number;
+	    busyMs: number;
+	    waitingMs: number;
+	    idleMs: number;
+	    waitingEvents: number;
+	    busyPercent: number;
+
+	    static createFrom(source: any = {}) {
+	        return new ActivityStatsSummary(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.observedMs = source["observedMs"];
+	        this.busyMs = source["busyMs"];
+	        this.waitingMs = source["waitingMs"];
+	        this.idleMs = source["idleMs"];
+	        this.waitingEvents = source["waitingEvents"];
+	        this.busyPercent = source["busyPercent"];
+	    }
+	}
 	export class AgentInfo {
 	    type: string;
 	    name: string;
@@ -392,6 +482,48 @@ export namespace main {
 	        this.activity = source["activity"];
 	    }
 	}
+	export class ProjectActivityStatistics {
+	    days: number;
+	    recordingFrom: string;
+	    updatedAt: string;
+	    summary: ActivityStatsSummary;
+	    series: ActivityStatsDay[];
+	    agents: ActivityStatsAgent[];
+	    sessions: ActivityStatsSession[];
+
+	    static createFrom(source: any = {}) {
+	        return new ProjectActivityStatistics(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.days = source["days"];
+	        this.recordingFrom = source["recordingFrom"];
+	        this.updatedAt = source["updatedAt"];
+	        this.summary = this.convertValues(source["summary"], ActivityStatsSummary);
+	        this.series = this.convertValues(source["series"], ActivityStatsDay);
+	        this.agents = this.convertValues(source["agents"], ActivityStatsAgent);
+	        this.sessions = this.convertValues(source["sessions"], ActivityStatsSession);
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class ProjectGitSummary {
 	    sessionId: string;
 	    path: string;
@@ -724,6 +856,7 @@ export namespace session {
 	    text_color?: string;
 	    background_color?: string;
 	    work_dir?: string;
+	    hide_status_line?: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new FollowedWindow(source);
@@ -743,6 +876,7 @@ export namespace session {
 	        this.text_color = source["text_color"];
 	        this.background_color = source["background_color"];
 	        this.work_dir = source["work_dir"];
+	        this.hide_status_line = source["hide_status_line"];
 	    }
 	}
 	export class WindowInfo {
@@ -773,4 +907,3 @@ export namespace session {
 	}
 
 }
-

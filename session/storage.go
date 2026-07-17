@@ -508,6 +508,20 @@ func (s *Storage) LoadAll() ([]*Instance, []*Group, error) {
 	return instances, groups, err
 }
 
+// LoadAllWithProjectSnapshot atomically captures the active project ID and its
+// data. Callers doing expensive work can attach the captured ID to their result
+// without an active-project ABA race.
+func (s *Storage) LoadAllWithProjectSnapshot() (string, []*Instance, []*Group, error) {
+	s.mu.Lock()
+	projectID := s.projectID
+	instances, groups, _, err := s.loadAllWithSettingsLocked()
+	s.mu.Unlock()
+	if err == nil {
+		refreshInstanceStatuses(instances)
+	}
+	return projectID, instances, groups, err
+}
+
 // LoadAllWithSettings loads instances, groups, and settings
 func (s *Storage) LoadAllWithSettings() ([]*Instance, []*Group, *Settings, error) {
 	s.mu.Lock()
@@ -686,6 +700,32 @@ func (s *Storage) UpdateInstance(instance *Instance) error {
 		}
 	}
 
+	return fmt.Errorf("instance not found")
+}
+
+// UpdateInstanceForProject updates an instance in an explicitly selected
+// project while holding the storage mutex for the complete switch/load/save
+// sequence.
+func (s *Storage) UpdateInstanceForProject(projectID string, instance *Instance) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	originalProject := s.projectID
+	if err := s.setActiveProjectLocked(projectID); err != nil {
+		return err
+	}
+	defer s.setActiveProjectLocked(originalProject)
+
+	instances, groups, settings, err := s.loadAllWithSettingsLocked()
+	if err != nil {
+		return err
+	}
+	for i, current := range instances {
+		if current.ID == instance.ID {
+			instances[i] = instance
+			return s.saveAllLocked(instances, groups, settings)
+		}
+	}
 	return fmt.Errorf("instance not found")
 }
 

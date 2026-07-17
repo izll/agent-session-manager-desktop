@@ -32,6 +32,9 @@ type App struct {
 	ptyMu            sync.RWMutex
 	termServer       *TerminalServer
 	dictation        *DictationService
+	activityStats    *ActivityStatsRecorder
+	previewCancel    context.CancelFunc
+	previewWG        sync.WaitGroup
 	lastTypingSignal int64 // unix nano timestamp of last typing signal
 }
 
@@ -65,6 +68,13 @@ func (a *App) startup(ctx context.Context) {
 		return
 	}
 	a.storage = storage
+
+	statsRecorder, err := NewActivityStatsRecorder()
+	if err != nil {
+		runtime.LogError(ctx, fmt.Sprintf("Failed to initialize activity statistics: %v", err))
+	} else {
+		a.activityStats = statsRecorder
+	}
 
 	// Start WebSocket terminal server for low-latency terminal I/O
 	a.termServer = NewTerminalServer(storage, 9753)
@@ -112,7 +122,13 @@ func (a *App) startup(ctx context.Context) {
 	go a.cleanupOrphanedGUISessions()
 
 	// Start preview polling in background
-	go a.startPreviewPolling()
+	previewCtx, previewCancel := context.WithCancel(ctx)
+	a.previewCancel = previewCancel
+	a.previewWG.Add(1)
+	go func() {
+		defer a.previewWG.Done()
+		a.startPreviewPolling(previewCtx)
+	}()
 
 	// Pull remote agent filters periodically. Hard-coded URL + host
 	// allowlist; refuses to run until session/filters/remote.go has a
@@ -127,6 +143,16 @@ func (a *App) IsDevMode() bool {
 
 // shutdown is called when the app is closing
 func (a *App) shutdown(ctx context.Context) {
+	if a.previewCancel != nil {
+		a.previewCancel()
+		a.previewWG.Wait()
+	}
+	if a.activityStats != nil {
+		if err := a.activityStats.Close(); err != nil {
+			log.Printf("[statistics] failed to flush: %v", err)
+		}
+	}
+
 	// Clean up all GUI linked tmux sessions
 	a.cleanupAllGUISessions()
 
@@ -1354,6 +1380,8 @@ type SidebarUpdate struct {
 	StatusLines  map[string]string          `json:"statusLines"`
 	SpinnerTexts map[string]string          `json:"spinnerTexts"`
 	TabStatuses  map[string][]TabStatusInfo `json:"tabStatuses"`
+	observations []activityObservation
+	projectID    string
 }
 
 // GetSidebarUpdates returns activity and status line data in one call (single LoadAll)
@@ -1365,10 +1393,11 @@ func (a *App) GetSidebarUpdates() SidebarUpdate {
 		TabStatuses:  make(map[string][]TabStatusInfo),
 	}
 
-	instances, _, err := a.storage.LoadAll()
+	projectID, instances, _, err := a.storage.LoadAllWithProjectSnapshot()
 	if err != nil {
 		return result
 	}
+	result.projectID = projectID
 
 	// Phase 1: auto-detect + persist session IDs (sequential; touches storage).
 	// Phase 2 (below) runs the tmux capture + detection in parallel across
@@ -1443,7 +1472,7 @@ func (a *App) GetSidebarUpdates() SidebarUpdate {
 		}
 
 		if needSave {
-			if err := a.storage.UpdateInstance(inst); err != nil {
+			if err := a.storage.UpdateInstanceForProject(projectID, inst); err != nil {
 				log.Printf("[SidebarPoll] failed to save auto-detected session IDs for session=%s: %v", inst.ID, err)
 			}
 		}
@@ -1457,11 +1486,12 @@ func (a *App) GetSidebarUpdates() SidebarUpdate {
 	// made 1s ticks infeasible. Doing it per-session concurrently keeps
 	// total time roughly at the slowest single session.
 	type sessionResult struct {
-		instID      string
-		activity    string
-		statusLine  string
-		spinnerText string
-		agentTabs   []TabStatusInfo
+		instID       string
+		activity     string
+		statusLine   string
+		spinnerText  string
+		agentTabs    []TabStatusInfo
+		observations []activityObservation
 	}
 	resultsCh := make(chan sessionResult, len(jobs))
 
@@ -1495,11 +1525,13 @@ func (a *App) GetSidebarUpdates() SidebarUpdate {
 			}
 
 			var tabStatuses []TabStatusInfo
+			validActivityWindows := make(map[int]bool)
 			highestActivity := session.ActivityIdle
 			bestWindowIdx := 0
 
 			for wi, w := range windows {
-				activity := inst.DetectActivityForWindow(w.idx)
+				activity, activityValid := inst.DetectActivityForWindowWithValidity(w.idx)
+				validActivityWindows[w.idx] = activityValid
 				info := inst.GetStatusInfoForWindow(w.idx, w.agent)
 
 				actStr := "idle"
@@ -1555,6 +1587,16 @@ func (a *App) GetSidebarUpdates() SidebarUpdate {
 			for _, ts := range tabStatuses {
 				if ts.Agent != string(session.AgentTerminal) {
 					sr.agentTabs = append(sr.agentTabs, ts)
+					if validActivityWindows[ts.WindowIdx] {
+						sr.observations = append(sr.observations, activityObservation{
+							SessionID:   inst.ID,
+							SessionName: inst.Name,
+							WindowIdx:   ts.WindowIdx,
+							TabName:     ts.Name,
+							Agent:       ts.Agent,
+							Activity:    ts.Activity,
+						})
+					}
 				}
 			}
 			resultsCh <- sr
@@ -1574,6 +1616,7 @@ func (a *App) GetSidebarUpdates() SidebarUpdate {
 		if len(sr.agentTabs) > 1 {
 			result.TabStatuses[sr.instID] = sr.agentTabs
 		}
+		result.observations = append(result.observations, sr.observations...)
 	}
 
 	return result
@@ -1591,7 +1634,7 @@ func (a *App) GetStatusLines() map[string]string {
 
 // startPreviewPolling runs a background goroutine that polls sidebar updates
 // and emits events to the frontend. This avoids blocking the JS main thread.
-func (a *App) startPreviewPolling() {
+func (a *App) startPreviewPolling(ctx context.Context) {
 	const typingCooldown = 1500 * time.Millisecond
 
 	// 1s tick feels "live" in the sidebar. GetSidebarUpdates parallelises
@@ -1610,12 +1653,21 @@ func (a *App) startPreviewPolling() {
 			}
 
 			data := a.GetSidebarUpdates()
+			// Drop a completed snapshot if the user switched projects while
+			// tmux captures were running. The snapshot itself carries the ID
+			// captured atomically with its instance list, so A→B→A is safe.
+			if data.projectID != a.storage.GetActiveProjectID() {
+				continue
+			}
+			if a.activityStats != nil {
+				a.activityStats.Observe(data.projectID, time.Now(), data.observations)
+			}
 			if isDevMode {
 				log.Printf("[SidebarEmit] activities=%v", data.Activities)
 			}
 			runtime.EventsEmit(a.ctx, "sidebar:update", data)
 
-		case <-a.ctx.Done():
+		case <-ctx.Done():
 			return
 		}
 	}
