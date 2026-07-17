@@ -359,6 +359,17 @@ func (i *Instance) Start() error {
 func (i *Instance) StartWithResume(resumeID string) error {
 	log.Printf("[StartWithResume] session=%s agent=%s resumeID=%q saved_ResumeSessionID=%q", i.ID, i.Agent, resumeID, i.ResumeSessionID)
 
+	// If the conversation is currently held by a Claude background agent
+	// (Ctrl+B / --bg), `claude --resume` would refuse to start — free it
+	// first so the tab actually comes back.
+	if i.Agent == AgentClaude {
+		if id := resumeID; id != "" {
+			ReleaseClaudeBackgroundAgent(id)
+		} else if i.ResumeSessionID != "" {
+			ReleaseClaudeBackgroundAgent(i.ResumeSessionID)
+		}
+	}
+
 	// Update status based on actual tmux session state
 	// This handles cases where session was killed externally
 	i.UpdateStatus()
@@ -558,6 +569,9 @@ func (i *Instance) restoreFollowedWindows() {
 	for _, fw := range oldWindows {
 		var cmd *exec.Cmd
 		resumeID := fw.ResumeSessionID
+		if fw.Agent == AgentClaude && resumeID != "" {
+			ReleaseClaudeBackgroundAgent(resumeID)
+		}
 
 		// Drop the saved resume ID if it no longer exists on disk so the
 		// tab boots fresh instead of dying with "No conversation found".
@@ -821,6 +835,9 @@ func (i *Instance) RestartWindowWithResume(windowIdx int, resumeID string) error
 		if resumeID == "" {
 			resumeID = i.ResumeSessionID
 		}
+		if i.Agent == AgentClaude && resumeID != "" {
+			ReleaseClaudeBackgroundAgent(resumeID)
+		}
 
 		// Handle resume subcommands (codex resume, q chat --resume) vs flags (claude --resume)
 		if config.SupportsResume && config.ResumeIsSubcommand {
@@ -903,6 +920,9 @@ func (i *Instance) RestartWindowWithResume(windowIdx int, resumeID string) error
 		tabResumeID := resumeID
 		if tabResumeID == "" {
 			tabResumeID = fw.ResumeSessionID
+		}
+		if fw.Agent == AgentClaude && tabResumeID != "" {
+			ReleaseClaudeBackgroundAgent(tabResumeID)
 		}
 
 		// Handle resume subcommands (codex resume, q chat --resume) vs flags (claude --resume)
