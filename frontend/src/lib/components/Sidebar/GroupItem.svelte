@@ -2,11 +2,12 @@
   import { createEventDispatcher, onMount, onDestroy, tick } from 'svelte';
   import SessionItem from './SessionItem.svelte';
   import type { Group, Session } from '../../stores/sessions';
-  import { toggleGroupCollapse, renameGroup, deleteGroup, sessions as allSessions, assignToGroup } from '../../stores/sessions';
+  import { toggleGroupCollapse, renameGroup, deleteGroup, sessions as allSessions, assignToGroup, startSession, stopSession } from '../../stores/sessions';
   import { activities, getActivity } from '../../stores/activities';
   import { statusLines, spinnerTexts, tabStatuses, getStatusLine } from '../../stores/statusLines';
   import { settings } from '../../stores/settings';
   import { t } from '../../i18n';
+  import { portal } from '../../utils/portal';
 
   export let group: Group;
   export let sessions: Session[] = [];
@@ -27,6 +28,27 @@
 
   function handleToggle() {
     toggleGroupCollapse(group.id);
+  }
+
+  // Bulk ops: sequential so tmux/session startup doesn't stampede; errors on
+  // one session don't stop the rest. Start resumes each session's saved
+  // conversation (startSession(id) alone would wipe the resume ID).
+  async function handleStartAll() {
+    showContextMenu = false;
+    for (const s of sessions) {
+      if (s.status === 'running') continue;
+      try { await startSession(s.id, s.resumeSessionId || undefined); } catch { /* keep going */ }
+    }
+  }
+
+  async function handleStopAll() {
+    showContextMenu = false;
+    const running = sessions.filter(s => s.status === 'running');
+    if (running.length === 0) return;
+    if (!window.confirm($t('group.stopAllConfirm', { n: running.length, name: group.name }))) return;
+    for (const s of running) {
+      try { await stopSession(s.id); } catch { /* keep going */ }
+    }
   }
 
   function handleContextMenu(e: MouseEvent) {
@@ -192,9 +214,22 @@
   {#if showContextMenu}
     <div
       class="context-menu"
+      use:portal
       style="left: {contextMenuX}px; top: {contextMenuY}px"
       on:click|stopPropagation
     >
+      <button class="context-menu-item" on:click={handleStartAll}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polygon points="5 3 19 12 5 21 5 3"/>
+        </svg>
+        {$t('group.startAll')}
+      </button>
+      <button class="context-menu-item" on:click={handleStopAll}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="6" y="6" width="12" height="12" rx="1"/>
+        </svg>
+        {$t('group.stopAll')}
+      </button>
       <button class="context-menu-item" on:click={startRename}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>

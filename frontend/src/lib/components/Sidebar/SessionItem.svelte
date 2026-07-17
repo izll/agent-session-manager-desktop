@@ -1,5 +1,6 @@
 <script lang="ts">
   import { createEventDispatcher, onMount, onDestroy, tick } from 'svelte';
+  import { portal } from '../../utils/portal';
   import StatusIndicator from '../common/StatusIndicator.svelte';
   import AgentIcon from '../common/AgentIcon.svelte';
   import type { Session } from '../../stores/sessions';
@@ -314,6 +315,7 @@
 {#if showContextMenu}
   <div
     class="context-menu"
+    use:portal
     style="left: {contextMenuX}px; top: {contextMenuY}px"
     on:click|stopPropagation
   >
@@ -322,20 +324,20 @@
         <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
         <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
       </svg>
-      Rename
+      {$t('sessionMenu.rename')}
     </button>
     <button class="context-menu-item" on:click={handleToggleFavorite}>
       <svg width="14" height="14" viewBox="0 0 24 24" fill={session.favorite ? 'currentColor' : 'none'} stroke="currentColor" stroke-width="2">
         <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
       </svg>
-      {session.favorite ? 'Unfavorite' : 'Favorite'}
+      {session.favorite ? $t('sessionMenu.unfavorite') : $t('sessionMenu.favorite')}
     </button>
     <button class="context-menu-item danger" on:click={handleDelete}>
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <polyline points="3 6 5 6 21 6"/>
         <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
       </svg>
-      Delete
+      {$t('sessionMenu.delete')}
     </button>
   </div>
 {/if}
