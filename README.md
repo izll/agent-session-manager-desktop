@@ -13,6 +13,8 @@ The graphical counterpart of the
 [![Wails](https://img.shields.io/badge/Wails-v2-DF0000?style=flat)](https://wails.io)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
+<img src="docs/screenshot-session.png" alt="A running Claude session in Agent Session Manager Desktop" width="900">
+
 </div>
 
 Built with [Wails](https://wails.io) (Go) + Svelte + TypeScript +
@@ -41,6 +43,14 @@ reattach any time.
   they never freeze the UI); per-tab notes.
 - **Selectable terminal renderer** — canvas (default), WebGL, or DOM, switchable
   at runtime from Settings.
+
+### Project dashboard
+
+A per-project overview of every session, grouped like the sidebar, with live
+activity, Git status (branch, dirty state, last commit) and Claude / Codex
+usage at a glance.
+
+<img src="docs/screenshot-dashboard.png" alt="The project dashboard showing grouped sessions with Git status" width="900">
 
 ## Install
 
