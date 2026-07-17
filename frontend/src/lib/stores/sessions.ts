@@ -55,8 +55,19 @@ export const selectedSession = derived(
     $sessions.find(s => s.id === $selectedSessionId) || null
 );
 
-export const favorites = derived(sessions, ($sessions) =>
-  $sessions.filter(s => s.favorite)
+export const favorites = derived(
+  [sessions, searchFilter],
+  ([$sessions, $searchFilter]) => {
+    let filtered = $sessions.filter(s => s.favorite);
+    if ($searchFilter) {
+      const lower = $searchFilter.toLowerCase();
+      filtered = filtered.filter(s =>
+        s.name.toLowerCase().includes(lower) ||
+        s.notes?.toLowerCase().includes(lower)
+      );
+    }
+    return filtered;
+  }
 );
 
 export const ungroupedSessions = derived(
