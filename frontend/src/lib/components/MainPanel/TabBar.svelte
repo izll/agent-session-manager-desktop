@@ -5,7 +5,7 @@
   import TabColorDialog from '../Dialogs/TabColorDialog.svelte';
   import ConfirmDialog from '../Dialogs/ConfirmDialog.svelte';
   import Toast from '../common/Toast.svelte';
-  import { sessions, selectedSessionId, selectedWindowIdx, selectWindow, selectedSession, startSession, stopSession, stopTab, restartTab, deleteSession, deleteTab, toggleFavorite, renameTab, reorderTab } from '../../stores/sessions';
+  import { sessions, selectedSessionId, selectedWindowIdx, selectWindow, selectedSession, startSession, stopSession, stopTab, restartTab, deleteSession, deleteTab, toggleFavorite, renameTab, reorderTab, loadSessions } from '../../stores/sessions';
   import { agents } from '../../stores/agents';
   import { get } from 'svelte/store';
   import { t } from '../../i18n';
@@ -782,6 +782,30 @@
     closeTabContextMenu();
   }
 
+  // Whether the context-menu'd tab currently hides its status line in the
+  // session list (main window: session-level flag; tabs: their own flag).
+  $: tabContextHidesStatus = (() => {
+    if (tabContextMenuIndex === null || !$selectedSession) return false;
+    const tab = ($tabStatuses[$selectedSession.id] || []).find(t => t.windowIdx === tabContextMenuIndex);
+    if (tab) return !!tab.hideStatusLine;
+    if (tabContextMenuIndex === 0) return !!$selectedSession.hideStatusLine;
+    const fw = ($selectedSession.followedWindows || []).find((f: any) => f.index === tabContextMenuIndex);
+    return !!(fw && fw.hide_status_line);
+  })();
+
+  async function tabContextToggleStatusLine() {
+    const idx = tabContextMenuIndex;
+    const hidden = tabContextHidesStatus;
+    closeTabContextMenu();
+    if (idx === null || !$selectedSession) return;
+    try {
+      await App.SetTabStatusLineVisibility($selectedSession.id, idx, !hidden);
+      await loadSessions();
+    } catch (e) {
+      console.error('Toggle status line failed:', e);
+    }
+  }
+
   function tabContextSetColor() {
     if (tabContextMenuIndex !== null && $selectedSessionId) {
       const win = windows.find(w => w.Index === tabContextMenuIndex);
@@ -1060,6 +1084,22 @@
     await toggleFavorite($selectedSession.id);
   }
 
+  // Which tabs hide their status line in the session list — for the small
+  // eye-off badge on the tab header. Reactive map (not a plain function) so
+  // store updates re-render it.
+  $: tabHidesStatusByIdx = (() => {
+    const m: Record<number, boolean> = {};
+    if (!$selectedSession) return m;
+    for (const tabStatus of ($tabStatuses[$selectedSession.id] || [])) {
+      m[tabStatus.windowIdx] = !!tabStatus.hideStatusLine;
+    }
+    for (const fw of ($selectedSession.followedWindows || [])) {
+      if (!(fw.index in m)) m[fw.index] = !!(fw as any).hide_status_line;
+    }
+    if (!(0 in m)) m[0] = !!$selectedSession.hideStatusLine;
+    return m;
+  })();
+
   function hasExtraArgs(winIndex: number): boolean {
     if (!$selectedSession) return false;
     if (winIndex === 0) return !!$selectedSession.extraArgs;
@@ -1121,6 +1161,14 @@
               <!-- svelte-ignore a11y-no-static-element-interactions -->
               <span class="tab-name" on:dblclick|stopPropagation={() => startTabRename(win.Index, win.Name)}>{win.Name}</span>
             {/if}
+            {#if tabHidesStatusByIdx[win.Index]}
+              <span class="tab-nostatus-badge" title={$t('tabBar.statusHiddenBadge')}>
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
+                  <line x1="1" y1="1" x2="23" y2="23"/>
+                </svg>
+              </span>
+            {/if}
             {#if win.Dead}
               <span class="tab-dead">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1167,6 +1215,16 @@
             <circle cx="16.5" cy="12.5" r="1" fill="currentColor" stroke="none"/>
           </svg>
           {$t('tabBar.setTabColor')}
+        </button>
+        <button class="tab-context-menu-item" on:click={tabContextToggleStatusLine}>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            {#if tabContextHidesStatus}
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+            {:else}
+              <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>
+            {/if}
+          </svg>
+          {tabContextHidesStatus ? $t('tabBar.showStatusLine') : $t('tabBar.hideStatusLine')}
         </button>
         {#if tabContextMenuIndex !== null && windows.find(w => w.Index === tabContextMenuIndex)?.Agent !== 'terminal' && windows.find(w => w.Index === tabContextMenuIndex)?.Agent !== 'custom'}
           <button class="tab-context-menu-item" on:click={tabContextEditExtraArgs}>
@@ -1612,6 +1670,14 @@
   .tab-rename-input:focus {
     border-color: rgba(139, 92, 246, 0.7);
     box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.2);
+  }
+
+  .tab-nostatus-badge {
+    display: inline-flex;
+    align-items: center;
+    color: #71717a;
+    opacity: 0.8;
+    flex-shrink: 0;
   }
 
   .tab-context-menu {

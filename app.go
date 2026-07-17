@@ -407,6 +407,7 @@ type SessionInfo struct {
 	FullRowColor       bool                     `json:"fullRowColor"`
 	GroupID            string                   `json:"groupId"`
 	AutoYes            bool                     `json:"autoYes"`
+	HideStatusLine     bool                     `json:"hideStatusLine"`
 	Notes              string                   `json:"notes"`
 	Favorite           bool                     `json:"favorite"`
 	ResumeSessionID    string                   `json:"resumeSessionId"`
@@ -465,6 +466,7 @@ func (a *App) instanceToSessionInfo(inst *session.Instance) SessionInfo {
 		FullRowColor:       inst.FullRowColor,
 		GroupID:            inst.GroupID,
 		AutoYes:            inst.AutoYes,
+		HideStatusLine:     inst.HideStatusLine,
 		Notes:              inst.Notes,
 		Favorite:           inst.Favorite,
 		ResumeSessionID:    inst.ResumeSessionID,
@@ -1341,6 +1343,9 @@ type TabStatusInfo struct {
 	// bar, so the sidebar follows a Shift+Tab toggle inside Claude, not just the
 	// stored launch flag. "auto mode" is NOT yolo and reports false here.
 	Yolo bool `json:"yolo"`
+	// HideStatusLine: per-tab user preference — the session list omits this
+	// tab's status line row when set.
+	HideStatusLine bool `json:"hideStatusLine"`
 }
 
 // SidebarUpdate contains combined activity and status line data
@@ -1473,18 +1478,19 @@ func (a *App) GetSidebarUpdates() SidebarUpdate {
 			mainWindowIdx := inst.GetMainWindowIndex()
 
 			type windowInfo struct {
-				idx   int
-				agent session.AgentType
-				name  string
+				idx      int
+				agent    session.AgentType
+				name     string
+				hideLine bool
 			}
-			windows := []windowInfo{{idx: mainWindowIdx, agent: mainAgent, name: inst.Name}}
+			windows := []windowInfo{{idx: mainWindowIdx, agent: mainAgent, name: inst.Name, hideLine: inst.HideStatusLine}}
 			for _, fw := range inst.FollowedWindows {
 				if fw.Index != mainWindowIdx && !fw.Stopped {
 					name := fw.Name
 					if name == "" {
 						name = string(fw.Agent)
 					}
-					windows = append(windows, windowInfo{idx: fw.Index, agent: fw.Agent, name: name})
+					windows = append(windows, windowInfo{idx: fw.Index, agent: fw.Agent, name: name, hideLine: fw.HideStatusLine})
 				}
 			}
 
@@ -1513,13 +1519,14 @@ func (a *App) GetSidebarUpdates() SidebarUpdate {
 				}
 
 				tabStatuses = append(tabStatuses, TabStatusInfo{
-					WindowIdx:   w.idx,
-					Agent:       string(w.agent),
-					Name:        w.name,
-					Activity:    actStr,
-					StatusLine:  line,
-					SpinnerText: info.SpinnerText,
-					Yolo:        inst.DetectYoloForWindow(w.idx),
+					WindowIdx:      w.idx,
+					Agent:          string(w.agent),
+					Name:           w.name,
+					Activity:       actStr,
+					StatusLine:     line,
+					SpinnerText:    info.SpinnerText,
+					Yolo:           inst.DetectYoloForWindow(w.idx),
+					HideStatusLine: w.hideLine,
 				})
 
 				if activity == session.ActivityWaiting {
@@ -2064,6 +2071,32 @@ type UpdateInfo struct {
 // GetVersion returns the current application version (for the UI/about).
 func (a *App) GetVersion() string {
 	return Version
+}
+
+// SetTabStatusLineVisibility stores whether a tab's status line should be
+// shown in the session list. windowIdx 0 (the main window) is stored on the
+// instance; followed windows carry their own flag.
+func (a *App) SetTabStatusLineVisibility(sessionID string, windowIdx int, hide bool) error {
+	inst, err := a.storage.GetInstance(sessionID)
+	if err != nil {
+		return err
+	}
+	if windowIdx == inst.GetMainWindowIndex() {
+		inst.HideStatusLine = hide
+	} else {
+		found := false
+		for i := range inst.FollowedWindows {
+			if inst.FollowedWindows[i].Index == windowIdx {
+				inst.FollowedWindows[i].HideStatusLine = hide
+				found = true
+				break
+			}
+		}
+		if !found {
+			return fmt.Errorf("window %d not found", windowIdx)
+		}
+	}
+	return a.storage.UpdateInstance(inst)
 }
 
 // QuickReplyTab sends one whitelisted answer key to a session window so the

@@ -269,7 +269,9 @@
     {#if tabStatuses.length > 1}
       <!-- Multi-tab: show per-tab status lines -->
       {#each tabStatuses as tab}
-        {#if tab.activity === 'busy'}
+        {#if tab.hideStatusLine}
+          <!-- per-tab opt-out: user hid this tab's status line -->
+        {:else if tab.activity === 'busy'}
           <div class="status-text busy tab-status">
             <span>{tab.spinnerText || tab.statusLine || ''}</span>
             {#if $settings?.showAgentIcons}<AgentIcon agent={tab.agent} size="xs" />{/if}
@@ -292,7 +294,9 @@
     {:else}
       <!-- Single tab: original behavior. YOLO shows next to the name (badges),
            not in the status line. -->
-      {#if activity === 'busy'}
+      {#if session.hideStatusLine}
+        <!-- user hid this session's status line -->
+      {:else if activity === 'busy'}
         <div class="status-text busy tab-status">
           <span>{spinnerText || statusLine || ''}</span>
           {#if $settings?.showAgentIcons}<AgentIcon agent={session.agent} size="xs" />{/if}

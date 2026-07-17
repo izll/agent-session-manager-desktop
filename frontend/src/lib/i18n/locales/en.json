@@ -523,5 +523,8 @@
   "bgAgents.asTabDesc": "Becomes a new tab of the selected running session",
   "bgAgents.asNewDesc": "Gets its own session in its working folder",
   "bgAgents.filterPlaceholder": "Filter by name, folder, id...",
-  "bgAgents.noMatches": "No agents match the filter"
+  "bgAgents.noMatches": "No agents match the filter",
+  "tabBar.showStatusLine": "Show status line in list",
+  "tabBar.hideStatusLine": "Hide status line in list",
+  "tabBar.statusHiddenBadge": "Status line hidden in the session list"
 }

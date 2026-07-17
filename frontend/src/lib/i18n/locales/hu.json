@@ -523,5 +523,8 @@
   "bgAgents.asTabDesc": "A kiválasztott futó munkamenet új füle lesz",
   "bgAgents.asNewDesc": "Saját munkamenetet kap a mappájában",
   "bgAgents.filterPlaceholder": "Szűrés névre, mappára, id-re...",
-  "bgAgents.noMatches": "Nincs a szűrőnek megfelelő agent"
+  "bgAgents.noMatches": "Nincs a szűrőnek megfelelő agent",
+  "tabBar.showStatusLine": "Státusz sor mutatása a listában",
+  "tabBar.hideStatusLine": "Státusz sor elrejtése a listában",
+  "tabBar.statusHiddenBadge": "Státusz sor rejtve a session listában"
 }

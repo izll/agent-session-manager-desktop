@@ -258,6 +258,10 @@ export function PerformUpdate(arg1) {
   return window['go']['main']['App']['PerformUpdate'](arg1);
 }
 
+export function SetTabStatusLineVisibility(arg1, arg2, arg3) {
+  return window['go']['main']['App']['SetTabStatusLineVisibility'](arg1, arg2, arg3);
+}
+
 export function QuickReplyTab(arg1, arg2, arg3) {
   return window['go']['main']['App']['QuickReplyTab'](arg1, arg2, arg3);
 }

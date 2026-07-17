@@ -131,6 +131,7 @@ type Instance struct {
 	CreatedAt          time.Time        `json:"created_at"`
 	UpdatedAt          time.Time        `json:"updated_at"`
 	AutoYes            bool             `json:"auto_yes"`
+	HideStatusLine     bool             `json:"hide_status_line,omitempty"`     // Don't show the main window's status line in the session list
 	ResumeSessionID    string           `json:"resume_session_id,omitempty"`    // Claude session ID to resume
 	Color              string           `json:"color,omitempty"`                // Foreground color
 	BgColor            string           `json:"bg_color,omitempty"`             // Background color
@@ -176,6 +177,7 @@ type FollowedWindow struct {
 	TextColor       string    `json:"text_color,omitempty"`       // Tab text color (empty uses the theme default)
 	BackgroundColor string    `json:"background_color,omitempty"` // Tab background color (empty uses the theme default)
 	WorkDir         string    `json:"work_dir,omitempty"`         // Tab working directory (empty = session path)
+	HideStatusLine  bool      `json:"hide_status_line,omitempty"` // Don't show this tab's status line in the session list
 }
 
 // GetAgentConfig returns the agent configuration for this instance
@@ -751,7 +753,12 @@ func (i *Instance) NewWindowWithName(name string, workDir string) error {
 	// Track terminal window for restore on restart
 	newIdx := i.GetCurrentWindowIndex()
 	i.FollowedWindows = append(i.FollowedWindows, FollowedWindow{
-		WorkDir: func() string { if workDir != i.Path { return workDir }; return "" }(),
+		WorkDir: func() string {
+			if workDir != i.Path {
+				return workDir
+			}
+			return ""
+		}(),
 		Index: newIdx,
 		Agent: AgentTerminal,
 		Name:  name,
@@ -1419,7 +1426,12 @@ func (i *Instance) NewAgentWindow(name string, agent AgentType, customCmd string
 
 	// Add to followed windows with agent info
 	i.FollowedWindows = append(i.FollowedWindows, FollowedWindow{
-		WorkDir: func() string { if workDir != i.Path { return workDir }; return "" }(),
+		WorkDir: func() string {
+			if workDir != i.Path {
+				return workDir
+			}
+			return ""
+		}(),
 		Index:           newIdx,
 		Agent:           agent,
 		Name:            name,

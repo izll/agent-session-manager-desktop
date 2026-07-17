@@ -15,6 +15,7 @@ export interface Session {
   fullRowColor: boolean;
   groupId: string;
   autoYes: boolean;
+  hideStatusLine: boolean;
   notes: string;
   favorite: boolean;
   resumeSessionId: string;

@@ -571,6 +571,15 @@
     </div>
 
     <div class="flex items-center gap-3" style="--wails-draggable:no-drag">
+      <button class="btn btn-ghost" on:click={() => showGlobalSearch = true} title={$t('header.globalSearch')}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="8"/>
+          <path d="M21 21l-4.35-4.35"/>
+        </svg>
+        {$t('app.search')}
+      </button>
+      <div class="header-divider-vertical actions-divider"></div>
+      <div class="header-icons">
       {#if waitingTabs.length > 0}
         <!-- Attention inbox: tabs waiting for user input, with one-click
              answers so none of them gets forgotten. -->
@@ -601,14 +610,6 @@
           {/if}
         </div>
       {/if}
-      <button class="btn btn-ghost" on:click={() => showGlobalSearch = true} title={$t('header.globalSearch')}>
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="11" cy="11" r="8"/>
-          <path d="M21 21l-4.35-4.35"/>
-        </svg>
-        {$t('app.search')}
-      </button>
-      <div class="header-icons">
         <button class="btn btn-ghost btn-icon" on:click={() => showBgAgents = true} title={$t('bgAgents.open')}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <rect x="5" y="7" width="14" height="12" rx="2"/>
@@ -808,7 +809,8 @@
   .waiting-badge:hover {
     background: rgba(0, 206, 209, 0.22);
   }
-  .waiting-wrap { position: relative; }
+  .waiting-wrap { position: relative; display: flex; }
+  .actions-divider { margin: 0; }
   .waiting-panel {
     position: absolute;
     top: calc(100% + 8px);
@@ -1128,7 +1130,6 @@
     display: flex;
     align-items: center;
     gap: 4px;
-    margin-left: 12px;
   }
 
   .window-divider {

@@ -459,6 +459,7 @@ export namespace main {
 	    fullRowColor: boolean;
 	    groupId: string;
 	    autoYes: boolean;
+	    hideStatusLine: boolean;
 	    notes: string;
 	    favorite: boolean;
 	    resumeSessionId: string;
@@ -485,6 +486,7 @@ export namespace main {
 	        this.fullRowColor = source["fullRowColor"];
 	        this.groupId = source["groupId"];
 	        this.autoYes = source["autoYes"];
+	        this.hideStatusLine = source["hideStatusLine"];
 	        this.notes = source["notes"];
 	        this.favorite = source["favorite"];
 	        this.resumeSessionId = source["resumeSessionId"];
@@ -608,6 +610,7 @@ export namespace main {
 	    statusLine: string;
 	    spinnerText: string;
 	    yolo: boolean;
+	    hideStatusLine: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new TabStatusInfo(source);
@@ -622,6 +625,7 @@ export namespace main {
 	        this.statusLine = source["statusLine"];
 	        this.spinnerText = source["spinnerText"];
 	        this.yolo = source["yolo"];
+	        this.hideStatusLine = source["hideStatusLine"];
 	    }
 	}
 	export class TaskInfo {

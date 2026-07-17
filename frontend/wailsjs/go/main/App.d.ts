@@ -131,6 +131,8 @@ export function MoveTask(arg1:string,arg2:string,arg3:string):Promise<void>;
 
 export function PerformUpdate(arg1:string):Promise<void>;
 
+export function SetTabStatusLineVisibility(arg1:string,arg2:number,arg3:boolean):Promise<void>;
+
 export function QuickReplyTab(arg1:string,arg2:number,arg3:string):Promise<void>;
 
 export function RefreshWindow(arg1:string,arg2:number):Promise<void>;
