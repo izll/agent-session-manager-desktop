@@ -175,6 +175,7 @@ type FollowedWindow struct {
 	Stopped         bool      `json:"stopped,omitempty"`          // Tab is stopped (window killed but can resume)
 	TextColor       string    `json:"text_color,omitempty"`       // Tab text color (empty uses the theme default)
 	BackgroundColor string    `json:"background_color,omitempty"` // Tab background color (empty uses the theme default)
+	WorkDir         string    `json:"work_dir,omitempty"`         // Tab working directory (empty = session path)
 }
 
 // GetAgentConfig returns the agent configuration for this instance
@@ -569,6 +570,10 @@ func (i *Instance) restoreFollowedWindows() {
 	for _, fw := range oldWindows {
 		var cmd *exec.Cmd
 		resumeID := fw.ResumeSessionID
+		tabDir := fw.WorkDir
+		if tabDir == "" {
+			tabDir = i.Path
+		}
 		if fw.Agent == AgentClaude && resumeID != "" {
 			ReleaseClaudeBackgroundAgent(resumeID)
 		}
@@ -583,7 +588,7 @@ func (i *Instance) restoreFollowedWindows() {
 
 		if fw.Agent == AgentTerminal {
 			// Terminal window - just create empty shell
-			cmd = exec.Command("tmux", "new-window", "-t", sessionName, "-c", i.Path, "-n", fw.Name)
+			cmd = exec.Command("tmux", "new-window", "-t", sessionName, "-c", tabDir, "-n", fw.Name)
 		} else {
 			// Agent window - build agent command (argv form, no shell)
 			config := AgentConfigs[fw.Agent]
@@ -625,7 +630,7 @@ func (i *Instance) restoreFollowedWindows() {
 
 			// Create new window with the agent command as separate argv
 			// elements (tmux execs directly, no `sh -c`).
-			tmuxArgs := append([]string{"new-window", "-t", sessionName, "-c", i.Path, "-n", fw.Name}, argv...)
+			tmuxArgs := append([]string{"new-window", "-t", sessionName, "-c", tabDir, "-n", fw.Name}, argv...)
 			cmd = exec.Command("tmux", tmuxArgs...)
 		}
 
@@ -729,13 +734,16 @@ func (i *Instance) NewWindow() error {
 }
 
 // NewWindowWithName creates a new tmux window with a specific name
-func (i *Instance) NewWindowWithName(name string) error {
+func (i *Instance) NewWindowWithName(name string, workDir string) error {
+	if workDir == "" {
+		workDir = i.Path
+	}
 	if i.Status != StatusRunning {
 		return fmt.Errorf("instance not running")
 	}
 
 	sessionName := i.TmuxSessionName()
-	cmd := exec.Command("tmux", "new-window", "-t", sessionName, "-c", i.Path, "-n", name)
+	cmd := exec.Command("tmux", "new-window", "-t", sessionName, "-c", workDir, "-n", name)
 	if err := cmd.Run(); err != nil {
 		return err
 	}
@@ -743,6 +751,7 @@ func (i *Instance) NewWindowWithName(name string) error {
 	// Track terminal window for restore on restart
 	newIdx := i.GetCurrentWindowIndex()
 	i.FollowedWindows = append(i.FollowedWindows, FollowedWindow{
+		WorkDir: func() string { if workDir != i.Path { return workDir }; return "" }(),
 		Index: newIdx,
 		Agent: AgentTerminal,
 		Name:  name,
@@ -1366,7 +1375,10 @@ func (i *Instance) GetWindowList() []WindowInfo {
 }
 
 // NewAgentWindow creates a new tmux window running the specified agent
-func (i *Instance) NewAgentWindow(name string, agent AgentType, customCmd string, extraArgs string) (int, error) {
+func (i *Instance) NewAgentWindow(name string, agent AgentType, customCmd string, extraArgs string, workDir string) (int, error) {
+	if workDir == "" {
+		workDir = i.Path
+	}
 	if i.Status != StatusRunning {
 		return -1, fmt.Errorf("instance not running")
 	}
@@ -1396,7 +1408,7 @@ func (i *Instance) NewAgentWindow(name string, agent AgentType, customCmd string
 
 	// Create new window with the agent command as separate argv elements
 	// (tmux execs directly, no `sh -c`).
-	tmuxArgs := append([]string{"new-window", "-t", sessionName, "-c", i.Path, "-n", name}, argv...)
+	tmuxArgs := append([]string{"new-window", "-t", sessionName, "-c", workDir, "-n", name}, argv...)
 	cmd := exec.Command("tmux", tmuxArgs...)
 	if err := cmd.Run(); err != nil {
 		return -1, err
@@ -1407,6 +1419,7 @@ func (i *Instance) NewAgentWindow(name string, agent AgentType, customCmd string
 
 	// Add to followed windows with agent info
 	i.FollowedWindows = append(i.FollowedWindows, FollowedWindow{
+		WorkDir: func() string { if workDir != i.Path { return workDir }; return "" }(),
 		Index:           newIdx,
 		Agent:           agent,
 		Name:            name,

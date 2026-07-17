@@ -1,7 +1,7 @@
 <script lang="ts">
   import { autoFocusDialog } from '../../utils/dialogActions';
   import { createEventDispatcher } from 'svelte';
-  import { selectedSessionId, loadSessions, selectWindow } from '../../stores/sessions';
+  import { selectedSessionId, loadSessions, selectWindow, sessions } from '../../stores/sessions';
   import { agents } from '../../stores/agents';
   import { get } from 'svelte/store';
   import * as App from '../../../../wailsjs/go/main/App';
@@ -16,13 +16,23 @@
   let selectedAgent = 'claude';
   let name = '';
   let extraArgs = '';
+  let workDir = '';
   let isSubmitting = false;
   let error = '';
   let userTouchedName = false;
 
+  $: sessionPath = $sessions.find(s => s.id === $selectedSessionId)?.path || '';
+
   // Auto-fill name based on tab type / agent (only if user hasn't edited it)
   $: if (show && !userTouchedName) {
     name = tabType === 'terminal' ? 'Terminal' : `${selectedAgent} tab`;
+  }
+
+  async function browseWorkDir() {
+    try {
+      const dir = await App.BrowseDirectory(workDir || sessionPath);
+      if (dir) workDir = dir;
+    } catch { /* cancelled */ }
   }
 
   function close() {
@@ -36,6 +46,7 @@
     selectedAgent = 'claude';
     name = '';
     extraArgs = '';
+    workDir = '';
     error = '';
     userTouchedName = false;
   }
@@ -58,7 +69,7 @@
     try {
       const isAgent = tabType === 'agent';
       const agent = isAgent ? selectedAgent : 'terminal';
-      const newIdx = await App.CreateTab(sessionId, isAgent, agent, name.trim(), extraArgs.trim());
+      const newIdx = await App.CreateTab(sessionId, isAgent, agent, name.trim(), extraArgs.trim(), workDir.trim());
       await loadSessions();
       close();
       // Switch to the freshly created tab and put the keyboard focus into
@@ -185,6 +196,21 @@
             />
           </div>
         {/if}
+
+        <!-- Working directory (optional; defaults to the session's path) -->
+        <div class="form-group">
+          <label class="form-label" for="tab-workdir">{$t('newTab.workDir')}</label>
+          <div class="workdir-row">
+            <input
+              id="tab-workdir"
+              type="text"
+              bind:value={workDir}
+              placeholder={sessionPath || $t('newTab.workDirPlaceholder')}
+              class="form-input"
+            />
+            <button type="button" class="browse-btn" on:click={browseWorkDir}>{$t('newTab.browse')}</button>
+          </div>
+        </div>
 
         <!-- Name -->
         <div class="form-group">
@@ -325,6 +351,20 @@
     border-color: rgba(139, 92, 246, 0.4);
     color: #a78bfa;
   }
+
+  .workdir-row { display: flex; gap: 8px; }
+  .workdir-row .form-input { flex: 1; min-width: 0; }
+  .browse-btn {
+    flex-shrink: 0;
+    padding: 0 14px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.05);
+    color: #d4d4d8;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .browse-btn:hover { border-color: rgba(139, 92, 246, 0.5); color: #ddd6fe; }
 
   .form-input {
     width: 100%;
