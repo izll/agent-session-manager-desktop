@@ -8,6 +8,7 @@
   import NewSessionDialog from './lib/components/Dialogs/NewSessionDialog.svelte';
   import NewGroupDialog from './lib/components/Dialogs/NewGroupDialog.svelte';
   import GlobalSearchDialog from './lib/components/Dialogs/GlobalSearchDialog.svelte';
+  import BgAgentsDialog from './lib/components/Dialogs/BgAgentsDialog.svelte';
   import HelpDialog from './lib/components/Dialogs/HelpDialog.svelte';
   import UpdateDialog from './lib/components/Dialogs/UpdateDialog.svelte';
   import ImportDialog from './lib/components/Dialogs/ImportDialog.svelte';
@@ -19,10 +20,12 @@
   import ResumeChoiceDialog from './lib/components/Dialogs/ResumeChoiceDialog.svelte';
   import ResumeSessionPickerDialog from './lib/components/Dialogs/ResumeSessionPickerDialog.svelte';
   import type { Session } from './lib/stores/sessions';
-  import { sessions, loadSessions, selectSession, selectedSession, selectedSessionId, selectedWindowIdx, startSession, stopSession, stopTab, restartTab, restartTabWithResume, deleteSession, toggleFavorite, reorderSession, selectPrevSession, selectNextSession } from './lib/stores/sessions';
+  import { sessions, loadSessions, selectSession, selectWindow, selectedSession, selectedSessionId, selectedWindowIdx, startSession, stopSession, stopTab, restartTab, restartTabWithResume, deleteSession, toggleFavorite, reorderSession, selectPrevSession, selectNextSession } from './lib/stores/sessions';
   import { activities } from './lib/stores/activities';
+  import { statusLines, tabStatuses } from './lib/stores/statusLines';
+  import { QuickReplyTab } from '../wailsjs/go/main/App';
   import { loadProjects } from './lib/stores/projects';
-  import { appView, showDashboard } from './lib/stores/navigation';
+  import { appView } from './lib/stores/navigation';
   import { loadSettings, settings } from './lib/stores/settings';
   import { agents, loadAgents } from './lib/stores/agents';
   import { startSidebarPolling, stopSidebarPolling } from './lib/stores/sidebarPolling';
@@ -48,6 +51,7 @@
   let showNewSessionDialog = false;
   let showNewGroupDialog = false;
   let showGlobalSearch = false;
+  let showBgAgents = false;
 
   let showHelpDialog = false;
   let showUpdateDialog = false;
@@ -74,7 +78,7 @@
   let anyDialogOpen = false;
   let prevAnyDialogOpen = false;
   $: anyDialogOpen =
-    showNewSessionDialog || showNewGroupDialog || showGlobalSearch ||
+    showNewSessionDialog || showNewGroupDialog || showGlobalSearch || showBgAgents ||
     showHelpDialog || showUpdateDialog || showImportDialog ||
     showSettingsDialog || showColorDialog || showDeleteConfirm ||
     showQuitConfirm || showStopDialog || showStartDialog ||
@@ -136,15 +140,48 @@
 
   $: actualSidebarWidth = sidebarCollapsed ? SIDEBAR_COLLAPSED : sidebarWidth;
 
-  // Sessions currently waiting for user input — drives the header ⏳ badge.
-  $: waitingSessions = $sessions.filter(s => s.status === 'running' && $activities[s.id] === 'waiting');
+  // Tabs currently waiting for user input — drives the header ⏳ badge and
+  // the attention inbox. Per-TAB granularity via tabStatuses; sessions whose
+  // tab list doesn't surface the waiting state fall back to a window-0 row.
+  interface WaitingTab {
+    sessionId: string;
+    sessionName: string;
+    color: string;
+    windowIdx: number;
+    tabName: string;
+    statusLine: string;
+  }
+  let showWaitingPanel = false;
+  $: waitingTabs = $sessions.flatMap((s): WaitingTab[] => {
+    if (s.status !== 'running') return [];
+    const tabs = ($tabStatuses[s.id] || [])
+      .filter(t => t.activity === 'waiting')
+      .map(t => ({
+        sessionId: s.id, sessionName: s.name, color: s.color || '',
+        windowIdx: t.windowIdx, tabName: t.name || t.agent || '',
+        statusLine: t.statusLine || '',
+      }));
+    if (tabs.length === 0 && $activities[s.id] === 'waiting') {
+      return [{ sessionId: s.id, sessionName: s.name, color: s.color || '',
+        windowIdx: 0, tabName: '', statusLine: $statusLines[s.id] || '' }];
+    }
+    return tabs;
+  });
+  $: if (waitingTabs.length === 0) showWaitingPanel = false;
 
-  function jumpToNextWaiting() {
-    if (waitingSessions.length === 0) return;
-    const idx = waitingSessions.findIndex(s => s.id === $selectedSessionId);
-    const next = waitingSessions[(idx + 1) % waitingSessions.length];
-    selectSession(next.id);
+  function jumpToWaiting(tab: WaitingTab) {
+    showWaitingPanel = false;
+    selectSession(tab.sessionId);
+    selectWindow(tab.windowIdx);
     focusTerminal();
+  }
+
+  async function quickReply(tab: WaitingTab, action: string) {
+    try {
+      await QuickReplyTab(tab.sessionId, tab.windowIdx, action);
+    } catch (e) {
+      console.error('Quick reply failed:', e);
+    }
   }
 
   // Auto-close overlay when session selection changes
@@ -509,6 +546,8 @@
   }
 </script>
 
+<svelte:window on:click={() => { if (showWaitingPanel) showWaitingPanel = false; }} />
+
 <main class="app-container h-screen flex flex-col text-white overflow-hidden" style="--sidebar-width: {actualSidebarWidth}px" dir={$isRTL ? 'rtl' : 'ltr'}>
   <!-- Header (draggable titlebar) -->
   <header class="header flex items-center justify-between py-3" style="--wails-draggable:drag; padding-left: 0; padding-right: 10px;"
@@ -532,23 +571,36 @@
     </div>
 
     <div class="flex items-center gap-3" style="--wails-draggable:no-drag">
-      {#if waitingSessions.length > 0}
-        <!-- Attention badge: sessions waiting for user input. Click cycles
-             through them so none gets forgotten. -->
-        <button class="btn waiting-badge" on:click={jumpToNextWaiting}
-          title={$t('header.waitingSessions', { n: waitingSessions.length })}>
-          ⏳ {waitingSessions.length}
-        </button>
+      {#if waitingTabs.length > 0}
+        <!-- Attention inbox: tabs waiting for user input, with one-click
+             answers so none of them gets forgotten. -->
+        <div class="waiting-wrap">
+          <button class="btn waiting-badge" on:click|stopPropagation={() => showWaitingPanel = !showWaitingPanel}
+            title={$t('header.waitingSessions', { n: waitingTabs.length })}>
+            ⏳ {waitingTabs.length}
+          </button>
+          {#if showWaitingPanel}
+            <div class="waiting-panel" on:click|stopPropagation>
+              {#each waitingTabs as tab (tab.sessionId + ':' + tab.windowIdx)}
+                <div class="waiting-row">
+                  <button class="waiting-target" on:click={() => jumpToWaiting(tab)}
+                    title={$t('waiting.jump')}>
+                    <span class="waiting-name" style={tab.color && !tab.color.startsWith('gradient-') ? `color:${tab.color}` : ''}>{tab.sessionName}</span>
+                    {#if tab.tabName}<span class="waiting-tab">› {tab.tabName}</span>{/if}
+                    {#if tab.statusLine}<span class="waiting-status">{tab.statusLine}</span>{/if}
+                  </button>
+                  <div class="waiting-actions">
+                    <button title="Enter" on:click={() => quickReply(tab, 'enter')}>↵</button>
+                    <button title="y + Enter" on:click={() => quickReply(tab, 'y')}>y</button>
+                    <button title="n + Enter" on:click={() => quickReply(tab, 'n')}>n</button>
+                    <button title="Esc" on:click={() => quickReply(tab, 'esc')}>Esc</button>
+                  </div>
+                </div>
+              {/each}
+            </div>
+          {/if}
+        </div>
       {/if}
-      <button class="btn btn-ghost" class:active-view={$appView === 'dashboard'} on:click={showDashboard} title={$t('dashboard.open')}>
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <rect x="3" y="3" width="7" height="7" rx="1"/>
-          <rect x="14" y="3" width="7" height="7" rx="1"/>
-          <rect x="3" y="14" width="7" height="7" rx="1"/>
-          <rect x="14" y="14" width="7" height="7" rx="1"/>
-        </svg>
-        {$t('dashboard.title')}
-      </button>
       <button class="btn btn-ghost" on:click={() => showGlobalSearch = true} title={$t('header.globalSearch')}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <circle cx="11" cy="11" r="8"/>
@@ -557,6 +609,15 @@
         {$t('app.search')}
       </button>
       <div class="header-icons">
+        <button class="btn btn-ghost btn-icon" on:click={() => showBgAgents = true} title={$t('bgAgents.open')}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="5" y="7" width="14" height="12" rx="2"/>
+            <path d="M12 7V4M8 4h8"/>
+            <circle cx="9.5" cy="12.5" r="0.5" fill="currentColor"/>
+            <circle cx="14.5" cy="12.5" r="0.5" fill="currentColor"/>
+            <path d="M9 16h6"/>
+          </svg>
+        </button>
         <button class="btn btn-ghost btn-icon" on:click={() => showImportDialog = true} title={$t('header.importSessions')}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
@@ -675,7 +736,8 @@
   <!-- Dialogs -->
   <NewSessionDialog bind:show={showNewSessionDialog} />
   <NewGroupDialog bind:show={showNewGroupDialog} />
-  <GlobalSearchDialog bind:show={showGlobalSearch} />
+  <BgAgentsDialog bind:show={showBgAgents} />
+<GlobalSearchDialog bind:show={showGlobalSearch} />
   <HelpDialog bind:show={showHelpDialog} />
   <UpdateDialog bind:show={showUpdateDialog} />
   <ImportDialog bind:show={showImportDialog} />
@@ -746,6 +808,57 @@
   .waiting-badge:hover {
     background: rgba(0, 206, 209, 0.22);
   }
+  .waiting-wrap { position: relative; }
+  .waiting-panel {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    z-index: 100;
+    min-width: 380px;
+    max-width: 520px;
+    max-height: 60vh;
+    overflow-y: auto;
+    padding: 6px;
+    border-radius: 10px;
+    border: 1px solid rgba(0, 206, 209, 0.25);
+    background: rgba(12, 12, 20, 0.98);
+    box-shadow: 0 12px 34px rgba(0, 0, 0, 0.5);
+  }
+  .waiting-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 6px;
+    border-radius: 7px;
+  }
+  .waiting-row:hover { background: rgba(0, 206, 209, 0.07); }
+  .waiting-target {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: baseline;
+    gap: 7px;
+    background: none;
+    border: 0;
+    padding: 4px 2px;
+    text-align: left;
+    cursor: pointer;
+  }
+  .waiting-name { color: #e4e4e7; font-size: 12px; font-weight: 650; white-space: nowrap; }
+  .waiting-tab { color: #8b8b95; font-size: 11px; white-space: nowrap; }
+  .waiting-status { color: #67e8f9; font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .waiting-actions { display: flex; gap: 4px; flex-shrink: 0; }
+  .waiting-actions button {
+    min-width: 26px;
+    padding: 3px 6px;
+    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.05);
+    color: #d4d4d8;
+    font-size: 11px;
+    cursor: pointer;
+  }
+  .waiting-actions button:hover { border-color: rgba(0, 206, 209, 0.5); color: #67e8f9; }
 
   :global(body) {
     margin: 0;

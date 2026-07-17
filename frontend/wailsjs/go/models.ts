@@ -40,6 +40,30 @@ export namespace main {
 	        this.timestamp = source["timestamp"];
 	    }
 	}
+	export class BackgroundAgentInfo {
+	    id: string;
+	    sessionId: string;
+	    pid: number;
+	    cwd: string;
+	    name: string;
+	    status: string;
+	    startedAt: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new BackgroundAgentInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.sessionId = source["sessionId"];
+	        this.pid = source["pid"];
+	        this.cwd = source["cwd"];
+	        this.name = source["name"];
+	        this.status = source["status"];
+	        this.startedAt = source["startedAt"];
+	    }
+	}
 	export class ClaudeUsageWindow {
 	    utilization: number;
 	    resetsAt: string;
@@ -695,6 +719,7 @@ export namespace session {
 	    stopped?: boolean;
 	    text_color?: string;
 	    background_color?: string;
+	    work_dir?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new FollowedWindow(source);
@@ -713,6 +738,7 @@ export namespace session {
 	        this.stopped = source["stopped"];
 	        this.text_color = source["text_color"];
 	        this.background_color = source["background_color"];
+	        this.work_dir = source["work_dir"];
 	    }
 	}
 	export class WindowInfo {

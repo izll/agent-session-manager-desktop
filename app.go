@@ -1075,7 +1075,7 @@ func (a *App) SetGroupColor(id, color, bgColor string, fullRow bool) error {
 // CreateTab creates a new tab in session
 // CreateTab creates a new tab and returns the new tmux window index so the
 // frontend can switch to (and focus) it immediately.
-func (a *App) CreateTab(sessionID string, isAgent bool, agent string, name string, extraArgs string) (int, error) {
+func (a *App) CreateTab(sessionID string, isAgent bool, agent string, name string, extraArgs string, workDir string) (int, error) {
 	inst, err := a.storage.GetInstance(sessionID)
 	if err != nil {
 		return -1, err
@@ -1084,13 +1084,13 @@ func (a *App) CreateTab(sessionID string, isAgent bool, agent string, name strin
 	newIdx := -1
 	if isAgent {
 		agentType := session.AgentType(agent)
-		idx, err := inst.NewAgentWindow(name, agentType, "", extraArgs)
+		idx, err := inst.NewAgentWindow(name, agentType, "", extraArgs, workDir)
 		if err != nil {
 			return -1, err
 		}
 		newIdx = idx
 	} else {
-		if err := inst.NewWindowWithName(name); err != nil {
+		if err := inst.NewWindowWithName(name, workDir); err != nil {
 			return -1, err
 		}
 		// tmux new-window selects the created window, so this is its index.
@@ -2064,6 +2064,38 @@ type UpdateInfo struct {
 // GetVersion returns the current application version (for the UI/about).
 func (a *App) GetVersion() string {
 	return Version
+}
+
+// QuickReplyTab sends one whitelisted answer key to a session window so the
+// user can respond to a waiting agent prompt straight from the attention
+// inbox, without switching tabs. The whitelist keeps arbitrary key injection
+// out of the bound API surface.
+func (a *App) QuickReplyTab(sessionID string, windowIdx int, action string) error {
+	inst, err := a.storage.GetInstance(sessionID)
+	if err != nil {
+		return err
+	}
+	var keys []string
+	switch action {
+	case "enter":
+		keys = []string{"Enter"}
+	case "esc":
+		keys = []string{"Escape"}
+	case "y":
+		keys = []string{"y", "Enter"}
+	case "n":
+		keys = []string{"n", "Enter"}
+	case "1", "2", "3":
+		keys = []string{action}
+	default:
+		return fmt.Errorf("unsupported quick-reply action %q", action)
+	}
+	for _, k := range keys {
+		if err := inst.SendKeysToWindow(windowIdx, k); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // LogFrontend drops a frontend message into the app's log file. The packaged

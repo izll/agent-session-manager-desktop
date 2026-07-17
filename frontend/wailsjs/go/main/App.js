@@ -10,6 +10,14 @@ export function AssignToGroup(arg1, arg2) {
   return window['go']['main']['App']['AssignToGroup'](arg1, arg2);
 }
 
+export function AttachBackgroundAgent(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['AttachBackgroundAgent'](arg1, arg2, arg3, arg4);
+}
+
+export function AttachBackgroundAgentAsTab(arg1, arg2, arg3) {
+  return window['go']['main']['App']['AttachBackgroundAgentAsTab'](arg1, arg2, arg3);
+}
+
 export function AttachSession(arg1, arg2) {
   return window['go']['main']['App']['AttachSession'](arg1, arg2);
 }
@@ -38,8 +46,8 @@ export function CreateSession(arg1, arg2, arg3, arg4, arg5) {
   return window['go']['main']['App']['CreateSession'](arg1, arg2, arg3, arg4, arg5);
 }
 
-export function CreateTab(arg1, arg2, arg3, arg4, arg5) {
-  return window['go']['main']['App']['CreateTab'](arg1, arg2, arg3, arg4, arg5);
+export function CreateTab(arg1, arg2, arg3, arg4, arg5, arg6) {
+  return window['go']['main']['App']['CreateTab'](arg1, arg2, arg3, arg4, arg5, arg6);
 }
 
 export function CreateTask(arg1, arg2, arg3, arg4, arg5) {
@@ -100,6 +108,10 @@ export function GetActivities() {
 
 export function GetAgents() {
   return window['go']['main']['App']['GetAgents']();
+}
+
+export function GetBackgroundAgentLogs(arg1) {
+  return window['go']['main']['App']['GetBackgroundAgentLogs'](arg1);
 }
 
 export function GetClaudeUsage() {
@@ -226,6 +238,10 @@ export function IsDevMode() {
   return window['go']['main']['App']['IsDevMode']();
 }
 
+export function ListBackgroundAgents() {
+  return window['go']['main']['App']['ListBackgroundAgents']();
+}
+
 export function LogFrontend(arg1) {
   return window['go']['main']['App']['LogFrontend'](arg1);
 }
@@ -240,6 +256,10 @@ export function MoveTask(arg1, arg2, arg3) {
 
 export function PerformUpdate(arg1) {
   return window['go']['main']['App']['PerformUpdate'](arg1);
+}
+
+export function QuickReplyTab(arg1, arg2, arg3) {
+  return window['go']['main']['App']['QuickReplyTab'](arg1, arg2, arg3);
 }
 
 export function RefreshWindow(arg1, arg2) {
@@ -332,6 +352,10 @@ export function StartSession(arg1) {
 
 export function StartSessionWithResume(arg1, arg2) {
   return window['go']['main']['App']['StartSessionWithResume'](arg1, arg2);
+}
+
+export function StopBackgroundAgent(arg1) {
+  return window['go']['main']['App']['StopBackgroundAgent'](arg1);
 }
 
 export function StopSession(arg1) {

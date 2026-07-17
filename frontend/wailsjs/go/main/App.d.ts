@@ -7,6 +7,10 @@ export function AddSubtask(arg1:string,arg2:string,arg3:string):Promise<main.Sub
 
 export function AssignToGroup(arg1:string,arg2:string):Promise<void>;
 
+export function AttachBackgroundAgent(arg1:string,arg2:string,arg3:string,arg4:string):Promise<string>;
+
+export function AttachBackgroundAgentAsTab(arg1:string,arg2:string,arg3:string):Promise<number>;
+
 export function AttachSession(arg1:string,arg2:number):Promise<string>;
 
 export function BrowseDirectory(arg1:string):Promise<string>;
@@ -21,7 +25,7 @@ export function CreateProject(arg1:string):Promise<main.ProjectInfo>;
 
 export function CreateSession(arg1:string,arg2:string,arg3:string,arg4:boolean,arg5:string):Promise<main.SessionInfo>;
 
-export function CreateTab(arg1:string,arg2:boolean,arg3:string,arg4:string,arg5:string):Promise<number>;
+export function CreateTab(arg1:string,arg2:boolean,arg3:string,arg4:string,arg5:string,arg6:string):Promise<number>;
 
 export function CreateTask(arg1:string,arg2:string,arg3:string,arg4:string,arg5:Array<string>):Promise<main.TaskInfo>;
 
@@ -52,6 +56,8 @@ export function GetActiveProjectID():Promise<string>;
 export function GetActivities():Promise<Record<string, string>>;
 
 export function GetAgents():Promise<Array<main.AgentInfo>>;
+
+export function GetBackgroundAgentLogs(arg1:string):Promise<string>;
 
 export function GetClaudeUsage():Promise<main.ClaudeUsageInfo>;
 
@@ -115,6 +121,8 @@ export function InitHistorySearch():Promise<void>;
 
 export function IsDevMode():Promise<boolean>;
 
+export function ListBackgroundAgents():Promise<Array<main.BackgroundAgentInfo>>;
+
 export function LogFrontend(arg1:string):Promise<void>;
 
 export function MoveSessionToIndex(arg1:string,arg2:number):Promise<void>;
@@ -122,6 +130,8 @@ export function MoveSessionToIndex(arg1:string,arg2:number):Promise<void>;
 export function MoveTask(arg1:string,arg2:string,arg3:string):Promise<void>;
 
 export function PerformUpdate(arg1:string):Promise<void>;
+
+export function QuickReplyTab(arg1:string,arg2:number,arg3:string):Promise<void>;
 
 export function RefreshWindow(arg1:string,arg2:number):Promise<void>;
 
@@ -168,6 +178,8 @@ export function SetWindowAutoYes(arg1:string,arg2:number,arg3:boolean):Promise<v
 export function StartSession(arg1:string):Promise<void>;
 
 export function StartSessionWithResume(arg1:string,arg2:string):Promise<void>;
+
+export function StopBackgroundAgent(arg1:string):Promise<void>;
 
 export function StopSession(arg1:string):Promise<void>;
 
