@@ -564,5 +564,6 @@
   "bgAgents.noMatches": "No agents match the filter",
   "tabBar.showStatusLine": "Show status line in list",
   "tabBar.hideStatusLine": "Hide status line in list",
-  "tabBar.statusHiddenBadge": "Status line hidden in the session list"
+  "tabBar.statusHiddenBadge": "Status line hidden in the session list",
+  "lock.otherInstance": "This project is already open in another window (pid {pid}). Terminals are disabled here to protect its sessions — close this window or switch to a different project."
 }

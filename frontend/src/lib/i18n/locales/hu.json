@@ -564,5 +564,6 @@
   "bgAgents.noMatches": "Nincs a szűrőnek megfelelő agent",
   "tabBar.showStatusLine": "Státusz sor mutatása a listában",
   "tabBar.hideStatusLine": "Státusz sor elrejtése a listában",
-  "tabBar.statusHiddenBadge": "Státusz sor rejtve a session listában"
+  "tabBar.statusHiddenBadge": "Státusz sor rejtve a session listában",
+  "lock.otherInstance": "Ez a projekt már meg van nyitva egy másik ablakban (pid {pid}). A terminálok itt le vannak tiltva a munkamenetek védelme miatt — zárd be ezt az ablakot, vagy válts másik projektre."
 }

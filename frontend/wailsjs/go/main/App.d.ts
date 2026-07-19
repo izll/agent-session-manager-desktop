@@ -73,6 +73,8 @@ export function GetHistoryPreview(arg1:main.HistoryEntryInfo):Promise<string>;
 
 export function GetLastLine(arg1:string):Promise<string>;
 
+export function GetLockStatus():Promise<main.LockStatusInfo>;
+
 export function GetNextTask(arg1:string):Promise<main.TaskInfo>;
 
 export function GetPreview(arg1:string,arg2:number):Promise<main.PreviewData>;

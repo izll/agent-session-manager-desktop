@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -171,7 +172,7 @@ func (s *Storage) IsProjectLocked(projectID string) (bool, int) {
 		return false, 0
 	}
 
-	pid, err := strconv.Atoi(string(data))
+	pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
 	if err != nil {
 		// Invalid lock file, remove it
 		os.Remove(lockPath)
@@ -196,20 +197,40 @@ func (s *Storage) IsProjectLocked(projectID string) (bool, int) {
 	return true, pid
 }
 
-// LockProject creates a lock file for the current project
+// ErrProjectLocked is returned by LockProject when another live instance
+// already holds the project. The holder's PID is carried on the error.
+type ErrProjectLocked struct {
+	PID int
+}
+
+func (e *ErrProjectLocked) Error() string {
+	return fmt.Sprintf("project already open in another instance (pid %d)", e.PID)
+}
+
+// LockProject acquires the project's lock file for this process. If a LIVE
+// instance already holds it, it fails with *ErrProjectLocked instead of
+// stealing the lock — two GUIs on the same project fight over the same tmux
+// windows and rip each other's ptys out ("read /dev/ptmx: input/output
+// error"). A stale lock (dead PID) is reclaimed. Any previously held lock by
+// this process is released first, so switching projects is safe.
 func (s *Storage) LockProject(projectID string) error {
 	if !validProjectID(projectID) {
 		return fmt.Errorf("invalid project ID")
 	}
-	lockPath := s.getLockPath(projectID)
 
-	// Ensure directory exists
+	if locked, pid := s.IsProjectLocked(projectID); locked && pid != os.Getpid() {
+		return &ErrProjectLocked{PID: pid}
+	}
+
+	// Release any lock this process previously held (e.g. on project switch).
+	s.UnlockProject()
+
+	lockPath := s.getLockPath(projectID)
 	dir := filepath.Dir(lockPath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return fmt.Errorf("failed to create lock directory: %w", err)
 	}
 
-	// Write current PID to lock file
 	pid := os.Getpid()
 	if err := os.WriteFile(lockPath, []byte(strconv.Itoa(pid)), 0644); err != nil {
 		return fmt.Errorf("failed to create lock file: %w", err)

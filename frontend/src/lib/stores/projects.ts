@@ -11,6 +11,21 @@ export const projects = writable<Project[]>([]);
 export const activeProjectId = writable<string>('');
 export const isLoadingProjects = writable<boolean>(false);
 
+// PID of another instance that holds the active project's lock (0 = we own
+// it). Kept in the store so the lock banner updates on every project switch,
+// not just at startup.
+export const otherInstancePID = writable<number>(0);
+
+// Refresh the single-instance lock status for the active project.
+export async function refreshLockStatus() {
+  try {
+    const lock = await App.GetLockStatus();
+    otherInstancePID.set(lock && !lock.locked && lock.otherInstancePid > 0 ? lock.otherInstancePid : 0);
+  } catch {
+    otherInstancePID.set(0);
+  }
+}
+
 export async function loadProjects() {
   isLoadingProjects.set(true);
   try {
@@ -39,6 +54,8 @@ export async function selectProject(id: string) {
     groups.set([]);
     selectSession(null);
     await loadSessions();
+    // The backend moved the lock with the switch — refresh the banner.
+    await refreshLockStatus();
   } catch (e) {
     console.error('Failed to select project:', e);
     throw e;

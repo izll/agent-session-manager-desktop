@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -36,6 +37,12 @@ type App struct {
 	previewCancel    context.CancelFunc
 	previewWG        sync.WaitGroup
 	lastTypingSignal int64 // unix nano timestamp of last typing signal
+	// projectLocked is true when THIS instance owns the active project's lock.
+	// otherInstancePID is the PID of the instance that owns it instead (0 if
+	// none). Terminal attaches are refused unless projectLocked, so a second
+	// GUI on the same project can't fight over its tmux sessions.
+	projectLocked    bool
+	otherInstancePID int
 }
 
 // ptySession represents an active PTY connection
@@ -69,6 +76,25 @@ func (a *App) startup(ctx context.Context) {
 	}
 	a.storage = storage
 
+	// Single-instance-per-project guard. Two GUIs on the same project attach
+	// to the same tmux sessions and rip each other's ptys out
+	// ("read /dev/ptmx: input/output error"), silently killing tabs. Try to
+	// claim the active project's lock; if another live instance holds it,
+	// record the holder's PID so the frontend can warn instead of stomping
+	// the tmux state. We DON'T abort startup — the UI is still usable for
+	// read-only browsing — but terminal attaches are gated on a.projectLocked.
+	if lockErr := a.storage.LockProject(a.storage.GetActiveProjectID()); lockErr != nil {
+		var locked *session.ErrProjectLocked
+		if errors.As(lockErr, &locked) {
+			a.otherInstancePID = locked.PID
+			log.Printf("[lock] project already open in pid %d — terminal attaches disabled to protect its tmux sessions", locked.PID)
+		} else {
+			log.Printf("[lock] could not acquire project lock: %v", lockErr)
+		}
+	} else {
+		a.projectLocked = true
+	}
+
 	statsRecorder, err := NewActivityStatsRecorder()
 	if err != nil {
 		runtime.LogError(ctx, fmt.Sprintf("Failed to initialize activity statistics: %v", err))
@@ -79,6 +105,7 @@ func (a *App) startup(ctx context.Context) {
 	// Start WebSocket terminal server for low-latency terminal I/O
 	a.termServer = NewTerminalServer(storage, 9753)
 	a.termServer.typingSignal = &a.lastTypingSignal
+	a.termServer.attachAllowed = &a.projectLocked
 	if err := a.termServer.Start(); err != nil {
 		runtime.LogError(ctx, fmt.Sprintf("Failed to start terminal server: %v", err))
 	}
@@ -143,6 +170,11 @@ func (a *App) IsDevMode() bool {
 
 // shutdown is called when the app is closing
 func (a *App) shutdown(ctx context.Context) {
+	// Release the project lock only if WE hold it — a second instance that
+	// failed to acquire it must not delete the real owner's lock file.
+	if a.projectLocked {
+		a.storage.UnlockProject()
+	}
 	if a.previewCancel != nil {
 		a.previewCancel()
 		a.previewWG.Wait()
@@ -194,15 +226,30 @@ func (a *App) shutdown(ctx context.Context) {
 // cleanupOrphanedGUISessions removes GUI linked tmux sessions that belong to
 // sessions that are no longer running (e.g. from a previous app crash).
 func (a *App) cleanupOrphanedGUISessions() {
+	// Only the project owner may sweep mirrors. A second instance's "running"
+	// set is built from ITS view of storage and would classify the owner's
+	// live mirrors as orphaned, killing them and dropping the owner's
+	// terminals. Non-owners created no mirrors, so there is nothing to reap.
+	if !a.projectLocked {
+		return
+	}
+
 	out, err := exec.Command("tmux", "list-sessions", "-F", "#{session_name}").Output()
 	if err != nil || len(out) == 0 {
 		return
 	}
 
-	// Collect running session IDs
+	// Build two sets from THIS project's storage: every session we own
+	// (mine) and which of those are running. A mirror is reaped only when its
+	// base session is ours AND not running — a mirror whose base belongs to
+	// another PROJECT (loaded from a different sessions.json) is invisible
+	// here and must be left alone, or closing one project would kill another
+	// project's live terminals.
 	instances, _, _, _ := a.storage.LoadAllWithSettings()
+	mine := make(map[string]bool)
 	running := make(map[string]bool)
 	for _, inst := range instances {
+		mine[inst.ID] = true
 		if inst.Status == session.StatusRunning {
 			running[inst.ID] = true
 		}
@@ -220,21 +267,42 @@ func (a *App) cleanupOrphanedGUISessions() {
 			continue
 		}
 		baseName := name[:idx]
-		if !running[baseName] {
+		if mine[baseName] && !running[baseName] {
 			exec.Command("tmux", "kill-session", "-t", name).Run()
 		}
 	}
 }
 
-// cleanupAllGUISessions removes all GUI linked tmux sessions on app shutdown.
+// cleanupAllGUISessions removes THIS project's GUI linked tmux sessions on
+// app shutdown.
 func (a *App) cleanupAllGUISessions() {
+	// Only the project owner sweeps, and only its OWN mirrors. Two guards:
+	//  1. a non-owner created no mirrors (attaches refused) — nothing to do;
+	//  2. even as owner, kill only mirrors whose base session is in THIS
+	//     project's storage, so closing one project's window can't kill a
+	//     different project's live terminals (the _gui_ namespace is shared
+	//     across all projects on the machine).
+	if !a.projectLocked {
+		return
+	}
+
 	out, err := exec.Command("tmux", "list-sessions", "-F", "#{session_name}").Output()
 	if err != nil || len(out) == 0 {
 		return
 	}
 
+	instances, _, _, _ := a.storage.LoadAllWithSettings()
+	mine := make(map[string]bool)
+	for _, inst := range instances {
+		mine[inst.ID] = true
+	}
+
 	for _, name := range strings.Split(strings.TrimSpace(string(out)), "\n") {
-		if strings.Contains(name, "_gui_") {
+		idx := strings.Index(name, "_gui_")
+		if idx <= 0 {
+			continue
+		}
+		if mine[name[:idx]] {
 			exec.Command("tmux", "kill-session", "-t", name).Run()
 		}
 	}
@@ -270,9 +338,38 @@ func (a *App) GetProjects() ([]ProjectInfo, error) {
 	return result, nil
 }
 
-// SelectProject switches to a project
+// SelectProject switches to a project, moving the single-instance lock with
+// it: release the old project's lock and claim the new one. If the target is
+// already open elsewhere, the switch still happens (so the user can view it)
+// but this instance stays unlocked and terminal attaches remain disabled.
 func (a *App) SelectProject(id string) error {
-	return a.storage.SetActiveProject(id)
+	if err := a.storage.SetActiveProject(id); err != nil {
+		return err
+	}
+	a.otherInstancePID = 0
+	if err := a.storage.LockProject(id); err != nil {
+		a.projectLocked = false
+		var locked *session.ErrProjectLocked
+		if errors.As(err, &locked) {
+			a.otherInstancePID = locked.PID
+			log.Printf("[lock] switched to project %q which is open in pid %d — terminal attaches disabled", id, locked.PID)
+		}
+	} else {
+		a.projectLocked = true
+	}
+	return nil
+}
+
+// LockStatusInfo tells the frontend whether this instance owns the active
+// project (and if not, which PID does) so it can warn the user.
+type LockStatusInfo struct {
+	Locked           bool `json:"locked"`
+	OtherInstancePID int  `json:"otherInstancePid"`
+}
+
+// GetLockStatus reports whether this instance owns the active project's lock.
+func (a *App) GetLockStatus() LockStatusInfo {
+	return LockStatusInfo{Locked: a.projectLocked, OtherInstancePID: a.otherInstancePID}
 }
 
 // CreateProject creates a new project

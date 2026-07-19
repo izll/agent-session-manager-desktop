@@ -24,7 +24,7 @@
   import { activities } from './lib/stores/activities';
   import { statusLines, tabStatuses } from './lib/stores/statusLines';
   import { QuickReplyTab } from '../wailsjs/go/main/App';
-  import { loadProjects } from './lib/stores/projects';
+  import { loadProjects, otherInstancePID, refreshLockStatus } from './lib/stores/projects';
   import { appView } from './lib/stores/navigation';
   import { loadSettings, settings } from './lib/stores/settings';
   import { agents, loadAgents } from './lib/stores/agents';
@@ -38,6 +38,19 @@
 
   // Dev mode
   let devMode = false;
+
+  // Single-instance guard: when another instance owns this project, the
+  // backend refuses terminal attaches. Show a dismissable banner so the user
+  // knows why terminals won't connect (instead of silent black tabs). The PID
+  // lives in the projects store so it updates on every project switch.
+  let lockBannerDismissed = false;
+  // Reset the "dismissed" state whenever the lock owner changes (e.g. after
+  // a project switch), so the banner reappears for a newly-locked project.
+  let prevOtherPID = 0;
+  $: if ($otherInstancePID !== prevOtherPID) {
+    prevOtherPID = $otherInstancePID;
+    lockBannerDismissed = false;
+  }
 
   function openDevTools() {
     // Wails internal message to open WebKit inspector
@@ -342,6 +355,10 @@
     // Check dev mode
     try { devMode = await IsDevMode(); } catch(_) {}
 
+    // Detect a second instance holding this project's lock (store-backed so
+    // it updates on project switches too).
+    await refreshLockStatus();
+
     // Start combined sidebar polling (activities + status lines)
     startSidebarPolling();
 
@@ -549,6 +566,15 @@
 <svelte:window on:click={() => { if (showWaitingPanel) showWaitingPanel = false; }} />
 
 <main class="app-container h-screen flex flex-col text-white overflow-hidden" style="--sidebar-width: {actualSidebarWidth}px" dir={$isRTL ? 'rtl' : 'ltr'}>
+  {#if $otherInstancePID > 0 && !lockBannerDismissed}
+    <div class="lock-banner">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+      </svg>
+      <span>{$t('lock.otherInstance', { pid: $otherInstancePID })}</span>
+      <button class="lock-dismiss" on:click={() => lockBannerDismissed = true}>×</button>
+    </div>
+  {/if}
   <!-- Header (draggable titlebar) -->
   <header class="header flex items-center justify-between py-3" style="--wails-draggable:drag; padding-left: 0; padding-right: 10px;"
     on:contextmenu|preventDefault={devMode ? openDevTools : undefined}>
@@ -795,7 +821,26 @@
 </main>
 
 <style>
-  .waiting-badge {
+.lock-banner {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 16px;
+    background: rgba(251, 146, 60, 0.14);
+    border-bottom: 1px solid rgba(251, 146, 60, 0.3);
+    color: #fdba74;
+    font-size: 12px;
+    flex-shrink: 0;
+  }
+  .lock-banner svg { flex-shrink: 0; }
+  .lock-banner span { flex: 1; }
+  .lock-dismiss {
+    border: 0; background: transparent; color: #fdba74;
+    cursor: pointer; font-size: 18px; line-height: 1; padding: 0 4px;
+  }
+  .lock-dismiss:hover { color: #fff; }
+
+    .waiting-badge {
     color: #67e8f9;
     background: rgba(0, 206, 209, 0.12);
     border: 1px solid rgba(0, 206, 209, 0.3);

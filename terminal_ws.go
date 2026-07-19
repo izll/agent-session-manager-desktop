@@ -64,6 +64,10 @@ type TerminalServer struct {
 	mu           sync.RWMutex
 	conns        map[string]*termConn
 	typingSignal *int64 // pointer to App.lastTypingSignal for zero-overhead typing detection
+	// attachAllowed points at App.projectLocked. When false (another instance
+	// owns the active project), we refuse terminal attaches so two GUIs can't
+	// fight over the same tmux sessions and kill each other's ptys.
+	attachAllowed *bool
 }
 
 type termConn struct {
@@ -216,6 +220,15 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 		subtle.ConstantTimeCompare([]byte(token), []byte(ts.authToken)) != 1 {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		log.Printf("[terminal] rejected connection: bad/missing token (origin=%q)", r.Header.Get("Origin"))
+		return
+	}
+
+	// Refuse attaches when another instance owns the project. Attaching would
+	// create/kill mirror tmux sessions that the owning instance is using,
+	// ripping its ptys out ("read /dev/ptmx: input/output error").
+	if ts.attachAllowed != nil && !*ts.attachAllowed {
+		http.Error(w, "project locked by another instance", http.StatusConflict)
+		log.Printf("[terminal] refused attach: project locked by another instance")
 		return
 	}
 

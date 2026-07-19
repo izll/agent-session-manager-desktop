@@ -142,6 +142,10 @@ export function GetLastLine(arg1) {
   return window['go']['main']['App']['GetLastLine'](arg1);
 }
 
+export function GetLockStatus() {
+  return window['go']['main']['App']['GetLockStatus']();
+}
+
 export function GetNextTask(arg1) {
   return window['go']['main']['App']['GetNextTask'](arg1);
 }

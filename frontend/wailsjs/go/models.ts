@@ -8,11 +8,11 @@ export namespace main {
 	    idleMs: number;
 	    waitingEvents: number;
 	    sharePercent: number;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new ActivityStatsAgent(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.agent = source["agent"];
@@ -29,11 +29,11 @@ export namespace main {
 	    busyMs: number;
 	    waitingMs: number;
 	    idleMs: number;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new ActivityStatsDay(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.date = source["date"];
@@ -51,11 +51,11 @@ export namespace main {
 	    waitingMs: number;
 	    idleMs: number;
 	    waitingEvents: number;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new ActivityStatsSession(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.sessionId = source["sessionId"];
@@ -75,11 +75,11 @@ export namespace main {
 	    idleMs: number;
 	    waitingEvents: number;
 	    busyPercent: number;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new ActivityStatsSummary(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.observedMs = source["observedMs"];
@@ -398,6 +398,20 @@ export namespace main {
 	        this.isDefault = source["isDefault"];
 	    }
 	}
+	export class LockStatusInfo {
+	    locked: boolean;
+	    otherInstancePid: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new LockStatusInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.locked = source["locked"];
+	        this.otherInstancePid = source["otherInstancePid"];
+	    }
+	}
 	export class MCPSubtaskInfo {
 	    id: string;
 	    title: string;
@@ -490,11 +504,11 @@ export namespace main {
 	    series: ActivityStatsDay[];
 	    agents: ActivityStatsAgent[];
 	    sessions: ActivityStatsSession[];
-
+	
 	    static createFrom(source: any = {}) {
 	        return new ProjectActivityStatistics(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.days = source["days"];
@@ -505,7 +519,7 @@ export namespace main {
 	        this.agents = this.convertValues(source["agents"], ActivityStatsAgent);
 	        this.sessions = this.convertValues(source["sessions"], ActivityStatsSession);
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -907,3 +921,4 @@ export namespace session {
 	}
 
 }
+
