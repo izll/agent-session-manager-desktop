@@ -268,7 +268,26 @@ export function createTerminal(container: HTMLElement, options: Partial<Terminal
     cleanup: () => {
       container.removeEventListener('mousedown', onMouseDown, true);
       container.removeEventListener('mouseup', onMouseUp, true);
-      terminal.dispose();
+      // xterm's dispose() intermittently throws from its internal linkifier
+      // ("this._linkifier2.onShowLinkUnderline" is undefined) when a tab is
+      // torn down right after an abrupt WebSocket close (1005). The throw
+      // aborts dispose() midway, leaving the instance half-disposed so the
+      // next attach reuses a broken renderer — the "black tab until manual
+      // detach/attach" symptom. Neutralize the linkifier's callbacks first so
+      // the risky path can't fire, then dispose defensively.
+      try {
+        const core = (terminal as any)._core;
+        const linkifier = core?._linkifier2 || core?.linkifier2 || core?._linkifier;
+        if (linkifier) {
+          linkifier.onShowLinkUnderline = () => {};
+          linkifier.onHideLinkUnderline = () => {};
+        }
+      } catch { /* internals shifted between xterm versions — ignore */ }
+      try {
+        terminal.dispose();
+      } catch (e) {
+        console.warn('[terminal] dispose threw during cleanup:', e);
+      }
     }
   };
 }
