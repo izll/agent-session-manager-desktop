@@ -1,20 +1,22 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
+  import { createEventDispatcher, onMount, onDestroy } from 'svelte';
   import TabBar from './TabBar.svelte';
   import Terminal from './Terminal.svelte';
   import Notes from './Notes.svelte';
   import Diff from './Diff.svelte';
   import TaskPanel from './TaskPanel.svelte';
   import ForkDialog from '../Dialogs/ForkDialog.svelte';
-  import { sessions, selectedSessionId, selectedWindowIdx, toggleAutoYes, cycleYoloMode } from '../../stores/sessions';
+  import { sessions, selectedSessionId, selectedWindowIdx, selectSession, selectWindow, toggleAutoYes, cycleYoloMode } from '../../stores/sessions';
   import { agents } from '../../stores/agents';
   import { tabStatuses } from '../../stores/statusLines';
+  import { settings, saveSettings } from '../../stores/settings';
   import { get } from 'svelte/store';
   import { t } from '../../i18n';
 
   const dispatch = createEventDispatcher();
 
   export let visible = true;
+  export let terminalFocusAllowed = true;
 
   let activeView: 'terminal' | 'diff' | 'notes' | 'tasks' = 'terminal';
   let terminalAttached = false;
@@ -23,6 +25,81 @@
   let diffMode: 'session' | 'full' = 'session';
   let terminalComponent: Terminal;
   let fullDiffActive = false;
+  let focusedTerminalPane: 'primary' | 'secondary' = 'primary';
+  let lastPrimaryTarget = '';
+
+  // Sidebar/session navigation always targets the primary pane. If the user
+  // previously typed in the pinned secondary pane, hand focus ownership back
+  // when the selected session or tab changes so input cannot remain stuck on
+  // the old split target.
+  $: {
+    const primaryTarget = `${$selectedSessionId || ''}:${$selectedWindowIdx ?? 0}`;
+    if (primaryTarget !== lastPrimaryTarget) {
+      lastPrimaryTarget = primaryTarget;
+      focusedTerminalPane = 'primary';
+    }
+  }
+
+  $: markedSession = $sessions.find(s => s.id === $settings.markedSessionId) || null;
+  $: markedWindowIdx = $settings.markedWindowIdx || 0;
+  $: markedTabName = (() => {
+    if (!markedSession) return '';
+    if (markedWindowIdx === 0) return markedSession.name;
+    const tab = markedSession.followedWindows?.find((w: any) => w.index === markedWindowIdx);
+    return tab?.name || `${markedSession.name} · ${markedWindowIdx}`;
+  })();
+  $: splitDuplicate = !!markedSession &&
+    markedSession.id === $selectedSessionId && markedWindowIdx === $selectedWindowIdx;
+  $: splitEnabled = $settings.splitView && !!markedSession;
+
+  function toggleSplitView() {
+    if ($settings.splitView) {
+      void saveSettings({ splitView: false, markedSessionId: '', markedWindowIdx: 0 });
+      focusedTerminalPane = 'primary';
+      return;
+    }
+    if (!$selectedSessionId) return;
+    void saveSettings({
+      splitView: true,
+      markedSessionId: $selectedSessionId,
+      markedWindowIdx: $selectedWindowIdx ?? 0
+    });
+  }
+
+  function pinCurrentToSplit() {
+    if (!$selectedSessionId) return;
+    void saveSettings({
+      splitView: true,
+      markedSessionId: $selectedSessionId,
+      markedWindowIdx: $selectedWindowIdx ?? 0
+    });
+  }
+
+  function swapSplitTargets() {
+    if (!markedSession || !$selectedSessionId) return;
+    const primarySessionId = $selectedSessionId;
+    const primaryWindowIdx = $selectedWindowIdx ?? 0;
+    const secondarySessionId = markedSession.id;
+    const secondaryWindowIdx = markedWindowIdx;
+    selectSession(secondarySessionId);
+    selectWindow(secondaryWindowIdx);
+    void saveSettings({
+      splitView: true,
+      markedSessionId: primarySessionId,
+      markedWindowIdx: primaryWindowIdx
+    });
+    focusedTerminalPane = 'primary';
+  }
+
+  function handleSetView(e: Event) {
+    const view = (e as CustomEvent<{ view: 'terminal' | 'diff' | 'notes' | 'tasks' }>).detail?.view;
+    if (!view) return;
+    fullDiffActive = false;
+    activeView = view;
+  }
+
+  onMount(() => window.addEventListener('main-panel:set-view', handleSetView));
+  onDestroy(() => window.removeEventListener('main-panel:set-view', handleSetView));
 
   // Check if current session supports fork (Claude only)
   function getCurrentSession() {
@@ -153,6 +230,19 @@
           </button>
         </div>
         <div class="view-tabs-right">
+          <button
+            class="split-btn"
+            class:active={splitEnabled}
+            on:click={toggleSplitView}
+            disabled={activeView !== 'terminal'}
+            title={splitEnabled ? $t('split.close') : $t('split.pinCurrent')}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="4" width="18" height="16" rx="2"/>
+              <line x1="12" y1="4" x2="12" y2="20"/>
+            </svg>
+            {$t('split.label')}
+          </button>
           {#if canAutoYes}
             <button
               class="yolo-btn"
@@ -209,7 +299,51 @@
       <!-- Content Area - Keep components mounted, use CSS to show/hide -->
       <div class="flex-1 overflow-hidden content-area">
         <div class="view-panel" class:active={activeView === 'terminal'}>
-          <Terminal bind:this={terminalComponent} bind:isAttached={terminalAttached} active={visible && activeView === 'terminal'} />
+          <div class="terminal-layout" class:split={splitEnabled}>
+            <div class="terminal-pane primary" class:focused={focusedTerminalPane === 'primary'}>
+              <Terminal
+                bind:this={terminalComponent}
+                bind:isAttached={terminalAttached}
+                active={visible && activeView === 'terminal'}
+                focusOwner={focusedTerminalPane === 'primary'}
+                focusAllowed={terminalFocusAllowed}
+                on:focus={() => focusedTerminalPane = 'primary'}
+              />
+            </div>
+            {#if splitEnabled && markedSession}
+              <div class="terminal-pane secondary" class:focused={focusedTerminalPane === 'secondary'}>
+                <div class="split-header">
+                  <div class="split-title">
+                    <strong>{markedSession.name}</strong>
+                    <span>› {markedTabName}</span>
+                  </div>
+                  <div class="split-actions">
+                    <button on:click={pinCurrentToSplit} title={$t('split.useCurrent')}>◎</button>
+                    <button on:click={swapSplitTargets} title={$t('split.swap')}>⇄</button>
+                    <button on:click={toggleSplitView} title={$t('split.close')}>×</button>
+                  </div>
+                </div>
+                <div class="split-terminal">
+                  {#if splitDuplicate}
+                    <div class="split-placeholder">
+                      <span>◫</span>
+                      <strong>{$t('split.sameTab')}</strong>
+                      <small>{$t('split.sameTabHint')}</small>
+                    </div>
+                  {:else}
+                    <Terminal
+                      sessionId={markedSession.id}
+                      windowIdx={markedWindowIdx}
+                      active={visible && activeView === 'terminal'}
+                      focusOwner={focusedTerminalPane === 'secondary'}
+                      focusAllowed={terminalFocusAllowed}
+                      on:focus={() => focusedTerminalPane = 'secondary'}
+                    />
+                  {/if}
+                </div>
+              </div>
+            {/if}
+          </div>
         </div>
         <div class="view-panel" class:active={activeView === 'diff'}>
           <Diff active={visible && activeView === 'diff'} initialMode={diffMode} />
@@ -397,6 +531,94 @@
     flex-direction: column;
   }
 
+  .terminal-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    min-height: 0;
+  }
+
+  .terminal-layout.split {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1px;
+    background: rgba(139, 92, 246, 0.28);
+  }
+
+  .terminal-pane {
+    position: relative;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+    background: #0a0a0f;
+  }
+
+  .terminal-pane.focused {
+    box-shadow: inset 0 0 0 1px rgba(139, 92, 246, 0.35);
+  }
+
+  .terminal-pane.secondary {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .split-header {
+    height: 34px;
+    flex: 0 0 34px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 0 8px 0 11px;
+    background: rgba(17, 17, 27, 0.96);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  }
+
+  .split-title {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    overflow: hidden;
+    font-size: 10px;
+  }
+
+  .split-title strong,
+  .split-title span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .split-title strong { color: #d4d4d8; }
+  .split-title span { color: #71717a; }
+  .split-actions { display: flex; gap: 3px; }
+  .split-actions button {
+    width: 23px;
+    height: 23px;
+    border: 0;
+    border-radius: 5px;
+    background: transparent;
+    color: #71717a;
+    cursor: pointer;
+  }
+  .split-actions button:hover { background: rgba(255,255,255,.07); color: #ddd6fe; }
+  .split-terminal { position: relative; flex: 1; min-height: 0; overflow: hidden; }
+  .split-placeholder {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    color: #52525b;
+    text-align: center;
+  }
+  .split-placeholder span { font-size: 28px; color: #7c3aed; }
+  .split-placeholder strong { font-size: 12px; color: #a1a1aa; }
+  .split-placeholder small { max-width: 260px; font-size: 10px; }
+
   .status-bar {
     display: flex;
     align-items: center;
@@ -481,6 +703,29 @@
     color: #9ca3af;
     cursor: pointer;
     transition: all 0.2s ease;
+  }
+
+  .split-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 10px;
+    background: rgba(139, 92, 246, 0.08);
+    border: 1px solid rgba(139, 92, 246, 0.2);
+    border-radius: 6px;
+    color: #8b8b95;
+    font-size: 11px;
+    cursor: pointer;
+  }
+  .split-btn:hover:not(:disabled),
+  .split-btn.active { color: #c4b5fd; background: rgba(139, 92, 246, 0.16); border-color: rgba(139, 92, 246, 0.38); }
+  .split-btn:disabled { opacity: .35; cursor: not-allowed; }
+
+  @media (max-width: 820px) {
+    .terminal-layout.split {
+      grid-template-columns: minmax(0, 1fr);
+      grid-template-rows: repeat(2, minmax(0, 1fr));
+    }
   }
 
   .yolo-btn:hover {

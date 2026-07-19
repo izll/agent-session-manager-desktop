@@ -13,6 +13,8 @@
   import UpdateDialog from './lib/components/Dialogs/UpdateDialog.svelte';
   import ImportDialog from './lib/components/Dialogs/ImportDialog.svelte';
   import SettingsDialog from './lib/components/Dialogs/SettingsDialog.svelte';
+  import RecoveryCenterDialog from './lib/components/Dialogs/RecoveryCenterDialog.svelte';
+  import CommandPalette from './lib/components/Dialogs/CommandPalette.svelte';
   import SessionColorDialog from './lib/components/Dialogs/SessionColorDialog.svelte';
   import ConfirmDialog from './lib/components/Dialogs/ConfirmDialog.svelte';
   import StopDialog from './lib/components/Dialogs/StopDialog.svelte';
@@ -70,6 +72,8 @@
   let showUpdateDialog = false;
   let showImportDialog = false;
   let showSettingsDialog = false;
+  let showRecoveryCenter = false;
+  let showCommandPalette = false;
   let showColorDialog = false;
   let colorDialogSession: Session | null = null;
   let showDeleteConfirm = false;
@@ -93,7 +97,7 @@
   $: anyDialogOpen =
     showNewSessionDialog || showNewGroupDialog || showGlobalSearch || showBgAgents ||
     showHelpDialog || showUpdateDialog || showImportDialog ||
-    showSettingsDialog || showColorDialog || showDeleteConfirm ||
+    showSettingsDialog || showRecoveryCenter || showCommandPalette || showColorDialog || showDeleteConfirm ||
     showQuitConfirm || showStopDialog || showStartDialog ||
     showResumeChoice || showResumeSessionPicker;
   $: if (prevAnyDialogOpen && !anyDialogOpen) {
@@ -225,12 +229,22 @@
     // running on every character, which dominated the per-keystroke JS cost
     // (profiling: ~48 keydown/s while typing pegged the main thread).
     const mod = (e.ctrlKey || e.metaKey) && e.shiftKey;
+    const paletteShortcut = (e.ctrlKey || e.metaKey) && !e.altKey && (
+      (!e.shiftKey && e.key.toLowerCase() === 'k') ||
+      (e.shiftKey && e.key.toLowerCase() === 'p')
+    );
     const altArrow = e.altKey && !e.ctrlKey && !e.shiftKey &&
       (e.key === 'ArrowUp' || e.key === 'ArrowDown');
-    if (!mod && !altArrow) return;
+    if (!mod && !altArrow && !paletteShortcut) return;
 
     // Don't handle shortcuts when any dialog is open
-    const dialogOpen = document.querySelector('.dialog-overlay') !== null;
+    const dialogOpen = showCommandPalette || document.querySelector('.dialog-overlay') !== null;
+    if (paletteShortcut) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!dialogOpen) showCommandPalette = true;
+      return;
+    }
     if (dialogOpen) return;
 
     // Don't handle shortcuts when dictation buffer panel is visible
@@ -336,10 +350,20 @@
     }
   }
 
+  function handleCommandStart() {
+    handleStart();
+  }
+
+  function handleCommandStop() {
+    handleStop();
+  }
+
   onMount(async () => {
     // Capture phase so the terminal (xterm) can't swallow Ctrl+Shift combos.
     window.addEventListener('keydown', handleKeydown, true);
     window.addEventListener('terminal-nav', handleTerminalNav as EventListener);
+    window.addEventListener('command:start-selected', handleCommandStart);
+    window.addEventListener('command:stop-selected', handleCommandStop);
 
     await Promise.all([
       loadProjects(),
@@ -369,6 +393,8 @@
   onDestroy(() => {
     window.removeEventListener('keydown', handleKeydown, true);
     window.removeEventListener('terminal-nav', handleTerminalNav as EventListener);
+    window.removeEventListener('command:start-selected', handleCommandStart);
+    window.removeEventListener('command:stop-selected', handleCommandStop);
     stopSidebarPolling();
     EventsOff('dictation:state');
     EventsOff('dictation:error');
@@ -597,13 +623,18 @@
     </div>
 
     <div class="flex items-center gap-3" style="--wails-draggable:no-drag">
-      <button class="btn btn-ghost" on:click={() => showGlobalSearch = true} title={$t('header.globalSearch')}>
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="11" cy="11" r="8"/>
-          <path d="M21 21l-4.35-4.35"/>
-        </svg>
-        {$t('app.search')}
-      </button>
+      <div class="header-text-actions">
+        <button class="btn btn-ghost" on:click={() => showGlobalSearch = true} title={$t('header.globalSearch')}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"/>
+            <path d="M21 21l-4.35-4.35"/>
+          </svg>
+          {$t('app.search')}
+        </button>
+        <button class="btn btn-ghost palette-trigger" on:click={() => showCommandPalette = true} title={$t('palette.title')}>
+          {$t('palette.title')}
+        </button>
+      </div>
       <div class="header-divider-vertical actions-divider"></div>
       <div class="header-icons">
       {#if waitingTabs.length > 0}
@@ -670,6 +701,13 @@
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="12" cy="12" r="3"/>
             <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+          </svg>
+        </button>
+        <button class="btn btn-ghost btn-icon" on:click={() => showRecoveryCenter = true} title={$t('recovery.open')}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="3 6 5 6 21 6"/>
+            <path d="M19 6l-1 15H6L5 6m3 0V3h8v3"/>
+            <path d="M9 11h6M9 15h6"/>
           </svg>
         </button>
       </div>
@@ -746,6 +784,7 @@
       <div class="main-view" class:hidden-view={$appView !== 'session'}>
         <MainPanel
           visible={$appView === 'session'}
+          terminalFocusAllowed={!anyDialogOpen}
           on:openColorDialog={() => { colorDialogSession = $selectedSession; showColorDialog = true; }}
           on:requestStop={handleStop}
           on:requestStart={handleStart}
@@ -769,6 +808,8 @@
   <UpdateDialog bind:show={showUpdateDialog} />
   <ImportDialog bind:show={showImportDialog} />
   <SettingsDialog bind:show={showSettingsDialog} on:dictationEnabledChange={handleDictationEnabledChange} />
+  <RecoveryCenterDialog bind:show={showRecoveryCenter} />
+  <CommandPalette bind:show={showCommandPalette} />
   <SessionColorDialog bind:show={showColorDialog} session={colorDialogSession} />
   <ConfirmDialog
     bind:show={showDeleteConfirm}
@@ -855,7 +896,6 @@
     background: rgba(0, 206, 209, 0.22);
   }
   .waiting-wrap { position: relative; display: flex; }
-  .actions-divider { margin: 0; }
   .waiting-panel {
     position: absolute;
     top: calc(100% + 8px);
@@ -962,6 +1002,16 @@
     border-color: rgba(139, 92, 246, 0.3);
   }
 
+  .header-text-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .header-text-actions .btn {
+    flex-shrink: 0;
+  }
+
   .header {
     background: linear-gradient(180deg, rgba(139, 92, 246, 0.08) 0%, transparent 100%);
     border-bottom: 1px solid rgba(139, 92, 246, 0.15);
@@ -1026,6 +1076,12 @@
     background: rgba(255, 255, 255, 0.1);
     margin: 0 16px 0 0;
     flex-shrink: 0;
+  }
+
+  .header-divider-vertical.actions-divider {
+    height: 20px;
+    align-self: auto;
+    margin: 0 8px;
   }
 
   .header-session-name {

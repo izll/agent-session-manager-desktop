@@ -35,6 +35,7 @@
       { key: 'Ctrl+Shift+8', desc: $t('help.actionToggleFavorite') },
     ]},
     { category: $t('help.searchCategory'), items: [
+      { key: 'Ctrl+K / Ctrl+Shift+P', desc: $t('help.actionCommandPalette') },
       { key: 'Ctrl+Shift+F', desc: $t('help.actionGlobalSearch') },
       { key: '/', desc: $t('help.actionFilterSessions') },
     ]},

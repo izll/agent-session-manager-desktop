@@ -15,6 +15,7 @@ export const isLoadingProjects = writable<boolean>(false);
 // it). Kept in the store so the lock banner updates on every project switch,
 // not just at startup.
 export const otherInstancePID = writable<number>(0);
+let projectSelectionQueue: Promise<void> = Promise.resolve();
 
 // Refresh the single-instance lock status for the active project.
 export async function refreshLockStatus() {
@@ -42,8 +43,13 @@ export async function loadProjects() {
   }
 }
 
-export async function selectProject(id: string) {
+async function selectProjectNow(id: string) {
   try {
+    const { loadSettings, flushSettingsSaves } = await import('./settings');
+    await flushSettingsSaves();
+    // Project-scoped terminal mirrors must not remain connected after the
+    // backend changes its active project.
+    window.dispatchEvent(new CustomEvent('terminal:destroy-all'));
     await App.SelectProject(id);
     activeProjectId.set(id);
     // Reload sessions for new project
@@ -53,13 +59,21 @@ export async function selectProject(id: string) {
     sessions.set([]);
     groups.set([]);
     selectSession(null);
-    await loadSessions();
+    await Promise.all([loadSessions(), loadSettings()]);
     // The backend moved the lock with the switch — refresh the banner.
     await refreshLockStatus();
   } catch (e) {
     console.error('Failed to select project:', e);
     throw e;
   }
+}
+
+export function selectProject(id: string): Promise<void> {
+  const selection = projectSelectionQueue
+    .catch(() => {})
+    .then(() => selectProjectNow(id));
+  projectSelectionQueue = selection;
+  return selection;
 }
 
 export async function createProject(name: string) {

@@ -27,6 +27,8 @@ export class TerminalPool {
   private parentEl: HTMLElement;
   private activeKey: string | null = null;
   private showGeneration = 0;
+  private disposed = false;
+  private connecting = new Map<string, Promise<void>>();
   private terminalOptions: Partial<Terminal['options']>;
 
   constructor(parentEl: HTMLElement, terminalOptions: Partial<Terminal['options']> = {}) {
@@ -80,9 +82,28 @@ export class TerminalPool {
   }
 
   async getOrCreate(sessionId: string, windowIdx: number): Promise<PoolEntry> {
+    if (this.disposed) throw new Error('terminal pool is disposed');
     const key = this.makeKey(sessionId, windowIdx);
     let entry = this.entries.get(key);
-    if (entry) return entry;
+    if (entry) {
+      const pending = this.connecting.get(key);
+      if (pending) {
+        await pending;
+        entry = this.entries.get(key);
+      }
+      if (entry?.terminalInstance.ws?.readyState === WebSocket.OPEN) {
+        return entry;
+      }
+      // A second split pane may have replaced this target's backend
+      // connection. Its onclose leaves the cached xterm entry behind with a
+      // null/closed socket; displaying that stale entry looks frozen until a
+      // manual detach/attach. Evict it and create a fresh connection instead.
+      if (entry) {
+        this.entries.delete(key);
+        if (this.activeKey === key) this.activeKey = null;
+        this.teardownEntry(entry);
+      }
+    }
 
     // Create a new DOM container
     const containerEl = document.createElement('div');
@@ -116,8 +137,10 @@ export class TerminalPool {
     // would poison the pool — every later show()/getOrCreate() would return
     // this dead, never-connected entry (permanently black terminal) until a
     // manual detach/attach happened to rebuild it.
+    const attachPromise = attachToSession(terminalInstance, sessionId, windowIdx);
+    this.connecting.set(key, attachPromise);
     try {
-      await attachToSession(terminalInstance, sessionId, windowIdx);
+      await attachPromise;
     } catch (err) {
       this.entries.delete(key);
       if (this.activeKey === key) {
@@ -126,21 +149,36 @@ export class TerminalPool {
       try { terminalInstance.cleanup(); } catch { /* already torn down */ }
       containerEl.remove();
       throw err;
+    } finally {
+      if (this.connecting.get(key) === attachPromise) {
+        this.connecting.delete(key);
+      }
+    }
+    if (this.disposed || this.entries.get(key) !== entry) {
+      this.entries.delete(key);
+      this.teardownEntry(entry);
+      throw new Error('terminal pool connection was cancelled');
     }
 
     return entry;
   }
 
-  async show(sessionId: string, windowIdx: number): Promise<void> {
+  async show(sessionId: string, windowIdx: number, shouldFocus: boolean | (() => boolean) = true): Promise<void> {
+    if (this.disposed) return;
+    const canFocus = () => typeof shouldFocus === 'function' ? shouldFocus() : shouldFocus;
     const key = this.makeKey(sessionId, windowIdx);
 
-    // If already active, just fit
+    // If already active and still connected, just fit. A split pane may have
+    // replaced this target's backend connection while the cached entry stayed
+    // active in this pool. In that case fall through so getOrCreate() can evict
+    // and rebuild it instead of fitting a dead, black terminal.
     if (this.activeKey === key) {
       const entry = this.entries.get(key);
-      if (entry) {
+      if (entry?.terminalInstance.ws?.readyState === WebSocket.OPEN) {
         requestAnimationFrame(() => fitTerminal(entry.terminalInstance));
+        if (canFocus()) entry.terminalInstance.terminal.focus();
+        return;
       }
-      return;
     }
 
     // Claim this generation so stale async calls won't override us
@@ -160,6 +198,13 @@ export class TerminalPool {
 
     // If another show() was called while we were awaiting, bail out
     if (this.showGeneration !== gen) return;
+
+    // getOrCreate() clears activeKey when it evicts a stale cached entry. That
+    // is normally correct for standalone callers, but this show() still owns
+    // the current generation and the freshly-created entry is its intended
+    // target. Restore the key before applying visibility; otherwise every
+    // entry remains display:none and the switched-to tab is permanently black.
+    this.activeKey = key;
 
     // NOTE: we intentionally keep EVERY opened tab's WebSocket + tmux mirror
     // live (we do NOT tear down inactive tabs). An earlier experiment tore
@@ -182,7 +227,7 @@ export class TerminalPool {
     // switch". Now we RETRY across several frames until the container has a real
     // size, then fit + force a full repaint. Focus happens immediately and
     // unconditionally (it doesn't depend on layout).
-    entry.terminalInstance.terminal.focus();
+    if (canFocus()) entry.terminalInstance.terminal.focus();
     const term = entry.terminalInstance.terminal;
     let tries = 0;
     const settle = () => {
@@ -193,7 +238,7 @@ export class TerminalPool {
         // Force a full repaint of the viewport — without this the DOM/canvas
         // renderer can stay blank after display:none→block on some WebKit builds.
         term.refresh(0, term.rows - 1);
-        term.focus();
+        if (canFocus()) term.focus();
         return;
       }
       if (++tries < 30) requestAnimationFrame(settle); // ~0.5s of retries max
@@ -239,6 +284,7 @@ export class TerminalPool {
   }
 
   async destroyWindow(sessionId: string, windowIdx: number): Promise<void> {
+    this.showGeneration++;
     const key = this.makeKey(sessionId, windowIdx);
     const entry = this.entries.get(key);
     if (!entry) return;
@@ -250,6 +296,7 @@ export class TerminalPool {
   }
 
   async destroy(sessionId: string): Promise<void> {
+    this.showGeneration++;
     // Detach map state synchronously first (see note above), then tear down.
     const doomed: PoolEntry[] = [];
     for (const [key, entry] of this.entries) {
@@ -267,6 +314,7 @@ export class TerminalPool {
   }
 
   async destroyAll(): Promise<void> {
+    this.showGeneration++;
     const doomed = [...this.entries.values()];
     this.entries.clear();
     this.activeKey = null;
@@ -288,7 +336,7 @@ export class TerminalPool {
    * key, fully tear down, then re-show — bumping showGeneration first so any
    * in-flight settle()/rAF from the old terminals can't write to the new ones.
    */
-  async recreateActiveForRenderer(): Promise<void> {
+  async recreateActiveForRenderer(shouldFocus: boolean | (() => boolean) = true): Promise<void> {
     const key = this.activeKey;
     if (!key) return;
     const sessionId = key.slice(0, key.lastIndexOf(':'));
@@ -305,12 +353,18 @@ export class TerminalPool {
     this.entries.clear();
     this.activeKey = null;
 
-    await this.show(sessionId, widx);
+    await this.show(sessionId, widx, shouldFocus);
   }
 
   hideAll(): void {
+    this.showGeneration++;
     this.activeKey = null;
     this.applyVisibility();
+  }
+
+  async dispose(): Promise<void> {
+    this.disposed = true;
+    await this.destroyAll();
   }
 
   fitActive(): void {

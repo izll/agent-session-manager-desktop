@@ -3,6 +3,7 @@
   import { selectedSessionId } from '../../stores/sessions';
   import { get } from 'svelte/store';
   import * as App from '../../../../wailsjs/go/main/App';
+  import { ClipboardSetText } from '../../../../wailsjs/runtime/runtime';
   import { t } from '../../i18n';
 
   export let active = false;
@@ -25,6 +26,12 @@
   // and let the user opt in, because rendering a huge diff is heavy. `forceShow`
   // is set by the "show anyway" button; reset whenever the diff content changes.
   let forceShow = false;
+  let copyState: 'idle' | 'copied' | 'failed' = 'idle';
+  let copyResetTimeout: ReturnType<typeof setTimeout> | null = null;
+  let loadedDiffKey = '';
+  let copyGeneration = 0;
+  let copying = false;
+  let destroyed = false;
   // ~6000 lines (or ~600 KB) counts as "large" — above this we warn first.
   const LARGE_DIFF_LINES = 6000;
   const LARGE_DIFF_BYTES = 600 * 1024;
@@ -58,19 +65,61 @@
   }
 
   onDestroy(() => {
+    destroyed = true;
+    copyGeneration++;
     stopPolling();
+    if (copyResetTimeout) clearTimeout(copyResetTimeout);
   });
+
+  function resetCopyState() {
+    copyGeneration++;
+    copying = false;
+    copyState = 'idle';
+    if (copyResetTimeout) {
+      clearTimeout(copyResetTimeout);
+      copyResetTimeout = null;
+    }
+  }
+
+  async function copyDiff() {
+    if (!diffContent || loading || copying || loadedDiffKey !== currentDiffKey) return;
+    const content = diffContent;
+    const generation = ++copyGeneration;
+    copying = true;
+    try {
+      const copied = await ClipboardSetText(content);
+      if (destroyed || generation !== copyGeneration || content !== diffContent) return;
+      copyState = copied ? 'copied' : 'failed';
+    } catch {
+      if (destroyed || generation !== copyGeneration) return;
+      copyState = 'failed';
+    }
+    copying = false;
+    if (copyResetTimeout) clearTimeout(copyResetTimeout);
+    copyResetTimeout = setTimeout(() => {
+      if (destroyed || generation !== copyGeneration) return;
+      copyState = 'idle';
+      copyResetTimeout = null;
+    }, 1800);
+  }
 
   async function loadDiff() {
     const sessionId = get(selectedSessionId);
     const mode = diffMode;
     const generation = ++loadGeneration;
+    const requestedKey = `${sessionId || ''}:${mode}`;
     if (!sessionId) {
       diff = null;
+      loadedDiffKey = '';
+      resetCopyState();
       error = '';
       return;
     }
 
+    if (loadedDiffKey !== requestedKey) {
+      diff = null;
+      resetCopyState();
+    }
     lastSessionId = sessionId;
     loading = true;
     error = '';
@@ -83,11 +132,15 @@
         result = await App.GetFullDiff(sessionId);
       }
       if (generation !== loadGeneration || sessionId !== get(selectedSessionId) || mode !== diffMode || !active) return;
+      if (diff?.content !== result.content) resetCopyState();
       diff = result;
+      loadedDiffKey = requestedKey;
     } catch (e) {
       if (generation !== loadGeneration || sessionId !== get(selectedSessionId) || mode !== diffMode || !active) return;
       error = String(e);
       diff = null;
+      loadedDiffKey = '';
+      resetCopyState();
     }
     if (generation === loadGeneration) loading = false;
     if (generation === loadGeneration && active && !pollTimeout) {
@@ -155,6 +208,7 @@
   // check + one newline count). If it's large we show a warning instead of
   // rendering, until the user clicks "show anyway".
   $: diffContent = diff?.content || '';
+  $: currentDiffKey = `${$selectedSessionId || ''}:${diffMode}`;
   $: isLargeDiff =
     diffContent.length > LARGE_DIFF_BYTES ||
     (diffContent ? countLines(diffContent) : 0) > LARGE_DIFF_LINES;
@@ -191,6 +245,17 @@
       {/if}
     </div>
     <div class="header-right">
+      <button class="copy-btn" on:click={copyDiff} disabled={!diffContent || loading || copying || loadedDiffKey !== currentDiffKey} title={$t('diff.copy')}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          {#if copyState === 'copied'}
+            <polyline points="20 6 9 17 4 12"/>
+          {:else}
+            <rect x="9" y="9" width="11" height="11" rx="2"/>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+          {/if}
+        </svg>
+        {copyState === 'copied' ? $t('diff.copied') : copyState === 'failed' ? $t('diff.copyFailed') : $t('diff.copy')}
+      </button>
       <button class="refresh-btn" on:click={() => loadDiff()} disabled={loading}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class:spinning={loading}>
           <path d="M23 4v6h-6M1 20v-6h6"/>
@@ -338,11 +403,11 @@
     color: #f87171;
   }
 
+  .copy-btn,
   .refresh-btn {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 28px;
     height: 28px;
     background: rgba(255, 255, 255, 0.05);
     border: 1px solid rgba(255, 255, 255, 0.1);
@@ -352,11 +417,23 @@
     transition: all 0.2s ease;
   }
 
+  .copy-btn {
+    gap: 6px;
+    padding: 0 9px;
+    font-size: 11px;
+  }
+
+  .refresh-btn {
+    width: 28px;
+  }
+
+  .copy-btn:hover:not(:disabled),
   .refresh-btn:hover:not(:disabled) {
     background: rgba(255, 255, 255, 0.1);
     color: white;
   }
 
+  .copy-btn:disabled,
   .refresh-btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
@@ -376,6 +453,8 @@
     overflow: auto;
     font-family: 'JetBrains Mono', 'Fira Code', monospace;
     font-size: 12px;
+    user-select: text;
+    -webkit-user-select: text;
   }
 
   .loading, .error, .no-diff {

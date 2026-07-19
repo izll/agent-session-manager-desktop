@@ -38,6 +38,7 @@ type Settings struct {
 	ShowAgentIcons  bool   `json:"show_agent_icons,omitempty"`
 	SplitView       bool   `json:"split_view,omitempty"`
 	MarkedSessionID string `json:"marked_session_id,omitempty"`
+	MarkedWindowIdx int    `json:"marked_window_idx,omitempty"`
 	Cursor          int    `json:"cursor,omitempty"`
 	SplitFocus      int    `json:"split_focus,omitempty"`
 	AnthropicAPIKey string `json:"anthropic_api_key,omitempty"`
@@ -55,9 +56,12 @@ type Settings struct {
 }
 
 type StorageData struct {
-	Instances []*Instance `json:"instances"`
-	Groups    []*Group    `json:"groups,omitempty"`
-	Settings  *Settings   `json:"settings,omitempty"`
+	SchemaVersion int           `json:"schema_version,omitempty"`
+	Revision      uint64        `json:"revision,omitempty"`
+	Instances     []*Instance   `json:"instances"`
+	Groups        []*Group      `json:"groups,omitempty"`
+	Settings      *Settings     `json:"settings,omitempty"`
+	Trash         []*TrashEntry `json:"trash,omitempty"`
 }
 
 // DefaultSettings returns the initial settings a brand-new install should have.
@@ -298,6 +302,9 @@ func (s *Storage) saveProjectsLocked(projectsData *ProjectsData) error {
 	if err := os.Rename(tmp, projectsFile); err != nil {
 		os.Remove(tmp)
 		return fmt.Errorf("failed to rename projects file: %w", err)
+	}
+	if err := s.createProjectsBackupLocked(projectsData); err != nil {
+		fmt.Fprintf(os.Stderr, "automatic projects backup failed: %v\n", err)
 	}
 
 	return nil
@@ -556,17 +563,32 @@ func (s *Storage) LoadAllWithSettings() ([]*Instance, []*Group, *Settings, error
 
 // loadAllWithSettingsLocked is the internal version that assumes the mutex is held.
 func (s *Storage) loadAllWithSettingsLocked() ([]*Instance, []*Group, *Settings, error) {
+	storageData, err := s.loadStorageDataLocked()
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	return storageData.Instances, storageData.Groups, storageData.Settings, nil
+}
+
+func (s *Storage) loadStorageDataLocked() (*StorageData, error) {
 	data, err := os.ReadFile(s.configPath)
 	if os.IsNotExist(err) {
-		return []*Instance{}, []*Group{}, &Settings{}, nil
+		return &StorageData{
+			SchemaVersion: recoverySchemaVersion,
+			Instances:     []*Instance{},
+			Groups:        []*Group{},
+			Settings:      &Settings{},
+			Trash:         []*TrashEntry{},
+		}, nil
 	}
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to read config file: %w", err)
+		return nil, fmt.Errorf("failed to read config file: %w", err)
 	}
 
 	var storageData StorageData
 	if err := json.Unmarshal(data, &storageData); err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to parse config file: %w", err)
+		return nil, fmt.Errorf("failed to parse config file: %w", err)
 	}
 
 	// NOTE: deliberately NOT calling instance.UpdateStatus() here.
@@ -586,8 +608,23 @@ func (s *Storage) loadAllWithSettingsLocked() ([]*Instance, []*Group, *Settings,
 	if storageData.Settings == nil {
 		storageData.Settings = &Settings{}
 	}
+	if storageData.Instances == nil {
+		storageData.Instances = []*Instance{}
+	}
+	if storageData.Trash == nil {
+		storageData.Trash = []*TrashEntry{}
+	}
+	if storageData.SchemaVersion == 0 {
+		storageData.SchemaVersion = recoverySchemaVersion
+	}
+	if storageData.SchemaVersion > recoverySchemaVersion {
+		return nil, fmt.Errorf(
+			"storage schema version %d is newer than supported version %d",
+			storageData.SchemaVersion, recoverySchemaVersion,
+		)
+	}
 
-	return storageData.Instances, storageData.Groups, storageData.Settings, nil
+	return &storageData, nil
 }
 
 func (s *Storage) Save(instances []*Instance) error {
@@ -622,6 +659,25 @@ func (s *Storage) SaveSettings(settings *Settings) error {
 	return s.saveAllLocked(instances, groups, settings)
 }
 
+// UpdateSettings mutates settings while holding the same lock that protects the
+// active project path. This prevents a project switch between reading and
+// writing settings and preserves backend-only fields.
+func (s *Storage) UpdateSettings(update func(*Settings)) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	data, err := s.loadStorageDataLocked()
+	if err != nil {
+		return err
+	}
+	if data.Settings == nil {
+		data.Settings = &Settings{}
+	}
+	update(data.Settings)
+	data.SchemaVersion = recoverySchemaVersion
+	data.Revision++
+	return s.writeStorageDataLocked(data, true)
+}
+
 // SaveAll saves instances, groups, and settings
 func (s *Storage) SaveAll(instances []*Instance, groups []*Group, settings *Settings) error {
 	s.mu.Lock()
@@ -632,12 +688,19 @@ func (s *Storage) SaveAll(instances []*Instance, groups []*Group, settings *Sett
 // saveAllLocked is the internal version that assumes the mutex is held.
 // Uses atomic write (temp file + rename) to avoid corrupting config on crash.
 func (s *Storage) saveAllLocked(instances []*Instance, groups []*Group, settings *Settings) error {
-	storageData := StorageData{
-		Instances: instances,
-		Groups:    groups,
-		Settings:  settings,
+	storageData, err := s.loadStorageDataLocked()
+	if err != nil {
+		return err
 	}
+	storageData.SchemaVersion = recoverySchemaVersion
+	storageData.Revision++
+	storageData.Instances = instances
+	storageData.Groups = groups
+	storageData.Settings = settings
+	return s.writeStorageDataLocked(storageData, true)
+}
 
+func (s *Storage) writeStorageDataLocked(storageData *StorageData, createBackup bool) error {
 	data, err := json.MarshalIndent(storageData, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal config: %w", err)
@@ -654,6 +717,14 @@ func (s *Storage) saveAllLocked(instances []*Instance, groups []*Group, settings
 		return fmt.Errorf("failed to rename temp config file: %w", err)
 	}
 
+	if createBackup {
+		if err := s.createAutomaticBackupLocked(storageData); err != nil {
+			// The primary atomic save already succeeded. Keep normal app
+			// mutations available even if the optional recovery history cannot
+			// be updated (for example because the backup volume is full).
+			fmt.Fprintf(os.Stderr, "automatic backup failed: %v\n", err)
+		}
+	}
 	return nil
 }
 

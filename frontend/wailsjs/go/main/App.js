@@ -34,6 +34,10 @@ export function CloseTab(arg1, arg2) {
   return window['go']['main']['App']['CloseTab'](arg1, arg2);
 }
 
+export function CreateBackup() {
+  return window['go']['main']['App']['CreateBackup']();
+}
+
 export function CreateGroup(arg1) {
   return window['go']['main']['App']['CreateGroup'](arg1);
 }
@@ -86,6 +90,10 @@ export function DetachSession(arg1) {
   return window['go']['main']['App']['DetachSession'](arg1);
 }
 
+export function EmptyTrash() {
+  return window['go']['main']['App']['EmptyTrash']();
+}
+
 export function ForkSession(arg1) {
   return window['go']['main']['App']['ForkSession'](arg1);
 }
@@ -112,6 +120,10 @@ export function GetAgents() {
 
 export function GetBackgroundAgentLogs(arg1) {
   return window['go']['main']['App']['GetBackgroundAgentLogs'](arg1);
+}
+
+export function GetBackups() {
+  return window['go']['main']['App']['GetBackups']();
 }
 
 export function GetClaudeUsage() {
@@ -218,6 +230,10 @@ export function GetTerminalWSToken() {
   return window['go']['main']['App']['GetTerminalWSToken']();
 }
 
+export function GetTrashItems() {
+  return window['go']['main']['App']['GetTrashItems']();
+}
+
 export function GetVersion() {
   return window['go']['main']['App']['GetVersion']();
 }
@@ -266,6 +282,10 @@ export function PerformUpdate(arg1) {
   return window['go']['main']['App']['PerformUpdate'](arg1);
 }
 
+export function PermanentlyDeleteTrashItem(arg1) {
+  return window['go']['main']['App']['PermanentlyDeleteTrashItem'](arg1);
+}
+
 export function QuickReplyTab(arg1, arg2, arg3) {
   return window['go']['main']['App']['QuickReplyTab'](arg1, arg2, arg3);
 }
@@ -304,6 +324,14 @@ export function RestartTab(arg1, arg2) {
 
 export function RestartTabWithResume(arg1, arg2, arg3) {
   return window['go']['main']['App']['RestartTabWithResume'](arg1, arg2, arg3);
+}
+
+export function RestoreBackup(arg1) {
+  return window['go']['main']['App']['RestoreBackup'](arg1);
+}
+
+export function RestoreTrashItem(arg1) {
+  return window['go']['main']['App']['RestoreTrashItem'](arg1);
 }
 
 export function SaveSettings(arg1) {

@@ -31,6 +31,7 @@ type App struct {
 	historyIndex     *session.HistoryIndex
 	ptys             map[string]*ptySession
 	ptyMu            sync.RWMutex
+	projectMu        sync.RWMutex
 	termServer       *TerminalServer
 	dictation        *DictationService
 	activityStats    *ActivityStatsRecorder
@@ -343,6 +344,8 @@ func (a *App) GetProjects() ([]ProjectInfo, error) {
 // already open elsewhere, the switch still happens (so the user can view it)
 // but this instance stays unlocked and terminal attaches remain disabled.
 func (a *App) SelectProject(id string) error {
+	a.projectMu.Lock()
+	defer a.projectMu.Unlock()
 	if err := a.storage.SetActiveProject(id); err != nil {
 		return err
 	}
@@ -753,19 +756,130 @@ func (a *App) StopTab(id string, windowIdx int) error {
 
 // DeleteTab deletes a tab (followed window) from a session
 func (a *App) DeleteTab(id string, windowIdx int) error {
-	inst, err := a.storage.GetInstance(id)
-	if err != nil {
-		return err
+	a.projectMu.RLock()
+	defer a.projectMu.RUnlock()
+	if !a.projectLocked {
+		return fmt.Errorf("project is read-only in this application instance")
 	}
-	if err := inst.DeleteWindow(windowIdx); err != nil {
-		return err
-	}
-	return a.storage.UpdateInstance(inst)
+	return a.storage.TrashTab(id, windowIdx)
 }
 
 // DeleteSession deletes a session
 func (a *App) DeleteSession(id string) error {
-	return a.storage.RemoveInstance(id)
+	a.projectMu.RLock()
+	defer a.projectMu.RUnlock()
+	if !a.projectLocked {
+		return fmt.Errorf("project is read-only in this application instance")
+	}
+	return a.storage.TrashInstance(id)
+}
+
+type TrashItemInfo struct {
+	ID                string `json:"id"`
+	Kind              string `json:"kind"`
+	Name              string `json:"name"`
+	ParentSessionID   string `json:"parentSessionId"`
+	ParentSessionName string `json:"parentSessionName"`
+	DeletedAt         string `json:"deletedAt"`
+}
+
+type BackupInfo struct {
+	ID        string `json:"id"`
+	CreatedAt string `json:"createdAt"`
+	Size      int64  `json:"size"`
+}
+
+func (a *App) GetTrashItems() ([]TrashItemInfo, error) {
+	a.projectMu.RLock()
+	defer a.projectMu.RUnlock()
+	items, err := a.storage.ListTrash()
+	if err != nil {
+		return nil, err
+	}
+	result := make([]TrashItemInfo, 0, len(items))
+	for _, item := range items {
+		result = append(result, TrashItemInfo{
+			ID:                item.ID,
+			Kind:              item.Kind,
+			Name:              item.SessionName,
+			ParentSessionID:   item.ParentSessionID,
+			ParentSessionName: item.ParentSessionName,
+			DeletedAt:         item.DeletedAt.Format(time.RFC3339),
+		})
+	}
+	return result, nil
+}
+
+func (a *App) RestoreTrashItem(id string) (*session.RestoreResult, error) {
+	a.projectMu.RLock()
+	defer a.projectMu.RUnlock()
+	if !a.projectLocked {
+		return nil, fmt.Errorf("project is read-only in this application instance")
+	}
+	return a.storage.RestoreTrashItem(id)
+}
+
+func (a *App) PermanentlyDeleteTrashItem(id string) error {
+	a.projectMu.RLock()
+	defer a.projectMu.RUnlock()
+	if !a.projectLocked {
+		return fmt.Errorf("project is read-only in this application instance")
+	}
+	return a.storage.PermanentlyDeleteTrashItem(id)
+}
+
+func (a *App) EmptyTrash() error {
+	a.projectMu.RLock()
+	defer a.projectMu.RUnlock()
+	if !a.projectLocked {
+		return fmt.Errorf("project is read-only in this application instance")
+	}
+	return a.storage.EmptyTrash()
+}
+
+func (a *App) GetBackups() ([]BackupInfo, error) {
+	a.projectMu.RLock()
+	defer a.projectMu.RUnlock()
+	items, err := a.storage.ListBackups()
+	if err != nil {
+		return nil, err
+	}
+	result := make([]BackupInfo, 0, len(items))
+	for _, item := range items {
+		result = append(result, BackupInfo{
+			ID:        item.ID,
+			CreatedAt: item.CreatedAt.Format(time.RFC3339),
+			Size:      item.Size,
+		})
+	}
+	return result, nil
+}
+
+func (a *App) CreateBackup() error {
+	a.projectMu.RLock()
+	defer a.projectMu.RUnlock()
+	if !a.projectLocked {
+		return fmt.Errorf("project is read-only in this application instance")
+	}
+	return a.storage.CreateBackup()
+}
+
+func (a *App) RestoreBackup(id string) error {
+	a.projectMu.RLock()
+	defer a.projectMu.RUnlock()
+	if !a.projectLocked {
+		return fmt.Errorf("project is read-only in this application instance")
+	}
+	instances, err := a.storage.Load()
+	if err != nil {
+		return err
+	}
+	for _, instance := range instances {
+		if instance.Status == session.StatusRunning {
+			return fmt.Errorf("stop all sessions before restoring a backup")
+		}
+	}
+	return a.storage.RestoreBackup(id)
 }
 
 // RenameSession renames a session
@@ -1226,14 +1340,12 @@ func (a *App) CreateTab(sessionID string, isAgent bool, agent string, name strin
 
 // CloseTab closes a tab
 func (a *App) CloseTab(sessionID string, windowIdx int) error {
-	inst, err := a.storage.GetInstance(sessionID)
-	if err != nil {
-		return err
+	a.projectMu.RLock()
+	defer a.projectMu.RUnlock()
+	if !a.projectLocked {
+		return fmt.Errorf("project is read-only in this application instance")
 	}
-	if err := inst.CloseWindow(windowIdx); err != nil {
-		return err
-	}
-	return a.storage.UpdateInstance(inst)
+	return a.storage.TrashTab(sessionID, windowIdx)
 }
 
 // RenameTab renames a tab
@@ -2144,6 +2256,7 @@ type SettingsInfo struct {
 	ShowAgentIcons   bool   `json:"showAgentIcons"`
 	SplitView        bool   `json:"splitView"`
 	MarkedSessionID  string `json:"markedSessionId"`
+	MarkedWindowIdx  int    `json:"markedWindowIdx"`
 	Language         string `json:"language"`
 	TerminalRenderer string `json:"terminalRenderer"`
 	NotifyOnWaiting  bool   `json:"notifyOnWaiting"`
@@ -2180,6 +2293,7 @@ func (a *App) GetSettings() (*SettingsInfo, error) {
 		ShowAgentIcons:   settings.ShowAgentIcons,
 		SplitView:        settings.SplitView,
 		MarkedSessionID:  settings.MarkedSessionID,
+		MarkedWindowIdx:  settings.MarkedWindowIdx,
 		Language:         lang,
 		TerminalRenderer: renderer,
 		NotifyOnWaiting:  settings.NotifyOnWaiting,
@@ -2191,18 +2305,26 @@ func (a *App) GetSettings() (*SettingsInfo, error) {
 
 // SaveSettings saves UI settings
 func (a *App) SaveSettings(settings SettingsInfo) error {
-	return a.storage.SaveSettings(&session.Settings{
-		CompactList:      settings.CompactList,
-		HideStatusLines:  settings.HideStatusLines,
-		ShowAgentIcons:   settings.ShowAgentIcons,
-		SplitView:        settings.SplitView,
-		MarkedSessionID:  settings.MarkedSessionID,
-		Language:         settings.Language,
-		TerminalRenderer: settings.TerminalRenderer,
-		NotifyOnWaiting:  settings.NotifyOnWaiting,
-		NotifyDesktop:    settings.NotifyDesktop,
-		NotifyNtfy:       settings.NotifyNtfy,
-		NtfyURL:          settings.NtfyURL,
+	a.projectMu.RLock()
+	defer a.projectMu.RUnlock()
+	if !a.projectLocked {
+		return fmt.Errorf("project is read-only in this application instance")
+	}
+	return a.storage.UpdateSettings(func(current *session.Settings) {
+		// Update only frontend-owned fields. Backend-only values (for example
+		// secrets and compatibility state) must survive an ordinary UI save.
+		current.CompactList = settings.CompactList
+		current.HideStatusLines = settings.HideStatusLines
+		current.ShowAgentIcons = settings.ShowAgentIcons
+		current.SplitView = settings.SplitView
+		current.MarkedSessionID = settings.MarkedSessionID
+		current.MarkedWindowIdx = settings.MarkedWindowIdx
+		current.Language = settings.Language
+		current.TerminalRenderer = settings.TerminalRenderer
+		current.NotifyOnWaiting = settings.NotifyOnWaiting
+		current.NotifyDesktop = settings.NotifyDesktop
+		current.NotifyNtfy = settings.NotifyNtfy
+		current.NtfyURL = settings.NtfyURL
 	})
 }
 

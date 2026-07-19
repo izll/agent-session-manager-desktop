@@ -2,6 +2,7 @@ import { writable, derived, get } from 'svelte/store';
 import * as App from '../../../wailsjs/go/main/App';
 import type { main } from '../../../wailsjs/go/models';
 import { showSessionView } from './navigation';
+import { settings, saveSettings } from './settings';
 
 // Types
 export interface Session {
@@ -243,9 +244,15 @@ export async function restartTabWithResume(id: string, windowIdx: number, resume
 export async function deleteTab(id: string, windowIdx: number) {
   try {
     await App.DeleteTab(id, windowIdx);
+    dropPoolForWindow(id, windowIdx);
     // Switch to window 0 if the deleted tab was selected
     if (get(selectedSessionId) === id && get(selectedWindowIdx) === windowIdx) {
       selectedWindowIdx.set(0);
+    }
+    const currentSettings = get(settings);
+    if (currentSettings.splitView && currentSettings.markedSessionId === id &&
+        currentSettings.markedWindowIdx === windowIdx) {
+      await saveSettings({ splitView: false, markedSessionId: '', markedWindowIdx: 0 });
     }
     await loadSessions();
   } catch (e) {
@@ -279,6 +286,12 @@ export async function renameTab(sessionId: string, windowIdx: number, name: stri
 export async function deleteSession(id: string) {
   try {
     await App.DeleteSession(id);
+    dropPoolForSession(id);
+    const currentSettings = get(settings);
+    if (currentSettings.splitView && currentSettings.markedSessionId === id) {
+      await saveSettings({ splitView: false, markedSessionId: '', markedWindowIdx: 0 });
+    }
+    sessionTabMemory.delete(id);
     sessions.update(s => s.filter(sess => sess.id !== id));
     if (get(selectedSessionId) === id) {
       selectedSessionId.set(null);

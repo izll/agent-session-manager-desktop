@@ -557,6 +557,24 @@ func (i *Instance) saveBaseCommit() {
 	i.BaseCommitSHA = strings.TrimSpace(string(output))
 }
 
+func newTmuxWindowCommand(sessionName, tabDir, name string, detached bool, argv []string) *exec.Cmd {
+	tmuxArgs := []string{"new-window"}
+	if detached {
+		tmuxArgs = append(tmuxArgs, "-d")
+	}
+	tmuxArgs = append(tmuxArgs, "-P", "-F", "#{window_index}", "-t", sessionName, "-c", tabDir, "-n", name)
+	tmuxArgs = append(tmuxArgs, argv...)
+	return exec.Command("tmux", tmuxArgs...)
+}
+
+func parseTmuxWindowIndex(output []byte) (int, error) {
+	var index int
+	if _, err := fmt.Sscanf(strings.TrimSpace(string(output)), "%d", &index); err != nil {
+		return 0, err
+	}
+	return index, nil
+}
+
 // restoreFollowedWindows recreates agent tabs after session restart
 func (i *Instance) restoreFollowedWindows() {
 	if len(i.FollowedWindows) == 0 {
@@ -588,9 +606,14 @@ func (i *Instance) restoreFollowedWindows() {
 			fw.ResumeSessionID = ""
 		}
 
-		if fw.Agent == AgentTerminal {
+		if fw.Stopped {
+			// A restored trash item is deliberately brought back as a stopped
+			// placeholder. Never launch an agent merely because its parent
+			// session was started; the user can explicitly start this tab.
+			cmd = newTmuxWindowCommand(sessionName, tabDir, fw.Name, true, nil)
+		} else if fw.Agent == AgentTerminal {
 			// Terminal window - just create empty shell
-			cmd = exec.Command("tmux", "new-window", "-t", sessionName, "-c", tabDir, "-n", fw.Name)
+			cmd = newTmuxWindowCommand(sessionName, tabDir, fw.Name, false, nil)
 		} else {
 			// Agent window - build agent command (argv form, no shell)
 			config := AgentConfigs[fw.Agent]
@@ -632,36 +655,37 @@ func (i *Instance) restoreFollowedWindows() {
 
 			// Create new window with the agent command as separate argv
 			// elements (tmux execs directly, no `sh -c`).
-			tmuxArgs := append([]string{"new-window", "-t", sessionName, "-c", tabDir, "-n", fw.Name}, argv...)
-			cmd = exec.Command("tmux", tmuxArgs...)
+			cmd = newTmuxWindowCommand(sessionName, tabDir, fw.Name, false, argv)
 		}
 
-		if err := cmd.Run(); err != nil {
+		output, err := cmd.Output()
+		if err != nil {
 			continue // Skip failed windows
 		}
 
-		// Get the new window index
-		newIdx := i.GetCurrentWindowIndex()
+		// Read the index of the window that was just created. This must come
+		// from `new-window -P`: stopped placeholders are created detached, so
+		// querying the active window would return the main agent's index.
+		newIdx, err := parseTmuxWindowIndex(output)
+		if err != nil {
+			log.Printf("[restoreFollowedWindows] invalid new-window index %q for tab %q: %v", strings.TrimSpace(string(output)), fw.Name, err)
+			continue
+		}
 
 		// Set remain-on-exit so window stays open when command exits (shows as stopped)
 		target := fmt.Sprintf("%s:%d", sessionName, newIdx)
 		exec.Command("tmux", "set-option", "-t", target, "remain-on-exit", "on").Run()
 		// Disable automatic-rename so the window keeps the user-specified name
 		exec.Command("tmux", "set-option", "-t", target, "automatic-rename", "off").Run()
+		if fw.Stopped {
+			_ = exec.Command("tmux", "respawn-pane", "-k", "-t", target, "exit 0").Run()
+		}
 
 		// Re-add to followed windows with updated index (preserve all fields)
-		i.FollowedWindows = append(i.FollowedWindows, FollowedWindow{
-			Index:           newIdx,
-			Agent:           fw.Agent,
-			Name:            fw.Name,
-			CustomCommand:   fw.CustomCommand,
-			AutoYes:         fw.AutoYes,
-			ResumeSessionID: resumeID,
-			Notes:           fw.Notes,
-			ExtraArgs:       fw.ExtraArgs,
-			TextColor:       fw.TextColor,
-			BackgroundColor: fw.BackgroundColor,
-		})
+		restored := fw
+		restored.Index = newIdx
+		restored.ResumeSessionID = resumeID
+		i.FollowedWindows = append(i.FollowedWindows, restored)
 	}
 
 	// Clear TabOrder since window indices changed after restart
@@ -1006,7 +1030,16 @@ func (i *Instance) DeleteWindow(windowIdx int) error {
 	if i.Status == StatusRunning {
 		sessionName := i.TmuxSessionName()
 		target := fmt.Sprintf("%s:%d", sessionName, windowIdx)
-		exec.Command("tmux", "kill-window", "-t", target).Run()
+		killErr := exec.Command("tmux", "kill-window", "-t", target).Run()
+		// Never drop metadata while an agent window is still alive. If tmux
+		// reports an error but the target is already gone, deletion is still
+		// complete and may safely continue.
+		if exec.Command("tmux", "display-message", "-p", "-t", target, "#{window_id}").Run() == nil {
+			if killErr != nil {
+				return fmt.Errorf("failed to delete live tmux window %s: %w", target, killErr)
+			}
+			return fmt.Errorf("tmux window %s is still alive after deletion", target)
+		}
 	}
 
 	// Find and remove from FollowedWindows (if tracked)

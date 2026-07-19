@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
+  import { onMount, onDestroy, createEventDispatcher } from 'svelte';
   import { sessions, selectedSessionId, selectedWindowIdx } from '../../stores/sessions';
   import { settings } from '../../stores/settings';
   import { get } from 'svelte/store';
@@ -13,9 +13,27 @@
   let poolContainerEl: HTMLElement;
   let pool: TerminalPool | null = null;
   let error = '';
+  let mounted = false;
+  const pendingTimeouts = new Set<ReturnType<typeof setTimeout>>();
+  const dispatch = createEventDispatcher();
 
   export let isAttached = false;
   export let active = false;
+  export let sessionId: string | null | undefined = undefined;
+  export let windowIdx: number | undefined = undefined;
+  export let focusOwner = true;
+  export let focusAllowed = true;
+
+  $: targetSessionId = sessionId === undefined ? $selectedSessionId : sessionId;
+  $: targetWindowIdx = windowIdx === undefined ? $selectedWindowIdx : windowIdx;
+
+  function currentTargetSessionId(): string | null {
+    return sessionId === undefined ? get(selectedSessionId) : sessionId;
+  }
+
+  function currentTargetWindowIdx(): number {
+    return windowIdx === undefined ? get(selectedWindowIdx) : windowIdx;
+  }
 
   const terminalOptions = {
     fontSize: 13,
@@ -29,14 +47,14 @@
 
   // Get current session without reactive subscription
   function getCurrentSession() {
-    const id = get(selectedSessionId);
+    const id = currentTargetSessionId();
     if (!id) return null;
     return get(sessions).find(s => s.id === id) || null;
   }
 
   // Focus the active terminal (called via 'terminal:focus' global event)
   function focusActive() {
-    if (!pool || !active) return;
+    if (!pool || !active || !focusOwner || !focusAllowed) return;
     const entry = pool.getActive();
     if (entry) {
       entry.terminalInstance.terminal.focus();
@@ -48,12 +66,21 @@
     requestAnimationFrame(focusActive);
   }
 
+  function schedule(callback: () => void, delay: number) {
+    const timeout = setTimeout(() => {
+      pendingTimeouts.delete(timeout);
+      if (mounted) callback();
+    }, delay);
+    pendingTimeouts.add(timeout);
+  }
+
   // --- Scrollback search (Ctrl+Shift+L) -------------------------------
   let searchOpen = false;
   let searchQuery = '';
   let searchInputEl: HTMLInputElement | null = null;
 
   function handleSearchToggle() {
+    if (!focusOwner) return;
     searchOpen = !searchOpen;
     if (searchOpen) {
       requestAnimationFrame(() => searchInputEl?.focus());
@@ -145,22 +172,23 @@
   // status-change grace-period path.
   function scheduleReshowIfViewing(sessionId: string, windowIdx: number | null) {
     const attempt = (delay: number, remaining: number) => {
-      setTimeout(async () => {
-        if (!pool) return;
-        if (get(selectedSessionId) !== sessionId) return;
-        if (windowIdx !== null && get(selectedWindowIdx) !== windowIdx) return;
+      schedule(async () => {
+        if (!mounted || !pool) return;
+        if (currentTargetSessionId() !== sessionId) return;
+        if (windowIdx !== null && currentTargetWindowIdx() !== windowIdx) return;
         const session = get(sessions).find(s => s.id === sessionId);
         if (session?.status !== 'running') return;
         try {
-          await pool.show(sessionId, get(selectedWindowIdx));
+          await pool.show(sessionId, currentTargetWindowIdx(), () => mounted && active && focusOwner && focusAllowed);
+          if (!mounted || currentTargetSessionId() !== sessionId) return;
           isAttached = true;
-          if (active) {
-            requestAnimationFrame(() => requestAnimationFrame(() => pool?.focusActive()));
+          if (active && focusOwner && focusAllowed) {
+            requestAnimationFrame(() => requestAnimationFrame(focusActive));
           }
-          LogFrontend(`reshow ok session=${sessionId} win=${get(selectedWindowIdx)}`);
+          LogFrontend(`reshow ok session=${sessionId} win=${currentTargetWindowIdx()}`);
         } catch (err) {
           console.error('Re-show after pool destroy failed:', err);
-          LogFrontend(`reshow FAILED session=${sessionId} win=${get(selectedWindowIdx)} remaining=${remaining}: ${err}`);
+          LogFrontend(`reshow FAILED session=${sessionId} win=${currentTargetWindowIdx()} remaining=${remaining}: ${err}`);
           // A transient WebSocket failure right after a respawn used to leave
           // the pane black until a manual detach/attach — retry with backoff.
           if (remaining > 0) {
@@ -173,12 +201,14 @@
   }
 
   onMount(() => {
+    mounted = true;
     pool = new TerminalPool(poolContainerEl, terminalOptions);
 
     window.addEventListener('terminal:focus', handleFocusEvent);
     window.addEventListener('terminal:search-toggle', handleSearchToggle);
     window.addEventListener('terminal:destroy-window', handleDestroyWindow as EventListener);
     window.addEventListener('terminal:destroy-session', handleDestroySession as EventListener);
+    window.addEventListener('terminal:destroy-all', handleDestroyAll);
 
     // Debounced resize handler
     let resizeTimeout: ReturnType<typeof setTimeout>;
@@ -223,13 +253,15 @@
     poolContainerEl.addEventListener('keydown', handleTerminalKeydown, true);
 
     // Initial auto-attach if session is already selected and running
-    const currentId = get(selectedSessionId);
+    const currentId = currentTargetSessionId();
     if (currentId) {
       const session = get(sessions).find(s => s.id === currentId);
       if (session && session.status === 'running') {
-        setTimeout(async () => {
+        schedule(async () => {
           try {
-            await pool!.show(currentId, get(selectedWindowIdx));
+            if (!pool) return;
+            await pool.show(currentId, currentTargetWindowIdx(), () => mounted && active && focusOwner && focusAllowed);
+            if (!mounted || currentTargetSessionId() !== currentId) return;
             isAttached = true;
           } catch (e) {
             console.error('Initial auto-attach failed:', e);
@@ -247,15 +279,22 @@
       window.removeEventListener('terminal:search-toggle', handleSearchToggle);
       window.removeEventListener('terminal:destroy-window', handleDestroyWindow as EventListener);
       window.removeEventListener('terminal:destroy-session', handleDestroySession as EventListener);
+      window.removeEventListener('terminal:destroy-all', handleDestroyAll);
       poolContainerEl.removeEventListener('keydown', handleTerminalKeydown, true);
     };
   });
+
+  async function handleDestroyAll() {
+    if (!pool) return;
+    await pool.destroyAll();
+    isAttached = false;
+  }
 
   // Listen for session restart events
   let unsubRestarted: (() => void) | null = null;
   onMount(() => {
     unsubRestarted = EventsOn('session:restarted', async (sessionId: string) => {
-      const currentId = get(selectedSessionId);
+      const currentId = currentTargetSessionId();
       if (sessionId === currentId && pool) {
         // Destroy old terminal for this session
         await pool.destroy(sessionId);
@@ -263,10 +302,12 @@
 
         // Wait for new tmux session to be ready
         await new Promise(r => setTimeout(r, 800));
+        if (!mounted || sessionId !== currentTargetSessionId() || !pool) return;
 
         // Create fresh terminal and show it
         try {
-          await pool.show(sessionId, get(selectedWindowIdx));
+          await pool.show(sessionId, currentTargetWindowIdx(), () => mounted && active && focusOwner && focusAllowed);
+          if (!mounted || sessionId !== currentTargetSessionId()) return;
           isAttached = true;
         } catch (e) {
           console.error('Reattach after restart failed:', e);
@@ -277,11 +318,15 @@
   });
 
   onDestroy(async () => {
+    mounted = false;
+    poolChangeGeneration++;
+    for (const timeout of pendingTimeouts) clearTimeout(timeout);
+    pendingTimeouts.clear();
     if (unsubRestarted) unsubRestarted();
     if (stopGraceTimer) clearTimeout(stopGraceTimer);
-    if (pool) {
-      await pool.destroyAll();
-    }
+    const oldPool = pool;
+    pool = null;
+    if (oldPool) await oldPool.dispose();
   });
 
   // Track last known status for detecting changes
@@ -289,10 +334,12 @@
   let lastSessionId: string | null = null;
   let lastWindowIdx: number = 0;
   let stopGraceTimer: ReturnType<typeof setTimeout> | null = null;
+  let poolChangeGeneration = 0;
 
   // Handle session/window/status changes via pool show/destroy
   async function handlePoolChange(newSessionId: string | null, newWindowIdx: number, newStatus?: string) {
     if (!pool) return;
+    const generation = ++poolChangeGeneration;
 
     const statusChanged = lastKnownStatus !== newStatus;
     const sessionJustStopped = statusChanged && newStatus !== 'running' && lastKnownStatus === 'running';
@@ -334,16 +381,19 @@
       // Small delay when session just started to let tmux initialize
       if (sessionJustStarted) {
         await new Promise(r => setTimeout(r, 500));
+        if (!mounted || generation !== poolChangeGeneration || !pool) return;
       }
       try {
-        await pool.show(newSessionId, newWindowIdx);
+        await pool.show(newSessionId, newWindowIdx, () => mounted && active && focusOwner && focusAllowed);
+        if (!mounted || generation !== poolChangeGeneration ||
+            currentTargetSessionId() !== newSessionId || currentTargetWindowIdx() !== newWindowIdx) return;
         isAttached = true;
         // Ensure the freshly-shown terminal grabs focus on session/tab switch.
         // pool.show() focuses internally, but a couple of rAFs later we focus
         // again in case layout/visibility wasn't settled the first time — this
         // is what was missing when the terminal lost focus on switch.
-        if (active) {
-          requestAnimationFrame(() => requestAnimationFrame(() => pool?.focusActive()));
+        if (active && focusOwner && focusAllowed) {
+          requestAnimationFrame(() => requestAnimationFrame(focusActive));
         }
       } catch (e) {
         console.error('Pool show failed:', e);
@@ -362,7 +412,7 @@
   }
 
   // Get current session's status reactively
-  $: currentSessionStatus = $sessions.find(s => s.id === $selectedSessionId)?.status;
+  $: currentSessionStatus = $sessions.find(s => s.id === targetSessionId)?.status;
 
   // Show placeholder when no running session is active
   $: showPlaceholder = !isAttached;
@@ -383,7 +433,7 @@
   }
 
   // Watch for session, window, or status changes
-  $: handlePoolChange($selectedSessionId, $selectedWindowIdx, currentSessionStatus);
+  $: handlePoolChange(targetSessionId, targetWindowIdx, currentSessionStatus);
 
   // Apply a renderer change (canvas/webgl/dom) from Settings immediately:
   // update the factory default for new terminals AND recreate the currently
@@ -393,25 +443,25 @@
     const r = $settings?.terminalRenderer || 'canvas';
     setTerminalRenderer(r as 'canvas' | 'webgl' | 'dom');
     if (lastRenderer !== undefined && lastRenderer !== r && pool) {
-      pool.recreateActiveForRenderer();
+      pool.recreateActiveForRenderer(() => mounted && active && focusOwner && focusAllowed);
     }
     lastRenderer = r;
   }
 
   // Fit and focus terminal when tab becomes active
   let wasActive = false;
-  $: if (active && pool && !wasActive) {
+  $: if (active && focusOwner && focusAllowed && pool && !wasActive) {
     wasActive = true;
     // Use requestAnimationFrame to ensure DOM is visible before fitting/focusing
     requestAnimationFrame(() => {
-      if (!pool || !active) return;
+      if (!pool || !active || !focusOwner || !focusAllowed) return;
       pool.fitActive();
       const activeEntry = pool.getActive();
       if (activeEntry) {
         activeEntry.terminalInstance.terminal.focus();
       }
     });
-  } else if (!active) {
+  } else if (!active || !focusOwner || !focusAllowed) {
     wasActive = false;
   }
 
@@ -424,9 +474,10 @@
     }
 
     error = '';
-    const windowIdx = get(selectedWindowIdx);
+    const windowIdx = currentTargetWindowIdx();
     try {
-      await pool.show(session.id, windowIdx);
+      await pool.show(session.id, windowIdx, () => mounted && active && focusOwner && focusAllowed);
+      if (!mounted || currentTargetSessionId() !== session.id || currentTargetWindowIdx() !== windowIdx) return;
       isAttached = true;
     } catch (e) {
       console.error('Failed to attach:', e);
@@ -437,7 +488,7 @@
 
   export async function detach() {
     if (pool) {
-      const currentId = get(selectedSessionId);
+      const currentId = currentTargetSessionId();
       if (currentId) {
         await pool.destroy(currentId);
       }
@@ -446,7 +497,7 @@
   }
 </script>
 
-<div class="terminal-wrapper">
+<div class="terminal-wrapper" on:mousedown={() => dispatch('focus')}>
   <div class="terminal-pool-container" bind:this={poolContainerEl}></div>
   {#if searchOpen}
     <div class="terminal-search">

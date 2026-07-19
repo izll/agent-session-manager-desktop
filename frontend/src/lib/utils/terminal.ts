@@ -508,9 +508,6 @@ export async function attachToSession(
       }
     });
 
-    // Focus terminal
-    terminal.focus();
-
   } catch (e) {
     console.error('Failed to attach session:', e);
     throw e;

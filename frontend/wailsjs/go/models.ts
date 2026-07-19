@@ -154,6 +154,22 @@ export namespace main {
 	        this.startedAt = source["startedAt"];
 	    }
 	}
+	export class BackupInfo {
+	    id: string;
+	    createdAt: string;
+	    size: number;
+
+	    static createFrom(source: any = {}) {
+	        return new BackupInfo(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.createdAt = source["createdAt"];
+	        this.size = source["size"];
+	    }
+	}
 	export class ClaudeUsageWindow {
 	    utilization: number;
 	    resetsAt: string;
@@ -668,6 +684,7 @@ export namespace main {
 	    showAgentIcons: boolean;
 	    splitView: boolean;
 	    markedSessionId: string;
+	    markedWindowIdx: number;
 	    language: string;
 	    terminalRenderer: string;
 	    notifyOnWaiting: boolean;
@@ -686,6 +703,7 @@ export namespace main {
 	        this.showAgentIcons = source["showAgentIcons"];
 	        this.splitView = source["splitView"];
 	        this.markedSessionId = source["markedSessionId"];
+	        this.markedWindowIdx = source["markedWindowIdx"];
 	        this.language = source["language"];
 	        this.terminalRenderer = source["terminalRenderer"];
 	        this.notifyOnWaiting = source["notifyOnWaiting"];
@@ -836,6 +854,28 @@ export namespace main {
 	
 	    }
 	}
+	export class TrashItemInfo {
+	    id: string;
+	    kind: string;
+	    name: string;
+	    parentSessionId: string;
+	    parentSessionName: string;
+	    deletedAt: string;
+
+	    static createFrom(source: any = {}) {
+	        return new TrashItemInfo(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.kind = source["kind"];
+	        this.name = source["name"];
+	        this.parentSessionId = source["parentSessionId"];
+	        this.parentSessionName = source["parentSessionName"];
+	        this.deletedAt = source["deletedAt"];
+	    }
+	}
 	export class UpdateInfo {
 	    available: boolean;
 	    currentVersion: string;
@@ -893,6 +933,20 @@ export namespace session {
 	        this.hide_status_line = source["hide_status_line"];
 	    }
 	}
+	export class RestoreResult {
+	    sessionId: string;
+	    windowIdx: number;
+
+	    static createFrom(source: any = {}) {
+	        return new RestoreResult(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.sessionId = source["sessionId"];
+	        this.windowIdx = source["windowIdx"];
+	    }
+	}
 	export class WindowInfo {
 	    Index: number;
 	    Name: string;
@@ -921,4 +975,3 @@ export namespace session {
 	}
 
 }
-

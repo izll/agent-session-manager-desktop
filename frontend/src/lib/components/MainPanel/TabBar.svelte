@@ -215,6 +215,11 @@
   let showErrorToast = false;
   let errorMessage = '';
 
+  function handleCommandNewTab() {
+    if (!visible || get(selectedSession)?.status !== 'running') return;
+    showNewTabDialog = true;
+  }
+
   // Restore terminal focus when TabBar-local dialogs close
   let prevTabBarDialogOpen = false;
   $: {
@@ -254,6 +259,7 @@
   onMount(async () => {
     window.addEventListener('keydown', handleWindowTabKeydown, true);
     window.addEventListener('click', handleTabContextWindowClick);
+    window.addEventListener('command:new-tab', handleCommandNewTab);
 
     // Get initial dictation state
     try {
@@ -398,6 +404,7 @@
   onDestroy(() => {
     window.removeEventListener('keydown', handleWindowTabKeydown, true);
     window.removeEventListener('click', handleTabContextWindowClick);
+    window.removeEventListener('command:new-tab', handleCommandNewTab);
     stopPolling();
     if (dictationCleanup) {
       dictationCleanup();
@@ -928,13 +935,6 @@
       const killedIdx = deleteTabIndex;
       try {
         await deleteTab(killedSession, killedIdx);
-        // Tell the Terminal pool to drop the cached PoolEntry for that
-        // (session, window) — otherwise a new tab created later that reuses
-        // the same tmux window index would inherit the deleted tab's stale
-        // WebSocket + xterm DOM and appear blank/unresponsive.
-        window.dispatchEvent(new CustomEvent('terminal:destroy-window', {
-          detail: { sessionId: killedSession, windowIdx: killedIdx },
-        }));
         // Force refresh window list immediately
         await loadWindowsForSession($selectedSessionId, currentSessionStatus, visible);
       } catch (e) {

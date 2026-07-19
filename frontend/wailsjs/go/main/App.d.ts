@@ -19,6 +19,8 @@ export function CheckForUpdate():Promise<main.UpdateInfo>;
 
 export function CloseTab(arg1:string,arg2:number):Promise<void>;
 
+export function CreateBackup():Promise<void>;
+
 export function CreateGroup(arg1:string):Promise<main.GroupInfo>;
 
 export function CreateProject(arg1:string):Promise<main.ProjectInfo>;
@@ -45,6 +47,8 @@ export function DeleteTask(arg1:string,arg2:string):Promise<void>;
 
 export function DetachSession(arg1:string):Promise<void>;
 
+export function EmptyTrash():Promise<void>;
+
 export function ForkSession(arg1:string):Promise<main.ForkResult>;
 
 export function ForkToNewSession(arg1:string,arg2:string,arg3:string):Promise<main.SessionInfo>;
@@ -58,6 +62,8 @@ export function GetActivities():Promise<Record<string, string>>;
 export function GetAgents():Promise<Array<main.AgentInfo>>;
 
 export function GetBackgroundAgentLogs(arg1:string):Promise<string>;
+
+export function GetBackups():Promise<Array<main.BackupInfo>>;
 
 export function GetClaudeUsage():Promise<main.ClaudeUsageInfo>;
 
@@ -111,6 +117,8 @@ export function GetTerminalWSPort():Promise<number>;
 
 export function GetTerminalWSToken():Promise<string>;
 
+export function GetTrashItems():Promise<Array<main.TrashItemInfo>>;
+
 export function GetVersion():Promise<string>;
 
 export function GetWindowAutoYes(arg1:string,arg2:number):Promise<boolean>;
@@ -135,6 +143,8 @@ export function MoveTask(arg1:string,arg2:string,arg3:string):Promise<void>;
 
 export function PerformUpdate(arg1:string):Promise<void>;
 
+export function PermanentlyDeleteTrashItem(arg1:string):Promise<void>;
+
 export function QuickReplyTab(arg1:string,arg2:number,arg3:string):Promise<void>;
 
 export function RefreshWindow(arg1:string,arg2:number):Promise<void>;
@@ -154,6 +164,10 @@ export function ResizeTerminal(arg1:string,arg2:number,arg3:number):Promise<void
 export function RestartTab(arg1:string,arg2:number):Promise<void>;
 
 export function RestartTabWithResume(arg1:string,arg2:number,arg3:string):Promise<void>;
+
+export function RestoreBackup(arg1:string):Promise<void>;
+
+export function RestoreTrashItem(arg1:string):Promise<session.RestoreResult>;
 
 export function SaveSettings(arg1:main.SettingsInfo):Promise<void>;
 
