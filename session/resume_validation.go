@@ -94,11 +94,10 @@ func claudeResumeIDExists(resumeID string) bool {
 // `session_meta` line of each file. To stay cheap, we early-return on first
 // match.
 func codexResumeIDExists(resumeID string) bool {
-	homeDir, err := os.UserHomeDir()
+	root, err := codexSessionsDir()
 	if err != nil {
 		return true
 	}
-	root := filepath.Join(homeDir, ".codex", "sessions")
 	if _, err := os.Stat(root); err != nil {
 		return false
 	}
@@ -116,6 +115,7 @@ func codexResumeIDExists(resumeID string) bool {
 		}
 		defer f.Close()
 		scanner := bufio.NewScanner(f)
+		scanner.Buffer(make([]byte, 64*1024), 1024*1024)
 		// session_meta is line 1; bail if it's missing or doesn't match.
 		if !scanner.Scan() {
 			return nil
@@ -124,7 +124,7 @@ func codexResumeIDExists(resumeID string) bool {
 		if err := json.Unmarshal(scanner.Bytes(), &meta); err != nil {
 			return nil
 		}
-		if meta.Type == "session_meta" && meta.Payload.ID == resumeID {
+		if meta.Type == "session_meta" && meta.isRoot() && meta.Payload.ID == resumeID {
 			found = true
 		}
 		return nil

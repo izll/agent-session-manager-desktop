@@ -287,10 +287,13 @@ func (s *Storage) TrashInstance(id string) error {
 	if index < 0 {
 		return fmt.Errorf("instance not found")
 	}
+	instance := data.Instances[index]
+	// Include generated Codex IDs in both the automatic pre-delete backup and
+	// the trash snapshot.
+	instance.CaptureCodexResumeIDs()
 	if err := s.createAutomaticBackupLocked(data); err != nil {
 		return fmt.Errorf("failed to create pre-delete backup: %w", err)
 	}
-	instance := data.Instances[index]
 	if err := instance.Stop(); err != nil {
 		return err
 	}
@@ -339,6 +342,15 @@ func (s *Storage) TrashTab(sessionID string, windowIdx int) error {
 	}
 	if position < 0 {
 		return fmt.Errorf("tab not found")
+	}
+	// Snapshot the Codex conversation ID while the tab process is still alive,
+	// otherwise restoring this trash item would start a different conversation.
+	parent.CaptureCodexResumeIDs()
+	for _, tab := range parent.FollowedWindows {
+		if tab.Index == windowIdx {
+			snapshot = tab
+			break
+		}
 	}
 	if err := s.createAutomaticBackupLocked(data); err != nil {
 		return fmt.Errorf("failed to create pre-delete backup: %w", err)
@@ -417,10 +429,10 @@ func (s *Storage) RestoreTrashItem(id string) (*RestoreResult, error) {
 		running := parent.Status == StatusRunning && parent.IsAlive()
 		if running {
 			workDir := restored.WorkDir
-			if err := parent.NewWindowWithName(restored.Name, workDir); err != nil {
+			newIndex, err := parent.NewWindowWithName(restored.Name, workDir)
+			if err != nil {
 				return nil, err
 			}
-			newIndex := parent.GetCurrentWindowIndex()
 			// NewWindowWithName added a terminal descriptor. Replace it with
 			// the complete trashed metadata before turning the pane into a safe
 			// stopped placeholder.

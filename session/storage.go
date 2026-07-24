@@ -821,6 +821,117 @@ func (s *Storage) UpdateInstanceForProject(projectID string, instance *Instance)
 	return fmt.Errorf("instance not found")
 }
 
+// MergeResumeSessionIDsForProject atomically fills only missing conversation
+// IDs on the latest stored instance. Sidebar polling works from an earlier
+// snapshot, so replacing the entire instance here could otherwise undo a
+// concurrent tab rename/create/stop or notes edit.
+func (s *Storage) MergeResumeSessionIDsForProject(projectID string, detected *Instance) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	originalProject := s.projectID
+	if err := s.setActiveProjectLocked(projectID); err != nil {
+		return err
+	}
+	defer s.setActiveProjectLocked(originalProject)
+
+	instances, groups, settings, err := s.loadAllWithSettingsLocked()
+	if err != nil {
+		return err
+	}
+	for _, current := range instances {
+		if current.ID != detected.ID {
+			continue
+		}
+
+		changed := false
+		if detected.Agent != AgentCodex &&
+			current.Agent == detected.Agent &&
+			current.ResumeSessionID == "" &&
+			detected.ResumeSessionID != "" {
+			current.ResumeSessionID = detected.ResumeSessionID
+			changed = true
+		}
+
+		detectedByIndex := make(map[int]FollowedWindow, len(detected.FollowedWindows))
+		for _, window := range detected.FollowedWindows {
+			if window.Agent != AgentCodex && window.ResumeSessionID != "" {
+				detectedByIndex[window.Index] = window
+			}
+		}
+		for idx := range current.FollowedWindows {
+			window := &current.FollowedWindows[idx]
+			if window.ResumeSessionID != "" {
+				continue
+			}
+			detectedWindow, ok := detectedByIndex[window.Index]
+			if ok &&
+				window.Agent == detectedWindow.Agent &&
+				window.WorkDir == detectedWindow.WorkDir {
+				window.ResumeSessionID = detectedWindow.ResumeSessionID
+				changed = true
+			}
+		}
+
+		if !changed {
+			return nil
+		}
+		return s.saveAllLocked(instances, groups, settings)
+	}
+	return fmt.Errorf("instance not found")
+}
+
+// CaptureCodexResumeIDsForProject reloads the current instance and detects its
+// live process while holding the storage lock. This prevents a stale sidebar
+// snapshot from assigning an old process ID after a rapid stop/start or a
+// deleted tmux index being reused by a newly created tab.
+func (s *Storage) CaptureCodexResumeIDsForProject(projectID, instanceID string) (bool, error) {
+	return s.captureCodexResumeIDsForProject(
+		projectID,
+		instanceID,
+		DetectCodexSessionIDFromTmux,
+		func(instance *Instance) (int, bool) { return instance.getMainWindowIndex() },
+	)
+}
+
+func (s *Storage) captureCodexResumeIDsForProject(
+	projectID,
+	instanceID string,
+	detect codexSessionDetector,
+	detectMainWindow func(*Instance) (int, bool),
+) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	originalProject := s.projectID
+	if err := s.setActiveProjectLocked(projectID); err != nil {
+		return false, err
+	}
+	defer s.setActiveProjectLocked(originalProject)
+
+	instances, groups, settings, err := s.loadAllWithSettingsLocked()
+	if err != nil {
+		return false, err
+	}
+	for _, current := range instances {
+		if current.ID != instanceID {
+			continue
+		}
+		mainWindowIdx, mainWindowOK := 0, false
+		if current.Agent == AgentCodex && current.ResumeSessionID == "" && !current.MainWindowStopped {
+			mainWindowIdx, mainWindowOK = detectMainWindow(current)
+		}
+		if !current.captureCodexResumeIDsAtMainWindow(detect, mainWindowIdx, mainWindowOK) {
+			return false, nil
+		}
+		if err := s.saveAllLocked(instances, groups, settings); err != nil {
+			return false, err
+		}
+		return true, nil
+	}
+	return false, fmt.Errorf("instance not found")
+}
+
 func (s *Storage) GetInstance(id string) (*Instance, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

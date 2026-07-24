@@ -515,8 +515,13 @@ func (i *Instance) StartWithResume(resumeID string) error {
 
 		// Ctrl+q will be set up with resize in UpdateDetachBinding
 
-		// Set window 0 name to agent type (session name is shown in status bar)
-		exec.Command("tmux", "rename-window", "-t", sessionName+":0", i.WindowName()).Run()
+		// Persist the main window identity on the tmux window object itself.
+		// Unlike its numeric index, this marker survives move-window/renumbering.
+		if mainWindowIdx, ok := soleTmuxWindowIndex(sessionName); ok {
+			mainTarget := fmt.Sprintf("%s:%d", sessionName, mainWindowIdx)
+			exec.Command("tmux", "set-option", "-w", "-t", mainTarget, "@asmgr_main", "1").Run()
+			exec.Command("tmux", "rename-window", "-t", mainTarget, i.WindowName()).Run()
+		}
 
 		// Check if session is still alive after a short delay (detect immediate exit)
 		time.Sleep(300 * time.Millisecond)
@@ -535,6 +540,11 @@ func (i *Instance) StartWithResume(resumeID string) error {
 
 	// Restore followed windows (tabs) if any
 	i.restoreFollowedWindows()
+
+	// A fresh Codex process usually has its rollout open by this point. Save
+	// the generated ID in the same storage update as the start operation;
+	// sidebar polling and stop/shutdown capture remain retries for slower starts.
+	i.CaptureCodexResumeIDs()
 
 	return nil
 }
@@ -573,6 +583,24 @@ func parseTmuxWindowIndex(output []byte) (int, error) {
 		return 0, err
 	}
 	return index, nil
+}
+
+func tmuxWindowExists(sessionName string, windowIdx int) bool {
+	output, err := exec.Command("tmux", "list-windows", "-t", sessionName, "-F", "#{window_index}").Output()
+	if err != nil {
+		return false
+	}
+	return tmuxWindowIndexListed(output, windowIdx)
+}
+
+func tmuxWindowIndexListed(output []byte, windowIdx int) bool {
+	for _, line := range strings.Split(strings.TrimSpace(string(output)), "\n") {
+		var listedIdx int
+		if _, err := fmt.Sscanf(line, "%d", &listedIdx); err == nil && listedIdx == windowIdx {
+			return true
+		}
+	}
+	return false
 }
 
 // restoreFollowedWindows recreates agent tabs after session restart
@@ -691,11 +719,18 @@ func (i *Instance) restoreFollowedWindows() {
 	// Clear TabOrder since window indices changed after restart
 	i.TabOrder = nil
 
-	// Switch back to window 0 (main agent)
-	exec.Command("tmux", "select-window", "-t", sessionName+":0").Run()
+	// Switch back to the main agent window.
+	if mainWindowIdx, ok := i.getMainWindowIndex(); ok {
+		exec.Command("tmux", "select-window", "-t", fmt.Sprintf("%s:%d", sessionName, mainWindowIdx)).Run()
+	}
 }
 
 func (i *Instance) Stop() error {
+	// Codex only exposes its generated conversation ID after the process has
+	// started. Capture it while the panes and their open rollout files still
+	// exist, before killing the tmux session.
+	i.CaptureCodexResumeIDs()
+
 	if i.Status != StatusRunning {
 		return nil
 	}
@@ -760,22 +795,27 @@ func (i *Instance) NewWindow() error {
 }
 
 // NewWindowWithName creates a new tmux window with a specific name
-func (i *Instance) NewWindowWithName(name string, workDir string) error {
+func (i *Instance) NewWindowWithName(name string, workDir string) (int, error) {
 	if workDir == "" {
 		workDir = i.Path
 	}
 	if i.Status != StatusRunning {
-		return fmt.Errorf("instance not running")
+		return -1, fmt.Errorf("instance not running")
 	}
 
 	sessionName := i.TmuxSessionName()
-	cmd := exec.Command("tmux", "new-window", "-t", sessionName, "-c", workDir, "-n", name)
-	if err := cmd.Run(); err != nil {
-		return err
+	output, err := newTmuxWindowCommand(sessionName, workDir, name, false, nil).Output()
+	if err != nil {
+		return -1, err
 	}
 
-	// Track terminal window for restore on restart
-	newIdx := i.GetCurrentWindowIndex()
+	// Never infer the new index from the active client. A linked GUI tmux
+	// client can keep a different window selected, which previously produced
+	// duplicate metadata indices and made Codex tabs restart as terminals.
+	newIdx, err := parseTmuxWindowIndex(output)
+	if err != nil {
+		return -1, fmt.Errorf("invalid new terminal window index: %w", err)
+	}
 	i.FollowedWindows = append(i.FollowedWindows, FollowedWindow{
 		WorkDir: func() string {
 			if workDir != i.Path {
@@ -797,7 +837,7 @@ func (i *Instance) NewWindowWithName(name string, workDir string) error {
 	// Disable automatic-rename so the window keeps the user-specified name
 	exec.Command("tmux", "set-option", "-t", target, "automatic-rename", "off").Run()
 
-	return nil
+	return newIdx, nil
 }
 
 // StopWindow stops the agent in a specific tmux window.
@@ -805,13 +845,23 @@ func (i *Instance) NewWindowWithName(name string, workDir string) error {
 // process (keeps session alive). Otherwise kills the entire tmux session.
 // For followed windows: kills the tmux window and marks the tab as stopped.
 func (i *Instance) StopWindow(windowIdx int) error {
+	// Capture before respawn-pane terminates the agent process.
+	i.CaptureCodexResumeIDs()
+
 	if i.Status != StatusRunning {
 		return fmt.Errorf("instance not running")
 	}
 
 	sessionName := i.TmuxSessionName()
+	mainWindowIdx, ok := i.getMainWindowIndex()
+	if !ok {
+		return fmt.Errorf("cannot identify main tmux window for session %s", sessionName)
+	}
+	if !tmuxWindowExists(sessionName, windowIdx) {
+		return fmt.Errorf("tmux window %s:%d not found", sessionName, windowIdx)
+	}
 
-	if windowIdx == 0 {
+	if windowIdx == mainWindowIdx {
 		// Check if there are active (non-stopped) followed windows
 		hasActiveFollowed := false
 		for _, fw := range i.FollowedWindows {
@@ -827,7 +877,7 @@ func (i *Instance) StopWindow(windowIdx int) error {
 		}
 
 		// Has active followed windows - stop just the main agent process
-		target := fmt.Sprintf("%s:0", sessionName)
+		target := fmt.Sprintf("%s:%d", sessionName, mainWindowIdx)
 		// Keep the window alive as a dead pane
 		exec.Command("tmux", "set-option", "-t", target, "remain-on-exit", "on").Run()
 		// Kill the agent and replace with an immediately-exiting command
@@ -849,7 +899,6 @@ func (i *Instance) StopWindow(windowIdx int) error {
 	for idx := range i.FollowedWindows {
 		if i.FollowedWindows[idx].Index == windowIdx {
 			i.FollowedWindows[idx].Stopped = true
-			break
 		}
 	}
 
@@ -865,11 +914,21 @@ func (i *Instance) RestartWindowWithResume(windowIdx int, resumeID string) error
 	}
 
 	sessionName := i.TmuxSessionName()
+	mainWindowIdx, ok := i.getMainWindowIndex()
+	if !ok {
+		return fmt.Errorf("cannot identify main tmux window for session %s", sessionName)
+	}
+	if !tmuxWindowExists(sessionName, windowIdx) {
+		return fmt.Errorf("tmux window %s:%d not found", sessionName, windowIdx)
+	}
 	target := fmt.Sprintf("%s:%d", sessionName, windowIdx)
 
-	if windowIdx == 0 {
+	if windowIdx == mainWindowIdx {
 		// Main window: restart the main agent
-		config := AgentConfigs[i.Agent]
+		config, ok := AgentConfigs[i.Agent]
+		if !ok || config.Command == "" {
+			return fmt.Errorf("cannot restart main window: unsupported agent %q", i.Agent)
+		}
 		args := []string{}
 		// Use provided resume ID or saved one
 		if resumeID == "" {
@@ -920,24 +979,23 @@ func (i *Instance) RestartWindowWithResume(windowIdx int, resumeID string) error
 			return fmt.Errorf("failed to restart main window: %w", err)
 		}
 		i.MainWindowStopped = false
+		i.CaptureCodexResumeIDs()
 		return nil
 	}
 
 	// Followed window: find the agent config and restart
-	var fw *FollowedWindow
-	for idx := range i.FollowedWindows {
-		if i.FollowedWindows[idx].Index == windowIdx {
-			fw = &i.FollowedWindows[idx]
-			break
-		}
+	fwSliceIdx, collapseDuplicates, err := selectFollowedWindowForRestart(i.FollowedWindows, windowIdx)
+	if err != nil {
+		return err
 	}
-	if fw == nil {
+	if fwSliceIdx < 0 {
 		log.Printf("[RestartWindow] window %d not found in followedWindows (count=%d)", windowIdx, len(i.FollowedWindows))
 		for _, w := range i.FollowedWindows {
 			log.Printf("[RestartWindow]   fw: index=%d agent=%s name=%q resumeID=%q stopped=%v", w.Index, w.Agent, w.Name, w.ResumeSessionID, w.Stopped)
 		}
 		return fmt.Errorf("window %d not found in followed windows", windowIdx)
 	}
+	fw := &i.FollowedWindows[fwSliceIdx]
 
 	log.Printf("[RestartWindow] found fw: index=%d agent=%s name=%q resumeID=%q stopped=%v extraArgs=%q", fw.Index, fw.Agent, fw.Name, fw.ResumeSessionID, fw.Stopped, fw.ExtraArgs)
 
@@ -953,7 +1011,10 @@ func (i *Instance) RestartWindowWithResume(windowIdx int, resumeID string) error
 	} else if fw.Agent == AgentCustom {
 		argv = customCommandArgv(fw.CustomCommand)
 	} else {
-		config := AgentConfigs[fw.Agent]
+		config, ok := AgentConfigs[fw.Agent]
+		if !ok || config.Command == "" {
+			return fmt.Errorf("cannot restart window %d: unsupported agent %q", windowIdx, fw.Agent)
+		}
 		args := []string{}
 		autoYes := fw.AutoYes || i.AutoYes
 		// Use provided resume ID, or saved one from the tab
@@ -1012,6 +1073,24 @@ func (i *Instance) RestartWindowWithResume(windowIdx int, resumeID string) error
 	}
 
 	fw.Stopped = false
+	if collapseDuplicates {
+		selected := *fw
+		compacted := make([]FollowedWindow, 0, len(i.FollowedWindows))
+		inserted := false
+		for _, window := range i.FollowedWindows {
+			if window.Index != windowIdx {
+				compacted = append(compacted, window)
+				continue
+			}
+			if !inserted {
+				compacted = append(compacted, selected)
+				inserted = true
+			}
+		}
+		i.FollowedWindows = compacted
+		log.Printf("[RestartWindow] repaired duplicate metadata for session=%s window=%d agent=%s", i.ID, windowIdx, selected.Agent)
+	}
+	i.CaptureCodexResumeIDs()
 	return nil
 }
 
@@ -1019,36 +1098,101 @@ func (i *Instance) RestartWindow(windowIdx int) error {
 	return i.RestartWindowWithResume(windowIdx, "")
 }
 
+func selectFollowedWindowForRestart(windows []FollowedWindow, windowIdx int) (sliceIdx int, collapseDuplicates bool, err error) {
+	var matches []int
+	for idx := range windows {
+		if windows[idx].Index == windowIdx {
+			matches = append(matches, idx)
+		}
+	}
+	if len(matches) == 0 {
+		return -1, false, nil
+	}
+	if len(matches) == 1 {
+		return matches[0], false, nil
+	}
+
+	// Older versions could store the active Terminal tab's index for a newly
+	// created agent tab. If every non-terminal duplicate agrees on one agent
+	// type, that descriptor is the only plausible restart command.
+	var preferredAgent AgentType
+	for _, idx := range matches {
+		agent := windows[idx].Agent
+		if agent == AgentTerminal {
+			continue
+		}
+		if preferredAgent == "" {
+			preferredAgent = agent
+			continue
+		}
+		if agent != preferredAgent {
+			return -1, false, fmt.Errorf(
+				"window %d has conflicting duplicate agent metadata (%s and %s)",
+				windowIdx,
+				preferredAgent,
+				agent,
+			)
+		}
+	}
+	if preferredAgent != "" {
+		for _, idx := range matches {
+			if windows[idx].Agent == preferredAgent {
+				return idx, true, nil
+			}
+		}
+	}
+	return matches[0], true, nil
+}
+
 // DeleteWindow removes a followed window. If the session is running and the
 // window is not already stopped, it kills the tmux window first.
 func (i *Instance) DeleteWindow(windowIdx int) error {
-	if windowIdx == 0 {
+	mainWindowIdx := 0
+	if i.Status == StatusRunning {
+		var ok bool
+		mainWindowIdx, ok = i.getMainWindowIndex()
+		if !ok {
+			return fmt.Errorf("cannot identify main tmux window for session %s", i.TmuxSessionName())
+		}
+	}
+	if windowIdx == mainWindowIdx {
 		return fmt.Errorf("cannot delete main agent window")
 	}
+
+	// Capture before kill-window removes the process that owns the rollout FD.
+	i.CaptureCodexResumeIDs()
 
 	// Kill the tmux window if session is running
 	if i.Status == StatusRunning {
 		sessionName := i.TmuxSessionName()
 		target := fmt.Sprintf("%s:%d", sessionName, windowIdx)
-		killErr := exec.Command("tmux", "kill-window", "-t", target).Run()
-		// Never drop metadata while an agent window is still alive. If tmux
-		// reports an error but the target is already gone, deletion is still
-		// complete and may safely continue.
-		if exec.Command("tmux", "display-message", "-p", "-t", target, "#{window_id}").Run() == nil {
-			if killErr != nil {
-				return fmt.Errorf("failed to delete live tmux window %s: %w", target, killErr)
+		// tmux silently falls back to the current window for a missing numeric
+		// target, so check exact membership before kill-window. Otherwise stale
+		// metadata could delete the main agent.
+		if tmuxWindowExists(sessionName, windowIdx) {
+			killErr := exec.Command("tmux", "kill-window", "-t", target).Run()
+			if tmuxWindowExists(sessionName, windowIdx) {
+				if killErr != nil {
+					return fmt.Errorf("failed to delete live tmux window %s: %w", target, killErr)
+				}
+				return fmt.Errorf("tmux window %s is still alive after deletion", target)
 			}
-			return fmt.Errorf("tmux window %s is still alive after deletion", target)
+			if killErr != nil {
+				log.Printf("[DeleteWindow] tmux reported an error after window %s was removed: %v", target, killErr)
+			}
 		}
 	}
 
-	// Find and remove from FollowedWindows (if tracked)
-	for idx, fw := range i.FollowedWindows {
-		if fw.Index == windowIdx {
-			i.FollowedWindows = append(i.FollowedWindows[:idx], i.FollowedWindows[idx+1:]...)
-			break
+	// A tmux index identifies exactly one real window. Remove every matching
+	// descriptor so older duplicate-index corruption cannot leave phantom tabs
+	// behind after the real window is deleted.
+	filtered := i.FollowedWindows[:0]
+	for _, window := range i.FollowedWindows {
+		if window.Index != windowIdx {
+			filtered = append(filtered, window)
 		}
 	}
+	i.FollowedWindows = filtered
 
 	// Clear TabOrder since window indices changed
 	i.TabOrder = nil
@@ -1062,8 +1206,12 @@ func (i *Instance) CloseWindow(windowIdx int) error {
 		return fmt.Errorf("instance not running")
 	}
 
-	// Don't allow closing window 0 (main agent)
-	if windowIdx == 0 {
+	// Don't allow closing the main agent window.
+	mainWindowIdx, ok := i.getMainWindowIndex()
+	if !ok {
+		return fmt.Errorf("cannot identify main tmux window for session %s", i.TmuxSessionName())
+	}
+	if windowIdx == mainWindowIdx {
 		return fmt.Errorf("cannot close main agent window")
 	}
 
@@ -1433,6 +1581,9 @@ func (i *Instance) NewAgentWindow(name string, agent AgentType, customCmd string
 	if agent == AgentCustom {
 		argv = customCommandArgv(customCmd)
 	} else {
+		if config.Command == "" {
+			return -1, fmt.Errorf("unsupported agent %q", agent)
+		}
 		args := []string{}
 		// Use instance's AutoYes setting for the new agent too
 		if i.AutoYes && config.SupportsAutoYes && config.AutoYesFlag != "" {
@@ -1448,14 +1599,15 @@ func (i *Instance) NewAgentWindow(name string, agent AgentType, customCmd string
 
 	// Create new window with the agent command as separate argv elements
 	// (tmux execs directly, no `sh -c`).
-	tmuxArgs := append([]string{"new-window", "-t", sessionName, "-c", workDir, "-n", name}, argv...)
-	cmd := exec.Command("tmux", tmuxArgs...)
-	if err := cmd.Run(); err != nil {
+	output, err := newTmuxWindowCommand(sessionName, workDir, name, false, argv).Output()
+	if err != nil {
 		return -1, err
 	}
 
-	// Get the new window index
-	newIdx := i.GetCurrentWindowIndex()
+	newIdx, err := parseTmuxWindowIndex(output)
+	if err != nil {
+		return -1, fmt.Errorf("invalid new agent window index: %w", err)
+	}
 
 	// Add to followed windows with agent info
 	i.FollowedWindows = append(i.FollowedWindows, FollowedWindow{
@@ -1481,6 +1633,8 @@ func (i *Instance) NewAgentWindow(name string, agent AgentType, customCmd string
 	exec.Command("tmux", "set-option", "-t", target, "remain-on-exit", "on").Run()
 	// Disable automatic-rename so the window keeps the user-specified name
 	exec.Command("tmux", "set-option", "-t", target, "automatic-rename", "off").Run()
+
+	i.CaptureCodexResumeIDs()
 
 	return newIdx, nil
 }
@@ -1546,14 +1700,15 @@ func (i *Instance) NewForkedTab(name string, sessionID string) error {
 	argv := buildAgentArgv(config.Command, args, "")
 
 	// Create new window with forked agent (argv form, no shell layer).
-	tmuxArgs := append([]string{"new-window", "-t", sessionName, "-c", i.Path, "-n", name}, argv...)
-	cmd := exec.Command("tmux", tmuxArgs...)
-	if err := cmd.Run(); err != nil {
+	output, err := newTmuxWindowCommand(sessionName, i.Path, name, false, argv).Output()
+	if err != nil {
 		return err
 	}
 
-	// Get the new window index
-	newIdx := i.GetCurrentWindowIndex()
+	newIdx, err := parseTmuxWindowIndex(output)
+	if err != nil {
+		return fmt.Errorf("invalid forked window index: %w", err)
+	}
 
 	// Add to followed windows with fork info
 	i.FollowedWindows = append(i.FollowedWindows, FollowedWindow{
@@ -2084,26 +2239,92 @@ func (i *Instance) ResetBaseCommit() {
 	i.saveBaseCommit()
 }
 
-// GetMainWindowIndex returns the index of the first tmux window for this session.
-// Window index may not be 0 if windows were reordered or renumbered.
+// GetMainWindowIndex returns the main agent window's current tmux index.
+// A marker stored on the tmux window survives move-window and renumbering.
 func (i *Instance) GetMainWindowIndex() int {
-	if i.Status != StatusRunning {
+	index, ok := i.getMainWindowIndex()
+	if !ok {
 		return 0
+	}
+	return index
+}
+
+func (i *Instance) getMainWindowIndex() (int, bool) {
+	if i.Status != StatusRunning {
+		return 0, false
 	}
 
 	sessionName := i.TmuxSessionName()
-	cmd := exec.Command("tmux", "list-windows", "-t", sessionName, "-F", "#{window_index}")
+	cmd := exec.Command("tmux", "list-windows", "-t", sessionName, "-F", "#{window_index}\t#{@asmgr_main}")
 	output, err := cmd.Output()
 	if err != nil {
-		return 0
+		return 0, false
 	}
 
-	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
-	if len(lines) == 0 || lines[0] == "" {
-		return 0
+	index, ok := identifyMainWindowIndex(output, i.FollowedWindows)
+	if !ok {
+		return 0, false
+	}
+	// Backfill the marker for sessions created by older asmgr versions.
+	target := fmt.Sprintf("%s:%d", sessionName, index)
+	_ = exec.Command("tmux", "set-option", "-w", "-t", target, "@asmgr_main", "1").Run()
+	return index, true
+}
+
+func identifyMainWindowIndex(output []byte, followedWindows []FollowedWindow) (int, bool) {
+	var live []int
+	var marked []int
+	for _, line := range strings.Split(strings.TrimSpace(string(output)), "\n") {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		parts := strings.SplitN(line, "\t", 2)
+		var index int
+		if _, err := fmt.Sscanf(parts[0], "%d", &index); err != nil {
+			continue
+		}
+		live = append(live, index)
+		if len(parts) == 2 && strings.TrimSpace(parts[1]) == "1" {
+			marked = append(marked, index)
+		}
+	}
+	if len(marked) == 1 {
+		return marked[0], true
+	}
+	if len(marked) > 1 {
+		return 0, false
 	}
 
-	var firstIdx int
-	fmt.Sscanf(lines[0], "%d", &firstIdx)
-	return firstIdx
+	followed := make(map[int]struct{}, len(followedWindows))
+	for _, window := range followedWindows {
+		followed[window.Index] = struct{}{}
+	}
+	var candidates []int
+	for _, index := range live {
+		if _, isFollowed := followed[index]; !isFollowed {
+			candidates = append(candidates, index)
+		}
+	}
+	if len(candidates) != 1 {
+		return 0, false
+	}
+	return candidates[0], true
+}
+
+func soleTmuxWindowIndex(sessionName string) (int, bool) {
+	output, err := exec.Command("tmux", "list-windows", "-t", sessionName, "-F", "#{window_index}").Output()
+	if err != nil {
+		return 0, false
+	}
+	var indices []int
+	for _, line := range strings.Split(strings.TrimSpace(string(output)), "\n") {
+		var index int
+		if _, err := fmt.Sscanf(line, "%d", &index); err == nil {
+			indices = append(indices, index)
+		}
+	}
+	if len(indices) != 1 {
+		return 0, false
+	}
+	return indices[0], true
 }

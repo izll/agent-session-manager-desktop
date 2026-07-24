@@ -171,6 +171,14 @@ func (a *App) IsDevMode() bool {
 
 // shutdown is called when the app is closing
 func (a *App) shutdown(ctx context.Context) {
+	// Persist Codex-generated conversation IDs before releasing the project
+	// lock or cleaning up GUI mirrors. The base tmux sessions intentionally
+	// survive app shutdown, so this is what makes a later reboot resume the
+	// exact conversation.
+	if a.projectLocked {
+		a.persistActiveProjectCodexResumeIDs("shutdown")
+	}
+
 	// Release the project lock only if WE hold it — a second instance that
 	// failed to acquire it must not delete the real owner's lock file.
 	if a.projectLocked {
@@ -346,6 +354,12 @@ func (a *App) GetProjects() ([]ProjectInfo, error) {
 func (a *App) SelectProject(id string) error {
 	a.projectMu.Lock()
 	defer a.projectMu.Unlock()
+	// Once the active project changes, its running sessions are no longer part
+	// of sidebar polling. Capture their Codex IDs while we still own that
+	// project's lock and before switching storage to the new project.
+	if a.projectLocked {
+		a.persistActiveProjectCodexResumeIDs("project switch")
+	}
 	if err := a.storage.SetActiveProject(id); err != nil {
 		return err
 	}
@@ -361,6 +375,22 @@ func (a *App) SelectProject(id string) error {
 		a.projectLocked = true
 	}
 	return nil
+}
+
+func (a *App) persistActiveProjectCodexResumeIDs(reason string) {
+	projectID, instances, _, err := a.storage.LoadAllWithProjectSnapshot()
+	if err != nil {
+		log.Printf("[%s] failed to load sessions for Codex resume capture: %v", reason, err)
+		return
+	}
+	for _, instance := range instances {
+		if !instance.NeedsCodexResumeCapture() {
+			continue
+		}
+		if _, err := a.storage.CaptureCodexResumeIDsForProject(projectID, instance.ID); err != nil {
+			log.Printf("[%s] failed to persist Codex resume IDs for session=%s: %v", reason, instance.ID, err)
+		}
+	}
 }
 
 // LockStatusInfo tells the frontend whether this instance owns the active
@@ -709,7 +739,8 @@ func (a *App) RestartTabWithResume(id string, windowIdx int, resumeId string) er
 	// Validate the resume ID exists for whichever agent owns this tab.
 	if resumeId != "" {
 		tabAgent := inst.Agent
-		if windowIdx != 0 {
+		mainWindowIdx := inst.GetMainWindowIndex()
+		if windowIdx != mainWindowIdx {
 			for _, fw := range inst.FollowedWindows {
 				if fw.Index == windowIdx {
 					tabAgent = fw.Agent
@@ -721,10 +752,8 @@ func (a *App) RestartTabWithResume(id string, windowIdx int, resumeId string) er
 			log.Printf("[RestartTabWithResume] resume ID %q no longer exists for agent=%s — starting fresh", resumeId, tabAgent)
 			resumeId = ""
 			// Also clear any persisted ID for this tab so future starts don't try again.
-			if windowIdx == 0 {
-				if inst.ResumeSessionID == "" || inst.ResumeSessionID != "" {
-					inst.ResumeSessionID = ""
-				}
+			if windowIdx == mainWindowIdx {
+				inst.ResumeSessionID = ""
 			} else {
 				for i := range inst.FollowedWindows {
 					if inst.FollowedWindows[i].Index == windowIdx {
@@ -1329,11 +1358,11 @@ func (a *App) CreateTab(sessionID string, isAgent bool, agent string, name strin
 		}
 		newIdx = idx
 	} else {
-		if err := inst.NewWindowWithName(name, workDir); err != nil {
+		idx, err := inst.NewWindowWithName(name, workDir)
+		if err != nil {
 			return -1, err
 		}
-		// tmux new-window selects the created window, so this is its index.
-		newIdx = inst.GetCurrentWindowIndex()
+		newIdx = idx
 	}
 	return newIdx, a.storage.UpdateInstance(inst)
 }
@@ -1625,6 +1654,11 @@ func (a *App) GetSidebarUpdates() SidebarUpdate {
 		// Auto-detect and persist Claude session ID from running process
 		// so that resume works correctly after app/machine restart
 		needSave := false
+		if inst.NeedsCodexResumeCapture() {
+			if _, err := a.storage.CaptureCodexResumeIDsForProject(projectID, inst.ID); err != nil {
+				log.Printf("[SidebarPoll] failed to capture Codex session IDs for session=%s: %v", inst.ID, err)
+			}
+		}
 		if inst.ResumeSessionID == "" && inst.Agent == session.AgentClaude {
 			if sid := getClaudeSessionIDFromTmux(inst.TmuxSessionName()); sid != "" {
 				inst.ResumeSessionID = sid
@@ -1681,7 +1715,7 @@ func (a *App) GetSidebarUpdates() SidebarUpdate {
 		}
 
 		if needSave {
-			if err := a.storage.UpdateInstanceForProject(projectID, inst); err != nil {
+			if err := a.storage.MergeResumeSessionIDsForProject(projectID, inst); err != nil {
 				log.Printf("[SidebarPoll] failed to save auto-detected session IDs for session=%s: %v", inst.ID, err)
 			}
 		}

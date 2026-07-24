@@ -13,9 +13,62 @@ import (
 type codexSessionMeta struct {
 	Type    string `json:"type"`
 	Payload struct {
-		ID  string `json:"id"`
-		CWD string `json:"cwd"`
+		ID             string          `json:"id"`
+		SessionID      string          `json:"session_id"`
+		CWD            string          `json:"cwd"`
+		Source         json.RawMessage `json:"source"`
+		ThreadSource   string          `json:"thread_source"`
+		ParentThreadID string          `json:"parent_thread_id"`
 	} `json:"payload"`
+}
+
+func (m codexSessionMeta) resumeID() string {
+	if m.Payload.SessionID != "" {
+		return m.Payload.SessionID
+	}
+	return m.Payload.ID
+}
+
+func (m codexSessionMeta) isRoot() bool {
+	if m.Payload.ParentThreadID != "" || m.Payload.ThreadSource == "subagent" {
+		return false
+	}
+	var sourceObject map[string]json.RawMessage
+	if json.Unmarshal(m.Payload.Source, &sourceObject) == nil {
+		if _, isSubagent := sourceObject["subagent"]; isSubagent {
+			return false
+		}
+	}
+	return true
+}
+
+func (m codexSessionMeta) isRootCLI() bool {
+	if !m.isRoot() {
+		return false
+	}
+	var source string
+	return json.Unmarshal(m.Payload.Source, &source) == nil && source == "cli"
+}
+
+func codexSessionsDir() (string, error) {
+	var root string
+	if codexHome := strings.TrimSpace(os.Getenv("CODEX_HOME")); codexHome != "" {
+		root = filepath.Join(codexHome, "sessions")
+	} else {
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			return "", err
+		}
+		root = filepath.Join(homeDir, ".codex", "sessions")
+	}
+	root, err := filepath.Abs(root)
+	if err != nil {
+		return "", err
+	}
+	if evaluated, evalErr := filepath.EvalSymlinks(root); evalErr == nil {
+		root = evaluated
+	}
+	return root, nil
 }
 
 // codexMessage represents a user message in the Codex JSONL session file
@@ -34,12 +87,11 @@ type codexMessage struct {
 // ListCodexSessions lists all Codex sessions for the given project path
 func ListCodexSessions(projectPath string) ([]AgentSession, error) {
 	// Try to list sessions from ~/.codex/sessions directory (note: sessions, not session)
-	homeDir, err := os.UserHomeDir()
+	sessionDir, err := codexSessionsDir()
 	if err != nil {
 		return []AgentSession{}, nil
 	}
 
-	sessionDir := filepath.Join(homeDir, ".codex", "sessions")
 	if _, err := os.Stat(sessionDir); os.IsNotExist(err) {
 		return []AgentSession{}, nil
 	}
@@ -83,8 +135,8 @@ func ListCodexSessions(projectPath string) ([]AgentSession, error) {
 
 			// Check if paths are related (one is ancestor of the other)
 			if cwd != projectPath &&
-			   !strings.HasPrefix(normalizedProject, normalizedCWD) &&
-			   !strings.HasPrefix(normalizedCWD, normalizedProject) {
+				!strings.HasPrefix(normalizedProject, normalizedCWD) &&
+				!strings.HasPrefix(normalizedCWD, normalizedProject) {
 				return nil // Skip sessions from unrelated directories
 			}
 		}
@@ -123,6 +175,7 @@ func parseCodexSession(path string) (sessionID, firstPrompt, cwd string) {
 	defer file.Close()
 
 	scanner := bufio.NewScanner(file)
+	scanner.Buffer(make([]byte, 64*1024), 1024*1024)
 	lineNum := 0
 
 	for scanner.Scan() {
@@ -133,7 +186,7 @@ func parseCodexSession(path string) (sessionID, firstPrompt, cwd string) {
 		if lineNum == 1 {
 			var meta codexSessionMeta
 			if err := json.Unmarshal([]byte(line), &meta); err == nil {
-				if meta.Type == "session_meta" {
+				if meta.Type == "session_meta" && meta.isRoot() {
 					sessionID = meta.Payload.ID
 					cwd = meta.Payload.CWD
 				}
