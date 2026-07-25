@@ -332,6 +332,12 @@ func (i *Instance) GetCaptureTarget(windowIdx int) string {
 func CheckAgentCommand(inst *Instance) error {
 	var cmdToCheck string
 
+	// A terminal session launches no agent — tmux just opens the user's
+	// shell, so there is nothing to look up in PATH.
+	if inst.Agent == AgentTerminal {
+		return nil
+	}
+
 	if inst.Agent == AgentCustom {
 		// Extract the base command (first token) from custom command,
 		// using the same quote-aware splitter the launcher uses.
@@ -393,7 +399,12 @@ func (i *Instance) StartWithResume(resumeID string) error {
 		var argv []string // tmux command in argv form (no shell layer)
 		var cmdToCheck string
 
-		if i.Agent == AgentCustom {
+		if i.Agent == AgentTerminal {
+			// Plain shell session — no agent to launch. Leaving argv empty
+			// makes tmux start the user's default shell, exactly like a
+			// terminal TAB does (see restoreFollowedWindows).
+			argv = nil
+		} else if i.Agent == AgentCustom {
 			// Use custom command directly, split into argv tokens.
 			argv = customCommandArgv(i.CustomCommand)
 			if len(argv) > 0 {
@@ -924,6 +935,23 @@ func (i *Instance) RestartWindowWithResume(windowIdx int, resumeID string) error
 	target := fmt.Sprintf("%s:%d", sessionName, windowIdx)
 
 	if windowIdx == mainWindowIdx {
+		// Terminal session: no agent to restart, just bring the shell back.
+		// respawn-pane without a command would re-run the pane's original
+		// start command ("exit 0" for a stopped window), so pass the shell
+		// explicitly — same as a terminal TAB restart below.
+		if i.Agent == AgentTerminal {
+			shell := os.Getenv("SHELL")
+			if shell == "" {
+				shell = "bash"
+			}
+			target := fmt.Sprintf("%s:%d", sessionName, windowIdx)
+			if err := exec.Command("tmux", "respawn-pane", "-k", "-t", target, shell).Run(); err != nil {
+				return fmt.Errorf("failed to restart terminal window: %w", err)
+			}
+			i.MainWindowStopped = false
+			return nil
+		}
+
 		// Main window: restart the main agent
 		config, ok := AgentConfigs[i.Agent]
 		if !ok || config.Command == "" {
@@ -1910,6 +1938,14 @@ func (i *Instance) GetStatusInfoForWindow(windowIdx int, agent AgentType) Status
 	result := StatusInfo{}
 	if !i.IsAlive() {
 		result.StatusLine = "stopped"
+		return result
+	}
+
+	// A plain shell has no agent status to report — its last pane line is
+	// just a prompt or whatever command the user last ran, which is noise in
+	// the session list. Activity detection already skips terminals; do the
+	// same for the status line.
+	if agent == AgentTerminal {
 		return result
 	}
 

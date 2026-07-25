@@ -257,7 +257,7 @@
         <div class="form-group">
           <span class="form-label">{$t('newSession.agentType')}</span>
           <div class="agent-grid">
-            {#each $agents.filter(a => a.type !== 'terminal') as agent (agent.type)}
+            {#each $agents as agent (agent.type)}
               <button
                 type="button"
                 class="agent-btn {selectedAgent === agent.type ? 'selected' : ''}"
@@ -409,11 +409,14 @@
 
         <!-- Options -->
         <div class="form-options">
-          <label class="checkbox-label">
-            <input type="checkbox" bind:checked={autoYes} class="checkbox-input" />
-            <span class="checkbox-custom"></span>
-            <span class="checkbox-text">{$t('newSession.autoApprove')}</span>
-          </label>
+          {#if selectedAgent !== 'terminal'}
+            <!-- A plain shell has no permission prompts to auto-approve. -->
+            <label class="checkbox-label">
+              <input type="checkbox" bind:checked={autoYes} class="checkbox-input" />
+              <span class="checkbox-custom"></span>
+              <span class="checkbox-text">{$t('newSession.autoApprove')}</span>
+            </label>
+          {/if}
 
           <label class="checkbox-label">
             <input type="checkbox" bind:checked={autoStart} class="checkbox-input" />
