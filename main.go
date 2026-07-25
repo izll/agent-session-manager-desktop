@@ -6,6 +6,7 @@ import (
 	_ "embed"
 	"log"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/wailsapp/wails/v2"
@@ -60,6 +61,13 @@ func main() {
 	if os.Getenv("GDK_BACKEND") == "" {
 		os.Setenv("GDK_BACKEND", "x11")
 	}
+
+	// On machines without a usable GPU stack (VMs, headless/remote sessions,
+	// missing or broken drivers) WebKit fails with "Could not create GBM EGL
+	// display: EGL_NOT_INITIALIZED" and aborts the whole process from inside
+	// cgo — too late for Go to recover. Detect that case up front and fall
+	// back to software rendering so the app starts instead of crashing.
+	applyGpuFallback()
 
 	// NOTE: an earlier experiment forced SOFTWARE rendering here
 	// (LIBGL_ALWAYS_SOFTWARE / GALLIUM_DRIVER=llvmpipe / Mesa EGL vendor) to get
@@ -126,6 +134,51 @@ func main() {
 	if err != nil {
 		println("Error:", err.Error())
 	}
+}
+
+// applyGpuFallback switches WebKit to software rendering when this machine
+// has no usable GPU, because WebKit aborts the process rather than degrading
+// gracefully:
+//
+//	Could not create GBM EGL display: EGL_NOT_INITIALIZED. Aborting...
+//
+// That happens on VMs, headless/remote sessions and boxes with missing or
+// broken drivers. The crash comes from cgo, so it can't be recovered once
+// wails.Run starts — the check has to happen before.
+//
+// An explicit ASMGR_GPU always wins: this only fills in a default.
+func applyGpuFallback() {
+	if os.Getenv("ASMGR_GPU") != "" {
+		return // user made the call; don't second-guess it
+	}
+	if hasUsableGPU() {
+		return
+	}
+	// Keep WebKit off the GPU paths that abort. DMABUF is the renderer that
+	// needs the GBM EGL display the log complains about.
+	os.Setenv("ASMGR_GPU", "never")
+	os.Setenv("WEBKIT_DISABLE_DMABUF_RENDERER", "1")
+	os.Setenv("WEBKIT_DISABLE_COMPOSITING_MODE", "1")
+	log.Println("no usable GPU render node found; falling back to software rendering " +
+		"(set ASMGR_GPU=ondemand|always to override)")
+}
+
+// hasUsableGPU reports whether a DRM render node exists AND can be opened.
+// Presence alone isn't enough: in containers and locked-down setups the node
+// is there but permissions deny it, which is exactly when EGL init fails.
+func hasUsableGPU() bool {
+	nodes, err := filepath.Glob("/dev/dri/renderD*")
+	if err != nil || len(nodes) == 0 {
+		return false
+	}
+	for _, n := range nodes {
+		f, err := os.Open(n)
+		if err == nil {
+			f.Close()
+			return true
+		}
+	}
+	return false
 }
 
 // gpuPolicyFromEnv lets us A/B the WebView hardware-acceleration policy at
