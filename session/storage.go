@@ -43,10 +43,12 @@ type Settings struct {
 	CompactList     bool   `json:"compact_list"`
 	HideStatusLines bool   `json:"hide_status_lines"`
 	ShowAgentIcons  bool   `json:"show_agent_icons,omitempty"`
-	// Both badges show by default, so these are "hide" flags: the zero value
-	// keeps the existing appearance for sessions saved before they existed.
+	// YOLO shows by default (it flags bypassed permissions, worth seeing), so
+	// it's a "hide" flag whose zero value keeps it visible. The resume marker
+	// is the opposite: most sessions continue an earlier conversation, so it
+	// adds noise more than information and is opt-in.
 	HideYoloBadge   bool `json:"hide_yolo_badge,omitempty"`
-	HideResumeBadge bool `json:"hide_resume_badge,omitempty"`
+	ShowResumeBadge bool `json:"show_resume_badge,omitempty"`
 	SplitView       bool   `json:"split_view,omitempty"`
 	MarkedSessionID string `json:"marked_session_id,omitempty"`
 	MarkedWindowIdx int    `json:"marked_window_idx,omitempty"`

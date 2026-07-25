@@ -719,7 +719,7 @@ export namespace main {
 	    hideStatusLines: boolean;
 	    showAgentIcons: boolean;
 	    hideYoloBadge: boolean;
-	    hideResumeBadge: boolean;
+	    showResumeBadge: boolean;
 	    splitView: boolean;
 	    markedSessionId: string;
 	    markedWindowIdx: number;
@@ -744,7 +744,7 @@ export namespace main {
 	        this.hideStatusLines = source["hideStatusLines"];
 	        this.showAgentIcons = source["showAgentIcons"];
 	        this.hideYoloBadge = source["hideYoloBadge"];
-	        this.hideResumeBadge = source["hideResumeBadge"];
+	        this.showResumeBadge = source["showResumeBadge"];
 	        this.splitView = source["splitView"];
 	        this.markedSessionId = source["markedSessionId"];
 	        this.markedWindowIdx = source["markedWindowIdx"];

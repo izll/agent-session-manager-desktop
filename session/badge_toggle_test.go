@@ -5,21 +5,24 @@ import (
 	"testing"
 )
 
-// Both badges are visible by default, so the flags must be "hide": settings
-// written before they existed have to keep showing the badges.
-func TestBadgeFlagsDefaultToVisible(t *testing.T) {
+// YOLO stays visible unless hidden (it flags bypassed permissions), while the
+// resume marker is opt-in. Settings written before either flag existed must
+// therefore show YOLO and hide resume.
+func TestBadgeFlagDefaults(t *testing.T) {
 	var s Settings
 	if err := json.Unmarshal([]byte(`{"compact_list":true}`), &s); err != nil {
 		t.Fatalf("unmarshal legacy settings: %v", err)
 	}
-	if s.HideYoloBadge || s.HideResumeBadge {
-		t.Fatalf("legacy settings hid a badge: yolo=%v resume=%v",
-			s.HideYoloBadge, s.HideResumeBadge)
+	if s.HideYoloBadge {
+		t.Error("legacy settings hid the YOLO badge; it should stay visible")
+	}
+	if s.ShowResumeBadge {
+		t.Error("legacy settings showed the resume badge; it should be opt-in")
 	}
 }
 
 func TestBadgeFlagsRoundTrip(t *testing.T) {
-	data, err := json.Marshal(Settings{HideYoloBadge: true, HideResumeBadge: true})
+	data, err := json.Marshal(Settings{HideYoloBadge: true, ShowResumeBadge: true})
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}
@@ -27,7 +30,8 @@ func TestBadgeFlagsRoundTrip(t *testing.T) {
 	if err := json.Unmarshal(data, &loaded); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if !loaded.HideYoloBadge || !loaded.HideResumeBadge {
-		t.Fatalf("flags lost: yolo=%v resume=%v", loaded.HideYoloBadge, loaded.HideResumeBadge)
+	if !loaded.HideYoloBadge || !loaded.ShowResumeBadge {
+		t.Fatalf("flags lost: hideYolo=%v showResume=%v",
+			loaded.HideYoloBadge, loaded.ShowResumeBadge)
 	}
 }

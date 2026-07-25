@@ -7,9 +7,9 @@ export interface Settings {
   compactList: boolean;
   hideStatusLines: boolean;
   showAgentIcons: boolean;
-  /** Both badges show by default, so these hide rather than show. */
+  /** YOLO shows unless hidden; the resume marker is opt-in. */
   hideYoloBadge: boolean;
-  hideResumeBadge: boolean;
+  showResumeBadge: boolean;
   splitView: boolean;
   markedSessionId: string;
   markedWindowIdx: number;
@@ -29,7 +29,7 @@ export const settings = writable<Settings>({
   hideStatusLines: false,
   showAgentIcons: true,
   hideYoloBadge: false,
-  hideResumeBadge: false,
+  showResumeBadge: false,
   splitView: false,
   markedSessionId: '',
   markedWindowIdx: 0,

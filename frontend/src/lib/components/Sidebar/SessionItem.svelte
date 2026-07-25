@@ -68,9 +68,9 @@
   //  - multi tab   → "Y" at the end of the specific tab's status row
   $: singleTabYolo = tabStatuses.length === 1 ? !!tabStatuses[0]?.yolo : false;
 
-  // Badge visibility (both shown unless switched off in settings).
+  // YOLO shows unless switched off; the resume marker is opt-in.
   $: showYolo = !$settings?.hideYoloBadge;
-  $: showResume = !$settings?.hideResumeBadge;
+  $: showResume = !!$settings?.showResumeBadge;
   /** A tab row worth drawing: it has status text, or a YOLO badge that shows. */
   $: tabRowVisible = (tab: { statusLine?: string; yolo?: boolean }) =>
     !!tab.statusLine || (!!tab.yolo && showYolo);
