@@ -68,6 +68,13 @@
   //  - multi tab   → "Y" at the end of the specific tab's status row
   $: singleTabYolo = tabStatuses.length === 1 ? !!tabStatuses[0]?.yolo : false;
 
+  // Badge visibility (both shown unless switched off in settings).
+  $: showYolo = !$settings?.hideYoloBadge;
+  $: showResume = !$settings?.hideResumeBadge;
+  /** A tab row worth drawing: it has status text, or a YOLO badge that shows. */
+  $: tabRowVisible = (tab: { statusLine?: string; yolo?: boolean }) =>
+    !!tab.statusLine || (!!tab.yolo && showYolo);
+
   // Unique agent types for multi-agent sessions (only when 2+ different agents)
   $: uniqueAgents = (() => {
     if (tabStatuses.length <= 1) return [];
@@ -250,7 +257,7 @@
     {/if}
 
     <div class="badges">
-      {#if session.resumeSessionId}
+      {#if session.resumeSessionId && showResume}
         <span class="badge resume" title={$t('sessionItem.resumed')}>&#8635;</span>
       {/if}
       {#if session.favorite}
@@ -259,7 +266,7 @@
       <!-- YOLO next to the name ONLY for a single-tab session. When running we
            use the live pane state; when not running fall back to the stored
            launch flag so the marker is still visible while stopped. -->
-      {#if (sessionStatus === 'running' ? singleTabYolo : session.autoYes)}
+      {#if (sessionStatus === 'running' ? singleTabYolo : session.autoYes) && showYolo}
         <span class="badge yolo" title="Bypass permissions (YOLO)">Y</span>
       {/if}
     </div>
@@ -275,19 +282,19 @@
           <div class="status-text busy tab-status">
             <span>{tab.spinnerText || tab.statusLine || ''}</span>
             {#if $settings?.showAgentIcons}<AgentIcon agent={tab.agent} size="xs" />{/if}
-            {#if tab.yolo}<span class="badge yolo" title="Bypass permissions (YOLO)">Y</span>{/if}
+            {#if tab.yolo && showYolo}<span class="badge yolo" title="Bypass permissions (YOLO)">Y</span>{/if}
           </div>
         {:else if tab.activity === 'waiting'}
           <div class="status-text waiting tab-status">
             <span>{$t('sessionItem.waitingInput')}</span>
             {#if $settings?.showAgentIcons}<AgentIcon agent={tab.agent} size="xs" />{/if}
-            {#if tab.yolo}<span class="badge yolo" title="Bypass permissions (YOLO)">Y</span>{/if}
+            {#if tab.yolo && showYolo}<span class="badge yolo" title="Bypass permissions (YOLO)">Y</span>{/if}
           </div>
-        {:else if tab.statusLine || tab.yolo}
+        {:else if tabRowVisible(tab)}
           <div class="status-text tab-status">
             <span>{tab.statusLine}</span>
             {#if $settings?.showAgentIcons}<AgentIcon agent={tab.agent} size="xs" />{/if}
-            {#if tab.yolo}<span class="badge yolo" title="Bypass permissions (YOLO)">Y</span>{/if}
+            {#if tab.yolo && showYolo}<span class="badge yolo" title="Bypass permissions (YOLO)">Y</span>{/if}
           </div>
         {/if}
       {/each}

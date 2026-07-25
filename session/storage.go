@@ -43,6 +43,10 @@ type Settings struct {
 	CompactList     bool   `json:"compact_list"`
 	HideStatusLines bool   `json:"hide_status_lines"`
 	ShowAgentIcons  bool   `json:"show_agent_icons,omitempty"`
+	// Both badges show by default, so these are "hide" flags: the zero value
+	// keeps the existing appearance for sessions saved before they existed.
+	HideYoloBadge   bool `json:"hide_yolo_badge,omitempty"`
+	HideResumeBadge bool `json:"hide_resume_badge,omitempty"`
 	SplitView       bool   `json:"split_view,omitempty"`
 	MarkedSessionID string `json:"marked_session_id,omitempty"`
 	MarkedWindowIdx int    `json:"marked_window_idx,omitempty"`

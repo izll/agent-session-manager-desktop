@@ -7,6 +7,9 @@ export interface Settings {
   compactList: boolean;
   hideStatusLines: boolean;
   showAgentIcons: boolean;
+  /** Both badges show by default, so these hide rather than show. */
+  hideYoloBadge: boolean;
+  hideResumeBadge: boolean;
   splitView: boolean;
   markedSessionId: string;
   markedWindowIdx: number;
@@ -25,6 +28,8 @@ export const settings = writable<Settings>({
   compactList: false,
   hideStatusLines: false,
   showAgentIcons: true,
+  hideYoloBadge: false,
+  hideResumeBadge: false,
   splitView: false,
   markedSessionId: '',
   markedWindowIdx: 0,

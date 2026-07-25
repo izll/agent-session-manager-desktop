@@ -718,6 +718,8 @@ export namespace main {
 	    compactList: boolean;
 	    hideStatusLines: boolean;
 	    showAgentIcons: boolean;
+	    hideYoloBadge: boolean;
+	    hideResumeBadge: boolean;
 	    splitView: boolean;
 	    markedSessionId: string;
 	    markedWindowIdx: number;
@@ -741,6 +743,8 @@ export namespace main {
 	        this.compactList = source["compactList"];
 	        this.hideStatusLines = source["hideStatusLines"];
 	        this.showAgentIcons = source["showAgentIcons"];
+	        this.hideYoloBadge = source["hideYoloBadge"];
+	        this.hideResumeBadge = source["hideResumeBadge"];
 	        this.splitView = source["splitView"];
 	        this.markedSessionId = source["markedSessionId"];
 	        this.markedWindowIdx = source["markedWindowIdx"];

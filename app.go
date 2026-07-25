@@ -2296,6 +2296,8 @@ type SettingsInfo struct {
 	CompactList      bool   `json:"compactList"`
 	HideStatusLines  bool   `json:"hideStatusLines"`
 	ShowAgentIcons   bool   `json:"showAgentIcons"`
+	HideYoloBadge    bool   `json:"hideYoloBadge"`
+	HideResumeBadge  bool   `json:"hideResumeBadge"`
 	SplitView        bool   `json:"splitView"`
 	MarkedSessionID  string `json:"markedSessionId"`
 	MarkedWindowIdx  int    `json:"markedWindowIdx"`
@@ -2362,6 +2364,8 @@ func (a *App) GetSettings() (*SettingsInfo, error) {
 		CompactList:      settings.CompactList,
 		HideStatusLines:  settings.HideStatusLines,
 		ShowAgentIcons:   settings.ShowAgentIcons,
+		HideYoloBadge:    settings.HideYoloBadge,
+		HideResumeBadge:  settings.HideResumeBadge,
 		SplitView:        settings.SplitView,
 		MarkedSessionID:  settings.MarkedSessionID,
 		MarkedWindowIdx:  settings.MarkedWindowIdx,
@@ -2391,6 +2395,8 @@ func (a *App) SaveSettings(settings SettingsInfo) error {
 		current.CompactList = settings.CompactList
 		current.HideStatusLines = settings.HideStatusLines
 		current.ShowAgentIcons = settings.ShowAgentIcons
+		current.HideYoloBadge = settings.HideYoloBadge
+		current.HideResumeBadge = settings.HideResumeBadge
 		current.SplitView = settings.SplitView
 		current.MarkedSessionID = settings.MarkedSessionID
 		current.MarkedWindowIdx = settings.MarkedWindowIdx

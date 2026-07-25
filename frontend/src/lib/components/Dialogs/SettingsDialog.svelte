@@ -391,6 +391,40 @@
               </button>
             </label>
 
+            <!-- Stored as "hide" flags so existing settings keep both badges,
+                 but shown as "show" toggles to match the others here. -->
+            <label class="setting-item">
+              <span class="setting-info">
+                <span class="setting-label">{$t('settings.showYoloBadge')}</span>
+                <span class="setting-desc">{$t('settings.showYoloBadgeDesc')}</span>
+              </span>
+              <button
+                class="toggle-btn"
+                class:active={!$settings.hideYoloBadge}
+                on:click={() => saveSettings({ hideYoloBadge: !$settings.hideYoloBadge })}
+              >
+                <span class="toggle-track">
+                  <span class="toggle-thumb"></span>
+                </span>
+              </button>
+            </label>
+
+            <label class="setting-item">
+              <span class="setting-info">
+                <span class="setting-label">{$t('settings.showResumeBadge')}</span>
+                <span class="setting-desc">{$t('settings.showResumeBadgeDesc')}</span>
+              </span>
+              <button
+                class="toggle-btn"
+                class:active={!$settings.hideResumeBadge}
+                on:click={() => saveSettings({ hideResumeBadge: !$settings.hideResumeBadge })}
+              >
+                <span class="toggle-track">
+                  <span class="toggle-thumb"></span>
+                </span>
+              </button>
+            </label>
+
             <label class="setting-item">
               <span class="setting-info">
                 <span class="setting-label">{$t('settings.compactList')}</span>
