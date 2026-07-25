@@ -276,10 +276,12 @@
 {/if}
 
 <style>
-  /* Component-specific: wider dialog for color grid */
+  /* Component-specific: wide enough that the colour grid fits without
+     scrolling on a normal screen. */
   .dialog-content {
-    max-width: 480px;
-    max-height: 80vh;
+    width: min(760px, 94vw);
+    max-width: min(760px, 94vw);
+    max-height: 88vh;
     display: flex;
     flex-direction: column;
   }
@@ -391,12 +393,13 @@
     margin-bottom: 12px;
   }
 
+  /* Fills the width instead of a fixed 4 columns, and has no inner height
+     cap: a scrollbar inside the dialog's own scrollbar meant scrolling twice
+     to reach the last colours. The dialog body still scrolls if it must. */
   .color-grid {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
     gap: 6px;
-    max-height: 300px;
-    overflow-y: auto;
     padding-right: 4px;
   }
 

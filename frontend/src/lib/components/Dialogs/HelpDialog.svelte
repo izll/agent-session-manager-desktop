@@ -1,11 +1,26 @@
 <script lang="ts">
   import { autoFocusDialog } from '../../utils/dialogActions';
-  import { createEventDispatcher } from 'svelte';
+  import { createEventDispatcher, onMount } from 'svelte';
+  import * as App from '../../../../wailsjs/go/main/App';
+  import { BrowserOpenURL } from '../../../../wailsjs/runtime/runtime';
   import { t } from '../../i18n';
 
   export let show = false;
 
   const dispatch = createEventDispatcher();
+
+  // Read the version from the binary rather than hard-coding it here, so it
+  // can't drift out of date at the next release.
+  const REPO_URL = 'https://github.com/izll/agent-session-manager-desktop';
+  let version = '';
+
+  onMount(async () => {
+    try {
+      version = await App.GetVersion();
+    } catch {
+      // Leave it blank rather than showing a stale or made-up number.
+    }
+  });
 
   function close() {
     show = false;
@@ -85,10 +100,17 @@
         <div class="section about">
           <h3 class="section-title">{$t('help.about')}</h3>
           <p>{$t('help.appName')}</p>
-          <p class="version">Version 0.1.0</p>
+          {#if version}
+            <p class="version">v{version}</p>
+          {/if}
           <p class="link">
-            <a href="https://github.com/anthropics/claude-code" target="_blank" rel="noopener">
-              github.com/anthropics/claude-code
+            <!-- The webview won't follow target="_blank"; hand the URL to the
+                 host so it opens in the user's real browser. -->
+            <a
+              href={REPO_URL}
+              on:click|preventDefault={() => BrowserOpenURL(REPO_URL)}
+            >
+              github.com/izll/agent-session-manager-desktop
             </a>
           </p>
         </div>
