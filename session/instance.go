@@ -146,6 +146,7 @@ type Instance struct {
 	Favorite           bool             `json:"favorite,omitempty"`             // Whether session is marked as favorite
 	MainWindowStopped  bool             `json:"main_window_stopped,omitempty"`  // Main window (0) is stopped but session still running
 	TabOrder           []int            `json:"tab_order,omitempty"`            // Custom tab display order (tmux window indices); if empty, default order is used
+	TerminalTheme      string           `json:"terminal_theme,omitempty"`       // Main window colour palette (empty inherits agent/global)
 	TabTextColor       string           `json:"tab_text_color,omitempty"`       // Main tab text color (empty uses the theme default)
 	TabBackgroundColor string           `json:"tab_background_color,omitempty"` // Main tab background color (empty uses the theme default)
 }
@@ -174,6 +175,7 @@ type FollowedWindow struct {
 	Notes           string    `json:"notes,omitempty"`            // User notes for this tab
 	ExtraArgs       string    `json:"extra_args,omitempty"`       // Extra CLI arguments for this tab
 	Stopped         bool      `json:"stopped,omitempty"`          // Tab is stopped (window killed but can resume)
+	TerminalTheme   string    `json:"terminal_theme,omitempty"`   // Tab colour palette (empty inherits agent/global)
 	TextColor       string    `json:"text_color,omitempty"`       // Tab text color (empty uses the theme default)
 	BackgroundColor string    `json:"background_color,omitempty"` // Tab background color (empty uses the theme default)
 	WorkDir         string    `json:"work_dir,omitempty"`         // Tab working directory (empty = session path)

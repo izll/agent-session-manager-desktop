@@ -7,6 +7,7 @@ import {
   type TerminalInstance
 } from './terminal';
 import type { Terminal } from '@xterm/xterm';
+import { themeFor } from './terminal';
 import { LogFrontend } from '../../../wailsjs/go/main/App';
 
 // Surface pool errors in the backend log file too — the packaged build has
@@ -20,6 +21,8 @@ export interface PoolEntry {
   terminalInstance: TerminalInstance;
   containerEl: HTMLDivElement;
   key: string;
+  /** Palette inputs for this pane, so a settings change can re-resolve it. */
+  themeCtx: { tabTheme?: string; agent?: string };
 }
 
 export class TerminalPool {
@@ -81,7 +84,7 @@ export class TerminalPool {
     }
   }
 
-  async getOrCreate(sessionId: string, windowIdx: number): Promise<PoolEntry> {
+  async getOrCreate(sessionId: string, windowIdx: number, themeCtx: { tabTheme?: string; agent?: string } = {}): Promise<PoolEntry> {
     if (this.disposed) throw new Error('terminal pool is disposed');
     const key = this.makeKey(sessionId, windowIdx);
     let entry = this.entries.get(key);
@@ -126,11 +129,11 @@ export class TerminalPool {
     this.parentEl.appendChild(containerEl);
 
     // Create xterm instance
-    const terminalInstance = createTerminal(containerEl, this.terminalOptions);
+    const terminalInstance = createTerminal(containerEl, this.terminalOptions, themeCtx);
     // Start hidden — applyVisibility() will flip this when show() runs.
     terminalInstance.visible = false;
 
-    entry = { terminalInstance, containerEl, key };
+    entry = { terminalInstance, containerEl, key, themeCtx };
     this.entries.set(key, entry);
 
     // Attach WebSocket. On failure EVICT the entry: leaving it in the map
@@ -163,7 +166,7 @@ export class TerminalPool {
     return entry;
   }
 
-  async show(sessionId: string, windowIdx: number, shouldFocus: boolean | (() => boolean) = true): Promise<void> {
+  async show(sessionId: string, windowIdx: number, shouldFocus: boolean | (() => boolean) = true, themeCtx: { tabTheme?: string; agent?: string } = {}): Promise<void> {
     if (this.disposed) return;
     const canFocus = () => typeof shouldFocus === 'function' ? shouldFocus() : shouldFocus;
     const key = this.makeKey(sessionId, windowIdx);
@@ -194,7 +197,7 @@ export class TerminalPool {
     }
 
     // Get or create the target entry (async for new entries - WebSocket connect)
-    const entry = await this.getOrCreate(sessionId, windowIdx);
+    const entry = await this.getOrCreate(sessionId, windowIdx, themeCtx);
 
     // If another show() was called while we were awaiting, bail out
     if (this.showGeneration !== gen) return;
@@ -310,6 +313,22 @@ export class TerminalPool {
     }
     for (const entry of doomed) {
       this.teardownEntry(entry);
+    }
+  }
+
+  /**
+   * Repaint every pooled terminal, re-resolving each one's palette from its
+   * own tab/agent context — a settings change can mean a different palette
+   * per pane, not one theme for all.
+   */
+  applyTheme(): void {
+    for (const entry of this.entries.values()) {
+      try {
+        entry.terminalInstance.terminal.options.theme =
+          themeFor(entry.themeCtx?.tabTheme, entry.themeCtx?.agent);
+      } catch (e) {
+        logPoolError('pool: applying theme failed', e);
+      }
     }
   }
 

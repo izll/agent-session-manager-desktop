@@ -158,11 +158,11 @@ export namespace main {
 	    id: string;
 	    createdAt: string;
 	    size: number;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new BackupInfo(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
@@ -398,6 +398,22 @@ export namespace main {
 	        this.score = source["score"];
 	    }
 	}
+	export class ImportedScheme {
+	    name: string;
+	    source: string;
+	    colors: Record<string, string>;
+	
+	    static createFrom(source: any = {}) {
+	        return new ImportedScheme(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.source = source["source"];
+	        this.colors = source["colors"];
+	    }
+	}
 	export class InputDevice {
 	    name: string;
 	    description: string;
@@ -497,6 +513,20 @@ export namespace main {
 		    }
 		    return a;
 		}
+	}
+	export class OnlineSchemeInfo {
+	    name: string;
+	    file: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new OnlineSchemeInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.file = source["file"];
+	    }
 	}
 	export class PreviewData {
 	    content: string;
@@ -631,6 +661,8 @@ export namespace main {
 	    extraArgs: string;
 	    tabTextColor: string;
 	    tabBackgroundColor: string;
+	    terminalTheme: string;
+	    mainWindowIndex: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new SessionInfo(source);
@@ -658,6 +690,8 @@ export namespace main {
 	        this.extraArgs = source["extraArgs"];
 	        this.tabTextColor = source["tabTextColor"];
 	        this.tabBackgroundColor = source["tabBackgroundColor"];
+	        this.terminalTheme = source["terminalTheme"];
+	        this.mainWindowIndex = source["mainWindowIndex"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -691,6 +725,10 @@ export namespace main {
 	    notifyDesktop: boolean;
 	    notifyNtfy: boolean;
 	    ntfyUrl: string;
+	    terminalTheme: string;
+	    agentDefaultTheme: string;
+	    agentTerminalThemes: Record<string, string>;
+	    customTerminalThemes: session.CustomTerminalTheme[];
 	
 	    static createFrom(source: any = {}) {
 	        return new SettingsInfo(source);
@@ -710,7 +748,29 @@ export namespace main {
 	        this.notifyDesktop = source["notifyDesktop"];
 	        this.notifyNtfy = source["notifyNtfy"];
 	        this.ntfyUrl = source["ntfyUrl"];
+	        this.terminalTheme = source["terminalTheme"];
+	        this.agentDefaultTheme = source["agentDefaultTheme"];
+	        this.agentTerminalThemes = source["agentTerminalThemes"];
+	        this.customTerminalThemes = this.convertValues(source["customTerminalThemes"], session.CustomTerminalTheme);
 	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class SidebarUpdate {
 	    activities: Record<string, string>;
@@ -861,11 +921,11 @@ export namespace main {
 	    parentSessionId: string;
 	    parentSessionName: string;
 	    deletedAt: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new TrashItemInfo(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
@@ -897,6 +957,22 @@ export namespace main {
 
 export namespace session {
 	
+	export class CustomTerminalTheme {
+	    id: string;
+	    name: string;
+	    colors: Record<string, string>;
+	
+	    static createFrom(source: any = {}) {
+	        return new CustomTerminalTheme(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.colors = source["colors"];
+	    }
+	}
 	export class FollowedWindow {
 	    index: number;
 	    agent: string;
@@ -907,6 +983,7 @@ export namespace session {
 	    notes?: string;
 	    extra_args?: string;
 	    stopped?: boolean;
+	    terminal_theme?: string;
 	    text_color?: string;
 	    background_color?: string;
 	    work_dir?: string;
@@ -927,6 +1004,7 @@ export namespace session {
 	        this.notes = source["notes"];
 	        this.extra_args = source["extra_args"];
 	        this.stopped = source["stopped"];
+	        this.terminal_theme = source["terminal_theme"];
 	        this.text_color = source["text_color"];
 	        this.background_color = source["background_color"];
 	        this.work_dir = source["work_dir"];
@@ -936,11 +1014,11 @@ export namespace session {
 	export class RestoreResult {
 	    sessionId: string;
 	    windowIdx: number;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new RestoreResult(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.sessionId = source["sessionId"];
@@ -975,3 +1053,4 @@ export namespace session {
 	}
 
 }
+

@@ -573,6 +573,10 @@ type SessionInfo struct {
 	ExtraArgs          string                   `json:"extraArgs"`
 	TabTextColor       string                   `json:"tabTextColor"`
 	TabBackgroundColor string                   `json:"tabBackgroundColor"`
+	TerminalTheme      string                   `json:"terminalTheme"`
+	// The main window isn't always index 0, so the frontend needs it to map a
+	// tab back to the session-level palette.
+	MainWindowIndex int `json:"mainWindowIndex"`
 }
 
 // GetSessions returns all sessions
@@ -632,6 +636,8 @@ func (a *App) instanceToSessionInfo(inst *session.Instance) SessionInfo {
 		ExtraArgs:          inst.ExtraArgs,
 		TabTextColor:       inst.TabTextColor,
 		TabBackgroundColor: inst.TabBackgroundColor,
+		TerminalTheme:      inst.TerminalTheme,
+		MainWindowIndex:    inst.GetMainWindowIndex(),
 	}
 }
 
@@ -2297,6 +2303,12 @@ type SettingsInfo struct {
 	NotifyDesktop    bool   `json:"notifyDesktop"`
 	NotifyNtfy       bool   `json:"notifyNtfy"`
 	NtfyURL          string `json:"ntfyUrl"`
+	TerminalTheme    string `json:"terminalTheme"`
+	AgentDefaultTheme string `json:"agentDefaultTheme"`
+	// Per-agent-type palette overrides ("claude" → "dracula", …) and the
+	// user-defined palette used when a theme id is "custom".
+	AgentTerminalThemes map[string]string `json:"agentTerminalThemes"`
+	CustomTerminalThemes []session.CustomTerminalTheme `json:"customTerminalThemes"`
 }
 
 // GetSettings returns UI settings
@@ -2321,6 +2333,29 @@ func (a *App) GetSettings() (*SettingsInfo, error) {
 		renderer = "canvas"
 	}
 
+	// Default the terminal palette to the app's own scheme if unset.
+	theme := settings.TerminalTheme
+	if theme == "" {
+		theme = "asmgr"
+	}
+
+	// The agent side has its own default, independent of the terminal one.
+	agentTheme := settings.AgentDefaultTheme
+	if agentTheme == "" {
+		agentTheme = "asmgr"
+	}
+
+	// Migrate the legacy single custom palette into the named list so old
+	// configs keep their colours after the multi-palette change.
+	customThemes := settings.CustomTerminalThemes
+	if len(customThemes) == 0 && len(settings.CustomTerminalTheme) > 0 {
+		customThemes = []session.CustomTerminalTheme{{
+			ID:     "custom:1",
+			Name:   "Custom",
+			Colors: settings.CustomTerminalTheme,
+		}}
+	}
+
 	return &SettingsInfo{
 		CompactList:      settings.CompactList,
 		HideStatusLines:  settings.HideStatusLines,
@@ -2334,6 +2369,10 @@ func (a *App) GetSettings() (*SettingsInfo, error) {
 		NotifyDesktop:    settings.NotifyDesktop,
 		NotifyNtfy:       settings.NotifyNtfy,
 		NtfyURL:          settings.NtfyURL,
+		TerminalTheme:    theme,
+		AgentDefaultTheme: agentTheme,
+		AgentTerminalThemes: settings.AgentTerminalThemes,
+		CustomTerminalThemes: customThemes,
 	}, nil
 }
 
@@ -2355,6 +2394,10 @@ func (a *App) SaveSettings(settings SettingsInfo) error {
 		current.MarkedWindowIdx = settings.MarkedWindowIdx
 		current.Language = settings.Language
 		current.TerminalRenderer = settings.TerminalRenderer
+		current.TerminalTheme = settings.TerminalTheme
+		current.AgentDefaultTheme = settings.AgentDefaultTheme
+		current.AgentTerminalThemes = settings.AgentTerminalThemes
+		current.CustomTerminalThemes = settings.CustomTerminalThemes
 		current.NotifyOnWaiting = settings.NotifyOnWaiting
 		current.NotifyDesktop = settings.NotifyDesktop
 		current.NotifyNtfy = settings.NotifyNtfy
@@ -2376,6 +2419,37 @@ type UpdateInfo struct {
 // GetVersion returns the current application version (for the UI/about).
 func (a *App) GetVersion() string {
 	return Version
+}
+
+// SetTabTerminalTheme sets a tab's own colour palette. An empty id clears
+// the override so the tab falls back to the agent-type palette, then the
+// global one. windowIdx 0 (main window) is stored on the instance.
+func (a *App) SetTabTerminalTheme(sessionID string, windowIdx int, themeID string) error {
+	a.projectMu.RLock()
+	defer a.projectMu.RUnlock()
+	if !a.projectLocked {
+		return fmt.Errorf("project is read-only in this application instance")
+	}
+	inst, err := a.storage.GetInstance(sessionID)
+	if err != nil {
+		return err
+	}
+	if windowIdx == inst.GetMainWindowIndex() {
+		inst.TerminalTheme = themeID
+	} else {
+		found := false
+		for i := range inst.FollowedWindows {
+			if inst.FollowedWindows[i].Index == windowIdx {
+				inst.FollowedWindows[i].TerminalTheme = themeID
+				found = true
+				break
+			}
+		}
+		if !found {
+			return fmt.Errorf("window %d not found", windowIdx)
+		}
+	}
+	return a.storage.UpdateInstance(inst)
 }
 
 // SetTabStatusLineVisibility stores whether a tab's status line should be

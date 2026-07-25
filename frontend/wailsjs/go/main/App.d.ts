@@ -47,7 +47,11 @@ export function DeleteTask(arg1:string,arg2:string):Promise<void>;
 
 export function DetachSession(arg1:string):Promise<void>;
 
+export function DiscoverLocalSchemes():Promise<Array<main.ImportedScheme>>;
+
 export function EmptyTrash():Promise<void>;
+
+export function FetchOnlineSchemes(arg1:Array<string>):Promise<Array<main.ImportedScheme>>;
 
 export function ForkSession(arg1:string):Promise<main.ForkResult>;
 
@@ -127,6 +131,8 @@ export function GetWindowList(arg1:string):Promise<Array<session.WindowInfo>>;
 
 export function GlobalSearch(arg1:string):Promise<Array<main.HistoryEntryInfo>>;
 
+export function ImportSchemeFiles():Promise<Array<main.ImportedScheme>>;
+
 export function ImportSessions(arg1:string,arg2:Array<string>):Promise<number>;
 
 export function InitHistorySearch():Promise<void>;
@@ -134,6 +140,8 @@ export function InitHistorySearch():Promise<void>;
 export function IsDevMode():Promise<boolean>;
 
 export function ListBackgroundAgents():Promise<Array<main.BackgroundAgentInfo>>;
+
+export function ListOnlineSchemes():Promise<Array<main.OnlineSchemeInfo>>;
 
 export function LogFrontend(arg1:string):Promise<void>;
 
@@ -192,6 +200,8 @@ export function SetTabColor(arg1:string,arg2:number,arg3:string,arg4:string):Pro
 export function SetTabNotes(arg1:string,arg2:number,arg3:string):Promise<void>;
 
 export function SetTabStatusLineVisibility(arg1:string,arg2:number,arg3:boolean):Promise<void>;
+
+export function SetTabTerminalTheme(arg1:string,arg2:number,arg3:string):Promise<void>;
 
 export function SetWindowAutoYes(arg1:string,arg2:number,arg3:boolean):Promise<void>;
 

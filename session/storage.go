@@ -31,6 +31,13 @@ type Group struct {
 	FullRowColor bool   `json:"full_row_color,omitempty"` // Extend background to full row
 }
 
+// CustomTerminalTheme is one user-defined terminal palette.
+type CustomTerminalTheme struct {
+	ID     string            `json:"id"`
+	Name   string            `json:"name"`
+	Colors map[string]string `json:"colors"`
+}
+
 // Settings stores UI preferences
 type Settings struct {
 	CompactList     bool   `json:"compact_list"`
@@ -53,6 +60,26 @@ type Settings struct {
 	NotifyDesktop   bool   `json:"notify_desktop,omitempty"`
 	NotifyNtfy      bool   `json:"notify_ntfy,omitempty"`
 	NtfyURL         string `json:"ntfy_url,omitempty"`
+	// TerminalTheme is the BASE terminal colour palette (see
+	// frontend/src/lib/utils/terminalThemes.ts). Empty = the app default.
+	// AgentTerminalThemes overrides it per agent type ("claude", "terminal",
+	// …); a tab's own TerminalTheme overrides both. Resolution order:
+	// tab → agent → base.
+	// Two independent palette worlds, deliberately unaware of each other:
+	//   TerminalTheme      — default for plain terminal sessions/tabs
+	//   AgentDefaultTheme  — default for agent sessions/tabs
+	// AgentTerminalThemes refines the agent side per agent type. A tab's own
+	// palette still wins over either default.
+	TerminalTheme       string            `json:"terminal_theme,omitempty"`
+	AgentDefaultTheme   string            `json:"agent_default_theme,omitempty"`
+	AgentTerminalThemes map[string]string `json:"agent_terminal_themes,omitempty"`
+	// CustomTerminalThemes holds user-defined palettes. Each has a stable id
+	// ("custom:<n>"), a display name, and xterm ITheme keys → colour strings.
+	// They appear alongside the built-in schemes everywhere a palette is
+	// picked. CustomTerminalTheme is the legacy single-palette field, kept so
+	// an older config still loads (migrated into the list on first save).
+	CustomTerminalThemes []CustomTerminalTheme `json:"custom_terminal_themes,omitempty"`
+	CustomTerminalTheme  map[string]string     `json:"custom_terminal_theme,omitempty"`
 }
 
 type StorageData struct {

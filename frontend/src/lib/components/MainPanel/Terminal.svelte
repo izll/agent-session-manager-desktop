@@ -6,7 +6,7 @@
   import { EventsOn } from '../../../../wailsjs/runtime/runtime';
   import { LogFrontend } from '../../../../wailsjs/go/main/App';
   import { TerminalPool } from '../../utils/terminalPool';
-  import { setTerminalRenderer } from '../../utils/terminal';
+  import { setTerminalRenderer, setTerminalThemeContext } from '../../utils/terminal';
   import { t } from '../../i18n';
   import '@xterm/xterm/css/xterm.css';
 
@@ -35,14 +35,10 @@
     return windowIdx === undefined ? get(selectedWindowIdx) : windowIdx;
   }
 
+  // Only non-colour options here — the palette comes from Settings via
+  // createTerminal(), so overriding theme colours would defeat the choice.
   const terminalOptions = {
     fontSize: 13,
-    theme: {
-      background: '#0a0a0f',
-      foreground: '#e4e4e7',
-      cursor: '#8b5cf6',
-      selection: 'rgba(139, 92, 246, 0.3)',
-    }
   };
 
   // Get current session without reactive subscription
@@ -179,7 +175,7 @@
         const session = get(sessions).find(s => s.id === sessionId);
         if (session?.status !== 'running') return;
         try {
-          await pool.show(sessionId, currentTargetWindowIdx(), () => mounted && active && focusOwner && focusAllowed);
+          await pool.show(sessionId, currentTargetWindowIdx(), () => mounted && active && focusOwner && focusAllowed, themeCtxFor(sessionId, currentTargetWindowIdx()));
           if (!mounted || currentTargetSessionId() !== sessionId) return;
           isAttached = true;
           if (active && focusOwner && focusAllowed) {
@@ -260,7 +256,7 @@
         schedule(async () => {
           try {
             if (!pool) return;
-            await pool.show(currentId, currentTargetWindowIdx(), () => mounted && active && focusOwner && focusAllowed);
+            await pool.show(currentId, currentTargetWindowIdx(), () => mounted && active && focusOwner && focusAllowed, themeCtxFor(currentId, currentTargetWindowIdx()));
             if (!mounted || currentTargetSessionId() !== currentId) return;
             isAttached = true;
           } catch (e) {
@@ -306,7 +302,7 @@
 
         // Create fresh terminal and show it
         try {
-          await pool.show(sessionId, currentTargetWindowIdx(), () => mounted && active && focusOwner && focusAllowed);
+          await pool.show(sessionId, currentTargetWindowIdx(), () => mounted && active && focusOwner && focusAllowed, themeCtxFor(sessionId, currentTargetWindowIdx()));
           if (!mounted || sessionId !== currentTargetSessionId()) return;
           isAttached = true;
         } catch (e) {
@@ -384,7 +380,7 @@
         if (!mounted || generation !== poolChangeGeneration || !pool) return;
       }
       try {
-        await pool.show(newSessionId, newWindowIdx, () => mounted && active && focusOwner && focusAllowed);
+        await pool.show(newSessionId, newWindowIdx, () => mounted && active && focusOwner && focusAllowed, themeCtxFor(newSessionId, newWindowIdx));
         if (!mounted || generation !== poolChangeGeneration ||
             currentTargetSessionId() !== newSessionId || currentTargetWindowIdx() !== newWindowIdx) return;
         isAttached = true;
@@ -448,6 +444,37 @@
     lastRenderer = r;
   }
 
+  // Apply palette settings immediately. Unlike the renderer, xterm accepts a
+  // new theme on a live instance, so open terminals are repainted in place —
+  // each re-resolving its own tab → agent → global palette.
+  let lastThemeKey: string | undefined;
+  $: {
+    const ctx = {
+      terminalDefault: $settings?.terminalTheme || 'asmgr',
+      agentDefault: ($settings as any)?.agentDefaultTheme || 'asmgr',
+      agentThemes: ($settings as any)?.agentTerminalThemes || {},
+      customThemes: ($settings as any)?.customTerminalThemes || [],
+    };
+    setTerminalThemeContext(ctx);
+    const key = JSON.stringify(ctx);
+    if (lastThemeKey !== undefined && lastThemeKey !== key && pool) {
+      pool.applyTheme();
+    }
+    lastThemeKey = key;
+  }
+
+  /** Palette inputs for the pane we're about to show. */
+  function themeCtxFor(sid: string | null, widx: number) {
+    const session = get(sessions).find(s => s.id === sid);
+    if (!session) return {};
+    const main = session.mainWindowIndex ?? 0;
+    if (widx === main) {
+      return { tabTheme: session.terminalTheme || '', agent: session.agent };
+    }
+    const fw = (session.followedWindows || []).find((f: any) => f.index === widx);
+    return { tabTheme: (fw as any)?.terminal_theme || '', agent: fw?.agent || session.agent };
+  }
+
   // Fit and focus terminal when tab becomes active
   let wasActive = false;
   $: if (active && focusOwner && focusAllowed && pool && !wasActive) {
@@ -476,7 +503,7 @@
     error = '';
     const windowIdx = currentTargetWindowIdx();
     try {
-      await pool.show(session.id, windowIdx, () => mounted && active && focusOwner && focusAllowed);
+      await pool.show(session.id, windowIdx, () => mounted && active && focusOwner && focusAllowed, themeCtxFor(session.id, windowIdx));
       if (!mounted || currentTargetSessionId() !== session.id || currentTargetWindowIdx() !== windowIdx) return;
       isAttached = true;
     } catch (e) {

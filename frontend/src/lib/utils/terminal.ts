@@ -4,6 +4,7 @@ import { SearchAddon } from '@xterm/addon-search';
 import { CanvasAddon } from '@xterm/addon-canvas';
 import { WebglAddon } from '@xterm/addon-webgl';
 import { GetTerminalWSPort, GetTerminalWSToken } from '../../../wailsjs/go/main/App';
+import { getTerminalTheme, resolveTerminalTheme, DEFAULT_TERMINAL_THEME } from './terminalThemes';
 
 // The backend may bind a fallback port if 9753 is taken (e.g. a second
 // instance running alongside). Resolve it from the backend, but ONLY cache
@@ -98,6 +99,48 @@ export function setTerminalRenderer(r: 'canvas' | 'webgl' | 'dom'): void {
   if (r === 'canvas' || r === 'webgl' || r === 'dom') __terminalRenderer = r;
 }
 
+// Colour palettes (see terminalThemes.ts). A terminal's palette resolves
+// most-specific-first: the tab's own override, then the agent-type override,
+// then this global base. Settings pushes the whole context here so both new
+// and live terminals can be repainted.
+let __themeCtx: {
+  terminalDefault: string;
+  agentDefault: string;
+  agentThemes: Record<string, string>;
+  customThemes: any[];
+} = {
+  terminalDefault: DEFAULT_TERMINAL_THEME,
+  agentDefault: DEFAULT_TERMINAL_THEME,
+  agentThemes: {},
+  customThemes: [],
+};
+
+export function setTerminalThemeContext(ctx: {
+  terminalDefault?: string;
+  agentDefault?: string;
+  agentThemes?: Record<string, string> | null;
+  customThemes?: any[] | null;
+}): void {
+  __themeCtx = {
+    terminalDefault: ctx.terminalDefault || DEFAULT_TERMINAL_THEME,
+    agentDefault: ctx.agentDefault || DEFAULT_TERMINAL_THEME,
+    agentThemes: ctx.agentThemes || {},
+    customThemes: ctx.customThemes || [],
+  };
+}
+
+/** Palette for one terminal, given its tab override and agent type. */
+export function themeFor(tabTheme?: string, agent?: string) {
+  return resolveTerminalTheme({
+    tabTheme,
+    agent,
+    agentThemes: __themeCtx.agentThemes,
+    terminalDefault: __themeCtx.terminalDefault,
+    agentDefault: __themeCtx.agentDefault,
+    customThemes: __themeCtx.customThemes,
+  });
+}
+
 // Load the configured renderer addon, defensively. xterm measures glyph metrics
 // synchronously when the renderer initialises; if the monospace font isn't
 // loaded yet those metrics are wrong and glyphs can blur/mis-align — so we wait
@@ -134,7 +177,11 @@ function loadRenderer(terminal: Terminal): void {
   }
 }
 
-export function createTerminal(container: HTMLElement, options: Partial<Terminal['options']> = {}): TerminalInstance {
+export function createTerminal(
+  container: HTMLElement,
+  options: Partial<Terminal['options']> = {},
+  themeCtx: { tabTheme?: string; agent?: string } = {},
+): TerminalInstance {
   const terminal = new Terminal({
     // cursorBlink triggers a continuous render tick on the xterm canvas every
     // ~500ms even when the terminal is idle — disabled to keep the WebKit
@@ -157,20 +204,7 @@ export function createTerminal(container: HTMLElement, options: Partial<Terminal
     allowTransparency: false,
     minimumContrastRatio: 1,
     fontFamily: 'JetBrains Mono, Menlo, Monaco, Consolas, monospace',
-    theme: {
-      background: '#1a1a2e',
-      foreground: '#eee',
-      cursor: '#7d56f4',
-      selectionBackground: 'rgba(125, 86, 244, 0.3)',
-      black: '#000000',
-      red: '#ff5555',
-      green: '#50fa7b',
-      yellow: '#f1fa8c',
-      blue: '#bd93f9',
-      magenta: '#ff79c6',
-      cyan: '#8be9fd',
-      white: '#f8f8f2',
-    },
+    theme: themeFor(themeCtx.tabTheme, themeCtx.agent),
     ...options
   });
 

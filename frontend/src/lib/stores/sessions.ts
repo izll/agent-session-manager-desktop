@@ -26,6 +26,9 @@ export interface Session {
   extraArgs: string;
   tabTextColor: string;
   tabBackgroundColor: string;
+  terminalTheme: string;
+  /** Main window's tmux index — not always 0. */
+  mainWindowIndex: number;
 }
 
 export interface Group {

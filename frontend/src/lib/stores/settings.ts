@@ -16,6 +16,9 @@ export interface Settings {
   notifyDesktop: boolean;
   notifyNtfy: boolean;
   ntfyUrl: string;
+  terminalTheme: string;
+  agentTerminalThemes?: Record<string, string>;
+  customTerminalThemes?: Array<{ id: string; name: string; colors: Record<string, string> }>;
 }
 
 export const settings = writable<Settings>({
@@ -30,7 +33,10 @@ export const settings = writable<Settings>({
   notifyOnWaiting: false,
   notifyDesktop: true,
   notifyNtfy: false,
-  ntfyUrl: ''
+  ntfyUrl: '',
+  terminalTheme: 'asmgr',
+  agentTerminalThemes: {},
+  customTerminalThemes: []
 });
 
 let saveQueue: Promise<void> = Promise.resolve();

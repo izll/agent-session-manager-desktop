@@ -90,8 +90,16 @@ export function DetachSession(arg1) {
   return window['go']['main']['App']['DetachSession'](arg1);
 }
 
+export function DiscoverLocalSchemes() {
+  return window['go']['main']['App']['DiscoverLocalSchemes']();
+}
+
 export function EmptyTrash() {
   return window['go']['main']['App']['EmptyTrash']();
+}
+
+export function FetchOnlineSchemes(arg1) {
+  return window['go']['main']['App']['FetchOnlineSchemes'](arg1);
 }
 
 export function ForkSession(arg1) {
@@ -250,6 +258,10 @@ export function GlobalSearch(arg1) {
   return window['go']['main']['App']['GlobalSearch'](arg1);
 }
 
+export function ImportSchemeFiles() {
+  return window['go']['main']['App']['ImportSchemeFiles']();
+}
+
 export function ImportSessions(arg1, arg2) {
   return window['go']['main']['App']['ImportSessions'](arg1, arg2);
 }
@@ -264,6 +276,10 @@ export function IsDevMode() {
 
 export function ListBackgroundAgents() {
   return window['go']['main']['App']['ListBackgroundAgents']();
+}
+
+export function ListOnlineSchemes() {
+  return window['go']['main']['App']['ListOnlineSchemes']();
 }
 
 export function LogFrontend(arg1) {
@@ -380,6 +396,10 @@ export function SetTabNotes(arg1, arg2, arg3) {
 
 export function SetTabStatusLineVisibility(arg1, arg2, arg3) {
   return window['go']['main']['App']['SetTabStatusLineVisibility'](arg1, arg2, arg3);
+}
+
+export function SetTabTerminalTheme(arg1, arg2, arg3) {
+  return window['go']['main']['App']['SetTabTerminalTheme'](arg1, arg2, arg3);
 }
 
 export function SetWindowAutoYes(arg1, arg2, arg3) {

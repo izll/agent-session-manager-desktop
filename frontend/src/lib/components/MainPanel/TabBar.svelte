@@ -13,6 +13,9 @@
   import { tabStatuses } from '../../stores/statusLines';
   import StatusIndicator from '../common/StatusIndicator.svelte';
   import * as App from '../../../../wailsjs/go/main/App';
+  import { allPalettes } from '../../utils/terminalThemes';
+  import PalettePicker from '../common/PalettePicker.svelte';
+  import { settings } from '../../stores/settings';
   import * as DictationService from '../../../../wailsjs/go/main/DictationService';
   import { EventsOn, EventsOff } from '../../../../wailsjs/runtime/runtime';
   import type { session } from '../../../../wailsjs/go/models';
@@ -800,6 +803,32 @@
     return !!(fw && fw.hide_status_line);
   })();
 
+  // Per-tab palette submenu state
+  let showTabThemeMenu = false;
+  // Template-safe: no TS casts allowed in Svelte markup.
+  $: tabPalettes = allPalettes((($settings as any).customTerminalThemes || []));
+  // Which palette the context-menu'd tab currently uses (empty = inherit).
+  $: currentTabTheme = (() => {
+    if (tabContextMenuIndex === null || !$selectedSession) return '';
+    const main = $selectedSession.mainWindowIndex ?? 0;
+    if (tabContextMenuIndex === main) return $selectedSession.terminalTheme || '';
+    const fw = ($selectedSession.followedWindows || []).find((f: any) => f.index === tabContextMenuIndex);
+    return (fw as any)?.terminal_theme || '';
+  })();
+
+  async function setTabTheme(themeID: string) {
+    const idx = tabContextMenuIndex;
+    showTabThemeMenu = false;
+    closeTabContextMenu();
+    if (idx === null || !$selectedSession) return;
+    try {
+      await App.SetTabTerminalTheme($selectedSession.id, idx, themeID);
+      await loadSessions();
+    } catch (e) {
+      console.error('Set tab theme failed:', e);
+    }
+  }
+
   async function tabContextToggleStatusLine() {
     const idx = tabContextMenuIndex;
     const hidden = tabContextHidesStatus;
@@ -1226,6 +1255,27 @@
           </svg>
           {tabContextHidesStatus ? $t('tabBar.showStatusLine') : $t('tabBar.hideStatusLine')}
         </button>
+        <div class="tab-theme-wrap">
+          <button class="tab-context-menu-item" on:click|stopPropagation={() => showTabThemeMenu = !showTabThemeMenu}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="13.5" cy="6.5" r="1"/><circle cx="17.5" cy="10.5" r="1"/>
+              <circle cx="8.5" cy="7.5" r="1"/><circle cx="6.5" cy="12.5" r="1"/>
+              <path d="M12 2a10 10 0 1 0 0 20 2 2 0 0 0 2-2v-1a2 2 0 0 1 2-2h1a4 4 0 0 0 4-4 10 10 0 0 0-9-11z"/>
+            </svg>
+            {$t('tabBar.tabPalette')}
+          </button>
+          {#if showTabThemeMenu}
+            <div class="tab-theme-list">
+              <PalettePicker
+                compact
+                palettes={tabPalettes}
+                value={currentTabTheme}
+                inheritLabel={$t('settings.themeInherit')}
+                on:change={(e) => setTabTheme(e.detail)}
+              />
+            </div>
+          {/if}
+        </div>
         {#if tabContextMenuIndex !== null && windows.find(w => w.Index === tabContextMenuIndex)?.Agent !== 'terminal' && windows.find(w => w.Index === tabContextMenuIndex)?.Agent !== 'custom'}
           <button class="tab-context-menu-item" on:click={tabContextEditExtraArgs}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1678,6 +1728,12 @@
     color: #71717a;
     opacity: 0.8;
     flex-shrink: 0;
+  }
+
+  .tab-theme-wrap { position: relative; }
+  .tab-theme-list {
+    max-height: 300px; overflow-y: auto; margin: 4px 0 4px 10px; padding: 6px 8px 6px 6px;
+    width: 340px; border-left: 2px solid rgba(139,92,246,.3);
   }
 
   .tab-context-menu {

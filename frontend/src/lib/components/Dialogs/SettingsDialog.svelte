@@ -6,6 +6,10 @@
   import type { main } from '../../../../wailsjs/go/models';
   import { EventsEmit } from '../../../../wailsjs/runtime/runtime';
   import Select from '../common/Select.svelte';
+  import { TERMINAL_THEMES, CUSTOM_THEME_KEYS, getTerminalTheme, allPalettes, nextCustomId, type CustomPalette } from '../../utils/terminalThemes';
+  import PalettePicker from '../common/PalettePicker.svelte';
+  import PaletteManager from '../common/PaletteManager.svelte';
+  import { agents } from '../../stores/agents';
   import { t, loadTranslations } from '../../i18n';
 
   export let show = false;
@@ -38,6 +42,31 @@
     saveSettings({ language: lang });
   }
 
+  // --- Terminal palettes -------------------------------------------------
+  $: customPalettes = ((($settings as any).customTerminalThemes || []) as CustomPalette[]);
+  $: pickablePalettes = allPalettes(customPalettes);
+
+  function changeTheme(id: string) {
+    saveSettings({ terminalTheme: id });
+  }
+
+  // The agent side has its own default, independent of the terminal one.
+  $: agentDefaultTheme = (($settings as any).agentDefaultTheme || 'asmgr') as string;
+  function changeAgentDefault(id: string) {
+    saveSettings({ agentDefaultTheme: id } as any);
+  }
+
+  $: agentThemeMap = (($settings as any).agentTerminalThemes || {}) as Record<string, string>;
+  function agentThemeValue(type: string): string {
+    return agentThemeMap[type] || '';
+  }
+  function changeAgentTheme(agentType: string, id: string) {
+    const map = { ...agentThemeMap };
+    if (id) map[agentType] = id; else delete map[agentType];
+    saveSettings({ agentTerminalThemes: map } as any);
+  }
+
+
   const rendererOptions = [
     { value: 'canvas', label: 'Canvas (ajánlott)' },
     { value: 'webgl', label: 'WebGL (leggyorsabb, kísérleti)' },
@@ -51,7 +80,7 @@
   const dispatch = createEventDispatcher();
 
   // Tab state
-  let activeTab: 'general' | 'dictation' = 'general';
+  let activeTab: 'general' | 'terminal' | 'agents' | 'dictation' = 'general';
 
   // Dictation settings state
   let dictationSettings: main.DictationSettings | null = null;
@@ -268,6 +297,20 @@
         </button>
         <button
           class="tab"
+          class:active={activeTab === 'terminal'}
+          on:click={() => activeTab = 'terminal'}
+        >
+          {$t('settings.terminal')}
+        </button>
+        <button
+          class="tab"
+          class:active={activeTab === 'agents'}
+          on:click={() => activeTab = 'agents'}
+        >
+          {$t('settings.agents')}
+        </button>
+        <button
+          class="tab"
           class:active={activeTab === 'dictation'}
           on:click={() => activeTab = 'dictation'}
         >
@@ -293,10 +336,17 @@
               />
             </div>
 
+          </div>
+
+          <!-- Renderer lives here, not on the Terminal tab: it applies to
+               every terminal view, agent sessions included. -->
+          <div class="settings-section">
+            <h3>{$t('settings.terminalRendering')}</h3>
+
             <div class="setting-item input-item">
               <span class="setting-info">
-                <span class="setting-label">Terminál renderer</span>
-                <span class="setting-desc">Új terminálokra érvényes. Canvas = ajánlott; WebGL = leggyorsabb, de egyes gépeken hibás lehet; DOM = legkompatibilisebb, de lassabb.</span>
+                <span class="setting-label">{$t('settings.terminalRenderer')}</span>
+                <span class="setting-desc">{$t('settings.terminalRendererDesc')}</span>
               </span>
               <Select
                 value={$settings.terminalRenderer || 'canvas'}
@@ -427,6 +477,95 @@
               {/if}
             {/if}
           </div>
+        {/if}
+
+        <!-- Terminal Tab -->
+        {#if activeTab === 'terminal'}
+          <div class="settings-section">
+            <h3>{$t('settings.paletteTerminalDefault')}</h3>
+
+            <div class="setting-item input-item column-item">
+              <span class="setting-info">
+                <span class="setting-label">{$t('settings.terminalTheme')}</span>
+                <span class="setting-desc">{$t('settings.terminalThemeDesc')}</span>
+              </span>
+              <PalettePicker
+                palettes={pickablePalettes}
+                value={$settings.terminalTheme || 'asmgr'}
+                on:change={(e) => changeTheme(e.detail)}
+              />
+            </div>
+
+          </div>
+
+          <div class="settings-section">
+            <h3>{$t('settings.paletteCustom')}</h3>
+
+            <!-- User-defined palettes (shared manager component) -->
+            <div class="setting-item input-item column-item">
+              <span class="setting-info">
+                <span class="setting-label">{$t('settings.customPalette')}</span>
+                <span class="setting-desc">{$t('settings.customPaletteDesc')}</span>
+              </span>
+              <PaletteManager />
+            </div>
+
+          </div>
+
+        {/if}
+
+        <!-- Agents Tab -->
+        {#if activeTab === 'agents'}
+          <div class="settings-section">
+            <h3>{$t('settings.paletteAgentDefault')}</h3>
+
+            <div class="setting-item input-item column-item">
+              <span class="setting-info">
+                <span class="setting-label">{$t('settings.agentDefaultTheme')}</span>
+                <span class="setting-desc">{$t('settings.agentDefaultThemeDesc')}</span>
+              </span>
+              <PalettePicker
+                palettes={pickablePalettes}
+                value={agentDefaultTheme}
+                on:change={(e) => changeAgentDefault(e.detail)}
+              />
+            </div>
+          </div>
+
+          <div class="settings-section">
+            <h3>{$t('settings.palettePerAgent')}</h3>
+
+            <!-- Per-agent overrides: a Claude pane can look different from a
+                 plain shell, like separate Konsole profiles. -->
+            <div class="setting-item input-item column-item">
+              <span class="setting-info">
+                <span class="setting-label">{$t('settings.agentThemes')}</span>
+                <span class="setting-desc">{$t('settings.agentThemesDesc')}</span>
+              </span>
+              {#each $agents.filter(a => a.type !== 'terminal') as agent (agent.type)}
+                <details class="agent-theme-block" open>
+                  <summary>
+                    <span class="agent-theme-name">{agent.name}</span>
+                    <span class="agent-theme-current">
+                      {pickablePalettes.find(p => p.id === agentThemeValue(agent.type))?.name || $t('settings.themeInherit')}
+                    </span>
+                  </summary>
+                  <PalettePicker
+                    compact
+                    palettes={pickablePalettes}
+                    value={agentThemeValue(agent.type)}
+                    inheritLabel={$t('settings.themeInherit')}
+                    on:change={(e) => changeAgentTheme(agent.type, e.detail)}
+                  />
+                </details>
+              {/each}
+
+              <!-- Create/edit palettes without leaving the Agents tab. -->
+              <PaletteManager collapsible />
+            </div>
+
+          </div>
+
         {/if}
 
         <!-- Dictation Tab -->
@@ -775,6 +914,55 @@
 {/if}
 
 <style>
+  /* Must beat .input-item's align-items:flex-start, which would shrink a
+     grid child to its content width and collapse it to a single column. */
+  .setting-item.column-item { align-items: stretch; }
+  .column-item { flex-direction: column; gap: 10px; }
+  .column-item > :global(*) { width: 100%; }
+  .agent-theme-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 8px; }
+  .agent-theme-row { display: flex; align-items: center; gap: 8px; }
+  .agent-theme-name { min-width: 80px; font-size: 12px; color: #d4d4d8; }
+  .palette-toggle {
+    align-self: flex-start; padding: 6px 12px; border-radius: 7px; font-size: 12px; cursor: pointer;
+    border: 1px solid rgba(255,255,255,.12); background: rgba(255,255,255,.05); color: #d4d4d8;
+  }
+  .palette-toggle:hover { border-color: rgba(139,92,246,.5); color: #ddd6fe; }
+  .agent-theme-block {
+    border: 1px solid rgba(255,255,255,.07); border-radius: 8px; padding: 6px 10px;
+    background: rgba(0,0,0,.15);
+  }
+  .agent-theme-block summary {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    cursor: pointer; font-size: 12px; color: #d4d4d8; list-style: none;
+  }
+  .agent-theme-block summary::-webkit-details-marker { display: none; }
+  .agent-theme-block[open] summary { margin-bottom: 8px; }
+  .agent-theme-current { color: #71717a; font-size: 11px; }
+  .custom-list { display: flex; flex-direction: column; gap: 6px; }
+  .custom-row { display: flex; align-items: center; gap: 6px; }
+  .custom-row.editing .custom-name { border-color: rgba(139,92,246,.5); }
+  .custom-name {
+    flex: 1; min-width: 0; padding: 6px 9px; border-radius: 6px; font-size: 12px;
+    border: 1px solid rgba(255,255,255,.12); background: rgba(0,0,0,.25); color: #e4e4e7;
+  }
+  .palette-delete {
+    border: 1px solid rgba(255,255,255,.12); background: rgba(255,255,255,.04);
+    color: #a1a1aa; border-radius: 6px; width: 28px; height: 28px; cursor: pointer; font-size: 15px;
+  }
+  .palette-delete:hover { color: #fb7185; border-color: rgba(251,113,133,.5); }
+  .palette-add {
+    align-self: flex-start; padding: 6px 12px; border-radius: 7px; font-size: 12px; cursor: pointer;
+    border: 1px dashed rgba(139,92,246,.4); background: rgba(139,92,246,.08); color: #c4b5fd;
+  }
+  .palette-add:hover { background: rgba(139,92,246,.16); }
+
+  .palette-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; }
+  .palette-swatch { display: flex; align-items: center; gap: 8px; font-size: 11px; color: #a1a1aa; }
+  .palette-swatch input[type="color"] {
+    width: 34px; height: 24px; padding: 0; border: 1px solid rgba(255,255,255,.15);
+    border-radius: 5px; background: transparent; cursor: pointer;
+  }
+
   .dialog-overlay {
     position: fixed;
     inset: 0;
