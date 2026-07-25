@@ -663,6 +663,7 @@ export namespace main {
 	    tabBackgroundColor: string;
 	    terminalTheme: string;
 	    mainWindowIndex: number;
+	    lastWindowIndex: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new SessionInfo(source);
@@ -692,6 +693,7 @@ export namespace main {
 	        this.tabBackgroundColor = source["tabBackgroundColor"];
 	        this.terminalTheme = source["terminalTheme"];
 	        this.mainWindowIndex = source["mainWindowIndex"];
+	        this.lastWindowIndex = source["lastWindowIndex"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

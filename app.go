@@ -577,6 +577,7 @@ type SessionInfo struct {
 	// The main window isn't always index 0, so the frontend needs it to map a
 	// tab back to the session-level palette.
 	MainWindowIndex int `json:"mainWindowIndex"`
+	LastWindowIndex int `json:"lastWindowIndex"`
 }
 
 // GetSessions returns all sessions
@@ -638,6 +639,7 @@ func (a *App) instanceToSessionInfo(inst *session.Instance) SessionInfo {
 		TabBackgroundColor: inst.TabBackgroundColor,
 		TerminalTheme:      inst.TerminalTheme,
 		MainWindowIndex:    inst.GetMainWindowIndex(),
+		LastWindowIndex:    inst.LastWindowIndex,
 	}
 }
 
@@ -2424,6 +2426,30 @@ func (a *App) GetVersion() string {
 // SetTabTerminalTheme sets a tab's own colour palette. An empty id clears
 // the override so the tab falls back to the agent-type palette, then the
 // global one. windowIdx 0 (main window) is stored on the instance.
+// SetLastWindowIndex remembers which tab was open, so the session reopens
+// where the user left it. Best-effort: a failure here must never block
+// switching sessions, so callers may ignore the error.
+func (a *App) SetLastWindowIndex(sessionID string, windowIdx int) error {
+	a.projectMu.RLock()
+	defer a.projectMu.RUnlock()
+	if !a.projectLocked {
+		// A read-only instance simply doesn't record it.
+		return nil
+	}
+	if windowIdx < 0 {
+		return nil
+	}
+	inst, err := a.storage.GetInstance(sessionID)
+	if err != nil {
+		return err
+	}
+	if inst.LastWindowIndex == windowIdx {
+		return nil // no write for an unchanged value
+	}
+	inst.LastWindowIndex = windowIdx
+	return a.storage.UpdateInstance(inst)
+}
+
 func (a *App) SetTabTerminalTheme(sessionID string, windowIdx int, themeID string) error {
 	a.projectMu.RLock()
 	defer a.projectMu.RUnlock()

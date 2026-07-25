@@ -29,6 +29,8 @@ export interface Session {
   terminalTheme: string;
   /** Main window's tmux index — not always 0. */
   mainWindowIndex: number;
+  /** Tab the session was last left on; may no longer exist. */
+  lastWindowIndex: number;
 }
 
 export interface Group {
@@ -416,21 +418,69 @@ export async function toggleGroupCollapse(id: string) {
   }
 }
 
+/** Tabs a session currently has: its main window plus every followed one. */
+function availableWindowIndexes(session: Session | undefined): number[] {
+  if (!session) return [];
+  const main = session.mainWindowIndex ?? 0;
+  const followed = (session.followedWindows || [])
+    .map((w: any) => w?.index)
+    .filter((i: any): i is number => typeof i === 'number');
+  return [main, ...followed];
+}
+
+/**
+ * The tab to open a session on: the one it was left on, if it still exists.
+ * Anything stale (tab closed, session restarted with fewer windows) falls
+ * back to the main window rather than leaving a blank pane.
+ */
+function resolveInitialWindow(id: string): number {
+  const remembered = sessionTabMemory.get(id);
+  const session = get(sessions).find(s => s.id === id);
+  const available = availableWindowIndexes(session);
+  const main = session?.mainWindowIndex ?? 0;
+
+  // Within this run, in-memory memory wins; across restarts it's empty and
+  // the persisted value takes over.
+  const candidate = remembered ?? session?.lastWindowIndex;
+  if (typeof candidate !== 'number') return main;
+
+  // Can't validate without a loaded session — trust it, the tab bar clamps.
+  if (available.length === 0) return candidate;
+  return available.includes(candidate) ? candidate : main;
+}
+
 export function selectSession(id: string | null) {
   // Save current tab for the session we're leaving
   const prevId = get(selectedSessionId);
   if (prevId) {
     sessionTabMemory.set(prevId, get(selectedWindowIdx));
+    persistLastWindow(prevId, get(selectedWindowIdx));
   }
 
   selectedSessionId.set(id);
-  // Restore remembered tab for the session we're switching to
-  selectedWindowIdx.set(id ? (sessionTabMemory.get(id) ?? 0) : 0);
+  // Restore the remembered tab, validated against the tabs that still exist
+  selectedWindowIdx.set(id ? resolveInitialWindow(id) : 0);
   if (id) showSessionView();
+}
+
+/**
+ * Record the tab for the next launch. Best-effort: remembering a tab is a
+ * convenience, so a storage failure is logged and otherwise ignored rather
+ * than surfaced as an error the user has to dismiss.
+ */
+function persistLastWindow(id: string, idx: number) {
+  void App.SetLastWindowIndex(id, idx).catch(e => {
+    console.warn('could not persist last tab', id, e);
+  });
 }
 
 export function selectWindow(idx: number) {
   selectedWindowIdx.set(idx);
+  const id = get(selectedSessionId);
+  if (id) {
+    sessionTabMemory.set(id, idx);
+    persistLastWindow(id, idx);
+  }
 }
 
 export async function reorderSession(id: string, direction: number) {

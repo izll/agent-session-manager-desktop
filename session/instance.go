@@ -147,6 +147,10 @@ type Instance struct {
 	MainWindowStopped  bool             `json:"main_window_stopped,omitempty"`  // Main window (0) is stopped but session still running
 	TabOrder           []int            `json:"tab_order,omitempty"`            // Custom tab display order (tmux window indices); if empty, default order is used
 	TerminalTheme      string           `json:"terminal_theme,omitempty"`       // Main window colour palette (empty inherits agent/global)
+	// LastWindowIndex is the tab that was open when the session was last
+	// left, so reopening it lands where the user was. Advisory only: the
+	// window may be gone by then, so callers must validate it.
+	LastWindowIndex int `json:"last_window_index,omitempty"`
 	TabTextColor       string           `json:"tab_text_color,omitempty"`       // Main tab text color (empty uses the theme default)
 	TabBackgroundColor string           `json:"tab_background_color,omitempty"` // Main tab background color (empty uses the theme default)
 }

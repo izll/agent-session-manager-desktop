@@ -378,6 +378,10 @@ export function SetGroupColor(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['SetGroupColor'](arg1, arg2, arg3, arg4);
 }
 
+export function SetLastWindowIndex(arg1, arg2) {
+  return window['go']['main']['App']['SetLastWindowIndex'](arg1, arg2);
+}
+
 export function SetSessionColor(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['SetSessionColor'](arg1, arg2, arg3, arg4);
 }
