@@ -6,8 +6,9 @@ import (
 	_ "embed"
 	"log"
 	"os"
-	"path/filepath"
+	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
@@ -23,6 +24,13 @@ var assets embed.FS
 var icon []byte
 
 func main() {
+	// When started as the GPU probe (see gbmEGLWorks) do nothing but that
+	// check, then exit — this must come before any other setup.
+	if os.Getenv(gpuProbeEnv) != "" {
+		runGpuProbe()
+		return
+	}
+
 	// Normalize TERM for everything we spawn. Launched from a desktop menu /
 	// KRunner (rather than a shell) the process inherits TERM=dumb or an empty
 	// TERM, which makes tmux refuse to attach with
@@ -151,7 +159,7 @@ func applyGpuFallback() {
 	if os.Getenv("ASMGR_GPU") != "" {
 		return // user made the call; don't second-guess it
 	}
-	if hasUsableGPU() {
+	if gbmEGLWorks() {
 		return
 	}
 	// Keep WebKit off the GPU paths that abort. DMABUF is the renderer that
@@ -159,26 +167,72 @@ func applyGpuFallback() {
 	os.Setenv("ASMGR_GPU", "never")
 	os.Setenv("WEBKIT_DISABLE_DMABUF_RENDERER", "1")
 	os.Setenv("WEBKIT_DISABLE_COMPOSITING_MODE", "1")
-	log.Println("no usable GPU render node found; falling back to software rendering " +
+	log.Println("GBM EGL is unavailable; falling back to software rendering " +
 		"(set ASMGR_GPU=ondemand|always to override)")
 }
 
-// hasUsableGPU reports whether a DRM render node exists AND can be opened.
-// Presence alone isn't enough: in containers and locked-down setups the node
-// is there but permissions deny it, which is exactly when EGL init fails.
-func hasUsableGPU() bool {
-	nodes, err := filepath.Glob("/dev/dri/renderD*")
-	if err != nil || len(nodes) == 0 {
-		return false
+// gbmEGLWorks reports whether a GBM EGL display can actually be created —
+// the exact thing WebKit aborts on.
+//
+// Checking that a render node exists and opens is NOT enough: on hybrid
+// setups (e.g. an NVIDIA card Mesa can't drive, reporting "driver (null)")
+// the nodes open fine and eglInitialize still fails.
+//
+// The probe re-executes this binary with ASMGR_GPU_PROBE=1, which brings up a
+// throwaway WebKit web view. If the GPU stack is broken that child aborts
+// exactly as the real launch would — but it's a child, so we survive to learn
+// the answer. Nothing external needs to be installed.
+func gbmEGLWorks() bool {
+	exe, err := os.Executable()
+	if err != nil {
+		return true // can't probe; leave the default alone
 	}
-	for _, n := range nodes {
-		f, err := os.Open(n)
-		if err == nil {
-			f.Close()
-			return true
-		}
+
+	// A healthy probe takes well under a second; the ceiling only exists so a
+	// wedged driver can't stall startup.
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, exe)
+	cmd.Env = append(os.Environ(), gpuProbeEnv+"=1")
+	err = cmd.Run()
+
+	if ctx.Err() != nil {
+		// Timed out. Under `go test` the executable is the test binary, which
+		// has no probe path and never exits — don't call that a broken GPU.
+		log.Println("GPU probe timed out; leaving the rendering default alone")
+		return true
 	}
-	return false
+	return err == nil
+}
+
+// gpuProbeEnv marks the child process spawned by gbmEGLWorks.
+const gpuProbeEnv = "ASMGR_GPU_PROBE"
+
+// runGpuProbe brings up a minimal WebKit window and exits with the outcome:
+// 0 if the GPU stack held up, non-zero (or a SIGABRT) if it didn't. Called at
+// the very top of main when this process is the probe child.
+func runGpuProbe() {
+	// Hidden, tiny, and torn down as soon as the web view exists — we only
+	// care whether SetupWebview survives.
+	err := wails.Run(&options.App{
+		Title:       "asmgr GPU probe",
+		Width:       1,
+		Height:      1,
+		StartHidden: true,
+		AssetServer: &assetserver.Options{Assets: assets},
+		OnDomReady: func(ctx context.Context) {
+			runtime.Quit(ctx)
+		},
+		Linux: &linux.Options{
+			ProgramName:      "asmgr-desktop-gpu-probe",
+			WebviewGpuPolicy: gpuPolicyFromEnv(),
+		},
+	})
+	if err != nil {
+		os.Exit(1)
+	}
+	os.Exit(0)
 }
 
 // gpuPolicyFromEnv lets us A/B the WebView hardware-acceleration policy at

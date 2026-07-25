@@ -23,18 +23,17 @@ func TestGpuFallbackRespectsExplicitChoice(t *testing.T) {
 	}
 }
 
-// On a machine with a working render node the defaults must be left alone,
-// otherwise everyone loses GPU compositing.
-func TestGpuFallbackKeepsGpuWhenAvailable(t *testing.T) {
-	if !hasUsableGPU() {
-		t.Skip("no usable GPU on this machine")
-	}
+// A probe that can't run (here: the test binary has no probe path, so it
+// never exits) must leave the rendering default alone rather than wrongly
+// declaring the GPU broken and downgrading everyone to software rendering.
+func TestGpuFallbackKeepsDefaultWhenProbeCannotRun(t *testing.T) {
 	t.Setenv("ASMGR_GPU", "")
+	t.Setenv("WEBKIT_DISABLE_DMABUF_RENDERER", "")
 
 	applyGpuFallback()
 
 	if got := os.Getenv("ASMGR_GPU"); got != "" {
-		t.Fatalf("ASMGR_GPU = %q, want it left empty on a GPU-capable machine", got)
+		t.Fatalf("ASMGR_GPU = %q, want it left empty when the probe is inconclusive", got)
 	}
 }
 
