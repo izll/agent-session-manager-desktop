@@ -77,6 +77,8 @@ export function GetExtraArgs(arg1:string,arg2:number):Promise<string>;
 
 export function GetFullDiff(arg1:string):Promise<main.DiffData>;
 
+export function GetFullDiffFiles(arg1:string):Promise<Array<session.DiffFile>>;
+
 export function GetGroups():Promise<Array<main.GroupInfo>>;
 
 export function GetHistoryPreview(arg1:main.HistoryEntryInfo):Promise<string>;
@@ -100,6 +102,8 @@ export function GetProjects():Promise<Array<main.ProjectInfo>>;
 export function GetResumeSessions(arg1:string,arg2:string):Promise<Array<main.AgentSessionInfo>>;
 
 export function GetSessionDiff(arg1:string):Promise<main.DiffData>;
+
+export function GetSessionDiffFiles(arg1:string):Promise<Array<session.DiffFile>>;
 
 export function GetSessions():Promise<Array<main.SessionInfo>>;
 
@@ -176,6 +180,10 @@ export function RestartTabWithResume(arg1:string,arg2:number,arg3:string):Promis
 export function RestoreBackup(arg1:string):Promise<void>;
 
 export function RestoreTrashItem(arg1:string):Promise<session.RestoreResult>;
+
+export function RevertDiffFile(arg1:string,arg2:string,arg3:boolean):Promise<void>;
+
+export function RevertDiffHunk(arg1:string,arg2:string):Promise<void>;
 
 export function SaveSettings(arg1:main.SettingsInfo):Promise<void>;
 

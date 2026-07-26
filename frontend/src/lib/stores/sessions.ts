@@ -31,6 +31,8 @@ export interface Session {
   mainWindowIndex: number;
   /** Tab the session was last left on; may no longer exist. */
   lastWindowIndex: number;
+  /** False outside a git repository — there is nothing to diff. */
+  isGitRepo: boolean;
 }
 
 export interface Group {

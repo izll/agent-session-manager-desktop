@@ -150,6 +150,10 @@ export function GetFullDiff(arg1) {
   return window['go']['main']['App']['GetFullDiff'](arg1);
 }
 
+export function GetFullDiffFiles(arg1) {
+  return window['go']['main']['App']['GetFullDiffFiles'](arg1);
+}
+
 export function GetGroups() {
   return window['go']['main']['App']['GetGroups']();
 }
@@ -196,6 +200,10 @@ export function GetResumeSessions(arg1, arg2) {
 
 export function GetSessionDiff(arg1) {
   return window['go']['main']['App']['GetSessionDiff'](arg1);
+}
+
+export function GetSessionDiffFiles(arg1) {
+  return window['go']['main']['App']['GetSessionDiffFiles'](arg1);
 }
 
 export function GetSessions() {
@@ -348,6 +356,14 @@ export function RestoreBackup(arg1) {
 
 export function RestoreTrashItem(arg1) {
   return window['go']['main']['App']['RestoreTrashItem'](arg1);
+}
+
+export function RevertDiffFile(arg1, arg2, arg3) {
+  return window['go']['main']['App']['RevertDiffFile'](arg1, arg2, arg3);
+}
+
+export function RevertDiffHunk(arg1, arg2) {
+  return window['go']['main']['App']['RevertDiffHunk'](arg1, arg2);
 }
 
 export function SaveSettings(arg1) {

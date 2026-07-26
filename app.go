@@ -162,6 +162,35 @@ func (a *App) startup(ctx context.Context) {
 	// allowlist; refuses to run until session/filters/remote.go has a
 	// real RemoteFiltersURL set, so this is a no-op for now.
 	filters.StartRemoteUpdater(ctx)
+
+	go a.autoCheckForUpdate(ctx)
+}
+
+// autoCheckForUpdate looks for a new release shortly after launch, at most
+// once a day (same throttle as the TUI version). It only ever notifies —
+// installing stays a deliberate action in the update dialog.
+func (a *App) autoCheckForUpdate(ctx context.Context) {
+	// Let the window finish coming up first; a release check is never urgent.
+	select {
+	case <-time.After(30 * time.Second):
+	case <-ctx.Done():
+		return
+	}
+
+	if !updater.ShouldCheckForUpdate() {
+		return
+	}
+	latest := updater.CheckForUpdate(Version)
+	updater.SaveLastCheckTime()
+	if latest == "" {
+		return
+	}
+
+	log.Printf("[update] %s available (running %s)", latest, Version)
+	runtime.EventsEmit(ctx, "update:available", map[string]string{
+		"version": latest,
+		"current": Version,
+	})
 }
 
 // IsDevMode returns whether the app is running in dev mode
@@ -578,6 +607,9 @@ type SessionInfo struct {
 	// tab back to the session-level palette.
 	MainWindowIndex int `json:"mainWindowIndex"`
 	LastWindowIndex int `json:"lastWindowIndex"`
+	// IsGitRepo drives whether the diff tab is offered at all — outside a
+	// repository it could only ever report "not a git repository".
+	IsGitRepo bool `json:"isGitRepo"`
 }
 
 // GetSessions returns all sessions
@@ -640,6 +672,7 @@ func (a *App) instanceToSessionInfo(inst *session.Instance) SessionInfo {
 		TerminalTheme:      inst.TerminalTheme,
 		MainWindowIndex:    inst.GetMainWindowIndex(),
 		LastWindowIndex:    inst.LastWindowIndex,
+		IsGitRepo:          inst.IsGitRepo(),
 	}
 }
 
@@ -2157,6 +2190,58 @@ func (a *App) GetFullDiff(id string) (*DiffData, error) {
 	}, nil
 }
 
+// GetSessionDiffFiles returns the per-file diff since the session started.
+func (a *App) GetSessionDiffFiles(id string) ([]session.DiffFile, error) {
+	inst, err := a.storage.GetInstance(id)
+	if err != nil {
+		return nil, err
+	}
+	return inst.GetSessionDiffFiles()
+}
+
+// GetFullDiffFiles returns the per-file uncommitted diff.
+func (a *App) GetFullDiffFiles(id string) ([]session.DiffFile, error) {
+	inst, err := a.storage.GetInstance(id)
+	if err != nil {
+		return nil, err
+	}
+	return inst.GetFullDiffFiles()
+}
+
+// RevertDiffFile discards every pending change to one file.
+func (a *App) RevertDiffFile(id, path string, sessionScope bool) error {
+	a.projectMu.RLock()
+	defer a.projectMu.RUnlock()
+	if !a.projectLocked {
+		return fmt.Errorf("project is read-only in this application instance")
+	}
+	inst, err := a.storage.GetInstance(id)
+	if err != nil {
+		return err
+	}
+	baseRef := ""
+	if sessionScope {
+		baseRef = inst.BaseCommitSHA
+	}
+	return inst.RevertFile(path, baseRef)
+}
+
+// RevertDiffHunk undoes a single change block. The patch is the text the UI
+// displayed, so a file that moved on since makes git refuse instead of
+// reverting something the user never saw.
+func (a *App) RevertDiffHunk(id, patch string) error {
+	a.projectMu.RLock()
+	defer a.projectMu.RUnlock()
+	if !a.projectLocked {
+		return fmt.Errorf("project is read-only in this application instance")
+	}
+	inst, err := a.storage.GetInstance(id)
+	if err != nil {
+		return err
+	}
+	return inst.RevertHunk(patch)
+}
+
 // ============================================================================
 // Global History Search
 // ============================================================================
@@ -2293,25 +2378,25 @@ func (a *App) GetResumeSessions(agent string, path string) ([]AgentSessionInfo, 
 
 // SettingsInfo represents settings for frontend
 type SettingsInfo struct {
-	CompactList      bool   `json:"compactList"`
-	HideStatusLines  bool   `json:"hideStatusLines"`
-	ShowAgentIcons   bool   `json:"showAgentIcons"`
-	HideYoloBadge    bool   `json:"hideYoloBadge"`
-	ShowResumeBadge  bool   `json:"showResumeBadge"`
-	SplitView        bool   `json:"splitView"`
-	MarkedSessionID  string `json:"markedSessionId"`
-	MarkedWindowIdx  int    `json:"markedWindowIdx"`
-	Language         string `json:"language"`
-	TerminalRenderer string `json:"terminalRenderer"`
-	NotifyOnWaiting  bool   `json:"notifyOnWaiting"`
-	NotifyDesktop    bool   `json:"notifyDesktop"`
-	NotifyNtfy       bool   `json:"notifyNtfy"`
-	NtfyURL          string `json:"ntfyUrl"`
-	TerminalTheme    string `json:"terminalTheme"`
+	CompactList       bool   `json:"compactList"`
+	HideStatusLines   bool   `json:"hideStatusLines"`
+	ShowAgentIcons    bool   `json:"showAgentIcons"`
+	HideYoloBadge     bool   `json:"hideYoloBadge"`
+	ShowResumeBadge   bool   `json:"showResumeBadge"`
+	SplitView         bool   `json:"splitView"`
+	MarkedSessionID   string `json:"markedSessionId"`
+	MarkedWindowIdx   int    `json:"markedWindowIdx"`
+	Language          string `json:"language"`
+	TerminalRenderer  string `json:"terminalRenderer"`
+	NotifyOnWaiting   bool   `json:"notifyOnWaiting"`
+	NotifyDesktop     bool   `json:"notifyDesktop"`
+	NotifyNtfy        bool   `json:"notifyNtfy"`
+	NtfyURL           string `json:"ntfyUrl"`
+	TerminalTheme     string `json:"terminalTheme"`
 	AgentDefaultTheme string `json:"agentDefaultTheme"`
 	// Per-agent-type palette overrides ("claude" → "dracula", …) and the
 	// user-defined palette used when a theme id is "custom".
-	AgentTerminalThemes map[string]string `json:"agentTerminalThemes"`
+	AgentTerminalThemes  map[string]string             `json:"agentTerminalThemes"`
 	CustomTerminalThemes []session.CustomTerminalTheme `json:"customTerminalThemes"`
 }
 
@@ -2361,23 +2446,23 @@ func (a *App) GetSettings() (*SettingsInfo, error) {
 	}
 
 	return &SettingsInfo{
-		CompactList:      settings.CompactList,
-		HideStatusLines:  settings.HideStatusLines,
-		ShowAgentIcons:   settings.ShowAgentIcons,
-		HideYoloBadge:    settings.HideYoloBadge,
-		ShowResumeBadge:  settings.ShowResumeBadge,
-		SplitView:        settings.SplitView,
-		MarkedSessionID:  settings.MarkedSessionID,
-		MarkedWindowIdx:  settings.MarkedWindowIdx,
-		Language:         lang,
-		TerminalRenderer: renderer,
-		NotifyOnWaiting:  settings.NotifyOnWaiting,
-		NotifyDesktop:    settings.NotifyDesktop,
-		NotifyNtfy:       settings.NotifyNtfy,
-		NtfyURL:          settings.NtfyURL,
-		TerminalTheme:    theme,
-		AgentDefaultTheme: agentTheme,
-		AgentTerminalThemes: settings.AgentTerminalThemes,
+		CompactList:          settings.CompactList,
+		HideStatusLines:      settings.HideStatusLines,
+		ShowAgentIcons:       settings.ShowAgentIcons,
+		HideYoloBadge:        settings.HideYoloBadge,
+		ShowResumeBadge:      settings.ShowResumeBadge,
+		SplitView:            settings.SplitView,
+		MarkedSessionID:      settings.MarkedSessionID,
+		MarkedWindowIdx:      settings.MarkedWindowIdx,
+		Language:             lang,
+		TerminalRenderer:     renderer,
+		NotifyOnWaiting:      settings.NotifyOnWaiting,
+		NotifyDesktop:        settings.NotifyDesktop,
+		NotifyNtfy:           settings.NotifyNtfy,
+		NtfyURL:              settings.NtfyURL,
+		TerminalTheme:        theme,
+		AgentDefaultTheme:    agentTheme,
+		AgentTerminalThemes:  settings.AgentTerminalThemes,
 		CustomTerminalThemes: customThemes,
 	}, nil
 }
