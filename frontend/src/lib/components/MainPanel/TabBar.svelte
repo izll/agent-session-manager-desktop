@@ -1139,6 +1139,16 @@
   export let fullDiffActive = false;
   export let activeView: 'terminal' | 'diff' | 'notes' | 'tasks' = 'terminal';
 
+  // Not the agent type: a plain terminal opened inside a repository still has
+  // changes worth reviewing, while a Claude session in a scratch folder has
+  // none. What matters is whether git has anything to say.
+  $: showDiffTab = !!$selectedSession?.isGitRepo;
+
+  // Never leave the user stranded on a diff view whose tab just disappeared.
+  $: if (fullDiffActive && !showDiffTab) {
+    dispatch('closeFullDiff');
+  }
+
   function handleFullDiffClick() {
     dispatch('openFullDiff');
   }
@@ -1305,21 +1315,25 @@
       </div>
     {/if}
 
-    <!-- Separator -->
-    <div class="tab-separator"></div>
+    <!-- Diff only exists inside a git repository; elsewhere the tab could only
+         ever report "not a git repository". -->
+    {#if showDiffTab}
+      <!-- Separator -->
+      <div class="tab-separator"></div>
 
-    <!-- Full Diff Tab -->
-    <button
-      class="tab diff-tab"
-      class:active={fullDiffActive}
-      on:click={handleFullDiffClick}
-      title={$t('tabBar.fullDiff')}
-    >
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M12 3v18M3 12h18"/>
-      </svg>
-      <span class="tab-name">{$t('tabBar.diffLabel')}</span>
-    </button>
+      <!-- Full Diff Tab -->
+      <button
+        class="tab diff-tab"
+        class:active={fullDiffActive}
+        on:click={handleFullDiffClick}
+        title={$t('tabBar.fullDiff')}
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 3v18M3 12h18"/>
+        </svg>
+        <span class="tab-name">{$t('tabBar.diffLabel')}</span>
+      </button>
+    {/if}
 
     <!-- Spacer to push controls to right -->
     <div class="tab-spacer"></div>

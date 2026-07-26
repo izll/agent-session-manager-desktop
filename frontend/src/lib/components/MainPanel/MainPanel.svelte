@@ -18,11 +18,12 @@
   export let visible = true;
   export let terminalFocusAllowed = true;
 
-  let activeView: 'terminal' | 'diff' | 'notes' | 'tasks' = 'terminal';
+  // Diff is not one of these: it lives in the tab bar (fullDiffActive), so the
+  // view bar never selects it.
+  let activeView: 'terminal' | 'notes' | 'tasks' = 'terminal';
   let terminalAttached = false;
   let showForkDialog = false;
   let localNotesCache: Record<string, string> = {}; // sessionId:windowIdx -> notes
-  let diffMode: 'session' | 'full' = 'session';
   let terminalComponent: Terminal;
   let fullDiffActive = false;
   let focusedTerminalPane: 'primary' | 'secondary' = 'primary';
@@ -94,6 +95,13 @@
   function handleSetView(e: Event) {
     const view = (e as CustomEvent<{ view: 'terminal' | 'diff' | 'notes' | 'tasks' }>).detail?.view;
     if (!view) return;
+    // Diff lives in the tab bar, not the view bar — route the palette there so
+    // its "open diff" action still lands somewhere. Outside a git repo there
+    // is no diff to open, so the request is simply ignored.
+    if (view === 'diff') {
+      if (currentSession?.isGitRepo) fullDiffActive = true;
+      return;
+    }
     fullDiffActive = false;
     activeView = view;
   }
@@ -109,6 +117,7 @@
   }
 
   $: currentSession = $sessions.find(s => s.id === $selectedSessionId);
+
   $: canFork = currentSession?.agent === 'claude' && currentSession?.status === 'running';
   $: agentConfig = $agents.find(a => a.type === currentSession?.agent);
   $: canAutoYes = agentConfig?.supportsAutoYes && currentSession?.status === 'running';
@@ -168,7 +177,7 @@
       {activeView}
       {visible}
       on:openColorDialog={() => dispatch('openColorDialog')}
-      on:openFullDiff={() => { fullDiffActive = true; diffMode = 'full'; }}
+      on:openFullDiff={() => fullDiffActive = true}
       on:closeFullDiff={() => { fullDiffActive = false; activeView = 'terminal'; }}
       on:requestStop={() => dispatch('requestStop')}
       on:requestStart={() => dispatch('requestStart')}
@@ -194,17 +203,6 @@
               <line x1="12" y1="19" x2="20" y2="19"/>
             </svg>
             {$t('mainPanel.terminal')}
-          </button>
-          <button
-            class="view-tab {activeView === 'diff' ? 'active' : ''}"
-            on:click={() => { diffMode = 'session'; activeView = 'diff'; }}
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/>
-              <polyline points="15 3 21 3 21 9"/>
-              <line x1="10" y1="14" x2="21" y2="3"/>
-            </svg>
-            {$t('mainPanel.diff')}
           </button>
           <button
             class="view-tab {activeView === 'notes' ? 'active' : ''}"
@@ -344,9 +342,6 @@
               </div>
             {/if}
           </div>
-        </div>
-        <div class="view-panel" class:active={activeView === 'diff'}>
-          <Diff active={visible && activeView === 'diff'} initialMode={diffMode} />
         </div>
         <div class="view-panel" class:active={activeView === 'notes'}>
           <Notes active={visible && activeView === 'notes'} on:notesChange={handleNotesChange} />

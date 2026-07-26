@@ -121,8 +121,15 @@
 
     if (current) {
       result.push(
-        { id: 'view-terminal', category: $t('palette.actions'), title: $t('palette.openTerminal'), icon: '›_', keywords: 'terminal', action: () => openView('terminal') },
-        { id: 'view-diff', category: $t('palette.actions'), title: $t('palette.openDiff'), icon: '±', keywords: 'git changes', action: () => openView('diff') },
+        { id: 'view-terminal', category: $t('palette.actions'), title: $t('palette.openTerminal'), icon: '›_', keywords: 'terminal', action: () => openView('terminal') }
+      );
+      // Offering "open diff" outside a git repo would do nothing.
+      if (current.isGitRepo) {
+        result.push(
+          { id: 'view-diff', category: $t('palette.actions'), title: $t('palette.openDiff'), icon: '±', keywords: 'git changes', action: () => openView('diff') }
+        );
+      }
+      result.push(
         { id: 'view-notes', category: $t('palette.actions'), title: $t('palette.openNotes'), icon: '⌑', keywords: 'notes jegyzet', action: () => openView('notes') }
       );
     }
