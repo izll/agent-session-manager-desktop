@@ -182,6 +182,10 @@ func (a *App) autoCheckForUpdate(ctx context.Context) {
 	}
 	latest := updater.CheckForUpdate(Version)
 	updater.SaveLastCheckTime()
+	// Remember the answer either way: a pending update must stay visible on
+	// later launches that fall inside the daily throttle, and a stale one
+	// must stop being shown.
+	updater.SaveAvailableUpdate(latest)
 	if latest == "" {
 		return
 	}
@@ -2638,8 +2642,20 @@ func (a *App) LogFrontend(msg string) {
 // CheckForUpdate checks for updates
 func (a *App) CheckForUpdate() *UpdateInfo {
 	current := Version
+	started := time.Now()
 	latest := updater.CheckForUpdate(current)
 
+	// Logged because a check that answers "nothing new" looks identical to one
+	// that never ran; without this there is no way to tell them apart after
+	// the fact.
+	if latest == "" {
+		log.Printf("[update] checked in %s: %s is current", time.Since(started).Round(time.Millisecond), current)
+	} else {
+		log.Printf("[update] checked in %s: %s available (running %s)",
+			time.Since(started).Round(time.Millisecond), latest, current)
+	}
+
+	updater.SaveAvailableUpdate(latest)
 	return &UpdateInfo{
 		Available:      latest != "",
 		CurrentVersion: current,
@@ -2647,9 +2663,21 @@ func (a *App) CheckForUpdate() *UpdateInfo {
 	}
 }
 
+// PendingUpdate returns the version an earlier check found, so the UI can flag
+// it at startup without waiting for (or forcing) a new network check.
+func (a *App) PendingUpdate() string {
+	return updater.CachedAvailableUpdate(Version)
+}
+
 // PerformUpdate downloads and installs update
 func (a *App) PerformUpdate(version string) error {
-	return updater.DownloadAndInstall(version)
+	if err := updater.DownloadAndInstall(version); err != nil {
+		return err
+	}
+	// Installed: stop advertising it. The running process is still the old
+	// binary, so Version can't tell us this on its own.
+	updater.ClearAvailableUpdate()
+	return nil
 }
 
 // ============================================================================

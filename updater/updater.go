@@ -29,6 +29,10 @@ const (
 	// Automatic checks are throttled to once a day, matching the TUI version.
 	CheckInterval = 24 * time.Hour
 	LastCheckFile = "last_update_check"
+	// AvailableUpdateFile caches the last "there is a newer version" answer.
+	// Without it a launch that falls inside the daily throttle shows nothing,
+	// even though an update is still waiting.
+	AvailableUpdateFile = "available_update"
 )
 
 var (
@@ -91,6 +95,72 @@ func SaveLastCheckTime() {
 		[]byte(time.Now().Format(time.RFC3339)),
 		0o644,
 	)
+}
+
+// CachedAvailableUpdate returns the version found by an earlier check, or ""
+// when there is none. The UI shows this immediately at startup so a pending
+// update stays visible on days when the throttle skips the network check.
+//
+// A cached version that is no longer newer than the running one is discarded:
+// it survives the update itself, and would otherwise keep nagging.
+func CachedAvailableUpdate(currentVersion string) string {
+	dir := configDir()
+	if dir == "" {
+		return ""
+	}
+	data, err := os.ReadFile(filepath.Join(dir, AvailableUpdateFile))
+	if err != nil {
+		return ""
+	}
+	cached := strings.TrimSpace(string(data))
+	if cached == "" {
+		return ""
+	}
+	if !isNewerVersion(cached, currentVersion) {
+		ClearAvailableUpdate()
+		return ""
+	}
+	return cached
+}
+
+// SaveAvailableUpdate records a pending update, or clears the record when the
+// argument is empty.
+func SaveAvailableUpdate(version string) {
+	dir := configDir()
+	if dir == "" {
+		return
+	}
+	if version == "" {
+		ClearAvailableUpdate()
+		return
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return
+	}
+	_ = os.WriteFile(filepath.Join(dir, AvailableUpdateFile), []byte(version), 0o644)
+}
+
+// ClearAvailableUpdate forgets a pending update — used once it is installed.
+func ClearAvailableUpdate() {
+	dir := configDir()
+	if dir == "" {
+		return
+	}
+	_ = os.Remove(filepath.Join(dir, AvailableUpdateFile))
+}
+
+// isNewerVersion reports whether candidate is a valid release newer than
+// current. Anything unparseable counts as not newer.
+func isNewerVersion(candidate, current string) bool {
+	c, ok := parseSemver(strings.TrimPrefix(candidate, "v"))
+	if !ok || len(c.prerelease) > 0 {
+		return false
+	}
+	cur, ok := parseSemver(strings.TrimPrefix(current, "v"))
+	if !ok {
+		return true // unknown running version: trust the cached tag
+	}
+	return compareSemver(c, cur) > 0
 }
 
 // CheckForUpdate returns the latest tag when it is a valid semantic version
@@ -439,9 +509,88 @@ func replaceExecutable(execPath, stagedPath string) error {
 	return nil
 }
 
-// DownloadAndInstall installs an update for a user-local installation. Linux
-// distro packages deliberately require the system package manager: a GUI app
-// cannot safely or reliably run interactive sudo without a controlling TTY.
+// installPackageUpdate upgrades a .deb/.rpm installation in place.
+//
+// The TUI can shell out to `sudo dpkg -i` because it owns a terminal to type a
+// password into; a GUI has no controlling TTY, so it asks PolicyKit instead —
+// pkexec shows the desktop's own authentication dialog. Without pkexec there
+// is no way to prompt, so the user is told what to run.
+func installPackageUpdate(version string) error {
+	pkexec, err := exec.LookPath("pkexec")
+	if err != nil {
+		return fmt.Errorf("this installation is managed by the system package manager, and pkexec is not available to ask for permission; install %s %s with: sudo %s",
+			BinaryName, version, manualInstallHint(version))
+	}
+
+	pkgPath, install, err := downloadPackageFor(version)
+	if err != nil {
+		return err
+	}
+	defer os.Remove(pkgPath)
+
+	args := append(install, pkgPath)
+	cmd := exec.Command(pkexec, args...)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		msg := strings.TrimSpace(string(out))
+		// 126/127 are pkexec's own codes for "dismissed" and "not authorised".
+		if code := cmd.ProcessState.ExitCode(); code == 126 || code == 127 {
+			return fmt.Errorf("the update was not authorised")
+		}
+		if msg == "" {
+			msg = err.Error()
+		}
+		return fmt.Errorf("package installation failed: %s", msg)
+	}
+	return nil
+}
+
+// downloadPackageFor fetches the package matching this installation and
+// returns it with the command needed to install it.
+func downloadPackageFor(version string) (path string, installCmd []string, err error) {
+	if isDpkgInstall() {
+		p, derr := DownloadDeb(version)
+		if derr != nil {
+			return "", nil, derr
+		}
+		// --force-confold keeps any config the user edited.
+		return p, []string{"dpkg", "-i", "--force-confold"}, nil
+	}
+	p, rerr := DownloadRpm(version)
+	if rerr != nil {
+		return "", nil, rerr
+	}
+	return p, []string{"rpm", "-U", "--replacepkgs"}, nil
+}
+
+// isDpkgInstall reports whether dpkg owns this executable.
+func isDpkgInstall() bool {
+	execPath, err := os.Executable()
+	if err != nil {
+		return false
+	}
+	if resolved, rerr := filepath.EvalSymlinks(execPath); rerr == nil {
+		execPath = resolved
+	}
+	if _, lerr := exec.LookPath("dpkg-query"); lerr != nil {
+		return false
+	}
+	out, qerr := exec.Command("dpkg-query", "--search", execPath).Output()
+	return qerr == nil && strings.HasPrefix(strings.TrimSpace(string(out)), BinaryName+":")
+}
+
+// manualInstallHint names the command that would do the job by hand.
+func manualInstallHint(version string) string {
+	v := strings.TrimPrefix(version, "v")
+	if isDpkgInstall() {
+		return fmt.Sprintf("dpkg -i %s_%s_linux_%s.deb", BinaryName, v, packageArch())
+	}
+	return fmt.Sprintf("rpm -U %s_%s_linux_%s.rpm", BinaryName, v, packageArch())
+}
+
+// DownloadAndInstall installs an update. A user-local install is replaced in
+// place; a distro package is upgraded through PolicyKit (see
+// installPackageUpdate).
 func DownloadAndInstall(version string) error {
 	if err := validateReleaseVersion(version); err != nil {
 		return err
@@ -450,7 +599,7 @@ func DownloadAndInstall(version string) error {
 		return fmt.Errorf("automatic updates are not supported on %s; download %s %s from the release page, close the app, and replace the complete application bundle", runtime.GOOS, BinaryName, version)
 	}
 	if IsPackageManaged() {
-		return fmt.Errorf("this installation is managed by the system package manager; download %s %s from the release page and install it with apt/dnf", BinaryName, version)
+		return installPackageUpdate(version)
 	}
 
 	execPath, err := os.Executable()

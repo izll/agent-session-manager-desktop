@@ -12,6 +12,7 @@
   import HelpDialog from './lib/components/Dialogs/HelpDialog.svelte';
   import UpdateDialog from './lib/components/Dialogs/UpdateDialog.svelte';
   import ImportDialog from './lib/components/Dialogs/ImportDialog.svelte';
+  import SessionFileDialog from './lib/components/Dialogs/SessionFileDialog.svelte';
   import SettingsDialog from './lib/components/Dialogs/SettingsDialog.svelte';
   import RecoveryCenterDialog from './lib/components/Dialogs/RecoveryCenterDialog.svelte';
   import CommandPalette from './lib/components/Dialogs/CommandPalette.svelte';
@@ -25,7 +26,7 @@
   import { sessions, loadSessions, selectSession, selectWindow, selectedSession, selectedSessionId, selectedWindowIdx, startSession, stopSession, stopTab, restartTab, restartTabWithResume, deleteSession, toggleFavorite, reorderSession, selectPrevSession, selectNextSession } from './lib/stores/sessions';
   import { activities } from './lib/stores/activities';
   import { statusLines, tabStatuses } from './lib/stores/statusLines';
-  import { QuickReplyTab } from '../wailsjs/go/main/App';
+  import { QuickReplyTab, ExportSessions, PendingUpdate } from '../wailsjs/go/main/App';
   import { loadProjects, otherInstancePID, refreshLockStatus } from './lib/stores/projects';
   import { appView } from './lib/stores/navigation';
   import { loadSettings, settings } from './lib/stores/settings';
@@ -73,6 +74,9 @@
   /** Version found by the daily background check; drives the header dot. */
   let availableUpdate = '';
   let showImportDialog = false;
+  let showFileImportDialog = false;
+  /** Export failures are rare but must not vanish silently. */
+  let exportError = '';
   let showSettingsDialog = false;
   let showRecoveryCenter = false;
   let showCommandPalette = false;
@@ -98,7 +102,7 @@
   let prevAnyDialogOpen = false;
   $: anyDialogOpen =
     showNewSessionDialog || showNewGroupDialog || showGlobalSearch || showBgAgents ||
-    showHelpDialog || showUpdateDialog || showImportDialog ||
+    showHelpDialog || showUpdateDialog || showImportDialog || showFileImportDialog ||
     showSettingsDialog || showRecoveryCenter || showCommandPalette || showColorDialog || showDeleteConfirm ||
     showQuitConfirm || showStopDialog || showStartDialog ||
     showResumeChoice || showResumeSessionPicker;
@@ -368,6 +372,15 @@
       availableUpdate = info?.version || '';
     });
 
+    // Show an update found by an earlier run straight away. The daily throttle
+    // means today's launch may not check at all, and a pending update should
+    // not disappear just because it was discovered yesterday.
+    try {
+      availableUpdate = await PendingUpdate();
+    } catch {
+      // Not worth surfacing: the background check will notice it again.
+    }
+
     // Capture phase so the terminal (xterm) can't swallow Ctrl+Shift combos.
     window.addEventListener('keydown', handleKeydown, true);
     window.addEventListener('terminal-nav', handleTerminalNav as EventListener);
@@ -441,6 +454,18 @@
       } catch (e) {
         console.error('Failed to initialize dictation:', e);
       }
+    }
+  }
+
+  // Export writes every session in the current project; the native save
+  // dialog is where the user picks the file, so there is nothing to configure
+  // here first.
+  async function exportSessions() {
+    showSettingsDialog = false;
+    try {
+      await ExportSessions([]);
+    } catch (e) {
+      exportError = String(e);
     }
   }
 
@@ -602,6 +627,12 @@
 <svelte:window on:click={() => { if (showWaitingPanel) showWaitingPanel = false; }} />
 
 <main class="app-container h-screen flex flex-col text-white overflow-hidden" style="--sidebar-width: {actualSidebarWidth}px" dir={$isRTL ? 'rtl' : 'ltr'}>
+  {#if exportError}
+    <div class="lock-banner export-error">
+      <span>{exportError}</span>
+      <button class="lock-dismiss" on:click={() => exportError = ''}>×</button>
+    </div>
+  {/if}
   {#if $otherInstancePID > 0 && !lockBannerDismissed}
     <div class="lock-banner">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -686,28 +717,22 @@
             <path d="M9 16h6"/>
           </svg>
         </button>
-        <button class="btn btn-ghost btn-icon" on:click={() => showImportDialog = true} title={$t('header.importSessions')}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-            <polyline points="17 8 12 3 7 8"/>
-            <line x1="12" y1="3" x2="12" y2="15"/>
-          </svg>
-        </button>
-        <button
-          class="btn btn-ghost btn-icon update-btn"
-          class:has-update={!!availableUpdate}
-          on:click={() => { showUpdateDialog = true; availableUpdate = ''; }}
-          title={availableUpdate
-            ? $t('header.updateAvailable', { version: availableUpdate })
-            : $t('header.checkUpdates')}
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-            <polyline points="7 10 12 15 17 10"/>
-            <line x1="12" y1="15" x2="12" y2="3"/>
-          </svg>
-          {#if availableUpdate}<span class="update-dot"></span>{/if}
-        </button>
+        <!-- Only shown when there is something to install: an icon that appears
+             for a reason is easier to notice than one that is always there. -->
+        {#if availableUpdate}
+          <button
+            class="btn btn-ghost btn-icon update-btn has-update"
+            on:click={() => { showUpdateDialog = true; }}
+            title={$t('header.updateAvailable', { version: availableUpdate })}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/>
+              <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            <span class="update-dot"></span>
+          </button>
+        {/if}
         <button class="btn btn-ghost btn-icon" on:click={() => showHelpDialog = true} title={$t('header.help')}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="12" cy="12" r="10"/>
@@ -823,9 +848,21 @@
   <BgAgentsDialog bind:show={showBgAgents} />
 <GlobalSearchDialog bind:show={showGlobalSearch} />
   <HelpDialog bind:show={showHelpDialog} />
-  <UpdateDialog bind:show={showUpdateDialog} />
+  <UpdateDialog
+    bind:show={showUpdateDialog}
+    on:installed={() => availableUpdate = ''}
+    on:checked={(e) => availableUpdate = e.detail}
+  />
   <ImportDialog bind:show={showImportDialog} />
-  <SettingsDialog bind:show={showSettingsDialog} on:dictationEnabledChange={handleDictationEnabledChange} />
+  <SessionFileDialog bind:show={showFileImportDialog} />
+  <SettingsDialog
+    bind:show={showSettingsDialog}
+    on:dictationEnabledChange={handleDictationEnabledChange}
+    on:openUpdate={() => { showSettingsDialog = false; showUpdateDialog = true; }}
+    on:openImport={() => { showSettingsDialog = false; showImportDialog = true; }}
+    on:openFileImport={() => { showSettingsDialog = false; showFileImportDialog = true; }}
+    on:exportSessions={exportSessions}
+  />
   <RecoveryCenterDialog bind:show={showRecoveryCenter} />
   <CommandPalette bind:show={showCommandPalette} />
   <SessionColorDialog bind:show={showColorDialog} session={colorDialogSession} />
@@ -1247,6 +1284,12 @@
 
   /* A new release is worth noticing but never worth interrupting for, so it
      shows as a dot on the existing button rather than a dialog. */
+  .export-error {
+    background: rgba(239, 68, 68, 0.12);
+    border-bottom-color: rgba(239, 68, 68, 0.3);
+    color: #fca5a5;
+  }
+
   .update-btn {
     position: relative;
   }

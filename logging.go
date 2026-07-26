@@ -60,6 +60,9 @@ var consoleAllowPrefixes = []string{
 	"[StartWithResume]",
 	"[StartSessionWithResume]",
 	"[RestartTabWithResume]",
+	// Chasing a report that the update dialog shows nothing; remove once the
+	// cause is known.
+	"[update]",
 	"Error",
 	"panic",
 	"fatal",
