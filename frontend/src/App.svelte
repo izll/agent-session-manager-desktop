@@ -16,6 +16,8 @@
   import SettingsDialog from './lib/components/Dialogs/SettingsDialog.svelte';
   import RecoveryCenterDialog from './lib/components/Dialogs/RecoveryCenterDialog.svelte';
   import CommandPalette from './lib/components/Dialogs/CommandPalette.svelte';
+  import CommandPickerDialog from './lib/components/Dialogs/CommandPickerDialog.svelte';
+  import CommandManagerDialog from './lib/components/Dialogs/CommandManagerDialog.svelte';
   import SessionColorDialog from './lib/components/Dialogs/SessionColorDialog.svelte';
   import ConfirmDialog from './lib/components/Dialogs/ConfirmDialog.svelte';
   import StopDialog from './lib/components/Dialogs/StopDialog.svelte';
@@ -80,6 +82,13 @@
   let showSettingsDialog = false;
   let showRecoveryCenter = false;
   let showCommandPalette = false;
+  /** Saved-command library: Ctrl+P picker and its editor. */
+  let showCommandPicker = false;
+  let showCommandManager = false;
+  /** The picker closes itself before handing over to the editor. */
+  function openCommandManager() {
+    showCommandManager = true;
+  }
   let showColorDialog = false;
   let colorDialogSession: Session | null = null;
   let showDeleteConfirm = false;
@@ -104,6 +113,7 @@
     showNewSessionDialog || showNewGroupDialog || showGlobalSearch || showBgAgents ||
     showHelpDialog || showUpdateDialog || showImportDialog || showFileImportDialog ||
     showSettingsDialog || showRecoveryCenter || showCommandPalette || showColorDialog || showDeleteConfirm ||
+    showCommandPicker || showCommandManager ||
     showQuitConfirm || showStopDialog || showStartDialog ||
     showResumeChoice || showResumeSessionPicker;
   $: if (prevAnyDialogOpen && !anyDialogOpen) {
@@ -241,7 +251,11 @@
     );
     const altArrow = e.altKey && !e.ctrlKey && !e.shiftKey &&
       (e.key === 'ArrowUp' || e.key === 'ArrowDown');
-    if (!mod && !altArrow && !paletteShortcut) return;
+    // Ctrl+P (no Shift) opens the saved-command picker. Ctrl+Shift+P and
+    // Ctrl+K stay with the command palette above.
+    const commandPickerShortcut = (e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey &&
+      e.key.toLowerCase() === 'p';
+    if (!mod && !altArrow && !paletteShortcut && !commandPickerShortcut) return;
 
     // Don't handle shortcuts when any dialog is open
     const dialogOpen = showCommandPalette || document.querySelector('.dialog-overlay') !== null;
@@ -249,6 +263,12 @@
       e.preventDefault();
       e.stopPropagation();
       if (!dialogOpen) showCommandPalette = true;
+      return;
+    }
+    if (commandPickerShortcut) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!dialogOpen) showCommandPicker = true;
       return;
     }
     if (dialogOpen) return;
@@ -865,6 +885,13 @@
   />
   <RecoveryCenterDialog bind:show={showRecoveryCenter} />
   <CommandPalette bind:show={showCommandPalette} />
+  <CommandPickerDialog
+    bind:show={showCommandPicker}
+    sessionId={$selectedSessionId || ''}
+    windowIdx={$selectedWindowIdx}
+    onOpenManager={openCommandManager}
+  />
+  <CommandManagerDialog bind:show={showCommandManager} />
   <SessionColorDialog bind:show={showColorDialog} session={colorDialogSession} />
   <ConfirmDialog
     bind:show={showDeleteConfirm}

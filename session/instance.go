@@ -2121,6 +2121,24 @@ func (i *Instance) SendText(text string) error {
 	return cmd.Run()
 }
 
+// SendTextToWindow types text into a specific window, optionally pressing
+// Enter afterwards. Sent with -l so the text is taken literally: a saved
+// command containing "C-c" or "Enter" is text, not a key name.
+func (i *Instance) SendTextToWindow(windowIdx int, text string, pressEnter bool) error {
+	if !i.IsAlive() {
+		return fmt.Errorf("session not running")
+	}
+	target := fmt.Sprintf("%s:%d", i.TmuxSessionName(), windowIdx)
+	if err := exec.Command("tmux", "send-keys", "-l", "-t", target, text).Run(); err != nil {
+		return fmt.Errorf("could not send the command: %w", err)
+	}
+	if !pressEnter {
+		return nil
+	}
+	// Separate call: Enter is a key name, so it must not carry -l.
+	return exec.Command("tmux", "send-keys", "-t", target, "Enter").Run()
+}
+
 // SendPrompt sends a prompt text followed by Enter key
 func (i *Instance) SendPrompt(text string) error {
 	if !i.IsAlive() {

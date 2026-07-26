@@ -62,6 +62,14 @@ export function CycleYoloMode(arg1, arg2) {
   return window['go']['main']['App']['CycleYoloMode'](arg1, arg2);
 }
 
+export function DeleteCommand(arg1) {
+  return window['go']['main']['App']['DeleteCommand'](arg1);
+}
+
+export function DeleteCommandGroup(arg1) {
+  return window['go']['main']['App']['DeleteCommandGroup'](arg1);
+}
+
 export function DeleteGroup(arg1) {
   return window['go']['main']['App']['DeleteGroup'](arg1);
 }
@@ -144,6 +152,10 @@ export function GetClaudeUsage() {
 
 export function GetCodexUsage() {
   return window['go']['main']['App']['GetCodexUsage']();
+}
+
+export function GetCommands() {
+  return window['go']['main']['App']['GetCommands']();
 }
 
 export function GetExtraArgs(arg1, arg2) {
@@ -380,6 +392,18 @@ export function RevertDiffFile(arg1, arg2, arg3) {
 
 export function RevertDiffHunk(arg1, arg2) {
   return window['go']['main']['App']['RevertDiffHunk'](arg1, arg2);
+}
+
+export function RunCommand(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['RunCommand'](arg1, arg2, arg3, arg4);
+}
+
+export function SaveCommand(arg1, arg2, arg3, arg4, arg5, arg6) {
+  return window['go']['main']['App']['SaveCommand'](arg1, arg2, arg3, arg4, arg5, arg6);
+}
+
+export function SaveCommandGroup(arg1, arg2) {
+  return window['go']['main']['App']['SaveCommandGroup'](arg1, arg2);
 }
 
 export function SaveSettings(arg1) {

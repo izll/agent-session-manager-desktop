@@ -33,6 +33,10 @@ export function CreateTask(arg1:string,arg2:string,arg3:string,arg4:string,arg5:
 
 export function CycleYoloMode(arg1:string,arg2:number):Promise<void>;
 
+export function DeleteCommand(arg1:string):Promise<void>;
+
+export function DeleteCommandGroup(arg1:string):Promise<void>;
+
 export function DeleteGroup(arg1:string):Promise<void>;
 
 export function DeleteProject(arg1:string):Promise<void>;
@@ -74,6 +78,8 @@ export function GetBackups():Promise<Array<main.BackupInfo>>;
 export function GetClaudeUsage():Promise<main.ClaudeUsageInfo>;
 
 export function GetCodexUsage():Promise<main.CodexUsageInfo>;
+
+export function GetCommands():Promise<main.CommandLibraryInfo>;
 
 export function GetExtraArgs(arg1:string,arg2:number):Promise<string>;
 
@@ -192,6 +198,12 @@ export function RestoreTrashItem(arg1:string):Promise<session.RestoreResult>;
 export function RevertDiffFile(arg1:string,arg2:string,arg3:boolean):Promise<void>;
 
 export function RevertDiffHunk(arg1:string,arg2:string):Promise<void>;
+
+export function RunCommand(arg1:string,arg2:string,arg3:number,arg4:Record<string, string>):Promise<void>;
+
+export function SaveCommand(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string,arg6:boolean):Promise<string>;
+
+export function SaveCommandGroup(arg1:string,arg2:string):Promise<string>;
 
 export function SaveSettings(arg1:main.SettingsInfo):Promise<void>;
 
