@@ -56,6 +56,13 @@ html, body {
   background: transparent;
 }
 
+/* Where a vertical and a horizontal scrollbar meet. Unstyled, WebKit fills
+   it with its own opaque black, which showed as a small dark block against
+   the app's near-black background. */
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
 ::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.2);
   border-radius: 4px;
