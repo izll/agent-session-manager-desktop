@@ -1310,15 +1310,21 @@
             </div>
           {/if}
         </div>
-        {#if tabHasFontOverride}
-          <button class="tab-context-menu-item" on:click={resetTabFontSize}>
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M3 7v6h6"/>
-              <path d="M3.51 13a9 9 0 1 0 2.13-9.36L3 7"/>
-            </svg>
-            {$t('tabBar.resetFontSize')}
-          </button>
-        {/if}
+        <!-- Always listed, disabled when there is nothing to reset: hiding it
+             made the entry impossible to find when you needed it, since you
+             cannot tell from the menu whether the tab has its own size. -->
+        <button
+          class="tab-context-menu-item"
+          class:disabled={!tabHasFontOverride}
+          disabled={!tabHasFontOverride}
+          on:click={resetTabFontSize}
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M3 7v6h6"/>
+            <path d="M3.51 13a9 9 0 1 0 2.13-9.36L3 7"/>
+          </svg>
+          {$t('tabBar.resetFontSize')}
+        </button>
         {#if tabContextMenuIndex !== null && windows.find(w => w.Index === tabContextMenuIndex)?.Agent !== 'terminal' && windows.find(w => w.Index === tabContextMenuIndex)?.Agent !== 'custom'}
           <button class="tab-context-menu-item" on:click={tabContextEditExtraArgs}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1792,6 +1798,16 @@
     border-radius: 8px;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
     padding: 4px;
+  }
+
+  /* Shown but inert when the tab has no size of its own — there is nothing
+     to reset, and hiding it made the entry hard to find when it mattered. */
+  .tab-context-menu-item.disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+  .tab-context-menu-item.disabled:hover {
+    background: none;
   }
 
   .tab-context-menu-item {
