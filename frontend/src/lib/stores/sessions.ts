@@ -29,6 +29,10 @@ export interface Session {
   terminalTheme: string;
   /** Per-session font size override; 0 inherits the global setting. */
   terminalFontSize: number;
+  /** View bar: 0 follow the global setting, 1 hide, 2 show. */
+  hideViewBar: number;
+  /** Bottom status bar, same tri-state. */
+  hideStatusBar: number;
   /** Main window's tmux index — not always 0. */
   mainWindowIndex: number;
   /** Tab the session was last left on; may no longer exist. */

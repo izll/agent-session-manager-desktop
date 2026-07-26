@@ -434,12 +434,20 @@ export function SetTabNotes(arg1, arg2, arg3) {
   return window['go']['main']['App']['SetTabNotes'](arg1, arg2, arg3);
 }
 
+export function SetTabStatusBar(arg1, arg2, arg3) {
+  return window['go']['main']['App']['SetTabStatusBar'](arg1, arg2, arg3);
+}
+
 export function SetTabStatusLineVisibility(arg1, arg2, arg3) {
   return window['go']['main']['App']['SetTabStatusLineVisibility'](arg1, arg2, arg3);
 }
 
 export function SetTabTerminalTheme(arg1, arg2, arg3) {
   return window['go']['main']['App']['SetTabTerminalTheme'](arg1, arg2, arg3);
+}
+
+export function SetTabViewBar(arg1, arg2, arg3) {
+  return window['go']['main']['App']['SetTabViewBar'](arg1, arg2, arg3);
 }
 
 export function SetWindowAutoYes(arg1, arg2, arg3) {

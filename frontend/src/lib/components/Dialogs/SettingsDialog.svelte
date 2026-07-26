@@ -54,6 +54,12 @@
     saveSettings({ terminalFontSize: size });
   }
 
+  $: currentAgentFontSize = $settings.agentFontSize || DEFAULT_FONT_SIZE;
+
+  function changeAgentFontSize(size: number) {
+    saveSettings({ agentFontSize: size });
+  }
+
   function changeTheme(id: string) {
     saveSettings({ terminalTheme: id });
   }
@@ -254,7 +260,7 @@
     }
   }
 
-  function toggle(key: 'hideStatusLines' | 'showAgentIcons' | 'compactList' | 'notifyOnWaiting' | 'notifyDesktop' | 'notifyNtfy') {
+  function toggle(key: 'hideStatusLines' | 'showAgentIcons' | 'compactList' | 'hideViewBar' | 'agentHideViewBar' | 'hideStatusBar' | 'agentHideStatusBar' | 'notifyOnWaiting' | 'notifyDesktop' | 'notifyNtfy') {
     saveSettings({ [key]: !$settings[key] });
   }
 
@@ -568,6 +574,38 @@
                 <span class="font-size-value">{currentFontSize}px</span>
               </div>
             </div>
+
+            <label class="setting-item">
+              <span class="setting-info">
+                <span class="setting-label">{$t('settings.hideViewBar')}</span>
+                <span class="setting-desc">{$t('settings.hideViewBarDesc')}</span>
+              </span>
+              <button
+                class="toggle-btn"
+                class:active={$settings.hideViewBar}
+                on:click={() => toggle('hideViewBar')}
+              >
+                <span class="toggle-track">
+                  <span class="toggle-thumb"></span>
+                </span>
+              </button>
+            </label>
+
+            <label class="setting-item">
+              <span class="setting-info">
+                <span class="setting-label">{$t('settings.hideStatusBar')}</span>
+                <span class="setting-desc">{$t('settings.hideStatusBarDesc')}</span>
+              </span>
+              <button
+                class="toggle-btn"
+                class:active={$settings.hideStatusBar}
+                on:click={() => toggle('hideStatusBar')}
+              >
+                <span class="toggle-track">
+                  <span class="toggle-thumb"></span>
+                </span>
+              </button>
+            </label>
           </div>
 
           <div class="settings-section">
@@ -588,6 +626,61 @@
 
         <!-- Agents Tab -->
         {#if activeTab === 'agents'}
+          <!-- Agent tabs keep their own defaults, deliberately unaware of the
+               terminal ones — the same split the palettes use. -->
+          <div class="settings-section">
+            <h3>{$t('settings.fontSize')}</h3>
+
+            <div class="setting-item">
+              <span class="setting-info">
+                <span class="setting-label">{$t('settings.fontSize')}</span>
+                <span class="setting-desc">{$t('settings.agentFontSizeDesc')}</span>
+              </span>
+              <div class="font-size-control">
+                <input
+                  type="range"
+                  min={MIN_FONT_SIZE}
+                  max={MAX_FONT_SIZE}
+                  value={currentAgentFontSize}
+                  on:input={(e) => changeAgentFontSize(+e.currentTarget.value)}
+                />
+                <span class="font-size-value">{currentAgentFontSize}px</span>
+              </div>
+            </div>
+
+            <label class="setting-item">
+              <span class="setting-info">
+                <span class="setting-label">{$t('settings.hideViewBar')}</span>
+                <span class="setting-desc">{$t('settings.agentHideViewBarDesc')}</span>
+              </span>
+              <button
+                class="toggle-btn"
+                class:active={$settings.agentHideViewBar}
+                on:click={() => toggle('agentHideViewBar')}
+              >
+                <span class="toggle-track">
+                  <span class="toggle-thumb"></span>
+                </span>
+              </button>
+            </label>
+
+            <label class="setting-item">
+              <span class="setting-info">
+                <span class="setting-label">{$t('settings.hideStatusBar')}</span>
+                <span class="setting-desc">{$t('settings.agentHideStatusBarDesc')}</span>
+              </span>
+              <button
+                class="toggle-btn"
+                class:active={$settings.agentHideStatusBar}
+                on:click={() => toggle('agentHideStatusBar')}
+              >
+                <span class="toggle-track">
+                  <span class="toggle-thumb"></span>
+                </span>
+              </button>
+            </label>
+          </div>
+
           <div class="settings-section">
             <h3>{$t('settings.paletteAgentDefault')}</h3>
 

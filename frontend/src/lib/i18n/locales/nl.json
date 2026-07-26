@@ -739,5 +739,16 @@
   "tabBar.resetFontSize": "Tekengrootte herstellen",
   "help.actionResetFontSize": "Tekengrootte herstellen",
   "help.wheel": "scrollen",
-  "help.actionZoomTerminal": "Terminaltekst schalen"
+  "help.actionZoomTerminal": "Terminaltekst schalen",
+  "tabBar.hideViewBar": "Weergavebalk verbergen",
+  "tabBar.showViewBar": "Weergavebalk tonen",
+  "settings.hideViewBar": "Weergavebalk verbergen",
+  "settings.hideViewBarDesc": "Standaard voor alle tabbladen. Eén tabblad stel je in via de tabbalk.",
+  "settings.agentFontSizeDesc": "Standaard voor agent-tabbladen, los van de terminal. Ctrl+scrollen past één tabblad aan.",
+  "settings.agentHideViewBarDesc": "Standaard voor agent-tabbladen. Eén tabblad stel je in via de tabbalk.",
+  "tabBar.hideStatusBar": "Statusbalk verbergen",
+  "tabBar.showStatusBar": "Statusbalk tonen",
+  "settings.hideStatusBar": "Statusbalk verbergen",
+  "settings.hideStatusBarDesc": "De balk onder de terminal met pad en agent. Eén tabblad stel je apart in.",
+  "settings.agentHideStatusBarDesc": "Standaard voor agent-tabbladen, los van de terminal."
 }

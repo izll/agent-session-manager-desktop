@@ -739,5 +739,16 @@
   "tabBar.resetFontSize": "รีเซ็ตขนาดตัวอักษร",
   "help.actionResetFontSize": "รีเซ็ตขนาดตัวอักษร",
   "help.wheel": "ล้อเลื่อน",
-  "help.actionZoomTerminal": "ปรับขนาดข้อความเทอร์มินัล"
+  "help.actionZoomTerminal": "ปรับขนาดข้อความเทอร์มินัล",
+  "tabBar.hideViewBar": "ซ่อนแถบมุมมอง",
+  "tabBar.showViewBar": "แสดงแถบมุมมอง",
+  "settings.hideViewBar": "ซ่อนแถบมุมมอง",
+  "settings.hideViewBarDesc": "ค่าเริ่มต้นสำหรับทุกแท็บ ตั้งค่าเฉพาะแท็บได้จากแถบแท็บ",
+  "settings.agentFontSizeDesc": "ค่าเริ่มต้นของแท็บเอเจนต์ แยกจากเทอร์มินัล Ctrl+เลื่อนเพื่อปรับทีละแท็บ",
+  "settings.agentHideViewBarDesc": "ค่าเริ่มต้นของแท็บเอเจนต์ ตั้งค่าเฉพาะแท็บได้จากแถบแท็บ",
+  "tabBar.hideStatusBar": "ซ่อนแถบสถานะ",
+  "tabBar.showStatusBar": "แสดงแถบสถานะ",
+  "settings.hideStatusBar": "ซ่อนแถบสถานะ",
+  "settings.hideStatusBarDesc": "แถบใต้เทอร์มินัลที่แสดงพาธและเอเจนต์ ตั้งค่าเฉพาะแท็บได้",
+  "settings.agentHideStatusBarDesc": "ค่าเริ่มต้นของแท็บเอเจนต์ แยกจากเทอร์มินัล"
 }

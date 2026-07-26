@@ -739,5 +739,16 @@
   "tabBar.resetFontSize": "重置字体大小",
   "help.actionResetFontSize": "重置字体大小",
   "help.wheel": "滚轮",
-  "help.actionZoomTerminal": "调整终端文字大小"
+  "help.actionZoomTerminal": "调整终端文字大小",
+  "tabBar.hideViewBar": "隐藏视图栏",
+  "tabBar.showViewBar": "显示视图栏",
+  "settings.hideViewBar": "隐藏视图栏",
+  "settings.hideViewBarDesc": "所有标签页的默认值。单个标签页可在标签栏中单独设置。",
+  "settings.agentFontSizeDesc": "代理标签页的默认值，与终端分开。Ctrl+滚轮可调整单个标签页。",
+  "settings.agentHideViewBarDesc": "代理标签页的默认值。单个标签页可在标签栏中单独设置。",
+  "tabBar.hideStatusBar": "隐藏状态栏",
+  "tabBar.showStatusBar": "显示状态栏",
+  "settings.hideStatusBar": "隐藏状态栏",
+  "settings.hideStatusBarDesc": "终端下方显示路径与代理的栏。单个标签页也可单独设置。",
+  "settings.agentHideStatusBarDesc": "代理标签页的默认值，与终端分开。"
 }

@@ -739,5 +739,16 @@
   "tabBar.resetFontSize": "Betűméret visszaállítása",
   "help.actionResetFontSize": "Betűméret visszaállítása",
   "help.wheel": "görgő",
-  "help.actionZoomTerminal": "Terminál betűméret állítása"
+  "help.actionZoomTerminal": "Terminál betűméret állítása",
+  "tabBar.hideViewBar": "Nézetsáv elrejtése",
+  "tabBar.showViewBar": "Nézetsáv megjelenítése",
+  "settings.hideViewBar": "Nézetsáv elrejtése",
+  "settings.hideViewBarDesc": "Minden fül alapértelmezése. Egy fül külön is állítható a fülsávból.",
+  "settings.agentFontSizeDesc": "Agent-fülek alapértelmezése, a terminálétól függetlenül. Ctrl+görgő egy fület állít.",
+  "settings.agentHideViewBarDesc": "Agent-fülek alapértelmezése. Egy fül külön is állítható a fülsávból.",
+  "tabBar.hideStatusBar": "Állapotsáv elrejtése",
+  "tabBar.showStatusBar": "Állapotsáv megjelenítése",
+  "settings.hideStatusBar": "Állapotsáv elrejtése",
+  "settings.hideStatusBarDesc": "A terminál alatti sáv az útvonallal és az agenttel. Egy fül külön is állítható.",
+  "settings.agentHideStatusBarDesc": "Agent-fülek alapértelmezése, a terminálétól függetlenül."
 }

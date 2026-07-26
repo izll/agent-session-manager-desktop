@@ -739,5 +739,16 @@
   "tabBar.resetFontSize": "Đặt lại cỡ chữ",
   "help.actionResetFontSize": "Đặt lại cỡ chữ",
   "help.wheel": "cuộn",
-  "help.actionZoomTerminal": "Đổi cỡ chữ terminal"
+  "help.actionZoomTerminal": "Đổi cỡ chữ terminal",
+  "tabBar.hideViewBar": "Ẩn thanh chế độ xem",
+  "tabBar.showViewBar": "Hiện thanh chế độ xem",
+  "settings.hideViewBar": "Ẩn thanh chế độ xem",
+  "settings.hideViewBarDesc": "Mặc định cho mọi tab. Có thể chỉnh riêng một tab từ thanh tab.",
+  "settings.agentFontSizeDesc": "Mặc định cho tab agent, tách khỏi terminal. Ctrl+cuộn chỉnh một tab.",
+  "settings.agentHideViewBarDesc": "Mặc định cho tab agent. Có thể chỉnh riêng một tab từ thanh tab.",
+  "tabBar.hideStatusBar": "Ẩn thanh trạng thái",
+  "tabBar.showStatusBar": "Hiện thanh trạng thái",
+  "settings.hideStatusBar": "Ẩn thanh trạng thái",
+  "settings.hideStatusBarDesc": "Thanh dưới terminal hiển thị đường dẫn và agent. Có thể chỉnh riêng từng tab.",
+  "settings.agentHideStatusBarDesc": "Mặc định cho tab agent, tách khỏi terminal."
 }

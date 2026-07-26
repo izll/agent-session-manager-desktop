@@ -122,6 +122,7 @@ export function setTerminalThemeContext(ctx: {
   agentThemes?: Record<string, string> | null;
   customThemes?: any[] | null;
   fontSize?: number;
+  agentFontSize?: number;
 }): void {
   __themeCtx = {
     terminalDefault: ctx.terminalDefault || DEFAULT_TERMINAL_THEME,
@@ -129,15 +130,17 @@ export function setTerminalThemeContext(ctx: {
     agentThemes: ctx.agentThemes || {},
     customThemes: ctx.customThemes || [],
   };
-  __globalFontSize = ctx.fontSize || 0;
+  __terminalFontSize = ctx.fontSize || 0;
+  __agentFontSize = ctx.agentFontSize || 0;
 }
 
-/** Global default size; 0 means the built-in default. */
-let __globalFontSize = 0;
+/** Separate defaults for terminal and agent tabs; 0 means the built-in one. */
+let __terminalFontSize = 0;
+let __agentFontSize = 0;
 
 /** The size a tab should render at, given its own override (0 = inherit). */
-export function fontSizeFor(tabSize?: number): number {
-  return resolveFontSize(tabSize, __globalFontSize);
+export function fontSizeFor(tabSize?: number, agent?: string): number {
+  return resolveFontSize(tabSize, __terminalFontSize, __agentFontSize, agent);
 }
 
 /** Palette for one terminal, given its tab override and agent type. */
@@ -198,7 +201,7 @@ export function createTerminal(
     // ~500ms even when the terminal is idle — disabled to keep the WebKit
     // renderer quiet when nothing is happening.
     cursorBlink: false,
-    fontSize: fontSizeFor(themeCtx.fontSize),
+    fontSize: fontSizeFor(themeCtx.fontSize, themeCtx.agent),
     scrollback: 1000,
     // Low-risk render-cost trims for the DOM renderer on WebKitGTK (no renderer
     // change). Each one removes work from the per-update style/layout/paint

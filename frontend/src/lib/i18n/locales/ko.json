@@ -739,5 +739,16 @@
   "tabBar.resetFontSize": "글꼴 크기 초기화",
   "help.actionResetFontSize": "글꼴 크기 초기화",
   "help.wheel": "휠",
-  "help.actionZoomTerminal": "터미널 글꼴 크기 조절"
+  "help.actionZoomTerminal": "터미널 글꼴 크기 조절",
+  "tabBar.hideViewBar": "보기 막대 숨기기",
+  "tabBar.showViewBar": "보기 막대 표시",
+  "settings.hideViewBar": "보기 막대 숨기기",
+  "settings.hideViewBarDesc": "모든 탭의 기본값입니다. 탭 하나는 탭 막대에서 따로 설정할 수 있습니다.",
+  "settings.agentFontSizeDesc": "에이전트 탭의 기본값이며 터미널과 별개입니다. Ctrl+휠로 탭 하나를 조절합니다.",
+  "settings.agentHideViewBarDesc": "에이전트 탭의 기본값입니다. 탭 하나는 탭 막대에서 따로 설정할 수 있습니다.",
+  "tabBar.hideStatusBar": "상태 표시줄 숨기기",
+  "tabBar.showStatusBar": "상태 표시줄 표시",
+  "settings.hideStatusBar": "상태 표시줄 숨기기",
+  "settings.hideStatusBarDesc": "경로와 에이전트를 보여주는 터미널 아래 막대입니다. 탭별로도 설정할 수 있습니다.",
+  "settings.agentHideStatusBarDesc": "에이전트 탭의 기본값이며 터미널과 별개입니다."
 }

@@ -148,6 +148,10 @@ type Instance struct {
 	TabOrder          []int            `json:"tab_order,omitempty"`           // Custom tab display order (tmux window indices); if empty, default order is used
 	TerminalTheme     string           `json:"terminal_theme,omitempty"`      // Main window colour palette (empty inherits agent/global)
 	TerminalFontSize  int              `json:"terminal_font_size,omitempty"`  // Main window font size in px (0 inherits the global setting)
+	// HideViewBar is tri-state: 0 follows the global setting, 1 hides, 2 shows.
+	// A plain bool could not express "explicitly shown" against a global hide.
+	HideViewBar   int `json:"hide_view_bar,omitempty"`
+	HideStatusBar int `json:"hide_status_bar,omitempty"`
 	// LastWindowIndex is the tab that was open when the session was last
 	// left, so reopening it lands where the user was. Advisory only: the
 	// window may be gone by then, so callers must validate it.
@@ -182,6 +186,8 @@ type FollowedWindow struct {
 	Stopped          bool      `json:"stopped,omitempty"`            // Tab is stopped (window killed but can resume)
 	TerminalTheme    string    `json:"terminal_theme,omitempty"`     // Tab colour palette (empty inherits agent/global)
 	TerminalFontSize int       `json:"terminal_font_size,omitempty"` // Tab font size in px (0 inherits the global setting)
+	HideViewBar      int       `json:"hide_view_bar,omitempty"`      // 0 inherit, 1 hide, 2 show
+	HideStatusBar    int       `json:"hide_status_bar,omitempty"`    // 0 inherit, 1 hide, 2 show
 	TextColor        string    `json:"text_color,omitempty"`         // Tab text color (empty uses the theme default)
 	BackgroundColor  string    `json:"background_color,omitempty"`   // Tab background color (empty uses the theme default)
 	WorkDir          string    `json:"work_dir,omitempty"`           // Tab working directory (empty = session path)

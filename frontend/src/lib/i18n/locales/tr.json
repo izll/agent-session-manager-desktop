@@ -739,5 +739,16 @@
   "tabBar.resetFontSize": "Yazı tipi boyutunu sıfırla",
   "help.actionResetFontSize": "Yazı tipi boyutunu sıfırla",
   "help.wheel": "tekerlek",
-  "help.actionZoomTerminal": "Terminal metnini yeniden boyutlandır"
+  "help.actionZoomTerminal": "Terminal metnini yeniden boyutlandır",
+  "tabBar.hideViewBar": "Görünüm çubuğunu gizle",
+  "tabBar.showViewBar": "Görünüm çubuğunu göster",
+  "settings.hideViewBar": "Görünüm çubuğunu gizle",
+  "settings.hideViewBarDesc": "Tüm sekmeler için varsayılan. Tek bir sekme, sekme çubuğundan ayarlanabilir.",
+  "settings.agentFontSizeDesc": "Agent sekmeleri için varsayılan, terminalden ayrı. Ctrl+tekerlek bir sekmeyi ayarlar.",
+  "settings.agentHideViewBarDesc": "Agent sekmeleri için varsayılan. Tek bir sekme, sekme çubuğundan ayarlanabilir.",
+  "tabBar.hideStatusBar": "Durum çubuğunu gizle",
+  "tabBar.showStatusBar": "Durum çubuğunu göster",
+  "settings.hideStatusBar": "Durum çubuğunu gizle",
+  "settings.hideStatusBarDesc": "Terminalin altındaki yol ve agent çubuğu. Tek bir sekme ayrıca ayarlanabilir.",
+  "settings.agentHideStatusBarDesc": "Agent sekmeleri için varsayılan, terminalden ayrı."
 }

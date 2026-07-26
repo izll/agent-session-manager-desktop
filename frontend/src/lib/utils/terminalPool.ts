@@ -342,7 +342,7 @@ export class TerminalPool {
   applyFontSize(): void {
     for (const entry of this.entries.values()) {
       try {
-        const size = fontSizeFor(entry.themeCtx?.fontSize);
+        const size = fontSizeFor(entry.themeCtx?.fontSize, entry.themeCtx?.agent);
         if (entry.terminalInstance.terminal.options.fontSize === size) continue;
         entry.terminalInstance.terminal.options.fontSize = size;
         entry.terminalInstance.fitAddon?.fit();

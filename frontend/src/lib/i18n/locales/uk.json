@@ -739,5 +739,16 @@
   "tabBar.resetFontSize": "Скинути розмір шрифту",
   "help.actionResetFontSize": "Скинути розмір шрифту",
   "help.wheel": "колесо",
-  "help.actionZoomTerminal": "Змінити розмір тексту термінала"
+  "help.actionZoomTerminal": "Змінити розмір тексту термінала",
+  "tabBar.hideViewBar": "Сховати панель виглядів",
+  "tabBar.showViewBar": "Показати панель виглядів",
+  "settings.hideViewBar": "Сховати панель виглядів",
+  "settings.hideViewBarDesc": "Типово для всіх вкладок. Окрему можна налаштувати на панелі вкладок.",
+  "settings.agentFontSizeDesc": "Типово для вкладок агента, окремо від термінала. Ctrl+колесо змінює одну.",
+  "settings.agentHideViewBarDesc": "Типово для вкладок агента. Окрему можна налаштувати на панелі вкладок.",
+  "tabBar.hideStatusBar": "Сховати рядок стану",
+  "tabBar.showStatusBar": "Показати рядок стану",
+  "settings.hideStatusBar": "Сховати рядок стану",
+  "settings.hideStatusBarDesc": "Смуга під терміналом зі шляхом і агентом. Окрему вкладку можна налаштувати.",
+  "settings.agentHideStatusBarDesc": "Типово для вкладок агента, окремо від термінала."
 }

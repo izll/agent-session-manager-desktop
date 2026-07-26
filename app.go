@@ -608,6 +608,8 @@ type SessionInfo struct {
 	TabBackgroundColor string                   `json:"tabBackgroundColor"`
 	TerminalTheme      string                   `json:"terminalTheme"`
 	TerminalFontSize   int                      `json:"terminalFontSize"`
+	HideViewBar        int                      `json:"hideViewBar"`
+	HideStatusBar      int                      `json:"hideStatusBar"`
 	// The main window isn't always index 0, so the frontend needs it to map a
 	// tab back to the session-level palette.
 	MainWindowIndex int `json:"mainWindowIndex"`
@@ -676,6 +678,8 @@ func (a *App) instanceToSessionInfo(inst *session.Instance) SessionInfo {
 		TabBackgroundColor: inst.TabBackgroundColor,
 		TerminalTheme:      inst.TerminalTheme,
 		TerminalFontSize:   inst.TerminalFontSize,
+		HideViewBar:        inst.HideViewBar,
+		HideStatusBar:      inst.HideStatusBar,
 		MainWindowIndex:    inst.GetMainWindowIndex(),
 		LastWindowIndex:    inst.LastWindowIndex,
 		IsGitRepo:          inst.IsGitRepo(),
@@ -2384,23 +2388,28 @@ func (a *App) GetResumeSessions(agent string, path string) ([]AgentSessionInfo, 
 
 // SettingsInfo represents settings for frontend
 type SettingsInfo struct {
-	CompactList       bool   `json:"compactList"`
-	HideStatusLines   bool   `json:"hideStatusLines"`
-	ShowAgentIcons    bool   `json:"showAgentIcons"`
-	HideYoloBadge     bool   `json:"hideYoloBadge"`
-	ShowResumeBadge   bool   `json:"showResumeBadge"`
-	SplitView         bool   `json:"splitView"`
-	MarkedSessionID   string `json:"markedSessionId"`
-	MarkedWindowIdx   int    `json:"markedWindowIdx"`
-	Language          string `json:"language"`
-	TerminalRenderer  string `json:"terminalRenderer"`
-	TerminalFontSize  int    `json:"terminalFontSize"`
-	NotifyOnWaiting   bool   `json:"notifyOnWaiting"`
-	NotifyDesktop     bool   `json:"notifyDesktop"`
-	NotifyNtfy        bool   `json:"notifyNtfy"`
-	NtfyURL           string `json:"ntfyUrl"`
-	TerminalTheme     string `json:"terminalTheme"`
-	AgentDefaultTheme string `json:"agentDefaultTheme"`
+	CompactList        bool   `json:"compactList"`
+	HideStatusLines    bool   `json:"hideStatusLines"`
+	ShowAgentIcons     bool   `json:"showAgentIcons"`
+	HideYoloBadge      bool   `json:"hideYoloBadge"`
+	ShowResumeBadge    bool   `json:"showResumeBadge"`
+	SplitView          bool   `json:"splitView"`
+	MarkedSessionID    string `json:"markedSessionId"`
+	MarkedWindowIdx    int    `json:"markedWindowIdx"`
+	Language           string `json:"language"`
+	TerminalRenderer   string `json:"terminalRenderer"`
+	TerminalFontSize   int    `json:"terminalFontSize"`
+	AgentFontSize      int    `json:"agentFontSize"`
+	HideViewBar        bool   `json:"hideViewBar"`
+	AgentHideViewBar   bool   `json:"agentHideViewBar"`
+	HideStatusBar      bool   `json:"hideStatusBar"`
+	AgentHideStatusBar bool   `json:"agentHideStatusBar"`
+	NotifyOnWaiting    bool   `json:"notifyOnWaiting"`
+	NotifyDesktop      bool   `json:"notifyDesktop"`
+	NotifyNtfy         bool   `json:"notifyNtfy"`
+	NtfyURL            string `json:"ntfyUrl"`
+	TerminalTheme      string `json:"terminalTheme"`
+	AgentDefaultTheme  string `json:"agentDefaultTheme"`
 	// Per-agent-type palette overrides ("claude" → "dracula", …) and the
 	// user-defined palette used when a theme id is "custom".
 	AgentTerminalThemes  map[string]string             `json:"agentTerminalThemes"`
@@ -2464,6 +2473,11 @@ func (a *App) GetSettings() (*SettingsInfo, error) {
 		Language:             lang,
 		TerminalRenderer:     renderer,
 		TerminalFontSize:     settings.TerminalFontSize,
+		AgentFontSize:        settings.AgentFontSize,
+		HideViewBar:          settings.HideViewBar,
+		AgentHideViewBar:     settings.AgentHideViewBar,
+		HideStatusBar:        settings.HideStatusBar,
+		AgentHideStatusBar:   settings.AgentHideStatusBar,
 		NotifyOnWaiting:      settings.NotifyOnWaiting,
 		NotifyDesktop:        settings.NotifyDesktop,
 		NotifyNtfy:           settings.NotifyNtfy,
@@ -2496,6 +2510,11 @@ func (a *App) SaveSettings(settings SettingsInfo) error {
 		current.Language = settings.Language
 		current.TerminalRenderer = settings.TerminalRenderer
 		current.TerminalFontSize = settings.TerminalFontSize
+		current.AgentFontSize = settings.AgentFontSize
+		current.HideViewBar = settings.HideViewBar
+		current.AgentHideViewBar = settings.AgentHideViewBar
+		current.HideStatusBar = settings.HideStatusBar
+		current.AgentHideStatusBar = settings.AgentHideStatusBar
 		current.TerminalTheme = settings.TerminalTheme
 		current.AgentDefaultTheme = settings.AgentDefaultTheme
 		current.AgentTerminalThemes = settings.AgentTerminalThemes
@@ -2557,6 +2576,69 @@ const (
 	MinTerminalFontSize = 8
 	MaxTerminalFontSize = 32
 )
+
+// View-bar visibility per tab. Tri-state because "follow the global setting"
+// and "explicitly show" are different answers when the global is "hide".
+const (
+	ViewBarInherit = 0
+	ViewBarHidden  = 1
+	ViewBarShown   = 2
+)
+
+// SetTabStatusBar overrides whether the bottom status bar shows for one tab.
+// ViewBarInherit clears the override so the tab follows the global setting.
+func (a *App) SetTabStatusBar(sessionID string, windowIdx int, state int) error {
+	return a.setTabBarState(sessionID, windowIdx, state, false)
+}
+
+// SetTabViewBar overrides whether the view bar shows for one tab.
+// ViewBarInherit clears the override so the tab follows the global setting.
+func (a *App) SetTabViewBar(sessionID string, windowIdx int, state int) error {
+	return a.setTabBarState(sessionID, windowIdx, state, true)
+}
+
+// setTabBarState stores a tri-state override for one of the two bars. They
+// differ only in which field they write, so the validation and the
+// main-window lookup are shared.
+func (a *App) setTabBarState(sessionID string, windowIdx, state int, viewBar bool) error {
+	a.projectMu.RLock()
+	defer a.projectMu.RUnlock()
+	if !a.projectLocked {
+		return fmt.Errorf("project is read-only in this application instance")
+	}
+	if state < ViewBarInherit || state > ViewBarShown {
+		return fmt.Errorf("invalid bar state %d", state)
+	}
+	inst, err := a.storage.GetInstance(sessionID)
+	if err != nil {
+		return err
+	}
+	if windowIdx == inst.GetMainWindowIndex() {
+		if viewBar {
+			inst.HideViewBar = state
+		} else {
+			inst.HideStatusBar = state
+		}
+	} else {
+		found := false
+		for i := range inst.FollowedWindows {
+			if inst.FollowedWindows[i].Index != windowIdx {
+				continue
+			}
+			if viewBar {
+				inst.FollowedWindows[i].HideViewBar = state
+			} else {
+				inst.FollowedWindows[i].HideStatusBar = state
+			}
+			found = true
+			break
+		}
+		if !found {
+			return fmt.Errorf("window %d not found", windowIdx)
+		}
+	}
+	return a.storage.UpdateInstance(inst)
+}
 
 // SetTabFontSize overrides the terminal font size for one tab. A size of 0
 // clears the override so the tab follows the global setting again.

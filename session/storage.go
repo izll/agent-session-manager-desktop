@@ -78,7 +78,14 @@ type Settings struct {
 	// palette still wins over either default.
 	// TerminalFontSize is the default size in px; 0 means the built-in
 	// default, so existing settings keep the size they had.
+	// Two independent defaults, like the palettes: terminal tabs and agent
+	// tabs each have their own, and neither falls back to the other.
 	TerminalFontSize    int               `json:"terminal_font_size,omitempty"`
+	AgentFontSize       int               `json:"agent_font_size,omitempty"`
+	HideViewBar         bool              `json:"hide_view_bar,omitempty"`
+	AgentHideViewBar    bool              `json:"agent_hide_view_bar,omitempty"`
+	HideStatusBar       bool              `json:"hide_status_bar,omitempty"`
+	AgentHideStatusBar  bool              `json:"agent_hide_status_bar,omitempty"`
 	TerminalTheme       string            `json:"terminal_theme,omitempty"`
 	AgentDefaultTheme   string            `json:"agent_default_theme,omitempty"`
 	AgentTerminalThemes map[string]string `json:"agent_terminal_themes,omitempty"`

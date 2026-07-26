@@ -739,5 +739,16 @@
   "tabBar.resetFontSize": "Reimposta dimensione carattere",
   "help.actionResetFontSize": "Reimposta dimensione carattere",
   "help.wheel": "rotellina",
-  "help.actionZoomTerminal": "Ridimensiona il testo del terminale"
+  "help.actionZoomTerminal": "Ridimensiona il testo del terminale",
+  "tabBar.hideViewBar": "Nascondi la barra delle viste",
+  "tabBar.showViewBar": "Mostra la barra delle viste",
+  "settings.hideViewBar": "Nascondi la barra delle viste",
+  "settings.hideViewBarDesc": "Predefinito per tutte le schede. Una scheda si regola dalla barra delle schede.",
+  "settings.agentFontSizeDesc": "Predefinito per le schede agente, separato dal terminale. Ctrl+rotellina regola una scheda.",
+  "settings.agentHideViewBarDesc": "Predefinito per le schede agente. Una scheda si regola dalla barra delle schede.",
+  "tabBar.hideStatusBar": "Nascondi la barra di stato",
+  "tabBar.showStatusBar": "Mostra la barra di stato",
+  "settings.hideStatusBar": "Nascondi la barra di stato",
+  "settings.hideStatusBarDesc": "La barra sotto il terminale con percorso e agente. Una scheda si regola a parte.",
+  "settings.agentHideStatusBarDesc": "Predefinito per le schede agente, separato dal terminale."
 }

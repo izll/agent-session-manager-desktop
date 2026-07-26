@@ -739,5 +739,16 @@
   "tabBar.resetFontSize": "Återställ teckenstorlek",
   "help.actionResetFontSize": "Återställ teckenstorlek",
   "help.wheel": "rulla",
-  "help.actionZoomTerminal": "Ändra terminalens textstorlek"
+  "help.actionZoomTerminal": "Ändra terminalens textstorlek",
+  "tabBar.hideViewBar": "Dölj vyfältet",
+  "tabBar.showViewBar": "Visa vyfältet",
+  "settings.hideViewBar": "Dölj vyfältet",
+  "settings.hideViewBarDesc": "Standard för alla flikar. En enskild flik ställs in från flikfältet.",
+  "settings.agentFontSizeDesc": "Standard för agentflikar, skilt från terminalen. Ctrl+rulla ändrar en flik.",
+  "settings.agentHideViewBarDesc": "Standard för agentflikar. En enskild flik ställs in från flikfältet.",
+  "tabBar.hideStatusBar": "Dölj statusfältet",
+  "tabBar.showStatusBar": "Visa statusfältet",
+  "settings.hideStatusBar": "Dölj statusfältet",
+  "settings.hideStatusBarDesc": "Fältet under terminalen med sökväg och agent. En flik ställs in separat.",
+  "settings.agentHideStatusBarDesc": "Standard för agentflikar, skilt från terminalen."
 }

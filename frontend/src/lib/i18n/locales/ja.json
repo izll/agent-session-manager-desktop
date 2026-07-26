@@ -739,5 +739,16 @@
   "tabBar.resetFontSize": "文字サイズをリセット",
   "help.actionResetFontSize": "文字サイズをリセット",
   "help.wheel": "ホイール",
-  "help.actionZoomTerminal": "ターミナルの文字サイズを変更"
+  "help.actionZoomTerminal": "ターミナルの文字サイズを変更",
+  "tabBar.hideViewBar": "ビューバーを隠す",
+  "tabBar.showViewBar": "ビューバーを表示",
+  "settings.hideViewBar": "ビューバーを隠す",
+  "settings.hideViewBarDesc": "すべてのタブの既定値。個別のタブはタブバーから設定できます。",
+  "settings.agentFontSizeDesc": "エージェントタブの既定値（ターミナルとは別）。Ctrl+ホイールで個別に調整。",
+  "settings.agentHideViewBarDesc": "エージェントタブの既定値。個別のタブはタブバーから設定できます。",
+  "tabBar.hideStatusBar": "ステータスバーを隠す",
+  "tabBar.showStatusBar": "ステータスバーを表示",
+  "settings.hideStatusBar": "ステータスバーを隠す",
+  "settings.hideStatusBarDesc": "ターミナル下のパスとエージェントを示すバー。個別のタブも設定できます。",
+  "settings.agentHideStatusBarDesc": "エージェントタブの既定値（ターミナルとは別）。"
 }

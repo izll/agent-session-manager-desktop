@@ -13,9 +13,9 @@
   import { tabStatuses } from '../../stores/statusLines';
   import StatusIndicator from '../common/StatusIndicator.svelte';
   import * as App from '../../../../wailsjs/go/main/App';
-  import { allPalettes } from '../../utils/terminalThemes';
+  import { allPalettes, resolveViewBarHidden } from '../../utils/terminalThemes';
   import PalettePicker from '../common/PalettePicker.svelte';
-  import { settings } from '../../stores/settings';
+  import { settings, saveSettings } from '../../stores/settings';
   import * as DictationService from '../../../../wailsjs/go/main/DictationService';
   import { EventsOn, EventsOff } from '../../../../wailsjs/runtime/runtime';
   import type { session } from '../../../../wailsjs/go/models';
@@ -827,6 +827,62 @@
     return !!(fw as any)?.terminal_font_size;
   })();
 
+  // Whether the bar is hidden for the tab being shown, resolving tab → global
+  // exactly as MainPanel does when it decides to render the bar.
+  // Both bars resolve the same way; only the fields differ.
+  function barHiddenHere(
+    tabField: 'hideViewBar' | 'hideStatusBar',
+    fwField: 'hide_view_bar' | 'hide_status_bar',
+    termDefault: boolean,
+    agentDefault: boolean,
+    forIndex?: number | null,
+  ): boolean {
+    const sess = $selectedSession;
+    if (!sess) return termDefault;
+    const idx = forIndex ?? $selectedWindowIdx ?? 0;
+    const main = sess.mainWindowIndex ?? 0;
+    const fw = (sess.followedWindows || []).find((f: any) => f.index === idx);
+    const tabState = idx === main ? (sess[tabField] || 0) : (fw?.[fwField] || 0);
+    const agent = idx === main ? sess.agent : (fw?.agent || sess.agent);
+    return resolveViewBarHidden(tabState, termDefault, agentDefault, agent);
+  }
+
+  // The menu acts on the tab that was right-clicked, which is not always the
+  // selected one, so its labels have to read that tab's state.
+  $: viewBarHiddenForMenu = barHiddenHere(
+    'hideViewBar', 'hide_view_bar',
+    $settings.hideViewBar, $settings.agentHideViewBar, tabContextMenuIndex);
+  $: statusBarHiddenForMenu = barHiddenHere(
+    'hideStatusBar', 'hide_status_bar',
+    $settings.hideStatusBar, $settings.agentHideStatusBar, tabContextMenuIndex);
+
+  async function toggleBarFromMenu(viewBar: boolean) {
+    const idx = tabContextMenuIndex;
+    const hidden = viewBar ? viewBarHiddenForMenu : statusBarHiddenForMenu;
+    closeTabContextMenu();
+    if (idx === null) return;
+    await toggleBar(viewBar, hidden, idx);
+  }
+
+  // The buttons always set an explicit per-tab state rather than clearing it,
+  // so one click does what it says even when the global setting disagrees.
+  async function toggleBar(viewBar: boolean, currentlyHidden: boolean, forIndex?: number) {
+    const sess = $selectedSession;
+    if (!sess) return;
+    const idx = forIndex ?? $selectedWindowIdx ?? 0;
+    const next = currentlyHidden ? 2 : 1; // 2 = show, 1 = hide
+    try {
+      if (viewBar) {
+        await App.SetTabViewBar(sess.id, idx, next);
+      } else {
+        await App.SetTabStatusBar(sess.id, idx, next);
+      }
+      await loadSessions();
+    } catch (e) {
+      console.error('Toggle bar failed:', e);
+    }
+  }
+
   // Zero clears the override, so the tab follows the global setting again.
   function resetTabFontSize() {
     const idx = tabContextMenuIndex;
@@ -1334,6 +1390,24 @@
             {$t('tabBar.editExtraArgs')}
           </button>
         {/if}
+        <!-- Chrome toggles, kept together at the end: they change what the
+             window looks like rather than what the tab does. -->
+        <button class="tab-context-menu-item" on:click={() => toggleBarFromMenu(true)}>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="4" width="18" height="4" rx="1"/>
+            <line x1="3" y1="12" x2="21" y2="12"/>
+            <line x1="3" y1="17" x2="21" y2="17"/>
+          </svg>
+          {viewBarHiddenForMenu ? $t('tabBar.showViewBar') : $t('tabBar.hideViewBar')}
+        </button>
+        <button class="tab-context-menu-item" on:click={() => toggleBarFromMenu(false)}>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="3" y1="7" x2="21" y2="7"/>
+            <line x1="3" y1="12" x2="21" y2="12"/>
+            <rect x="3" y="16" width="18" height="4" rx="1"/>
+          </svg>
+          {statusBarHiddenForMenu ? $t('tabBar.showStatusBar') : $t('tabBar.hideStatusBar')}
+        </button>
         {#if currentSessionStatus === 'running' && tabContextMenuIndex !== null && !windows.find(w => w.Index === tabContextMenuIndex)?.Dead}
           <button class="tab-context-menu-item" on:click={tabContextStop}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">

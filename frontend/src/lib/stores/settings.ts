@@ -17,6 +17,14 @@ export interface Settings {
   terminalRenderer: TerminalRenderer;
   /** Default terminal font size in px; 0 means the built-in default. */
   terminalFontSize: number;
+  /** Same again for agent tabs; the two never fall back to each other. */
+  agentFontSize: number;
+  /** Hide the Terminal/Notes/Tasks bar under the tabs. */
+  hideViewBar: boolean;
+  agentHideViewBar: boolean;
+  /** Same again for the bottom bar (path + agent badge). */
+  hideStatusBar: boolean;
+  agentHideStatusBar: boolean;
   notifyOnWaiting: boolean;
   notifyDesktop: boolean;
   notifyNtfy: boolean;
@@ -38,6 +46,11 @@ export const settings = writable<Settings>({
   language: 'en',
   terminalRenderer: 'canvas',
   terminalFontSize: 0,
+  agentFontSize: 0,
+  hideViewBar: false,
+  agentHideViewBar: false,
+  hideStatusBar: false,
+  agentHideStatusBar: false,
   notifyOnWaiting: false,
   notifyDesktop: true,
   notifyNtfy: false,

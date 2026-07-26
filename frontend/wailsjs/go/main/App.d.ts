@@ -219,9 +219,13 @@ export function SetTabFontSize(arg1:string,arg2:number,arg3:number):Promise<void
 
 export function SetTabNotes(arg1:string,arg2:number,arg3:string):Promise<void>;
 
+export function SetTabStatusBar(arg1:string,arg2:number,arg3:number):Promise<void>;
+
 export function SetTabStatusLineVisibility(arg1:string,arg2:number,arg3:boolean):Promise<void>;
 
 export function SetTabTerminalTheme(arg1:string,arg2:number,arg3:string):Promise<void>;
+
+export function SetTabViewBar(arg1:string,arg2:number,arg3:number):Promise<void>;
 
 export function SetWindowAutoYes(arg1:string,arg2:number,arg3:boolean):Promise<void>;
 

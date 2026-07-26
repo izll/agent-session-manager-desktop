@@ -739,5 +739,16 @@
   "tabBar.resetFontSize": "Redefinir tamanho da fonte",
   "help.actionResetFontSize": "Redefinir tamanho da fonte",
   "help.wheel": "rolagem",
-  "help.actionZoomTerminal": "Ajustar o texto do terminal"
+  "help.actionZoomTerminal": "Ajustar o texto do terminal",
+  "tabBar.hideViewBar": "Ocultar a barra de exibição",
+  "tabBar.showViewBar": "Mostrar a barra de exibição",
+  "settings.hideViewBar": "Ocultar a barra de exibição",
+  "settings.hideViewBarDesc": "Padrão para todas as abas. Uma aba pode ser ajustada na barra de abas.",
+  "settings.agentFontSizeDesc": "Padrão das abas de agente, separado do terminal. Ctrl+rolagem ajusta uma aba.",
+  "settings.agentHideViewBarDesc": "Padrão das abas de agente. Uma aba pode ser ajustada na barra de abas.",
+  "tabBar.hideStatusBar": "Ocultar a barra de status",
+  "tabBar.showStatusBar": "Mostrar a barra de status",
+  "settings.hideStatusBar": "Ocultar a barra de status",
+  "settings.hideStatusBarDesc": "A barra abaixo do terminal com o caminho e o agente. Uma aba pode ser ajustada à parte.",
+  "settings.agentHideStatusBarDesc": "Padrão das abas de agente, separado do terminal."
 }

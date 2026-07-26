@@ -739,5 +739,16 @@
   "tabBar.resetFontSize": "Réinitialiser la taille du texte",
   "help.actionResetFontSize": "Réinitialiser la taille du texte",
   "help.wheel": "molette",
-  "help.actionZoomTerminal": "Redimensionner le texte du terminal"
+  "help.actionZoomTerminal": "Redimensionner le texte du terminal",
+  "tabBar.hideViewBar": "Masquer la barre de vues",
+  "tabBar.showViewBar": "Afficher la barre de vues",
+  "settings.hideViewBar": "Masquer la barre de vues",
+  "settings.hideViewBarDesc": "Valeur par défaut pour tous les onglets. Un onglet se règle depuis la barre d’onglets.",
+  "settings.agentFontSizeDesc": "Défaut des onglets agent, distinct du terminal. Ctrl+molette ajuste un onglet.",
+  "settings.agentHideViewBarDesc": "Défaut des onglets agent. Un onglet se règle depuis la barre d’onglets.",
+  "tabBar.hideStatusBar": "Masquer la barre d’état",
+  "tabBar.showStatusBar": "Afficher la barre d’état",
+  "settings.hideStatusBar": "Masquer la barre d’état",
+  "settings.hideStatusBarDesc": "La barre sous le terminal avec le chemin et l’agent. Un onglet se règle à part.",
+  "settings.agentHideStatusBarDesc": "Défaut des onglets agent, distinct du terminal."
 }

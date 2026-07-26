@@ -739,5 +739,16 @@
   "tabBar.resetFontSize": "Restablecer tamaño de fuente",
   "help.actionResetFontSize": "Restablecer tamaño de fuente",
   "help.wheel": "rueda",
-  "help.actionZoomTerminal": "Ajustar el texto del terminal"
+  "help.actionZoomTerminal": "Ajustar el texto del terminal",
+  "tabBar.hideViewBar": "Ocultar la barra de vistas",
+  "tabBar.showViewBar": "Mostrar la barra de vistas",
+  "settings.hideViewBar": "Ocultar la barra de vistas",
+  "settings.hideViewBarDesc": "Predeterminado para todas las pestañas. Cada pestaña puede ajustarse desde su barra.",
+  "settings.agentFontSizeDesc": "Predeterminado de las pestañas de agente, aparte del terminal. Ctrl+rueda ajusta una.",
+  "settings.agentHideViewBarDesc": "Predeterminado de las pestañas de agente. Cada pestaña se ajusta desde su barra.",
+  "tabBar.hideStatusBar": "Ocultar la barra de estado",
+  "tabBar.showStatusBar": "Mostrar la barra de estado",
+  "settings.hideStatusBar": "Ocultar la barra de estado",
+  "settings.hideStatusBarDesc": "La barra bajo el terminal con la ruta y el agente. Cada pestaña se ajusta aparte.",
+  "settings.agentHideStatusBarDesc": "Predeterminado de las pestañas de agente, aparte del terminal."
 }

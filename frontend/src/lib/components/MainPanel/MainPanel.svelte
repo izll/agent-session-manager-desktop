@@ -11,6 +11,7 @@
   import { tabStatuses } from '../../stores/statusLines';
   import { settings, saveSettings } from '../../stores/settings';
   import { get } from 'svelte/store';
+  import { resolveViewBarHidden } from '../../utils/terminalThemes';
   import { t } from '../../i18n';
 
   const dispatch = createEventDispatcher();
@@ -116,6 +117,61 @@
     return get(sessions).find(s => s.id === id) || null;
   }
 
+  // The bar's visibility resolves tab → global, like the font size. The tab
+  // value is tri-state so "show this one" survives a global hide.
+  // The agent of the tab on screen, which is not the session's agent once a
+  // session has tabs of its own — a Codex tab inside a Claude session is
+  // still Codex.
+  $: currentTabAgent = (() => {
+    const s = currentSession;
+    if (!s) return '';
+    const idx = $selectedWindowIdx ?? 0;
+    if (idx === (s.mainWindowIndex ?? 0)) return s.agent;
+    const fw = (s.followedWindows || []).find((f: any) => f.index === idx);
+    return fw?.agent || s.agent;
+  })();
+
+  // Same for the path: a tab can be opened in its own directory, so showing
+  // the session's would be wrong there.
+  $: currentTabPath = (() => {
+    const s = currentSession;
+    if (!s) return '';
+    const idx = $selectedWindowIdx ?? 0;
+    if (idx === (s.mainWindowIndex ?? 0)) return s.path;
+    const fw = (s.followedWindows || []).find((f: any) => f.index === idx);
+    return fw?.work_dir || s.path;
+  })();
+
+  // The bottom bar resolves the same way as the view bar: tab → the default
+  // for its kind. Shared helper so the two can't drift apart.
+  $: statusBarHidden = (() => {
+    const s = currentSession;
+    if (!s) return !!$settings.hideStatusBar;
+    const idx = $selectedWindowIdx ?? 0;
+    const main = s.mainWindowIndex ?? 0;
+    const fw = (s.followedWindows || []).find((f: any) => f.index === idx);
+    const tabState = idx === main ? (s.hideStatusBar || 0) : (fw?.hide_status_bar || 0);
+    return resolveViewBarHidden(
+      tabState, $settings.hideStatusBar, $settings.agentHideStatusBar, currentTabAgent);
+  })();
+
+  $: viewBarHidden = (() => {
+    const s = currentSession;
+    if (!s) return !!$settings.hideViewBar;
+    const idx = $selectedWindowIdx ?? 0;
+    const main = s.mainWindowIndex ?? 0;
+    const fw = (s.followedWindows || []).find((f: any) => f.index === idx);
+    const tabState = idx === main ? (s.hideViewBar || 0) : (fw?.hide_view_bar || 0);
+    return resolveViewBarHidden(
+      tabState, $settings.hideViewBar, $settings.agentHideViewBar, currentTabAgent);
+  })();
+
+  // Hiding the bar while Notes or Tasks is open would leave the user on a
+  // view with no visible way back, so return to the terminal first.
+  $: if (viewBarHidden && activeView !== 'terminal') {
+    activeView = 'terminal';
+  }
+
   $: currentSession = $sessions.find(s => s.id === $selectedSessionId);
 
   $: canFork = currentSession?.agent === 'claude' && currentSession?.status === 'running';
@@ -191,8 +247,10 @@
         <Diff active={visible} initialMode="full" />
       </div>
     {:else}
-      <!-- View Selector -->
-      <div class="view-tabs">
+      <!-- View Selector. Hidden on request to give the terminal another row;
+           the tab bar keeps a button to bring it back, and the views stay
+           reachable from the command palette meanwhile. -->
+      <div class="view-tabs" class:hidden={viewBarHidden}>
         <div class="view-tabs-left">
           <button
             class="view-tab {activeView === 'terminal' ? 'active' : ''}"
@@ -353,14 +411,14 @@
     {/if}
 
     <!-- Status Bar -->
-    <div class="status-bar">
+    <div class="status-bar" class:hidden={statusBarHidden}>
       <div class="status-left">
         <!-- Path -->
-        <div class="status-item" title={currentSession?.path}>
+        <div class="status-item" title={currentTabPath}>
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/>
           </svg>
-          <span class="status-path">{truncatePath(currentSession?.path || '')}</span>
+          <span class="status-path">{truncatePath(currentTabPath)}</span>
         </div>
 
         {#if currentResumeId}
@@ -389,7 +447,7 @@
       </div>
 
       <div class="status-right">
-        <span class="agent-badge">{currentSession?.agent}</span>
+        <span class="agent-badge">{currentTabAgent}</span>
       </div>
     </div>
   {:else}
@@ -422,6 +480,10 @@
 <style>
   .main-panel {
     background: linear-gradient(180deg, rgba(15, 15, 26, 0.8) 0%, rgba(10, 10, 15, 0.9) 100%);
+  }
+
+  .view-tabs.hidden {
+    display: none;
   }
 
   .view-tabs {
@@ -613,6 +675,10 @@
   .split-placeholder span { font-size: 28px; color: #7c3aed; }
   .split-placeholder strong { font-size: 12px; color: #a1a1aa; }
   .split-placeholder small { max-width: 260px; font-size: 10px; }
+
+  .status-bar.hidden {
+    display: none;
+  }
 
   .status-bar {
     display: flex;

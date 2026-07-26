@@ -739,5 +739,16 @@
   "tabBar.resetFontSize": "إعادة تعيين حجم الخط",
   "help.actionResetFontSize": "إعادة تعيين حجم الخط",
   "help.wheel": "عجلة",
-  "help.actionZoomTerminal": "تغيير حجم نص الطرفية"
+  "help.actionZoomTerminal": "تغيير حجم نص الطرفية",
+  "tabBar.hideViewBar": "إخفاء شريط العرض",
+  "tabBar.showViewBar": "إظهار شريط العرض",
+  "settings.hideViewBar": "إخفاء شريط العرض",
+  "settings.hideViewBarDesc": "الافتراضي لكل علامات التبويب. يمكن ضبط علامة واحدة من شريط التبويبات.",
+  "settings.agentFontSizeDesc": "الافتراضي لعلامات تبويب الوكيل، منفصل عن الطرفية. Ctrl+عجلة يضبط علامة واحدة.",
+  "settings.agentHideViewBarDesc": "الافتراضي لعلامات تبويب الوكيل. يمكن ضبط علامة واحدة من شريط التبويبات.",
+  "tabBar.hideStatusBar": "إخفاء شريط الحالة",
+  "tabBar.showStatusBar": "إظهار شريط الحالة",
+  "settings.hideStatusBar": "إخفاء شريط الحالة",
+  "settings.hideStatusBarDesc": "الشريط أسفل الطرفية الذي يعرض المسار والوكيل. يمكن ضبط علامة تبويب على حدة.",
+  "settings.agentHideStatusBarDesc": "الافتراضي لعلامات تبويب الوكيل، منفصل عن الطرفية."
 }

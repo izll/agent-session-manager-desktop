@@ -739,5 +739,16 @@
   "tabBar.resetFontSize": "Reset font size",
   "help.actionResetFontSize": "Reset font size",
   "help.wheel": "scroll",
-  "help.actionZoomTerminal": "Resize terminal text"
+  "help.actionZoomTerminal": "Resize terminal text",
+  "tabBar.hideViewBar": "Hide the view bar",
+  "tabBar.showViewBar": "Show the view bar",
+  "settings.hideViewBar": "Hide the view bar",
+  "settings.hideViewBarDesc": "Default for all tabs. A tab can be set on its own from the tab bar.",
+  "settings.agentFontSizeDesc": "Default for agent tabs, separate from the terminal one. Ctrl+scroll resizes one tab.",
+  "settings.agentHideViewBarDesc": "Default for agent tabs. A tab can be set on its own from the tab bar.",
+  "tabBar.hideStatusBar": "Hide the status bar",
+  "tabBar.showStatusBar": "Show the status bar",
+  "settings.hideStatusBar": "Hide the status bar",
+  "settings.hideStatusBarDesc": "The bar under the terminal showing the path and agent. A tab can be set on its own.",
+  "settings.agentHideStatusBarDesc": "Default for agent tabs, separate from the terminal one."
 }

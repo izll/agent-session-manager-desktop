@@ -739,5 +739,16 @@
   "tabBar.resetFontSize": "Obnovit velikost písma",
   "help.actionResetFontSize": "Obnovit velikost písma",
   "help.wheel": "kolečko",
-  "help.actionZoomTerminal": "Změnit velikost textu terminálu"
+  "help.actionZoomTerminal": "Změnit velikost textu terminálu",
+  "tabBar.hideViewBar": "Skrýt panel zobrazení",
+  "tabBar.showViewBar": "Zobrazit panel zobrazení",
+  "settings.hideViewBar": "Skrýt panel zobrazení",
+  "settings.hideViewBarDesc": "Výchozí pro všechny záložky. Jednotlivou lze nastavit z panelu záložek.",
+  "settings.agentFontSizeDesc": "Výchozí pro záložky agenta, odděleně od terminálu. Ctrl+kolečko upraví jednu.",
+  "settings.agentHideViewBarDesc": "Výchozí pro záložky agenta. Jednotlivou lze nastavit z panelu záložek.",
+  "tabBar.hideStatusBar": "Skrýt stavový řádek",
+  "tabBar.showStatusBar": "Zobrazit stavový řádek",
+  "settings.hideStatusBar": "Skrýt stavový řádek",
+  "settings.hideStatusBarDesc": "Pruh pod terminálem s cestou a agentem. Jednotlivou záložku lze nastavit zvlášť.",
+  "settings.agentHideStatusBarDesc": "Výchozí pro záložky agenta, odděleně od terminálu."
 }

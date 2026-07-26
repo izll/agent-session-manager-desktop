@@ -537,6 +537,7 @@
       agentThemes: ($settings as any)?.agentTerminalThemes || {},
       customThemes: ($settings as any)?.customTerminalThemes || [],
       fontSize: $settings?.terminalFontSize || 0,
+      agentFontSize: $settings?.agentFontSize || 0,
     };
     setTerminalThemeContext(ctx);
     const key = JSON.stringify(ctx);

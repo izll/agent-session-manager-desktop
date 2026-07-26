@@ -739,5 +739,16 @@
   "tabBar.resetFontSize": "Przywróć rozmiar czcionki",
   "help.actionResetFontSize": "Przywróć rozmiar czcionki",
   "help.wheel": "kółko",
-  "help.actionZoomTerminal": "Zmień rozmiar tekstu terminala"
+  "help.actionZoomTerminal": "Zmień rozmiar tekstu terminala",
+  "tabBar.hideViewBar": "Ukryj pasek widoków",
+  "tabBar.showViewBar": "Pokaż pasek widoków",
+  "settings.hideViewBar": "Ukryj pasek widoków",
+  "settings.hideViewBarDesc": "Domyślne dla wszystkich kart. Pojedynczą kartę ustawisz z paska kart.",
+  "settings.agentFontSizeDesc": "Domyślne dla kart agenta, niezależnie od terminala. Ctrl+kółko zmienia jedną kartę.",
+  "settings.agentHideViewBarDesc": "Domyślne dla kart agenta. Pojedynczą kartę ustawisz z paska kart.",
+  "tabBar.hideStatusBar": "Ukryj pasek stanu",
+  "tabBar.showStatusBar": "Pokaż pasek stanu",
+  "settings.hideStatusBar": "Ukryj pasek stanu",
+  "settings.hideStatusBarDesc": "Pasek pod terminalem ze ścieżką i agentem. Pojedynczą kartę ustawisz osobno.",
+  "settings.agentHideStatusBarDesc": "Domyślne dla kart agenta, niezależnie od terminala."
 }

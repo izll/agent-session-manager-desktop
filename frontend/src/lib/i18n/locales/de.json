@@ -739,5 +739,16 @@
   "tabBar.resetFontSize": "Schriftgröße zurücksetzen",
   "help.actionResetFontSize": "Schriftgröße zurücksetzen",
   "help.wheel": "Rad",
-  "help.actionZoomTerminal": "Terminaltext skalieren"
+  "help.actionZoomTerminal": "Terminaltext skalieren",
+  "tabBar.hideViewBar": "Ansichtsleiste ausblenden",
+  "tabBar.showViewBar": "Ansichtsleiste einblenden",
+  "settings.hideViewBar": "Ansichtsleiste ausblenden",
+  "settings.hideViewBarDesc": "Standard für alle Tabs. Einzelne Tabs lassen sich in der Tableiste umstellen.",
+  "settings.agentFontSizeDesc": "Standard für Agent-Tabs, unabhängig vom Terminal. Strg+Scrollen ändert einen Tab.",
+  "settings.agentHideViewBarDesc": "Standard für Agent-Tabs. Einzelne Tabs lassen sich in der Tableiste umstellen.",
+  "tabBar.hideStatusBar": "Statusleiste ausblenden",
+  "tabBar.showStatusBar": "Statusleiste einblenden",
+  "settings.hideStatusBar": "Statusleiste ausblenden",
+  "settings.hideStatusBarDesc": "Die Leiste unter dem Terminal mit Pfad und Agent. Einzelne Tabs sind umstellbar.",
+  "settings.agentHideStatusBarDesc": "Standard für Agent-Tabs, unabhängig vom Terminal."
 }

@@ -722,6 +722,8 @@ export namespace main {
 	    tabBackgroundColor: string;
 	    terminalTheme: string;
 	    terminalFontSize: number;
+	    hideViewBar: number;
+	    hideStatusBar: number;
 	    mainWindowIndex: number;
 	    lastWindowIndex: number;
 	    isGitRepo: boolean;
@@ -754,6 +756,8 @@ export namespace main {
 	        this.tabBackgroundColor = source["tabBackgroundColor"];
 	        this.terminalTheme = source["terminalTheme"];
 	        this.terminalFontSize = source["terminalFontSize"];
+	        this.hideViewBar = source["hideViewBar"];
+	        this.hideStatusBar = source["hideStatusBar"];
 	        this.mainWindowIndex = source["mainWindowIndex"];
 	        this.lastWindowIndex = source["lastWindowIndex"];
 	        this.isGitRepo = source["isGitRepo"];
@@ -789,6 +793,11 @@ export namespace main {
 	    language: string;
 	    terminalRenderer: string;
 	    terminalFontSize: number;
+	    agentFontSize: number;
+	    hideViewBar: boolean;
+	    agentHideViewBar: boolean;
+	    hideStatusBar: boolean;
+	    agentHideStatusBar: boolean;
 	    notifyOnWaiting: boolean;
 	    notifyDesktop: boolean;
 	    notifyNtfy: boolean;
@@ -815,6 +824,11 @@ export namespace main {
 	        this.language = source["language"];
 	        this.terminalRenderer = source["terminalRenderer"];
 	        this.terminalFontSize = source["terminalFontSize"];
+	        this.agentFontSize = source["agentFontSize"];
+	        this.hideViewBar = source["hideViewBar"];
+	        this.agentHideViewBar = source["agentHideViewBar"];
+	        this.hideStatusBar = source["hideStatusBar"];
+	        this.agentHideStatusBar = source["agentHideStatusBar"];
 	        this.notifyOnWaiting = source["notifyOnWaiting"];
 	        this.notifyDesktop = source["notifyDesktop"];
 	        this.notifyNtfy = source["notifyNtfy"];
@@ -1123,6 +1137,8 @@ export namespace session {
 	    stopped?: boolean;
 	    terminal_theme?: string;
 	    terminal_font_size?: number;
+	    hide_view_bar?: number;
+	    hide_status_bar?: number;
 	    text_color?: string;
 	    background_color?: string;
 	    work_dir?: string;
@@ -1145,6 +1161,8 @@ export namespace session {
 	        this.stopped = source["stopped"];
 	        this.terminal_theme = source["terminal_theme"];
 	        this.terminal_font_size = source["terminal_font_size"];
+	        this.hide_view_bar = source["hide_view_bar"];
+	        this.hide_status_bar = source["hide_status_bar"];
 	        this.text_color = source["text_color"];
 	        this.background_color = source["background_color"];
 	        this.work_dir = source["work_dir"];

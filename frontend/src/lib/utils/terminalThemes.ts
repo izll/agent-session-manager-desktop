@@ -423,11 +423,37 @@ export const DEFAULT_FONT_SIZE = 13;
  * otherwise the global setting, otherwise the built-in default. Zero means
  * "not set" at every level, so an untouched config keeps the original size.
  */
-export function resolveFontSize(tabSize?: number, globalSize?: number): number {
+export function resolveFontSize(
+  tabSize?: number,
+  terminalDefault?: number,
+  agentDefault?: number,
+  agent?: string,
+): number {
   // Only a positive value counts as "set". A negative one (corrupt config, a
   // hand-edited file) is truthy in JS and would otherwise win over the global
   // setting and then clamp to the minimum.
   const usable = (n?: number) => (typeof n === 'number' && n > 0 ? n : 0);
-  const size = usable(tabSize) || usable(globalSize) || DEFAULT_FONT_SIZE;
+  // Terminal tabs and agent tabs have separate defaults and never fall back
+  // to each other's, matching how the colour palettes work.
+  const isTerminal = !agent || agent === 'terminal';
+  const scoped = isTerminal ? usable(terminalDefault) : usable(agentDefault);
+  const size = usable(tabSize) || scoped || DEFAULT_FONT_SIZE;
   return Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, size));
+}
+
+/**
+ * Whether the view bar should be hidden for a tab. The per-tab value is
+ * tri-state (0 inherit, 1 hide, 2 show) so "show this one" survives a
+ * default of hidden; terminal and agent tabs have separate defaults.
+ */
+export function resolveViewBarHidden(
+  tabState?: number,
+  terminalDefault?: boolean,
+  agentDefault?: boolean,
+  agent?: string,
+): boolean {
+  if (tabState === 1) return true;
+  if (tabState === 2) return false;
+  const isTerminal = !agent || agent === 'terminal';
+  return !!(isTerminal ? terminalDefault : agentDefault);
 }
