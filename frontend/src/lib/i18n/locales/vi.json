@@ -275,6 +275,8 @@
   "update.latestVersion": "Phiên bản mới nhất:",
   "update.available": "Đã có phiên bản mới!",
   "update.upToDate": "Bạn đang dùng phiên bản mới nhất!",
+  "update.checkedAt": "Đã kiểm tra lúc {time}",
+  "update.checkAgain": "Kiểm tra lại",
   "update.updateNow": "Cập nhật ngay",
   "update.close": "Đóng",
   "update.cancel": "Hủy",

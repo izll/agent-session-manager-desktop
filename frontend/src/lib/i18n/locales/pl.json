@@ -275,6 +275,8 @@
   "update.latestVersion": "Najnowsza wersja:",
   "update.available": "Dostępna jest nowa wersja!",
   "update.upToDate": "Masz najnowszą wersję!",
+  "update.checkedAt": "Sprawdzono o {time}",
+  "update.checkAgain": "Sprawdź ponownie",
   "update.updateNow": "Aktualizuj teraz",
   "update.close": "Zamknij",
   "update.cancel": "Anuluj",

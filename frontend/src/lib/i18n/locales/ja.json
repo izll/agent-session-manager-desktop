@@ -275,6 +275,8 @@
   "update.latestVersion": "最新バージョン:",
   "update.available": "新しいバージョンが利用可能です！",
   "update.upToDate": "最新の状態です！",
+  "update.checkedAt": "{time} に確認",
+  "update.checkAgain": "再確認",
   "update.updateNow": "今すぐアップデート",
   "update.close": "閉じる",
   "update.cancel": "キャンセル",

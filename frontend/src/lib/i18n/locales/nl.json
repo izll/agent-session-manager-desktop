@@ -275,6 +275,8 @@
   "update.latestVersion": "Laatste versie:",
   "update.available": "Er is een nieuwe versie beschikbaar!",
   "update.upToDate": "Je bent up-to-date!",
+  "update.checkedAt": "Gecontroleerd om {time}",
+  "update.checkAgain": "Opnieuw controleren",
   "update.updateNow": "Nu updaten",
   "update.close": "Sluiten",
   "update.cancel": "Annuleren",

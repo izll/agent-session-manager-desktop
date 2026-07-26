@@ -275,6 +275,8 @@
   "update.latestVersion": "Nejnovější verze:",
   "update.available": "Je dostupná nová verze!",
   "update.upToDate": "Máte nejnovější verzi!",
+  "update.checkedAt": "Zkontrolováno v {time}",
+  "update.checkAgain": "Zkontrolovat znovu",
   "update.updateNow": "Aktualizovat nyní",
   "update.close": "Zavřít",
   "update.cancel": "Zrušit",

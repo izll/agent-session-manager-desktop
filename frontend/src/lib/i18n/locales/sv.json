@@ -275,6 +275,8 @@
   "update.latestVersion": "Senaste version:",
   "update.available": "En ny version är tillgänglig!",
   "update.upToDate": "Du har den senaste versionen!",
+  "update.checkedAt": "Kontrollerad {time}",
+  "update.checkAgain": "Kontrollera igen",
   "update.updateNow": "Uppdatera nu",
   "update.close": "Stäng",
   "update.cancel": "Avbryt",

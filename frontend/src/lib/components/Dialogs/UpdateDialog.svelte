@@ -17,6 +17,8 @@
   let isUpdating = false;
   let error = '';
   let success = '';
+  /** Clock time of the last completed check, shown with the result. */
+  let checkedAt = '';
 
   let lastShow = false;
   $: if (show && !lastShow) {
@@ -28,11 +30,23 @@
     isChecking = true;
     error = '';
     success = '';
+    // The check usually answers in well under a second. Without a floor the
+    // spinner flickers past and the dialog looks like it never did anything,
+    // so hold it just long enough to read.
+    const started = Date.now();
     try {
       updateInfo = await App.CheckForUpdate();
+      checkedAt = new Date().toLocaleTimeString(undefined, {
+        hour: '2-digit',
+        minute: '2-digit',
+      });
     } catch (e) {
       error = String(e);
     } finally {
+      const elapsed = Date.now() - started;
+      if (elapsed < 600) {
+        await new Promise(r => setTimeout(r, 600 - elapsed));
+      }
       isChecking = false;
     }
   }
@@ -135,6 +149,9 @@
                 </svg>
                 <span>{$t('update.upToDate')}</span>
               </div>
+              <!-- Says the check actually ran; without it "up to date" could
+                   be stale text from before the dialog opened. -->
+              <div class="checked-at">{$t('update.checkedAt', { time: checkedAt })}</div>
             {/if}
           </div>
         {/if}
@@ -160,8 +177,17 @@
             {/if}
           </button>
         {/if}
+        <!-- Re-check without reopening the dialog; also proves the button does
+             something when the answer is "up to date" either way. -->
+        {#if updateInfo && !updateInfo.available && !success && !isUpdating}
+          <button class="btn btn-secondary" on:click={checkForUpdate} disabled={isChecking}>
+            {$t('update.checkAgain')}
+          </button>
+        {/if}
         <button class="btn btn-secondary" on:click={close}>
-          {success ? $t('update.close') : $t('update.cancel')}
+          <!-- Nothing is in flight once a result is on screen, so "Cancel"
+               would misdescribe the button. -->
+          {success || updateInfo || error ? $t('update.close') : $t('update.cancel')}
         </button>
       </div>
     </div>
@@ -242,6 +268,13 @@
   .up-to-date {
     background: rgba(34, 197, 94, 0.1);
     color: #4ade80;
+  }
+
+  .checked-at {
+    margin-top: 8px;
+    font-size: 11px;
+    color: #6b7280;
+    text-align: center;
   }
 
   /* Button base and secondary styles (not in global CSS) */

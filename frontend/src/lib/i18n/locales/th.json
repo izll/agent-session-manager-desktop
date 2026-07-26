@@ -275,6 +275,8 @@
   "update.latestVersion": "เวอร์ชันล่าสุด:",
   "update.available": "มีเวอร์ชันใหม่!",
   "update.upToDate": "คุณใช้เวอร์ชันล่าสุดแล้ว!",
+  "update.checkedAt": "ตรวจสอบเมื่อ {time}",
+  "update.checkAgain": "ตรวจสอบอีกครั้ง",
   "update.updateNow": "อัปเดตเลย",
   "update.close": "ปิด",
   "update.cancel": "ยกเลิก",

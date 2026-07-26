@@ -461,6 +461,8 @@
   "update.latestVersion": "Latest version:",
   "update.available": "A new version is available!",
   "update.upToDate": "You're up to date!",
+  "update.checkedAt": "Checked at {time}",
+  "update.checkAgain": "Check again",
   "update.updateNow": "Update Now",
   "update.close": "Close",
   "update.cancel": "Cancel",

@@ -452,6 +452,8 @@
   "update.latestVersion": "Legújabb verzió:",
   "update.available": "Új verzió érhető el!",
   "update.upToDate": "A legfrissebb verziót használod!",
+  "update.checkedAt": "Ellenőrizve: {time}",
+  "update.checkAgain": "Újraellenőrzés",
   "update.updateNow": "Frissítés most",
   "update.close": "Bezárás",
   "update.cancel": "Mégse",

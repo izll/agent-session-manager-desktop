@@ -275,6 +275,8 @@
   "update.latestVersion": "Остання версія:",
   "update.available": "Доступна нова версія!",
   "update.upToDate": "У вас остання версія!",
+  "update.checkedAt": "Перевірено о {time}",
+  "update.checkAgain": "Перевірити знову",
   "update.updateNow": "Оновити зараз",
   "update.close": "Закрити",
   "update.cancel": "Скасувати",

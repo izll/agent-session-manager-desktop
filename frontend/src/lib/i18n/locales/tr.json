@@ -275,6 +275,8 @@
   "update.latestVersion": "Son sürüm:",
   "update.available": "Yeni bir sürüm mevcut!",
   "update.upToDate": "Güncelsiniz!",
+  "update.checkedAt": "{time} itibarıyla kontrol edildi",
+  "update.checkAgain": "Tekrar kontrol et",
   "update.updateNow": "Şimdi Güncelle",
   "update.close": "Kapat",
   "update.cancel": "İptal",
