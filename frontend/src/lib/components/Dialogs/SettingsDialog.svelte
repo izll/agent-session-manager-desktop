@@ -1200,6 +1200,11 @@
     box-shadow: 0 25px 50px rgba(0, 0, 0, 0.5), 0 0 100px rgba(139, 92, 246, 0.1);
     width: 100%;
     max-width: 520px;
+    /* A fixed height, not just a maximum: the tabs differ in content length,
+       and sizing to each one made the whole dialog jump as you switched
+       between them. The list inside scrolls instead. Capped in px as well so
+       a tall screen doesn't stretch it into mostly empty space. */
+    height: min(85vh, 680px);
     max-height: 85vh;
     overflow: hidden;
     display: flex;
