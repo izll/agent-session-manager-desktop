@@ -51,6 +51,8 @@ export function DiscoverLocalSchemes():Promise<Array<main.ImportedScheme>>;
 
 export function EmptyTrash():Promise<void>;
 
+export function ExportSessions(arg1:Array<string>):Promise<string>;
+
 export function FetchOnlineSchemes(arg1:Array<string>):Promise<Array<main.ImportedScheme>>;
 
 export function ForkSession(arg1:string):Promise<main.ForkResult>;
@@ -137,6 +139,8 @@ export function GlobalSearch(arg1:string):Promise<Array<main.HistoryEntryInfo>>;
 
 export function ImportSchemeFiles():Promise<Array<main.ImportedScheme>>;
 
+export function ImportSessionFile(arg1:string,arg2:Array<string>):Promise<number>;
+
 export function ImportSessions(arg1:string,arg2:Array<string>):Promise<number>;
 
 export function InitHistorySearch():Promise<void>;
@@ -153,11 +157,15 @@ export function MoveSessionToIndex(arg1:string,arg2:number):Promise<void>;
 
 export function MoveTask(arg1:string,arg2:string,arg3:string):Promise<void>;
 
+export function PendingUpdate():Promise<string>;
+
 export function PerformUpdate(arg1:string):Promise<void>;
 
 export function PermanentlyDeleteTrashItem(arg1:string):Promise<void>;
 
 export function QuickReplyTab(arg1:string,arg2:number,arg3:string):Promise<void>;
+
+export function ReadSessionFile():Promise<main.PortableFileInfo>;
 
 export function RefreshWindow(arg1:string,arg2:number):Promise<void>;
 

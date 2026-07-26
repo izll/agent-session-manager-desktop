@@ -80,7 +80,7 @@
   const dispatch = createEventDispatcher();
 
   // Tab state
-  let activeTab: 'general' | 'terminal' | 'agents' | 'dictation' = 'general';
+  let activeTab: 'general' | 'terminal' | 'agents' | 'dictation' | 'maintenance' = 'general';
 
   // Dictation settings state
   let dictationSettings: main.DictationSettings | null = null;
@@ -316,6 +316,13 @@
         >
           {$t('settings.dictation')}
         </button>
+        <button
+          class="tab"
+          class:active={activeTab === 'maintenance'}
+          on:click={() => activeTab = 'maintenance'}
+        >
+          {$t('settings.maintenance')}
+        </button>
       </div>
 
       <div class="settings-list">
@@ -512,6 +519,7 @@
               {/if}
             {/if}
           </div>
+
         {/if}
 
         <!-- Terminal Tab -->
@@ -939,6 +947,59 @@
             {/if}
           {/if}
         {/if}
+
+        <!-- Maintenance: occasional, one-off actions. They lived in the header
+             toolbar, where they competed with everyday controls and their icons
+             were easy to confuse with each other. -->
+        {#if activeTab === 'maintenance'}
+          <div class="settings-section">
+            <h3>{$t('settings.checkUpdates')}</h3>
+
+            <div class="setting-item">
+              <span class="setting-info">
+                <span class="setting-label">{$t('settings.checkUpdates')}</span>
+                <span class="setting-desc">{$t('settings.checkUpdatesDesc')}</span>
+              </span>
+              <button class="action-btn" on:click={() => dispatch('openUpdate')}>
+                {$t('settings.checkUpdatesAction')}
+              </button>
+            </div>
+          </div>
+
+          <div class="settings-section">
+            <h3>{$t('settings.sessionTransfer')}</h3>
+
+            <div class="setting-item">
+              <span class="setting-info">
+                <span class="setting-label">{$t('settings.exportSessions')}</span>
+                <span class="setting-desc">{$t('settings.exportSessionsDesc')}</span>
+              </span>
+              <button class="action-btn" on:click={() => dispatch('exportSessions')}>
+                {$t('settings.exportSessionsAction')}
+              </button>
+            </div>
+
+            <div class="setting-item">
+              <span class="setting-info">
+                <span class="setting-label">{$t('settings.importFromFile')}</span>
+                <span class="setting-desc">{$t('settings.importFromFileDesc')}</span>
+              </span>
+              <button class="action-btn" on:click={() => dispatch('openFileImport')}>
+                {$t('settings.importFromFileAction')}
+              </button>
+            </div>
+
+            <div class="setting-item">
+              <span class="setting-info">
+                <span class="setting-label">{$t('settings.importSessions')}</span>
+                <span class="setting-desc">{$t('settings.importSessionsDesc')}</span>
+              </span>
+              <button class="action-btn" on:click={() => dispatch('openImport')}>
+                {$t('settings.importSessionsAction')}
+              </button>
+            </div>
+          </div>
+        {/if}
       </div>
 
       <div class="dialog-footer">
@@ -1164,6 +1225,25 @@
   .setting-desc {
     font-size: 12px;
     color: #6b7280;
+  }
+
+  /* One-off actions in the Maintenance section: these open a dialog rather
+     than change a setting, so they read as buttons, not toggles. */
+  .action-btn {
+    flex-shrink: 0;
+    padding: 7px 14px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.05);
+    color: #d4d4d8;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: border-color 0.15s ease, color 0.15s ease;
+  }
+  .action-btn:hover {
+    border-color: rgba(139, 92, 246, 0.5);
+    color: #ddd6fe;
   }
 
   .setting-input {

@@ -98,6 +98,10 @@ export function EmptyTrash() {
   return window['go']['main']['App']['EmptyTrash']();
 }
 
+export function ExportSessions(arg1) {
+  return window['go']['main']['App']['ExportSessions'](arg1);
+}
+
 export function FetchOnlineSchemes(arg1) {
   return window['go']['main']['App']['FetchOnlineSchemes'](arg1);
 }
@@ -270,6 +274,10 @@ export function ImportSchemeFiles() {
   return window['go']['main']['App']['ImportSchemeFiles']();
 }
 
+export function ImportSessionFile(arg1, arg2) {
+  return window['go']['main']['App']['ImportSessionFile'](arg1, arg2);
+}
+
 export function ImportSessions(arg1, arg2) {
   return window['go']['main']['App']['ImportSessions'](arg1, arg2);
 }
@@ -302,6 +310,10 @@ export function MoveTask(arg1, arg2, arg3) {
   return window['go']['main']['App']['MoveTask'](arg1, arg2, arg3);
 }
 
+export function PendingUpdate() {
+  return window['go']['main']['App']['PendingUpdate']();
+}
+
 export function PerformUpdate(arg1) {
   return window['go']['main']['App']['PerformUpdate'](arg1);
 }
@@ -312,6 +324,10 @@ export function PermanentlyDeleteTrashItem(arg1) {
 
 export function QuickReplyTab(arg1, arg2, arg3) {
   return window['go']['main']['App']['QuickReplyTab'](arg1, arg2, arg3);
+}
+
+export function ReadSessionFile() {
+  return window['go']['main']['App']['ReadSessionFile']();
 }
 
 export function RefreshWindow(arg1, arg2) {

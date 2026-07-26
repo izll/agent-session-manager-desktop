@@ -528,6 +528,65 @@ export namespace main {
 	        this.file = source["file"];
 	    }
 	}
+	export class PortableSessionInfo {
+	    name: string;
+	    path: string;
+	    agent: string;
+	    groupName: string;
+	    tabs: number;
+	    pathExists: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new PortableSessionInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.path = source["path"];
+	        this.agent = source["agent"];
+	        this.groupName = source["groupName"];
+	        this.tabs = source["tabs"];
+	        this.pathExists = source["pathExists"];
+	    }
+	}
+	export class PortableFileInfo {
+	    path: string;
+	    exportedAt: string;
+	    appVersion: string;
+	    sessions: PortableSessionInfo[];
+	
+	    static createFrom(source: any = {}) {
+	        return new PortableFileInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.path = source["path"];
+	        this.exportedAt = source["exportedAt"];
+	        this.appVersion = source["appVersion"];
+	        this.sessions = this.convertValues(source["sessions"], PortableSessionInfo);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
 	export class PreviewData {
 	    content: string;
 	    activity: string;

@@ -1,0 +1,238 @@
+package session
+
+import (
+	"encoding/json"
+	"fmt"
+	"io"
+	"os"
+	"strings"
+	"time"
+)
+
+// Exporting sessions to a file and reading them back, so a set-up can be moved
+// to another machine or kept as a snapshot.
+//
+// Runtime state is deliberately left out: tmux window indices, the running
+// status, the git commit a diff was based on and resume IDs all describe THIS
+// machine at THIS moment. Carrying them over would produce sessions that look
+// live but point at nothing.
+
+// PortableFormat identifies the file layout, so a future change can be
+// detected rather than mis-parsed.
+const PortableFormat = "asmgr-sessions"
+
+// PortableVersion is the current layout revision.
+const PortableVersion = 1
+
+// PortableTab is one tab of an exported session.
+type PortableTab struct {
+	Name            string    `json:"name"`
+	Agent           AgentType `json:"agent,omitempty"`
+	CustomCommand   string    `json:"custom_command,omitempty"`
+	AutoYes         bool      `json:"auto_yes,omitempty"`
+	ExtraArgs       string    `json:"extra_args,omitempty"`
+	Notes           string    `json:"notes,omitempty"`
+	WorkDir         string    `json:"work_dir,omitempty"`
+	TerminalTheme   string    `json:"terminal_theme,omitempty"`
+	TextColor       string    `json:"text_color,omitempty"`
+	BackgroundColor string    `json:"background_color,omitempty"`
+	HideStatusLine  bool      `json:"hide_status_line,omitempty"`
+}
+
+// PortableSession is one exported session: its configuration, without any
+// machine- or run-specific state.
+type PortableSession struct {
+	Name               string        `json:"name"`
+	Path               string        `json:"path"`
+	Agent              AgentType     `json:"agent,omitempty"`
+	CustomCommand      string        `json:"custom_command,omitempty"`
+	ExtraArgs          string        `json:"extra_args,omitempty"`
+	AutoYes            bool          `json:"auto_yes,omitempty"`
+	Notes              string        `json:"notes,omitempty"`
+	Color              string        `json:"color,omitempty"`
+	BgColor            string        `json:"bg_color,omitempty"`
+	FullRowColor       bool          `json:"full_row_color,omitempty"`
+	Favorite           bool          `json:"favorite,omitempty"`
+	HideStatusLine     bool          `json:"hide_status_line,omitempty"`
+	TerminalTheme      string        `json:"terminal_theme,omitempty"`
+	TabTextColor       string        `json:"tab_text_color,omitempty"`
+	TabBackgroundColor string        `json:"tab_background_color,omitempty"`
+	GroupName          string        `json:"group_name,omitempty"` // by name, not ID: IDs are per-install
+	Tabs               []PortableTab `json:"tabs,omitempty"`
+}
+
+// PortableGroup is an exported group. Colours travel; the ID does not.
+type PortableGroup struct {
+	Name         string `json:"name"`
+	Color        string `json:"color,omitempty"`
+	BgColor      string `json:"bg_color,omitempty"`
+	FullRowColor bool   `json:"full_row_color,omitempty"`
+}
+
+// PortableBundle is the whole exported file.
+type PortableBundle struct {
+	Format     string            `json:"format"`
+	Version    int               `json:"version"`
+	ExportedAt time.Time         `json:"exported_at"`
+	AppVersion string            `json:"app_version,omitempty"`
+	Groups     []PortableGroup   `json:"groups,omitempty"`
+	Sessions   []PortableSession `json:"sessions"`
+}
+
+// ToPortable converts live instances into the exportable form, resolving group
+// IDs to names so the file makes sense on another install.
+func ToPortable(instances []*Instance, groups []*Group, appVersion string) *PortableBundle {
+	groupNameByID := make(map[string]string, len(groups))
+	for _, g := range groups {
+		groupNameByID[g.ID] = g.Name
+	}
+
+	usedGroups := map[string]bool{}
+	out := make([]PortableSession, 0, len(instances))
+	for _, inst := range instances {
+		if inst == nil {
+			continue
+		}
+		ps := PortableSession{
+			Name:               inst.Name,
+			Path:               inst.Path,
+			Agent:              inst.Agent,
+			CustomCommand:      inst.CustomCommand,
+			ExtraArgs:          inst.ExtraArgs,
+			AutoYes:            inst.AutoYes,
+			Notes:              inst.Notes,
+			Color:              inst.Color,
+			BgColor:            inst.BgColor,
+			FullRowColor:       inst.FullRowColor,
+			Favorite:           inst.Favorite,
+			HideStatusLine:     inst.HideStatusLine,
+			TerminalTheme:      inst.TerminalTheme,
+			TabTextColor:       inst.TabTextColor,
+			TabBackgroundColor: inst.TabBackgroundColor,
+		}
+		if name, ok := groupNameByID[inst.GroupID]; ok && name != "" {
+			ps.GroupName = name
+			usedGroups[inst.GroupID] = true
+		}
+		for _, w := range inst.FollowedWindows {
+			ps.Tabs = append(ps.Tabs, PortableTab{
+				Name:            w.Name,
+				Agent:           w.Agent,
+				CustomCommand:   w.CustomCommand,
+				AutoYes:         w.AutoYes,
+				ExtraArgs:       w.ExtraArgs,
+				Notes:           w.Notes,
+				WorkDir:         w.WorkDir,
+				TerminalTheme:   w.TerminalTheme,
+				TextColor:       w.TextColor,
+				BackgroundColor: w.BackgroundColor,
+				HideStatusLine:  w.HideStatusLine,
+			})
+		}
+		out = append(out, ps)
+	}
+
+	bundle := &PortableBundle{
+		Format:     PortableFormat,
+		Version:    PortableVersion,
+		ExportedAt: time.Now(),
+		AppVersion: appVersion,
+		Sessions:   out,
+	}
+	for _, g := range groups {
+		if usedGroups[g.ID] {
+			bundle.Groups = append(bundle.Groups, PortableGroup{
+				Name:         g.Name,
+				Color:        g.Color,
+				BgColor:      g.BgColor,
+				FullRowColor: g.FullRowColor,
+			})
+		}
+	}
+	return bundle
+}
+
+// WritePortable writes the bundle as indented JSON — it is meant to be
+// readable and diffable, not compact.
+func WritePortable(w io.Writer, bundle *PortableBundle) error {
+	enc := json.NewEncoder(w)
+	enc.SetIndent("", "  ")
+	return enc.Encode(bundle)
+}
+
+// ReadPortable parses an exported file, rejecting anything that isn't one.
+func ReadPortable(r io.Reader) (*PortableBundle, error) {
+	var bundle PortableBundle
+	if err := json.NewDecoder(r).Decode(&bundle); err != nil {
+		return nil, fmt.Errorf("this is not a readable session file: %w", err)
+	}
+	if bundle.Format != PortableFormat {
+		return nil, fmt.Errorf("this file is not a session export")
+	}
+	if bundle.Version > PortableVersion {
+		return nil, fmt.Errorf("this file was written by a newer version of the app (format %d); update to read it", bundle.Version)
+	}
+	if len(bundle.Sessions) == 0 {
+		return nil, fmt.Errorf("the file contains no sessions")
+	}
+	return &bundle, nil
+}
+
+// PathExists reports whether a session's directory is present on this machine.
+// Paths are absolute and machine-specific, so an import from elsewhere will
+// often point at directories that don't exist here.
+func PathExists(path string) bool {
+	if strings.TrimSpace(path) == "" {
+		return false
+	}
+	info, err := os.Stat(path)
+	return err == nil && info.IsDir()
+}
+
+// FromPortable turns an exported session back into an Instance ready to be
+// stored. It gets a fresh ID and starts stopped: nothing about the exporting
+// machine's runtime state carries over.
+func (p PortableSession) FromPortable(groupID string) *Instance {
+	now := time.Now()
+	inst := &Instance{
+		ID:                 generateID(p.Name, p.Agent),
+		Name:               p.Name,
+		Path:               p.Path,
+		Status:             StatusStopped,
+		CreatedAt:          now,
+		UpdatedAt:          now,
+		Agent:              p.Agent,
+		CustomCommand:      p.CustomCommand,
+		ExtraArgs:          p.ExtraArgs,
+		AutoYes:            p.AutoYes,
+		Notes:              p.Notes,
+		Color:              p.Color,
+		BgColor:            p.BgColor,
+		FullRowColor:       p.FullRowColor,
+		Favorite:           p.Favorite,
+		HideStatusLine:     p.HideStatusLine,
+		TerminalTheme:      p.TerminalTheme,
+		TabTextColor:       p.TabTextColor,
+		TabBackgroundColor: p.TabBackgroundColor,
+		GroupID:            groupID,
+	}
+	// Tab indices are assigned fresh: the exporting machine's tmux window
+	// numbers mean nothing here.
+	for i, t := range p.Tabs {
+		inst.FollowedWindows = append(inst.FollowedWindows, FollowedWindow{
+			Index:           i + 1,
+			Name:            t.Name,
+			Agent:           t.Agent,
+			CustomCommand:   t.CustomCommand,
+			AutoYes:         t.AutoYes,
+			ExtraArgs:       t.ExtraArgs,
+			Notes:           t.Notes,
+			WorkDir:         t.WorkDir,
+			TerminalTheme:   t.TerminalTheme,
+			TextColor:       t.TextColor,
+			BackgroundColor: t.BackgroundColor,
+			HideStatusLine:  t.HideStatusLine,
+		})
+	}
+	return inst
+}
