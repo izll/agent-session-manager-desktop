@@ -735,5 +735,9 @@
   "sessionFile.cancel": "Annuler",
   "sessionFile.close": "Fermer",
   "settings.fontSize": "Taille du texte",
-  "settings.fontSizeDesc": "Valeur par défaut pour tous les terminaux. Ctrl+molette ajuste un onglet."
+  "settings.fontSizeDesc": "Valeur par défaut pour tous les terminaux. Ctrl+molette ajuste un onglet.",
+  "tabBar.resetFontSize": "Réinitialiser la taille du texte",
+  "help.actionResetFontSize": "Réinitialiser la taille du texte",
+  "help.wheel": "molette",
+  "help.actionZoomTerminal": "Redimensionner le texte du terminal"
 }

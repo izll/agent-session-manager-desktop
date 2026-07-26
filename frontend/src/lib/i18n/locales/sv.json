@@ -735,5 +735,9 @@
   "sessionFile.cancel": "Avbryt",
   "sessionFile.close": "Stäng",
   "settings.fontSize": "Teckenstorlek",
-  "settings.fontSizeDesc": "Standard för alla terminaler. Ctrl+rulla ändrar en flik."
+  "settings.fontSizeDesc": "Standard för alla terminaler. Ctrl+rulla ändrar en flik.",
+  "tabBar.resetFontSize": "Återställ teckenstorlek",
+  "help.actionResetFontSize": "Återställ teckenstorlek",
+  "help.wheel": "rulla",
+  "help.actionZoomTerminal": "Ändra terminalens textstorlek"
 }

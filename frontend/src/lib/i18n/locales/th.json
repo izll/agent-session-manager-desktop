@@ -735,5 +735,9 @@
   "sessionFile.cancel": "ยกเลิก",
   "sessionFile.close": "ปิด",
   "settings.fontSize": "ขนาดตัวอักษร",
-  "settings.fontSizeDesc": "ค่าเริ่มต้นสำหรับทุกเทอร์มินัล Ctrl+เลื่อนเพื่อปรับเฉพาะแท็บเดียว"
+  "settings.fontSizeDesc": "ค่าเริ่มต้นสำหรับทุกเทอร์มินัล Ctrl+เลื่อนเพื่อปรับเฉพาะแท็บเดียว",
+  "tabBar.resetFontSize": "รีเซ็ตขนาดตัวอักษร",
+  "help.actionResetFontSize": "รีเซ็ตขนาดตัวอักษร",
+  "help.wheel": "ล้อเลื่อน",
+  "help.actionZoomTerminal": "ปรับขนาดข้อความเทอร์มินัล"
 }

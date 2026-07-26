@@ -735,5 +735,9 @@
   "sessionFile.cancel": "Отмена",
   "sessionFile.close": "Закрыть",
   "settings.fontSize": "Размер шрифта",
-  "settings.fontSizeDesc": "По умолчанию для всех терминалов. Ctrl+колесо меняет одну вкладку."
+  "settings.fontSizeDesc": "По умолчанию для всех терминалов. Ctrl+колесо меняет одну вкладку.",
+  "tabBar.resetFontSize": "Сбросить размер шрифта",
+  "help.actionResetFontSize": "Сбросить размер шрифта",
+  "help.wheel": "колесо",
+  "help.actionZoomTerminal": "Изменить размер текста терминала"
 }

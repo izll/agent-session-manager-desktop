@@ -735,5 +735,9 @@
   "sessionFile.cancel": "Annuleren",
   "sessionFile.close": "Sluiten",
   "settings.fontSize": "Tekengrootte",
-  "settings.fontSizeDesc": "Standaard voor alle terminals. Ctrl+scrollen past één tabblad aan."
+  "settings.fontSizeDesc": "Standaard voor alle terminals. Ctrl+scrollen past één tabblad aan.",
+  "tabBar.resetFontSize": "Tekengrootte herstellen",
+  "help.actionResetFontSize": "Tekengrootte herstellen",
+  "help.wheel": "scrollen",
+  "help.actionZoomTerminal": "Terminaltekst schalen"
 }

@@ -735,5 +735,9 @@
   "sessionFile.cancel": "Mégse",
   "sessionFile.close": "Bezárás",
   "settings.fontSize": "Betűméret",
-  "settings.fontSizeDesc": "Minden terminál alapértelmezése. Ctrl+görgővel egy fül külön állítható."
+  "settings.fontSizeDesc": "Minden terminál alapértelmezése. Ctrl+görgővel egy fül külön állítható.",
+  "tabBar.resetFontSize": "Betűméret visszaállítása",
+  "help.actionResetFontSize": "Betűméret visszaállítása",
+  "help.wheel": "görgő",
+  "help.actionZoomTerminal": "Terminál betűméret állítása"
 }

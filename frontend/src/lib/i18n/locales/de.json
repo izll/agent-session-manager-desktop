@@ -735,5 +735,9 @@
   "sessionFile.cancel": "Abbrechen",
   "sessionFile.close": "Schließen",
   "settings.fontSize": "Schriftgröße",
-  "settings.fontSizeDesc": "Standard für alle Terminals. Strg+Scrollen ändert einen einzelnen Tab."
+  "settings.fontSizeDesc": "Standard für alle Terminals. Strg+Scrollen ändert einen einzelnen Tab.",
+  "tabBar.resetFontSize": "Schriftgröße zurücksetzen",
+  "help.actionResetFontSize": "Schriftgröße zurücksetzen",
+  "help.wheel": "Rad",
+  "help.actionZoomTerminal": "Terminaltext skalieren"
 }

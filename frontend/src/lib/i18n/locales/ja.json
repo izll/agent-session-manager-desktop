@@ -735,5 +735,9 @@
   "sessionFile.cancel": "キャンセル",
   "sessionFile.close": "閉じる",
   "settings.fontSize": "文字サイズ",
-  "settings.fontSizeDesc": "すべてのターミナルの既定値。Ctrl+ホイールで個別のタブを調整できます。"
+  "settings.fontSizeDesc": "すべてのターミナルの既定値。Ctrl+ホイールで個別のタブを調整できます。",
+  "tabBar.resetFontSize": "文字サイズをリセット",
+  "help.actionResetFontSize": "文字サイズをリセット",
+  "help.wheel": "ホイール",
+  "help.actionZoomTerminal": "ターミナルの文字サイズを変更"
 }

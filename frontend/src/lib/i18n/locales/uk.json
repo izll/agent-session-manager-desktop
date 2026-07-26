@@ -735,5 +735,9 @@
   "sessionFile.cancel": "Скасувати",
   "sessionFile.close": "Закрити",
   "settings.fontSize": "Розмір шрифту",
-  "settings.fontSizeDesc": "Типово для всіх терміналів. Ctrl+колесо змінює одну вкладку."
+  "settings.fontSizeDesc": "Типово для всіх терміналів. Ctrl+колесо змінює одну вкладку.",
+  "tabBar.resetFontSize": "Скинути розмір шрифту",
+  "help.actionResetFontSize": "Скинути розмір шрифту",
+  "help.wheel": "колесо",
+  "help.actionZoomTerminal": "Змінити розмір тексту термінала"
 }

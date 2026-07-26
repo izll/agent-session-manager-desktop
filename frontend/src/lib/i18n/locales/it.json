@@ -735,5 +735,9 @@
   "sessionFile.cancel": "Annulla",
   "sessionFile.close": "Chiudi",
   "settings.fontSize": "Dimensione del carattere",
-  "settings.fontSizeDesc": "Predefinito per tutti i terminali. Ctrl+rotellina regola una scheda."
+  "settings.fontSizeDesc": "Predefinito per tutti i terminali. Ctrl+rotellina regola una scheda.",
+  "tabBar.resetFontSize": "Reimposta dimensione carattere",
+  "help.actionResetFontSize": "Reimposta dimensione carattere",
+  "help.wheel": "rotellina",
+  "help.actionZoomTerminal": "Ridimensiona il testo del terminale"
 }

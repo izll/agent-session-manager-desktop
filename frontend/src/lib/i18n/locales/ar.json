@@ -735,5 +735,9 @@
   "sessionFile.cancel": "إلغاء",
   "sessionFile.close": "إغلاق",
   "settings.fontSize": "حجم الخط",
-  "settings.fontSizeDesc": "الافتراضي لكل الطرفيات. Ctrl+عجلة الفأرة يضبط علامة تبويب واحدة."
+  "settings.fontSizeDesc": "الافتراضي لكل الطرفيات. Ctrl+عجلة الفأرة يضبط علامة تبويب واحدة.",
+  "tabBar.resetFontSize": "إعادة تعيين حجم الخط",
+  "help.actionResetFontSize": "إعادة تعيين حجم الخط",
+  "help.wheel": "عجلة",
+  "help.actionZoomTerminal": "تغيير حجم نص الطرفية"
 }

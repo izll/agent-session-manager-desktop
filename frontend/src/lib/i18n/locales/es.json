@@ -735,5 +735,9 @@
   "sessionFile.cancel": "Cancelar",
   "sessionFile.close": "Cerrar",
   "settings.fontSize": "Tamaño de fuente",
-  "settings.fontSizeDesc": "Predeterminado para todos los terminales. Ctrl+rueda ajusta una pestaña."
+  "settings.fontSizeDesc": "Predeterminado para todos los terminales. Ctrl+rueda ajusta una pestaña.",
+  "tabBar.resetFontSize": "Restablecer tamaño de fuente",
+  "help.actionResetFontSize": "Restablecer tamaño de fuente",
+  "help.wheel": "rueda",
+  "help.actionZoomTerminal": "Ajustar el texto del terminal"
 }

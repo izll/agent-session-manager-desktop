@@ -735,5 +735,9 @@
   "sessionFile.cancel": "Anuluj",
   "sessionFile.close": "Zamknij",
   "settings.fontSize": "Rozmiar czcionki",
-  "settings.fontSizeDesc": "Domyślny dla wszystkich terminali. Ctrl+kółko zmienia jedną kartę."
+  "settings.fontSizeDesc": "Domyślny dla wszystkich terminali. Ctrl+kółko zmienia jedną kartę.",
+  "tabBar.resetFontSize": "Przywróć rozmiar czcionki",
+  "help.actionResetFontSize": "Przywróć rozmiar czcionki",
+  "help.wheel": "kółko",
+  "help.actionZoomTerminal": "Zmień rozmiar tekstu terminala"
 }

@@ -58,6 +58,8 @@
       { key: 'Ctrl+Shift+H', desc: $t('help.actionShowHelp') },
       { key: 'Ctrl+Shift+U', desc: $t('help.actionCheckUpdates') },
       { key: 'Ctrl+Shift+I', desc: $t('help.actionImportSessions') },
+      { key: 'Ctrl+' + $t('help.wheel'), desc: $t('help.actionZoomTerminal') },
+      { key: 'Ctrl+0', desc: $t('help.actionResetFontSize') },
       { key: 'Esc', desc: $t('help.actionCloseDialogs') },
     ]},
   ];

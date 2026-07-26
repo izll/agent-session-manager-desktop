@@ -735,5 +735,9 @@
   "sessionFile.cancel": "取消",
   "sessionFile.close": "关闭",
   "settings.fontSize": "字体大小",
-  "settings.fontSizeDesc": "所有终端的默认值。Ctrl+滚轮可单独调整某个标签页。"
+  "settings.fontSizeDesc": "所有终端的默认值。Ctrl+滚轮可单独调整某个标签页。",
+  "tabBar.resetFontSize": "重置字体大小",
+  "help.actionResetFontSize": "重置字体大小",
+  "help.wheel": "滚轮",
+  "help.actionZoomTerminal": "调整终端文字大小"
 }

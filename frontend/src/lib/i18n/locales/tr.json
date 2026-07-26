@@ -735,5 +735,9 @@
   "sessionFile.cancel": "İptal",
   "sessionFile.close": "Kapat",
   "settings.fontSize": "Yazı tipi boyutu",
-  "settings.fontSizeDesc": "Tüm terminaller için varsayılan. Ctrl+tekerlek tek bir sekmeyi ayarlar."
+  "settings.fontSizeDesc": "Tüm terminaller için varsayılan. Ctrl+tekerlek tek bir sekmeyi ayarlar.",
+  "tabBar.resetFontSize": "Yazı tipi boyutunu sıfırla",
+  "help.actionResetFontSize": "Yazı tipi boyutunu sıfırla",
+  "help.wheel": "tekerlek",
+  "help.actionZoomTerminal": "Terminal metnini yeniden boyutlandır"
 }

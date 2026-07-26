@@ -735,5 +735,9 @@
   "sessionFile.cancel": "Zrušit",
   "sessionFile.close": "Zavřít",
   "settings.fontSize": "Velikost písma",
-  "settings.fontSizeDesc": "Výchozí pro všechny terminály. Ctrl+kolečko upraví jednu záložku."
+  "settings.fontSizeDesc": "Výchozí pro všechny terminály. Ctrl+kolečko upraví jednu záložku.",
+  "tabBar.resetFontSize": "Obnovit velikost písma",
+  "help.actionResetFontSize": "Obnovit velikost písma",
+  "help.wheel": "kolečko",
+  "help.actionZoomTerminal": "Změnit velikost textu terminálu"
 }

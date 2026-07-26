@@ -735,5 +735,9 @@
   "sessionFile.cancel": "Cancelar",
   "sessionFile.close": "Fechar",
   "settings.fontSize": "Tamanho da fonte",
-  "settings.fontSizeDesc": "Padrão para todos os terminais. Ctrl+rolagem ajusta uma aba."
+  "settings.fontSizeDesc": "Padrão para todos os terminais. Ctrl+rolagem ajusta uma aba.",
+  "tabBar.resetFontSize": "Redefinir tamanho da fonte",
+  "help.actionResetFontSize": "Redefinir tamanho da fonte",
+  "help.wheel": "rolagem",
+  "help.actionZoomTerminal": "Ajustar o texto do terminal"
 }

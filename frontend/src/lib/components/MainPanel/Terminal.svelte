@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy, createEventDispatcher } from 'svelte';
-  import { sessions, selectedSessionId, selectedWindowIdx } from '../../stores/sessions';
+  import { sessions, selectedSessionId, selectedWindowIdx, loadSessions } from '../../stores/sessions';
   import { settings } from '../../stores/settings';
   import { get } from 'svelte/store';
   import { EventsOn } from '../../../../wailsjs/runtime/runtime';
@@ -55,6 +55,32 @@
         LogFrontend(`SetTabFontSize failed session=${sid} win=${widx}: ${err}`);
       });
     }, 400);
+  }
+
+  /**
+   * Drop this tab's own size so it follows the global setting again. The
+   * pane is updated straight away; the stored value is cleared behind it.
+   */
+  async function resetFontSizeForCurrentTab() {
+    const sid = currentTargetSessionId();
+    if (!sid) return;
+    const widx = currentTargetWindowIdx();
+    // A pending Ctrl+scroll save would otherwise write the old size back.
+    if (fontSizeSaveTimer) {
+      clearTimeout(fontSizeSaveTimer);
+      fontSizeSaveTimer = null;
+    }
+    const entry = pool?.getActive();
+    if (entry) {
+      entry.themeCtx = { ...(entry.themeCtx || {}), fontSize: 0 };
+    }
+    pool?.applyFontSize();
+    try {
+      await SetTabFontSize(sid, widx, 0);
+      await loadSessions();
+    } catch (err) {
+      LogFrontend(`reset font size failed session=${sid} win=${widx}: ${err}`);
+    }
   }
 
   // Get current session without reactive subscription
@@ -257,6 +283,14 @@
 
     // Capture-phase handler for Shift+PageUp/Down → send to tmux via WebSocket
     function handleTerminalKeydown(e: KeyboardEvent) {
+      // Ctrl+0 resets the zoom, as in a browser. Caught here rather than sent
+      // to the shell: Ctrl+0 has no terminal meaning, so nothing is lost.
+      if (e.ctrlKey && !e.shiftKey && !e.altKey && (e.key === '0' || e.code === 'Digit0')) {
+        e.preventDefault();
+        e.stopPropagation();
+        void resetFontSizeForCurrentTab();
+        return;
+      }
       if (e.shiftKey && (e.key === 'PageUp' || e.key === 'PageDown')) {
         e.preventDefault();
         e.stopPropagation();

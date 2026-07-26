@@ -816,6 +816,30 @@
     return (fw as any)?.terminal_theme || '';
   })();
 
+  // A tab only has its own size after a Ctrl+scroll; without one there is
+  // nothing to reset, so the menu entry stays hidden.
+  $: tabHasFontOverride = (() => {
+    if (tabContextMenuIndex === null || !$selectedSession) return false;
+    const main = $selectedSession.mainWindowIndex ?? 0;
+    if (tabContextMenuIndex === main) return !!$selectedSession.terminalFontSize;
+    const fw = ($selectedSession.followedWindows || [])
+      .find((f: any) => f.index === tabContextMenuIndex);
+    return !!(fw as any)?.terminal_font_size;
+  })();
+
+  // Zero clears the override, so the tab follows the global setting again.
+  async function resetTabFontSize() {
+    const idx = tabContextMenuIndex;
+    closeTabContextMenu();
+    if (idx === null || !$selectedSession) return;
+    try {
+      await App.SetTabFontSize($selectedSession.id, idx, 0);
+      await loadSessions();
+    } catch (e) {
+      console.error('Reset tab font size failed:', e);
+    }
+  }
+
   async function setTabTheme(themeID: string) {
     const idx = tabContextMenuIndex;
     showTabThemeMenu = false;
@@ -1286,6 +1310,15 @@
             </div>
           {/if}
         </div>
+        {#if tabHasFontOverride}
+          <button class="tab-context-menu-item" on:click={resetTabFontSize}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M3 7v6h6"/>
+              <path d="M3.51 13a9 9 0 1 0 2.13-9.36L3 7"/>
+            </svg>
+            {$t('tabBar.resetFontSize')}
+          </button>
+        {/if}
         {#if tabContextMenuIndex !== null && windows.find(w => w.Index === tabContextMenuIndex)?.Agent !== 'terminal' && windows.find(w => w.Index === tabContextMenuIndex)?.Agent !== 'custom'}
           <button class="tab-context-menu-item" on:click={tabContextEditExtraArgs}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">

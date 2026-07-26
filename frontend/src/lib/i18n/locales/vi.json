@@ -735,5 +735,9 @@
   "sessionFile.cancel": "Hủy",
   "sessionFile.close": "Đóng",
   "settings.fontSize": "Cỡ chữ",
-  "settings.fontSizeDesc": "Mặc định cho mọi terminal. Ctrl+cuộn để chỉnh riêng một tab."
+  "settings.fontSizeDesc": "Mặc định cho mọi terminal. Ctrl+cuộn để chỉnh riêng một tab.",
+  "tabBar.resetFontSize": "Đặt lại cỡ chữ",
+  "help.actionResetFontSize": "Đặt lại cỡ chữ",
+  "help.wheel": "cuộn",
+  "help.actionZoomTerminal": "Đổi cỡ chữ terminal"
 }

@@ -735,5 +735,9 @@
   "sessionFile.cancel": "Cancel",
   "sessionFile.close": "Close",
   "settings.fontSize": "Font size",
-  "settings.fontSizeDesc": "Default for all terminals. Ctrl+scroll resizes one tab on its own."
+  "settings.fontSizeDesc": "Default for all terminals. Ctrl+scroll resizes one tab on its own.",
+  "tabBar.resetFontSize": "Reset font size",
+  "help.actionResetFontSize": "Reset font size",
+  "help.wheel": "scroll",
+  "help.actionZoomTerminal": "Resize terminal text"
 }
