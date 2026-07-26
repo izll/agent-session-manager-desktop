@@ -733,5 +733,7 @@
   "sessionFile.missingNote": "{n} из них указывают на папки, которых здесь нет. Их можно импортировать, но они не запустятся, пока путь не будет исправлен.",
   "sessionFile.importSelected": "Импортировать ({n})",
   "sessionFile.cancel": "Отмена",
-  "sessionFile.close": "Закрыть"
+  "sessionFile.close": "Закрыть",
+  "settings.fontSize": "Размер шрифта",
+  "settings.fontSizeDesc": "По умолчанию для всех терминалов. Ctrl+колесо меняет одну вкладку."
 }

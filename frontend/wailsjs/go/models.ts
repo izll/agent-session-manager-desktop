@@ -721,6 +721,7 @@ export namespace main {
 	    tabTextColor: string;
 	    tabBackgroundColor: string;
 	    terminalTheme: string;
+	    terminalFontSize: number;
 	    mainWindowIndex: number;
 	    lastWindowIndex: number;
 	    isGitRepo: boolean;
@@ -752,6 +753,7 @@ export namespace main {
 	        this.tabTextColor = source["tabTextColor"];
 	        this.tabBackgroundColor = source["tabBackgroundColor"];
 	        this.terminalTheme = source["terminalTheme"];
+	        this.terminalFontSize = source["terminalFontSize"];
 	        this.mainWindowIndex = source["mainWindowIndex"];
 	        this.lastWindowIndex = source["lastWindowIndex"];
 	        this.isGitRepo = source["isGitRepo"];
@@ -786,6 +788,7 @@ export namespace main {
 	    markedWindowIdx: number;
 	    language: string;
 	    terminalRenderer: string;
+	    terminalFontSize: number;
 	    notifyOnWaiting: boolean;
 	    notifyDesktop: boolean;
 	    notifyNtfy: boolean;
@@ -811,6 +814,7 @@ export namespace main {
 	        this.markedWindowIdx = source["markedWindowIdx"];
 	        this.language = source["language"];
 	        this.terminalRenderer = source["terminalRenderer"];
+	        this.terminalFontSize = source["terminalFontSize"];
 	        this.notifyOnWaiting = source["notifyOnWaiting"];
 	        this.notifyDesktop = source["notifyDesktop"];
 	        this.notifyNtfy = source["notifyNtfy"];
@@ -1118,6 +1122,7 @@ export namespace session {
 	    extra_args?: string;
 	    stopped?: boolean;
 	    terminal_theme?: string;
+	    terminal_font_size?: number;
 	    text_color?: string;
 	    background_color?: string;
 	    work_dir?: string;
@@ -1139,6 +1144,7 @@ export namespace session {
 	        this.extra_args = source["extra_args"];
 	        this.stopped = source["stopped"];
 	        this.terminal_theme = source["terminal_theme"];
+	        this.terminal_font_size = source["terminal_font_size"];
 	        this.text_color = source["text_color"];
 	        this.background_color = source["background_color"];
 	        this.work_dir = source["work_dir"];

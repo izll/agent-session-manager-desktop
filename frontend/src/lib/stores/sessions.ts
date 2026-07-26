@@ -27,6 +27,8 @@ export interface Session {
   tabTextColor: string;
   tabBackgroundColor: string;
   terminalTheme: string;
+  /** Per-session font size override; 0 inherits the global setting. */
+  terminalFontSize: number;
   /** Main window's tmux index — not always 0. */
   mainWindowIndex: number;
   /** Tab the session was last left on; may no longer exist. */

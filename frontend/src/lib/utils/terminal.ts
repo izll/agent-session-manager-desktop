@@ -4,7 +4,8 @@ import { SearchAddon } from '@xterm/addon-search';
 import { CanvasAddon } from '@xterm/addon-canvas';
 import { WebglAddon } from '@xterm/addon-webgl';
 import { GetTerminalWSPort, GetTerminalWSToken } from '../../../wailsjs/go/main/App';
-import { getTerminalTheme, resolveTerminalTheme, DEFAULT_TERMINAL_THEME } from './terminalThemes';
+import { getTerminalTheme, resolveTerminalTheme, DEFAULT_TERMINAL_THEME, resolveFontSize,
+         MIN_FONT_SIZE, MAX_FONT_SIZE, DEFAULT_FONT_SIZE } from './terminalThemes';
 
 // The backend may bind a fallback port if 9753 is taken (e.g. a second
 // instance running alongside). Resolve it from the backend, but ONLY cache
@@ -120,6 +121,7 @@ export function setTerminalThemeContext(ctx: {
   agentDefault?: string;
   agentThemes?: Record<string, string> | null;
   customThemes?: any[] | null;
+  fontSize?: number;
 }): void {
   __themeCtx = {
     terminalDefault: ctx.terminalDefault || DEFAULT_TERMINAL_THEME,
@@ -127,6 +129,15 @@ export function setTerminalThemeContext(ctx: {
     agentThemes: ctx.agentThemes || {},
     customThemes: ctx.customThemes || [],
   };
+  __globalFontSize = ctx.fontSize || 0;
+}
+
+/** Global default size; 0 means the built-in default. */
+let __globalFontSize = 0;
+
+/** The size a tab should render at, given its own override (0 = inherit). */
+export function fontSizeFor(tabSize?: number): number {
+  return resolveFontSize(tabSize, __globalFontSize);
 }
 
 /** Palette for one terminal, given its tab override and agent type. */
@@ -180,14 +191,14 @@ function loadRenderer(terminal: Terminal): void {
 export function createTerminal(
   container: HTMLElement,
   options: Partial<Terminal['options']> = {},
-  themeCtx: { tabTheme?: string; agent?: string } = {},
+  themeCtx: { tabTheme?: string; agent?: string; fontSize?: number } = {},
 ): TerminalInstance {
   const terminal = new Terminal({
     // cursorBlink triggers a continuous render tick on the xterm canvas every
     // ~500ms even when the terminal is idle — disabled to keep the WebKit
     // renderer quiet when nothing is happening.
     cursorBlink: false,
-    fontSize: 14,
+    fontSize: fontSizeFor(themeCtx.fontSize),
     scrollback: 1000,
     // Low-risk render-cost trims for the DOM renderer on WebKitGTK (no renderer
     // change). Each one removes work from the per-update style/layout/paint
@@ -288,6 +299,34 @@ export function createTerminal(
   container.addEventListener('mousedown', onMouseDown, true);
   container.addEventListener('mouseup', onMouseUp, true);
 
+  // Ctrl+wheel resizes the text, as in a browser or a terminal emulator. The
+  // change is reported so the caller can persist it — this handler only knows
+  // about one pane, not which session or tab it belongs to.
+  const onWheel = (e: WheelEvent) => {
+    if (!e.ctrlKey) return;
+    // Without this the pane scrolls as well as zooming.
+    e.preventDefault();
+    const current = terminal.options.fontSize || DEFAULT_FONT_SIZE;
+    const next = Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE,
+      current + (e.deltaY < 0 ? 1 : -1)));
+    if (next === current) return; // already at a limit
+    terminal.options.fontSize = next;
+    // A different size means a different row/column count; without refitting,
+    // the pty keeps the old geometry and output wraps at the wrong column.
+    try { fitAddon.fit(); } catch { /* not attached yet */ }
+    container.dispatchEvent(new CustomEvent('terminal:fontsize', {
+      detail: { size: next },
+      bubbles: true,
+    }));
+  };
+  // Capture phase, like the mouse handlers above: xterm registers its own
+  // non-passive wheel listener on the element it creates inside this
+  // container, so a bubble-phase handler here would run after it — or not at
+  // all. Capturing on the outer container means we see the event on its way
+  // down, before xterm can act on it. Not passive either: the handler calls
+  // preventDefault to stop the pane scrolling while zooming.
+  container.addEventListener('wheel', onWheel, { capture: true, passive: false });
+
   return {
     terminal,
     fitAddon,
@@ -302,6 +341,7 @@ export function createTerminal(
     cleanup: () => {
       container.removeEventListener('mousedown', onMouseDown, true);
       container.removeEventListener('mouseup', onMouseUp, true);
+      container.removeEventListener('wheel', onWheel, true);
       // xterm's dispose() intermittently throws from its internal linkifier
       // ("this._linkifier2.onShowLinkUnderline" is undefined) when a tab is
       // torn down right after an abrupt WebSocket close (1005). The throw

@@ -733,5 +733,7 @@
   "sessionFile.missingNote": "{n} hiervan verwijzen naar mappen die hier ontbreken. Ze kunnen wel worden geïmporteerd, maar starten pas als het pad is gecorrigeerd.",
   "sessionFile.importSelected": "Importeren ({n})",
   "sessionFile.cancel": "Annuleren",
-  "sessionFile.close": "Sluiten"
+  "sessionFile.close": "Sluiten",
+  "settings.fontSize": "Tekengrootte",
+  "settings.fontSizeDesc": "Standaard voor alle terminals. Ctrl+scrollen past één tabblad aan."
 }

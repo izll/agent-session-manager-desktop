@@ -733,5 +733,7 @@
   "sessionFile.missingNote": "{n} phiên trỏ tới thư mục không có ở đây. Vẫn có thể nhập, nhưng sẽ không khởi động cho đến khi sửa đường dẫn.",
   "sessionFile.importSelected": "Nhập ({n})",
   "sessionFile.cancel": "Hủy",
-  "sessionFile.close": "Đóng"
+  "sessionFile.close": "Đóng",
+  "settings.fontSize": "Cỡ chữ",
+  "settings.fontSizeDesc": "Mặc định cho mọi terminal. Ctrl+cuộn để chỉnh riêng một tab."
 }

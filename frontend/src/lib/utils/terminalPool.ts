@@ -7,7 +7,7 @@ import {
   type TerminalInstance
 } from './terminal';
 import type { Terminal } from '@xterm/xterm';
-import { themeFor } from './terminal';
+import { themeFor, fontSizeFor } from './terminal';
 import { LogFrontend } from '../../../wailsjs/go/main/App';
 
 // Surface pool errors in the backend log file too — the packaged build has
@@ -22,7 +22,7 @@ export interface PoolEntry {
   containerEl: HTMLDivElement;
   key: string;
   /** Palette inputs for this pane, so a settings change can re-resolve it. */
-  themeCtx: { tabTheme?: string; agent?: string };
+  themeCtx: { tabTheme?: string; agent?: string; fontSize?: number };
 }
 
 export class TerminalPool {
@@ -84,7 +84,7 @@ export class TerminalPool {
     }
   }
 
-  async getOrCreate(sessionId: string, windowIdx: number, themeCtx: { tabTheme?: string; agent?: string } = {}): Promise<PoolEntry> {
+  async getOrCreate(sessionId: string, windowIdx: number, themeCtx: { tabTheme?: string; agent?: string; fontSize?: number } = {}): Promise<PoolEntry> {
     if (this.disposed) throw new Error('terminal pool is disposed');
     const key = this.makeKey(sessionId, windowIdx);
     let entry = this.entries.get(key);
@@ -166,7 +166,7 @@ export class TerminalPool {
     return entry;
   }
 
-  async show(sessionId: string, windowIdx: number, shouldFocus: boolean | (() => boolean) = true, themeCtx: { tabTheme?: string; agent?: string } = {}): Promise<void> {
+  async show(sessionId: string, windowIdx: number, shouldFocus: boolean | (() => boolean) = true, themeCtx: { tabTheme?: string; agent?: string; fontSize?: number } = {}): Promise<void> {
     if (this.disposed) return;
     const canFocus = () => typeof shouldFocus === 'function' ? shouldFocus() : shouldFocus;
     const key = this.makeKey(sessionId, windowIdx);
@@ -328,6 +328,26 @@ export class TerminalPool {
           themeFor(entry.themeCtx?.tabTheme, entry.themeCtx?.agent);
       } catch (e) {
         logPoolError('pool: applying theme failed', e);
+      }
+    }
+  }
+
+  /**
+   * Re-apply font sizes after a settings change. Each pane resolves its own
+   * size, since a tab may override the global default. Changing the size
+   * changes how many rows and columns fit, so every pane is refitted and the
+   * new dimensions pushed to tmux — otherwise the pty keeps the old geometry
+   * and output wraps at the wrong column.
+   */
+  applyFontSize(): void {
+    for (const entry of this.entries.values()) {
+      try {
+        const size = fontSizeFor(entry.themeCtx?.fontSize);
+        if (entry.terminalInstance.terminal.options.fontSize === size) continue;
+        entry.terminalInstance.terminal.options.fontSize = size;
+        entry.terminalInstance.fitAddon?.fit();
+      } catch (e) {
+        logPoolError('pool: applying font size failed', e);
       }
     }
   }

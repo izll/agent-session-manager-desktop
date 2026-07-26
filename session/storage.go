@@ -40,15 +40,15 @@ type CustomTerminalTheme struct {
 
 // Settings stores UI preferences
 type Settings struct {
-	CompactList     bool   `json:"compact_list"`
-	HideStatusLines bool   `json:"hide_status_lines"`
-	ShowAgentIcons  bool   `json:"show_agent_icons,omitempty"`
+	CompactList     bool `json:"compact_list"`
+	HideStatusLines bool `json:"hide_status_lines"`
+	ShowAgentIcons  bool `json:"show_agent_icons,omitempty"`
 	// YOLO shows by default (it flags bypassed permissions, worth seeing), so
 	// it's a "hide" flag whose zero value keeps it visible. The resume marker
 	// is the opposite: most sessions continue an earlier conversation, so it
 	// adds noise more than information and is opt-in.
-	HideYoloBadge   bool `json:"hide_yolo_badge,omitempty"`
-	ShowResumeBadge bool `json:"show_resume_badge,omitempty"`
+	HideYoloBadge   bool   `json:"hide_yolo_badge,omitempty"`
+	ShowResumeBadge bool   `json:"show_resume_badge,omitempty"`
 	SplitView       bool   `json:"split_view,omitempty"`
 	MarkedSessionID string `json:"marked_session_id,omitempty"`
 	MarkedWindowIdx int    `json:"marked_window_idx,omitempty"`
@@ -76,6 +76,9 @@ type Settings struct {
 	//   AgentDefaultTheme  — default for agent sessions/tabs
 	// AgentTerminalThemes refines the agent side per agent type. A tab's own
 	// palette still wins over either default.
+	// TerminalFontSize is the default size in px; 0 means the built-in
+	// default, so existing settings keep the size they had.
+	TerminalFontSize    int               `json:"terminal_font_size,omitempty"`
 	TerminalTheme       string            `json:"terminal_theme,omitempty"`
 	AgentDefaultTheme   string            `json:"agent_default_theme,omitempty"`
 	AgentTerminalThemes map[string]string `json:"agent_terminal_themes,omitempty"`

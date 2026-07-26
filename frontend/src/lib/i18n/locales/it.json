@@ -733,5 +733,7 @@
   "sessionFile.missingNote": "{n} di queste puntano a cartelle mancanti qui. Possono comunque essere importate, ma non si avvieranno finché il percorso non sarà corretto.",
   "sessionFile.importSelected": "Importa ({n})",
   "sessionFile.cancel": "Annulla",
-  "sessionFile.close": "Chiudi"
+  "sessionFile.close": "Chiudi",
+  "settings.fontSize": "Dimensione del carattere",
+  "settings.fontSizeDesc": "Predefinito per tutti i terminali. Ctrl+rotellina regola una scheda."
 }

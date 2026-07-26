@@ -733,5 +733,7 @@
   "sessionFile.missingNote": "Bunların {n} tanesi burada bulunmayan klasörleri gösteriyor. Yine de içe aktarılabilir, ancak yol düzeltilene kadar başlatılamaz.",
   "sessionFile.importSelected": "İçe aktar ({n})",
   "sessionFile.cancel": "İptal",
-  "sessionFile.close": "Kapat"
+  "sessionFile.close": "Kapat",
+  "settings.fontSize": "Yazı tipi boyutu",
+  "settings.fontSizeDesc": "Tüm terminaller için varsayılan. Ctrl+tekerlek tek bir sekmeyi ayarlar."
 }

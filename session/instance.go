@@ -124,35 +124,36 @@ var AgentConfigs = map[AgentType]AgentConfig{
 }
 
 type Instance struct {
-	ID                 string           `json:"id"`
-	Name               string           `json:"name"`
-	Path               string           `json:"path"`
-	Status             Status           `json:"status"`
-	CreatedAt          time.Time        `json:"created_at"`
-	UpdatedAt          time.Time        `json:"updated_at"`
-	AutoYes            bool             `json:"auto_yes"`
-	HideStatusLine     bool             `json:"hide_status_line,omitempty"`     // Don't show the main window's status line in the session list
-	ResumeSessionID    string           `json:"resume_session_id,omitempty"`    // Claude session ID to resume
-	Color              string           `json:"color,omitempty"`                // Foreground color
-	BgColor            string           `json:"bg_color,omitempty"`             // Background color
-	FullRowColor       bool             `json:"full_row_color,omitempty"`       // Extend background to full row
-	GroupID            string           `json:"group_id,omitempty"`             // Session group ID
-	Agent              AgentType        `json:"agent,omitempty"`                // Agent type (claude, gemini, aider, custom)
-	CustomCommand      string           `json:"custom_command,omitempty"`       // Custom command for AgentCustom
-	ExtraArgs          string           `json:"extra_args,omitempty"`           // Extra CLI arguments appended to agent command
-	Notes              string           `json:"notes,omitempty"`                // User notes/comments for this session
-	FollowedWindows    []FollowedWindow `json:"followed_windows,omitempty"`     // Windows tracked as agents (window 0 is main agent)
-	BaseCommitSHA      string           `json:"base_commit_sha,omitempty"`      // Git HEAD commit at session start (for diff)
-	Favorite           bool             `json:"favorite,omitempty"`             // Whether session is marked as favorite
-	MainWindowStopped  bool             `json:"main_window_stopped,omitempty"`  // Main window (0) is stopped but session still running
-	TabOrder           []int            `json:"tab_order,omitempty"`            // Custom tab display order (tmux window indices); if empty, default order is used
-	TerminalTheme      string           `json:"terminal_theme,omitempty"`       // Main window colour palette (empty inherits agent/global)
+	ID                string           `json:"id"`
+	Name              string           `json:"name"`
+	Path              string           `json:"path"`
+	Status            Status           `json:"status"`
+	CreatedAt         time.Time        `json:"created_at"`
+	UpdatedAt         time.Time        `json:"updated_at"`
+	AutoYes           bool             `json:"auto_yes"`
+	HideStatusLine    bool             `json:"hide_status_line,omitempty"`    // Don't show the main window's status line in the session list
+	ResumeSessionID   string           `json:"resume_session_id,omitempty"`   // Claude session ID to resume
+	Color             string           `json:"color,omitempty"`               // Foreground color
+	BgColor           string           `json:"bg_color,omitempty"`            // Background color
+	FullRowColor      bool             `json:"full_row_color,omitempty"`      // Extend background to full row
+	GroupID           string           `json:"group_id,omitempty"`            // Session group ID
+	Agent             AgentType        `json:"agent,omitempty"`               // Agent type (claude, gemini, aider, custom)
+	CustomCommand     string           `json:"custom_command,omitempty"`      // Custom command for AgentCustom
+	ExtraArgs         string           `json:"extra_args,omitempty"`          // Extra CLI arguments appended to agent command
+	Notes             string           `json:"notes,omitempty"`               // User notes/comments for this session
+	FollowedWindows   []FollowedWindow `json:"followed_windows,omitempty"`    // Windows tracked as agents (window 0 is main agent)
+	BaseCommitSHA     string           `json:"base_commit_sha,omitempty"`     // Git HEAD commit at session start (for diff)
+	Favorite          bool             `json:"favorite,omitempty"`            // Whether session is marked as favorite
+	MainWindowStopped bool             `json:"main_window_stopped,omitempty"` // Main window (0) is stopped but session still running
+	TabOrder          []int            `json:"tab_order,omitempty"`           // Custom tab display order (tmux window indices); if empty, default order is used
+	TerminalTheme     string           `json:"terminal_theme,omitempty"`      // Main window colour palette (empty inherits agent/global)
+	TerminalFontSize  int              `json:"terminal_font_size,omitempty"`  // Main window font size in px (0 inherits the global setting)
 	// LastWindowIndex is the tab that was open when the session was last
 	// left, so reopening it lands where the user was. Advisory only: the
 	// window may be gone by then, so callers must validate it.
-	LastWindowIndex int `json:"last_window_index,omitempty"`
-	TabTextColor       string           `json:"tab_text_color,omitempty"`       // Main tab text color (empty uses the theme default)
-	TabBackgroundColor string           `json:"tab_background_color,omitempty"` // Main tab background color (empty uses the theme default)
+	LastWindowIndex    int    `json:"last_window_index,omitempty"`
+	TabTextColor       string `json:"tab_text_color,omitempty"`       // Main tab text color (empty uses the theme default)
+	TabBackgroundColor string `json:"tab_background_color,omitempty"` // Main tab background color (empty uses the theme default)
 }
 
 // DiffStats contains git diff statistics and content
@@ -170,20 +171,21 @@ func (d *DiffStats) IsEmpty() bool {
 
 // FollowedWindow represents a tmux window tracked as an agent
 type FollowedWindow struct {
-	Index           int       `json:"index"`
-	Agent           AgentType `json:"agent"`
-	Name            string    `json:"name"`                       // Tab name for display
-	CustomCommand   string    `json:"custom_command"`             // For custom agents
-	AutoYes         bool      `json:"auto_yes"`                   // YOLO mode for this tab
-	ResumeSessionID string    `json:"resume_session_id"`          // Resume session ID for this tab
-	Notes           string    `json:"notes,omitempty"`            // User notes for this tab
-	ExtraArgs       string    `json:"extra_args,omitempty"`       // Extra CLI arguments for this tab
-	Stopped         bool      `json:"stopped,omitempty"`          // Tab is stopped (window killed but can resume)
-	TerminalTheme   string    `json:"terminal_theme,omitempty"`   // Tab colour palette (empty inherits agent/global)
-	TextColor       string    `json:"text_color,omitempty"`       // Tab text color (empty uses the theme default)
-	BackgroundColor string    `json:"background_color,omitempty"` // Tab background color (empty uses the theme default)
-	WorkDir         string    `json:"work_dir,omitempty"`         // Tab working directory (empty = session path)
-	HideStatusLine  bool      `json:"hide_status_line,omitempty"` // Don't show this tab's status line in the session list
+	Index            int       `json:"index"`
+	Agent            AgentType `json:"agent"`
+	Name             string    `json:"name"`                         // Tab name for display
+	CustomCommand    string    `json:"custom_command"`               // For custom agents
+	AutoYes          bool      `json:"auto_yes"`                     // YOLO mode for this tab
+	ResumeSessionID  string    `json:"resume_session_id"`            // Resume session ID for this tab
+	Notes            string    `json:"notes,omitempty"`              // User notes for this tab
+	ExtraArgs        string    `json:"extra_args,omitempty"`         // Extra CLI arguments for this tab
+	Stopped          bool      `json:"stopped,omitempty"`            // Tab is stopped (window killed but can resume)
+	TerminalTheme    string    `json:"terminal_theme,omitempty"`     // Tab colour palette (empty inherits agent/global)
+	TerminalFontSize int       `json:"terminal_font_size,omitempty"` // Tab font size in px (0 inherits the global setting)
+	TextColor        string    `json:"text_color,omitempty"`         // Tab text color (empty uses the theme default)
+	BackgroundColor  string    `json:"background_color,omitempty"`   // Tab background color (empty uses the theme default)
+	WorkDir          string    `json:"work_dir,omitempty"`           // Tab working directory (empty = session path)
+	HideStatusLine   bool      `json:"hide_status_line,omitempty"`   // Don't show this tab's status line in the session list
 }
 
 // GetAgentConfig returns the agent configuration for this instance

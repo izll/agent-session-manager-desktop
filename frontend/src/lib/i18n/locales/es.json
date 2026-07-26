@@ -733,5 +733,7 @@
   "sessionFile.missingNote": "{n} de estas apuntan a carpetas que faltan aquí. Se pueden importar igualmente, pero no se iniciarán hasta corregir la ruta.",
   "sessionFile.importSelected": "Importar ({n})",
   "sessionFile.cancel": "Cancelar",
-  "sessionFile.close": "Cerrar"
+  "sessionFile.close": "Cerrar",
+  "settings.fontSize": "Tamaño de fuente",
+  "settings.fontSizeDesc": "Predeterminado para todos los terminales. Ctrl+rueda ajusta una pestaña."
 }

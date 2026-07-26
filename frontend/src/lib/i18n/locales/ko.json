@@ -733,5 +733,7 @@
   "sessionFile.missingNote": "이 중 {n}개는 여기 없는 폴더를 가리킵니다. 가져올 수는 있지만 경로를 고치기 전까지 시작되지 않습니다.",
   "sessionFile.importSelected": "가져오기 ({n})",
   "sessionFile.cancel": "취소",
-  "sessionFile.close": "닫기"
+  "sessionFile.close": "닫기",
+  "settings.fontSize": "글꼴 크기",
+  "settings.fontSizeDesc": "모든 터미널의 기본값입니다. Ctrl+휠로 탭 하나만 조절할 수 있습니다."
 }

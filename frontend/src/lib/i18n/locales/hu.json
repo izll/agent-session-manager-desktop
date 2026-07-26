@@ -733,5 +733,7 @@
   "sessionFile.missingNote": "Közülük {n} olyan mappára mutat, ami itt nincs meg. Behozhatók, de amíg az útvonalat nem javítod, nem indulnak el.",
   "sessionFile.importSelected": "Importálás ({n})",
   "sessionFile.cancel": "Mégse",
-  "sessionFile.close": "Bezárás"
+  "sessionFile.close": "Bezárás",
+  "settings.fontSize": "Betűméret",
+  "settings.fontSizeDesc": "Minden terminál alapértelmezése. Ctrl+görgővel egy fül külön állítható."
 }

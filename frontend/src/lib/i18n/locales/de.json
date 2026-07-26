@@ -733,5 +733,7 @@
   "sessionFile.missingNote": "{n} davon verweisen auf Ordner, die hier fehlen. Sie können trotzdem importiert werden, starten aber erst, wenn der Pfad korrigiert ist.",
   "sessionFile.importSelected": "Importieren ({n})",
   "sessionFile.cancel": "Abbrechen",
-  "sessionFile.close": "Schließen"
+  "sessionFile.close": "Schließen",
+  "settings.fontSize": "Schriftgröße",
+  "settings.fontSizeDesc": "Standard für alle Terminals. Strg+Scrollen ändert einen einzelnen Tab."
 }

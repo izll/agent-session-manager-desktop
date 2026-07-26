@@ -733,5 +733,7 @@
   "sessionFile.missingNote": "{n} z nich odkazuje na složky, které zde chybí. Lze je přesto importovat, ale nespustí se, dokud nebude cesta opravena.",
   "sessionFile.importSelected": "Importovat ({n})",
   "sessionFile.cancel": "Zrušit",
-  "sessionFile.close": "Zavřít"
+  "sessionFile.close": "Zavřít",
+  "settings.fontSize": "Velikost písma",
+  "settings.fontSizeDesc": "Výchozí pro všechny terminály. Ctrl+kolečko upraví jednu záložku."
 }

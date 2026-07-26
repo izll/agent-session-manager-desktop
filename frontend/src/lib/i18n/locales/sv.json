@@ -733,5 +733,7 @@
   "sessionFile.missingNote": "{n} av dessa pekar på mappar som saknas här. De kan ändå importeras, men startar inte förrän sökvägen har rättats.",
   "sessionFile.importSelected": "Importera ({n})",
   "sessionFile.cancel": "Avbryt",
-  "sessionFile.close": "Stäng"
+  "sessionFile.close": "Stäng",
+  "settings.fontSize": "Teckenstorlek",
+  "settings.fontSizeDesc": "Standard för alla terminaler. Ctrl+rulla ändrar en flik."
 }

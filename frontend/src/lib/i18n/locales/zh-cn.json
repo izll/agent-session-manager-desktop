@@ -733,5 +733,7 @@
   "sessionFile.missingNote": "其中 {n} 个指向本机缺失的文件夹。仍可导入，但在修正路径前无法启动。",
   "sessionFile.importSelected": "导入 ({n})",
   "sessionFile.cancel": "取消",
-  "sessionFile.close": "关闭"
+  "sessionFile.close": "关闭",
+  "settings.fontSize": "字体大小",
+  "settings.fontSizeDesc": "所有终端的默认值。Ctrl+滚轮可单独调整某个标签页。"
 }

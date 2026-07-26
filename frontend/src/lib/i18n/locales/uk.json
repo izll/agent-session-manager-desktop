@@ -733,5 +733,7 @@
   "sessionFile.missingNote": "{n} із них вказують на теки, яких тут немає. Їх можна імпортувати, але вони не запустяться, доки шлях не буде виправлено.",
   "sessionFile.importSelected": "Імпортувати ({n})",
   "sessionFile.cancel": "Скасувати",
-  "sessionFile.close": "Закрити"
+  "sessionFile.close": "Закрити",
+  "settings.fontSize": "Розмір шрифту",
+  "settings.fontSizeDesc": "Типово для всіх терміналів. Ctrl+колесо змінює одну вкладку."
 }

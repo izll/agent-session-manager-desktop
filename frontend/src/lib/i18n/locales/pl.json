@@ -733,5 +733,7 @@
   "sessionFile.missingNote": "{n} z nich wskazuje na foldery, których tu brakuje. Można je zaimportować, ale nie uruchomią się, dopóki ścieżka nie zostanie poprawiona.",
   "sessionFile.importSelected": "Importuj ({n})",
   "sessionFile.cancel": "Anuluj",
-  "sessionFile.close": "Zamknij"
+  "sessionFile.close": "Zamknij",
+  "settings.fontSize": "Rozmiar czcionki",
+  "settings.fontSizeDesc": "Domyślny dla wszystkich terminali. Ctrl+kółko zmienia jedną kartę."
 }

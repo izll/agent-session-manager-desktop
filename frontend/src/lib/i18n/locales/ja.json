@@ -733,5 +733,7 @@
   "sessionFile.missingNote": "{n} 件はこのマシンにないフォルダーを指しています。インポートはできますが、パスを修正するまで起動しません。",
   "sessionFile.importSelected": "インポート ({n})",
   "sessionFile.cancel": "キャンセル",
-  "sessionFile.close": "閉じる"
+  "sessionFile.close": "閉じる",
+  "settings.fontSize": "文字サイズ",
+  "settings.fontSizeDesc": "すべてのターミナルの既定値。Ctrl+ホイールで個別のタブを調整できます。"
 }

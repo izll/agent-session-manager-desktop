@@ -15,6 +15,8 @@ export interface Settings {
   markedWindowIdx: number;
   language: string;
   terminalRenderer: TerminalRenderer;
+  /** Default terminal font size in px; 0 means the built-in default. */
+  terminalFontSize: number;
   notifyOnWaiting: boolean;
   notifyDesktop: boolean;
   notifyNtfy: boolean;
@@ -35,6 +37,7 @@ export const settings = writable<Settings>({
   markedWindowIdx: 0,
   language: 'en',
   terminalRenderer: 'canvas',
+  terminalFontSize: 0,
   notifyOnWaiting: false,
   notifyDesktop: true,
   notifyNtfy: false,

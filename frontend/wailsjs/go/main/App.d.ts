@@ -215,6 +215,8 @@ export function SetSessionNotes(arg1:string,arg2:string):Promise<void>;
 
 export function SetTabColor(arg1:string,arg2:number,arg3:string,arg4:string):Promise<void>;
 
+export function SetTabFontSize(arg1:string,arg2:number,arg3:number):Promise<void>;
+
 export function SetTabNotes(arg1:string,arg2:number,arg3:string):Promise<void>;
 
 export function SetTabStatusLineVisibility(arg1:string,arg2:number,arg3:boolean):Promise<void>;

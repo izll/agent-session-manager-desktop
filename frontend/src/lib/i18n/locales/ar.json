@@ -733,5 +733,7 @@
   "sessionFile.missingNote": "{n} منها تشير إلى مجلدات غير موجودة هنا. يمكن استيرادها، لكنها لن تبدأ حتى يتم تصحيح المسار.",
   "sessionFile.importSelected": "استيراد ({n})",
   "sessionFile.cancel": "إلغاء",
-  "sessionFile.close": "إغلاق"
+  "sessionFile.close": "إغلاق",
+  "settings.fontSize": "حجم الخط",
+  "settings.fontSizeDesc": "الافتراضي لكل الطرفيات. Ctrl+عجلة الفأرة يضبط علامة تبويب واحدة."
 }

@@ -733,5 +733,7 @@
   "sessionFile.missingNote": "{n} d’entre elles pointent vers des dossiers absents ici. Elles peuvent être importées, mais ne démarreront pas tant que le chemin n’est pas corrigé.",
   "sessionFile.importSelected": "Importer ({n})",
   "sessionFile.cancel": "Annuler",
-  "sessionFile.close": "Fermer"
+  "sessionFile.close": "Fermer",
+  "settings.fontSize": "Taille du texte",
+  "settings.fontSizeDesc": "Valeur par défaut pour tous les terminaux. Ctrl+molette ajuste un onglet."
 }

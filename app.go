@@ -607,6 +607,7 @@ type SessionInfo struct {
 	TabTextColor       string                   `json:"tabTextColor"`
 	TabBackgroundColor string                   `json:"tabBackgroundColor"`
 	TerminalTheme      string                   `json:"terminalTheme"`
+	TerminalFontSize   int                      `json:"terminalFontSize"`
 	// The main window isn't always index 0, so the frontend needs it to map a
 	// tab back to the session-level palette.
 	MainWindowIndex int `json:"mainWindowIndex"`
@@ -674,6 +675,7 @@ func (a *App) instanceToSessionInfo(inst *session.Instance) SessionInfo {
 		TabTextColor:       inst.TabTextColor,
 		TabBackgroundColor: inst.TabBackgroundColor,
 		TerminalTheme:      inst.TerminalTheme,
+		TerminalFontSize:   inst.TerminalFontSize,
 		MainWindowIndex:    inst.GetMainWindowIndex(),
 		LastWindowIndex:    inst.LastWindowIndex,
 		IsGitRepo:          inst.IsGitRepo(),
@@ -2392,6 +2394,7 @@ type SettingsInfo struct {
 	MarkedWindowIdx   int    `json:"markedWindowIdx"`
 	Language          string `json:"language"`
 	TerminalRenderer  string `json:"terminalRenderer"`
+	TerminalFontSize  int    `json:"terminalFontSize"`
 	NotifyOnWaiting   bool   `json:"notifyOnWaiting"`
 	NotifyDesktop     bool   `json:"notifyDesktop"`
 	NotifyNtfy        bool   `json:"notifyNtfy"`
@@ -2460,6 +2463,7 @@ func (a *App) GetSettings() (*SettingsInfo, error) {
 		MarkedWindowIdx:      settings.MarkedWindowIdx,
 		Language:             lang,
 		TerminalRenderer:     renderer,
+		TerminalFontSize:     settings.TerminalFontSize,
 		NotifyOnWaiting:      settings.NotifyOnWaiting,
 		NotifyDesktop:        settings.NotifyDesktop,
 		NotifyNtfy:           settings.NotifyNtfy,
@@ -2491,6 +2495,7 @@ func (a *App) SaveSettings(settings SettingsInfo) error {
 		current.MarkedWindowIdx = settings.MarkedWindowIdx
 		current.Language = settings.Language
 		current.TerminalRenderer = settings.TerminalRenderer
+		current.TerminalFontSize = settings.TerminalFontSize
 		current.TerminalTheme = settings.TerminalTheme
 		current.AgentDefaultTheme = settings.AgentDefaultTheme
 		current.AgentTerminalThemes = settings.AgentTerminalThemes
@@ -2542,6 +2547,50 @@ func (a *App) SetLastWindowIndex(sessionID string, windowIdx int) error {
 		return nil // no write for an unchanged value
 	}
 	inst.LastWindowIndex = windowIdx
+	return a.storage.UpdateInstance(inst)
+}
+
+// Terminal font size bounds. Below the minimum the text is unreadable; above
+// the maximum a single line no longer fits, and both are awkward to undo from
+// inside the terminal itself.
+const (
+	MinTerminalFontSize = 8
+	MaxTerminalFontSize = 32
+)
+
+// SetTabFontSize overrides the terminal font size for one tab. A size of 0
+// clears the override so the tab follows the global setting again.
+func (a *App) SetTabFontSize(sessionID string, windowIdx int, size int) error {
+	a.projectMu.RLock()
+	defer a.projectMu.RUnlock()
+	if !a.projectLocked {
+		return fmt.Errorf("project is read-only in this application instance")
+	}
+	// Guard the stored value, not just the UI: a size outside this range makes
+	// the terminal unusable and is hard to recover from.
+	if size != 0 && (size < MinTerminalFontSize || size > MaxTerminalFontSize) {
+		return fmt.Errorf("font size must be between %d and %d",
+			MinTerminalFontSize, MaxTerminalFontSize)
+	}
+	inst, err := a.storage.GetInstance(sessionID)
+	if err != nil {
+		return err
+	}
+	if windowIdx == inst.GetMainWindowIndex() {
+		inst.TerminalFontSize = size
+	} else {
+		found := false
+		for i := range inst.FollowedWindows {
+			if inst.FollowedWindows[i].Index == windowIdx {
+				inst.FollowedWindows[i].TerminalFontSize = size
+				found = true
+				break
+			}
+		}
+		if !found {
+			return fmt.Errorf("window %d not found", windowIdx)
+		}
+	}
 	return a.storage.UpdateInstance(inst)
 }
 

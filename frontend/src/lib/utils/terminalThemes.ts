@@ -407,3 +407,24 @@ export function resolveTerminalTheme(opts: {
   }
   return getTerminalTheme(id);
 }
+
+// --- Font size -----------------------------------------------------------
+
+/** Matches the bounds enforced in app.go; a size outside them is unusable. */
+export const MIN_FONT_SIZE = 8;
+export const MAX_FONT_SIZE = 32;
+export const DEFAULT_FONT_SIZE = 14;
+
+/**
+ * The size a terminal should use: the tab's own override if it has one,
+ * otherwise the global setting, otherwise the built-in default. Zero means
+ * "not set" at every level, so an untouched config keeps the original size.
+ */
+export function resolveFontSize(tabSize?: number, globalSize?: number): number {
+  // Only a positive value counts as "set". A negative one (corrupt config, a
+  // hand-edited file) is truthy in JS and would otherwise win over the global
+  // setting and then clamp to the minimum.
+  const usable = (n?: number) => (typeof n === 'number' && n > 0 ? n : 0);
+  const size = usable(tabSize) || usable(globalSize) || DEFAULT_FONT_SIZE;
+  return Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, size));
+}

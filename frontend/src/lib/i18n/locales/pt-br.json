@@ -733,5 +733,7 @@
   "sessionFile.missingNote": "{n} delas apontam para pastas que faltam aqui. Ainda podem ser importadas, mas não iniciarão até o caminho ser corrigido.",
   "sessionFile.importSelected": "Importar ({n})",
   "sessionFile.cancel": "Cancelar",
-  "sessionFile.close": "Fechar"
+  "sessionFile.close": "Fechar",
+  "settings.fontSize": "Tamanho da fonte",
+  "settings.fontSizeDesc": "Padrão para todos os terminais. Ctrl+rolagem ajusta uma aba."
 }

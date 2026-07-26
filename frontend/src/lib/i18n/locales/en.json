@@ -733,5 +733,7 @@
   "sessionFile.missingNote": "{n} of these point at folders that are missing here. They can still be imported, but will not start until the path is corrected.",
   "sessionFile.importSelected": "Import ({n})",
   "sessionFile.cancel": "Cancel",
-  "sessionFile.close": "Close"
+  "sessionFile.close": "Close",
+  "settings.fontSize": "Font size",
+  "settings.fontSizeDesc": "Default for all terminals. Ctrl+scroll resizes one tab on its own."
 }

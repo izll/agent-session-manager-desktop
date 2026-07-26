@@ -733,5 +733,7 @@
   "sessionFile.missingNote": "{n} รายการชี้ไปยังโฟลเดอร์ที่ไม่มีบนเครื่องนี้ ยังนำเข้าได้ แต่จะไม่เริ่มทำงานจนกว่าจะแก้เส้นทาง",
   "sessionFile.importSelected": "นำเข้า ({n})",
   "sessionFile.cancel": "ยกเลิก",
-  "sessionFile.close": "ปิด"
+  "sessionFile.close": "ปิด",
+  "settings.fontSize": "ขนาดตัวอักษร",
+  "settings.fontSizeDesc": "ค่าเริ่มต้นสำหรับทุกเทอร์มินัล Ctrl+เลื่อนเพื่อปรับเฉพาะแท็บเดียว"
 }

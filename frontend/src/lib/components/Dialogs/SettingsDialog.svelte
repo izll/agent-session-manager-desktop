@@ -6,7 +6,8 @@
   import type { main } from '../../../../wailsjs/go/models';
   import { EventsEmit } from '../../../../wailsjs/runtime/runtime';
   import Select from '../common/Select.svelte';
-  import { TERMINAL_THEMES, CUSTOM_THEME_KEYS, getTerminalTheme, allPalettes, nextCustomId, type CustomPalette } from '../../utils/terminalThemes';
+  import { TERMINAL_THEMES, CUSTOM_THEME_KEYS, getTerminalTheme, allPalettes, nextCustomId,
+           MIN_FONT_SIZE, MAX_FONT_SIZE, DEFAULT_FONT_SIZE, type CustomPalette } from '../../utils/terminalThemes';
   import PalettePicker from '../common/PalettePicker.svelte';
   import PaletteManager from '../common/PaletteManager.svelte';
   import { agents } from '../../stores/agents';
@@ -45,6 +46,13 @@
   // --- Terminal palettes -------------------------------------------------
   $: customPalettes = ((($settings as any).customTerminalThemes || []) as CustomPalette[]);
   $: pickablePalettes = allPalettes(customPalettes);
+
+  // 0 means "unset" in storage, so the slider shows the effective default.
+  $: currentFontSize = $settings.terminalFontSize || DEFAULT_FONT_SIZE;
+
+  function changeFontSize(size: number) {
+    saveSettings({ terminalFontSize: size });
+  }
 
   function changeTheme(id: string) {
     saveSettings({ terminalTheme: id });
@@ -539,6 +547,27 @@
               />
             </div>
 
+          </div>
+
+          <div class="settings-section">
+            <h3>{$t('settings.fontSize')}</h3>
+
+            <div class="setting-item">
+              <span class="setting-info">
+                <span class="setting-label">{$t('settings.fontSize')}</span>
+                <span class="setting-desc">{$t('settings.fontSizeDesc')}</span>
+              </span>
+              <div class="font-size-control">
+                <input
+                  type="range"
+                  min={MIN_FONT_SIZE}
+                  max={MAX_FONT_SIZE}
+                  value={currentFontSize}
+                  on:input={(e) => changeFontSize(+e.currentTarget.value)}
+                />
+                <span class="font-size-value">{currentFontSize}px</span>
+              </div>
+            </div>
           </div>
 
           <div class="settings-section">
@@ -1244,6 +1273,24 @@
   .action-btn:hover {
     border-color: rgba(139, 92, 246, 0.5);
     color: #ddd6fe;
+  }
+
+  .font-size-control {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+  }
+  .font-size-control input[type="range"] {
+    width: 150px;
+    accent-color: #8b5cf6;
+  }
+  .font-size-value {
+    min-width: 42px;
+    text-align: right;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: #a1a1aa;
   }
 
   .setting-input {

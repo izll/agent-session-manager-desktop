@@ -4,7 +4,7 @@
   import { settings } from '../../stores/settings';
   import { get } from 'svelte/store';
   import { EventsOn } from '../../../../wailsjs/runtime/runtime';
-  import { LogFrontend } from '../../../../wailsjs/go/main/App';
+  import { LogFrontend, SetTabFontSize } from '../../../../wailsjs/go/main/App';
   import { TerminalPool } from '../../utils/terminalPool';
   import { setTerminalRenderer, setTerminalThemeContext } from '../../utils/terminal';
   import { t } from '../../i18n';
@@ -35,11 +35,27 @@
     return windowIdx === undefined ? get(selectedWindowIdx) : windowIdx;
   }
 
-  // Only non-colour options here — the palette comes from Settings via
-  // createTerminal(), so overriding theme colours would defeat the choice.
-  const terminalOptions = {
-    fontSize: 13,
-  };
+  // Neither colours nor font size belong here: both come from Settings via
+  // createTerminal(), and options passed in are spread last — a value here
+  // would silently win over the user's choice.
+  const terminalOptions = {};
+
+  // Persist a Ctrl+wheel resize against the tab it happened in.
+  let fontSizeSaveTimer: ReturnType<typeof setTimeout> | null = null;
+  function handleFontSizeGesture(e: CustomEvent<{ size: number }>) {
+    const sid = currentTargetSessionId();
+    if (!sid || !e.detail) return;
+    const widx = currentTargetWindowIdx();
+    const size = e.detail.size;
+    // A wheel gesture fires many events; only the size it settles on matters.
+    if (fontSizeSaveTimer) clearTimeout(fontSizeSaveTimer);
+    fontSizeSaveTimer = setTimeout(() => {
+      fontSizeSaveTimer = null;
+      void SetTabFontSize(sid, widx, size).catch((err) => {
+        LogFrontend(`SetTabFontSize failed session=${sid} win=${widx}: ${err}`);
+      });
+    }, 400);
+  }
 
   // Get current session without reactive subscription
   function getCurrentSession() {
@@ -200,6 +216,11 @@
     mounted = true;
     pool = new TerminalPool(poolContainerEl, terminalOptions);
 
+    // Ctrl+wheel already resized the pane; store it so the tab keeps that size
+    // next time. Saving is best-effort — a failed write must not undo what the
+    // user just did on screen.
+    poolContainerEl.addEventListener('terminal:fontsize', handleFontSizeGesture as EventListener);
+
     window.addEventListener('terminal:focus', handleFocusEvent);
     window.addEventListener('terminal:search-toggle', handleSearchToggle);
     window.addEventListener('terminal:destroy-window', handleDestroyWindow as EventListener);
@@ -318,6 +339,8 @@
     poolChangeGeneration++;
     for (const timeout of pendingTimeouts) clearTimeout(timeout);
     pendingTimeouts.clear();
+    if (fontSizeSaveTimer) clearTimeout(fontSizeSaveTimer);
+    poolContainerEl?.removeEventListener('terminal:fontsize', handleFontSizeGesture as EventListener);
     if (unsubRestarted) unsubRestarted();
     if (stopGraceTimer) clearTimeout(stopGraceTimer);
     const oldPool = pool;
@@ -454,11 +477,15 @@
       agentDefault: ($settings as any)?.agentDefaultTheme || 'asmgr',
       agentThemes: ($settings as any)?.agentTerminalThemes || {},
       customThemes: ($settings as any)?.customTerminalThemes || [],
+      fontSize: $settings?.terminalFontSize || 0,
     };
     setTerminalThemeContext(ctx);
     const key = JSON.stringify(ctx);
     if (lastThemeKey !== undefined && lastThemeKey !== key && pool) {
       pool.applyTheme();
+      // Font size changes the row/column count, so this also refits every
+      // pane and pushes the new geometry to tmux.
+      pool.applyFontSize();
     }
     lastThemeKey = key;
   }
@@ -469,10 +496,18 @@
     if (!session) return {};
     const main = session.mainWindowIndex ?? 0;
     if (widx === main) {
-      return { tabTheme: session.terminalTheme || '', agent: session.agent };
+      return {
+        tabTheme: session.terminalTheme || '',
+        agent: session.agent,
+        fontSize: session.terminalFontSize || 0,
+      };
     }
     const fw = (session.followedWindows || []).find((f: any) => f.index === widx);
-    return { tabTheme: (fw as any)?.terminal_theme || '', agent: fw?.agent || session.agent };
+    return {
+      tabTheme: (fw as any)?.terminal_theme || '',
+      agent: fw?.agent || session.agent,
+      fontSize: (fw as any)?.terminal_font_size || 0,
+    };
   }
 
   // Fit and focus terminal when tab becomes active
