@@ -38,8 +38,13 @@
   import * as DictationService from '../wailsjs/go/main/DictationService';
   import { IsDevMode } from '../wailsjs/go/main/App';
   import asmgrIcon from './assets/icons/asmgr.svg';
+  import { applyUITheme, DEFAULT_UI_THEME } from './lib/utils/uiThemes';
   import { t, isRTL, loadTranslations } from './lib/i18n';
   import { focusTerminal } from './lib/utils/focus';
+
+  // The accent lives in CSS variables, so applying a theme is one write to
+  // the root element — no component needs to know about it.
+  $: applyUITheme($settings.uiTheme || DEFAULT_UI_THEME, $settings.uiAccent);
 
   // Dev mode
   let devMode = false;
@@ -695,6 +700,15 @@
         <button class="btn btn-ghost palette-trigger" on:click={() => showCommandPalette = true} title={$t('palette.title')}>
           {$t('palette.title')}
         </button>
+        <!-- The saved-command library, distinct from the palette above: that
+             one jumps to sessions and views, this one runs shell commands. -->
+        <button
+          class="btn btn-ghost palette-trigger"
+          on:click={() => showCommandPicker = true}
+          title={$t('header.commands')}
+        >
+          {$t('header.commands')}
+        </button>
       </div>
       <div class="header-divider-vertical actions-divider"></div>
       <div class="header-icons">
@@ -1051,12 +1065,12 @@
   }
 
   :global(::-webkit-scrollbar-thumb) {
-    background: rgba(139, 92, 246, 0.3);
+    background: rgba(var(--accent-rgb), 0.3);
     border-radius: 3px;
   }
 
   :global(::-webkit-scrollbar-thumb:hover) {
-    background: rgba(139, 92, 246, 0.5);
+    background: rgba(var(--accent-rgb), 0.5);
   }
 
   .app-container {
@@ -1079,9 +1093,9 @@
   }
 
   .btn.active-view {
-    color: #c4b5fd;
-    background: rgba(139, 92, 246, 0.15);
-    border-color: rgba(139, 92, 246, 0.3);
+    color: var(--accent-lighter);
+    background: rgba(var(--accent-rgb), 0.15);
+    border-color: rgba(var(--accent-rgb), 0.3);
   }
 
   .header-text-actions {
@@ -1095,8 +1109,8 @@
   }
 
   .header {
-    background: linear-gradient(180deg, rgba(139, 92, 246, 0.08) 0%, transparent 100%);
-    border-bottom: 1px solid rgba(139, 92, 246, 0.15);
+    background: linear-gradient(180deg, rgba(var(--accent-rgb), 0.08) 0%, transparent 100%);
+    border-bottom: 1px solid rgba(var(--accent-rgb), 0.15);
     /* No backdrop-filter: an always-visible blurred region forces WebKit to
        re-gaussian-blur (and full-window repaint) on every frame anything
        behind it changes — the dominant cause of ~90% renderer CPU with
@@ -1121,7 +1135,7 @@
   .logo-suffix {
     font-size: 9px;
     font-weight: 500;
-    color: #a78bfa;
+    color: var(--accent-light);
     margin-left: 2px;
     vertical-align: super;
     opacity: 0.8;
@@ -1180,7 +1194,7 @@
   .sidebar {
     position: relative;
     background: linear-gradient(180deg, rgba(15, 15, 26, 0.9) 0%, rgba(10, 10, 15, 0.95) 100%);
-    border-right: 1px solid rgba(139, 92, 246, 0.1);
+    border-right: 1px solid rgba(var(--accent-rgb), 0.1);
     box-shadow: 4px 0 24px rgba(0, 0, 0, 0.3);
   }
 
@@ -1204,7 +1218,7 @@
   }
 
   .resize-handle:hover {
-    background: rgba(139, 92, 246, 0.3);
+    background: rgba(var(--accent-rgb), 0.3);
   }
 
   .collapse-btn {
@@ -1226,9 +1240,9 @@
   }
 
   .collapse-btn:hover {
-    background: rgba(139, 92, 246, 0.15);
-    border-color: rgba(139, 92, 246, 0.3);
-    color: #a78bfa;
+    background: rgba(var(--accent-rgb), 0.15);
+    border-color: rgba(var(--accent-rgb), 0.3);
+    color: var(--accent-light);
   }
 
   .collapsed-sidebar-wrapper {
@@ -1261,9 +1275,9 @@
   }
 
   .expand-btn:hover {
-    background: rgba(139, 92, 246, 0.15);
-    border-color: rgba(139, 92, 246, 0.3);
-    color: #a78bfa;
+    background: rgba(var(--accent-rgb), 0.15);
+    border-color: rgba(var(--accent-rgb), 0.3);
+    color: var(--accent-light);
   }
 
   .sidebar.collapsed {
@@ -1383,7 +1397,7 @@
 
   :global([dir="rtl"]) .sidebar {
     border-right: none;
-    border-left: 1px solid rgba(139, 92, 246, 0.1);
+    border-left: 1px solid rgba(var(--accent-rgb), 0.1);
     box-shadow: -4px 0 24px rgba(0, 0, 0, 0.3);
   }
 
@@ -1430,7 +1444,7 @@
 
   .sidebar-overlay {
     background: linear-gradient(180deg, rgba(15, 15, 26, 0.97) 0%, rgba(10, 10, 15, 0.99) 100%);
-    border-right: 1px solid rgba(139, 92, 246, 0.15);
+    border-right: 1px solid rgba(var(--accent-rgb), 0.15);
     box-shadow: 8px 0 32px rgba(0, 0, 0, 0.5);
     display: flex;
     flex-direction: column;
@@ -1445,7 +1459,7 @@
 
   :global([dir="rtl"]) .sidebar-overlay {
     border-right: none;
-    border-left: 1px solid rgba(139, 92, 246, 0.15);
+    border-left: 1px solid rgba(var(--accent-rgb), 0.15);
     box-shadow: -8px 0 32px rgba(0, 0, 0, 0.5);
   }
 

@@ -156,7 +156,7 @@
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.5px;
-    color: #a78bfa;
+    color: var(--accent-light);
     margin: 0 0 12px 0;
   }
 
@@ -205,7 +205,7 @@
   }
 
   .about .link a {
-    color: #a78bfa;
+    color: var(--accent-light);
     text-decoration: none;
   }
 
@@ -235,9 +235,9 @@
 
   .btn-close kbd {
     padding: 2px 6px;
-    background: rgba(139, 92, 246, 0.2);
+    background: rgba(var(--accent-rgb), 0.2);
     border-radius: 4px;
     font-size: 11px;
-    color: #a78bfa;
+    color: var(--accent-light);
   }
 </style>

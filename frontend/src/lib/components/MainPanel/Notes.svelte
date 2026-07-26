@@ -223,8 +223,8 @@
 
   .notes-textarea:focus {
     outline: none;
-    border-color: rgba(139, 92, 246, 0.4);
-    box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.1);
+    border-color: rgba(var(--accent-rgb), 0.4);
+    box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.1);
   }
 
   .notes-textarea::placeholder {
@@ -240,13 +240,13 @@
   }
 
   .notes-textarea::-webkit-scrollbar-thumb {
-    background: rgba(139, 92, 246, 0.3);
+    background: rgba(var(--accent-rgb), 0.3);
     border-radius: 3px;
   }
 
   .notes-textarea.dictating {
-    border-color: rgba(139, 92, 246, 0.5);
-    box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.15);
+    border-color: rgba(var(--accent-rgb), 0.5);
+    box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.15);
   }
 
   .mic-btn {
@@ -266,7 +266,7 @@
   }
 
   .mic-btn.active {
-    color: #8b5cf6;
+    color: var(--accent);
     animation: mic-pulse 1.5s ease-in-out infinite;
   }
 

@@ -817,7 +817,7 @@
     z-index: 5;
   }
   .pane-resizer:hover {
-    background: rgba(139, 92, 246, 0.3);
+    background: rgba(var(--accent-rgb), 0.3);
   }
   /* While dragging, keep the cursor and kill text selection everywhere in the
      panes — otherwise the drag selects file names as it passes over them. */
@@ -826,7 +826,7 @@
     user-select: none;
   }
   .diff-body.resizing .pane-resizer {
-    background: rgba(139, 92, 246, 0.5);
+    background: rgba(var(--accent-rgb), 0.5);
   }
 
   .file-pane-header {
@@ -861,8 +861,8 @@
   }
 
   .file-row.selected {
-    background: rgba(139, 92, 246, 0.12);
-    border-left-color: #8b5cf6;
+    background: rgba(var(--accent-rgb), 0.12);
+    border-left-color: var(--accent);
   }
 
   .file-main {
@@ -1040,7 +1040,7 @@
   .selected-status.modified { background: rgba(234, 179, 8, 0.15); color: #eab308; }
   .selected-status.added { background: rgba(34, 197, 94, 0.15); color: #22c55e; }
   .selected-status.deleted { background: rgba(239, 68, 68, 0.15); color: #ef4444; }
-  .selected-status.renamed { background: rgba(139, 92, 246, 0.15); color: #a78bfa; }
+  .selected-status.renamed { background: rgba(var(--accent-rgb), 0.15); color: var(--accent-light); }
 
   .diff-content {
     flex: 1;
@@ -1103,7 +1103,7 @@
   }
 
   .diff-line.meta {
-    color: #8b5cf6;
+    color: var(--accent);
     font-weight: 600;
     margin-top: 16px;
   }
@@ -1131,7 +1131,7 @@
 
   .diff-content::-webkit-scrollbar-thumb,
   .file-list::-webkit-scrollbar-thumb {
-    background: rgba(139, 92, 246, 0.3);
+    background: rgba(var(--accent-rgb), 0.3);
     border-radius: 3px;
   }
 </style>

@@ -297,7 +297,7 @@
     gap: 10px;
     padding: 18px;
     border-radius: 12px;
-    border: 1px solid rgba(139, 92, 246, 0.25);
+    border: 1px solid rgba(var(--accent-rgb), 0.25);
     background: linear-gradient(180deg, #1a1a2e 0%, #0f0f1a 100%);
   }
   .dialog-header { display: flex; align-items: center; justify-content: space-between; }
@@ -311,7 +311,7 @@
     border: 1px solid rgba(255, 255, 255, 0.1); background: rgba(255, 255, 255, 0.04); color: #a1a1aa;
   }
   .source-tabs button.active {
-    border-color: rgba(139, 92, 246, 0.6); background: rgba(139, 92, 246, 0.15); color: #ddd6fe;
+    border-color: rgba(var(--accent-rgb), 0.6); background: rgba(var(--accent-rgb), 0.15); color: var(--accent-pale);
   }
   .source-hint { margin: 0; font-size: 11px; color: #71717a; }
   .error-line { color: #fb7185; font-size: 12px; }
@@ -332,8 +332,8 @@
     border-radius: 6px; font-size: 12px; color: #d4d4d8; cursor: pointer;
   }
   .online-row:hover, .found-row:hover { background: rgba(255, 255, 255, 0.05); }
-  .online-row.checked, .found-row.checked { background: rgba(139, 92, 246, 0.12); color: #ddd6fe; }
-  .online-row input, .found-row input { accent-color: #8b5cf6; }
+  .online-row.checked, .found-row.checked { background: rgba(var(--accent-rgb), 0.12); color: var(--accent-pale); }
+  .online-row input, .found-row input { accent-color: var(--accent); }
   .online-actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
   .count { font-size: 11px; color: #71717a; }
 
@@ -341,9 +341,9 @@
   .found-head .back { margin-left: auto; }
   .link-btn {
     border: 0; background: none; padding: 0; cursor: pointer;
-    font-size: 11px; color: #a78bfa; text-decoration: underline;
+    font-size: 11px; color: var(--accent-light); text-decoration: underline;
   }
-  .link-btn:hover { color: #ddd6fe; }
+  .link-btn:hover { color: var(--accent-pale); }
   .file-state { display: flex; justify-content: center; }
   .dup-note { margin: 0; font-size: 11px; color: #fbbf24; }
 
@@ -363,7 +363,7 @@
     border: 1px solid rgba(255, 255, 255, 0.12); background: rgba(255, 255, 255, 0.04); color: #a1a1aa;
   }
   .dialog-actions .primary, .online-actions .primary {
-    border: 1px solid #8b5cf6; background: linear-gradient(135deg, #7c3aed, #8b5cf6); color: white;
+    border: 1px solid var(--accent); background: linear-gradient(135deg, var(--accent-dark), var(--accent)); color: var(--accent-ink);
     padding: 7px 16px; border-radius: 7px; font-size: 12px; font-weight: 600; cursor: pointer;
   }
   .dialog-actions .primary:disabled, .online-actions .primary:disabled { opacity: 0.45; cursor: default; }

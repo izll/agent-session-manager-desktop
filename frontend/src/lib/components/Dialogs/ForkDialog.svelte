@@ -216,11 +216,11 @@
     gap: 10px;
     margin: 16px 24px;
     padding: 12px 16px;
-    background: rgba(139, 92, 246, 0.1);
-    border: 1px solid rgba(139, 92, 246, 0.2);
+    background: rgba(var(--accent-rgb), 0.1);
+    border: 1px solid rgba(var(--accent-rgb), 0.2);
     border-radius: 10px;
     font-size: 12px;
-    color: #a78bfa;
+    color: var(--accent-light);
     line-height: 1.5;
   }
 
@@ -283,10 +283,10 @@
   }
 
   .mode-btn.selected {
-    background: linear-gradient(135deg, rgba(139, 92, 246, 0.2) 0%, rgba(99, 102, 241, 0.15) 100%);
-    border-color: rgba(139, 92, 246, 0.5);
-    box-shadow: 0 0 20px rgba(139, 92, 246, 0.15);
-    color: #a78bfa;
+    background: linear-gradient(135deg, rgba(var(--accent-rgb), 0.2) 0%, rgba(99, 102, 241, 0.15) 100%);
+    border-color: rgba(var(--accent-rgb), 0.5);
+    box-shadow: 0 0 20px rgba(var(--accent-rgb), 0.15);
+    color: var(--accent-light);
   }
 
   .mode-btn:disabled {
@@ -321,8 +321,8 @@
 
   .form-input:focus {
     outline: none;
-    border-color: rgba(139, 92, 246, 0.5);
-    box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.1);
+    border-color: rgba(var(--accent-rgb), 0.5);
+    box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.1);
   }
 
   .dialog-actions {

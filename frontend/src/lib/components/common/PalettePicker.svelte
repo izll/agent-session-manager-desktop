@@ -91,8 +91,8 @@
   }
   .palette-card:hover { border-color: rgba(255, 255, 255, 0.2); }
   .palette-card.selected {
-    border-color: rgba(139, 92, 246, 0.7);
-    background: rgba(139, 92, 246, 0.12);
+    border-color: rgba(var(--accent-rgb), 0.7);
+    background: rgba(var(--accent-rgb), 0.12);
   }
 
   .preview {
@@ -124,7 +124,7 @@
     overflow: hidden;
     text-overflow: ellipsis;
   }
-  .palette-card.selected .palette-name { color: #ddd6fe; }
+  .palette-card.selected .palette-name { color: var(--accent-pale); }
 
   .palette-card.inherit {
     justify-content: center;

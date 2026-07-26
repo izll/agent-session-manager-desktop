@@ -155,7 +155,7 @@
 
   function getAgentColor(agent: string): string {
     const colors: Record<string, string> = {
-      claude: '#a78bfa',
+      claude: 'var(--accent-light)',
       gemini: '#60a5fa',
       aider: '#4ade80',
       codex: '#fbbf24',
@@ -477,8 +477,8 @@
   }
 
   .fullscreen-btn:hover {
-    background: rgba(139, 92, 246, 0.2);
-    color: #a78bfa;
+    background: rgba(var(--accent-rgb), 0.2);
+    color: var(--accent-light);
   }
 
   .search-header {
@@ -486,7 +486,7 @@
     align-items: center;
     gap: 12px;
     padding: 16px 20px;
-    background: linear-gradient(180deg, rgba(139, 92, 246, 0.1) 0%, transparent 100%);
+    background: linear-gradient(180deg, rgba(var(--accent-rgb), 0.1) 0%, transparent 100%);
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
   }
 
@@ -503,8 +503,8 @@
   }
 
   .search-input-wrapper:focus-within {
-    border-color: rgba(139, 92, 246, 0.5);
-    box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.1);
+    border-color: rgba(var(--accent-rgb), 0.5);
+    box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.1);
   }
 
   .search-input {
@@ -660,9 +660,9 @@
   }
 
   .nav-btn:hover {
-    background: rgba(139, 92, 246, 0.2);
-    border-color: rgba(139, 92, 246, 0.3);
-    color: #a78bfa;
+    background: rgba(var(--accent-rgb), 0.2);
+    border-color: rgba(var(--accent-rgb), 0.3);
+    color: var(--accent-light);
   }
 
   .loading-state, .error-state, .empty-state {
@@ -718,8 +718,8 @@
   }
 
   .result-item.selected {
-    background: linear-gradient(135deg, rgba(139, 92, 246, 0.2) 0%, rgba(99, 102, 241, 0.15) 100%);
-    border-color: rgba(139, 92, 246, 0.3);
+    background: linear-gradient(135deg, rgba(var(--accent-rgb), 0.2) 0%, rgba(99, 102, 241, 0.15) 100%);
+    border-color: rgba(var(--accent-rgb), 0.3);
   }
 
   .agent-icon {
@@ -802,7 +802,7 @@
 
   .results-panel::-webkit-scrollbar-thumb,
   .preview-content::-webkit-scrollbar-thumb {
-    background: rgba(139, 92, 246, 0.3);
+    background: rgba(var(--accent-rgb), 0.3);
     border-radius: 3px;
   }
 </style>

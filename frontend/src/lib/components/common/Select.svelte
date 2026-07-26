@@ -146,11 +146,11 @@
 
   .select-trigger:focus {
     outline: none;
-    border-color: rgba(139, 92, 246, 0.5);
+    border-color: rgba(var(--accent-rgb), 0.5);
   }
 
   .open .select-trigger {
-    border-color: rgba(139, 92, 246, 0.5);
+    border-color: rgba(var(--accent-rgb), 0.5);
   }
 
   .select-value {
@@ -207,12 +207,12 @@
   }
 
   :global(.select-dropdown .select-option:hover) {
-    background: rgba(139, 92, 246, 0.15);
+    background: rgba(var(--accent-rgb), 0.15);
     color: white;
   }
 
   :global(.select-dropdown .select-option.selected) {
-    background: rgba(139, 92, 246, 0.2);
+    background: rgba(var(--accent-rgb), 0.2);
     color: white;
   }
 </style>

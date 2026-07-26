@@ -10,6 +10,8 @@
            MIN_FONT_SIZE, MAX_FONT_SIZE, DEFAULT_FONT_SIZE, type CustomPalette } from '../../utils/terminalThemes';
   import PalettePicker from '../common/PalettePicker.svelte';
   import PaletteManager from '../common/PaletteManager.svelte';
+  import { UI_THEMES, DEFAULT_UI_THEME, CUSTOM_UI_THEME,
+           accentContrastOnBackground, MIN_ACCENT_CONTRAST } from '../../utils/uiThemes';
   import { agents } from '../../stores/agents';
   import { t, loadTranslations } from '../../i18n';
 
@@ -89,6 +91,19 @@
 
   function changeRenderer(r: string) {
     saveSettings({ terminalRenderer: r as 'canvas' | 'webgl' | 'dom' });
+  }
+
+  $: currentUITheme = $settings.uiTheme || DEFAULT_UI_THEME;
+  $: customAccent = $settings.uiAccent || '#8b5cf6';
+  // A very dark accent is nearly invisible on the dark background; say so
+  // rather than leave the user wondering why nothing changed.
+  $: customAccentTooDark =
+    accentContrastOnBackground(customAccent) < MIN_ACCENT_CONTRAST;
+
+  // Picking a colour also selects the custom theme: choosing a shade and then
+  // having to select it separately would be a step with no purpose.
+  function pickCustomAccent(hex: string) {
+    saveSettings({ uiTheme: CUSTOM_UI_THEME, uiAccent: hex });
   }
 
   const dispatch = createEventDispatcher();
@@ -357,6 +372,54 @@
               />
             </div>
 
+          </div>
+
+          <div class="settings-section">
+            <h3>{$t('settings.appearance')}</h3>
+
+            <div class="setting-item input-item column-item">
+              <span class="setting-info">
+                <span class="setting-label">{$t('settings.uiTheme')}</span>
+                <span class="setting-desc">{$t('settings.uiThemeDesc')}</span>
+              </span>
+              <div class="theme-grid">
+                {#each UI_THEMES as th (th.id)}
+                  <button
+                    class="theme-swatch"
+                    class:selected={currentUITheme === th.id}
+                    title={th.name}
+                    style="--sw: {th.accent}; --sw-light: {th.light}"
+                    on:click={() => saveSettings({ uiTheme: th.id })}
+                  >
+                    <span class="theme-dot"></span>
+                    <span class="theme-name">{th.name}</span>
+                  </button>
+                {/each}
+
+                <!-- The custom entry doubles as its own colour picker: the
+                     swatch shows the current choice, clicking opens the
+                     native picker. Only one colour is asked for — the lighter
+                     and darker steps, and the readable text colour, are
+                     derived from it. -->
+                <label
+                  class="theme-swatch custom"
+                  class:selected={currentUITheme === CUSTOM_UI_THEME}
+                  title={$t('settings.uiThemeCustom')}
+                  style="--sw: {customAccent}; --sw-light: {customAccent}"
+                >
+                  <span class="theme-dot custom-dot"></span>
+                  <span class="theme-name">{$t('settings.uiThemeCustom')}</span>
+                  <input
+                    type="color"
+                    value={customAccent}
+                    on:input={(e) => pickCustomAccent(e.currentTarget.value)}
+                  />
+                </label>
+              </div>
+              {#if currentUITheme === CUSTOM_UI_THEME && customAccentTooDark}
+                <p class="accent-warning">{$t('settings.uiAccentTooDark')}</p>
+              {/if}
+            </div>
           </div>
 
           <!-- Renderer lives here, not on the Terminal tab: it applies to
@@ -1144,7 +1207,7 @@
     align-self: flex-start; padding: 6px 12px; border-radius: 7px; font-size: 12px; cursor: pointer;
     border: 1px solid rgba(255,255,255,.12); background: rgba(255,255,255,.05); color: #d4d4d8;
   }
-  .palette-toggle:hover { border-color: rgba(139,92,246,.5); color: #ddd6fe; }
+  .palette-toggle:hover { border-color: rgba(var(--accent-rgb), .5); color: var(--accent-pale); }
   .agent-theme-block {
     border: 1px solid rgba(255,255,255,.07); border-radius: 8px; padding: 6px 10px;
     background: rgba(0,0,0,.15);
@@ -1158,7 +1221,7 @@
   .agent-theme-current { color: #71717a; font-size: 11px; }
   .custom-list { display: flex; flex-direction: column; gap: 6px; }
   .custom-row { display: flex; align-items: center; gap: 6px; }
-  .custom-row.editing .custom-name { border-color: rgba(139,92,246,.5); }
+  .custom-row.editing .custom-name { border-color: rgba(var(--accent-rgb), .5); }
   .custom-name {
     flex: 1; min-width: 0; padding: 6px 9px; border-radius: 6px; font-size: 12px;
     border: 1px solid rgba(255,255,255,.12); background: rgba(0,0,0,.25); color: #e4e4e7;
@@ -1170,9 +1233,9 @@
   .palette-delete:hover { color: #fb7185; border-color: rgba(251,113,133,.5); }
   .palette-add {
     align-self: flex-start; padding: 6px 12px; border-radius: 7px; font-size: 12px; cursor: pointer;
-    border: 1px dashed rgba(139,92,246,.4); background: rgba(139,92,246,.08); color: #c4b5fd;
+    border: 1px dashed rgba(var(--accent-rgb), .4); background: rgba(var(--accent-rgb), .08); color: var(--accent-lighter);
   }
-  .palette-add:hover { background: rgba(139,92,246,.16); }
+  .palette-add:hover { background: rgba(var(--accent-rgb), .16); }
 
   .palette-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; }
   .palette-swatch { display: flex; align-items: center; gap: 8px; font-size: 11px; color: #a1a1aa; }
@@ -1195,9 +1258,9 @@
 
   .dialog-content {
     background: linear-gradient(180deg, #1a1a2e 0%, #0f0f1a 100%);
-    border: 1px solid rgba(139, 92, 246, 0.2);
+    border: 1px solid rgba(var(--accent-rgb), 0.2);
     border-radius: 16px;
-    box-shadow: 0 25px 50px rgba(0, 0, 0, 0.5), 0 0 100px rgba(139, 92, 246, 0.1);
+    box-shadow: 0 25px 50px rgba(0, 0, 0, 0.5), 0 0 100px rgba(var(--accent-rgb), 0.1);
     width: 100%;
     max-width: 520px;
     /* A fixed height, not just a maximum: the tabs differ in content length,
@@ -1216,7 +1279,7 @@
     align-items: center;
     justify-content: space-between;
     padding: 20px 24px;
-    background: linear-gradient(180deg, rgba(139, 92, 246, 0.1) 0%, transparent 100%);
+    background: linear-gradient(180deg, rgba(var(--accent-rgb), 0.1) 0%, transparent 100%);
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
     flex-shrink: 0;
   }
@@ -1225,7 +1288,7 @@
     font-size: 18px;
     font-weight: 600;
     margin: 0;
-    background: linear-gradient(135deg, #a78bfa 0%, #818cf8 100%);
+    background: linear-gradient(135deg, var(--accent-light) 0%, var(--accent) 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
@@ -1276,9 +1339,9 @@
   }
 
   .tab.active {
-    color: #a78bfa;
-    background: rgba(139, 92, 246, 0.15);
-    border-color: rgba(139, 92, 246, 0.3);
+    color: var(--accent-light);
+    background: rgba(var(--accent-rgb), 0.15);
+    border-color: rgba(var(--accent-rgb), 0.3);
   }
 
   .settings-list {
@@ -1356,6 +1419,63 @@
 
   /* One-off actions in the Maintenance section: these open a dialog rather
      than change a setting, so they read as buttons, not toggles. */
+  .theme-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+    gap: 8px;
+  }
+  .theme-swatch {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 7px 9px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.03);
+    color: #a1a1aa;
+    font-size: 11px;
+    cursor: pointer;
+    transition: border-color 0.15s ease, color 0.15s ease;
+  }
+  .theme-swatch:hover { border-color: rgba(255, 255, 255, 0.25); color: #e4e4e7; }
+  /* Bordered in its OWN colour, not the active accent: the selected swatch
+     has to be identifiable before the theme is applied. */
+  .theme-swatch.selected {
+    border-color: var(--sw);
+    background: color-mix(in srgb, var(--sw) 14%, transparent);
+    color: #e4e4e7;
+  }
+  .theme-dot {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    background: linear-gradient(135deg, var(--sw), var(--sw-light));
+  }
+  /* The colour input covers the swatch so the whole tile is the target,
+     rather than a separate small square beside the label. */
+  .accent-warning {
+    margin: 8px 0 0;
+    font-size: 11px;
+    color: #fbbf24;
+  }
+
+  .theme-swatch.custom { position: relative; }
+  .theme-swatch.custom input[type="color"] {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+    border: 0;
+    padding: 0;
+  }
+  .custom-dot {
+    background: var(--sw);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25);
+  }
+
+  .theme-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
   .action-btn {
     flex-shrink: 0;
     padding: 7px 14px;
@@ -1369,8 +1489,8 @@
     transition: border-color 0.15s ease, color 0.15s ease;
   }
   .action-btn:hover {
-    border-color: rgba(139, 92, 246, 0.5);
-    color: #ddd6fe;
+    border-color: rgba(var(--accent-rgb), 0.5);
+    color: var(--accent-pale);
   }
 
   .font-size-control {
@@ -1381,7 +1501,7 @@
   }
   .font-size-control input[type="range"] {
     width: 150px;
-    accent-color: #8b5cf6;
+    accent-color: var(--accent);
   }
   .font-size-value {
     min-width: 42px;
@@ -1404,7 +1524,7 @@
   }
 
   .setting-input:focus {
-    border-color: rgba(139, 92, 246, 0.5);
+    border-color: rgba(var(--accent-rgb), 0.5);
     background: rgba(255, 255, 255, 0.08);
   }
 
@@ -1433,7 +1553,7 @@
   }
 
   .modifier-checkbox input {
-    accent-color: #8b5cf6;
+    accent-color: var(--accent);
   }
 
   .plus {
@@ -1447,16 +1567,16 @@
     text-align: center;
     text-transform: uppercase;
     font-weight: 600;
-    background: rgba(139, 92, 246, 0.2);
-    border: 1px solid rgba(139, 92, 246, 0.3);
+    background: rgba(var(--accent-rgb), 0.2);
+    border: 1px solid rgba(var(--accent-rgb), 0.3);
     border-radius: 8px;
-    color: #a78bfa;
+    color: var(--accent-light);
     font-size: 14px;
     outline: none;
   }
 
   .hotkey-key:focus {
-    border-color: #8b5cf6;
+    border-color: var(--accent);
   }
 
   .loading {
@@ -1488,14 +1608,14 @@
     appearance: none;
     width: 16px;
     height: 16px;
-    background: #8b5cf6;
+    background: var(--accent);
     border-radius: 50%;
     cursor: pointer;
     transition: all 0.15s ease;
   }
 
   .setting-slider::-webkit-slider-thumb:hover {
-    background: #a78bfa;
+    background: var(--accent-light);
     transform: scale(1.1);
   }
 
@@ -1503,7 +1623,7 @@
     min-width: 40px;
     text-align: right;
     font-size: 13px;
-    color: #a78bfa;
+    color: var(--accent-light);
     font-weight: 500;
   }
 
@@ -1526,7 +1646,7 @@
   }
 
   .toggle-btn.active .toggle-track {
-    background: rgba(139, 92, 246, 0.6);
+    background: rgba(var(--accent-rgb), 0.6);
   }
 
   .toggle-thumb {
@@ -1542,7 +1662,7 @@
 
   .toggle-btn.active .toggle-thumb {
     left: 22px;
-    background: #a78bfa;
+    background: var(--accent-light);
   }
 
   .commands-list {
@@ -1567,7 +1687,7 @@
   }
 
   .command-word {
-    color: #a78bfa;
+    color: var(--accent-light);
     font-weight: 500;
     min-width: 120px;
   }
@@ -1602,10 +1722,10 @@
     align-items: center;
     gap: 6px;
     padding: 8px 14px;
-    background: rgba(139, 92, 246, 0.2);
-    border: 1px solid rgba(139, 92, 246, 0.3);
+    background: rgba(var(--accent-rgb), 0.2);
+    border: 1px solid rgba(var(--accent-rgb), 0.3);
     border-radius: 8px;
-    color: #a78bfa;
+    color: var(--accent-light);
     font-size: 12px;
     font-weight: 500;
     cursor: pointer;
@@ -1615,8 +1735,8 @@
   }
 
   .audio-test-btn:hover:not(:disabled) {
-    background: rgba(139, 92, 246, 0.3);
-    border-color: rgba(139, 92, 246, 0.5);
+    background: rgba(var(--accent-rgb), 0.3);
+    border-color: rgba(var(--accent-rgb), 0.5);
   }
 
   .audio-test-btn:disabled {

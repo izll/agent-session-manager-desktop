@@ -365,9 +365,9 @@
   }
 
   .mode-btn.active {
-    background: rgba(139, 92, 246, 0.2);
-    border-color: rgba(139, 92, 246, 0.4);
-    color: #a78bfa;
+    background: rgba(var(--accent-rgb), 0.2);
+    border-color: rgba(var(--accent-rgb), 0.4);
+    color: var(--accent-light);
   }
 
   .full-row-toggle {
@@ -380,7 +380,7 @@
   }
 
   .full-row-toggle input {
-    accent-color: #8b5cf6;
+    accent-color: var(--accent);
   }
 
   .hint {
@@ -412,7 +412,7 @@
   }
 
   .color-grid::-webkit-scrollbar-thumb {
-    background: rgba(139, 92, 246, 0.3);
+    background: rgba(var(--accent-rgb), 0.3);
     border-radius: 2px;
   }
 
@@ -434,8 +434,8 @@
   }
 
   .color-btn.selected {
-    background: rgba(139, 92, 246, 0.15);
-    border-color: rgba(139, 92, 246, 0.4);
+    background: rgba(var(--accent-rgb), 0.15);
+    border-color: rgba(var(--accent-rgb), 0.4);
   }
 
   .color-swatch {
@@ -457,8 +457,8 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    background: linear-gradient(135deg, #fbbf24, #a78bfa);
-    color: white;
+    background: linear-gradient(135deg, #fbbf24, var(--accent-light));
+    color: var(--accent-ink);
   }
 
   .gradient-swatch {

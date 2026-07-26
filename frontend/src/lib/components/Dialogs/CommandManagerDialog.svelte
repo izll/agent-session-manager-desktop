@@ -482,9 +482,9 @@
 
   .link-btn {
     border: 0; background: none; padding: 0; cursor: pointer;
-    font-size: 11px; color: #a78bfa; text-decoration: underline;
+    font-size: 11px; color: var(--accent-light); text-decoration: underline;
   }
-  .link-btn:hover { color: #ddd6fe; }
+  .link-btn:hover { color: var(--accent-pale); }
 
   .form { display: flex; flex-direction: column; gap: 10px; }
   .form-title { margin: 0; font-size: 13px; color: #e4e4e7; }
@@ -498,7 +498,7 @@
   }
   .field textarea { font-family: 'JetBrains Mono', monospace; }
   .field input:focus, .field textarea:focus {
-    outline: none; border-color: rgba(139, 92, 246, 0.6);
+    outline: none; border-color: rgba(var(--accent-rgb), 0.6);
   }
 
   .placeholder-note {
@@ -509,11 +509,11 @@
   .ph-hint { font-size: 10px; color: #52525b; }
   .ph-chip {
     font-family: 'JetBrains Mono', monospace; font-size: 10px; color: #a5b4fc;
-    background: rgba(139, 92, 246, 0.15); border-radius: 999px; padding: 1px 8px;
+    background: rgba(var(--accent-rgb), 0.15); border-radius: 999px; padding: 1px 8px;
   }
 
   .toggle-row { display: flex; align-items: flex-start; gap: 9px; cursor: pointer; }
-  .toggle-row input { margin-top: 2px; accent-color: #8b5cf6; }
+  .toggle-row input { margin-top: 2px; accent-color: var(--accent); }
   .toggle-main { display: flex; flex-direction: column; gap: 1px; }
   .toggle-label { font-size: 12px; color: #e4e4e7; }
   .toggle-hint { font-size: 10px; color: #6b7280; }
@@ -532,8 +532,8 @@
     background: rgba(255, 255, 255, 0.05); color: #a1a1aa;
   }
   .btn-primary {
-    border: 1px solid #8b5cf6;
-    background: linear-gradient(135deg, #7c3aed, #8b5cf6); color: white;
+    border: 1px solid var(--accent);
+    background: linear-gradient(135deg, var(--accent-dark), var(--accent)); color: var(--accent-ink);
   }
   .btn-primary:disabled { opacity: 0.45; cursor: default; }
 </style>

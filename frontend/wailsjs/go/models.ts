@@ -884,6 +884,8 @@ export namespace main {
 	    markedSessionId: string;
 	    markedWindowIdx: number;
 	    language: string;
+	    uiTheme: string;
+	    uiAccent: string;
 	    terminalRenderer: string;
 	    terminalFontSize: number;
 	    agentFontSize: number;
@@ -915,6 +917,8 @@ export namespace main {
 	        this.markedSessionId = source["markedSessionId"];
 	        this.markedWindowIdx = source["markedWindowIdx"];
 	        this.language = source["language"];
+	        this.uiTheme = source["uiTheme"];
+	        this.uiAccent = source["uiAccent"];
 	        this.terminalRenderer = source["terminalRenderer"];
 	        this.terminalFontSize = source["terminalFontSize"];
 	        this.agentFontSize = source["agentFontSize"];

@@ -364,12 +364,12 @@
     border-color: rgba(255, 255, 255, 0.08);
   }
   .session-item.selected {
-    background: rgba(139, 92, 246, 0.12);
-    border-color: rgba(139, 92, 246, 0.3);
-    box-shadow: 0 0 0 1px rgba(139, 92, 246, 0.1), 0 4px 12px rgba(0, 0, 0, 0.2);
+    background: rgba(var(--accent-rgb), 0.12);
+    border-color: rgba(var(--accent-rgb), 0.3);
+    box-shadow: 0 0 0 1px rgba(var(--accent-rgb), 0.1), 0 4px 12px rgba(0, 0, 0, 0.2);
   }
   .session-item.selected:hover {
-    background: rgba(139, 92, 246, 0.15);
+    background: rgba(var(--accent-rgb), 0.15);
   }
   .session-item.running {
     background: rgba(255, 255, 255, 0.03);
@@ -394,15 +394,15 @@
   }
 
   .session-item.selected {
-    background: rgba(139, 92, 246, 0.15);
-    border-color: rgba(139, 92, 246, 0.4);
+    background: rgba(var(--accent-rgb), 0.15);
+    border-color: rgba(var(--accent-rgb), 0.4);
     box-shadow:
-      0 0 0 1px rgba(139, 92, 246, 0.15),
+      0 0 0 1px rgba(var(--accent-rgb), 0.15),
       0 4px 12px rgba(0, 0, 0, 0.2);
   }
 
   .session-item.selected:hover {
-    background: rgba(139, 92, 246, 0.2);
+    background: rgba(var(--accent-rgb), 0.2);
   }
 
   /* Running indicator - subtle glow effect */
@@ -432,8 +432,8 @@
     font-size: 13px;
     font-weight: 500;
     color: #e4e4e7;
-    background: rgba(139, 92, 246, 0.15);
-    border: 1px solid rgba(139, 92, 246, 0.4);
+    background: rgba(var(--accent-rgb), 0.15);
+    border: 1px solid rgba(var(--accent-rgb), 0.4);
     border-radius: 4px;
     padding: 2px 6px;
     outline: none;
@@ -441,8 +441,8 @@
   }
 
   .rename-input:focus {
-    border-color: rgba(139, 92, 246, 0.7);
-    box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.2);
+    border-color: rgba(var(--accent-rgb), 0.7);
+    box-shadow: 0 0 0 2px rgba(var(--accent-rgb), 0.2);
   }
 
   .session-item:hover .session-name span {
@@ -486,9 +486,9 @@
   }
 
   .badge.resume {
-    color: #a78bfa;
-    background: rgba(139, 92, 246, 0.1);
-    border: 1px solid rgba(139, 92, 246, 0.25);
+    color: var(--accent-light);
+    background: rgba(var(--accent-rgb), 0.1);
+    border: 1px solid rgba(var(--accent-rgb), 0.25);
     font-size: 10px;
     padding: 0 4px;
   }
@@ -575,9 +575,9 @@
   }
 
   .session-item.drag-over {
-    border-color: rgba(139, 92, 246, 0.6);
-    background: rgba(139, 92, 246, 0.15);
-    box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.2);
+    border-color: rgba(var(--accent-rgb), 0.6);
+    background: rgba(var(--accent-rgb), 0.15);
+    box-shadow: 0 0 0 2px rgba(var(--accent-rgb), 0.2);
   }
 
   .session-item.drag-over::before {
@@ -587,7 +587,7 @@
     left: 0;
     right: 0;
     height: 2px;
-    background: #8b5cf6;
+    background: var(--accent);
     border-radius: 1px;
   }
 
@@ -597,7 +597,7 @@
     z-index: 1000;
     min-width: 160px;
     background: #1a1a2e;
-    border: 1px solid rgba(139, 92, 246, 0.3);
+    border: 1px solid rgba(var(--accent-rgb), 0.3);
     border-radius: 8px;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
     padding: 4px;
@@ -620,7 +620,7 @@
   }
 
   .context-menu-item:hover {
-    background: rgba(139, 92, 246, 0.15);
+    background: rgba(var(--accent-rgb), 0.15);
   }
 
   .context-menu-item.danger {

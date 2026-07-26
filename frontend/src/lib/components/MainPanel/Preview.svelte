@@ -29,8 +29,8 @@
       theme: {
         background: '#0a0a0f',
         foreground: '#e4e4e7',
-        cursor: '#8b5cf6',
-        selectionBackground: 'rgba(139, 92, 246, 0.3)',
+        cursor: 'var(--accent)',
+        selectionBackground: 'rgba(var(--accent-rgb), 0.3)',
       },
       convertEol: true,
     });
@@ -236,7 +236,7 @@
   }
 
   .terminal-container :global(.xterm-viewport::-webkit-scrollbar-thumb) {
-    background: rgba(139, 92, 246, 0.3);
+    background: rgba(var(--accent-rgb), 0.3);
     border-radius: 3px;
   }
 </style>

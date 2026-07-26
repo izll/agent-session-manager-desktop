@@ -163,18 +163,18 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #a78bfa;
-    background: rgba(139, 92, 246, 0.08);
-    border: 1px solid rgba(139, 92, 246, 0.18);
+    color: var(--accent-light);
+    background: rgba(var(--accent-rgb), 0.08);
+    border: 1px solid rgba(var(--accent-rgb), 0.18);
     border-radius: 8px;
     cursor: pointer;
     transition: all 0.15s ease;
   }
 
   .dashboard-button:hover {
-    color: #c4b5fd;
-    background: rgba(139, 92, 246, 0.18);
-    border-color: rgba(139, 92, 246, 0.4);
+    color: var(--accent-lighter);
+    background: rgba(var(--accent-rgb), 0.18);
+    border-color: rgba(var(--accent-rgb), 0.4);
   }
 
   .selector-button {
@@ -192,8 +192,8 @@
   }
 
   .selector-button:hover {
-    background: rgba(139, 92, 246, 0.1);
-    border-color: rgba(139, 92, 246, 0.2);
+    background: rgba(var(--accent-rgb), 0.1);
+    border-color: rgba(var(--accent-rgb), 0.2);
   }
 
   .project-info {
@@ -203,7 +203,7 @@
   }
 
   .project-icon {
-    color: #a78bfa;
+    color: var(--accent-light);
   }
 
   .project-name {
@@ -227,7 +227,7 @@
     left: 44px;
     right: 0;
     background: #1a1a2e;
-    border: 1px solid rgba(139, 92, 246, 0.2);
+    border: 1px solid rgba(var(--accent-rgb), 0.2);
     border-radius: 8px;
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
     z-index: 50;
@@ -250,7 +250,7 @@
   }
 
   .dropdown-item:hover {
-    background: rgba(139, 92, 246, 0.1);
+    background: rgba(var(--accent-rgb), 0.1);
   }
 
   .dropdown-item:disabled {
@@ -259,8 +259,8 @@
   }
 
   .dropdown-item.active {
-    background: rgba(139, 92, 246, 0.2);
-    color: #a78bfa;
+    background: rgba(var(--accent-rgb), 0.2);
+    color: var(--accent-light);
   }
 
   .dropdown-item svg {
@@ -268,15 +268,15 @@
   }
 
   .dropdown-item.active svg {
-    color: #a78bfa;
+    color: var(--accent-light);
   }
 
   .dropdown-item.new-project {
-    color: #a78bfa;
+    color: var(--accent-light);
   }
 
   .dropdown-item.new-project svg {
-    color: #a78bfa;
+    color: var(--accent-light);
   }
 
   .lock-icon {
@@ -311,8 +311,8 @@
   }
 
   .create-input:focus {
-    border-color: rgba(139, 92, 246, 0.5);
-    box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.1);
+    border-color: rgba(var(--accent-rgb), 0.5);
+    box-shadow: 0 0 0 2px rgba(var(--accent-rgb), 0.1);
   }
 
   .create-actions {

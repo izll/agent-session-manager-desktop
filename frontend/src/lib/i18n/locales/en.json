@@ -31,8 +31,9 @@
   "split.close": "Close split view",
   "split.sameTab": "This tab is already open on the left",
   "split.sameTabHint": "Select another session or tab on the left, or replace the pinned target.",
-  "palette.title": "Commands",
-  "palette.placeholder": "Search commands, projects, sessions and tabs...",
+  "palette.title": "Go to",
+  "header.commands": "Commands",
+  "palette.placeholder": "Search sessions, projects, tabs and actions...",
   "palette.noResults": "No matching command.",
   "palette.actions": "Actions",
   "palette.projects": "Projects",
@@ -790,5 +791,10 @@
   "commands.detected": "Placeholders:",
   "commands.noPlaceholders": "Write {{a word}} in double braces and you will be asked for it. Add a default with {{lines:100}}.",
   "commands.sendEnter": "Send Enter",
-  "commands.sendEnterHint": "Run the command straight away instead of only typing it into the terminal."
+  "commands.sendEnterHint": "Run the command straight away instead of only typing it into the terminal.",
+  "settings.appearance": "Appearance",
+  "settings.uiTheme": "Accent colour",
+  "settings.uiThemeDesc": "Colours the buttons, highlights and selections. Terminal palettes are set separately.",
+  "settings.uiThemeCustom": "Custom",
+  "settings.uiAccentTooDark": "This colour is very close to the background — buttons and highlights will be hard to make out."
 }

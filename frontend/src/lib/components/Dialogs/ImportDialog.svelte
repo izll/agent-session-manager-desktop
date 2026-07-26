@@ -347,8 +347,8 @@
   }
 
   select:focus {
-    border-color: rgba(139, 92, 246, 0.5);
-    box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.1);
+    border-color: rgba(var(--accent-rgb), 0.5);
+    box-shadow: 0 0 0 2px rgba(var(--accent-rgb), 0.1);
   }
 
   select:disabled {
@@ -383,7 +383,7 @@
   .link-btn {
     background: none;
     border: none;
-    color: #a78bfa;
+    color: var(--accent-light);
     font-size: 12px;
     cursor: pointer;
     padding: 0;
@@ -428,14 +428,14 @@
   }
 
   .session-item.selected {
-    background: rgba(139, 92, 246, 0.1);
-    border-color: rgba(139, 92, 246, 0.3);
+    background: rgba(var(--accent-rgb), 0.1);
+    border-color: rgba(var(--accent-rgb), 0.3);
   }
 
   .session-item input[type="checkbox"] {
     width: 16px;
     height: 16px;
-    accent-color: #8b5cf6;
+    accent-color: var(--accent);
   }
 
   .session-name {
@@ -513,8 +513,8 @@
   .spinner {
     width: 20px;
     height: 20px;
-    border: 2px solid rgba(139, 92, 246, 0.2);
-    border-top-color: #8b5cf6;
+    border: 2px solid rgba(var(--accent-rgb), 0.2);
+    border-top-color: var(--accent);
     border-radius: 50%;
     animation: spin 0.8s linear infinite;
   }

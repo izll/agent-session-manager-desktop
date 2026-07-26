@@ -227,14 +227,14 @@
     padding: 3px 8px; border-radius: 5px; border: 1px solid rgba(255,255,255,.1);
     background: rgba(255,255,255,.04); color: #9ca3af; cursor: pointer; font-size: 10px;
   }
-  .quick-actions button.active { border-color: #8b5cf6; color: #c4b5fd; background: rgba(139,92,246,.18); }
+  .quick-actions button.active { border-color: var(--accent); color: var(--accent-lighter); background: rgba(var(--accent-rgb), .18); }
   .color-grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 6px; }
   .color-swatch {
     aspect-ratio: 1; min-width: 0; border-radius: 5px; border: 2px solid transparent;
     background: var(--swatch); cursor: pointer; box-shadow: inset 0 0 0 1px rgba(255,255,255,.14);
   }
   .color-swatch:hover { transform: scale(1.12); }
-  .color-swatch.selected { border-color: #fff; box-shadow: 0 0 0 2px #8b5cf6; }
+  .color-swatch.selected { border-color: #fff; box-shadow: 0 0 0 2px var(--accent); }
   .custom-color { display: flex; align-items: center; gap: 9px; color: #71717a; font-size: 11px; }
   .custom-color input { width: 30px; height: 24px; padding: 0; border: 0; background: none; cursor: pointer; }
   .custom-color code { color: #a1a1aa; font-size: 10px; }

@@ -14,6 +14,10 @@ export interface Settings {
   markedSessionId: string;
   markedWindowIdx: number;
   language: string;
+  /** Interface accent colour id (see uiThemes.ts). */
+  uiTheme: string;
+  /** Custom accent hex, used when uiTheme is 'custom'. */
+  uiAccent: string;
   terminalRenderer: TerminalRenderer;
   /** Default terminal font size in px; 0 means the built-in default. */
   terminalFontSize: number;
@@ -44,6 +48,8 @@ export const settings = writable<Settings>({
   markedSessionId: '',
   markedWindowIdx: 0,
   language: 'en',
+  uiTheme: 'violet',
+  uiAccent: '#8b5cf6',
   terminalRenderer: 'canvas',
   terminalFontSize: 0,
   agentFontSize: 0,

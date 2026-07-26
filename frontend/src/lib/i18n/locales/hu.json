@@ -31,8 +31,9 @@
   "split.close": "Osztott nézet bezárása",
   "split.sameTab": "Ez a fül már meg van nyitva bal oldalon",
   "split.sameTabHint": "Válassz másik munkamenetet vagy fület bal oldalon, vagy cseréld le a rögzített célt.",
-  "palette.title": "Parancsok",
-  "palette.placeholder": "Parancs, projekt, munkamenet vagy fül keresése...",
+  "palette.title": "Ugrás",
+  "header.commands": "Parancsok",
+  "palette.placeholder": "Munkamenet, projekt, fül vagy művelet keresése...",
   "palette.noResults": "Nincs egyező parancs.",
   "palette.actions": "Műveletek",
   "palette.projects": "Projektek",
@@ -790,5 +791,10 @@
   "commands.detected": "Helykitöltők:",
   "commands.noPlaceholders": "Írd {{dupla kapcsos}} zárójelbe a szót, és futtatáskor rákérdezünk. Alapértéket a {{sorok:100}} formával adhatsz.",
   "commands.sendEnter": "Enter küldése",
-  "commands.sendEnterHint": "Rögtön futtatja a parancsot, nem csak beírja a terminálba."
+  "commands.sendEnterHint": "Rögtön futtatja a parancsot, nem csak beírja a terminálba.",
+  "settings.appearance": "Megjelenés",
+  "settings.uiTheme": "Kiemelőszín",
+  "settings.uiThemeDesc": "A gombok, kiemelések és kijelölések színe. A terminál palettái külön állíthatók.",
+  "settings.uiThemeCustom": "Egyedi",
+  "settings.uiAccentTooDark": "Ez a szín nagyon közel van a háttérhez — a gombok és kiemelések alig fognak látszani."
 }

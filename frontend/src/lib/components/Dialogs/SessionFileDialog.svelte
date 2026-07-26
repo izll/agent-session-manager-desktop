@@ -196,9 +196,9 @@
   .list-head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
   .link-btn {
     border: 0; background: none; padding: 0; cursor: pointer;
-    font-size: 11px; color: #a78bfa; text-decoration: underline;
+    font-size: 11px; color: var(--accent-light); text-decoration: underline;
   }
-  .link-btn:hover { color: #ddd6fe; }
+  .link-btn:hover { color: var(--accent-pale); }
   .count { font-size: 11px; color: #6b7280; }
 
   .session-list { display: flex; flex-direction: column; gap: 3px; }
@@ -207,11 +207,11 @@
     border-radius: 7px; cursor: pointer; border: 1px solid transparent;
   }
   .session-row:hover { background: rgba(255, 255, 255, 0.04); }
-  .session-row.checked { background: rgba(139, 92, 246, 0.1); }
+  .session-row.checked { background: rgba(var(--accent-rgb), 0.1); }
   /* A session whose directory is gone can still be imported — it just won't
      start until the path is fixed, so warn rather than block. */
   .session-row.missing { border-color: rgba(251, 191, 36, 0.35); }
-  .session-row input { margin-top: 2px; accent-color: #8b5cf6; }
+  .session-row input { margin-top: 2px; accent-color: var(--accent); }
 
   .session-main { display: flex; flex-direction: column; gap: 1px; flex: 1; min-width: 0; }
   .session-name { font-size: 13px; color: #e4e4e7; display: flex; align-items: center; gap: 6px; }
@@ -239,8 +239,8 @@
     background: rgba(255, 255, 255, 0.05); color: #a1a1aa;
   }
   .btn-primary {
-    border: 1px solid #8b5cf6;
-    background: linear-gradient(135deg, #7c3aed, #8b5cf6); color: white;
+    border: 1px solid var(--accent);
+    background: linear-gradient(135deg, var(--accent-dark), var(--accent)); color: var(--accent-ink);
   }
   .btn-primary:disabled { opacity: 0.45; cursor: default; }
 </style>

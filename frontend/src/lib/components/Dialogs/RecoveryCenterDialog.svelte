@@ -251,20 +251,20 @@
   .close-btn { border:0; background:transparent; color:#71717a; font-size:22px; cursor:pointer; }
   .recovery-tabs { display:flex; gap:4px; padding:10px 16px 0; }
   .recovery-tabs button { border:0; border-radius:6px; padding:7px 11px; background:transparent; color:#71717a; cursor:pointer; }
-  .recovery-tabs button.active { background:rgba(139,92,246,.14); color:#c4b5fd; }
+  .recovery-tabs button.active { background:rgba(var(--accent-rgb), .14); color:var(--accent-lighter); }
   .recovery-tabs span { margin-left:4px; padding:1px 5px; border-radius:8px; background:rgba(255,255,255,.07); font-size:10px; }
   .error-line { margin:10px 16px 0; padding:8px 10px; border:1px solid rgba(248,113,113,.25); border-radius:6px; color:#fca5a5; background:rgba(127,29,29,.2); font-size:11px; }
   .recovery-body { min-height:300px; max-height:500px; overflow:auto; padding:12px 16px 18px; }
   .toolbar { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:10px; color:#71717a; font-size:11px; }
   .item-list { display:flex; flex-direction:column; gap:7px; }
   .recovery-item { display:flex; align-items:center; gap:11px; padding:10px; border:1px solid rgba(255,255,255,.07); border-radius:8px; background:rgba(255,255,255,.025); }
-  .item-icon { display:grid; place-items:center; width:30px; height:30px; border-radius:7px; color:#a78bfa; background:rgba(139,92,246,.12); }
+  .item-icon { display:grid; place-items:center; width:30px; height:30px; border-radius:7px; color:var(--accent-light); background:rgba(var(--accent-rgb), .12); }
   .item-info { min-width:0; flex:1; display:flex; flex-direction:column; gap:3px; }
   .item-info strong { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#e4e4e7; font-size:12px; }
   .item-info small { color:#71717a; font-size:10px; }
   .item-actions { display:flex; gap:6px; }
   .item-actions button, .toolbar button { border:1px solid rgba(255,255,255,.1); border-radius:6px; padding:5px 9px; background:rgba(255,255,255,.05); color:#a1a1aa; cursor:pointer; font-size:10px; }
-  button.primary { color:#c4b5fd; border-color:rgba(139,92,246,.25); background:rgba(139,92,246,.1); }
+  button.primary { color:var(--accent-lighter); border-color:rgba(var(--accent-rgb), .25); background:rgba(var(--accent-rgb), .1); }
   button.danger { color:#fca5a5; border-color:rgba(248,113,113,.2); }
   button.subtle { background:transparent; }
   button:disabled { opacity:.4; cursor:not-allowed; }

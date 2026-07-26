@@ -56,6 +56,10 @@ type Settings struct {
 	SplitFocus      int    `json:"split_focus,omitempty"`
 	AnthropicAPIKey string `json:"anthropic_api_key,omitempty"`
 	Language        string `json:"language,omitempty"`
+	// UITheme is the interface accent colour (see uiThemes.ts); empty = default.
+	UITheme string `json:"ui_theme,omitempty"`
+	// UIAccent is the custom accent hex, used when UITheme is "custom".
+	UIAccent string `json:"ui_accent,omitempty"`
 	// TerminalRenderer selects the xterm.js renderer: "canvas" (default),
 	// "webgl" (fastest but flaky on some WebKitGTK), or "dom" (most compatible).
 	TerminalRenderer string `json:"terminal_renderer,omitempty"`

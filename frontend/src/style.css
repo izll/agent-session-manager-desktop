@@ -4,6 +4,22 @@
 @tailwind components;
 @tailwind utilities;
 
+/* The interface accent, in one place.
+   Almost every purple in the app is either #8b5cf6 / #a78bfa or an
+   rgba(139, 92, 246, …) tint of the same hue, so both forms are driven from
+   one RGB triple: --accent-rgb feeds the tints, the named steps cover solid
+   fills, hovers and text. Changing these six values re-themes the app. */
+:root {
+  --accent-rgb: 139, 92, 246;
+  --accent: #8b5cf6;
+  --accent-light: #a78bfa;
+  --accent-lighter: #c4b5fd;
+  --accent-pale: #ddd6fe;
+  --accent-dark: #7c3aed;
+  /* Text on a solid accent fill — dark on the brighter themes. */
+  --accent-ink: #ffffff;
+}
+
 * {
   margin: 0;
   padding: 0;
@@ -74,7 +90,7 @@ button:focus {
 }
 
 button:focus-visible {
-  outline: 2px solid #7d56f4;
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
@@ -100,7 +116,7 @@ select {
 
 select:focus {
   outline: none;
-  border-color: rgba(139, 92, 246, 0.5);
+  border-color: rgba(var(--accent-rgb), 0.5);
 }
 
 select option {
@@ -136,9 +152,9 @@ select option {
 /* Dialog content */
 .dialog-content {
   background: linear-gradient(180deg, #1a1a2e 0%, #0f0f1a 100%);
-  border: 1px solid rgba(139, 92, 246, 0.2);
+  border: 1px solid rgba(var(--accent-rgb), 0.2);
   border-radius: 16px;
-  box-shadow: 0 25px 50px rgba(0, 0, 0, 0.5), 0 0 100px rgba(139, 92, 246, 0.1);
+  box-shadow: 0 25px 50px rgba(0, 0, 0, 0.5), 0 0 100px rgba(var(--accent-rgb), 0.1);
   width: 100%;
   max-width: 400px;
   overflow: hidden;
@@ -162,7 +178,7 @@ select option {
   align-items: center;
   justify-content: space-between;
   padding: 20px 24px;
-  background: linear-gradient(180deg, rgba(139, 92, 246, 0.1) 0%, transparent 100%);
+  background: linear-gradient(180deg, rgba(var(--accent-rgb), 0.1) 0%, transparent 100%);
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
@@ -170,7 +186,7 @@ select option {
   font-size: 18px;
   font-weight: 600;
   margin: 0;
-  background: linear-gradient(135deg, #a78bfa 0%, #818cf8 100%);
+  background: linear-gradient(135deg, var(--accent-light) 0%, var(--accent) 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -236,7 +252,7 @@ select option {
 /* Primary button */
 .btn-primary {
   padding: 10px 18px;
-  background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-dark) 100%);
   border: none;
   border-radius: 8px;
   font-size: 13px;
@@ -248,7 +264,7 @@ select option {
 
 .btn-primary:hover:not(:disabled) {
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(139, 92, 246, 0.4);
+  box-shadow: 0 4px 12px rgba(var(--accent-rgb), 0.4);
 }
 
 .btn-primary:disabled {
@@ -316,9 +332,9 @@ select option {
 }
 
 .text-input:focus {
-  border-color: rgba(139, 92, 246, 0.5);
-  background: rgba(139, 92, 246, 0.05);
-  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.1);
+  border-color: rgba(var(--accent-rgb), 0.5);
+  background: rgba(var(--accent-rgb), 0.05);
+  box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.1);
 }
 
 /* Error message */
@@ -353,7 +369,7 @@ select option {
 }
 
 .toggle-btn.active .toggle-track {
-  background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-dark) 100%);
 }
 
 .toggle-thumb {

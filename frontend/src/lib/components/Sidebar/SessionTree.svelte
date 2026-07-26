@@ -389,9 +389,9 @@
   }
 
   .search-input:focus {
-    border-color: rgba(139, 92, 246, 0.5);
-    background: rgba(139, 92, 246, 0.05);
-    box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.1);
+    border-color: rgba(var(--accent-rgb), 0.5);
+    background: rgba(var(--accent-rgb), 0.05);
+    box-shadow: 0 0 0 2px rgba(var(--accent-rgb), 0.1);
   }
 
   .session-list {
@@ -446,8 +446,8 @@
   }
 
   .section-header.drag-over {
-    background: rgba(139, 92, 246, 0.2);
-    box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.3), inset 0 0 15px rgba(139, 92, 246, 0.1);
+    background: rgba(var(--accent-rgb), 0.2);
+    box-shadow: 0 0 0 2px rgba(var(--accent-rgb), 0.3), inset 0 0 15px rgba(var(--accent-rgb), 0.1);
   }
 
   .section-header.sessions-label {
@@ -486,20 +486,20 @@
 
   .create-first-btn {
     padding: 8px 16px;
-    background: rgba(139, 92, 246, 0.15);
-    border: 1px solid rgba(139, 92, 246, 0.3);
+    background: rgba(var(--accent-rgb), 0.15);
+    border: 1px solid rgba(var(--accent-rgb), 0.3);
     border-radius: 8px;
     font-size: 13px;
     font-weight: 500;
-    color: #a78bfa;
+    color: var(--accent-light);
     cursor: pointer;
     transition: all 0.2s ease;
   }
 
   .create-first-btn:hover {
-    background: rgba(139, 92, 246, 0.25);
-    border-color: rgba(139, 92, 246, 0.5);
-    box-shadow: 0 0 15px rgba(139, 92, 246, 0.2);
+    background: rgba(var(--accent-rgb), 0.25);
+    border-color: rgba(var(--accent-rgb), 0.5);
+    box-shadow: 0 0 15px rgba(var(--accent-rgb), 0.2);
   }
 
   .footer {
@@ -529,13 +529,13 @@
   }
 
   .new-btn.session {
-    background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
-    box-shadow: 0 2px 10px rgba(139, 92, 246, 0.3);
+    background: linear-gradient(135deg, var(--accent) 0%, var(--accent-dark) 100%);
+    box-shadow: 0 2px 10px rgba(var(--accent-rgb), 0.3);
   }
 
   .new-btn.session:hover {
     transform: translateY(-1px);
-    box-shadow: 0 4px 15px rgba(139, 92, 246, 0.4);
+    box-shadow: 0 4px 15px rgba(var(--accent-rgb), 0.4);
   }
 
   .new-btn.group {
@@ -569,9 +569,9 @@
   }
 
   .collapse-btn:hover {
-    background: rgba(139, 92, 246, 0.15);
-    border-color: rgba(139, 92, 246, 0.3);
-    color: #a78bfa;
+    background: rgba(var(--accent-rgb), 0.15);
+    border-color: rgba(var(--accent-rgb), 0.3);
+    color: var(--accent-light);
   }
 
   /* Compact mode */

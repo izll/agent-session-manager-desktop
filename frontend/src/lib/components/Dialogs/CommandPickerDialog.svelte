@@ -373,7 +373,7 @@
     border: 1px solid rgba(255, 255, 255, 0.12);
     background: rgba(0, 0, 0, 0.25); color: #e4e4e7;
   }
-  .search:focus { outline: none; border-color: rgba(139, 92, 246, 0.6); }
+  .search:focus { outline: none; border-color: rgba(var(--accent-rgb), 0.6); }
 
   .dialog-body { padding: 12px 18px; overflow-y: auto; flex: 1; min-height: 0; }
   .state { padding: 26px 0; text-align: center; font-size: 13px; color: #71717a; }
@@ -393,7 +393,7 @@
     display: flex; align-items: center; gap: 10px; padding: 7px 9px;
     border-radius: 7px; cursor: pointer; border: 1px solid transparent;
   }
-  .cmd-row.selected { background: rgba(139, 92, 246, 0.14); border-color: rgba(139, 92, 246, 0.4); }
+  .cmd-row.selected { background: rgba(var(--accent-rgb), 0.14); border-color: rgba(var(--accent-rgb), 0.4); }
   .cmd-main { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
   .cmd-name { font-size: 13px; color: #e4e4e7; }
   .cmd-text {
@@ -414,7 +414,7 @@
     border: 1px solid rgba(255, 255, 255, 0.12);
     background: rgba(0, 0, 0, 0.25); color: #e4e4e7;
   }
-  .value-row input:focus { outline: none; border-color: rgba(139, 92, 246, 0.6); }
+  .value-row input:focus { outline: none; border-color: rgba(var(--accent-rgb), 0.6); }
 
   .preview { margin-top: 14px; display: flex; flex-direction: column; gap: 4px; }
   .preview-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: #6b7280; }
@@ -432,9 +432,9 @@
   .foot-hint { font-size: 10px; color: #6b7280; }
   .link-btn {
     border: 0; background: none; padding: 0; cursor: pointer;
-    font-size: 11px; color: #a78bfa; text-decoration: underline;
+    font-size: 11px; color: var(--accent-light); text-decoration: underline;
   }
-  .link-btn:hover { color: #ddd6fe; }
+  .link-btn:hover { color: var(--accent-pale); }
 
   .btn-primary, .btn-secondary {
     padding: 7px 16px; border-radius: 7px; font-size: 12px; font-weight: 600; cursor: pointer;
@@ -444,7 +444,7 @@
     background: rgba(255, 255, 255, 0.05); color: #a1a1aa;
   }
   .btn-primary {
-    border: 1px solid #8b5cf6;
-    background: linear-gradient(135deg, #7c3aed, #8b5cf6); color: white;
+    border: 1px solid var(--accent);
+    background: linear-gradient(135deg, var(--accent-dark), var(--accent)); color: var(--accent-ink);
   }
 </style>

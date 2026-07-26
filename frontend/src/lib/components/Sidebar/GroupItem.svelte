@@ -288,14 +288,14 @@
   }
 
   .group-header:hover {
-    background: rgba(139, 92, 246, 0.08);
-    border-color: rgba(139, 92, 246, 0.15);
+    background: rgba(var(--accent-rgb), 0.08);
+    border-color: rgba(var(--accent-rgb), 0.15);
   }
 
   .group-header.drag-over {
-    background: rgba(139, 92, 246, 0.2);
-    border-color: rgba(139, 92, 246, 0.5);
-    box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.2), inset 0 0 20px rgba(139, 92, 246, 0.1);
+    background: rgba(var(--accent-rgb), 0.2);
+    border-color: rgba(var(--accent-rgb), 0.5);
+    box-shadow: 0 0 0 2px rgba(var(--accent-rgb), 0.2), inset 0 0 20px rgba(var(--accent-rgb), 0.1);
   }
 
   .chevron {
@@ -334,8 +334,8 @@
     font-size: 13px;
     font-weight: 600;
     color: #e4e4e7;
-    background: rgba(139, 92, 246, 0.15);
-    border: 1px solid rgba(139, 92, 246, 0.4);
+    background: rgba(var(--accent-rgb), 0.15);
+    border: 1px solid rgba(var(--accent-rgb), 0.4);
     border-radius: 4px;
     padding: 2px 6px;
     outline: none;
@@ -343,8 +343,8 @@
   }
 
   .rename-input:focus {
-    border-color: rgba(139, 92, 246, 0.7);
-    box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.2);
+    border-color: rgba(var(--accent-rgb), 0.7);
+    box-shadow: 0 0 0 2px rgba(var(--accent-rgb), 0.2);
   }
 
   .session-count {
@@ -360,13 +360,13 @@
     margin-top: 4px;
     margin-left: 12px;
     padding-left: 12px;
-    border-left: 1px solid rgba(139, 92, 246, 0.2);
+    border-left: 1px solid rgba(var(--accent-rgb), 0.2);
     transition: all 0.15s ease;
   }
 
   .group-content.drag-over {
-    background: rgba(139, 92, 246, 0.1);
-    border-left-color: rgba(139, 92, 246, 0.5);
+    background: rgba(var(--accent-rgb), 0.1);
+    border-left-color: rgba(var(--accent-rgb), 0.5);
     border-radius: 0 8px 8px 0;
   }
 
@@ -383,7 +383,7 @@
     z-index: 1000;
     min-width: 160px;
     background: #1a1a2e;
-    border: 1px solid rgba(139, 92, 246, 0.3);
+    border: 1px solid rgba(var(--accent-rgb), 0.3);
     border-radius: 8px;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
     padding: 4px;
@@ -406,7 +406,7 @@
   }
 
   .context-menu-item:hover {
-    background: rgba(139, 92, 246, 0.15);
+    background: rgba(var(--accent-rgb), 0.15);
   }
 
   .context-menu-item.danger {

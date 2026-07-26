@@ -1101,7 +1101,7 @@
 
   function getAgentColor(agent: string): string {
     const colors: Record<string, string> = {
-      claude: '#a78bfa',
+      claude: 'var(--accent-light)',
       gemini: '#60a5fa',
       aider: '#4ade80',
       codex: '#fbbf24',
@@ -1748,10 +1748,10 @@
   }
 
   .tab.active {
-    background: linear-gradient(180deg, rgba(139, 92, 246, 0.15) 0%, rgba(139, 92, 246, 0.08) 100%);
-    border-color: rgba(139, 92, 246, 0.3);
+    background: linear-gradient(180deg, rgba(var(--accent-rgb), 0.15) 0%, rgba(var(--accent-rgb), 0.08) 100%);
+    border-color: rgba(var(--accent-rgb), 0.3);
     color: white;
-    box-shadow: 0 -4px 20px rgba(139, 92, 246, 0.15);
+    box-shadow: 0 -4px 20px rgba(var(--accent-rgb), 0.15);
   }
 
   .tab.tab-dragging {
@@ -1760,8 +1760,8 @@
   }
 
   .tab.tab-drag-over {
-    border-left: 2px solid #a78bfa;
-    background: rgba(139, 92, 246, 0.1);
+    border-left: 2px solid var(--accent-light);
+    background: rgba(var(--accent-rgb), 0.1);
   }
 
   .tab.tab-dropped {
@@ -1770,8 +1770,8 @@
 
   @keyframes tab-drop-flash {
     0% {
-      background: rgba(139, 92, 246, 0.4);
-      box-shadow: 0 0 12px rgba(139, 92, 246, 0.6);
+      background: rgba(var(--accent-rgb), 0.4);
+      box-shadow: 0 0 12px rgba(var(--accent-rgb), 0.6);
     }
     100% {
       background: rgba(255, 255, 255, 0.03);
@@ -1836,8 +1836,8 @@
     font-size: 13px;
     font-weight: 500;
     color: #e4e4e7;
-    background: rgba(139, 92, 246, 0.15);
-    border: 1px solid rgba(139, 92, 246, 0.4);
+    background: rgba(var(--accent-rgb), 0.15);
+    border: 1px solid rgba(var(--accent-rgb), 0.4);
     border-radius: 4px;
     padding: 1px 4px;
     outline: none;
@@ -1845,8 +1845,8 @@
   }
 
   .tab-rename-input:focus {
-    border-color: rgba(139, 92, 246, 0.7);
-    box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.2);
+    border-color: rgba(var(--accent-rgb), 0.7);
+    box-shadow: 0 0 0 2px rgba(var(--accent-rgb), 0.2);
   }
 
   .tab-nostatus-badge {
@@ -1860,7 +1860,7 @@
   .tab-theme-wrap { position: relative; }
   .tab-theme-list {
     max-height: 300px; overflow-y: auto; margin: 4px 0 4px 10px; padding: 6px 8px 6px 6px;
-    width: 340px; border-left: 2px solid rgba(139,92,246,.3);
+    width: 340px; border-left: 2px solid rgba(var(--accent-rgb), .3);
   }
 
   .tab-context-menu {
@@ -1868,7 +1868,7 @@
     z-index: 1000;
     min-width: 140px;
     background: #1a1a2e;
-    border: 1px solid rgba(139, 92, 246, 0.3);
+    border: 1px solid rgba(var(--accent-rgb), 0.3);
     border-radius: 8px;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
     padding: 4px;
@@ -1901,7 +1901,7 @@
   }
 
   .tab-context-menu-item:hover {
-    background: rgba(139, 92, 246, 0.15);
+    background: rgba(var(--accent-rgb), 0.15);
   }
 
   .tab-context-menu-item.delete {
@@ -1925,8 +1925,8 @@
     width: 16px;
     height: 16px;
     border-radius: 4px;
-    background: rgba(139, 92, 246, 0.2);
-    color: #a78bfa;
+    background: rgba(var(--accent-rgb), 0.2);
+    color: var(--accent-light);
     flex-shrink: 0;
   }
 
@@ -1988,9 +1988,9 @@
   }
 
   .control-btn.add-tab:hover {
-    background: rgba(139, 92, 246, 0.15);
-    border-color: rgba(139, 92, 246, 0.3);
-    color: #a78bfa;
+    background: rgba(var(--accent-rgb), 0.15);
+    border-color: rgba(var(--accent-rgb), 0.3);
+    color: var(--accent-light);
   }
 
   .control-btn.start {
@@ -2060,9 +2060,9 @@
   }
 
   .control-btn.color:hover {
-    background: rgba(139, 92, 246, 0.15);
-    border-color: rgba(139, 92, 246, 0.3);
-    color: #a78bfa;
+    background: rgba(var(--accent-rgb), 0.15);
+    border-color: rgba(var(--accent-rgb), 0.3);
+    color: var(--accent-light);
   }
 
   .control-divider {
@@ -2363,7 +2363,7 @@
   /* Extra Args Editor */
   .extra-args-dialog {
     background: #1a1a2e;
-    border: 1px solid rgba(139, 92, 246, 0.3);
+    border: 1px solid rgba(var(--accent-rgb), 0.3);
     border-radius: 12px;
     padding: 20px;
     width: 400px;
@@ -2399,8 +2399,8 @@
   }
 
   .extra-args-input:focus {
-    border-color: rgba(139, 92, 246, 0.5);
-    box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.1);
+    border-color: rgba(var(--accent-rgb), 0.5);
+    box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.1);
   }
 
   .extra-args-input::placeholder {

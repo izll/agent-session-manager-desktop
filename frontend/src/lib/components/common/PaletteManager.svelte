@@ -149,12 +149,12 @@
   .manager-toggle:hover { color: #e4e4e7; }
   .count {
     padding: 1px 6px; border-radius: 999px; font-size: 10px;
-    background: rgba(139, 92, 246, 0.15); color: #a78bfa;
+    background: rgba(var(--accent-rgb), 0.15); color: var(--accent-light);
   }
 
   .custom-list { display: flex; flex-direction: column; gap: 6px; }
   .custom-row { display: flex; align-items: center; gap: 6px; }
-  .custom-row.editing .custom-name { border-color: rgba(139, 92, 246, 0.5); }
+  .custom-row.editing .custom-name { border-color: rgba(var(--accent-rgb), 0.5); }
   .custom-name {
     flex: 1; min-width: 0; padding: 6px 9px; border-radius: 6px; font-size: 12px;
     border: 1px solid rgba(255, 255, 255, 0.12); background: rgba(0, 0, 0, 0.25); color: #e4e4e7;
@@ -163,7 +163,7 @@
     padding: 6px 12px; border-radius: 7px; font-size: 12px; cursor: pointer;
     border: 1px solid rgba(255, 255, 255, 0.12); background: rgba(255, 255, 255, 0.05); color: #d4d4d8;
   }
-  .palette-toggle:hover { border-color: rgba(139, 92, 246, 0.5); color: #ddd6fe; }
+  .palette-toggle:hover { border-color: rgba(var(--accent-rgb), 0.5); color: var(--accent-pale); }
   .palette-delete {
     border: 1px solid rgba(255, 255, 255, 0.12); background: rgba(255, 255, 255, 0.04);
     color: #a1a1aa; border-radius: 6px; width: 28px; height: 28px; cursor: pointer; font-size: 15px;
@@ -171,15 +171,15 @@
   .palette-delete:hover { color: #fb7185; border-color: rgba(251, 113, 133, 0.5); }
   .palette-add {
     align-self: flex-start; padding: 6px 12px; border-radius: 7px; font-size: 12px; cursor: pointer;
-    border: 1px dashed rgba(139, 92, 246, 0.4); background: rgba(139, 92, 246, 0.08); color: #c4b5fd;
+    border: 1px dashed rgba(var(--accent-rgb), 0.4); background: rgba(var(--accent-rgb), 0.08); color: var(--accent-lighter);
   }
-  .palette-add:hover { background: rgba(139, 92, 246, 0.16); }
+  .palette-add:hover { background: rgba(var(--accent-rgb), 0.16); }
   .manager-actions { display: flex; gap: 8px; flex-wrap: wrap; }
   .palette-import {
     padding: 6px 12px; border-radius: 7px; font-size: 12px; cursor: pointer;
     border: 1px solid rgba(255,255,255,.12); background: rgba(255,255,255,.05); color: #d4d4d8;
   }
-  .palette-import:hover { border-color: rgba(139,92,246,.5); color: #ddd6fe; }
+  .palette-import:hover { border-color: rgba(var(--accent-rgb), .5); color: var(--accent-pale); }
 
   .palette-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(168px, 1fr)); gap: 10px; }
   .palette-swatch { display: flex; flex-direction: column; gap: 4px; }
@@ -194,5 +194,5 @@
     border: 1px solid rgba(255, 255, 255, 0.12); background: rgba(0, 0, 0, 0.25);
     color: #e4e4e7; font-family: 'JetBrains Mono', Menlo, monospace; font-size: 11px;
   }
-  .hex-input:focus { outline: none; border-color: rgba(139, 92, 246, 0.5); }
+  .hex-input:focus { outline: none; border-color: rgba(var(--accent-rgb), 0.5); }
 </style>

@@ -1330,7 +1330,7 @@
 
   .mcp-badge {
     font-size: 10px;
-    color: #a78bfa;
+    color: var(--accent-light);
     background: rgba(167, 139, 250, 0.15);
     padding: 2px 6px;
     border-radius: 4px;
@@ -1400,9 +1400,9 @@
   }
 
   .action-bar .action-btn.init {
-    background: rgba(139, 92, 246, 0.2);
-    border-color: rgba(139, 92, 246, 0.3);
-    color: #a78bfa;
+    background: rgba(var(--accent-rgb), 0.2);
+    border-color: rgba(var(--accent-rgb), 0.3);
+    color: var(--accent-light);
   }
 
   .action-bar .action-btn.next {
@@ -1448,8 +1448,8 @@
   }
 
   .task-item.selected {
-    background: rgba(139, 92, 246, 0.1);
-    border-color: rgba(139, 92, 246, 0.3);
+    background: rgba(var(--accent-rgb), 0.1);
+    border-color: rgba(var(--accent-rgb), 0.3);
   }
 
   .task-item.done {
@@ -1479,19 +1479,19 @@
   }
 
   .task-checkbox:hover {
-    border-color: rgba(139, 92, 246, 0.5);
-    background: rgba(139, 92, 246, 0.1);
+    border-color: rgba(var(--accent-rgb), 0.5);
+    background: rgba(var(--accent-rgb), 0.1);
   }
 
   .task-checkbox.checked {
-    background: rgba(139, 92, 246, 0.3);
-    border-color: rgba(139, 92, 246, 0.6);
+    background: rgba(var(--accent-rgb), 0.3);
+    border-color: rgba(var(--accent-rgb), 0.6);
     color: #e4e4e7;
   }
 
   .task-checkbox.checked:hover {
-    background: rgba(139, 92, 246, 0.4);
-    border-color: rgba(139, 92, 246, 0.7);
+    background: rgba(var(--accent-rgb), 0.4);
+    border-color: rgba(var(--accent-rgb), 0.7);
   }
 
   .task-id {
@@ -1545,7 +1545,7 @@
 
   .complexity-badge {
     font-size: 10px;
-    color: #a78bfa;
+    color: var(--accent-light);
     background: rgba(167, 139, 250, 0.15);
     padding: 2px 6px;
     border-radius: 4px;
@@ -1620,17 +1620,17 @@
   .expand-btn {
     width: 100%;
     padding: 10px;
-    background: rgba(139, 92, 246, 0.1);
-    border: 1px dashed rgba(139, 92, 246, 0.3);
+    background: rgba(var(--accent-rgb), 0.1);
+    border: 1px dashed rgba(var(--accent-rgb), 0.3);
     border-radius: 8px;
-    color: #a78bfa;
+    color: var(--accent-light);
     font-size: 12px;
     cursor: pointer;
     margin-bottom: 16px;
   }
 
   .expand-btn:hover {
-    background: rgba(139, 92, 246, 0.2);
+    background: rgba(var(--accent-rgb), 0.2);
   }
 
   .dependencies {
@@ -1675,9 +1675,9 @@
   }
 
   .task-actions .action-btn.primary {
-    background: rgba(139, 92, 246, 0.2);
-    border-color: rgba(139, 92, 246, 0.3);
-    color: #a78bfa;
+    background: rgba(var(--accent-rgb), 0.2);
+    border-color: rgba(var(--accent-rgb), 0.3);
+    color: var(--accent-light);
   }
 
   .task-actions .action-btn.danger {
@@ -1710,7 +1710,7 @@
   }
 
   .context-menu button:hover {
-    background: rgba(139, 92, 246, 0.1);
+    background: rgba(var(--accent-rgb), 0.1);
   }
 
   .context-menu button.danger {
@@ -1800,7 +1800,7 @@
   }
 
   .task-list::-webkit-scrollbar-thumb {
-    background: rgba(139, 92, 246, 0.3);
+    background: rgba(var(--accent-rgb), 0.3);
     border-radius: 3px;
   }
 
@@ -1831,8 +1831,8 @@
   }
 
   .mode-btn.active {
-    background: rgba(139, 92, 246, 0.2);
-    color: #a78bfa;
+    background: rgba(var(--accent-rgb), 0.2);
+    color: var(--accent-light);
   }
 
   .api-info {
@@ -1857,9 +1857,9 @@
   }
 
   .add-subtask-btn {
-    background: rgba(139, 92, 246, 0.1);
-    border: 1px solid rgba(139, 92, 246, 0.3);
-    color: #a78bfa;
+    background: rgba(var(--accent-rgb), 0.1);
+    border: 1px solid rgba(var(--accent-rgb), 0.3);
+    color: var(--accent-light);
     padding: 2px 8px;
     border-radius: 4px;
     font-size: 11px;
@@ -1867,7 +1867,7 @@
   }
 
   .add-subtask-btn:hover {
-    background: rgba(139, 92, 246, 0.2);
+    background: rgba(var(--accent-rgb), 0.2);
   }
 
   .subtask-item {
@@ -1890,7 +1890,7 @@
     width: 16px;
     height: 16px;
     cursor: pointer;
-    accent-color: #8b5cf6;
+    accent-color: var(--accent);
   }
 
   .subtask-id {
@@ -2027,8 +2027,8 @@
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    background: rgba(139, 92, 246, 0.1);
-    color: #a78bfa;
+    background: rgba(var(--accent-rgb), 0.1);
+    color: var(--accent-light);
     padding: 4px 10px;
     border-radius: 6px;
     font-size: 12px;
@@ -2037,7 +2037,7 @@
   .dep-remove-inline {
     background: transparent;
     border: none;
-    color: #a78bfa;
+    color: var(--accent-light);
     cursor: pointer;
     font-size: 14px;
     padding: 0;
@@ -2060,9 +2060,9 @@
   }
 
   .add-dep-inline-btn {
-    background: rgba(139, 92, 246, 0.2);
-    border: 1px solid rgba(139, 92, 246, 0.3);
-    color: #a78bfa;
+    background: rgba(var(--accent-rgb), 0.2);
+    border: 1px solid rgba(var(--accent-rgb), 0.3);
+    color: var(--accent-light);
     padding: 8px 16px;
     border-radius: 8px;
     cursor: pointer;
@@ -2070,7 +2070,7 @@
   }
 
   .add-dep-inline-btn:hover:not(:disabled) {
-    background: rgba(139, 92, 246, 0.3);
+    background: rgba(var(--accent-rgb), 0.3);
   }
 
   .add-dep-inline-btn:disabled {
@@ -2129,14 +2129,14 @@
   }
 
   .mic-btn.active {
-    color: #8b5cf6;
+    color: var(--accent);
     animation: mic-pulse 1.5s ease-in-out infinite;
   }
 
   textarea.dictating,
   input.dictating {
-    border-color: rgba(139, 92, 246, 0.5) !important;
-    box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.15) !important;
+    border-color: rgba(var(--accent-rgb), 0.5) !important;
+    box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.15) !important;
   }
 
   @keyframes mic-pulse {

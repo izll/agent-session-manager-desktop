@@ -243,8 +243,8 @@
   }
 
   .version-row.highlight {
-    background: rgba(139, 92, 246, 0.1);
-    border: 1px solid rgba(139, 92, 246, 0.2);
+    background: rgba(var(--accent-rgb), 0.1);
+    border: 1px solid rgba(var(--accent-rgb), 0.2);
   }
 
   .label {
@@ -258,7 +258,7 @@
   }
 
   .value.new {
-    color: #a78bfa;
+    color: var(--accent-light);
   }
 
   .update-available, .up-to-date {
@@ -272,8 +272,8 @@
   }
 
   .update-available {
-    background: rgba(139, 92, 246, 0.1);
-    color: #a78bfa;
+    background: rgba(var(--accent-rgb), 0.1);
+    color: var(--accent-light);
   }
 
   .up-to-date {
@@ -322,8 +322,8 @@
   .spinner {
     width: 24px;
     height: 24px;
-    border: 2px solid rgba(139, 92, 246, 0.2);
-    border-top-color: #8b5cf6;
+    border: 2px solid rgba(var(--accent-rgb), 0.2);
+    border-top-color: var(--accent);
     border-radius: 50%;
     animation: spin 0.8s linear infinite;
   }

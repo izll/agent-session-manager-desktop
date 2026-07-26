@@ -2397,6 +2397,8 @@ type SettingsInfo struct {
 	MarkedSessionID    string `json:"markedSessionId"`
 	MarkedWindowIdx    int    `json:"markedWindowIdx"`
 	Language           string `json:"language"`
+	UITheme            string `json:"uiTheme"`
+	UIAccent           string `json:"uiAccent"`
 	TerminalRenderer   string `json:"terminalRenderer"`
 	TerminalFontSize   int    `json:"terminalFontSize"`
 	AgentFontSize      int    `json:"agentFontSize"`
@@ -2471,6 +2473,8 @@ func (a *App) GetSettings() (*SettingsInfo, error) {
 		MarkedSessionID:      settings.MarkedSessionID,
 		MarkedWindowIdx:      settings.MarkedWindowIdx,
 		Language:             lang,
+		UITheme:              settings.UITheme,
+		UIAccent:             settings.UIAccent,
 		TerminalRenderer:     renderer,
 		TerminalFontSize:     settings.TerminalFontSize,
 		AgentFontSize:        settings.AgentFontSize,
@@ -2508,6 +2512,8 @@ func (a *App) SaveSettings(settings SettingsInfo) error {
 		current.MarkedSessionID = settings.MarkedSessionID
 		current.MarkedWindowIdx = settings.MarkedWindowIdx
 		current.Language = settings.Language
+		current.UITheme = settings.UITheme
+		current.UIAccent = settings.UIAccent
 		current.TerminalRenderer = settings.TerminalRenderer
 		current.TerminalFontSize = settings.TerminalFontSize
 		current.AgentFontSize = settings.AgentFontSize

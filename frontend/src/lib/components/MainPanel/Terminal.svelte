@@ -664,7 +664,7 @@
     gap: 6px;
     padding: 5px 8px;
     border-radius: 8px;
-    border: 1px solid rgba(139, 92, 246, 0.35);
+    border: 1px solid rgba(var(--accent-rgb), 0.35);
     background: rgba(15, 15, 26, 0.95);
     box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
     color: #71717a;
@@ -687,7 +687,7 @@
     padding: 2px 4px;
     border-radius: 4px;
   }
-  .search-nav:hover { color: #e4e4e7; background: rgba(139, 92, 246, 0.15); }
+  .search-nav:hover { color: #e4e4e7; background: rgba(var(--accent-rgb), 0.15); }
   .search-nav.close { font-size: 15px; line-height: 1; }
 
   .terminal-pool-container {
@@ -752,7 +752,7 @@
   }
 
   .terminal-pool-container :global(.xterm-viewport::-webkit-scrollbar-thumb) {
-    background: rgba(139, 92, 246, 0.3);
+    background: rgba(var(--accent-rgb), 0.3);
     border-radius: 3px;
   }
 </style>
