@@ -25,6 +25,10 @@ const (
 	CheckTimeout  = 5 * time.Second
 	DownloadLimit = 512 << 20 // 512 MiB, including compressed release assets.
 	BinaryLimit   = 256 << 20 // 256 MiB uncompressed executable limit.
+
+	// Automatic checks are throttled to once a day, matching the TUI version.
+	CheckInterval = 24 * time.Hour
+	LastCheckFile = "last_update_check"
 )
 
 var (
@@ -36,6 +40,57 @@ var (
 
 type GitHubRelease struct {
 	TagName string `json:"tag_name"`
+}
+
+// configDir is where the last-check timestamp lives, alongside the app's
+// other state.
+func configDir() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(home, ".config", "agent-session-manager-desktop")
+}
+
+// ShouldCheckForUpdate reports whether enough time has passed since the last
+// automatic check. Anything unreadable or unparseable means "check" — missing
+// an update is worse than one extra request.
+func ShouldCheckForUpdate() bool {
+	dir := configDir()
+	if dir == "" {
+		return true
+	}
+	data, err := os.ReadFile(filepath.Join(dir, LastCheckFile))
+	if err != nil {
+		return true
+	}
+	last, err := time.Parse(time.RFC3339, strings.TrimSpace(string(data)))
+	if err != nil {
+		return true
+	}
+	// A timestamp in the future (clock change, edited file) would otherwise
+	// suppress checks indefinitely.
+	if last.After(time.Now()) {
+		return true
+	}
+	return time.Since(last) >= CheckInterval
+}
+
+// SaveLastCheckTime records that an automatic check just happened. Failures
+// are ignored: the only consequence is checking again sooner than needed.
+func SaveLastCheckTime() {
+	dir := configDir()
+	if dir == "" {
+		return
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return
+	}
+	_ = os.WriteFile(
+		filepath.Join(dir, LastCheckFile),
+		[]byte(time.Now().Format(time.RFC3339)),
+		0o644,
+	)
 }
 
 // CheckForUpdate returns the latest tag when it is a valid semantic version

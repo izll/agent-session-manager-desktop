@@ -70,6 +70,8 @@
 
   let showHelpDialog = false;
   let showUpdateDialog = false;
+  /** Version found by the daily background check; drives the header dot. */
+  let availableUpdate = '';
   let showImportDialog = false;
   let showSettingsDialog = false;
   let showRecoveryCenter = false;
@@ -359,6 +361,13 @@
   }
 
   onMount(async () => {
+    // The backend checks for a release once a day, shortly after launch. It
+    // only ever notifies — a dot on the update button, not a popup that
+    // interrupts what the user is doing.
+    EventsOn('update:available', (info: { version: string; current: string }) => {
+      availableUpdate = info?.version || '';
+    });
+
     // Capture phase so the terminal (xterm) can't swallow Ctrl+Shift combos.
     window.addEventListener('keydown', handleKeydown, true);
     window.addEventListener('terminal-nav', handleTerminalNav as EventListener);
@@ -396,6 +405,7 @@
     window.removeEventListener('command:start-selected', handleCommandStart);
     window.removeEventListener('command:stop-selected', handleCommandStop);
     stopSidebarPolling();
+    EventsOff('update:available');
     EventsOff('dictation:state');
     EventsOff('dictation:error');
   });
@@ -683,12 +693,20 @@
             <line x1="12" y1="3" x2="12" y2="15"/>
           </svg>
         </button>
-        <button class="btn btn-ghost btn-icon" on:click={() => showUpdateDialog = true} title={$t('header.checkUpdates')}>
+        <button
+          class="btn btn-ghost btn-icon update-btn"
+          class:has-update={!!availableUpdate}
+          on:click={() => { showUpdateDialog = true; availableUpdate = ''; }}
+          title={availableUpdate
+            ? $t('header.updateAvailable', { version: availableUpdate })
+            : $t('header.checkUpdates')}
+        >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
             <polyline points="7 10 12 15 17 10"/>
             <line x1="12" y1="15" x2="12" y2="3"/>
           </svg>
+          {#if availableUpdate}<span class="update-dot"></span>{/if}
         </button>
         <button class="btn btn-ghost btn-icon" on:click={() => showHelpDialog = true} title={$t('header.help')}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1225,6 +1243,25 @@
     width: 32px;
     padding: 0;
     justify-content: center;
+  }
+
+  /* A new release is worth noticing but never worth interrupting for, so it
+     shows as a dot on the existing button rather than a dialog. */
+  .update-btn {
+    position: relative;
+  }
+  .update-btn.has-update {
+    color: #4ade80;
+  }
+  .update-dot {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #4ade80;
+    box-shadow: 0 0 0 2px rgba(15, 15, 26, 0.9);
   }
 
   .header-icons {
