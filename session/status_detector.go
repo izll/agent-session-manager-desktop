@@ -91,7 +91,15 @@ var agentPatterns = map[AgentType]AgentPatterns{
 		Spinners: defaultSpinners,
 	},
 	AgentCodex: {
+		// Codex phrases its approval prompt its own way; the generic
+		// "allow once"/"do you want to proceed" wording never appears, so
+		// those alone left every Codex question undetected.
 		WaitingPatterns: []string{
+			"would you like to run",
+			"press enter to confirm",
+			"yes, proceed",
+			"yes, and don't ask again",
+			"tell codex what to do differently",
 			"allow once",
 			"allow always",
 			"do you want to proceed",
