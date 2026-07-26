@@ -36,10 +36,14 @@
   let successMessage = '';
 
   let lastShow = false;
-  $: if (show && !lastShow) {
-    loadProjects();
+  // Assign lastShow inside the same block: a separate `$: lastShow = show`
+  // is ordered BEFORE this guard, so the project list was never loaded.
+  $: {
+    if (show && !lastShow) {
+      loadProjects();
+    }
+    lastShow = show;
   }
-  $: lastShow = show;
 
   async function loadProjects() {
     isLoading = true;

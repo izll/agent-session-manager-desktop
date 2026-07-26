@@ -14,11 +14,15 @@
   let lastShow = false;
 
   // Reset form only when dialog transitions from hidden to shown
-  $: if (show && !lastShow) {
-    groupName = '';
-    error = '';
+  // Assign lastShow inside the same block: a separate `$: lastShow = show`
+  // is ordered BEFORE this guard, so the fields were never reset on open.
+  $: {
+    if (show && !lastShow) {
+      groupName = '';
+      error = '';
+    }
+    lastShow = show;
   }
-  $: lastShow = show;
 
   function close() {
     show = false;

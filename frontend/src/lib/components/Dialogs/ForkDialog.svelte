@@ -17,10 +17,14 @@
   let lastShow = false;
 
   // Generate default name only when dialog transitions from hidden to shown
-  $: if (show && !lastShow) {
-    name = `Fork ${new Date().toLocaleTimeString()}`;
+  // Assign lastShow inside the same block: a separate `$: lastShow = show`
+  // is ordered BEFORE this guard, so the "just opened" test never passes.
+  $: {
+    if (show && !lastShow) {
+      name = `Fork ${new Date().toLocaleTimeString()}`;
+    }
+    lastShow = show;
   }
-  $: lastShow = show;
 
   function close() {
     show = false;

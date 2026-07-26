@@ -1,10 +1,12 @@
 <script lang="ts">
   import { autoFocusDialog } from '../../utils/dialogActions';
-  import { onMount } from 'svelte';
+  import { createEventDispatcher, onMount } from 'svelte';
   import * as App from '../../../../wailsjs/go/main/App';
   import { t } from '../../i18n';
 
   export let show = false;
+
+  const dispatch = createEventDispatcher();
 
   interface UpdateInfo {
     available: boolean;
@@ -20,11 +22,15 @@
   /** Clock time of the last completed check, shown with the result. */
   let checkedAt = '';
 
+  // One reactive block, not two: Svelte orders blocks by dependency, so a
+  // separate `$: lastShow = show` runs BEFORE the guard that reads it and the
+  // "just opened" condition is never true. Assigning inside the same block
+  // keeps the comparison against the previous value.
   let lastShow = false;
-  $: if (show && !lastShow) {
-    checkForUpdate();
+  $: {
+    if (show && !lastShow) checkForUpdate();
+    lastShow = show;
   }
-  $: lastShow = show;
 
   async function checkForUpdate() {
     isChecking = true;
@@ -40,6 +46,9 @@
         hour: '2-digit',
         minute: '2-digit',
       });
+      // Keep the header in step: a manual check is the freshest answer there
+      // is, so an "up to date" result must retire the indicator too.
+      dispatch('checked', updateInfo?.available ? updateInfo.latestVersion : '');
     } catch (e) {
       error = String(e);
     } finally {
@@ -59,6 +68,8 @@
     try {
       await App.PerformUpdate(updateInfo.latestVersion);
       success = $t('update.success');
+      // Installed — the header indicator has nothing left to point at.
+      dispatch('installed');
     } catch (e) {
       error = String(e);
     } finally {
