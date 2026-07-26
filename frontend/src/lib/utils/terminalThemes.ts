@@ -413,7 +413,10 @@ export function resolveTerminalTheme(opts: {
 /** Matches the bounds enforced in app.go; a size outside them is unusable. */
 export const MIN_FONT_SIZE = 8;
 export const MAX_FONT_SIZE = 32;
-export const DEFAULT_FONT_SIZE = 14;
+// 13, not 14: that is what terminals actually rendered at before the size
+// became configurable (Terminal.svelte passed 13 and it won over the 14 in
+// createTerminal), so this keeps existing installs looking unchanged.
+export const DEFAULT_FONT_SIZE = 13;
 
 /**
  * The size a terminal should use: the tab's own override if it has one,

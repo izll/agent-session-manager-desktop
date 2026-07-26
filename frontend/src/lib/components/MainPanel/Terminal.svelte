@@ -51,9 +51,14 @@
     if (fontSizeSaveTimer) clearTimeout(fontSizeSaveTimer);
     fontSizeSaveTimer = setTimeout(() => {
       fontSizeSaveTimer = null;
-      void SetTabFontSize(sid, widx, size).catch((err) => {
-        LogFrontend(`SetTabFontSize failed session=${sid} win=${widx}: ${err}`);
-      });
+      void SetTabFontSize(sid, widx, size)
+        // Refresh the session list so anything reading the stored size — the
+        // tab menu's reset entry, for one — sees that this tab now has its
+        // own. Without it the menu stays greyed out until the next reload.
+        .then(() => loadSessions())
+        .catch((err) => {
+          LogFrontend(`SetTabFontSize failed session=${sid} win=${widx}: ${err}`);
+        });
     }, 400);
   }
 
@@ -61,26 +66,44 @@
    * Drop this tab's own size so it follows the global setting again. The
    * pane is updated straight away; the stored value is cleared behind it.
    */
-  async function resetFontSizeForCurrentTab() {
-    const sid = currentTargetSessionId();
+  async function resetFontSizeForCurrentTab(target?: { sessionId: string; windowIdx: number }) {
+    const sid = target?.sessionId ?? currentTargetSessionId();
     if (!sid) return;
-    const widx = currentTargetWindowIdx();
+    const widx = target?.windowIdx ?? currentTargetWindowIdx();
+    // Only touch the live pane if it is the one being reset; the stored value
+    // still has to be cleared either way.
+    const affectsVisiblePane =
+      sid === currentTargetSessionId() && widx === currentTargetWindowIdx();
     // A pending Ctrl+scroll save would otherwise write the old size back.
     if (fontSizeSaveTimer) {
       clearTimeout(fontSizeSaveTimer);
       fontSizeSaveTimer = null;
     }
-    const entry = pool?.getActive();
-    if (entry) {
-      entry.themeCtx = { ...(entry.themeCtx || {}), fontSize: 0 };
+    if (affectsVisiblePane) {
+      const entry = pool?.getActive();
+      if (entry) {
+        entry.themeCtx = { ...(entry.themeCtx || {}), fontSize: 0 };
+      }
+      pool?.applyFontSize();
     }
-    pool?.applyFontSize();
     try {
       await SetTabFontSize(sid, widx, 0);
       await loadSessions();
     } catch (err) {
       LogFrontend(`reset font size failed session=${sid} win=${widx}: ${err}`);
     }
+  }
+
+  // The tab context menu lives in another component, so it asks for the reset
+  // through an event rather than reaching into this one's pool.
+  function handleResetFontSizeEvent(e: CustomEvent<{ sessionId: string; windowIdx: number }>) {
+    if (!e.detail) return;
+    // In split view two panes listen; only the one actually showing this tab
+    // should act, so the save isn't issued twice for the same tab.
+    const mine = e.detail.sessionId === currentTargetSessionId() &&
+                 e.detail.windowIdx === currentTargetWindowIdx();
+    if (!mine && !focusOwner) return;
+    void resetFontSizeForCurrentTab(e.detail);
   }
 
   // Get current session without reactive subscription
@@ -247,6 +270,7 @@
     // user just did on screen.
     poolContainerEl.addEventListener('terminal:fontsize', handleFontSizeGesture as EventListener);
 
+    window.addEventListener('terminal:reset-fontsize', handleResetFontSizeEvent as EventListener);
     window.addEventListener('terminal:focus', handleFocusEvent);
     window.addEventListener('terminal:search-toggle', handleSearchToggle);
     window.addEventListener('terminal:destroy-window', handleDestroyWindow as EventListener);
@@ -326,7 +350,8 @@
       clearTimeout(resizeTimeout);
       resizeObserver.disconnect();
       window.removeEventListener('resize', handleResize);
-      window.removeEventListener('terminal:focus', handleFocusEvent);
+      window.removeEventListener('terminal:reset-fontsize', handleResetFontSizeEvent as EventListener);
+    window.removeEventListener('terminal:focus', handleFocusEvent);
       window.removeEventListener('terminal:search-toggle', handleSearchToggle);
       window.removeEventListener('terminal:destroy-window', handleDestroyWindow as EventListener);
       window.removeEventListener('terminal:destroy-session', handleDestroySession as EventListener);

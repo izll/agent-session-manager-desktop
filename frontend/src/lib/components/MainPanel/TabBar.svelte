@@ -828,16 +828,16 @@
   })();
 
   // Zero clears the override, so the tab follows the global setting again.
-  async function resetTabFontSize() {
+  function resetTabFontSize() {
     const idx = tabContextMenuIndex;
+    const sessionId = $selectedSession?.id;
     closeTabContextMenu();
-    if (idx === null || !$selectedSession) return;
-    try {
-      await App.SetTabFontSize($selectedSession.id, idx, 0);
-      await loadSessions();
-    } catch (e) {
-      console.error('Reset tab font size failed:', e);
-    }
+    if (idx === null || !sessionId) return;
+    // Terminal.svelte owns the pool, so it does the work: saving alone would
+    // leave the open pane rendering at the old size until it was recreated.
+    window.dispatchEvent(new CustomEvent('terminal:reset-fontsize', {
+      detail: { sessionId, windowIdx: idx },
+    }));
   }
 
   async function setTabTheme(themeID: string) {
