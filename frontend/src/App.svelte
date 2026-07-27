@@ -920,6 +920,9 @@
     onOpenManager={openCommandManager}
   />
   <CommandManagerDialog bind:show={showCommandManager} />
+  <!-- Opened from the tab bar's colour button. The sidebar's context-menu
+       entry opens its own instance from SessionItem, which is rendered in
+       three places and would otherwise have to forward the event up. -->
   <SessionColorDialog bind:show={showColorDialog} session={colorDialogSession} />
   <ConfirmDialog
     bind:show={showDeleteConfirm}

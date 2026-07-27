@@ -518,6 +518,7 @@
   "sessionMenu.rename": "Переименовать",
   "sessionMenu.favorite": "Добавить в избранное",
   "sessionMenu.unfavorite": "Удалить из избранного",
+  "sessionMenu.color": "Цвет…",
   "sessionMenu.delete": "Удалить",
   "group.startAll": "Запустить все сессии",
   "group.stopAll": "Остановить все сессии",

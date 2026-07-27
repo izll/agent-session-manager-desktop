@@ -101,6 +101,7 @@
   "sessionMenu.rename": "Átnevezés",
   "sessionMenu.favorite": "Kedvencekhez adás",
   "sessionMenu.unfavorite": "Eltávolítás a kedvencekből",
+  "sessionMenu.color": "Szín…",
   "sessionMenu.delete": "Törlés",
   "group.startAll": "Összes munkamenet indítása",
   "group.stopAll": "Összes munkamenet leállítása",

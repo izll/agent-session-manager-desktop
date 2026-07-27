@@ -518,6 +518,7 @@
   "sessionMenu.rename": "إعادة تسمية",
   "sessionMenu.favorite": "إضافة إلى المفضلة",
   "sessionMenu.unfavorite": "إزالة من المفضلة",
+  "sessionMenu.color": "اللون…",
   "sessionMenu.delete": "حذف",
   "group.startAll": "بدء كل الجلسات",
   "group.stopAll": "إيقاف كل الجلسات",

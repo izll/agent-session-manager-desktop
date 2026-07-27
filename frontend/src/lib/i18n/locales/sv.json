@@ -518,6 +518,7 @@
   "sessionMenu.rename": "Byt namn",
   "sessionMenu.favorite": "Lägg till i favoriter",
   "sessionMenu.unfavorite": "Ta bort från favoriter",
+  "sessionMenu.color": "Färg…",
   "sessionMenu.delete": "Ta bort",
   "group.startAll": "Starta alla sessioner",
   "group.stopAll": "Stoppa alla sessioner",

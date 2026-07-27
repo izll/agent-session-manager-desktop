@@ -518,6 +518,7 @@
   "sessionMenu.rename": "Hernoemen",
   "sessionMenu.favorite": "Aan favorieten toevoegen",
   "sessionMenu.unfavorite": "Uit favorieten verwijderen",
+  "sessionMenu.color": "Kleur…",
   "sessionMenu.delete": "Verwijderen",
   "group.startAll": "Alle sessies starten",
   "group.stopAll": "Alle sessies stoppen",

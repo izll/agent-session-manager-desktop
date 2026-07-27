@@ -3,6 +3,7 @@
   import { portal } from '../../utils/portal';
   import StatusIndicator from '../common/StatusIndicator.svelte';
   import AgentIcon from '../common/AgentIcon.svelte';
+  import SessionColorDialog from '../Dialogs/SessionColorDialog.svelte';
   import type { Session } from '../../stores/sessions';
   import { selectSession, selectedSessionId, renameSession, deleteSession, toggleFavorite } from '../../stores/sessions';
   import { settings } from '../../stores/settings';
@@ -127,6 +128,17 @@
   async function handleToggleFavorite() {
     closeContextMenu();
     await toggleFavorite(session.id);
+  }
+
+  // Colour belongs to the session, so it is set from the session's own menu —
+  // the tab bar's button repeated it on every tab of that one session. Opened
+  // here rather than dispatched, matching GroupItem: SessionItem is rendered
+  // from three places, all of which would otherwise have to forward the event.
+  let showColorDialog = false;
+
+  function handleColor() {
+    closeContextMenu();
+    showColorDialog = true;
   }
 
   function handleDragStart(e: DragEvent) {
@@ -323,6 +335,14 @@
       </svg>
       {session.favorite ? $t('sessionMenu.unfavorite') : $t('sessionMenu.favorite')}
     </button>
+    <button class="context-menu-item" on:click={handleColor}>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="13.5" cy="6.5" r=".5"/><circle cx="17.5" cy="10.5" r=".5"/>
+        <circle cx="8.5" cy="7.5" r=".5"/><circle cx="6.5" cy="12.5" r=".5"/>
+        <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/>
+      </svg>
+      {$t('sessionMenu.color')}
+    </button>
     <button class="context-menu-item danger" on:click={handleDelete}>
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <polyline points="3 6 5 6 21 6"/>
@@ -332,6 +352,8 @@
     </button>
   </div>
 {/if}
+
+<SessionColorDialog bind:show={showColorDialog} {session} />
 
 <style>
   /* ORIGINAL SESSION ITEM STYLES (for restoring later):

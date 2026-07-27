@@ -518,6 +518,7 @@
   "sessionMenu.rename": "Umbenennen",
   "sessionMenu.favorite": "Zu Favoriten hinzufügen",
   "sessionMenu.unfavorite": "Aus Favoriten entfernen",
+  "sessionMenu.color": "Farbe…",
   "sessionMenu.delete": "Löschen",
   "group.startAll": "Alle Sitzungen starten",
   "group.stopAll": "Alle Sitzungen stoppen",

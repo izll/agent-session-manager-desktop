@@ -1,5 +1,10 @@
 <script lang="ts">
   import { autoFocusDialog } from '../../utils/dialogActions';
+  // Rendered into <body>: this dialog is opened from the sidebar, whose scroll
+  // container carries transform/contain for a WebKitGTK compositing workaround.
+  // Either of those makes an ancestor the containing block for position:fixed,
+  // so the overlay was laid out inside the sidebar instead of the window.
+  import { portal } from '../../utils/portal';
   import { createEventDispatcher } from 'svelte';
   import { setSessionColor, setGroupColor, type Group, type Session } from '../../stores/sessions';
   import { t } from '../../i18n';
@@ -114,7 +119,7 @@
 
 {#if show && target}
   <div
-    class="dialog-overlay" use:autoFocusDialog
+    class="dialog-overlay" use:portal use:autoFocusDialog
     on:click|self={close}
     on:keydown={handleKeydown}
     role="dialog"

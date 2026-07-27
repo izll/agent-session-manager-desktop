@@ -518,6 +518,7 @@
   "sessionMenu.rename": "重命名",
   "sessionMenu.favorite": "添加到收藏夹",
   "sessionMenu.unfavorite": "从收藏夹移除",
+  "sessionMenu.color": "颜色…",
   "sessionMenu.delete": "删除",
   "group.startAll": "启动所有会话",
   "group.stopAll": "停止所有会话",

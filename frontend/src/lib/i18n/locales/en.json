@@ -101,6 +101,7 @@
   "sessionMenu.rename": "Rename",
   "sessionMenu.favorite": "Add to favorites",
   "sessionMenu.unfavorite": "Remove from favorites",
+  "sessionMenu.color": "Colour…",
   "sessionMenu.delete": "Delete",
   "group.startAll": "Start all sessions",
   "group.stopAll": "Stop all sessions",

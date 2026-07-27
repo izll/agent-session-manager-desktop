@@ -518,6 +518,7 @@
   "sessionMenu.rename": "Yeniden adlandır",
   "sessionMenu.favorite": "Favorilere ekle",
   "sessionMenu.unfavorite": "Favorilerden kaldır",
+  "sessionMenu.color": "Renk…",
   "sessionMenu.delete": "Sil",
   "group.startAll": "Tüm oturumları başlat",
   "group.stopAll": "Tüm oturumları durdur",

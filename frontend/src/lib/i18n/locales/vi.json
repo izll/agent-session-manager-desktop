@@ -518,6 +518,7 @@
   "sessionMenu.rename": "Đổi tên",
   "sessionMenu.favorite": "Thêm vào yêu thích",
   "sessionMenu.unfavorite": "Xóa khỏi yêu thích",
+  "sessionMenu.color": "Màu…",
   "sessionMenu.delete": "Xóa",
   "group.startAll": "Bắt đầu tất cả phiên",
   "group.stopAll": "Dừng tất cả phiên",

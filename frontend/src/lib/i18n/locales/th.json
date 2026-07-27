@@ -518,6 +518,7 @@
   "sessionMenu.rename": "เปลี่ยนชื่อ",
   "sessionMenu.favorite": "เพิ่มในรายการโปรด",
   "sessionMenu.unfavorite": "นำออกจากรายการโปรด",
+  "sessionMenu.color": "สี…",
   "sessionMenu.delete": "ลบ",
   "group.startAll": "เริ่มทุกเซสชัน",
   "group.stopAll": "หยุดทุกเซสชัน",

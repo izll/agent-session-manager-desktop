@@ -518,6 +518,7 @@
   "sessionMenu.rename": "Přejmenovat",
   "sessionMenu.favorite": "Přidat do oblíbených",
   "sessionMenu.unfavorite": "Odebrat z oblíbených",
+  "sessionMenu.color": "Barva…",
   "sessionMenu.delete": "Smazat",
   "group.startAll": "Spustit všechny relace",
   "group.stopAll": "Zastavit všechny relace",

@@ -518,6 +518,7 @@
   "sessionMenu.rename": "이름 변경",
   "sessionMenu.favorite": "즐겨찾기에 추가",
   "sessionMenu.unfavorite": "즐겨찾기에서 제거",
+  "sessionMenu.color": "색상…",
   "sessionMenu.delete": "삭제",
   "group.startAll": "모든 세션 시작",
   "group.stopAll": "모든 세션 중지",

@@ -1530,7 +1530,9 @@
         </svg>
       </button>
 
-      <!-- Color -->
+      <!-- Colour. Also in the session's context menu in the sidebar, which is
+           the more logical home for a session-level setting — but a menu on
+           its own is easy to never find, so the button stays. -->
       <button class="control-btn color" on:click={handleColorClick} title={$t('tabBar.setSessionColor')}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <circle cx="12" cy="12" r="10"/>

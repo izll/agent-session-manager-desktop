@@ -518,6 +518,7 @@
   "sessionMenu.rename": "名前を変更",
   "sessionMenu.favorite": "お気に入りに追加",
   "sessionMenu.unfavorite": "お気に入りから削除",
+  "sessionMenu.color": "色…",
   "sessionMenu.delete": "削除",
   "group.startAll": "すべてのセッションを開始",
   "group.stopAll": "すべてのセッションを停止",

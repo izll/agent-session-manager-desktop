@@ -390,9 +390,9 @@
       {fullDiffActive}
       {activeView}
       {visible}
-      on:openColorDialog={() => dispatch('openColorDialog')}
       on:openFullDiff={() => fullDiffActive = true}
       on:closeFullDiff={closeFullDiff}
+      on:openColorDialog={() => dispatch('openColorDialog')}
       on:requestStop={() => dispatch('requestStop')}
       on:requestStart={() => dispatch('requestStart')}
       on:requestResume={() => dispatch('requestResume')}
