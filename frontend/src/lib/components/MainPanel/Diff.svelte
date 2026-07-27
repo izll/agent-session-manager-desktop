@@ -565,17 +565,26 @@
             <!-- Both glyphs are drawn symmetrically within the 24px box (4..20),
                  so neither sits visibly off-centre in the square button. -->
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <!-- Both glyphs use the same three rows at y=6/12/18 spanning
+                   x=4..20, so the button's weight doesn't shift as it toggles.
+                   Kept coarse: at 14px, detail finer than ~4 units muddies. -->
               {#if treeView}
-                <line x1="10" y1="6" x2="20" y2="6"/>
+                <!-- Flat list: bullet + rule per row. -->
+                <circle cx="5" cy="6" r="1.1" fill="currentColor" stroke="none"/>
+                <circle cx="5" cy="12" r="1.1" fill="currentColor" stroke="none"/>
+                <circle cx="5" cy="18" r="1.1" fill="currentColor" stroke="none"/>
+                <line x1="9" y1="6" x2="20" y2="6"/>
+                <line x1="9" y1="12" x2="20" y2="12"/>
+                <line x1="9" y1="18" x2="20" y2="18"/>
+              {:else}
+                <!-- Tree: rows at two indent levels. A literal tree — spine
+                     plus elbows plus branches — needs more strokes than 14px
+                     can hold; drawn that way it read as a letter (first "T",
+                     then "E"). Indentation alone is what the view is about,
+                     and it survives the size. -->
+                <line x1="4" y1="6" x2="20" y2="6"/>
                 <line x1="10" y1="12" x2="20" y2="12"/>
                 <line x1="10" y1="18" x2="20" y2="18"/>
-                <line x1="4" y1="6" x2="4.01" y2="6"/>
-                <line x1="4" y1="12" x2="4.01" y2="12"/>
-                <line x1="4" y1="18" x2="4.01" y2="18"/>
-              {:else}
-                <line x1="4" y1="5" x2="20" y2="5"/>
-                <path d="M6 5v6a2 2 0 0 0 2 2h12"/>
-                <path d="M6 13v4a2 2 0 0 0 2 2h12"/>
               {/if}
             </svg>
           </button>
