@@ -1361,6 +1361,11 @@ func (a *App) RenameGroup(id, name string) error {
 	return a.storage.RenameGroup(id, name)
 }
 
+// MoveGroup moves a group to a new position in the sidebar order
+func (a *App) MoveGroup(id string, newIndex int) error {
+	return a.storage.MoveGroup(id, newIndex)
+}
+
 // ToggleGroupCollapse toggles group collapsed state
 func (a *App) ToggleGroupCollapse(id string) error {
 	return a.storage.ToggleGroupCollapsed(id)
@@ -2400,6 +2405,7 @@ type SettingsInfo struct {
 	UITheme            string `json:"uiTheme"`
 	UIAccent           string `json:"uiAccent"`
 	TerminalRenderer   string `json:"terminalRenderer"`
+	GitBranchDisplay   string `json:"gitBranchDisplay"`
 	TerminalFontSize   int    `json:"terminalFontSize"`
 	AgentFontSize      int    `json:"agentFontSize"`
 	HideViewBar        bool   `json:"hideViewBar"`
@@ -2440,6 +2446,12 @@ func (a *App) GetSettings() (*SettingsInfo, error) {
 		renderer = "canvas"
 	}
 
+	// The branch reads best next to the session name, so that's the default.
+	branchDisplay := settings.GitBranchDisplay
+	if branchDisplay == "" {
+		branchDisplay = "header"
+	}
+
 	// Default the terminal palette to the app's own scheme if unset.
 	theme := settings.TerminalTheme
 	if theme == "" {
@@ -2476,6 +2488,7 @@ func (a *App) GetSettings() (*SettingsInfo, error) {
 		UITheme:              settings.UITheme,
 		UIAccent:             settings.UIAccent,
 		TerminalRenderer:     renderer,
+		GitBranchDisplay:     branchDisplay,
 		TerminalFontSize:     settings.TerminalFontSize,
 		AgentFontSize:        settings.AgentFontSize,
 		HideViewBar:          settings.HideViewBar,
@@ -2515,6 +2528,7 @@ func (a *App) SaveSettings(settings SettingsInfo) error {
 		current.UITheme = settings.UITheme
 		current.UIAccent = settings.UIAccent
 		current.TerminalRenderer = settings.TerminalRenderer
+		current.GitBranchDisplay = settings.GitBranchDisplay
 		current.TerminalFontSize = settings.TerminalFontSize
 		current.AgentFontSize = settings.AgentFontSize
 		current.HideViewBar = settings.HideViewBar

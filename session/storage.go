@@ -63,6 +63,9 @@ type Settings struct {
 	// TerminalRenderer selects the xterm.js renderer: "canvas" (default),
 	// "webgl" (fastest but flaky on some WebKitGTK), or "dom" (most compatible).
 	TerminalRenderer string `json:"terminal_renderer,omitempty"`
+	// GitBranchDisplay places the session's git branch: "header" (default),
+	// "statusbar" or "off".
+	GitBranchDisplay string `json:"git_branch_display,omitempty"`
 	// Attention notifications: fire when an agent flips to "waiting"
 	// (needs user input). Desktop uses notify-send/osascript; ntfy POSTs
 	// to NtfyURL (e.g. https://ntfy.sh/my-topic) for mobile push.
@@ -1127,6 +1130,51 @@ func (s *Storage) ToggleGroupCollapsed(id string) error {
 	}
 
 	return fmt.Errorf("group not found")
+}
+
+// MoveGroup moves a group to a new position in the sidebar order.
+//
+// Order is the slice order itself rather than a numeric field on Group: the
+// groups already round-trip through JSON as an array, so there is nothing to
+// migrate and no way for two groups to claim the same position.
+//
+// newIndex is clamped, so callers can pass index-1 / index+1 for "move up" and
+// "move down" without special-casing the ends of the list.
+func (s *Storage) MoveGroup(id string, newIndex int) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	instances, groups, settings, err := s.loadAllWithSettingsLocked()
+	if err != nil {
+		return err
+	}
+
+	oldIndex := -1
+	for i, g := range groups {
+		if g.ID == id {
+			oldIndex = i
+			break
+		}
+	}
+	if oldIndex < 0 {
+		return fmt.Errorf("group not found")
+	}
+
+	if newIndex < 0 {
+		newIndex = 0
+	}
+	if newIndex > len(groups)-1 {
+		newIndex = len(groups) - 1
+	}
+	if newIndex == oldIndex {
+		return nil
+	}
+
+	moved := groups[oldIndex]
+	groups = append(groups[:oldIndex], groups[oldIndex+1:]...)
+	groups = append(groups[:newIndex], append([]*Group{moved}, groups[newIndex:]...)...)
+
+	return s.saveAllLocked(instances, groups, settings)
 }
 
 // SetInstanceGroup assigns an instance to a group

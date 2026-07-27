@@ -9,6 +9,12 @@
   import { t } from '../../i18n';
   import { focusTerminal } from '../../utils/focus';
   import type { TabStatusInfo } from '../../stores/statusLines';
+  import {
+    getGradientCSS,
+    getNameStyle,
+    getRowBackgroundStyle,
+    isGradient as isGradientColor,
+  } from '../../utils/rowColors';
 
   export let session: Session;
   export let activity: 'idle' | 'busy' | 'waiting' = 'idle';
@@ -29,39 +35,12 @@
   let renameValue = '';
   let renameInput: HTMLInputElement;
 
-  // Gradient definitions (same as SessionColorDialog)
-  const gradients: Record<string, string[]> = {
-    'gradient-rainbow':  ['#FF0000', '#FF7F00', '#FFFF00', '#00FF00', '#00FFFF', '#0000FF', '#8B00FF'],
-    'gradient-sunset':   ['#FF512F', '#F09819', '#FF8C00', '#DD2476', '#FF416C'],
-    'gradient-ocean':    ['#00D2FF', '#3A7BD5', '#00D2D3', '#54A0FF', '#2E86DE'],
-    'gradient-forest':   ['#134E5E', '#11998E', '#38EF7D', '#A8E063', '#56AB2F'],
-    'gradient-fire':     ['#FF0000', '#FF4500', '#FF6347', '#FF8C00', '#FFD700'],
-    'gradient-ice':      ['#E0FFFF', '#B0E0E6', '#87CEEB', '#00CED1', '#4682B4'],
-    'gradient-neon':     ['#FF00FF', '#00FFFF', '#39FF14', '#FF6600', '#BF00FF'],
-    'gradient-galaxy':   ['#0F0C29', '#302B63', '#8E2DE2', '#4A00E0', '#24243E'],
-    'gradient-pastel':   ['#FFB6C1', '#FFDAB9', '#FFFACD', '#98FB98', '#ADD8E6', '#E6E6FA'],
-    'gradient-pink':     ['#FF69B4', '#FF1493', '#DB7093', '#FF69B4'],
-    'gradient-blue':     ['#00BFFF', '#1E90FF', '#4169E1', '#0000FF', '#4169E1', '#1E90FF'],
-    'gradient-green':    ['#00FF00', '#32CD32', '#228B22', '#006400', '#228B22', '#32CD32'],
-    'gradient-gold':     ['#FFD700', '#FFA500', '#FF8C00', '#FFA500', '#FFD700'],
-    'gradient-purple':   ['#9400D3', '#8A2BE2', '#9932CC', '#BA55D3', '#9932CC', '#8A2BE2'],
-    'gradient-cyber':    ['#00FF00', '#00FFFF', '#FF00FF', '#00FFFF', '#00FF00'],
-  };
-
-  function getGradientCSS(colorValue: string): string {
-    if (colorValue?.startsWith('gradient-')) {
-      const colors = gradients[colorValue];
-      if (colors) {
-        return `linear-gradient(90deg, ${colors.join(', ')})`;
-      }
-    }
-    return colorValue;
-  }
-
   $: isSelected = $selectedSessionId === session.id;
   $: sessionStatus = session.status as 'running' | 'paused' | 'stopped';
-  $: isGradient = session.color?.startsWith('gradient-');
+  $: isGradient = isGradientColor(session.color);
   $: displayColor = isGradient ? getGradientCSS(session.color) : session.color;
+  $: rowStyle = getRowBackgroundStyle(session.bgColor, session.fullRowColor);
+  $: nameStyle = getNameStyle(session.color, session.bgColor, session.fullRowColor);
 
   // Live YOLO (bypass-permissions) state, read per-tab from the pane.
   //  - single tab  → "Y" next to the session NAME (in the badges)
@@ -204,6 +183,7 @@
   class:dragging={isDragging}
   class:drag-over={isDragOver}
   class:compact={$settings?.compactList}
+  style={rowStyle}
   on:click={() => selectSession(session.id)}
   on:contextmenu={handleContextMenu}
   on:keydown={(e) => e.key === 'Enter' && selectSession(session.id)}
@@ -239,7 +219,7 @@
         {#if isGradient}
           <span style="background: {displayColor}; -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; font-weight: {isSelected ? 800 : 600};">{session.name}</span>
         {:else}
-          <span style={session.color ? `color: ${displayColor}` : ''}>{session.name}</span>
+          <span style={nameStyle}>{session.name}</span>
         {/if}
       </span>
     {/if}

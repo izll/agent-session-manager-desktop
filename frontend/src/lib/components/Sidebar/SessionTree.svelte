@@ -208,12 +208,14 @@
          otherwise the one group that DOES have a hit gets buried among
          empty headers and is hard to find. Without a filter we still show
          every group (the user wants to see the structure). -->
-    {#each $groups as group (group.id)}
+    {#each $groups as group, i (group.id)}
       {@const groupSessions = $sessionsByGroup.get(group.id) || []}
       {#if !$searchFilter.trim() || groupSessions.length > 0}
         <GroupItem
           {group}
           sessions={groupSessions}
+          index={i}
+          groupCount={$groups.length}
           on:sessionDrop={handleSessionDrop}
         />
       {/if}

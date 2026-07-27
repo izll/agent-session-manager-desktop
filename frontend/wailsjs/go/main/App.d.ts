@@ -87,6 +87,8 @@ export function GetFullDiff(arg1:string):Promise<main.DiffData>;
 
 export function GetFullDiffFiles(arg1:string):Promise<Array<session.DiffFile>>;
 
+export function GetGitBranch(arg1:string):Promise<main.GitBranchInfo>;
+
 export function GetGroups():Promise<Array<main.GroupInfo>>;
 
 export function GetHistoryPreview(arg1:main.HistoryEntryInfo):Promise<string>;
@@ -125,6 +127,8 @@ export function GetTabNotes(arg1:string,arg2:number):Promise<string>;
 
 export function GetTabOrder(arg1:string):Promise<Array<number>>;
 
+export function GetTabWorkingDirectory(arg1:string,arg2:number):Promise<string>;
+
 export function GetTasks(arg1:string):Promise<Array<main.TaskInfo>>;
 
 export function GetTasksByStatus(arg1:string,arg2:string):Promise<Array<main.TaskInfo>>;
@@ -155,9 +159,13 @@ export function IsDevMode():Promise<boolean>;
 
 export function ListBackgroundAgents():Promise<Array<main.BackgroundAgentInfo>>;
 
+export function ListGitBranches(arg1:string):Promise<main.GitBranchList>;
+
 export function ListOnlineSchemes():Promise<Array<main.OnlineSchemeInfo>>;
 
 export function LogFrontend(arg1:string):Promise<void>;
+
+export function MoveGroup(arg1:string,arg2:number):Promise<void>;
 
 export function MoveSessionToIndex(arg1:string,arg2:number):Promise<void>;
 

@@ -170,6 +170,10 @@ export function GetFullDiffFiles(arg1) {
   return window['go']['main']['App']['GetFullDiffFiles'](arg1);
 }
 
+export function GetGitBranch(arg1) {
+  return window['go']['main']['App']['GetGitBranch'](arg1);
+}
+
 export function GetGroups() {
   return window['go']['main']['App']['GetGroups']();
 }
@@ -246,6 +250,10 @@ export function GetTabOrder(arg1) {
   return window['go']['main']['App']['GetTabOrder'](arg1);
 }
 
+export function GetTabWorkingDirectory(arg1, arg2) {
+  return window['go']['main']['App']['GetTabWorkingDirectory'](arg1, arg2);
+}
+
 export function GetTasks(arg1) {
   return window['go']['main']['App']['GetTasks'](arg1);
 }
@@ -306,12 +314,20 @@ export function ListBackgroundAgents() {
   return window['go']['main']['App']['ListBackgroundAgents']();
 }
 
+export function ListGitBranches(arg1) {
+  return window['go']['main']['App']['ListGitBranches'](arg1);
+}
+
 export function ListOnlineSchemes() {
   return window['go']['main']['App']['ListOnlineSchemes']();
 }
 
 export function LogFrontend(arg1) {
   return window['go']['main']['App']['LogFrontend'](arg1);
+}
+
+export function MoveGroup(arg1, arg2) {
+  return window['go']['main']['App']['MoveGroup'](arg1, arg2);
 }
 
 export function MoveSessionToIndex(arg1, arg2) {

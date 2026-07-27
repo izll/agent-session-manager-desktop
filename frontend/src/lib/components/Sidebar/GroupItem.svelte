@@ -2,19 +2,48 @@
   import { createEventDispatcher, onMount, onDestroy, tick } from 'svelte';
   import SessionItem from './SessionItem.svelte';
   import type { Group, Session } from '../../stores/sessions';
-  import { toggleGroupCollapse, renameGroup, deleteGroup, sessions as allSessions, assignToGroup, startSession, stopSession } from '../../stores/sessions';
+  import { toggleGroupCollapse, renameGroup, deleteGroup, moveGroup, sessions as allSessions, assignToGroup, startSession, stopSession } from '../../stores/sessions';
   import { activities, getActivity } from '../../stores/activities';
   import { statusLines, spinnerTexts, tabStatuses, getStatusLine } from '../../stores/statusLines';
   import { settings } from '../../stores/settings';
   import { t } from '../../i18n';
   import { portal } from '../../utils/portal';
+  import SessionColorDialog from '../Dialogs/SessionColorDialog.svelte';
+  import {
+    getGradientCSS,
+    getNameStyle,
+    getRowBackgroundStyle,
+    isGradient as isGradientColor,
+  } from '../../utils/rowColors';
 
   export let group: Group;
   export let sessions: Session[] = [];
+  export let index: number = 0;
+  export let groupCount: number = 0;
 
   const dispatch = createEventDispatcher();
 
+  // Groups are dragged with their own MIME type so a group drop can be told
+  // apart from a session drop on the very same header. dataTransfer payloads
+  // are unreadable during dragover (protected mode), so presence of the type
+  // in `types` is what we branch on there.
+  const GROUP_MIME = 'application/x-asmgr-group';
+
   let isDragOver = false;
+  let isGroupDragOver = false;
+  let isDragging = false;
+
+  $: isFirst = index <= 0;
+  $: isLast = index >= groupCount - 1;
+
+  // Group colours are rendered exactly like a session row's, via the shared helpers.
+  $: isGradient = isGradientColor(group.color);
+  $: displayColor = getGradientCSS(group.color);
+  $: headerStyle = getRowBackgroundStyle(group.bgColor, group.fullRowColor);
+  $: nameStyle = getNameStyle(group.color, group.bgColor, group.fullRowColor);
+
+  // Colour dialog state
+  let showColorDialog = false;
 
   // Context menu state
   let showContextMenu = false;
@@ -105,6 +134,23 @@
     await deleteGroup(group.id);
   }
 
+  function openColorDialog() {
+    closeContextMenu();
+    showColorDialog = true;
+  }
+
+  async function handleMoveUp() {
+    closeContextMenu();
+    if (isFirst) return;
+    await moveGroup(group.id, index - 1);
+  }
+
+  async function handleMoveDown() {
+    closeContextMenu();
+    if (isLast) return;
+    await moveGroup(group.id, index + 1);
+  }
+
   async function handleSessionDrop(e: CustomEvent<{ sourceId: string; targetIndex: number }>) {
     const { sourceId } = e.detail;
     const session = $allSessions.find(s => s.id === sourceId);
@@ -116,6 +162,61 @@
       // Same group - just reorder
       dispatch('sessionDrop', e.detail);
     }
+  }
+
+  function handleGroupDragStart(e: DragEvent) {
+    if (!e.dataTransfer) return;
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData(GROUP_MIME, JSON.stringify({ id: group.id, index }));
+    isDragging = true;
+  }
+
+  function handleGroupDragEnd() {
+    isDragging = false;
+    isGroupDragOver = false;
+  }
+
+  // The header accepts both a dropped session (assign to this group) and a
+  // dropped group (reorder), so every handler here branches on the drag type.
+  function handleHeaderDragOver(e: DragEvent) {
+    e.preventDefault();
+    if (e.dataTransfer) {
+      e.dataTransfer.dropEffect = 'move';
+    }
+    if (e.dataTransfer?.types.includes(GROUP_MIME)) {
+      // Dropping a group on itself is a no-op; don't advertise it as a target.
+      if (!isDragging) isGroupDragOver = true;
+    } else {
+      isDragOver = true;
+    }
+  }
+
+  function handleHeaderDragLeave() {
+    isDragOver = false;
+    isGroupDragOver = false;
+  }
+
+  async function handleHeaderDrop(e: DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    isDragOver = false;
+    isGroupDragOver = false;
+    if (!e.dataTransfer) return;
+
+    const groupPayload = e.dataTransfer.getData(GROUP_MIME);
+    if (groupPayload) {
+      try {
+        const data = JSON.parse(groupPayload);
+        if (data.id && data.id !== group.id) {
+          await moveGroup(data.id, index);
+        }
+      } catch {
+        // Invalid drop data
+      }
+      return;
+    }
+
+    await handleDrop(e);
   }
 
   function handleDragOver(e: DragEvent) {
@@ -162,11 +263,17 @@
   <button
     class="group-header"
     class:drag-over={isDragOver}
+    class:group-drag-over={isGroupDragOver}
+    class:dragging={isDragging}
+    style={headerStyle}
+    draggable="true"
     on:click={handleToggle}
     on:contextmenu={handleContextMenu}
-    on:dragover={handleDragOver}
-    on:dragleave={handleDragLeave}
-    on:drop={handleDrop}
+    on:dragstart={handleGroupDragStart}
+    on:dragend={handleGroupDragEnd}
+    on:dragover={handleHeaderDragOver}
+    on:dragleave={handleHeaderDragLeave}
+    on:drop={handleHeaderDrop}
   >
     <span class="chevron" class:expanded={!group.collapsed}>
       <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
@@ -201,8 +308,12 @@
         on:click|stopPropagation
       />
     {:else}
-      <span class="group-name" style={group.color ? `color: ${group.color}` : ''}>
-        {group.name}
+      <span class="group-name">
+        {#if isGradient}
+          <span style="background: {displayColor}; -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">{group.name}</span>
+        {:else}
+          <span style={nameStyle}>{group.name}</span>
+        {/if}
       </span>
     {/if}
 
@@ -230,12 +341,46 @@
         </svg>
         {$t('group.stopAll')}
       </button>
+      <button
+        class="context-menu-item"
+        class:disabled={isFirst}
+        disabled={isFirst}
+        on:click={handleMoveUp}
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="12" y1="19" x2="12" y2="5"/>
+          <polyline points="5 12 12 5 19 12"/>
+        </svg>
+        {$t('group.moveUp')}
+      </button>
+      <button
+        class="context-menu-item"
+        class:disabled={isLast}
+        disabled={isLast}
+        on:click={handleMoveDown}
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="12" y1="5" x2="12" y2="19"/>
+          <polyline points="19 12 12 19 5 12"/>
+        </svg>
+        {$t('group.moveDown')}
+      </button>
       <button class="context-menu-item" on:click={startRename}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
           <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
         </svg>
         {$t('group.rename')}
+      </button>
+      <button class="context-menu-item" on:click={openColorDialog}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="13.5" cy="6.5" r=".5"/>
+          <circle cx="17.5" cy="10.5" r=".5"/>
+          <circle cx="8.5" cy="7.5" r=".5"/>
+          <circle cx="6.5" cy="12.5" r=".5"/>
+          <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/>
+        </svg>
+        {$t('group.color')}
       </button>
       <button class="context-menu-item danger" on:click={handleDeleteGroup}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -268,6 +413,8 @@
   {/if}
 </div>
 
+<SessionColorDialog bind:show={showColorDialog} {group} />
+
 <style>
   .group-container {
     margin-bottom: 8px;
@@ -296,6 +443,29 @@
     background: rgba(var(--accent-rgb), 0.2);
     border-color: rgba(var(--accent-rgb), 0.5);
     box-shadow: 0 0 0 2px rgba(var(--accent-rgb), 0.2), inset 0 0 20px rgba(var(--accent-rgb), 0.1);
+  }
+
+  .group-header.dragging {
+    opacity: 0.5;
+    transform: scale(0.98);
+  }
+
+  /* Reorder target: a solid bar on the edge the group will land on, kept
+     visually distinct from the "drop a session in here" fill above. */
+  .group-header.group-drag-over {
+    position: relative;
+    border-color: rgba(var(--accent-rgb), 0.5);
+  }
+
+  .group-header.group-drag-over::before {
+    content: '';
+    position: absolute;
+    top: -2px;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: var(--accent);
+    border-radius: 2px;
   }
 
   .chevron {
@@ -407,6 +577,17 @@
 
   .context-menu-item:hover {
     background: rgba(var(--accent-rgb), 0.15);
+  }
+
+  /* Shown but inert at the ends of the list — hiding the entry made it hard
+     to find when it mattered. */
+  .context-menu-item.disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+
+  .context-menu-item.disabled:hover {
+    background: none;
   }
 
   .context-menu-item.danger {

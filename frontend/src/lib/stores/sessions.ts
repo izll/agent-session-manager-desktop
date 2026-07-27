@@ -414,6 +414,33 @@ export async function renameGroup(id: string, name: string) {
   }
 }
 
+/**
+ * Reorders a group. Unlike the other group helpers we reload instead of
+ * patching the store: order IS the array order on the Go side, and newIndex is
+ * clamped there, so replaying the move locally could drift from what was saved.
+ */
+export async function moveGroup(id: string, newIndex: number) {
+  try {
+    await App.MoveGroup(id, newIndex);
+    await loadSessions();
+  } catch (e) {
+    error.set(String(e));
+    throw e;
+  }
+}
+
+export async function setGroupColor(id: string, color: string, bgColor: string, fullRow: boolean) {
+  try {
+    await App.SetGroupColor(id, color, bgColor, fullRow);
+    groups.update(g => g.map(group =>
+      group.id === id ? { ...group, color, bgColor, fullRowColor: fullRow } : group
+    ));
+  } catch (e) {
+    error.set(String(e));
+    throw e;
+  }
+}
+
 export async function toggleGroupCollapse(id: string) {
   try {
     await App.ToggleGroupCollapse(id);

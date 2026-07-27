@@ -448,6 +448,84 @@ export namespace main {
 	        this.sessionId = source["sessionId"];
 	    }
 	}
+	export class GitBranchEntry {
+	    name: string;
+	    hash: string;
+	    committed: string;
+	    current: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new GitBranchEntry(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.hash = source["hash"];
+	        this.committed = source["committed"];
+	        this.current = source["current"];
+	    }
+	}
+	export class GitBranchInfo {
+	    path: string;
+	    repository: boolean;
+	    branch: string;
+	    upstream: string;
+	    ahead: number;
+	    behind: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new GitBranchInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.path = source["path"];
+	        this.repository = source["repository"];
+	        this.branch = source["branch"];
+	        this.upstream = source["upstream"];
+	        this.ahead = source["ahead"];
+	        this.behind = source["behind"];
+	    }
+	}
+	export class GitBranchList {
+	    path: string;
+	    repository: boolean;
+	    branches: GitBranchEntry[];
+	    total: number;
+	    truncated: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new GitBranchList(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.path = source["path"];
+	        this.repository = source["repository"];
+	        this.branches = this.convertValues(source["branches"], GitBranchEntry);
+	        this.total = source["total"];
+	        this.truncated = source["truncated"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class GroupInfo {
 	    id: string;
 	    name: string;
@@ -887,6 +965,7 @@ export namespace main {
 	    uiTheme: string;
 	    uiAccent: string;
 	    terminalRenderer: string;
+	    gitBranchDisplay: string;
 	    terminalFontSize: number;
 	    agentFontSize: number;
 	    hideViewBar: boolean;
@@ -920,6 +999,7 @@ export namespace main {
 	        this.uiTheme = source["uiTheme"];
 	        this.uiAccent = source["uiAccent"];
 	        this.terminalRenderer = source["terminalRenderer"];
+	        this.gitBranchDisplay = source["gitBranchDisplay"];
 	        this.terminalFontSize = source["terminalFontSize"];
 	        this.agentFontSize = source["agentFontSize"];
 	        this.hideViewBar = source["hideViewBar"];
