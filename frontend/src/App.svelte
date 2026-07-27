@@ -32,6 +32,7 @@
   import { loadProjects, otherInstancePID, refreshLockStatus } from './lib/stores/projects';
   import { appView } from './lib/stores/navigation';
   import { loadSettings, settings } from './lib/stores/settings';
+  import GitBranchBadge from './lib/components/common/GitBranchBadge.svelte';
   import { agents, loadAgents } from './lib/stores/agents';
   import { startSidebarPolling, stopSidebarPolling } from './lib/stores/sidebarPolling';
   import { WindowMinimise, WindowToggleMaximise, Quit, EventsOn, EventsOff, EventsEmit } from '../wailsjs/runtime/runtime';
@@ -685,6 +686,9 @@
         <span class="header-session-name">{$t('dashboard.title')}</span>
       {:else if $selectedSession}
         <span class="header-session-name" style={$selectedSession.color ? `color: ${$selectedSession.color}` : ''}>{$selectedSession.name}</span>
+        {#if ($settings.gitBranchDisplay || 'header') === 'header'}
+          <GitBranchBadge variant="header" />
+        {/if}
       {/if}
     </div>
 
@@ -698,6 +702,11 @@
           {$t('app.search')}
         </button>
         <button class="btn btn-ghost palette-trigger" on:click={() => showCommandPalette = true} title={$t('palette.title')}>
+          <!-- Corner-out arrow: this palette jumps you to a session or view. -->
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+            <path d="M15 3h6v6M10 14L21 3"/>
+          </svg>
           {$t('palette.title')}
         </button>
         <!-- The saved-command library, distinct from the palette above: that
@@ -707,6 +716,11 @@
           on:click={() => showCommandPicker = true}
           title={$t('header.commands')}
         >
+          <!-- Terminal prompt: this one runs shell commands. -->
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="4" width="18" height="16" rx="2"/>
+            <path d="M7 9l3 3-3 3M13 15h4"/>
+          </svg>
           {$t('header.commands')}
         </button>
       </div>
@@ -1188,7 +1202,9 @@
     overflow: hidden;
     text-overflow: ellipsis;
     min-width: 0;
-    flex: 1;
+    /* Shrinks before the branch badge does, so a long session name truncates
+       instead of pushing the branch out of the header. */
+    flex: 0 1 auto;
   }
 
   .sidebar {

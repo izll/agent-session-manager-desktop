@@ -93,6 +93,17 @@
     saveSettings({ terminalRenderer: r as 'canvas' | 'webgl' | 'dom' });
   }
 
+  // Rebuilt on locale change so the labels follow the chosen language.
+  $: gitBranchOptions = [
+    { value: 'header', label: $t('settings.gitBranchHeader') },
+    { value: 'statusbar', label: $t('settings.gitBranchStatusBar') },
+    { value: 'off', label: $t('settings.gitBranchOff') },
+  ];
+
+  function changeGitBranchDisplay(v: string) {
+    saveSettings({ gitBranchDisplay: v as 'header' | 'statusbar' | 'off' });
+  }
+
   $: currentUITheme = $settings.uiTheme || DEFAULT_UI_THEME;
   $: customAccent = $settings.uiAccent || '#8b5cf6';
   // A very dark accent is nearly invisible on the dark background; say so
@@ -436,6 +447,22 @@
                 value={$settings.terminalRenderer || 'canvas'}
                 options={rendererOptions}
                 on:change={(e) => changeRenderer(e.detail)}
+              />
+            </div>
+          </div>
+
+          <div class="settings-section">
+            <h3>{$t('settings.gitSection')}</h3>
+
+            <div class="setting-item input-item">
+              <span class="setting-info">
+                <span class="setting-label">{$t('settings.gitBranchDisplay')}</span>
+                <span class="setting-desc">{$t('settings.gitBranchDisplayDesc')}</span>
+              </span>
+              <Select
+                value={$settings.gitBranchDisplay || 'header'}
+                options={gitBranchOptions}
+                on:change={(e) => changeGitBranchDisplay(e.detail)}
               />
             </div>
           </div>

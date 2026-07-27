@@ -3,6 +3,9 @@ import * as App from '../../../wailsjs/go/main/App';
 
 export type TerminalRenderer = 'canvas' | 'webgl' | 'dom';
 
+/** Where the session's git branch is shown, if anywhere. */
+export type GitBranchDisplay = 'header' | 'statusbar' | 'off';
+
 export interface Settings {
   compactList: boolean;
   hideStatusLines: boolean;
@@ -19,6 +22,8 @@ export interface Settings {
   /** Custom accent hex, used when uiTheme is 'custom'. */
   uiAccent: string;
   terminalRenderer: TerminalRenderer;
+  /** Where to show the session's git branch; 'header' by default. */
+  gitBranchDisplay: GitBranchDisplay;
   /** Default terminal font size in px; 0 means the built-in default. */
   terminalFontSize: number;
   /** Same again for agent tabs; the two never fall back to each other. */
@@ -51,6 +56,7 @@ export const settings = writable<Settings>({
   uiTheme: 'violet',
   uiAccent: '#8b5cf6',
   terminalRenderer: 'canvas',
+  gitBranchDisplay: 'header',
   terminalFontSize: 0,
   agentFontSize: 0,
   hideViewBar: false,

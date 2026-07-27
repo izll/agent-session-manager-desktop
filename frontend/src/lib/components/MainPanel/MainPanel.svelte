@@ -10,8 +10,11 @@
   import { agents } from '../../stores/agents';
   import { tabStatuses } from '../../stores/statusLines';
   import { settings, saveSettings } from '../../stores/settings';
+  import { gitBranch, refreshGitBranch, revalidateGitBranch } from '../../stores/gitBranch';
+  import GitBranchBadge from '../common/GitBranchBadge.svelte';
   import { get } from 'svelte/store';
   import { resolveViewBarHidden } from '../../utils/terminalThemes';
+  import * as App from '../../../../wailsjs/go/main/App';
   import { t } from '../../i18n';
 
   const dispatch = createEventDispatcher();
@@ -110,6 +113,54 @@
   onMount(() => window.addEventListener('main-panel:set-view', handleSetView));
   onDestroy(() => window.removeEventListener('main-panel:set-view', handleSetView));
 
+  // Regaining focus is when the directory and the branch are most likely to
+  // have changed behind our back — the user just switched away to a terminal
+  // or an editor. The directory is re-resolved first; if it moved, the reactive
+  // chain refreshes the branch for the new one, so revalidate only has to cover
+  // the case where the directory stayed put but its branch changed.
+  function revalidateOnFocus() {
+    startPathPolling();
+    void refreshLiveTabPath();
+    void revalidateGitBranch();
+  }
+
+  // A pane's directory moves without the app being told: `cd`, but equally
+  // pushd/popd, a script, or the agent itself running a shell command. There is
+  // no event to hook, so the only way to follow it is to ask periodically.
+  //
+  // Only ever for the tab on screen, and only while the window has focus —
+  // stopping on blur is what keeps this off the background entirely. The 2s
+  // period matches the activity/status-line pollers this app already runs, and
+  // one tmux query costs ~4ms.
+  const PATH_POLL_MS = 2000;
+  let pathPollTimer: ReturnType<typeof setInterval> | null = null;
+
+  function startPathPolling() {
+    if (pathPollTimer) return;
+    pathPollTimer = setInterval(() => {
+      void refreshLiveTabPath();
+    }, PATH_POLL_MS);
+  }
+
+  function stopPathPolling() {
+    if (!pathPollTimer) return;
+    clearInterval(pathPollTimer);
+    pathPollTimer = null;
+  }
+
+  onMount(() => {
+    window.addEventListener('focus', revalidateOnFocus);
+    window.addEventListener('blur', stopPathPolling);
+    // document.hasFocus() rather than assuming: the panel can mount while the
+    // window is already in the background.
+    if (document.hasFocus()) startPathPolling();
+  });
+  onDestroy(() => {
+    window.removeEventListener('focus', revalidateOnFocus);
+    window.removeEventListener('blur', stopPathPolling);
+    stopPathPolling();
+  });
+
   // Check if current session supports fork (Claude only)
   function getCurrentSession() {
     const id = get(selectedSessionId);
@@ -132,8 +183,9 @@
   })();
 
   // Same for the path: a tab can be opened in its own directory, so showing
-  // the session's would be wrong there.
-  $: currentTabPath = (() => {
+  // the session's would be wrong there. This is only what the tab was
+  // CONFIGURED with — the pane may have been `cd`-ed elsewhere since.
+  $: configuredTabPath = (() => {
     const s = currentSession;
     if (!s) return '';
     const idx = $selectedWindowIdx ?? 0;
@@ -141,6 +193,56 @@
     const fw = (s.followedWindows || []).find((f: any) => f.index === idx);
     return fw?.work_dir || s.path;
   })();
+
+  // The pane's real directory, resolved from tmux. Empty until the first
+  // answer arrives, and reset on every tab change so the previous tab's
+  // directory can never be shown against the new one.
+  let liveTabPath = '';
+  let liveTabPathTarget = '';
+  let liveTabPathGeneration = 0;
+
+  async function refreshLiveTabPath() {
+    const sessionId = $selectedSessionId;
+    const windowIdx = $selectedWindowIdx ?? 0;
+    if (!sessionId) {
+      liveTabPath = '';
+      return;
+    }
+    const generation = ++liveTabPathGeneration;
+    try {
+      const resolved = await App.GetTabWorkingDirectory(sessionId, windowIdx);
+      // A slow reply for a tab the user has already left must not overwrite
+      // the answer for the tab now on screen.
+      if (generation !== liveTabPathGeneration) return;
+      liveTabPath = resolved || '';
+    } catch (e) {
+      console.error('Failed to resolve the tab working directory:', e);
+      if (generation === liveTabPathGeneration) liveTabPath = '';
+    }
+  }
+
+  // Session and tab changes both land here. The guard variable is assigned
+  // INSIDE the block: Svelte orders reactive statements by dependency, not by
+  // source position, so a guard assigned elsewhere could be updated first and
+  // swallow the change.
+  $: {
+    const target = `${$selectedSessionId || ''}:${$selectedWindowIdx ?? 0}`;
+    if (target !== liveTabPathTarget) {
+      liveTabPathTarget = target;
+      liveTabPath = '';
+      void refreshLiveTabPath();
+    }
+  }
+
+  // What the status bar shows and what git is asked about: the pane's real
+  // directory, falling back to the configured one until tmux has answered (or
+  // when there is no pane to ask).
+  $: currentTabPath = liveTabPath || configuredTabPath;
+
+  // Covers both refresh triggers at once: currentTabPath changes when the
+  // session changes, when the tab changes, and when a `cd` moves the pane into
+  // another repository. Off means we never ask at all.
+  $: if ($settings.gitBranchDisplay !== 'off') void refreshGitBranch(currentTabPath);
 
   // The bottom bar resolves the same way as the view bar: tab → the default
   // for its kind. Shared helper so the two can't drift apart.
@@ -420,6 +522,14 @@
           </svg>
           <span class="status-path">{truncatePath(currentTabPath)}</span>
         </div>
+
+        {#if $settings.gitBranchDisplay === 'statusbar' && $gitBranch}
+          <span class="status-divider"></span>
+          <!-- Git branch -->
+          <div class="status-item">
+            <GitBranchBadge variant="statusbar" />
+          </div>
+        {/if}
 
         {#if currentResumeId}
           <span class="status-divider"></span>
