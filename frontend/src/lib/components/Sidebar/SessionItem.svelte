@@ -26,6 +26,14 @@
   export let spinnerText: string = '';
   export let tabStatuses: TabStatusInfo[] = [];
   export let index: number = 0;
+  /**
+   * 1-7 when Ctrl+Shift+N reaches this session, 0 when it does not.
+   *
+   * Only surfaced in the row's tooltip: a number printed beside every
+   * favourite read as clutter in a list that already carries a status dot,
+   * agent icons and badges.
+   */
+  export let favoriteSlot: number = 0;
 
   const dispatch = createEventDispatcher();
 
@@ -213,6 +221,7 @@
   class:drag-over={isDragOver}
   class:compact={$settings?.compactList}
   style={rowStyle}
+  title={favoriteSlot > 0 ? $t('sidebar.favoriteShortcut', { n: favoriteSlot }) : undefined}
   on:click={() => selectSession(session.id)}
   on:contextmenu={handleContextMenu}
   on:keydown={(e) => e.key === 'Enter' && selectSession(session.id)}

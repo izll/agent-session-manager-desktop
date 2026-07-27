@@ -932,5 +932,7 @@
   "templates.keepPathOn": "Доступен только в {path}.",
   "templates.keepPathOff": "Подходит к любому проекту — каталог выбирается каждый раз.",
   "templates.anyDirectory": "любой каталог",
-  "sidebar.resizeHint": "Перетащите для изменения · двойной щелчок сбрасывает"
+  "sidebar.resizeHint": "Перетащите для изменения · двойной щелчок сбрасывает",
+  "sidebar.favoriteShortcut": "Перейти сюда: Ctrl+Shift+{n}",
+  "help.navFavorite": "Перейти к избранному 1-7"
 }

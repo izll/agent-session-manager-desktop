@@ -119,6 +119,20 @@
     }
   }
 
+  // Which Ctrl+Shift+N reaches a favourite, or 0 for the ones past the last
+  // slot. Stops at 7 to match App.svelte, where Ctrl+Shift+8 already toggles
+  // the favourite mark.
+  //
+  // Counted from the UNFILTERED list, like the shortcut itself: numbering the
+  // rows as they appear would renumber them as the search box narrows the
+  // list, and the badge would stop matching the key that works.
+  const FAVORITE_SLOTS = 7;
+  $: favoriteOrder = $sessions.filter(s => s.favorite).map(s => s.id);
+  $: favoriteSlot = (id: string) => {
+    const i = favoriteOrder.indexOf(id);
+    return i >= 0 && i < FAVORITE_SLOTS ? i + 1 : 0;
+  };
+
   // Count sessions by status
   $: statusCounts = (() => {
     let busy = 0, waiting = 0, idle = 0, stopped = 0;
@@ -186,7 +200,7 @@
           {$t('sidebar.favorites')}
         </div>
         {#each $favorites as session, i (session.id)}
-          <SessionItem {session} index={$sessions.findIndex(s => s.id === session.id)} activity={getActivity(session.id, $activities)} statusLine={getStatusLine(session.id, $statusLines)} spinnerText={$spinnerTexts[session.id] || ''} tabStatuses={$tabStatuses[session.id] || []} on:drop={handleSessionDrop} />
+          <SessionItem {session} index={$sessions.findIndex(s => s.id === session.id)} favoriteSlot={favoriteSlot(session.id)} activity={getActivity(session.id, $activities)} statusLine={getStatusLine(session.id, $statusLines)} spinnerText={$spinnerTexts[session.id] || ''} tabStatuses={$tabStatuses[session.id] || []} on:drop={handleSessionDrop} />
         {/each}
       </div>
     {/if}

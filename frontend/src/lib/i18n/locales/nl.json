@@ -932,5 +932,7 @@
   "templates.keepPathOn": "Alleen bruikbaar in {path}.",
   "templates.keepPathOff": "Bruikbaar in elk project — de map kies je elke keer.",
   "templates.anyDirectory": "elke map",
-  "sidebar.resizeHint": "Sleep om te vergroten · dubbelklik om te herstellen"
+  "sidebar.resizeHint": "Sleep om te vergroten · dubbelklik om te herstellen",
+  "sidebar.favoriteShortcut": "Spring hierheen met Ctrl+Shift+{n}",
+  "help.navFavorite": "Naar favoriet 1-7 springen"
 }

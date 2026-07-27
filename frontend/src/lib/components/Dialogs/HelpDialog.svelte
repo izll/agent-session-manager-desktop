@@ -38,6 +38,7 @@
       { key: 'Ctrl+Shift+↑ / ↓', desc: $t('help.navGlobalSession') },
       { key: 'Alt+↑ / ↓', desc: $t('help.navGlobalSession') },
       { key: 'Ctrl+Shift+K / J', desc: $t('help.navReorderSession') },
+      { key: 'Ctrl+Shift+1…7', desc: $t('help.navFavorite') },
       { key: 'Ctrl+PgUp / PgDn', desc: $t('help.navSwitchTab') },
       { key: 'Enter', desc: $t('help.navAttach') },
     ]},

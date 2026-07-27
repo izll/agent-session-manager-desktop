@@ -932,5 +932,7 @@
   "templates.keepPathOn": "قابل للاستخدام في {path} فقط.",
   "templates.keepPathOff": "قابل للاستخدام في أي مشروع — تختار المجلد في كل مرة.",
   "templates.anyDirectory": "أي مجلد",
-  "sidebar.resizeHint": "اسحب لتغيير الحجم · انقر مزدوجًا لإعادة التعيين"
+  "sidebar.resizeHint": "اسحب لتغيير الحجم · انقر مزدوجًا لإعادة التعيين",
+  "sidebar.favoriteShortcut": "انتقل إلى هنا بـ Ctrl+Shift+{n}",
+  "help.navFavorite": "الانتقال إلى المفضلة 1-7"
 }

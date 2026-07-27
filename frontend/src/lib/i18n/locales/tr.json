@@ -932,5 +932,7 @@
   "templates.keepPathOn": "Yalnızca burada kullanılabilir: {path}.",
   "templates.keepPathOff": "Her projede kullanılabilir — dizini her seferinde sen seçersin.",
   "templates.anyDirectory": "herhangi bir dizin",
-  "sidebar.resizeHint": "Sürükleyerek boyutlandır · çift tıkla sıfırla"
+  "sidebar.resizeHint": "Sürükleyerek boyutlandır · çift tıkla sıfırla",
+  "sidebar.favoriteShortcut": "Buraya git: Ctrl+Shift+{n}",
+  "help.navFavorite": "1-7 numaralı sık kullanılana git"
 }

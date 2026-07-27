@@ -932,5 +932,7 @@
   "templates.keepPathOn": "Utilizzabile solo in {path}.",
   "templates.keepPathOff": "Utilizzabile in qualsiasi progetto: la directory la scegli ogni volta.",
   "templates.anyDirectory": "qualsiasi directory",
-  "sidebar.resizeHint": "Trascina per ridimensionare · doppio clic per reimpostare"
+  "sidebar.resizeHint": "Trascina per ridimensionare · doppio clic per reimpostare",
+  "sidebar.favoriteShortcut": "Vai qui con Ctrl+Maiusc+{n}",
+  "help.navFavorite": "Vai al preferito 1-7"
 }

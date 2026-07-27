@@ -932,5 +932,7 @@
   "templates.keepPathOn": "Chỉ dùng được trong {path}.",
   "templates.keepPathOff": "Dùng được cho mọi dự án — mỗi lần bạn tự chọn thư mục.",
   "templates.anyDirectory": "bất kỳ thư mục nào",
-  "sidebar.resizeHint": "Kéo để đổi kích thước · nhấp đúp để đặt lại"
+  "sidebar.resizeHint": "Kéo để đổi kích thước · nhấp đúp để đặt lại",
+  "sidebar.favoriteShortcut": "Chuyển tới đây bằng Ctrl+Shift+{n}",
+  "help.navFavorite": "Chuyển tới mục yêu thích 1-7"
 }

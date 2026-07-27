@@ -932,5 +932,7 @@
   "templates.keepPathOn": "Nur verwendbar in {path}.",
   "templates.keepPathOff": "In jedem Projekt verwendbar — das Verzeichnis wählst du jedes Mal.",
   "templates.anyDirectory": "beliebiges Verzeichnis",
-  "sidebar.resizeHint": "Ziehen zum Anpassen · Doppelklick setzt zurück"
+  "sidebar.resizeHint": "Ziehen zum Anpassen · Doppelklick setzt zurück",
+  "sidebar.favoriteShortcut": "Mit Strg+Umschalt+{n} hierher springen",
+  "help.navFavorite": "Zu Favorit 1-7 springen"
 }

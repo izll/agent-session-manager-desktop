@@ -932,5 +932,7 @@
   "templates.keepPathOn": "Kan bara användas i {path}.",
   "templates.keepPathOff": "Kan användas i vilket projekt som helst — katalogen väljer du varje gång.",
   "templates.anyDirectory": "valfri katalog",
-  "sidebar.resizeHint": "Dra för att ändra storlek · dubbelklicka för att återställa"
+  "sidebar.resizeHint": "Dra för att ändra storlek · dubbelklicka för att återställa",
+  "sidebar.favoriteShortcut": "Hoppa hit med Ctrl+Skift+{n}",
+  "help.navFavorite": "Hoppa till favorit 1-7"
 }

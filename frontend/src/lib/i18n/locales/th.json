@@ -932,5 +932,7 @@
   "templates.keepPathOn": "ใช้ได้เฉพาะใน {path}",
   "templates.keepPathOff": "ใช้ได้กับทุกโปรเจกต์ — คุณเลือกไดเรกทอรีทุกครั้ง",
   "templates.anyDirectory": "ไดเรกทอรีใดก็ได้",
-  "sidebar.resizeHint": "ลากเพื่อปรับขนาด · ดับเบิลคลิกเพื่อรีเซ็ต"
+  "sidebar.resizeHint": "ลากเพื่อปรับขนาด · ดับเบิลคลิกเพื่อรีเซ็ต",
+  "sidebar.favoriteShortcut": "ไปที่นี่ด้วย Ctrl+Shift+{n}",
+  "help.navFavorite": "ไปยังรายการโปรด 1-7"
 }

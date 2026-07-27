@@ -932,5 +932,7 @@
   "templates.keepPathOn": "{path} でのみ使用できます。",
   "templates.keepPathOff": "どのプロジェクトでも使えます — ディレクトリは毎回選びます。",
   "templates.anyDirectory": "任意のディレクトリ",
-  "sidebar.resizeHint": "ドラッグで幅を変更 · ダブルクリックで既定に戻す"
+  "sidebar.resizeHint": "ドラッグで幅を変更 · ダブルクリックで既定に戻す",
+  "sidebar.favoriteShortcut": "Ctrl+Shift+{n} でここへ移動",
+  "help.navFavorite": "お気に入り 1〜7 へ移動"
 }

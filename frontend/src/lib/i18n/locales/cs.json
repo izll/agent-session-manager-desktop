@@ -932,5 +932,7 @@
   "templates.keepPathOn": "Použitelné pouze v {path}.",
   "templates.keepPathOff": "Použitelné v každém projektu — adresář vybereš pokaždé.",
   "templates.anyDirectory": "libovolný adresář",
-  "sidebar.resizeHint": "Tažením změníte velikost · dvojklik obnoví"
+  "sidebar.resizeHint": "Tažením změníte velikost · dvojklik obnoví",
+  "sidebar.favoriteShortcut": "Přejít sem pomocí Ctrl+Shift+{n}",
+  "help.navFavorite": "Přejít na oblíbenou 1-7"
 }

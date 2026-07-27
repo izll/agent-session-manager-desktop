@@ -932,5 +932,7 @@
   "templates.keepPathOn": "Csak itt használható: {path}.",
   "templates.keepPathOff": "Bármelyik projektben használható — a könyvtárat minden alkalommal kiválasztod.",
   "templates.anyDirectory": "bármely könyvtár",
-  "sidebar.resizeHint": "Húzd az átméretezéshez · dupla kattintás visszaállít"
+  "sidebar.resizeHint": "Húzd az átméretezéshez · dupla kattintás visszaállít",
+  "sidebar.favoriteShortcut": "Ugrás ide: Ctrl+Shift+{n}",
+  "help.navFavorite": "Ugrás az 1-7. kedvencre"
 }

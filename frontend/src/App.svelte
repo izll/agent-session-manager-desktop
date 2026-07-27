@@ -268,6 +268,35 @@
   // bindings (Ctrl+<x>) or shell bindings (Ctrl+N/P/etc.). The listener
   // is registered in the capture phase so the terminal doesn't swallow
   // these combos before we see them.
+  /**
+   * Which favourite slot a key event names, 1-9, or 0 for none.
+   *
+   * Reads e.code rather than e.key: with Shift held, a digit key reports a
+   * punctuation character, and which one depends on the layout — on a
+   * Hungarian keyboard Shift+2 is not "2" but a quote.
+   */
+  function favouriteSlot(e: KeyboardEvent): number {
+    // Stops at 7: Ctrl+Shift+8 already toggles the favourite mark, named for
+    // the "*" it produces on many layouts. Numbering past a gap would put a
+    // badge on a row whose key does something else entirely.
+    const m = /^Digit([1-7])$/.exec(e.code);
+    return m ? Number(m[1]) : 0;
+  }
+
+  /**
+   * The favourites in sidebar order, unfiltered.
+   *
+   * Deliberately not the `favourites` store, which narrows with the search
+   * box: a shortcut whose target changes as you type would be unusable.
+   */
+  $: favouriteTargets = $sessions.filter(s => s.favorite);
+
+  function jumpToFavourite(slot: number) {
+    const target = favouriteTargets[slot - 1];
+    if (!target) return;
+    selectSession(target.id);
+  }
+
   function handleKeydown(e: KeyboardEvent) {
     // Close sidebar overlay on Escape
     if (e.key === 'Escape' && sidebarOverlayOpen) {
@@ -293,6 +322,9 @@
     // Ctrl+K stay with the command palette above.
     const commandPickerShortcut = (e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey &&
       e.key.toLowerCase() === 'p';
+    // Ctrl+Shift+1..9 jumps to a favourite. Shift is deliberate: plain
+    // Ctrl+digit is something terminal programs use.
+    const favouriteShortcut = mod && !e.altKey && favouriteSlot(e) > 0;
     if (!mod && !altArrow && !paletteShortcut && !commandPickerShortcut) return;
 
     // Don't handle shortcuts when any dialog is open
@@ -307,6 +339,12 @@
       e.preventDefault();
       e.stopPropagation();
       if (!dialogOpen) showCommandPicker = true;
+      return;
+    }
+    if (favouriteShortcut) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!dialogOpen) jumpToFavourite(favouriteSlot(e));
       return;
     }
     if (dialogOpen) return;

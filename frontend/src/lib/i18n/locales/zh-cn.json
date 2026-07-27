@@ -932,5 +932,7 @@
   "templates.keepPathOn": "仅可在 {path} 中使用。",
   "templates.keepPathOff": "在任何项目中都可用 — 每次由你选择目录。",
   "templates.anyDirectory": "任意目录",
-  "sidebar.resizeHint": "拖动调整宽度 · 双击恢复默认"
+  "sidebar.resizeHint": "拖动调整宽度 · 双击恢复默认",
+  "sidebar.favoriteShortcut": "按 Ctrl+Shift+{n} 跳转到此处",
+  "help.navFavorite": "跳转到收藏 1-7"
 }
