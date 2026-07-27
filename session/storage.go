@@ -66,6 +66,10 @@ type Settings struct {
 	// GitBranchDisplay places the session's git branch: "header" (default),
 	// "statusbar" or "off".
 	GitBranchDisplay string `json:"git_branch_display,omitempty"`
+	// The diff file list groups into a directory tree by default. Stored as a
+	// "flat" flag rather than a "tree" one so the zero value keeps the default
+	// in place — with omitempty there is no entry at all in existing configs.
+	DiffFlatFileList bool `json:"diff_flat_file_list,omitempty"`
 	// Attention notifications: fire when an agent flips to "waiting"
 	// (needs user input). Desktop uses notify-send/osascript; ntfy POSTs
 	// to NtfyURL (e.g. https://ntfy.sh/my-topic) for mobile push.

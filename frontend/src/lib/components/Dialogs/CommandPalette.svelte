@@ -54,7 +54,7 @@
     show = false;
   }
 
-  function openView(view: 'terminal' | 'diff' | 'notes' | 'tasks') {
+  function openView(view: 'terminal' | 'diff' | 'notes' | 'tasks' | 'browser') {
     if (get(selectedSessionId)) showSessionView();
     window.dispatchEvent(new CustomEvent('main-panel:set-view', { detail: { view } }));
   }
@@ -130,7 +130,9 @@
         );
       }
       result.push(
-        { id: 'view-notes', category: $t('palette.actions'), title: $t('palette.openNotes'), icon: '⌑', keywords: 'notes jegyzet', action: () => openView('notes') }
+        { id: 'view-notes', category: $t('palette.actions'), title: $t('palette.openNotes'), icon: '⌑', keywords: 'notes jegyzet', action: () => openView('notes') },
+        // No git requirement: browsing only needs a directory.
+        { id: 'view-browser', category: $t('palette.actions'), title: $t('palette.openBrowser'), icon: '🗀', keywords: 'files browser fajlok', action: () => openView('browser') }
       );
     }
 

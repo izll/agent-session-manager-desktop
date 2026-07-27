@@ -24,6 +24,8 @@ export interface Settings {
   terminalRenderer: TerminalRenderer;
   /** Where to show the session's git branch; 'header' by default. */
   gitBranchDisplay: GitBranchDisplay;
+  /** Show the diff's file list as a directory tree instead of a flat list. */
+  diffFlatFileList: boolean;
   /** Default terminal font size in px; 0 means the built-in default. */
   terminalFontSize: number;
   /** Same again for agent tabs; the two never fall back to each other. */
@@ -57,6 +59,7 @@ export const settings = writable<Settings>({
   uiAccent: '#8b5cf6',
   terminalRenderer: 'canvas',
   gitBranchDisplay: 'header',
+  diffFlatFileList: false,
   terminalFontSize: 0,
   agentFontSize: 0,
   hideViewBar: false,

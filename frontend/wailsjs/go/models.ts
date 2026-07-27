@@ -869,6 +869,40 @@ export namespace main {
 	        this.isLocked = source["isLocked"];
 	    }
 	}
+	export class SaveFileEditResult {
+	    saved: boolean;
+	    conflict?: string;
+	    file?: session.EditableFile;
+	
+	    static createFrom(source: any = {}) {
+	        return new SaveFileEditResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.saved = source["saved"];
+	        this.conflict = source["conflict"];
+	        this.file = this.convertValues(source["file"], session.EditableFile);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	
 	export class SessionInfo {
 	    id: string;
@@ -966,6 +1000,7 @@ export namespace main {
 	    uiAccent: string;
 	    terminalRenderer: string;
 	    gitBranchDisplay: string;
+	    diffFlatFileList: boolean;
 	    terminalFontSize: number;
 	    agentFontSize: number;
 	    hideViewBar: boolean;
@@ -1000,6 +1035,7 @@ export namespace main {
 	        this.uiAccent = source["uiAccent"];
 	        this.terminalRenderer = source["terminalRenderer"];
 	        this.gitBranchDisplay = source["gitBranchDisplay"];
+	        this.diffFlatFileList = source["diffFlatFileList"];
 	        this.terminalFontSize = source["terminalFontSize"];
 	        this.agentFontSize = source["agentFontSize"];
 	        this.hideViewBar = source["hideViewBar"];
@@ -1219,6 +1255,88 @@ export namespace main {
 
 export namespace session {
 	
+	export class BrowseEntry {
+	    name: string;
+	    path: string;
+	    isDir: boolean;
+	    size: number;
+	    modTime: string;
+	    unreadable: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new BrowseEntry(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.path = source["path"];
+	        this.isDir = source["isDir"];
+	        this.size = source["size"];
+	        this.modTime = source["modTime"];
+	        this.unreadable = source["unreadable"];
+	    }
+	}
+	export class BrowseFile {
+	    path: string;
+	    absPath: string;
+	    content: string;
+	    size: number;
+	    binary: boolean;
+	    truncated: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new BrowseFile(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.path = source["path"];
+	        this.absPath = source["absPath"];
+	        this.content = source["content"];
+	        this.size = source["size"];
+	        this.binary = source["binary"];
+	        this.truncated = source["truncated"];
+	    }
+	}
+	export class BrowseListing {
+	    path: string;
+	    absPath: string;
+	    entries: BrowseEntry[];
+	    truncated: boolean;
+	    totalEntries: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new BrowseListing(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.path = source["path"];
+	        this.absPath = source["absPath"];
+	        this.entries = this.convertValues(source["entries"], BrowseEntry);
+	        this.truncated = source["truncated"];
+	        this.totalEntries = source["totalEntries"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class CustomTerminalTheme {
 	    id: string;
 	    name: string;
@@ -1281,6 +1399,73 @@ export namespace session {
 	        this.added = source["added"];
 	        this.removed = source["removed"];
 	        this.binary = source["binary"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
+	export class FileShape {
+	    bom: boolean;
+	    lineEnding: string;
+	    mixed: boolean;
+	    trailingNewline: boolean;
+	    empty: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new FileShape(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.bom = source["bom"];
+	        this.lineEnding = source["lineEnding"];
+	        this.mixed = source["mixed"];
+	        this.trailingNewline = source["trailingNewline"];
+	        this.empty = source["empty"];
+	    }
+	}
+	export class EditableFile {
+	    path: string;
+	    absPath: string;
+	    text: string;
+	    shape: FileShape;
+	    version: string;
+	    mode: number;
+	    size: number;
+	    editable: boolean;
+	    notEditableReason?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new EditableFile(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.path = source["path"];
+	        this.absPath = source["absPath"];
+	        this.text = source["text"];
+	        this.shape = this.convertValues(source["shape"], FileShape);
+	        this.version = source["version"];
+	        this.mode = source["mode"];
+	        this.size = source["size"];
+	        this.editable = source["editable"];
+	        this.notEditableReason = source["notEditableReason"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

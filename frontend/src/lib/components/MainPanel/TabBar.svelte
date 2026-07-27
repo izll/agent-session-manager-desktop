@@ -1217,7 +1217,7 @@
   }
 
   export let fullDiffActive = false;
-  export let activeView: 'terminal' | 'diff' | 'notes' | 'tasks' = 'terminal';
+  export let activeView: 'terminal' | 'diff' | 'notes' | 'tasks' | 'browser' = 'terminal';
 
   // Not the agent type: a plain terminal opened inside a repository still has
   // changes worth reviewing, while a Claude session in a scratch folder has

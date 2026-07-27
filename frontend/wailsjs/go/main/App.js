@@ -322,6 +322,10 @@ export function ListOnlineSchemes() {
   return window['go']['main']['App']['ListOnlineSchemes']();
 }
 
+export function ListSessionDirectory(arg1, arg2) {
+  return window['go']['main']['App']['ListSessionDirectory'](arg1, arg2);
+}
+
 export function LogFrontend(arg1) {
   return window['go']['main']['App']['LogFrontend'](arg1);
 }
@@ -338,6 +342,10 @@ export function MoveTask(arg1, arg2, arg3) {
   return window['go']['main']['App']['MoveTask'](arg1, arg2, arg3);
 }
 
+export function OpenSessionFileForEdit(arg1, arg2) {
+  return window['go']['main']['App']['OpenSessionFileForEdit'](arg1, arg2);
+}
+
 export function PendingUpdate() {
   return window['go']['main']['App']['PendingUpdate']();
 }
@@ -352,6 +360,10 @@ export function PermanentlyDeleteTrashItem(arg1) {
 
 export function QuickReplyTab(arg1, arg2, arg3) {
   return window['go']['main']['App']['QuickReplyTab'](arg1, arg2, arg3);
+}
+
+export function ReadSessionDirectoryFile(arg1, arg2) {
+  return window['go']['main']['App']['ReadSessionDirectoryFile'](arg1, arg2);
 }
 
 export function ReadSessionFile() {
@@ -420,6 +432,10 @@ export function SaveCommand(arg1, arg2, arg3, arg4, arg5, arg6) {
 
 export function SaveCommandGroup(arg1, arg2) {
   return window['go']['main']['App']['SaveCommandGroup'](arg1, arg2);
+}
+
+export function SaveSessionFileEdit(arg1, arg2, arg3, arg4, arg5, arg6) {
+  return window['go']['main']['App']['SaveSessionFileEdit'](arg1, arg2, arg3, arg4, arg5, arg6);
 }
 
 export function SaveSettings(arg1) {

@@ -7,6 +7,9 @@
   import type { session } from '../../../../wailsjs/go/models';
   import ConfirmDialog from '../Dialogs/ConfirmDialog.svelte';
   import { t } from '../../i18n';
+  import { settings, saveSettings } from '../../stores/settings';
+  import { buildTreeRows, type TreeRow } from '../../utils/fileTree';
+  import { fileTypeOf } from '../../utils/fileTypes';
 
   export let active = false;
   export let initialMode: 'session' | 'full' = 'session';
@@ -448,6 +451,50 @@
 
   $: hiddenLineCount = renderedHunks.reduce((n, h) => n + h.hidden, 0);
   $: fileCount = files.length;
+
+  // --- File tree ----------------------------------------------------------
+
+  // Directories the user has folded shut. Everything else is open: opening the
+  // diff means wanting to see what changed, so expanded is the useful default.
+  let collapsedDirs = new Set<string>();
+  // Stored inverted (see Settings.DiffFlatFileList): the tree is the default,
+  // and an unset flag has to mean "tree" for configs written before this.
+  $: treeView = !$settings.diffFlatFileList;
+  // Rebuilt whenever the file list or the fold state changes; the builder is
+  // cheap (one pass per file) and the list is at most a few hundred rows.
+  $: treeRows = treeView ? buildTreeRows<session.DiffFile>(files, collapsedDirs) : [];
+
+  function toggleTreeView() {
+    void saveSettings({ diffFlatFileList: treeView });
+  }
+
+  function toggleDir(path: string) {
+    // Reassign rather than mutate — Svelte 3 doesn't track Set mutations.
+    const next = new Set(collapsedDirs);
+    if (next.has(path)) next.delete(path);
+    else next.add(path);
+    collapsedDirs = next;
+  }
+
+  // Fold state is keyed by directory path, so it would silently apply to a
+  // different repo's directories after a session switch. Reset it with the
+  // session; the tracking variable is assigned INSIDE the block because Svelte
+  // 3 orders reactive statements by dependency, not by source position.
+  let collapseSessionId: string | null = null;
+  $: if ($selectedSessionId !== collapseSessionId) {
+    collapseSessionId = $selectedSessionId;
+    collapsedDirs = new Set<string>();
+  }
+
+  // Indent step in px. Small enough that a deep tree still leaves room for the
+  // file name in a narrow pane, wide enough to read as a level.
+  const TREE_INDENT = 12;
+
+  // Hoisted out of the markup: Svelte's template can't narrow the row union,
+  // and casts aren't allowed there.
+  function rowFile(row: TreeRow<session.DiffFile>): session.DiffFile {
+    return (row as { kind: 'file'; file: session.DiffFile }).file;
+  }
 </script>
 
 <div class="diff-container">
@@ -506,10 +553,111 @@
 
     <div class="diff-body" bind:this={panesEl} class:resizing={isResizingPane}>
       <div class="file-pane" style="width: {filePaneWidth}px">
-        <div class="file-pane-header">{$t('diff.filesCount', { count: fileCount })}</div>
+        <div class="file-pane-header">
+          <span>{$t('diff.filesCount', { count: fileCount })}</span>
+          <button
+            class="view-toggle"
+            class:active={treeView}
+            title={treeView ? $t('diff.showFlatList') : $t('diff.showTree')}
+            aria-pressed={treeView}
+            on:click={toggleTreeView}
+          >
+            <!-- Both glyphs are drawn symmetrically within the 24px box (4..20),
+                 so neither sits visibly off-centre in the square button. -->
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              {#if treeView}
+                <line x1="10" y1="6" x2="20" y2="6"/>
+                <line x1="10" y1="12" x2="20" y2="12"/>
+                <line x1="10" y1="18" x2="20" y2="18"/>
+                <line x1="4" y1="6" x2="4.01" y2="6"/>
+                <line x1="4" y1="12" x2="4.01" y2="12"/>
+                <line x1="4" y1="18" x2="4.01" y2="18"/>
+              {:else}
+                <line x1="4" y1="5" x2="20" y2="5"/>
+                <path d="M6 5v6a2 2 0 0 0 2 2h12"/>
+                <path d="M6 13v4a2 2 0 0 0 2 2h12"/>
+              {/if}
+            </svg>
+          </button>
+        </div>
+        {#if treeView}
+          <div class="file-list">
+            {#each treeRows as row (row.kind + ':' + row.path)}
+              {#if row.kind === 'dir'}
+                <div
+                  class="tree-dir"
+                  style="padding-left: {10 + row.depth * TREE_INDENT}px"
+                  role="button"
+                  tabindex="0"
+                  aria-expanded={!collapsedDirs.has(row.path)}
+                  title={row.path}
+                  on:click={() => toggleDir(row.path)}
+                  on:keydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleDir(row.path); } }}
+                >
+                  <div class="file-main">
+                    <svg
+                      class="tree-caret"
+                      class:collapsed={collapsedDirs.has(row.path)}
+                      width="12" height="12" viewBox="0 0 24 24"
+                      fill="none" stroke="currentColor" stroke-width="2"
+                    >
+                      <polyline points="6 9 12 15 18 9"/>
+                    </svg>
+                    <span class="tree-dir-name">{row.label}</span>
+                    <span class="tree-dir-count">{row.fileCount}</span>
+                  </div>
+                  <div class="file-meta">
+                    <span class="stat added">+{row.added}</span>
+                    <span class="stat removed">-{row.removed}</span>
+                  </div>
+                </div>
+              {:else}
+                {@const file = rowFile(row)}
+                {@const type = fileTypeOf(file.path)}
+                <div
+                  class="file-row tree-file"
+                  class:selected={file.path === selectedPath}
+                  style="padding-left: {10 + row.depth * TREE_INDENT}px"
+                  role="button"
+                  tabindex="0"
+                  on:click={() => selectFile(file.path)}
+                  on:keydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectFile(file.path); } }}
+                >
+                  <div class="file-main">
+                    <span class="file-status {file.status}" title={statusLabel(file.status)}>{statusLetter(file.status)}</span>
+                    <span
+                      class="file-type-dot"
+                      style="background: {type.colour}"
+                      title="{$t('diff.fileType')}: {type.label}"
+                    ></span>
+                    <span class="file-path tree-file-path" title={file.path}>
+                      <span class="file-name">{splitPath(file.path).name}</span>
+                    </span>
+                  </div>
+                  <div class="file-meta">
+                    <span class="stat added">+{file.added}</span>
+                    <span class="stat removed">-{file.removed}</span>
+                    <button
+                      class="revert-btn file-revert"
+                      disabled={reverting}
+                      title={$t('diff.revertFile')}
+                      on:click|stopPropagation={() => askRevertFile(file)}
+                    >
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M3 7v6h6"/>
+                        <path d="M3.51 13a9 9 0 1 0 2.13-9.36L3 7"/>
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              {/if}
+            {/each}
+          </div>
+        {:else}
         <div class="file-list">
           {#each files as file (file.path)}
             {@const parts = splitPath(file.path)}
+            {@const type = fileTypeOf(file.path)}
             <div
               class="file-row"
               class:selected={file.path === selectedPath}
@@ -520,6 +668,11 @@
             >
               <div class="file-main">
                 <span class="file-status {file.status}" title={statusLabel(file.status)}>{statusLetter(file.status)}</span>
+                <span
+                  class="file-type-dot"
+                  style="background: {type.colour}"
+                  title="{$t('diff.fileType')}: {type.label}"
+                ></span>
                 <span class="file-path" title={file.path}>
                   {#if parts.dir}<span class="file-dir">{parts.dir}</span>{/if}<span class="file-name">{parts.name}</span>
                 </span>
@@ -542,6 +695,7 @@
             </div>
           {/each}
         </div>
+        {/if}
       </div>
 
       <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
@@ -830,13 +984,96 @@
   }
 
   .file-pane-header {
-    padding: 8px 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 4px 8px 4px 12px;
     font-size: 11px;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.5px;
     color: #6b7280;
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  }
+
+  .view-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 24px;
+    height: 24px;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    color: #6b7280;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .view-toggle:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: #e4e4e7;
+  }
+  .view-toggle.active {
+    background: rgba(var(--accent-rgb), 0.15);
+    border-color: rgba(var(--accent-rgb), 0.35);
+    color: var(--accent-light);
+  }
+
+  /* Directory rows read as structure, not as content: no status badge, no
+     revert, and a dimmer weight than the file names underneath them. */
+  .tree-dir {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 5px 10px;
+    cursor: pointer;
+    border-left: 2px solid transparent;
+    transition: background 0.15s ease;
+  }
+  .tree-dir:hover {
+    background: rgba(255, 255, 255, 0.04);
+  }
+
+  .tree-caret {
+    flex-shrink: 0;
+    color: #6b7280;
+    transition: transform 0.15s ease;
+  }
+  .tree-caret.collapsed {
+    transform: rotate(-90deg);
+  }
+
+  .tree-dir-name {
+    font-size: 12px;
+    font-weight: 600;
+    color: #9ca3af;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    direction: rtl;
+    text-align: left;
+  }
+
+  .tree-dir-count {
+    flex-shrink: 0;
+    padding: 0 5px;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.06);
+    color: #6b7280;
+    font-size: 10px;
+    font-family: monospace;
+    font-weight: 600;
+    line-height: 15px;
+  }
+
+  /* Inside the tree the directory is already the row above, so the file row
+     shows only the basename — and it must not be reversed like the flat
+     list's full path. */
+  .tree-file-path {
+    direction: ltr;
   }
 
   .file-list {
@@ -905,6 +1142,25 @@
     color: #fbbf24;
   }
 
+  /* A dot rather than a second lettered badge: the status letter already owns
+     that slot, the pane is narrow and resizable, and a per-language glyph would
+     have to shrink or truncate as the pane narrows. A 6px dot costs a fixed
+     14px whatever the type is, so the filename never loses room — and the
+     type's own token stays available in the tooltip. */
+  .file-type-dot {
+    flex-shrink: 0;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    /* The colours are chosen to carry at full strength on the pane background;
+       dimming them is what would make the neutral default vanish. */
+    opacity: 0.85;
+  }
+  .file-row:hover .file-type-dot,
+  .file-row.selected .file-type-dot {
+    opacity: 1;
+  }
+
   .file-path {
     font-size: 12px;
     white-space: nowrap;
@@ -921,6 +1177,13 @@
   .file-name {
     color: #e4e4e7;
     font-weight: 600;
+  }
+
+  /* In the flat list the weight separates the name from the dimmed directory
+     prefix it shares a line with. A tree row has no prefix — the directory is
+     the row above — so the emphasis is noise there. */
+  .tree-file .file-name {
+    font-weight: 400;
   }
 
   .file-meta {

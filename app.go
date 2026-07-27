@@ -2258,6 +2258,90 @@ func (a *App) RevertDiffHunk(id, patch string) error {
 }
 
 // ============================================================================
+// File Browser
+// ============================================================================
+
+// ListSessionDirectory lists one directory inside a session's working
+// directory. The path is relative to that directory; "" lists its root. Paths
+// that would escape the tree are rejected in session.Instance.
+//
+// Not named BrowseDirectory: that is already the native directory picker.
+func (a *App) ListSessionDirectory(id, path string) (*session.BrowseListing, error) {
+	inst, err := a.storage.GetInstance(id)
+	if err != nil {
+		return nil, err
+	}
+	return inst.ListDirectory(path)
+}
+
+// ReadSessionDirectoryFile returns one file's contents for display. Read-only:
+// there is no counterpart that writes.
+//
+// The long name avoids ReadSessionFile, which already means "open the session
+// export the user picked".
+func (a *App) ReadSessionDirectoryFile(id, path string) (*session.BrowseFile, error) {
+	inst, err := a.storage.GetInstance(id)
+	if err != nil {
+		return nil, err
+	}
+	return inst.ReadFileForBrowse(path)
+}
+
+// OpenSessionFileForEdit returns a file decomposed into editable text plus the
+// byte-layout details the editor cannot represent (BOM, line-ending convention,
+// trailing newline), which are handed straight back to SaveSessionFileEdit so an
+// unmodified file saves byte-identically.
+func (a *App) OpenSessionFileForEdit(id, path string) (*session.EditableFile, error) {
+	inst, err := a.storage.GetInstance(id)
+	if err != nil {
+		return nil, err
+	}
+	return inst.ReadFileForEdit(path)
+}
+
+// SaveFileEditResult is what a save attempt reports back.
+//
+// A conflict is NOT returned as an error: Wails flattens errors to a string, and
+// the UI has to tell "someone else changed this file" apart from every other
+// failure in order to offer overwrite/reload/keep-editing instead of a message.
+type SaveFileEditResult struct {
+	// Saved is false when Conflict is set; the file on disk was not touched.
+	Saved bool `json:"saved"`
+	// Conflict is "", "modified" or "deleted".
+	Conflict string `json:"conflict,omitempty"`
+	// File carries the new version and shape after a successful save, so the
+	// editor can keep going without re-reading.
+	File *session.EditableFile `json:"file,omitempty"`
+}
+
+// SaveSessionFileEdit writes edited text back to a file in the session's working
+// directory.
+//
+// Gated on the project lock for the same reason terminal attaches are: a second
+// application instance holding no lock must not write into a project another
+// instance owns.
+func (a *App) SaveSessionFileEdit(id, path, text string, shape session.FileShape, version string, overwrite bool) (*SaveFileEditResult, error) {
+	a.projectMu.RLock()
+	defer a.projectMu.RUnlock()
+	if !a.projectLocked {
+		return nil, fmt.Errorf("project is read-only in this application instance")
+	}
+	inst, err := a.storage.GetInstance(id)
+	if err != nil {
+		return nil, err
+	}
+	saved, err := inst.SaveFileForEdit(path, text, shape, version, overwrite)
+	if err != nil {
+		var conflict *session.SaveConflictError
+		if errors.As(err, &conflict) {
+			return &SaveFileEditResult{Conflict: conflict.Kind}, nil
+		}
+		return nil, err
+	}
+	return &SaveFileEditResult{Saved: true, File: saved}, nil
+}
+
+// ============================================================================
 // Global History Search
 // ============================================================================
 
@@ -2406,6 +2490,7 @@ type SettingsInfo struct {
 	UIAccent           string `json:"uiAccent"`
 	TerminalRenderer   string `json:"terminalRenderer"`
 	GitBranchDisplay   string `json:"gitBranchDisplay"`
+	DiffFlatFileList   bool   `json:"diffFlatFileList"`
 	TerminalFontSize   int    `json:"terminalFontSize"`
 	AgentFontSize      int    `json:"agentFontSize"`
 	HideViewBar        bool   `json:"hideViewBar"`
@@ -2489,6 +2574,7 @@ func (a *App) GetSettings() (*SettingsInfo, error) {
 		UIAccent:             settings.UIAccent,
 		TerminalRenderer:     renderer,
 		GitBranchDisplay:     branchDisplay,
+		DiffFlatFileList:     settings.DiffFlatFileList,
 		TerminalFontSize:     settings.TerminalFontSize,
 		AgentFontSize:        settings.AgentFontSize,
 		HideViewBar:          settings.HideViewBar,
@@ -2529,6 +2615,7 @@ func (a *App) SaveSettings(settings SettingsInfo) error {
 		current.UIAccent = settings.UIAccent
 		current.TerminalRenderer = settings.TerminalRenderer
 		current.GitBranchDisplay = settings.GitBranchDisplay
+		current.DiffFlatFileList = settings.DiffFlatFileList
 		current.TerminalFontSize = settings.TerminalFontSize
 		current.AgentFontSize = settings.AgentFontSize
 		current.HideViewBar = settings.HideViewBar

@@ -163,6 +163,8 @@ export function ListGitBranches(arg1:string):Promise<main.GitBranchList>;
 
 export function ListOnlineSchemes():Promise<Array<main.OnlineSchemeInfo>>;
 
+export function ListSessionDirectory(arg1:string,arg2:string):Promise<session.BrowseListing>;
+
 export function LogFrontend(arg1:string):Promise<void>;
 
 export function MoveGroup(arg1:string,arg2:number):Promise<void>;
@@ -171,6 +173,8 @@ export function MoveSessionToIndex(arg1:string,arg2:number):Promise<void>;
 
 export function MoveTask(arg1:string,arg2:string,arg3:string):Promise<void>;
 
+export function OpenSessionFileForEdit(arg1:string,arg2:string):Promise<session.EditableFile>;
+
 export function PendingUpdate():Promise<string>;
 
 export function PerformUpdate(arg1:string):Promise<void>;
@@ -178,6 +182,8 @@ export function PerformUpdate(arg1:string):Promise<void>;
 export function PermanentlyDeleteTrashItem(arg1:string):Promise<void>;
 
 export function QuickReplyTab(arg1:string,arg2:number,arg3:string):Promise<void>;
+
+export function ReadSessionDirectoryFile(arg1:string,arg2:string):Promise<session.BrowseFile>;
 
 export function ReadSessionFile():Promise<main.PortableFileInfo>;
 
@@ -212,6 +218,8 @@ export function RunCommand(arg1:string,arg2:string,arg3:number,arg4:Record<strin
 export function SaveCommand(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string,arg6:boolean):Promise<string>;
 
 export function SaveCommandGroup(arg1:string,arg2:string):Promise<string>;
+
+export function SaveSessionFileEdit(arg1:string,arg2:string,arg3:string,arg4:session.FileShape,arg5:string,arg6:boolean):Promise<main.SaveFileEditResult>;
 
 export function SaveSettings(arg1:main.SettingsInfo):Promise<void>;
 

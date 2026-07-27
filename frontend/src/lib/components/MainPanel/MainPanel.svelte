@@ -4,6 +4,7 @@
   import Terminal from './Terminal.svelte';
   import Notes from './Notes.svelte';
   import Diff from './Diff.svelte';
+  import FileBrowser from './FileBrowser.svelte';
   import TaskPanel from './TaskPanel.svelte';
   import ForkDialog from '../Dialogs/ForkDialog.svelte';
   import { sessions, selectedSessionId, selectedWindowIdx, selectSession, selectWindow, toggleAutoYes, cycleYoloMode } from '../../stores/sessions';
@@ -24,7 +25,8 @@
 
   // Diff is not one of these: it lives in the tab bar (fullDiffActive), so the
   // view bar never selects it.
-  let activeView: 'terminal' | 'notes' | 'tasks' = 'terminal';
+  type ViewName = 'terminal' | 'notes' | 'tasks' | 'browser';
+  let activeView: ViewName = 'terminal';
   let terminalAttached = false;
   let showForkDialog = false;
   let localNotesCache: Record<string, string> = {}; // sessionId:windowIdx -> notes
@@ -97,7 +99,7 @@
   }
 
   function handleSetView(e: Event) {
-    const view = (e as CustomEvent<{ view: 'terminal' | 'diff' | 'notes' | 'tasks' }>).detail?.view;
+    const view = (e as CustomEvent<{ view: 'terminal' | 'diff' | 'notes' | 'tasks' | 'browser' }>).detail?.view;
     if (!view) return;
     // Diff lives in the tab bar, not the view bar — route the palette there so
     // its "open diff" action still lands somewhere. Outside a git repo there
@@ -107,7 +109,55 @@
       return;
     }
     fullDiffActive = false;
+    selectView(view);
+  }
+
+  // Which view each tab was left on. Browsing files and switching to another
+  // agent used to drop you back on the terminal, losing your place; the tab
+  // itself is already remembered this way, so the view follows the same rule.
+  // In-memory only: it tracks where you are in this sitting, not a preference
+  // worth persisting.
+  const tabViewMemory = new Map<string, ViewName>();
+
+  function tabViewKey(sessionId: string | null, windowIdx: number): string {
+    return `${sessionId || ''}:${windowIdx}`;
+  }
+
+  // Restore on tab/session change.
+  //
+  // This block deliberately does NOT read activeView. Doing so would make
+  // activeView one of its dependencies, so every view change would re-enter it
+  // and race with the assignment that caused it — which is exactly why the
+  // first attempt at this failed to restore. The outgoing tab's view is taken
+  // from lastView, a plain variable the block writes but never subscribes to.
+  let lastViewKey = '';
+  let lastView: ViewName = 'terminal';
+  $: {
+    const key = tabViewKey($selectedSessionId, $selectedWindowIdx ?? 0);
+    if (key !== lastViewKey) {
+      if (lastViewKey) tabViewMemory.set(lastViewKey, lastView);
+      lastViewKey = key;
+      const restored = tabViewMemory.get(key) || 'terminal';
+      lastView = restored;
+      activeView = restored;
+    }
+  }
+
+  // Every deliberate view change goes through here, so the memory and lastView
+  // stay in step with what is on screen.
+  function selectView(view: ViewName) {
     activeView = view;
+    lastView = view;
+    if (lastViewKey) tabViewMemory.set(lastViewKey, view);
+  }
+
+  // Deliberately leaves activeView alone. The tab bar dispatches this on EVERY
+  // tab click, not only when the diff is open, so forcing the terminal here
+  // overwrote the view tabViewMemory had just restored — the reason a
+  // remembered view never survived a tab switch. Hiding the diff simply
+  // reveals whichever view the tab was already on.
+  function closeFullDiff() {
+    fullDiffActive = false;
   }
 
   onMount(() => window.addEventListener('main-panel:set-view', handleSetView));
@@ -268,10 +318,16 @@
       tabState, $settings.hideViewBar, $settings.agentHideViewBar, currentTabAgent);
   })();
 
-  // Hiding the bar while Notes or Tasks is open would leave the user on a
-  // view with no visible way back, so return to the terminal first.
-  $: if (viewBarHidden && activeView !== 'terminal') {
+  // Notes and Tasks have no exit of their own, so hiding the bar while one is
+  // open would strand the user — bounce those back to the terminal.
+  //
+  // The browser is exempt: it has its own close button (added for exactly this
+  // reason), so a remembered browser view survives arriving at a tab whose bar
+  // is hidden. Without the exemption, hiding the bar for terminal tabs — a
+  // common setting — undid the view restored from tabViewMemory every time.
+  $: if (viewBarHidden && activeView !== 'terminal' && activeView !== 'browser') {
     activeView = 'terminal';
+    lastView = 'terminal';
   }
 
   $: currentSession = $sessions.find(s => s.id === $selectedSessionId);
@@ -336,7 +392,7 @@
       {visible}
       on:openColorDialog={() => dispatch('openColorDialog')}
       on:openFullDiff={() => fullDiffActive = true}
-      on:closeFullDiff={() => { fullDiffActive = false; activeView = 'terminal'; }}
+      on:closeFullDiff={closeFullDiff}
       on:requestStop={() => dispatch('requestStop')}
       on:requestStart={() => dispatch('requestStart')}
       on:requestResume={() => dispatch('requestResume')}
@@ -356,7 +412,7 @@
         <div class="view-tabs-left">
           <button
             class="view-tab {activeView === 'terminal' ? 'active' : ''}"
-            on:click={() => activeView = 'terminal'}
+            on:click={() => selectView('terminal')}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <polyline points="4 17 10 11 4 5"/>
@@ -366,7 +422,7 @@
           </button>
           <button
             class="view-tab {activeView === 'notes' ? 'active' : ''}"
-            on:click={() => activeView = 'notes'}
+            on:click={() => selectView('notes')}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
@@ -378,13 +434,24 @@
           </button>
           <button
             class="view-tab {activeView === 'tasks' ? 'active' : ''}"
-            on:click={() => activeView = 'tasks'}
+            on:click={() => selectView('tasks')}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M9 11l3 3L22 4"/>
               <path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
             </svg>
             {$t('mainPanel.tasks')}
+          </button>
+          <!-- Always offered: unlike the diff, a browser only needs a
+               directory, and every session has one. -->
+          <button
+            class="view-tab {activeView === 'browser' ? 'active' : ''}"
+            on:click={() => selectView('browser')}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+            </svg>
+            {$t('mainPanel.browser')}
           </button>
         </div>
         <div class="view-tabs-right">
@@ -507,7 +574,10 @@
           <Notes active={visible && activeView === 'notes'} on:notesChange={handleNotesChange} />
         </div>
         <div class="view-panel" class:active={activeView === 'tasks'}>
-          <TaskPanel active={visible && activeView === 'tasks'} on:taskSent={() => activeView = 'terminal'} />
+          <TaskPanel active={visible && activeView === 'tasks'} on:taskSent={() => selectView('terminal')} />
+        </div>
+        <div class="view-panel" class:active={activeView === 'browser'}>
+          <FileBrowser active={visible && activeView === 'browser'} on:close={() => selectView('terminal')} />
         </div>
       </div>
     {/if}
