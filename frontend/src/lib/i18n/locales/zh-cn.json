@@ -931,5 +931,6 @@
   "templates.keepPath": "固定到此目录",
   "templates.keepPathOn": "仅可在 {path} 中使用。",
   "templates.keepPathOff": "在任何项目中都可用 — 每次由你选择目录。",
-  "templates.anyDirectory": "任意目录"
+  "templates.anyDirectory": "任意目录",
+  "sidebar.resizeHint": "拖动调整宽度 · 双击恢复默认"
 }

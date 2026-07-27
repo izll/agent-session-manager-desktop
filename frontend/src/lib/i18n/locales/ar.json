@@ -931,5 +931,6 @@
   "templates.keepPath": "تثبيت على هذا المجلد",
   "templates.keepPathOn": "قابل للاستخدام في {path} فقط.",
   "templates.keepPathOff": "قابل للاستخدام في أي مشروع — تختار المجلد في كل مرة.",
-  "templates.anyDirectory": "أي مجلد"
+  "templates.anyDirectory": "أي مجلد",
+  "sidebar.resizeHint": "اسحب لتغيير الحجم · انقر مزدوجًا لإعادة التعيين"
 }

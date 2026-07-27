@@ -931,5 +931,6 @@
   "templates.keepPath": "Připnout k tomuto adresáři",
   "templates.keepPathOn": "Použitelné pouze v {path}.",
   "templates.keepPathOff": "Použitelné v každém projektu — adresář vybereš pokaždé.",
-  "templates.anyDirectory": "libovolný adresář"
+  "templates.anyDirectory": "libovolný adresář",
+  "sidebar.resizeHint": "Tažením změníte velikost · dvojklik obnoví"
 }

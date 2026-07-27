@@ -931,5 +931,6 @@
   "templates.keepPath": "このディレクトリに固定",
   "templates.keepPathOn": "{path} でのみ使用できます。",
   "templates.keepPathOff": "どのプロジェクトでも使えます — ディレクトリは毎回選びます。",
-  "templates.anyDirectory": "任意のディレクトリ"
+  "templates.anyDirectory": "任意のディレクトリ",
+  "sidebar.resizeHint": "ドラッグで幅を変更 · ダブルクリックで既定に戻す"
 }

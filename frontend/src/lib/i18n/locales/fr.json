@@ -931,5 +931,6 @@
   "templates.keepPath": "Fixer à ce répertoire",
   "templates.keepPathOn": "Utilisable uniquement dans {path}.",
   "templates.keepPathOff": "Utilisable dans n'importe quel projet — vous choisissez le répertoire à chaque fois.",
-  "templates.anyDirectory": "n'importe quel répertoire"
+  "templates.anyDirectory": "n'importe quel répertoire",
+  "sidebar.resizeHint": "Glissez pour redimensionner · double-clic pour réinitialiser"
 }

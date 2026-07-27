@@ -133,7 +133,19 @@
   $: prevAnyDialogOpen = anyDialogOpen;
 
   // Sidebar state
-  let sidebarWidth = 288; // default w-72 = 288px
+  const SIDEBAR_MIN = 200;
+  const SIDEBAR_MAX = 500;
+  const SIDEBAR_COLLAPSED = 40;
+  const SIDEBAR_DEFAULT = 288;
+  const SIDEBAR_STORAGE_KEY = 'asmgr.sidebar.width';
+
+  function readStoredSidebarWidth(): number {
+    const raw = Number(localStorage.getItem(SIDEBAR_STORAGE_KEY));
+    if (!Number.isFinite(raw) || raw <= 0) return SIDEBAR_DEFAULT;
+    return Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, raw));
+  }
+
+  let sidebarWidth = readStoredSidebarWidth();
   let sidebarCollapsed = false;
   let sidebarOverlayOpen = false;
   let isResizing = false;
@@ -147,9 +159,15 @@
   function handleCollapsedHoverLeave() {
     sidebarOverlayOpen = false;
   }
-  const SIDEBAR_MIN = 200;
-  const SIDEBAR_MAX = 500;
-  const SIDEBAR_COLLAPSED = 40;
+
+  function storeSidebarWidth(px: number) {
+    try {
+      localStorage.setItem(SIDEBAR_STORAGE_KEY, String(Math.round(px)));
+    } catch {
+      // A full or disabled storage isn't worth surfacing; the width simply
+      // won't be remembered.
+    }
+  }
 
   function startResize(e: MouseEvent) {
     isResizing = true;
@@ -171,6 +189,16 @@
     isResizing = false;
     document.removeEventListener('mousemove', resize);
     document.removeEventListener('mouseup', stopResize);
+    storeSidebarWidth(sidebarWidth);
+  }
+
+  // Double-click the handle to get the default width back, as the diff view's
+  // splitter already does. Persisted too — without that, "reset" and "restart"
+  // would do the same thing and the width would never have been yours.
+  function resetSidebarWidth() {
+    sidebarWidth = SIDEBAR_DEFAULT;
+    sidebarCollapsed = false;
+    storeSidebarWidth(SIDEBAR_DEFAULT);
   }
 
   function toggleSidebar() {
@@ -854,9 +882,15 @@
           <ProjectSelector />
         </div>
         <div class="flex-1 overflow-hidden">
-          <SessionTree onNewSession={handleNewSession} onNewGroup={handleNewGroup} onTemplates={handleTemplates} onCollapse={toggleSidebar} />
+          <SessionTree onNewSession={handleNewSession} onNewGroup={handleNewGroup} onCollapse={toggleSidebar} />
         </div>
-        <div class="resize-handle" on:mousedown={startResize}></div>
+        <!-- svelte-ignore a11y-no-static-element-interactions -->
+        <div
+          class="resize-handle"
+          on:mousedown={startResize}
+          on:dblclick={resetSidebarWidth}
+          title={$t('sidebar.resizeHint')}
+        ></div>
       </aside>
     {:else}
       <!-- svelte-ignore a11y-no-static-element-interactions -->
@@ -876,7 +910,7 @@
               <ProjectSelector />
             </div>
             <div class="flex-1 overflow-hidden">
-              <SessionTree onNewSession={handleNewSession} onNewGroup={handleNewGroup} onTemplates={handleTemplates} onCollapse={() => { sidebarOverlayOpen = false; toggleSidebar(); }} />
+              <SessionTree onNewSession={handleNewSession} onNewGroup={handleNewGroup} onCollapse={() => { sidebarOverlayOpen = false; toggleSidebar(); }} />
             </div>
           </div>
         {/if}

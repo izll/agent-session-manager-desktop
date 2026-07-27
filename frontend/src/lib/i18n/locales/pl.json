@@ -931,5 +931,6 @@
   "templates.keepPath": "Przypnij do tego katalogu",
   "templates.keepPathOn": "Użyteczny tylko w {path}.",
   "templates.keepPathOff": "Użyteczny w każdym projekcie — katalog wybierasz za każdym razem.",
-  "templates.anyDirectory": "dowolny katalog"
+  "templates.anyDirectory": "dowolny katalog",
+  "sidebar.resizeHint": "Przeciągnij, aby zmienić rozmiar · kliknij dwukrotnie, aby zresetować"
 }

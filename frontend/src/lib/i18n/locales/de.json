@@ -931,5 +931,6 @@
   "templates.keepPath": "An dieses Verzeichnis binden",
   "templates.keepPathOn": "Nur verwendbar in {path}.",
   "templates.keepPathOff": "In jedem Projekt verwendbar — das Verzeichnis wählst du jedes Mal.",
-  "templates.anyDirectory": "beliebiges Verzeichnis"
+  "templates.anyDirectory": "beliebiges Verzeichnis",
+  "sidebar.resizeHint": "Ziehen zum Anpassen · Doppelklick setzt zurück"
 }

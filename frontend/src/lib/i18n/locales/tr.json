@@ -931,5 +931,6 @@
   "templates.keepPath": "Bu dizine sabitle",
   "templates.keepPathOn": "Yalnızca burada kullanılabilir: {path}.",
   "templates.keepPathOff": "Her projede kullanılabilir — dizini her seferinde sen seçersin.",
-  "templates.anyDirectory": "herhangi bir dizin"
+  "templates.anyDirectory": "herhangi bir dizin",
+  "sidebar.resizeHint": "Sürükleyerek boyutlandır · çift tıkla sıfırla"
 }

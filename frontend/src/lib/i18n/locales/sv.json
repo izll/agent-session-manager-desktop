@@ -931,5 +931,6 @@
   "templates.keepPath": "Fäst vid den här katalogen",
   "templates.keepPathOn": "Kan bara användas i {path}.",
   "templates.keepPathOff": "Kan användas i vilket projekt som helst — katalogen väljer du varje gång.",
-  "templates.anyDirectory": "valfri katalog"
+  "templates.anyDirectory": "valfri katalog",
+  "sidebar.resizeHint": "Dra för att ändra storlek · dubbelklicka för att återställa"
 }

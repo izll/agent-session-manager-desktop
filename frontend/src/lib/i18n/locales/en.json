@@ -931,5 +931,6 @@
   "templates.keepPath": "Pin to this directory",
   "templates.keepPathOn": "Only usable in {path}.",
   "templates.keepPathOff": "Usable in any project — you pick the directory each time.",
-  "templates.anyDirectory": "any directory"
+  "templates.anyDirectory": "any directory",
+  "sidebar.resizeHint": "Drag to resize · double-click to reset"
 }

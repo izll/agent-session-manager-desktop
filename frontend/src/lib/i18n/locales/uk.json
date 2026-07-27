@@ -931,5 +931,6 @@
   "templates.keepPath": "Закріпити за цим каталогом",
   "templates.keepPathOn": "Доступний лише в {path}.",
   "templates.keepPathOff": "Працює в будь-якому проєкті — каталог обирається щоразу.",
-  "templates.anyDirectory": "будь-який каталог"
+  "templates.anyDirectory": "будь-який каталог",
+  "sidebar.resizeHint": "Перетягніть, щоб змінити · подвійний клік скидає"
 }

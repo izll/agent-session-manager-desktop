@@ -931,5 +931,6 @@
   "templates.keepPath": "Vincola a questa directory",
   "templates.keepPathOn": "Utilizzabile solo in {path}.",
   "templates.keepPathOff": "Utilizzabile in qualsiasi progetto: la directory la scegli ogni volta.",
-  "templates.anyDirectory": "qualsiasi directory"
+  "templates.anyDirectory": "qualsiasi directory",
+  "sidebar.resizeHint": "Trascina per ridimensionare · doppio clic per reimpostare"
 }
