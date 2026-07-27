@@ -675,7 +675,7 @@
     border: 0;
     outline: 0;
     color: #e4e4e7;
-    font-size: 12px;
+    font-size: 13px;
   }
   .terminal-search input::placeholder { color: #52525b; }
   .search-nav {
@@ -683,7 +683,7 @@
     background: transparent;
     color: #a1a1aa;
     cursor: pointer;
-    font-size: 11px;
+    font-size: 12px;
     padding: 2px 4px;
     border-radius: 4px;
   }

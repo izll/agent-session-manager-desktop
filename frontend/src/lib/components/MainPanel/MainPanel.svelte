@@ -691,7 +691,7 @@
     align-items: center;
     gap: 6px;
     padding: 6px 12px;
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 500;
     border-radius: 8px;
     border: none;
@@ -818,7 +818,7 @@
     align-items: center;
     gap: 6px;
     overflow: hidden;
-    font-size: 10px;
+    font-size: 11px;
   }
 
   .split-title strong,
@@ -853,8 +853,8 @@
     text-align: center;
   }
   .split-placeholder span { font-size: 28px; color: var(--accent-dark); }
-  .split-placeholder strong { font-size: 12px; color: #a1a1aa; }
-  .split-placeholder small { max-width: 260px; font-size: 10px; }
+  .split-placeholder strong { font-size: 13px; color: #a1a1aa; }
+  .split-placeholder small { max-width: 260px; font-size: 11px; }
 
   .status-bar.hidden {
     display: none;
@@ -867,7 +867,7 @@
     padding: 8px 16px;
     background: rgba(0, 0, 0, 0.3);
     border-top: 1px solid rgba(255, 255, 255, 0.05);
-    font-size: 12px;
+    font-size: 13px;
   }
 
   .status-left {
@@ -895,18 +895,18 @@
 
   .status-path {
     font-family: 'JetBrains Mono', 'Fira Code', monospace;
-    font-size: 11px;
+    font-size: 12px;
     color: #9ca3af;
   }
 
   .status-id {
     font-family: 'JetBrains Mono', 'Fira Code', monospace;
-    font-size: 11px;
+    font-size: 12px;
     color: var(--accent-light);
   }
 
   .status-notes {
-    font-size: 11px;
+    font-size: 12px;
     color: #6b7280;
     font-style: italic;
   }
@@ -926,7 +926,7 @@
     padding: 2px 8px;
     background: rgba(var(--accent-rgb), 0.2);
     border-radius: 4px;
-    font-size: 11px;
+    font-size: 12px;
     color: var(--accent-light);
     text-transform: capitalize;
   }
@@ -939,7 +939,7 @@
     background: rgba(107, 107, 107, 0.15);
     border: 1px solid rgba(107, 107, 107, 0.3);
     border-radius: 6px;
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 500;
     color: #9ca3af;
     cursor: pointer;
@@ -955,7 +955,7 @@
     border: 1px solid rgba(var(--accent-rgb), 0.2);
     border-radius: 6px;
     color: #8b8b95;
-    font-size: 11px;
+    font-size: 12px;
     cursor: pointer;
   }
   .split-btn:hover:not(:disabled),
@@ -996,7 +996,7 @@
     background: linear-gradient(135deg, rgba(var(--accent-rgb), 0.2) 0%, rgba(99, 102, 241, 0.15) 100%);
     border: 1px solid rgba(var(--accent-rgb), 0.3);
     border-radius: 6px;
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 500;
     color: var(--accent-light);
     cursor: pointer;

@@ -164,7 +164,7 @@
   }
 
   .preview-title {
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.5px;
@@ -175,7 +175,7 @@
     display: flex;
     align-items: center;
     gap: 6px;
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 500;
     padding: 4px 10px;
     border-radius: 12px;

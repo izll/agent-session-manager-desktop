@@ -250,7 +250,7 @@
 
   .label {
     display: block;
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.5px;
@@ -306,7 +306,7 @@
 
   .mode-btn {
     padding: 6px 12px;
-    font-size: 11px;
+    font-size: 12px;
     background: rgba(255, 255, 255, 0.03);
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 6px;
@@ -329,7 +329,7 @@
     display: flex;
     align-items: center;
     gap: 6px;
-    font-size: 11px;
+    font-size: 12px;
     color: #9ca3af;
     cursor: pointer;
   }
@@ -339,7 +339,7 @@
   }
 
   .hint {
-    font-size: 10px;
+    font-size: 11px;
     color: #4b5563;
     margin-left: auto;
   }
@@ -422,7 +422,7 @@
   }
 
   .color-name {
-    font-size: 10px;
+    font-size: 11px;
     color: #9ca3af;
     white-space: nowrap;
     overflow: hidden;

@@ -833,7 +833,7 @@
     font-weight: 600;
   }
   .large-diff-hint {
-    font-size: 12px;
+    font-size: 13px;
     color: #a1a1aa;
     max-width: 360px;
     line-height: 1.5;
@@ -882,7 +882,7 @@
   }
 
   .diff-title {
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.5px;
@@ -892,7 +892,7 @@
   .diff-stats {
     display: flex;
     gap: 8px;
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 600;
     font-family: monospace;
   }
@@ -922,7 +922,7 @@
   .copy-btn {
     gap: 6px;
     padding: 0 9px;
-    font-size: 11px;
+    font-size: 12px;
   }
 
   .refresh-btn {
@@ -998,7 +998,7 @@
     justify-content: space-between;
     gap: 8px;
     padding: 4px 8px 4px 12px;
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.5px;
@@ -1056,7 +1056,7 @@
   }
 
   .tree-dir-name {
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 600;
     color: #9ca3af;
     white-space: nowrap;
@@ -1072,7 +1072,7 @@
     border-radius: 8px;
     background: rgba(255, 255, 255, 0.06);
     color: #6b7280;
-    font-size: 10px;
+    font-size: 11px;
     font-family: monospace;
     font-weight: 600;
     line-height: 15px;
@@ -1126,7 +1126,7 @@
     align-items: center;
     justify-content: center;
     border-radius: 4px;
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 700;
     font-family: monospace;
   }
@@ -1171,7 +1171,7 @@
   }
 
   .file-path {
-    font-size: 12px;
+    font-size: 13px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1200,7 +1200,7 @@
     align-items: center;
     gap: 6px;
     flex-shrink: 0;
-    font-size: 11px;
+    font-size: 12px;
     font-family: monospace;
     font-weight: 600;
   }
@@ -1215,7 +1215,7 @@
     color: #9ca3af;
     cursor: pointer;
     padding: 2px 5px;
-    font-size: 10px;
+    font-size: 11px;
     font-family: inherit;
     transition: all 0.15s ease;
   }
@@ -1244,7 +1244,7 @@
 
   .revert-error {
     padding: 8px 16px;
-    font-size: 12px;
+    font-size: 13px;
     color: #f87171;
     background: rgba(239, 68, 68, 0.1);
     border-bottom: 1px solid rgba(239, 68, 68, 0.25);
@@ -1268,7 +1268,7 @@
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
     background: rgba(0, 0, 0, 0.2);
     font-family: 'JetBrains Mono', 'Fira Code', monospace;
-    font-size: 11px;
+    font-size: 12px;
     color: #d4d4d8;
     flex-shrink: 0;
   }
@@ -1305,7 +1305,7 @@
     width: 16px;
     text-align: center;
     border-radius: 3px;
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 700;
     line-height: 16px;
   }
@@ -1319,7 +1319,7 @@
     overflow: auto;
     min-width: 0;
     font-family: 'JetBrains Mono', 'Fira Code', monospace;
-    font-size: 12px;
+    font-size: 13px;
     user-select: text;
     -webkit-user-select: text;
   }
@@ -1339,7 +1339,7 @@
   }
 
   .no-diff-hint {
-    font-size: 12px;
+    font-size: 13px;
     opacity: 0.6;
   }
 

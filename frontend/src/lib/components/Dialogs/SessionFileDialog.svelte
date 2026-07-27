@@ -184,22 +184,22 @@
   .state, .done { padding: 26px 0; text-align: center; font-size: 13px; }
   .state { color: #71717a; }
   .done { color: #4ade80; }
-  .error-line { color: #fb7185; font-size: 12px; }
+  .error-line { color: #fb7185; font-size: 13px; }
 
   .file-meta { display: flex; flex-direction: column; gap: 2px; margin-bottom: 12px; }
   .file-path {
-    font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #a1a1aa;
+    font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #a1a1aa;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
-  .file-date { font-size: 11px; color: #6b7280; }
+  .file-date { font-size: 12px; color: #6b7280; }
 
   .list-head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
   .link-btn {
     border: 0; background: none; padding: 0; cursor: pointer;
-    font-size: 11px; color: var(--accent-light); text-decoration: underline;
+    font-size: 12px; color: var(--accent-light); text-decoration: underline;
   }
   .link-btn:hover { color: var(--accent-pale); }
-  .count { font-size: 11px; color: #6b7280; }
+  .count { font-size: 12px; color: #6b7280; }
 
   .session-list { display: flex; flex-direction: column; gap: 3px; }
   .session-row {
@@ -216,23 +216,23 @@
   .session-main { display: flex; flex-direction: column; gap: 1px; flex: 1; min-width: 0; }
   .session-name { font-size: 13px; color: #e4e4e7; display: flex; align-items: center; gap: 6px; }
   .tab-count {
-    font-size: 10px; color: #a1a1aa; padding: 0 5px;
+    font-size: 11px; color: #a1a1aa; padding: 0 5px;
     border-radius: 999px; background: rgba(255, 255, 255, 0.07);
   }
   .session-path {
-    font-family: 'JetBrains Mono', monospace; font-size: 10px; color: #6b7280;
+    font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #6b7280;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
-  .path-warning { font-size: 10px; color: #fbbf24; }
-  .session-agent { font-size: 10px; color: #71717a; flex-shrink: 0; }
-  .missing-note { margin: 10px 0 0; font-size: 11px; color: #fbbf24; }
+  .path-warning { font-size: 11px; color: #fbbf24; }
+  .session-agent { font-size: 11px; color: #71717a; flex-shrink: 0; }
+  .missing-note { margin: 10px 0 0; font-size: 12px; color: #fbbf24; }
 
   .dialog-footer {
     display: flex; justify-content: flex-end; gap: 8px;
     padding: 12px 18px; border-top: 1px solid rgba(255, 255, 255, 0.06);
   }
   .btn-primary, .btn-secondary {
-    padding: 7px 16px; border-radius: 7px; font-size: 12px; font-weight: 600; cursor: pointer;
+    padding: 7px 16px; border-radius: 7px; font-size: 13px; font-weight: 600; cursor: pointer;
   }
   .btn-secondary {
     border: 1px solid rgba(255, 255, 255, 0.12);

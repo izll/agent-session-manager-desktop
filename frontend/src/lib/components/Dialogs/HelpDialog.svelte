@@ -152,7 +152,7 @@
   }
 
   .section-title {
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.5px;
@@ -179,7 +179,7 @@
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 6px;
     font-family: monospace;
-    font-size: 12px;
+    font-size: 13px;
     color: #e4e4e7;
     text-align: center;
   }
@@ -237,7 +237,7 @@
     padding: 2px 6px;
     background: rgba(var(--accent-rgb), 0.2);
     border-radius: 4px;
-    font-size: 11px;
+    font-size: 12px;
     color: var(--accent-light);
   }
 </style>

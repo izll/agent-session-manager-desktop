@@ -309,10 +309,10 @@
   .dialog-header h2 { margin: 0; color: #e4e4e7; font-size: 16px; }
   .close-btn { background: none; border: 0; color: #71717a; font-size: 20px; cursor: pointer; }
   .close-btn:hover { color: #e4e4e7; }
-  .error-line { color: #fb7185; font-size: 11px; margin-bottom: 8px; }
+  .error-line { color: #fb7185; font-size: 12px; margin-bottom: 8px; }
   .agent-count {
     display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 999px;
-    background: rgba(var(--accent-rgb), 0.15); color: var(--accent-light); font-size: 11px; vertical-align: 2px;
+    background: rgba(var(--accent-rgb), 0.15); color: var(--accent-light); font-size: 12px; vertical-align: 2px;
   }
   .filter-box {
     display: flex; align-items: center; gap: 8px; margin-bottom: 10px;
@@ -320,11 +320,11 @@
     border: 1px solid rgba(255, 255, 255, 0.08); background: rgba(0, 0, 0, 0.25); color: #52525b;
   }
   .filter-box:focus-within { border-color: rgba(var(--accent-rgb), 0.45); color: var(--accent-light); }
-  .filter-box input { flex: 1; min-width: 0; background: transparent; border: 0; outline: 0; color: #e4e4e7; font-size: 12px; }
+  .filter-box input { flex: 1; min-width: 0; background: transparent; border: 0; outline: 0; color: #e4e4e7; font-size: 13px; }
   .filter-box input::placeholder { color: #52525b; }
   .clear-filter { border: 0; background: transparent; color: #71717a; cursor: pointer; font-size: 16px; line-height: 1; }
   .empty { color: #71717a; text-align: center; padding: 32px 0; font-size: 13px; }
-  .empty .hint { display: block; margin-top: 6px; font-size: 11px; color: #52525b; }
+  .empty .hint { display: block; margin-top: 6px; font-size: 12px; color: #52525b; }
   .agent-list { display: flex; flex-direction: column; gap: 4px; }
   .agent-row {
     display: flex; align-items: center; gap: 10px;
@@ -337,10 +337,10 @@
   .status-dot.idle { background: #4ade80; }
   .agent-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
   .agent-name { color: #e4e4e7; font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .agent-meta { color: #71717a; font-size: 10px; font-family: monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .agent-meta { color: #71717a; font-size: 11px; font-family: monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .agent-actions { display: flex; gap: 6px; flex-shrink: 0; }
   .agent-actions button {
-    padding: 5px 10px; border-radius: 6px; font-size: 11px; cursor: pointer;
+    padding: 5px 10px; border-radius: 6px; font-size: 12px; cursor: pointer;
     border: 1px solid rgba(255, 255, 255, 0.12);
     background: rgba(255, 255, 255, 0.05); color: #d4d4d8;
   }
@@ -381,24 +381,24 @@
     color: var(--accent-light);
   }
   .attach-card:disabled { opacity: 0.4; cursor: default; }
-  .attach-card-title { font-size: 12px; font-weight: 650; color: #e4e4e7; }
+  .attach-card-title { font-size: 13px; font-weight: 650; color: #e4e4e7; }
   .attach-card.selected .attach-card-title { color: var(--accent-pale); }
-  .attach-card-desc { font-size: 10px; color: #71717a; line-height: 1.35; }
+  .attach-card-desc { font-size: 11px; color: #71717a; line-height: 1.35; }
   .attach-fields { display: flex; gap: 14px; flex-wrap: wrap; }
   .attach-field { display: flex; flex-direction: column; gap: 5px; min-width: 180px; flex: 1; }
   .attach-label {
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.5px;
     color: #9ca3af;
   }
-  .cascade-empty { color: #71717a; font-size: 11px; font-style: italic; padding: 7px 0; }
+  .cascade-empty { color: #71717a; font-size: 12px; font-style: italic; padding: 7px 0; }
   .attach-buttons { display: flex; gap: 8px; justify-content: flex-end; }
   .attach-buttons button {
     padding: 7px 16px;
     border-radius: 7px;
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 600;
     cursor: pointer;
     transition: all 0.15s ease;
@@ -422,7 +422,7 @@
   .agent-logs {
     margin: 2px 0 6px; padding: 10px; border-radius: 8px;
     background: rgba(0, 0, 0, 0.4); border: 1px solid rgba(255, 255, 255, 0.05);
-    color: #a1a1aa; font-size: 11px; line-height: 1.45;
+    color: #a1a1aa; font-size: 12px; line-height: 1.45;
     max-height: 260px; overflow: auto; white-space: pre-wrap; word-break: break-word;
   }
 </style>

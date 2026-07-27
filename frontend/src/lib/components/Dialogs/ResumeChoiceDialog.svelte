@@ -275,7 +275,7 @@
   }
 
   .option-desc {
-    font-size: 12px;
+    font-size: 13px;
     color: #9ca3af;
   }
 
@@ -283,7 +283,7 @@
     position: absolute;
     top: 12px;
     right: 16px;
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 600;
     color: #6b7280;
     background: rgba(255, 255, 255, 0.05);
@@ -311,7 +311,7 @@
 
   .dialog-hint {
     margin-top: 20px;
-    font-size: 12px;
+    font-size: 13px;
     color: #6b7280;
   }
 </style>

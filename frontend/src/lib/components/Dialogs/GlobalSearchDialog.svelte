@@ -610,7 +610,7 @@
 
   .preview-text {
     font-family: 'JetBrains Mono', 'Fira Code', monospace;
-    font-size: 12px;
+    font-size: 13px;
     line-height: 1.6;
     color: #e4e4e7;
     white-space: pre-wrap;
@@ -639,7 +639,7 @@
   }
 
   .match-counter {
-    font-size: 12px;
+    font-size: 13px;
     color: #9ca3af;
     padding: 0 8px;
     font-variant-numeric: tabular-nums;
@@ -681,7 +681,7 @@
   }
 
   .hint {
-    font-size: 12px;
+    font-size: 13px;
     opacity: 0.7;
   }
 
@@ -749,7 +749,7 @@
     display: flex;
     align-items: center;
     gap: 12px;
-    font-size: 11px;
+    font-size: 12px;
   }
 
   .agent-name {
@@ -765,7 +765,7 @@
   .dialog-footer {
     justify-content: space-between;
     padding: 10px 20px;
-    font-size: 11px;
+    font-size: 12px;
     color: #4b5563;
   }
 
@@ -785,7 +785,7 @@
     border: 1px solid rgba(255, 255, 255, 0.15);
     border-radius: 4px;
     font-family: inherit;
-    font-size: 10px;
+    font-size: 11px;
     color: #9ca3af;
   }
 

@@ -144,11 +144,11 @@
   .manager-toggle {
     align-self: flex-start; display: flex; align-items: center; gap: 6px;
     padding: 4px 2px; border: 0; background: none; cursor: pointer;
-    color: #a1a1aa; font-size: 12px;
+    color: #a1a1aa; font-size: 13px;
   }
   .manager-toggle:hover { color: #e4e4e7; }
   .count {
-    padding: 1px 6px; border-radius: 999px; font-size: 10px;
+    padding: 1px 6px; border-radius: 999px; font-size: 11px;
     background: rgba(var(--accent-rgb), 0.15); color: var(--accent-light);
   }
 
@@ -156,11 +156,11 @@
   .custom-row { display: flex; align-items: center; gap: 6px; }
   .custom-row.editing .custom-name { border-color: rgba(var(--accent-rgb), 0.5); }
   .custom-name {
-    flex: 1; min-width: 0; padding: 6px 9px; border-radius: 6px; font-size: 12px;
+    flex: 1; min-width: 0; padding: 6px 9px; border-radius: 6px; font-size: 13px;
     border: 1px solid rgba(255, 255, 255, 0.12); background: rgba(0, 0, 0, 0.25); color: #e4e4e7;
   }
   .palette-toggle {
-    padding: 6px 12px; border-radius: 7px; font-size: 12px; cursor: pointer;
+    padding: 6px 12px; border-radius: 7px; font-size: 13px; cursor: pointer;
     border: 1px solid rgba(255, 255, 255, 0.12); background: rgba(255, 255, 255, 0.05); color: #d4d4d8;
   }
   .palette-toggle:hover { border-color: rgba(var(--accent-rgb), 0.5); color: var(--accent-pale); }
@@ -170,20 +170,20 @@
   }
   .palette-delete:hover { color: #fb7185; border-color: rgba(251, 113, 133, 0.5); }
   .palette-add {
-    align-self: flex-start; padding: 6px 12px; border-radius: 7px; font-size: 12px; cursor: pointer;
+    align-self: flex-start; padding: 6px 12px; border-radius: 7px; font-size: 13px; cursor: pointer;
     border: 1px dashed rgba(var(--accent-rgb), 0.4); background: rgba(var(--accent-rgb), 0.08); color: var(--accent-lighter);
   }
   .palette-add:hover { background: rgba(var(--accent-rgb), 0.16); }
   .manager-actions { display: flex; gap: 8px; flex-wrap: wrap; }
   .palette-import {
-    padding: 6px 12px; border-radius: 7px; font-size: 12px; cursor: pointer;
+    padding: 6px 12px; border-radius: 7px; font-size: 13px; cursor: pointer;
     border: 1px solid rgba(255,255,255,.12); background: rgba(255,255,255,.05); color: #d4d4d8;
   }
   .palette-import:hover { border-color: rgba(var(--accent-rgb), .5); color: var(--accent-pale); }
 
   .palette-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(168px, 1fr)); gap: 10px; }
   .palette-swatch { display: flex; flex-direction: column; gap: 4px; }
-  .swatch-label { font-size: 11px; color: #a1a1aa; }
+  .swatch-label { font-size: 12px; color: #a1a1aa; }
   .swatch-inputs { display: flex; align-items: center; gap: 6px; }
   .palette-swatch input[type="color"] {
     width: 32px; height: 26px; padding: 0; border: 1px solid rgba(255, 255, 255, 0.15);
@@ -192,7 +192,7 @@
   .hex-input {
     flex: 1; min-width: 0; width: 100%; padding: 5px 7px; border-radius: 5px;
     border: 1px solid rgba(255, 255, 255, 0.12); background: rgba(0, 0, 0, 0.25);
-    color: #e4e4e7; font-family: 'JetBrains Mono', Menlo, monospace; font-size: 11px;
+    color: #e4e4e7; font-family: 'JetBrains Mono', Menlo, monospace; font-size: 12px;
   }
   .hex-input:focus { outline: none; border-color: rgba(var(--accent-rgb), 0.5); }
 </style>

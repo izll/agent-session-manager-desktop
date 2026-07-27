@@ -270,7 +270,7 @@
 
   .form-label {
     display: block;
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.5px;
@@ -316,7 +316,7 @@
   }
 
   .type-desc {
-    font-size: 11px;
+    font-size: 12px;
     opacity: 0.7;
   }
 
@@ -338,7 +338,7 @@
     cursor: pointer;
     transition: all 0.2s ease;
     color: #9ca3af;
-    font-size: 11px;
+    font-size: 12px;
   }
 
   .agent-btn:hover {
@@ -361,7 +361,7 @@
     border: 1px solid rgba(255, 255, 255, 0.12);
     background: rgba(255, 255, 255, 0.05);
     color: #d4d4d8;
-    font-size: 12px;
+    font-size: 13px;
     cursor: pointer;
   }
   .browse-btn:hover { border-color: rgba(var(--accent-rgb), 0.5); color: var(--accent-pale); }

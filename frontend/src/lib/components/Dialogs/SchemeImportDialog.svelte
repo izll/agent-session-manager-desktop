@@ -307,19 +307,19 @@
 
   .source-tabs { display: flex; gap: 6px; }
   .source-tabs button {
-    padding: 6px 14px; border-radius: 7px; font-size: 12px; cursor: pointer;
+    padding: 6px 14px; border-radius: 7px; font-size: 13px; cursor: pointer;
     border: 1px solid rgba(255, 255, 255, 0.1); background: rgba(255, 255, 255, 0.04); color: #a1a1aa;
   }
   .source-tabs button.active {
     border-color: rgba(var(--accent-rgb), 0.6); background: rgba(var(--accent-rgb), 0.15); color: var(--accent-pale);
   }
-  .source-hint { margin: 0; font-size: 11px; color: #71717a; }
-  .error-line { color: #fb7185; font-size: 12px; }
+  .source-hint { margin: 0; font-size: 12px; color: #71717a; }
+  .error-line { color: #fb7185; font-size: 13px; }
   .state { padding: 30px 0; text-align: center; color: #71717a; font-size: 13px; }
 
   .filter, .online-list, .found-list { width: 100%; }
   .filter {
-    padding: 7px 10px; border-radius: 7px; font-size: 12px;
+    padding: 7px 10px; border-radius: 7px; font-size: 13px;
     border: 1px solid rgba(255, 255, 255, 0.12); background: rgba(0, 0, 0, 0.25); color: #e4e4e7;
   }
   .online-picker { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
@@ -329,42 +329,42 @@
   }
   .online-row, .found-row {
     display: flex; align-items: center; gap: 8px; padding: 5px 8px;
-    border-radius: 6px; font-size: 12px; color: #d4d4d8; cursor: pointer;
+    border-radius: 6px; font-size: 13px; color: #d4d4d8; cursor: pointer;
   }
   .online-row:hover, .found-row:hover { background: rgba(255, 255, 255, 0.05); }
   .online-row.checked, .found-row.checked { background: rgba(var(--accent-rgb), 0.12); color: var(--accent-pale); }
   .online-row input, .found-row input { accent-color: var(--accent); }
   .online-actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-  .count { font-size: 11px; color: #71717a; }
+  .count { font-size: 12px; color: #71717a; }
 
   .found-head { display: flex; align-items: center; gap: 10px; }
   .found-head .back { margin-left: auto; }
   .link-btn {
     border: 0; background: none; padding: 0; cursor: pointer;
-    font-size: 11px; color: var(--accent-light); text-decoration: underline;
+    font-size: 12px; color: var(--accent-light); text-decoration: underline;
   }
   .link-btn:hover { color: var(--accent-pale); }
   .file-state { display: flex; justify-content: center; }
-  .dup-note { margin: 0; font-size: 11px; color: #fbbf24; }
+  .dup-note { margin: 0; font-size: 12px; color: #fbbf24; }
 
   .found-list { display: flex; flex-direction: column; gap: 2px; max-height: 200px; overflow-y: auto; }
   .found-name { flex: 1; }
   .found-source {
-    font-size: 10px; color: #71717a; padding: 1px 6px; border-radius: 999px;
+    font-size: 11px; color: #71717a; padding: 1px 6px; border-radius: 999px;
     background: rgba(255, 255, 255, 0.06);
   }
   .preview-strip { max-height: 200px; overflow-y: auto; }
 
   .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 2px; }
   .dialog-actions button {
-    padding: 7px 16px; border-radius: 7px; font-size: 12px; font-weight: 600; cursor: pointer;
+    padding: 7px 16px; border-radius: 7px; font-size: 13px; font-weight: 600; cursor: pointer;
   }
   .dialog-actions .cancel {
     border: 1px solid rgba(255, 255, 255, 0.12); background: rgba(255, 255, 255, 0.04); color: #a1a1aa;
   }
   .dialog-actions .primary, .online-actions .primary {
     border: 1px solid var(--accent); background: linear-gradient(135deg, var(--accent-dark), var(--accent)); color: var(--accent-ink);
-    padding: 7px 16px; border-radius: 7px; font-size: 12px; font-weight: 600; cursor: pointer;
+    padding: 7px 16px; border-radius: 7px; font-size: 13px; font-weight: 600; cursor: pointer;
   }
   .dialog-actions .primary:disabled, .online-actions .primary:disabled { opacity: 0.45; cursor: default; }
 </style>

@@ -283,7 +283,7 @@
 
   .checked-at {
     margin-top: 8px;
-    font-size: 11px;
+    font-size: 12px;
     color: #6b7280;
     text-align: center;
   }

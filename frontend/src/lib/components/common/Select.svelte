@@ -134,7 +134,7 @@
 
   .small .select-trigger {
     padding: 6px 10px;
-    font-size: 12px;
+    font-size: 13px;
     color: #9ca3af;
     background: rgba(255, 255, 255, 0.05);
     border-radius: 6px;
@@ -203,7 +203,7 @@
 
   :global(.select-dropdown.small .select-option) {
     padding: 8px 10px;
-    font-size: 12px;
+    font-size: 13px;
   }
 
   :global(.select-dropdown .select-option:hover) {

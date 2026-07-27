@@ -184,7 +184,7 @@
   }
 
   .notes-title {
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.5px;
@@ -192,7 +192,7 @@
   }
 
   .save-indicator {
-    font-size: 11px;
+    font-size: 12px;
     color: #4ade80;
   }
 

@@ -219,7 +219,7 @@
     background: rgba(var(--accent-rgb), 0.1);
     border: 1px solid rgba(var(--accent-rgb), 0.2);
     border-radius: 10px;
-    font-size: 12px;
+    font-size: 13px;
     color: var(--accent-light);
     line-height: 1.5;
   }
@@ -249,7 +249,7 @@
 
   .form-label {
     display: block;
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.5px;
@@ -300,7 +300,7 @@
   }
 
   .mode-desc {
-    font-size: 11px;
+    font-size: 12px;
     opacity: 0.7;
   }
 

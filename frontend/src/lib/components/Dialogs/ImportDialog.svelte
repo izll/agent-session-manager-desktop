@@ -384,7 +384,7 @@
     background: none;
     border: none;
     color: var(--accent-light);
-    font-size: 12px;
+    font-size: 13px;
     cursor: pointer;
     padding: 0;
   }
@@ -450,11 +450,11 @@
 
   .favorite {
     color: #fbbf24;
-    font-size: 12px;
+    font-size: 13px;
   }
 
   .session-path {
-    font-size: 11px;
+    font-size: 12px;
     color: #6b7280;
     max-width: 150px;
     white-space: nowrap;

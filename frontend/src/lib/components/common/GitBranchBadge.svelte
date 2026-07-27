@@ -230,7 +230,7 @@
 
   .git-branch-name {
     font-family: 'JetBrains Mono', 'Fira Code', monospace;
-    font-size: 11px;
+    font-size: 12px;
     max-width: 180px;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -238,7 +238,7 @@
   }
 
   .git-branch-counts {
-    font-size: 11px;
+    font-size: 12px;
     color: var(--accent-light);
   }
 
@@ -304,7 +304,7 @@
 
   :global(.branch-menu .branch-menu-title) {
     padding: 4px 8px 6px;
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 600;
     letter-spacing: 0.06em;
     text-transform: uppercase;
@@ -313,7 +313,7 @@
 
   :global(.branch-menu .branch-menu-note) {
     padding: 6px 8px;
-    font-size: 11px;
+    font-size: 12px;
     color: #6b7280;
     font-style: italic;
   }
@@ -337,7 +337,7 @@
     align-items: center;
     gap: 8px;
     padding: 5px 8px;
-    font-size: 12px;
+    font-size: 13px;
     color: #9ca3af;
     cursor: default;
     user-select: text;
@@ -367,7 +367,7 @@
 
   :global(.branch-menu .branch-row-hash) {
     font-family: 'JetBrains Mono', 'Fira Code', monospace;
-    font-size: 10px;
+    font-size: 11px;
     color: #4b5563;
     flex-shrink: 0;
   }

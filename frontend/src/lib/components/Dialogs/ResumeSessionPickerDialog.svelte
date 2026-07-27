@@ -354,7 +354,7 @@
   }
 
   .session-desc {
-    font-size: 12px;
+    font-size: 13px;
     color: #9ca3af;
   }
 
@@ -362,7 +362,7 @@
     margin-top: 16px;
     padding-top: 16px;
     border-top: 1px solid rgba(255, 255, 255, 0.1);
-    font-size: 12px;
+    font-size: 13px;
     color: #6b7280;
     text-align: center;
   }

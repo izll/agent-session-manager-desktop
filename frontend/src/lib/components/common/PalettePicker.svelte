@@ -102,7 +102,7 @@
     padding: 6px 7px;
     border-radius: 5px;
     font-family: 'JetBrains Mono', Menlo, monospace;
-    font-size: 8px;
+    font-size: 9px;
     line-height: 1.35;
     text-align: left;
     overflow: hidden;
@@ -117,7 +117,7 @@
   .swatch { width: 7px; height: 7px; border-radius: 2px; flex-shrink: 0; }
 
   .palette-name {
-    font-size: 10px;
+    font-size: 11px;
     color: #d4d4d8;
     text-align: center;
     white-space: nowrap;

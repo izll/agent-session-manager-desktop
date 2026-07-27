@@ -445,19 +445,19 @@
 
   .dialog-body { padding: 14px 18px; overflow-y: auto; flex: 1; min-height: 0; }
   .state { padding: 26px 0; text-align: center; font-size: 13px; color: #71717a; }
-  .error-line { color: #fb7185; font-size: 12px; margin-bottom: 10px; }
+  .error-line { color: #fb7185; font-size: 13px; margin-bottom: 10px; }
 
   .empty { padding: 26px 0; text-align: center; }
   .empty-title { margin: 0 0 6px; font-size: 14px; color: #e4e4e7; }
-  .empty-hint { margin: 0; font-size: 12px; color: #71717a; line-height: 1.6; }
+  .empty-hint { margin: 0; font-size: 13px; color: #71717a; line-height: 1.6; }
 
   .section { margin-bottom: 14px; }
   .section-head { display: flex; align-items: center; gap: 6px; padding: 4px 2px; }
   .section-name {
-    font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: #6b7280;
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: #6b7280;
   }
   .section-head .add { margin-left: auto; }
-  .section-empty { font-size: 11px; color: #52525b; padding: 4px 9px; }
+  .section-empty { font-size: 12px; color: #52525b; padding: 4px 9px; }
 
   .cmd-row {
     display: flex; align-items: center; gap: 8px; padding: 7px 9px;
@@ -467,31 +467,31 @@
   .cmd-main { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
   .cmd-name { font-size: 13px; color: #e4e4e7; }
   .cmd-text {
-    font-family: 'JetBrains Mono', monospace; font-size: 10px; color: #6b7280;
+    font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #6b7280;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
-  .cmd-desc { font-size: 11px; color: #71717a; }
+  .cmd-desc { font-size: 12px; color: #71717a; }
 
   .icon-btn {
     border: 1px solid rgba(255, 255, 255, 0.1); background: rgba(255, 255, 255, 0.04);
     color: #a1a1aa; border-radius: 6px; width: 24px; height: 24px;
-    font-size: 12px; cursor: pointer; flex-shrink: 0;
+    font-size: 13px; cursor: pointer; flex-shrink: 0;
   }
   .icon-btn:hover { color: #e4e4e7; background: rgba(255, 255, 255, 0.08); }
   .icon-btn.danger:hover { color: #fb7185; border-color: rgba(251, 113, 133, 0.4); }
 
   .link-btn {
     border: 0; background: none; padding: 0; cursor: pointer;
-    font-size: 11px; color: var(--accent-light); text-decoration: underline;
+    font-size: 12px; color: var(--accent-light); text-decoration: underline;
   }
   .link-btn:hover { color: var(--accent-pale); }
 
   .form { display: flex; flex-direction: column; gap: 10px; }
   .form-title { margin: 0; font-size: 13px; color: #e4e4e7; }
   .field { display: flex; flex-direction: column; gap: 3px; }
-  .field-label { font-size: 11px; color: #a1a1aa; }
+  .field-label { font-size: 12px; color: #a1a1aa; }
   .field input, .field textarea {
-    padding: 7px 10px; border-radius: 7px; font-size: 12px;
+    padding: 7px 10px; border-radius: 7px; font-size: 13px;
     border: 1px solid rgba(255, 255, 255, 0.12);
     background: rgba(0, 0, 0, 0.25); color: #e4e4e7;
     font-family: inherit; resize: vertical;
@@ -505,18 +505,18 @@
     display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
     margin-top: -4px; min-height: 18px;
   }
-  .ph-label { font-size: 10px; color: #6b7280; }
-  .ph-hint { font-size: 10px; color: #52525b; }
+  .ph-label { font-size: 11px; color: #6b7280; }
+  .ph-hint { font-size: 11px; color: #52525b; }
   .ph-chip {
-    font-family: 'JetBrains Mono', monospace; font-size: 10px; color: #a5b4fc;
+    font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #a5b4fc;
     background: rgba(var(--accent-rgb), 0.15); border-radius: 999px; padding: 1px 8px;
   }
 
   .toggle-row { display: flex; align-items: flex-start; gap: 9px; cursor: pointer; }
   .toggle-row input { margin-top: 2px; accent-color: var(--accent); }
   .toggle-main { display: flex; flex-direction: column; gap: 1px; }
-  .toggle-label { font-size: 12px; color: #e4e4e7; }
-  .toggle-hint { font-size: 10px; color: #6b7280; }
+  .toggle-label { font-size: 13px; color: #e4e4e7; }
+  .toggle-hint { font-size: 11px; color: #6b7280; }
 
   .form-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
 
@@ -525,7 +525,7 @@
     padding: 12px 18px; border-top: 1px solid rgba(255, 255, 255, 0.06);
   }
   .btn-primary, .btn-secondary {
-    padding: 7px 16px; border-radius: 7px; font-size: 12px; font-weight: 600; cursor: pointer;
+    padding: 7px 16px; border-radius: 7px; font-size: 13px; font-weight: 600; cursor: pointer;
   }
   .btn-secondary {
     border: 1px solid rgba(255, 255, 255, 0.12);
