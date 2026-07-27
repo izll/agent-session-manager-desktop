@@ -431,6 +431,12 @@
               <line x1="16" y1="17" x2="8" y2="17"/>
             </svg>
             {$t('mainPanel.notes')}
+            <!-- A dot when this tab has a note, so it is visible without
+                 opening the view. A count would be false precision: there is
+                 one note per tab, and it either exists or it doesn't. -->
+            {#if currentTabNotes}
+              <span class="tab-dot" title={currentTabNotes}></span>
+            {/if}
           </button>
           <button
             class="view-tab {activeView === 'tasks' ? 'active' : ''}"
@@ -613,17 +619,6 @@
           </div>
         {/if}
 
-        {#if currentTabNotes}
-          <span class="status-divider"></span>
-          <!-- Notes preview -->
-          <div class="status-item notes-preview" title={currentTabNotes}>
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
-              <polyline points="14 2 14 8 20 8"/>
-            </svg>
-            <span class="status-notes">{currentTabNotes.slice(0, 30)}{currentTabNotes.length > 30 ? '...' : ''}</span>
-          </div>
-        {/if}
       </div>
 
       <div class="status-right">
@@ -905,15 +900,16 @@
     color: var(--accent-light);
   }
 
-  .status-notes {
-    font-size: 12px;
-    color: #6b7280;
-    font-style: italic;
-  }
 
-  .notes-preview {
-    max-width: 200px;
-    overflow: hidden;
+  /* Marks a view tab as having content. Deliberately small and accent-toned:
+     it is a hint, not a badge demanding attention. */
+  .tab-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--accent-light);
+    opacity: 0.6;
+    flex-shrink: 0;
   }
 
   .status-divider {
