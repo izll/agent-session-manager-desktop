@@ -946,16 +946,18 @@
     transition: all 0.2s ease;
   }
 
+  /* Matches .yolo-btn and .fork-btn, its neighbours in view-tabs-right — not
+     the view tabs on the left, which are a taller control of a different kind. */
   .split-btn {
     display: flex;
     align-items: center;
     gap: 6px;
-    padding: 5px 10px;
+    padding: 5px 12px;
     background: rgba(var(--accent-rgb), 0.08);
     border: 1px solid rgba(var(--accent-rgb), 0.2);
     border-radius: 6px;
     color: #8b8b95;
-    font-size: 12px;
+    font-size: 13px;
     cursor: pointer;
   }
   .split-btn:hover:not(:disabled),

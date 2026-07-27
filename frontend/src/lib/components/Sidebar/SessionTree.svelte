@@ -20,7 +20,6 @@
   export let onNewSession: () => void;
   export let onNewGroup: () => void;
   export let onCollapse: () => void;
-  export let onTemplates: () => void;
 
   let ungroupedDragOver = false;
   let sessionListEl: HTMLDivElement;
@@ -260,26 +259,16 @@
           <line x1="12" y1="5" x2="12" y2="19"/>
           <line x1="5" y1="12" x2="19" y2="12"/>
         </svg>
-        {$t('sidebar.session')}
+        <span>{$t('sidebar.session')}</span>
       </button>
-      <button class="new-btn group" on:click={onNewGroup} title={$t('sidebar.newGroup')}>
+      <button class="new-btn group icon-only" on:click={onNewGroup} title={$t('sidebar.newGroup')}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/>
         </svg>
-        {$t('sidebar.group')}
       </button>
-      <!-- Icon-only, next to "new session": templates are another way to
-           create one, but a third full-width button would crowd the footer.
-           A context-menu-only entry would be too easy never to find. -->
-      <button class="collapse-btn" on:click={onTemplates} title={$t('sidebar.templates')}>
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <rect x="3" y="3" width="7" height="7" rx="1"/>
-          <rect x="14" y="3" width="7" height="7" rx="1"/>
-          <rect x="3" y="14" width="7" height="7" rx="1"/>
-          <line x1="17.5" y1="14" x2="17.5" y2="21"/>
-          <line x1="14" y1="17.5" x2="21" y2="17.5"/>
-        </svg>
-      </button>
+      <!-- No templates button here: a fourth control pushed the footer wide
+           enough to shift the whole list. Templates stay reachable from the
+           new-session dialog, the command palette and a session's own menu. -->
       <button class="collapse-btn" on:click={onCollapse} title={$t('sidebar.collapseSidebar')}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <polyline points="15 18 9 12 15 6"/>
@@ -528,7 +517,12 @@
   }
 
   .new-btn {
-    flex: 1;
+    /* Sized to their labels rather than split evenly: at flex: 1 the longer
+       "Munkamenet" ran out of room and ellipsised while "Csoport" sat in
+       spare space. min-width lets them still give way before the collapse
+       button gets pushed off the sidebar's edge. */
+    flex: 1 1 auto;
+    min-width: 0;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -541,6 +535,25 @@
     color: white;
     cursor: pointer;
     transition: all 0.2s ease;
+  }
+
+  /* The icon must keep its size; only the words give way. */
+  .new-btn svg {
+    flex-shrink: 0;
+  }
+
+  /* Creating a group is the rarer action, so it gives its label back to the
+     primary button — which then fits at any sidebar width without ellipsis.
+     Its meaning lives in the tooltip. */
+  .new-btn.icon-only {
+    flex: 0 0 auto;
+    padding: 10px 14px;
+  }
+
+  .new-btn span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .new-btn.session {
