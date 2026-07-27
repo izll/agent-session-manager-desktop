@@ -26,6 +26,12 @@ export interface Settings {
   gitBranchDisplay: GitBranchDisplay;
   /** Show the diff's file list as a directory tree instead of a flat list. */
   diffFlatFileList: boolean;
+  /**
+   * Days a deleted session or tab stays in the trash. 0 means the backend
+   * default, and "keep everything" is a negative — 0 was already taken by
+   * "unset", which every config predating this setting reports.
+   */
+  trashRetentionDays: number;
   /** Default terminal font size in px; 0 means the built-in default. */
   terminalFontSize: number;
   /** Same again for agent tabs; the two never fall back to each other. */
@@ -60,6 +66,7 @@ export const settings = writable<Settings>({
   terminalRenderer: 'canvas',
   gitBranchDisplay: 'header',
   diffFlatFileList: false,
+  trashRetentionDays: 0,
   terminalFontSize: 0,
   agentFontSize: 0,
   hideViewBar: false,

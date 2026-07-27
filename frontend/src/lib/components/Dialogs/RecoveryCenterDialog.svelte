@@ -2,7 +2,7 @@
   import { createEventDispatcher } from 'svelte';
   import * as App from '../../../../wailsjs/go/main/App';
   import { loadSessions, selectSession, selectWindow } from '../../stores/sessions';
-  import { loadSettings } from '../../stores/settings';
+  import { loadSettings, settings } from '../../stores/settings';
   import { t } from '../../i18n';
   import ConfirmDialog from './ConfirmDialog.svelte';
 
@@ -34,6 +34,14 @@
   let confirmTitle = '';
   let confirmMessage = '';
   let pendingAction: (() => Promise<void>) | null = null;
+
+  // State the policy that's actually in force, so the trash list doesn't imply
+  // entries live forever. 0 is unset and means the backend default; a negative
+  // is "keep everything".
+  $: retentionHint =
+    $settings.trashRetentionDays < 0
+      ? $t('recovery.trashHint')
+      : $t('recovery.trashRetentionHint', { days: $settings.trashRetentionDays || 30 });
 
   $: if (show && !loadedForOpen) {
     loadedForOpen = true;
@@ -178,7 +186,7 @@
           <div class="empty">{$t('common.loading')}</div>
         {:else if activeTab === 'trash'}
           <div class="toolbar">
-            <span>{$t('recovery.trashHint')}</span>
+            <span>{retentionHint}</span>
             <button class="danger subtle" disabled={trash.length === 0} on:click={requestEmptyTrash}>{$t('recovery.emptyTrash')}</button>
           </div>
           {#if trash.length === 0}

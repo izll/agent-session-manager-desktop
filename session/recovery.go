@@ -17,7 +17,67 @@ import (
 const (
 	recoverySchemaVersion = 1
 	backupRetentionCount  = 25
+	// Days a deleted session or tab stays recoverable when the user hasn't
+	// chosen otherwise. Nothing expired at all before this, so the trash — and
+	// with it sessions.json, read on every load — grew unbounded.
+	defaultTrashRetentionDays = 30
+	// A ceiling for what retention alone doesn't cover: deleting a great many
+	// sessions in one sitting. The newest are kept, and it applies even when
+	// retention is switched off — the file still has to stay loadable.
+	trashRetentionCount = 100
 )
+
+// trashRetentionDays resolves the configured retention in days, or 0 for
+// "keep everything".
+//
+// Unset (the zero value, and so every existing config) means the default
+// rather than "expire immediately", which would bin the trash of everyone
+// upgrading. "Keep everything" is stored as a negative, since zero was
+// already taken by unset.
+func trashRetentionDays(settings *Settings) int {
+	switch {
+	case settings == nil, settings.TrashRetentionDays == 0:
+		return defaultTrashRetentionDays
+	case settings.TrashRetentionDays < 0:
+		return 0
+	default:
+		return settings.TrashRetentionDays
+	}
+}
+
+// pruneTrash drops entries past their retention. It returns the kept entries
+// and whether anything was removed.
+//
+// Called where the trash is already being written rather than on load: expiry
+// is not urgent to the millisecond, and rewriting the file during a read would
+// turn every load into a write.
+func pruneTrash(entries []*TrashEntry, now time.Time, days int) ([]*TrashEntry, bool) {
+	kept := make([]*TrashEntry, 0, len(entries))
+	if days <= 0 {
+		// Retention off: only the count cap below applies.
+		kept = append(kept, entries...)
+	} else {
+		cutoff := now.Add(-time.Duration(days) * 24 * time.Hour)
+		for _, e := range entries {
+			// A zero DeletedAt predates this field; treat it as fresh rather
+			// than silently discarding something the user may still want.
+			if e.DeletedAt.IsZero() || e.DeletedAt.After(cutoff) {
+				kept = append(kept, e)
+			}
+		}
+	}
+
+	// Trim oldest-first once over the cap. Sorted by deletion time rather than
+	// insertion order, which restores can disturb.
+	if len(kept) > trashRetentionCount {
+		sort.SliceStable(kept, func(i, j int) bool {
+			return kept[i].DeletedAt.Before(kept[j].DeletedAt)
+		})
+		kept = kept[len(kept)-trashRetentionCount:]
+	}
+
+	return kept, len(kept) != len(entries)
+}
 
 type TrashEntry struct {
 	ID                string          `json:"id"`
@@ -308,6 +368,7 @@ func (s *Storage) TrashInstance(id string) error {
 		Session:          instance,
 	})
 	data.Instances = append(data.Instances[:index], data.Instances[index+1:]...)
+	data.Trash, _ = pruneTrash(data.Trash, time.Now().UTC(), trashRetentionDays(data.Settings))
 	data.SchemaVersion = recoverySchemaVersion
 	data.Revision++
 	return s.writeStorageDataLocked(data, true)
@@ -369,6 +430,7 @@ func (s *Storage) TrashTab(sessionID string, windowIdx int) error {
 		OriginalTabOrder:  originalTabOrder,
 		Tab:               &snapshot,
 	})
+	data.Trash, _ = pruneTrash(data.Trash, time.Now().UTC(), trashRetentionDays(data.Settings))
 	data.SchemaVersion = recoverySchemaVersion
 	data.Revision++
 	return s.writeStorageDataLocked(data, true)

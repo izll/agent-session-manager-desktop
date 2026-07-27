@@ -1073,6 +1073,7 @@ export namespace main {
 	    terminalRenderer: string;
 	    gitBranchDisplay: string;
 	    diffFlatFileList: boolean;
+	    trashRetentionDays: number;
 	    terminalFontSize: number;
 	    agentFontSize: number;
 	    hideViewBar: boolean;
@@ -1108,6 +1109,7 @@ export namespace main {
 	        this.terminalRenderer = source["terminalRenderer"];
 	        this.gitBranchDisplay = source["gitBranchDisplay"];
 	        this.diffFlatFileList = source["diffFlatFileList"];
+	        this.trashRetentionDays = source["trashRetentionDays"];
 	        this.terminalFontSize = source["terminalFontSize"];
 	        this.agentFontSize = source["agentFontSize"];
 	        this.hideViewBar = source["hideViewBar"];

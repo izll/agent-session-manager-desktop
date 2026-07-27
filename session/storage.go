@@ -70,6 +70,12 @@ type Settings struct {
 	// "flat" flag rather than a "tree" one so the zero value keeps the default
 	// in place — with omitempty there is no entry at all in existing configs.
 	DiffFlatFileList bool `json:"diff_flat_file_list,omitempty"`
+	// Days a deleted session or tab stays in the trash. Zero can't mean "keep
+	// everything" here: with omitempty it is also what every config written
+	// before this setting existed says, and reading those as "never expire"
+	// would leave the growing trash this was added to bound. So zero means the
+	// default and "keep everything" is stored as a negative.
+	TrashRetentionDays int `json:"trash_retention_days,omitempty"`
 	// Attention notifications: fire when an agent flips to "waiting"
 	// (needs user input). Desktop uses notify-send/osascript; ntfy POSTs
 	// to NtfyURL (e.g. https://ntfy.sh/my-topic) for mobile push.

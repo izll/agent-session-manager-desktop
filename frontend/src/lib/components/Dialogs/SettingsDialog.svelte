@@ -104,6 +104,26 @@
     saveSettings({ gitBranchDisplay: v as 'header' | 'statusbar' | 'off' });
   }
 
+  // How long deleted sessions and tabs stay recoverable. "Keep everything" is
+  // -1 rather than 0: 0 is what every config predating the setting reports, so
+  // it has to keep meaning "the default".
+  const KEEP_ALL_RETENTION = '-1';
+  const DEFAULT_RETENTION_DAYS = 30;
+
+  $: trashRetentionOptions = [
+    { value: '7', label: $t('settings.trashRetentionDays', { days: 7 }) },
+    { value: '30', label: $t('settings.trashRetentionDays', { days: 30 }) },
+    { value: '90', label: $t('settings.trashRetentionDays', { days: 90 }) },
+    { value: KEEP_ALL_RETENTION, label: $t('settings.trashRetentionForever') },
+  ];
+
+  // 0 means unset, which resolves to the default, so show that option selected.
+  $: trashRetentionValue = String($settings.trashRetentionDays || DEFAULT_RETENTION_DAYS);
+
+  function changeTrashRetention(v: string) {
+    saveSettings({ trashRetentionDays: parseInt(v, 10) });
+  }
+
   $: currentUITheme = $settings.uiTheme || DEFAULT_UI_THEME;
   $: customAccent = $settings.uiAccent || '#8b5cf6';
   // A very dark accent is nearly invisible on the dark background; say so
@@ -1164,6 +1184,22 @@
              toolbar, where they competed with everyday controls and their icons
              were easy to confuse with each other. -->
         {#if activeTab === 'maintenance'}
+          <div class="settings-section">
+            <h3>{$t('settings.recoverySection')}</h3>
+
+            <div class="setting-item input-item">
+              <span class="setting-info">
+                <span class="setting-label">{$t('settings.trashRetention')}</span>
+                <span class="setting-desc">{$t('settings.trashRetentionDesc')}</span>
+              </span>
+              <Select
+                value={trashRetentionValue}
+                options={trashRetentionOptions}
+                on:change={(e) => changeTrashRetention(e.detail)}
+              />
+            </div>
+          </div>
+
           <div class="settings-section">
             <h3>{$t('settings.checkUpdates')}</h3>
 

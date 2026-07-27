@@ -2491,6 +2491,7 @@ type SettingsInfo struct {
 	TerminalRenderer   string `json:"terminalRenderer"`
 	GitBranchDisplay   string `json:"gitBranchDisplay"`
 	DiffFlatFileList   bool   `json:"diffFlatFileList"`
+	TrashRetentionDays int    `json:"trashRetentionDays"`
 	TerminalFontSize   int    `json:"terminalFontSize"`
 	AgentFontSize      int    `json:"agentFontSize"`
 	HideViewBar        bool   `json:"hideViewBar"`
@@ -2575,6 +2576,7 @@ func (a *App) GetSettings() (*SettingsInfo, error) {
 		TerminalRenderer:     renderer,
 		GitBranchDisplay:     branchDisplay,
 		DiffFlatFileList:     settings.DiffFlatFileList,
+		TrashRetentionDays:   settings.TrashRetentionDays,
 		TerminalFontSize:     settings.TerminalFontSize,
 		AgentFontSize:        settings.AgentFontSize,
 		HideViewBar:          settings.HideViewBar,
@@ -2616,6 +2618,7 @@ func (a *App) SaveSettings(settings SettingsInfo) error {
 		current.TerminalRenderer = settings.TerminalRenderer
 		current.GitBranchDisplay = settings.GitBranchDisplay
 		current.DiffFlatFileList = settings.DiffFlatFileList
+		current.TrashRetentionDays = settings.TrashRetentionDays
 		current.TerminalFontSize = settings.TerminalFontSize
 		current.AgentFontSize = settings.AgentFontSize
 		current.HideViewBar = settings.HideViewBar
