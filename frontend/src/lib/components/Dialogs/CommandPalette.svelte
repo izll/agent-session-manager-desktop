@@ -9,6 +9,8 @@
   import { activities } from '../../stores/activities';
   import { tabStatuses } from '../../stores/statusLines';
   import { showDashboard, showSessionView } from '../../stores/navigation';
+  import { GetSessionTemplates } from '../../../../wailsjs/go/main/App';
+  import type { main } from '../../../../wailsjs/go/models';
   import { t } from '../../i18n';
 
   export let show = false;
@@ -62,6 +64,30 @@
   function openNewTab() {
     showSessionView();
     window.dispatchEvent(new CustomEvent('command:new-tab'));
+  }
+
+  function openTemplates(templateId = '') {
+    window.dispatchEvent(new CustomEvent('command:templates', { detail: { templateId } }));
+  }
+
+  // Templates come from disk rather than a store, so they are fetched when the
+  // palette opens. The tracking variable is assigned inside this block, and
+  // the branches are keyed on `show` alone: a block that both reads and writes
+  // its own guard re-enters, and only a condition that has already flipped
+  // makes that re-entry settle instead of looping.
+  let templates: main.SessionTemplateInfo[] = [];
+  let templatesLoadedWhileOpen = false;
+  $: {
+    if (show) {
+      if (!templatesLoadedWhileOpen) {
+        templatesLoadedWhileOpen = true;
+        void GetSessionTemplates()
+          .then((list) => { templates = list || []; })
+          .catch(() => { templates = []; });
+      }
+    } else {
+      templatesLoadedWhileOpen = false;
+    }
   }
 
   function requestStart() {
@@ -163,6 +189,25 @@
       });
     }
 
+    if (projectWritable) {
+      result.push({
+        id: 'templates', category: $t('palette.actions'), title: $t('palette.manageTemplates'),
+        keywords: 'template sablon', icon: '▦', action: () => openTemplates()
+      });
+      for (const tpl of templates) {
+        const tabCount = tpl.tabs?.length || 0;
+        result.push({
+          id: `template:${tpl.id}`,
+          category: $t('palette.templates'),
+          title: tpl.name,
+          detail: tabCount > 0 ? $t('templates.tabCount', { count: String(tabCount) }) : tpl.agent,
+          keywords: `template sablon ${tpl.agent} ${tpl.path || ''}`,
+          icon: '▦',
+          action: () => openTemplates(tpl.id)
+        });
+      }
+    }
+
     const projectItems = [
       { id: '', name: $t('project.default') },
       ...get(projects)
@@ -190,17 +235,35 @@
         detail: `${session.agent} · ${session.status}`,
         keywords: `${session.path} ${session.agent} ${session.notes || ''}`,
         icon: session.status === 'running' ? '●' : '○',
-        action: () => { selectSession(session.id); openView('terminal'); }
+        // No openView here: selectSession restores the tab you last used in
+        // this session, and forcing the terminal would undo the per-tab view
+        // that restore is for. This is what distinguishes the session entry
+        // from the tab entries below — it means "where I left off".
+        action: () => { selectSession(session.id); showSessionView(); }
       });
-      result.push({
-        id: `tab:${session.id}:0`,
-        category: $t('palette.tabs'),
-        title: `${session.name} › ${session.name}`,
-        detail: session.agent,
-        keywords: `tab ${session.path}`,
-        icon: '▤',
-        action: () => { selectSession(session.id); selectWindow(0); openView('terminal'); }
-      });
+      // The main tab is listed only when the session has other tabs. On a
+      // single-tab session the session entry above already goes there, and two
+      // near-identical rows for one destination is just noise; with several
+      // tabs it is a real destination the session entry can't target.
+      if ((session.followedWindows || []).length > 0) {
+        const mainIdx = session.mainWindowIndex ?? 0;
+        result.push({
+          id: `tab:${session.id}:${mainIdx}`,
+          category: $t('palette.tabs'),
+          // Labelled by its agent, like every other tab. The live tmux window
+          // name isn't available here — the palette builds from the session
+          // list, not from GetWindowList.
+          title: `${session.name} › ${session.agent}`,
+          detail: session.agent,
+          keywords: `tab ${session.path}`,
+          icon: '▤',
+          action: () => {
+            selectSession(session.id);
+            selectWindow(mainIdx);
+            openView('terminal');
+          }
+        });
+      }
       for (const tab of session.followedWindows || []) {
         result.push({
           id: `tab:${session.id}:${tab.index}`,
@@ -218,7 +281,7 @@
 
   $: allItems = show ? buildItems([
     $sessions, $projects, $activities, $tabStatuses,
-    $selectedSessionId, $selectedWindowIdx, $activeProjectId, $otherInstancePID
+    $selectedSessionId, $selectedWindowIdx, $activeProjectId, $otherInstancePID, templates
   ]) : [];
   $: normalizedQuery = query.trim().toLocaleLowerCase();
   $: filteredItems = normalizedQuery

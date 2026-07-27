@@ -18,6 +18,7 @@
   import CommandPalette from './lib/components/Dialogs/CommandPalette.svelte';
   import CommandPickerDialog from './lib/components/Dialogs/CommandPickerDialog.svelte';
   import CommandManagerDialog from './lib/components/Dialogs/CommandManagerDialog.svelte';
+  import SessionTemplateDialog from './lib/components/Dialogs/SessionTemplateDialog.svelte';
   import SessionColorDialog from './lib/components/Dialogs/SessionColorDialog.svelte';
   import ConfirmDialog from './lib/components/Dialogs/ConfirmDialog.svelte';
   import StopDialog from './lib/components/Dialogs/StopDialog.svelte';
@@ -95,6 +96,9 @@
   function openCommandManager() {
     showCommandManager = true;
   }
+  /** Session templates: the manager, and the template it should open on. */
+  let showTemplateDialog = false;
+  let templateToUse = '';
   let showColorDialog = false;
   let colorDialogSession: Session | null = null;
   let showDeleteConfirm = false;
@@ -119,7 +123,7 @@
     showNewSessionDialog || showNewGroupDialog || showGlobalSearch || showBgAgents ||
     showHelpDialog || showUpdateDialog || showImportDialog || showFileImportDialog ||
     showSettingsDialog || showRecoveryCenter || showCommandPalette || showColorDialog || showDeleteConfirm ||
-    showCommandPicker || showCommandManager ||
+    showCommandPicker || showCommandManager || showTemplateDialog ||
     showQuitConfirm || showStopDialog || showStartDialog ||
     showResumeChoice || showResumeSessionPicker;
   $: if (prevAnyDialogOpen && !anyDialogOpen) {
@@ -390,6 +394,10 @@
     handleStop();
   }
 
+  function handleCommandTemplates(e: CustomEvent<{ templateId?: string }>) {
+    handleTemplates(e.detail?.templateId || '');
+  }
+
   onMount(async () => {
     // The backend checks for a release once a day, shortly after launch. It
     // only ever notifies — a dot on the update button, not a popup that
@@ -412,6 +420,7 @@
     window.addEventListener('terminal-nav', handleTerminalNav as EventListener);
     window.addEventListener('command:start-selected', handleCommandStart);
     window.addEventListener('command:stop-selected', handleCommandStop);
+    window.addEventListener('command:templates', handleCommandTemplates as EventListener);
 
     await Promise.all([
       loadProjects(),
@@ -443,6 +452,7 @@
     window.removeEventListener('terminal-nav', handleTerminalNav as EventListener);
     window.removeEventListener('command:start-selected', handleCommandStart);
     window.removeEventListener('command:stop-selected', handleCommandStop);
+    window.removeEventListener('command:templates', handleCommandTemplates as EventListener);
     stopSidebarPolling();
     EventsOff('update:available');
     EventsOff('dictation:state');
@@ -501,6 +511,13 @@
 
   function handleNewGroup() {
     showNewGroupDialog = true;
+  }
+
+  // Opening with no preselected template lands on the list; the palette passes
+  // an id to jump straight to "create a session from this one".
+  function handleTemplates(templateId = '') {
+    templateToUse = templateId;
+    showTemplateDialog = true;
   }
 
   function handleDelete() {
@@ -837,7 +854,7 @@
           <ProjectSelector />
         </div>
         <div class="flex-1 overflow-hidden">
-          <SessionTree onNewSession={handleNewSession} onNewGroup={handleNewGroup} onCollapse={toggleSidebar} />
+          <SessionTree onNewSession={handleNewSession} onNewGroup={handleNewGroup} onTemplates={handleTemplates} onCollapse={toggleSidebar} />
         </div>
         <div class="resize-handle" on:mousedown={startResize}></div>
       </aside>
@@ -859,7 +876,7 @@
               <ProjectSelector />
             </div>
             <div class="flex-1 overflow-hidden">
-              <SessionTree onNewSession={handleNewSession} onNewGroup={handleNewGroup} onCollapse={() => { sidebarOverlayOpen = false; toggleSidebar(); }} />
+              <SessionTree onNewSession={handleNewSession} onNewGroup={handleNewGroup} onTemplates={handleTemplates} onCollapse={() => { sidebarOverlayOpen = false; toggleSidebar(); }} />
             </div>
           </div>
         {/if}
@@ -920,6 +937,7 @@
     onOpenManager={openCommandManager}
   />
   <CommandManagerDialog bind:show={showCommandManager} />
+  <SessionTemplateDialog bind:show={showTemplateDialog} useTemplateId={templateToUse} />
   <!-- Opened from the tab bar's colour button. The sidebar's context-menu
        entry opens its own instance from SessionItem, which is rendered in
        three places and would otherwise have to forward the event up. -->
@@ -983,7 +1001,7 @@
     background: rgba(251, 146, 60, 0.14);
     border-bottom: 1px solid rgba(251, 146, 60, 0.3);
     color: #fdba74;
-    font-size: 12px;
+    font-size: 13px;
     flex-shrink: 0;
   }
   .lock-banner svg { flex-shrink: 0; }
@@ -1000,7 +1018,7 @@
     border: 1px solid rgba(0, 206, 209, 0.3);
     border-radius: 8px;
     padding: 5px 10px;
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 650;
     cursor: pointer;
     transition: background 0.15s ease;
@@ -1044,9 +1062,9 @@
     text-align: left;
     cursor: pointer;
   }
-  .waiting-name { color: #e4e4e7; font-size: 12px; font-weight: 650; white-space: nowrap; }
-  .waiting-tab { color: #8b8b95; font-size: 11px; white-space: nowrap; }
-  .waiting-status { color: #67e8f9; font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .waiting-name { color: #e4e4e7; font-size: 13px; font-weight: 650; white-space: nowrap; }
+  .waiting-tab { color: #8b8b95; font-size: 12px; white-space: nowrap; }
+  .waiting-status { color: #67e8f9; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
   .waiting-actions { display: flex; gap: 4px; flex-shrink: 0; }
   .waiting-actions button {
     min-width: 26px;
@@ -1055,7 +1073,7 @@
     border: 1px solid rgba(255, 255, 255, 0.12);
     background: rgba(255, 255, 255, 0.05);
     color: #d4d4d8;
-    font-size: 11px;
+    font-size: 12px;
     cursor: pointer;
   }
   .waiting-actions button:hover { border-color: rgba(0, 206, 209, 0.5); color: #67e8f9; }
@@ -1150,7 +1168,7 @@
   }
 
   .logo-suffix {
-    font-size: 9px;
+    font-size: 10px;
     font-weight: 500;
     color: var(--accent-light);
     margin-left: 2px;

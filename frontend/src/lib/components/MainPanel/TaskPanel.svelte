@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy, createEventDispatcher } from 'svelte';
+  import { claimMenu, releaseMenu } from '../../utils/openMenu';
   import { get } from 'svelte/store';
   import { selectedSessionId } from '../../stores/sessions';
   import Select from '../common/Select.svelte';
@@ -472,10 +473,13 @@
     contextMenuTask = task;
     contextMenuX = event.clientX;
     contextMenuY = event.clientY;
+    // See SessionItem: contextmenu doesn't fire the click that closes menus.
+    claimMenu(closeContextMenu);
   }
 
   function closeContextMenu() {
     contextMenuTask = null;
+    releaseMenu(closeContextMenu);
   }
 
   // Open edit task modal
@@ -1313,7 +1317,7 @@
   }
 
   .task-title {
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.5px;
@@ -1321,7 +1325,7 @@
   }
 
   .task-count {
-    font-size: 11px;
+    font-size: 12px;
     color: #4ade80;
     background: rgba(74, 222, 128, 0.1);
     padding: 2px 8px;
@@ -1329,7 +1333,7 @@
   }
 
   .mcp-badge {
-    font-size: 10px;
+    font-size: 11px;
     color: var(--accent-light);
     background: rgba(167, 139, 250, 0.15);
     padding: 2px 6px;
@@ -1384,7 +1388,7 @@
     color: #9ca3af;
     padding: 6px 12px;
     border-radius: 6px;
-    font-size: 12px;
+    font-size: 13px;
     cursor: pointer;
     transition: all 0.2s;
   }
@@ -1416,7 +1420,7 @@
     background: rgba(239, 68, 68, 0.1);
     border-bottom: 1px solid rgba(239, 68, 68, 0.2);
     color: #f87171;
-    font-size: 12px;
+    font-size: 13px;
   }
 
   .task-list {
@@ -1496,7 +1500,7 @@
 
   .task-id {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 11px;
+    font-size: 12px;
     color: #6b7280;
     background: rgba(255, 255, 255, 0.05);
     padding: 2px 6px;
@@ -1528,7 +1532,7 @@
   }
 
   .priority-badge, .status-badge {
-    font-size: 10px;
+    font-size: 11px;
     padding: 2px 8px;
     border-radius: 10px;
     font-weight: 500;
@@ -1536,7 +1540,7 @@
   }
 
   .created-at {
-    font-size: 10px;
+    font-size: 11px;
     color: #6b7280;
     margin-left: auto;
     flex-shrink: 0;
@@ -1544,7 +1548,7 @@
   }
 
   .complexity-badge {
-    font-size: 10px;
+    font-size: 11px;
     color: var(--accent-light);
     background: rgba(167, 139, 250, 0.15);
     padding: 2px 6px;
@@ -1568,7 +1572,7 @@
   }
 
   .tag {
-    font-size: 11px;
+    font-size: 12px;
     background: rgba(255, 255, 255, 0.05);
     color: #9ca3af;
     padding: 2px 8px;
@@ -1586,7 +1590,7 @@
   }
 
   .subtasks-header {
-    font-size: 12px;
+    font-size: 13px;
     color: #6b7280;
     margin-bottom: 8px;
   }
@@ -1602,7 +1606,7 @@
 
   .subtask-id {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 10px;
+    font-size: 11px;
     color: #6b7280;
   }
 
@@ -1613,7 +1617,7 @@
 
   .subtask-status {
     margin-left: auto;
-    font-size: 10px;
+    font-size: 11px;
     text-transform: uppercase;
   }
 
@@ -1624,7 +1628,7 @@
     border: 1px dashed rgba(var(--accent-rgb), 0.3);
     border-radius: 8px;
     color: var(--accent-light);
-    font-size: 12px;
+    font-size: 13px;
     cursor: pointer;
     margin-bottom: 16px;
   }
@@ -1642,12 +1646,12 @@
   }
 
   .dep-label {
-    font-size: 12px;
+    font-size: 13px;
     color: #6b7280;
   }
 
   .dep-badge {
-    font-size: 11px;
+    font-size: 12px;
     background: rgba(255, 255, 255, 0.05);
     color: #9ca3af;
     padding: 2px 8px;
@@ -1665,7 +1669,7 @@
     color: #9ca3af;
     padding: 8px 16px;
     border-radius: 6px;
-    font-size: 12px;
+    font-size: 13px;
     cursor: pointer;
     transition: all 0.2s;
   }
@@ -1743,7 +1747,7 @@
   .dialog-body label {
     display: block;
     margin-bottom: 16px;
-    font-size: 12px;
+    font-size: 13px;
     color: #9ca3af;
   }
 
@@ -1839,7 +1843,7 @@
     display: block;
     margin-top: 8px;
     color: #60a5fa;
-    font-size: 12px;
+    font-size: 13px;
   }
 
   /* Subtasks Section Enhanced */
@@ -1851,7 +1855,7 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    font-size: 12px;
+    font-size: 13px;
     color: #6b7280;
     margin-bottom: 8px;
   }
@@ -1862,7 +1866,7 @@
     color: var(--accent-light);
     padding: 2px 8px;
     border-radius: 4px;
-    font-size: 11px;
+    font-size: 12px;
     cursor: pointer;
   }
 
@@ -1895,7 +1899,7 @@
 
   .subtask-id {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 10px;
+    font-size: 11px;
     color: #6b7280;
     flex-shrink: 0;
   }
@@ -1940,7 +1944,7 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    font-size: 12px;
+    font-size: 13px;
     color: #6b7280;
     margin-bottom: 8px;
   }
@@ -1951,7 +1955,7 @@
     color: #60a5fa;
     padding: 2px 8px;
     border-radius: 4px;
-    font-size: 11px;
+    font-size: 12px;
     cursor: pointer;
   }
 
@@ -1969,7 +1973,7 @@
     display: inline-flex;
     align-items: center;
     gap: 4px;
-    font-size: 11px;
+    font-size: 12px;
     background: rgba(255, 255, 255, 0.05);
     color: #9ca3af;
     padding: 4px 8px;
@@ -1991,7 +1995,7 @@
   }
 
   .no-deps {
-    font-size: 12px;
+    font-size: 13px;
     color: #4b5563;
     font-style: italic;
   }
@@ -2010,7 +2014,7 @@
 
   .dep-section-label {
     display: block;
-    font-size: 11px;
+    font-size: 12px;
     color: #6b7280;
     margin-bottom: 8px;
     text-transform: uppercase;
@@ -2031,7 +2035,7 @@
     color: var(--accent-light);
     padding: 4px 10px;
     border-radius: 6px;
-    font-size: 12px;
+    font-size: 13px;
   }
 
   .dep-remove-inline {
@@ -2098,7 +2102,7 @@
     border-radius: 6px;
     text-align: left;
     cursor: pointer;
-    font-size: 12px;
+    font-size: 13px;
   }
 
   .task-ref-btn:hover {

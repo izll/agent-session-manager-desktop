@@ -1,9 +1,12 @@
 <script lang="ts">
   import { createEventDispatcher, onMount, onDestroy, tick } from 'svelte';
   import { portal } from '../../utils/portal';
+  import { menuPosition } from '../../utils/menuPosition';
+  import { claimMenu, releaseMenu } from '../../utils/openMenu';
   import StatusIndicator from '../common/StatusIndicator.svelte';
   import AgentIcon from '../common/AgentIcon.svelte';
   import SessionColorDialog from '../Dialogs/SessionColorDialog.svelte';
+  import SaveAsTemplateDialog from '../Dialogs/SaveAsTemplateDialog.svelte';
   import type { Session } from '../../stores/sessions';
   import { selectSession, selectedSessionId, renameSession, deleteSession, toggleFavorite } from '../../stores/sessions';
   import { settings } from '../../stores/settings';
@@ -74,10 +77,15 @@
     contextMenuX = e.clientX;
     contextMenuY = e.clientY;
     showContextMenu = true;
+    // A right-click fires contextmenu, not click, so the window listener that
+    // closes menus never sees it — without this, opening this menu leaves any
+    // other one on screen.
+    claimMenu(closeContextMenu);
   }
 
   function closeContextMenu() {
     showContextMenu = false;
+    releaseMenu(closeContextMenu);
   }
 
   function handleWindowClick() {
@@ -139,6 +147,15 @@
   function handleColor() {
     closeContextMenu();
     showColorDialog = true;
+  }
+
+  // Saving an arrangement starts from the session that already has it, so the
+  // entry belongs on the session's own menu — same reasoning as the colour.
+  let showSaveAsTemplate = false;
+
+  function handleSaveAsTemplate() {
+    closeContextMenu();
+    showSaveAsTemplate = true;
   }
 
   function handleDragStart(e: DragEvent) {
@@ -319,7 +336,7 @@
   <div
     class="context-menu"
     use:portal
-    style="left: {contextMenuX}px; top: {contextMenuY}px"
+    use:menuPosition={{ x: contextMenuX, y: contextMenuY }}
     on:click|stopPropagation
   >
     <button class="context-menu-item" on:click={startRename}>
@@ -343,6 +360,14 @@
       </svg>
       {$t('sessionMenu.color')}
     </button>
+    <button class="context-menu-item" on:click={handleSaveAsTemplate}>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+        <polyline points="17 21 17 13 7 13 7 21"/>
+        <polyline points="7 3 7 8 15 8"/>
+      </svg>
+      {$t('sessionMenu.saveAsTemplate')}
+    </button>
     <button class="context-menu-item danger" on:click={handleDelete}>
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <polyline points="3 6 5 6 21 6"/>
@@ -354,6 +379,7 @@
 {/if}
 
 <SessionColorDialog bind:show={showColorDialog} {session} />
+<SaveAsTemplateDialog bind:show={showSaveAsTemplate} {session} />
 
 <style>
   /* ORIGINAL SESSION ITEM STYLES (for restoring later):
@@ -471,7 +497,7 @@
   }
 
   .badge {
-    font-size: 9px;
+    font-size: 10px;
     font-weight: 700;
     padding: 2px 5px;
     border-radius: 4px;
@@ -483,7 +509,7 @@
     color: #fbbf24;
     background: transparent;
     text-shadow: 0 0 10px rgba(251, 191, 36, 0.8);
-    font-size: 12px;
+    font-size: 13px;
     padding: 0;
   }
 
@@ -491,7 +517,7 @@
     color: var(--accent-light);
     background: rgba(var(--accent-rgb), 0.1);
     border: 1px solid rgba(var(--accent-rgb), 0.25);
-    font-size: 10px;
+    font-size: 11px;
     padding: 0 4px;
   }
 
@@ -499,11 +525,11 @@
     color: #ff6b6b;
     background: rgba(255, 107, 107, 0.1);
     border: 1px solid rgba(255, 107, 107, 0.25);
-    font-size: 8px;
+    font-size: 9px;
   }
 
   .status-text {
-    font-size: 10px;
+    font-size: 11px;
     line-height: 14px;
     height: 14px;
     color: #888888;
@@ -545,7 +571,7 @@
     overflow: visible;
     padding: 0 4px;
     line-height: 13px;
-    font-size: 8px;
+    font-size: 9px;
     align-self: center;
   }
 
@@ -645,13 +671,13 @@
   }
 
   .session-item.compact .session-name {
-    font-size: 12px;
+    font-size: 13px;
   }
 
   .session-item.compact .status-text {
     margin-top: 2px;
     margin-left: 14px;
-    font-size: 9px;
+    font-size: 10px;
     line-height: 12px;
     height: 12px;
   }
@@ -671,11 +697,11 @@
   }
 
   .session-item.compact .badge.favorite {
-    font-size: 10px;
+    font-size: 11px;
   }
 
   .session-item.compact .badge.resume {
-    font-size: 8px;
+    font-size: 9px;
     padding: 0 3px;
   }
 </style>

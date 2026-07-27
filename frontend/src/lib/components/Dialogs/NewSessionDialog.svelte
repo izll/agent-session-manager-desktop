@@ -210,6 +210,13 @@
     }
   }
 
+  // Hands over to the template manager rather than embedding it: the dialogs
+  // overlap, and two open at once would stack their overlays.
+  function openTemplates() {
+    close();
+    window.dispatchEvent(new CustomEvent('command:templates', { detail: { templateId: '' } }));
+  }
+
   async function browsePath() {
     try {
       const selectedPath = await App.BrowseDirectory(path || '');
@@ -233,6 +240,9 @@
     <div class="dialog-content">
       <div class="dialog-header">
         <h2>{$t('newSession.title')}</h2>
+        <!-- Someone creating a session is exactly who wants a template; the
+             sidebar's icon button alone would be easy to miss from here. -->
+        <button class="template-link" on:click={openTemplates}>{$t('newSession.fromTemplate')}</button>
         <button class="close-btn" on:click={close}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <line x1="18" y1="6" x2="6" y2="18"/>
@@ -452,6 +462,23 @@
     max-width: 480px;
   }
 
+  /* Sits to the left of the close button, which the shared header pushes to
+     the far right. */
+  .template-link {
+    margin-left: auto;
+    margin-right: 12px;
+    border: 0;
+    background: none;
+    padding: 0;
+    cursor: pointer;
+    font-size: 12px;
+    color: var(--accent-light);
+    text-decoration: underline;
+  }
+  .template-link:hover {
+    color: var(--accent-pale);
+  }
+
   /* Component-specific: error message with icon and margin */
   .error-message {
     display: flex;
@@ -470,7 +497,7 @@
 
   .form-label {
     display: block;
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.5px;
@@ -517,7 +544,7 @@
   }
 
   .agent-name {
-    font-size: 11px;
+    font-size: 12px;
     color: #9ca3af;
   }
 
@@ -566,7 +593,7 @@
 
   .form-hint {
     display: block;
-    font-size: 11px;
+    font-size: 12px;
     color: #6b7280;
     margin-top: 6px;
   }
@@ -761,7 +788,7 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    font-size: 11px;
+    font-size: 12px;
     color: #6b7280;
     margin-top: 2px;
   }
@@ -770,7 +797,7 @@
     padding: 2px 6px;
     background: rgba(251, 191, 36, 0.15);
     border-radius: 4px;
-    font-size: 10px;
+    font-size: 11px;
     color: #fbbf24;
   }
 

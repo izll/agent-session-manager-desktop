@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onDestroy, createEventDispatcher } from 'svelte';
+  import { onMount, onDestroy, createEventDispatcher } from 'svelte';
   import { selectedSessionId } from '../../stores/sessions';
   import { get } from 'svelte/store';
   import * as App from '../../../../wailsjs/go/main/App';
@@ -9,6 +9,7 @@
   import { detectLanguage, highlightLines } from '../../utils/highlight';
   import { fileTypeOf } from '../../utils/fileTypes';
   import ConfirmDialog from '../Dialogs/ConfirmDialog.svelte';
+  import FileQuickOpen from './FileQuickOpen.svelte';
 
   export let active = false;
 
@@ -161,11 +162,77 @@
     }
   }
 
+  // --- Quick open -----------------------------------------------------------
+
+  // Ctrl+Shift+O rather than a plain Ctrl+key: everything in this app is
+  // Ctrl+Shift so the terminal and tmux never see it, and O is the only free
+  // letter left in App.svelte's handler (Ctrl+P is the saved-command picker,
+  // Ctrl+K/Ctrl+Shift+P the palette, Ctrl+Shift+F the global history search).
+  // Handled here rather than in App.svelte because the shortcut only means
+  // anything while the browser is the visible view.
+  let showQuickOpen = false;
+
+  function handleWindowKeydown(e: KeyboardEvent) {
+    if (!active || !(e.ctrlKey || e.metaKey) || !e.shiftKey || e.altKey) return;
+    if (e.key.toLowerCase() !== 'o') return;
+    // Another dialog owning the keyboard must keep it — the overlay opening
+    // behind a confirm prompt would leave two things listening for Escape.
+    if (document.querySelector('.dialog-overlay')) return;
+    e.preventDefault();
+    e.stopPropagation();
+    showQuickOpen = true;
+  }
+
+  /**
+   * Open a file picked in the quick-open and reveal it in the tree.
+   *
+   * Revealing means loading every directory on the way down, which the lazy
+   * tree has usually never opened. The loads are sequential on purpose: each
+   * one is what proves the next path segment is a directory the user may
+   * expand, and they are single-digit milliseconds on a local filesystem.
+   */
+  function openFromQuickOpen(path: string) {
+    // Selecting a file discards the edit buffer, so it goes through the same
+    // guard as every other way of leaving it.
+    guardUnsaved(() => {
+      if (editing) leaveEditModeQuietly();
+      selectedPath = path;
+      void loadFile(path);
+      void revealInTree(path);
+    });
+  }
+
+  async function revealInTree(path: string) {
+    const segments = path.split('/');
+    // The last segment is the file itself; only its ancestors are directories.
+    segments.pop();
+    const next = new Set(expanded);
+    let prefix = '';
+    for (const segment of segments) {
+      prefix = prefix ? `${prefix}/${segment}` : segment;
+      next.add(prefix);
+      // Awaited one level at a time: buildBrowseTree only descends into
+      // directories it has a listing for, so a parent must be loaded before
+      // its child's row can exist.
+      await loadDir(prefix);
+      if (destroyed) return;
+    }
+    // Reassigned rather than mutated — Svelte 3 doesn't track Set mutations.
+    expanded = next;
+  }
+
+  onMount(() => {
+    // Capture phase, matching App.svelte: xterm would otherwise swallow the
+    // combo before it reaches us.
+    window.addEventListener('keydown', handleWindowKeydown, true);
+  });
+
   onDestroy(() => {
     destroyed = true;
     treeGeneration++;
     fileGeneration++;
     if (savedFlashTimer) clearTimeout(savedFlashTimer);
+    window.removeEventListener('keydown', handleWindowKeydown, true);
     // Leaving the tab mid-drag would otherwise strand the document listeners.
     stopPaneResize();
   });
@@ -454,6 +521,9 @@
     // buffer, so it is guarded like any other way of losing the edits.
     guardUnsaved(() => {
       if (editing) leaveEditModeQuietly();
+      // The quick-open index is a snapshot of the same tree, so a refresh has
+      // to drop it too or the picker keeps offering files that are gone.
+      void App.InvalidateSessionFileIndex(sessionId);
       // Re-fetch everything the user had open, so a refresh shows the current
       // state of the tree rather than silently keeping stale listings.
       const open = Array.from(expanded);
@@ -657,6 +727,14 @@
       {/if}
     </div>
     <div class="header-right">
+      <!-- A button as well as the shortcut: a keyboard-only feature in a view
+           reached by mouse is a feature most users never find. -->
+      <button class="refresh-btn" on:click={() => (showQuickOpen = true)} title={$t('browser.quickOpenTooltip')}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="7"/>
+          <path d="M21 21l-4.35-4.35"/>
+        </svg>
+      </button>
       <button class="refresh-btn" on:click={refresh} disabled={rootLoading} title={$t('browser.refresh')}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class:spinning={rootLoading}>
           <path d="M23 4v6h-6M1 20v-6h6"/>
@@ -933,6 +1011,12 @@
   {/if}
 </div>
 
+<FileQuickOpen
+  bind:show={showQuickOpen}
+  sessionId={$selectedSessionId || ''}
+  on:pick={(e) => openFromQuickOpen(e.detail.path)}
+/>
+
 {#if pendingLeave}
   <ConfirmDialog
     show={true}
@@ -979,7 +1063,7 @@
 
   .browser-title {
     flex-shrink: 0;
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.5px;
@@ -989,7 +1073,7 @@
   /* The root path can be long; it may shrink away entirely before the title. */
   .browser-root {
     font-family: 'JetBrains Mono', 'Fira Code', monospace;
-    font-size: 11px;
+    font-size: 12px;
     color: #6b7280;
     white-space: nowrap;
     overflow: hidden;
@@ -1075,7 +1159,7 @@
     justify-content: space-between;
     gap: 8px;
     padding: 6px 8px 6px 12px;
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.5px;
@@ -1115,7 +1199,7 @@
   }
 
   .tree-dir-name {
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 600;
     color: #9ca3af;
     white-space: nowrap;
@@ -1129,7 +1213,7 @@
     border-radius: 8px;
     background: rgba(255, 255, 255, 0.06);
     color: #6b7280;
-    font-size: 10px;
+    font-size: 11px;
     font-family: monospace;
     font-weight: 600;
     line-height: 15px;
@@ -1137,7 +1221,7 @@
 
   .tree-hint {
     flex-shrink: 0;
-    font-size: 10px;
+    font-size: 11px;
     color: #6b7280;
   }
   .tree-hint.error {
@@ -1147,7 +1231,7 @@
   /* Notices that belong to a directory rather than to a row of its own. */
   .tree-note {
     padding: 4px 10px 6px;
-    font-size: 10px;
+    font-size: 11px;
     font-style: italic;
     color: #4b5563;
   }
@@ -1200,7 +1284,7 @@
   }
 
   .file-path {
-    font-size: 12px;
+    font-size: 13px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1224,7 +1308,7 @@
   }
 
   .file-size {
-    font-size: 10px;
+    font-size: 11px;
     font-family: monospace;
     color: #6b7280;
   }
@@ -1247,7 +1331,7 @@
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
     background: rgba(0, 0, 0, 0.2);
     font-family: 'JetBrains Mono', 'Fira Code', monospace;
-    font-size: 11px;
+    font-size: 12px;
     color: #d4d4d8;
     flex-shrink: 0;
   }
@@ -1284,7 +1368,7 @@
     background: rgba(255, 255, 255, 0.05);
     color: #d4d4d8;
     font-family: inherit;
-    font-size: 11px;
+    font-size: 12px;
     cursor: pointer;
     transition: all 0.15s ease;
   }
@@ -1317,7 +1401,7 @@
   .saved-flash {
     flex-shrink: 0;
     color: #4ade80;
-    font-size: 11px;
+    font-size: 12px;
   }
 
   /* Gutter + textarea as siblings, scrolled in lockstep. */
@@ -1327,7 +1411,7 @@
     min-height: 0;
     min-width: 0;
     font-family: 'JetBrains Mono', 'Fira Code', monospace;
-    font-size: 12px;
+    font-size: 13px;
     /* line-height must match between the two columns exactly or the numbers
        drift by a fraction of a row per line and are visibly wrong by the
        bottom of a long file. */
@@ -1397,7 +1481,7 @@
     background: rgba(251, 191, 36, 0.12);
     border-bottom: 1px solid rgba(251, 191, 36, 0.35);
     color: #fbbf24;
-    font-size: 12px;
+    font-size: 13px;
   }
   /* A deletion is a harder case than a concurrent edit — saving recreates a
      file someone removed — so it reads as a warning rather than a notice. */
@@ -1425,7 +1509,7 @@
     background: transparent;
     color: inherit;
     font-family: inherit;
-    font-size: 11px;
+    font-size: 12px;
     cursor: pointer;
     transition: background 0.15s ease;
   }
@@ -1442,14 +1526,14 @@
     overflow: auto;
     min-width: 0;
     font-family: 'JetBrains Mono', 'Fira Code', monospace;
-    font-size: 12px;
+    font-size: 13px;
     user-select: text;
     -webkit-user-select: text;
   }
 
   .file-notice {
     padding: 6px 16px;
-    font-size: 11px;
+    font-size: 12px;
     color: #fbbf24;
     background: rgba(251, 191, 36, 0.1);
     border-bottom: 1px solid rgba(251, 191, 36, 0.25);
@@ -1541,7 +1625,7 @@
     color: #f87171;
   }
   .state-hint {
-    font-size: 12px;
+    font-size: 13px;
     opacity: 0.7;
   }
 
@@ -1561,7 +1645,7 @@
     font-weight: 600;
   }
   .large-file-hint {
-    font-size: 12px;
+    font-size: 13px;
     color: #a1a1aa;
     max-width: 360px;
     line-height: 1.5;

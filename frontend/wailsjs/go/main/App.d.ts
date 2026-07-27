@@ -27,6 +27,8 @@ export function CreateProject(arg1:string):Promise<main.ProjectInfo>;
 
 export function CreateSession(arg1:string,arg2:string,arg3:string,arg4:boolean,arg5:string):Promise<main.SessionInfo>;
 
+export function CreateSessionFromTemplate(arg1:string,arg2:string,arg3:string):Promise<main.SessionInfo>;
+
 export function CreateTab(arg1:string,arg2:boolean,arg3:string,arg4:string,arg5:string,arg6:string):Promise<number>;
 
 export function CreateTask(arg1:string,arg2:string,arg3:string,arg4:string,arg5:Array<string>):Promise<main.TaskInfo>;
@@ -42,6 +44,8 @@ export function DeleteGroup(arg1:string):Promise<void>;
 export function DeleteProject(arg1:string):Promise<void>;
 
 export function DeleteSession(arg1:string):Promise<void>;
+
+export function DeleteSessionTemplate(arg1:string):Promise<void>;
 
 export function DeleteSubtask(arg1:string,arg2:string,arg3:string):Promise<void>;
 
@@ -115,6 +119,8 @@ export function GetSessionDiff(arg1:string):Promise<main.DiffData>;
 
 export function GetSessionDiffFiles(arg1:string):Promise<Array<session.DiffFile>>;
 
+export function GetSessionTemplates():Promise<Array<main.SessionTemplateInfo>>;
+
 export function GetSessions():Promise<Array<main.SessionInfo>>;
 
 export function GetSettings():Promise<main.SettingsInfo>;
@@ -154,6 +160,8 @@ export function ImportSessionFile(arg1:string,arg2:Array<string>):Promise<number
 export function ImportSessions(arg1:string,arg2:Array<string>):Promise<number>;
 
 export function InitHistorySearch():Promise<void>;
+
+export function InvalidateSessionFileIndex(arg1:string):Promise<void>;
 
 export function IsDevMode():Promise<boolean>;
 
@@ -219,9 +227,17 @@ export function SaveCommand(arg1:string,arg2:string,arg3:string,arg4:string,arg5
 
 export function SaveCommandGroup(arg1:string,arg2:string):Promise<string>;
 
+export function SaveSessionAsTemplate(arg1:string,arg2:string,arg3:boolean):Promise<string>;
+
 export function SaveSessionFileEdit(arg1:string,arg2:string,arg3:string,arg4:session.FileShape,arg5:string,arg6:boolean):Promise<main.SaveFileEditResult>;
 
+export function SaveSessionTemplate(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string,arg6:string,arg7:boolean,arg8:string,arg9:Array<main.TemplateTabInfo>):Promise<string>;
+
 export function SaveSettings(arg1:main.SettingsInfo):Promise<void>;
+
+export function SearchSessionFileContents(arg1:string,arg2:string,arg3:boolean,arg4:boolean):Promise<session.ContentSearchResult>;
+
+export function SearchSessionFileIndex(arg1:string,arg2:boolean):Promise<session.FileIndex>;
 
 export function SelectProject(arg1:string):Promise<void>;
 

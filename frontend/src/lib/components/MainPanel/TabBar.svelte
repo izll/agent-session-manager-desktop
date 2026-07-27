@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy, createEventDispatcher, tick } from 'svelte';
+  import { claimMenu, releaseMenu } from '../../utils/openMenu';
   import AgentIcon from '../common/AgentIcon.svelte';
   import NewTabDialog from '../Dialogs/NewTabDialog.svelte';
   import TabColorDialog from '../Dialogs/TabColorDialog.svelte';
@@ -772,11 +773,14 @@
     tabContextMenuIndex = index;
     tabContextMenuName = name;
     showTabContextMenu = true;
+    // See SessionItem: contextmenu doesn't fire the click that closes menus.
+    claimMenu(closeTabContextMenu);
   }
 
   function closeTabContextMenu() {
     showTabContextMenu = false;
     tabContextMenuIndex = null;
+    releaseMenu(closeTabContextMenu);
   }
 
   function handleTabContextWindowClick() {
@@ -2124,7 +2128,7 @@
   }
 
   .interim-text {
-    font-size: 12px;
+    font-size: 13px;
     color: rgba(239, 68, 68, 0.9);
     font-style: italic;
   }
@@ -2264,7 +2268,7 @@
   }
 
   .buffer-hint {
-    font-size: 11px;
+    font-size: 12px;
     color: #4b5563;
   }
 
@@ -2311,7 +2315,7 @@
   }
 
   .buffer-toggle-label {
-    font-size: 11px;
+    font-size: 12px;
     color: #6b7280;
   }
 
@@ -2411,7 +2415,7 @@
 
   .extra-args-hint {
     display: block;
-    font-size: 11px;
+    font-size: 12px;
     color: #6b7280;
     margin-top: 8px;
     margin-bottom: 16px;

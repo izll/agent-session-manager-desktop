@@ -1229,9 +1229,9 @@
   .column-item > :global(*) { width: 100%; }
   .agent-theme-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 8px; }
   .agent-theme-row { display: flex; align-items: center; gap: 8px; }
-  .agent-theme-name { min-width: 80px; font-size: 12px; color: #d4d4d8; }
+  .agent-theme-name { min-width: 80px; font-size: 13px; color: #d4d4d8; }
   .palette-toggle {
-    align-self: flex-start; padding: 6px 12px; border-radius: 7px; font-size: 12px; cursor: pointer;
+    align-self: flex-start; padding: 6px 12px; border-radius: 7px; font-size: 13px; cursor: pointer;
     border: 1px solid rgba(255,255,255,.12); background: rgba(255,255,255,.05); color: #d4d4d8;
   }
   .palette-toggle:hover { border-color: rgba(var(--accent-rgb), .5); color: var(--accent-pale); }
@@ -1241,16 +1241,16 @@
   }
   .agent-theme-block summary {
     display: flex; align-items: center; justify-content: space-between; gap: 8px;
-    cursor: pointer; font-size: 12px; color: #d4d4d8; list-style: none;
+    cursor: pointer; font-size: 13px; color: #d4d4d8; list-style: none;
   }
   .agent-theme-block summary::-webkit-details-marker { display: none; }
   .agent-theme-block[open] summary { margin-bottom: 8px; }
-  .agent-theme-current { color: #71717a; font-size: 11px; }
+  .agent-theme-current { color: #71717a; font-size: 12px; }
   .custom-list { display: flex; flex-direction: column; gap: 6px; }
   .custom-row { display: flex; align-items: center; gap: 6px; }
   .custom-row.editing .custom-name { border-color: rgba(var(--accent-rgb), .5); }
   .custom-name {
-    flex: 1; min-width: 0; padding: 6px 9px; border-radius: 6px; font-size: 12px;
+    flex: 1; min-width: 0; padding: 6px 9px; border-radius: 6px; font-size: 13px;
     border: 1px solid rgba(255,255,255,.12); background: rgba(0,0,0,.25); color: #e4e4e7;
   }
   .palette-delete {
@@ -1259,13 +1259,13 @@
   }
   .palette-delete:hover { color: #fb7185; border-color: rgba(251,113,133,.5); }
   .palette-add {
-    align-self: flex-start; padding: 6px 12px; border-radius: 7px; font-size: 12px; cursor: pointer;
+    align-self: flex-start; padding: 6px 12px; border-radius: 7px; font-size: 13px; cursor: pointer;
     border: 1px dashed rgba(var(--accent-rgb), .4); background: rgba(var(--accent-rgb), .08); color: var(--accent-lighter);
   }
   .palette-add:hover { background: rgba(var(--accent-rgb), .16); }
 
   .palette-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; }
-  .palette-swatch { display: flex; align-items: center; gap: 8px; font-size: 11px; color: #a1a1aa; }
+  .palette-swatch { display: flex; align-items: center; gap: 8px; font-size: 12px; color: #a1a1aa; }
   .palette-swatch input[type="color"] {
     width: 34px; height: 24px; padding: 0; border: 1px solid rgba(255,255,255,.15);
     border-radius: 5px; background: transparent; cursor: pointer;
@@ -1289,13 +1289,17 @@
     border-radius: 16px;
     box-shadow: 0 25px 50px rgba(0, 0, 0, 0.5), 0 0 100px rgba(var(--accent-rgb), 0.1);
     width: 100%;
-    max-width: 520px;
+    /* Wide enough that a setting's label and its control share a line
+       comfortably; the 90vw keeps it sane on a small window. */
+    max-width: min(760px, 90vw);
     /* A fixed height, not just a maximum: the tabs differ in content length,
        and sizing to each one made the whole dialog jump as you switched
        between them. The list inside scrolls instead. Capped in px as well so
-       a tall screen doesn't stretch it into mostly empty space. */
-    height: min(85vh, 680px);
-    max-height: 85vh;
+       a tall screen doesn't stretch it into mostly empty space.
+       Both figures grew with the app-wide type bump — at the old size the
+       longer settings tabs scrolled where they used to fit. */
+    height: min(88vh, 780px);
+    max-height: 88vh;
     overflow: hidden;
     display: flex;
     flex-direction: column;
@@ -1346,12 +1350,25 @@
     padding: 12px 24px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
     flex-shrink: 0;
+    /* Six tabs whose labels vary a lot by language — Hungarian's
+       "Karbantartás" is twice the width of English's "Update". Rather than let
+       them overflow the dialog, the strip scrolls; the scrollbar is hidden
+       because a horizontal bar under the tabs reads as a divider. */
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .tabs::-webkit-scrollbar {
+    display: none;
   }
 
   .tab {
     padding: 8px 16px;
     font-size: 13px;
     font-weight: 500;
+    /* A scrolling strip must not compress or wrap its labels. */
+    white-space: nowrap;
+    flex-shrink: 0;
     color: #6b7280;
     background: transparent;
     border: 1px solid transparent;
@@ -1386,7 +1403,7 @@
   }
 
   .settings-section h3 {
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.5px;
@@ -1395,7 +1412,7 @@
   }
 
   .section-desc {
-    font-size: 12px;
+    font-size: 13px;
     color: #4b5563;
     margin: 0 0 12px 0;
   }
@@ -1404,6 +1421,10 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
+    /* Keeps the label and its control reading as one row now the dialog is
+       wide: space-between alone would push them to opposite edges with a lake
+       of empty space between, and the eye stops connecting the two. */
+    gap: 24px;
     padding: 12px 0;
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
     cursor: pointer;
@@ -1431,6 +1452,10 @@
     display: flex;
     flex-direction: column;
     gap: 2px;
+    /* Takes the row's slack so a long description wraps into the space rather
+       than the label and its control drifting to opposite edges. */
+    flex: 1;
+    min-width: 0;
   }
 
   .setting-label {
@@ -1440,7 +1465,7 @@
   }
 
   .setting-desc {
-    font-size: 12px;
+    font-size: 13px;
     color: #6b7280;
   }
 
@@ -1460,7 +1485,7 @@
     border: 1px solid rgba(255, 255, 255, 0.1);
     background: rgba(255, 255, 255, 0.03);
     color: #a1a1aa;
-    font-size: 11px;
+    font-size: 12px;
     cursor: pointer;
     transition: border-color 0.15s ease, color 0.15s ease;
   }
@@ -1483,7 +1508,7 @@
      rather than a separate small square beside the label. */
   .accent-warning {
     margin: 8px 0 0;
-    font-size: 11px;
+    font-size: 12px;
     color: #fbbf24;
   }
 
@@ -1510,7 +1535,7 @@
     border: 1px solid rgba(255, 255, 255, 0.12);
     background: rgba(255, 255, 255, 0.05);
     color: #d4d4d8;
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 600;
     cursor: pointer;
     transition: border-color 0.15s ease, color 0.15s ease;
@@ -1534,7 +1559,7 @@
     min-width: 42px;
     text-align: right;
     font-family: 'JetBrains Mono', monospace;
-    font-size: 12px;
+    font-size: 13px;
     color: #a1a1aa;
   }
 
@@ -1574,7 +1599,7 @@
     display: flex;
     align-items: center;
     gap: 4px;
-    font-size: 12px;
+    font-size: 13px;
     color: #9ca3af;
     cursor: pointer;
   }
@@ -1710,7 +1735,7 @@
     padding: 6px 8px;
     background: rgba(255, 255, 255, 0.03);
     border-radius: 6px;
-    font-size: 12px;
+    font-size: 13px;
   }
 
   .command-word {
@@ -1735,7 +1760,7 @@
   }
 
   .hint {
-    font-size: 11px;
+    font-size: 12px;
     color: #4b5563;
   }
 
@@ -1753,7 +1778,7 @@
     border: 1px solid rgba(var(--accent-rgb), 0.3);
     border-radius: 8px;
     color: var(--accent-light);
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 500;
     cursor: pointer;
     transition: all 0.2s ease;

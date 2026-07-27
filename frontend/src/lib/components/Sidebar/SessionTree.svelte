@@ -20,6 +20,7 @@
   export let onNewSession: () => void;
   export let onNewGroup: () => void;
   export let onCollapse: () => void;
+  export let onTemplates: () => void;
 
   let ungroupedDragOver = false;
   let sessionListEl: HTMLDivElement;
@@ -267,6 +268,18 @@
         </svg>
         {$t('sidebar.group')}
       </button>
+      <!-- Icon-only, next to "new session": templates are another way to
+           create one, but a third full-width button would crowd the footer.
+           A context-menu-only entry would be too easy never to find. -->
+      <button class="collapse-btn" on:click={onTemplates} title={$t('sidebar.templates')}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="3" width="7" height="7" rx="1"/>
+          <rect x="14" y="3" width="7" height="7" rx="1"/>
+          <rect x="3" y="14" width="7" height="7" rx="1"/>
+          <line x1="17.5" y1="14" x2="17.5" y2="21"/>
+          <line x1="14" y1="17.5" x2="21" y2="17.5"/>
+        </svg>
+      </button>
       <button class="collapse-btn" on:click={onCollapse} title={$t('sidebar.collapseSidebar')}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <polyline points="15 18 9 12 15 6"/>
@@ -297,7 +310,7 @@
     display: flex;
     align-items: center;
     gap: 4px;
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 500;
   }
 
@@ -417,7 +430,7 @@
 
   .section-header {
     padding: 8px 12px;
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.5px;
@@ -432,7 +445,7 @@
   }
 
   .section-header .star {
-    font-size: 12px;
+    font-size: 13px;
     text-shadow: 0 0 6px rgba(251, 191, 36, 0.6);
   }
 
@@ -481,7 +494,7 @@
   .no-matches {
     padding: 16px 12px;
     color: #6b7280;
-    font-size: 12px;
+    font-size: 13px;
     text-align: center;
     font-style: italic;
   }
@@ -523,7 +536,7 @@
     padding: 10px 12px;
     border: none;
     border-radius: 8px;
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 600;
     color: white;
     cursor: pointer;
@@ -583,7 +596,7 @@
 
   .session-tree.compact .search-input {
     padding: 5px 10px 5px 30px;
-    font-size: 12px;
+    font-size: 13px;
   }
 
   .session-tree.compact .status-summary {
@@ -592,7 +605,7 @@
   }
 
   .session-tree.compact .status-item {
-    font-size: 11px;
+    font-size: 12px;
   }
 
   .session-tree.compact .status-dot {
@@ -606,7 +619,7 @@
 
   .session-tree.compact .section-header {
     padding: 4px 10px;
-    font-size: 10px;
+    font-size: 11px;
   }
 
   .session-tree.compact .footer {
@@ -615,6 +628,6 @@
 
   .session-tree.compact .new-btn {
     padding: 7px 10px;
-    font-size: 11px;
+    font-size: 12px;
   }
 </style>

@@ -986,6 +986,78 @@ export namespace main {
 		    return a;
 		}
 	}
+	export class TemplateTabInfo {
+	    name: string;
+	    agent: string;
+	    customCommand: string;
+	    autoYes: boolean;
+	    extraArgs: string;
+	    workDir: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new TemplateTabInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.agent = source["agent"];
+	        this.customCommand = source["customCommand"];
+	        this.autoYes = source["autoYes"];
+	        this.extraArgs = source["extraArgs"];
+	        this.workDir = source["workDir"];
+	    }
+	}
+	export class SessionTemplateInfo {
+	    id: string;
+	    name: string;
+	    description: string;
+	    sessionName: string;
+	    path: string;
+	    agent: string;
+	    autoYes: boolean;
+	    extraArgs: string;
+	    needsPath: boolean;
+	    tabs: TemplateTabInfo[];
+	    useCount: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new SessionTemplateInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.description = source["description"];
+	        this.sessionName = source["sessionName"];
+	        this.path = source["path"];
+	        this.agent = source["agent"];
+	        this.autoYes = source["autoYes"];
+	        this.extraArgs = source["extraArgs"];
+	        this.needsPath = source["needsPath"];
+	        this.tabs = this.convertValues(source["tabs"], TemplateTabInfo);
+	        this.useCount = source["useCount"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class SettingsInfo {
 	    compactList: boolean;
 	    hideStatusLines: boolean;
@@ -1200,6 +1272,7 @@ export namespace main {
 		    return a;
 		}
 	}
+	
 	export class TerminalServer {
 	
 	
@@ -1317,6 +1390,62 @@ export namespace session {
 	        this.entries = this.convertValues(source["entries"], BrowseEntry);
 	        this.truncated = source["truncated"];
 	        this.totalEntries = source["totalEntries"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class ContentMatch {
+	    path: string;
+	    line: number;
+	    text: string;
+	    col: number;
+	    length: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new ContentMatch(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.path = source["path"];
+	        this.line = source["line"];
+	        this.text = source["text"];
+	        this.col = source["col"];
+	        this.length = source["length"];
+	    }
+	}
+	export class ContentSearchResult {
+	    matches: ContentMatch[];
+	    truncated: boolean;
+	    filesSearched: number;
+	    filesSkipped: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new ContentSearchResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.matches = this.convertValues(source["matches"], ContentMatch);
+	        this.truncated = source["truncated"];
+	        this.filesSearched = source["filesSearched"];
+	        this.filesSkipped = source["filesSkipped"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -1486,6 +1615,58 @@ export namespace session {
 		    return a;
 		}
 	}
+	export class IndexedFile {
+	    path: string;
+	    name: string;
+	    size: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new IndexedFile(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.path = source["path"];
+	        this.name = source["name"];
+	        this.size = source["size"];
+	    }
+	}
+	export class FileIndex {
+	    files: IndexedFile[];
+	    truncated: boolean;
+	    skippedDirs: string[];
+	    includedAll: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new FileIndex(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.files = this.convertValues(source["files"], IndexedFile);
+	        this.truncated = source["truncated"];
+	        this.skippedDirs = source["skippedDirs"];
+	        this.includedAll = source["includedAll"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	
 	export class FollowedWindow {
 	    index: number;
@@ -1531,6 +1712,7 @@ export namespace session {
 	        this.hide_status_line = source["hide_status_line"];
 	    }
 	}
+	
 	export class Placeholder {
 	    name: string;
 	    default?: string;

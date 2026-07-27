@@ -8,6 +8,8 @@
   import { settings } from '../../stores/settings';
   import { t } from '../../i18n';
   import { portal } from '../../utils/portal';
+  import { menuPosition } from '../../utils/menuPosition';
+  import { claimMenu, releaseMenu } from '../../utils/openMenu';
   import SessionColorDialog from '../Dialogs/SessionColorDialog.svelte';
   import {
     getGradientCSS,
@@ -86,10 +88,13 @@
     contextMenuX = e.clientX;
     contextMenuY = e.clientY;
     showContextMenu = true;
+    // See SessionItem: contextmenu doesn't fire the click that closes menus.
+    claimMenu(closeContextMenu);
   }
 
   function closeContextMenu() {
     showContextMenu = false;
+    releaseMenu(closeContextMenu);
   }
 
   function handleWindowClick() {
@@ -326,7 +331,7 @@
     <div
       class="context-menu"
       use:portal
-      style="left: {contextMenuX}px; top: {contextMenuY}px"
+      use:menuPosition={{ x: contextMenuX, y: contextMenuY }}
       on:click|stopPropagation
     >
       <button class="context-menu-item" on:click={handleStartAll}>
@@ -518,7 +523,7 @@
   }
 
   .session-count {
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 500;
     color: #6b7280;
     background: rgba(107, 114, 128, 0.2);
@@ -542,7 +547,7 @@
 
   .empty-group {
     padding: 12px 16px;
-    font-size: 12px;
+    font-size: 13px;
     color: #6b7280;
     font-style: italic;
   }
@@ -605,11 +610,11 @@
   }
 
   .group-container.compact .group-name {
-    font-size: 12px;
+    font-size: 13px;
   }
 
   .group-container.compact .session-count {
-    font-size: 10px;
+    font-size: 11px;
     padding: 1px 6px;
   }
 
@@ -639,6 +644,6 @@
 
   .group-container.compact .empty-group {
     padding: 6px 12px;
-    font-size: 11px;
+    font-size: 12px;
   }
 </style>

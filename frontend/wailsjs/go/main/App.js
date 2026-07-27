@@ -50,6 +50,10 @@ export function CreateSession(arg1, arg2, arg3, arg4, arg5) {
   return window['go']['main']['App']['CreateSession'](arg1, arg2, arg3, arg4, arg5);
 }
 
+export function CreateSessionFromTemplate(arg1, arg2, arg3) {
+  return window['go']['main']['App']['CreateSessionFromTemplate'](arg1, arg2, arg3);
+}
+
 export function CreateTab(arg1, arg2, arg3, arg4, arg5, arg6) {
   return window['go']['main']['App']['CreateTab'](arg1, arg2, arg3, arg4, arg5, arg6);
 }
@@ -80,6 +84,10 @@ export function DeleteProject(arg1) {
 
 export function DeleteSession(arg1) {
   return window['go']['main']['App']['DeleteSession'](arg1);
+}
+
+export function DeleteSessionTemplate(arg1) {
+  return window['go']['main']['App']['DeleteSessionTemplate'](arg1);
 }
 
 export function DeleteSubtask(arg1, arg2, arg3) {
@@ -226,6 +234,10 @@ export function GetSessionDiffFiles(arg1) {
   return window['go']['main']['App']['GetSessionDiffFiles'](arg1);
 }
 
+export function GetSessionTemplates() {
+  return window['go']['main']['App']['GetSessionTemplates']();
+}
+
 export function GetSessions() {
   return window['go']['main']['App']['GetSessions']();
 }
@@ -304,6 +316,10 @@ export function ImportSessions(arg1, arg2) {
 
 export function InitHistorySearch() {
   return window['go']['main']['App']['InitHistorySearch']();
+}
+
+export function InvalidateSessionFileIndex(arg1) {
+  return window['go']['main']['App']['InvalidateSessionFileIndex'](arg1);
 }
 
 export function IsDevMode() {
@@ -434,12 +450,28 @@ export function SaveCommandGroup(arg1, arg2) {
   return window['go']['main']['App']['SaveCommandGroup'](arg1, arg2);
 }
 
+export function SaveSessionAsTemplate(arg1, arg2, arg3) {
+  return window['go']['main']['App']['SaveSessionAsTemplate'](arg1, arg2, arg3);
+}
+
 export function SaveSessionFileEdit(arg1, arg2, arg3, arg4, arg5, arg6) {
   return window['go']['main']['App']['SaveSessionFileEdit'](arg1, arg2, arg3, arg4, arg5, arg6);
 }
 
+export function SaveSessionTemplate(arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9) {
+  return window['go']['main']['App']['SaveSessionTemplate'](arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9);
+}
+
 export function SaveSettings(arg1) {
   return window['go']['main']['App']['SaveSettings'](arg1);
+}
+
+export function SearchSessionFileContents(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['SearchSessionFileContents'](arg1, arg2, arg3, arg4);
+}
+
+export function SearchSessionFileIndex(arg1, arg2) {
+  return window['go']['main']['App']['SearchSessionFileIndex'](arg1, arg2);
 }
 
 export function SelectProject(arg1) {
