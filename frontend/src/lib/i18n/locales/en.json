@@ -302,6 +302,7 @@
   "browser.largeFileTitle": "Large file ({size})",
   "browser.largeFileHint": "This file is too large to display automatically (it can freeze the UI). Only show it if you really need to.",
   "browser.showAnyway": "Show anyway (first {count} lines)",
+  "browser.showAnywayAll": "Show anyway",
   "browser.linesHidden": "… {count} more lines hidden (the file is too large to display inline)",
   "browser.edit": "Edit",
   "browser.stopEditing": "Close editor",
@@ -940,5 +941,8 @@
   "templates.anyDirectory": "any directory",
   "sidebar.resizeHint": "Drag to resize · double-click to reset",
   "sidebar.favoriteShortcut": "Jump here with Ctrl+Shift+{n}",
-  "help.navFavorite": "Jump to favourite 1-7"
+  "help.navFavorite": "Jump to favourite 1-7",
+  "browser.caretPosition": "Ln {line}, Col {col}",
+  "browser.caretSelection": "{n} selected",
+  "browser.caretTotal": "{n} lines"
 }

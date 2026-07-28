@@ -748,6 +748,7 @@
   "browser.largeFileTitle": "Tệp lớn ({size})",
   "browser.largeFileHint": "Tệp này quá lớn để hiển thị tự động (có thể làm treo giao diện). Chỉ hiển thị khi bạn thực sự cần.",
   "browser.showAnyway": "Vẫn hiển thị ({count} dòng đầu)",
+  "browser.showAnywayAll": "Vẫn hiển thị",
   "browser.linesHidden": "… còn {count} dòng bị ẩn (tệp quá lớn để hiển thị ở đây)",
   "browser.edit": "Chỉnh sửa",
   "browser.stopEditing": "Đóng trình soạn thảo",
@@ -940,5 +941,8 @@
   "templates.anyDirectory": "bất kỳ thư mục nào",
   "sidebar.resizeHint": "Kéo để đổi kích thước · nhấp đúp để đặt lại",
   "sidebar.favoriteShortcut": "Chuyển tới đây bằng Ctrl+Shift+{n}",
-  "help.navFavorite": "Chuyển tới mục yêu thích 1-7"
+  "help.navFavorite": "Chuyển tới mục yêu thích 1-7",
+  "browser.caretPosition": "Dòng {line}, Cột {col}",
+  "browser.caretSelection": "đã chọn {n}",
+  "browser.caretTotal": "{n} dòng"
 }

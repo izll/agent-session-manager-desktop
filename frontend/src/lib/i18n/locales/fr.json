@@ -748,6 +748,7 @@
   "browser.largeFileTitle": "Fichier volumineux ({size})",
   "browser.largeFileHint": "Ce fichier est trop volumineux pour être affiché automatiquement (cela peut figer l'interface). Ne l'affiche que si tu en as vraiment besoin.",
   "browser.showAnyway": "Afficher quand même ({count} premières lignes)",
+  "browser.showAnywayAll": "Afficher quand même",
   "browser.linesHidden": "… {count} lignes supplémentaires masquées (le fichier est trop volumineux pour être affiché ici)",
   "browser.edit": "Modifier",
   "browser.stopEditing": "Fermer l'éditeur",
@@ -940,5 +941,8 @@
   "templates.anyDirectory": "n'importe quel répertoire",
   "sidebar.resizeHint": "Glissez pour redimensionner · double-clic pour réinitialiser",
   "sidebar.favoriteShortcut": "Aller ici avec Ctrl+Maj+{n}",
-  "help.navFavorite": "Aller au favori 1 à 7"
+  "help.navFavorite": "Aller au favori 1 à 7",
+  "browser.caretPosition": "Lig. {line}, Col. {col}",
+  "browser.caretSelection": "{n} sélectionnés",
+  "browser.caretTotal": "{n} lignes"
 }

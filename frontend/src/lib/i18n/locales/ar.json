@@ -748,6 +748,7 @@
   "browser.largeFileTitle": "ملف كبير ({size})",
   "browser.largeFileHint": "هذا الملف أكبر من أن يُعرض تلقائيًا (قد يؤدي إلى تجمّد الواجهة). اعرضه فقط إذا كنت بحاجة إليه فعلًا.",
   "browser.showAnyway": "اعرضه على أي حال (أول {count} سطر)",
+  "browser.showAnywayAll": "اعرضه على أي حال",
   "browser.linesHidden": "… تم إخفاء {count} سطرًا إضافيًا (الملف كبير جدًا لعرضه هنا)",
   "browser.edit": "تحرير",
   "browser.stopEditing": "إغلاق المحرّر",
@@ -940,5 +941,8 @@
   "templates.anyDirectory": "أي مجلد",
   "sidebar.resizeHint": "اسحب لتغيير الحجم · انقر مزدوجًا لإعادة التعيين",
   "sidebar.favoriteShortcut": "انتقل إلى هنا بـ Ctrl+Shift+{n}",
-  "help.navFavorite": "الانتقال إلى المفضلة 1-7"
+  "help.navFavorite": "الانتقال إلى المفضلة 1-7",
+  "browser.caretPosition": "سطر {line}، عمود {col}",
+  "browser.caretSelection": "{n} محدد",
+  "browser.caretTotal": "{n} سطر"
 }

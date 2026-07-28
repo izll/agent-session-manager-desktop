@@ -1,13 +1,16 @@
 <script lang="ts">
   import { onMount, onDestroy, createEventDispatcher } from 'svelte';
-  import { selectedSessionId } from '../../stores/sessions';
+  import { selectedSessionId, selectedWindowIdx } from '../../stores/sessions';
   import { get } from 'svelte/store';
   import * as App from '../../../../wailsjs/go/main/App';
   import type { session } from '../../../../wailsjs/go/models';
   import { t } from '../../i18n';
   import { flattenTree, type DirNode, type TreeRow } from '../../utils/fileTree';
-  import { detectLanguage, highlightLines } from '../../utils/highlight';
   import { fileTypeOf } from '../../utils/fileTypes';
+  import { EditorState, Compartment } from '@codemirror/state';
+  import { EditorView, keymap } from '@codemirror/view';
+  import { history, historyKeymap, defaultKeymap } from '@codemirror/commands';
+  import { baseExtensions, insertTabKeymap, loadLanguage, cachedLanguage } from '../../utils/codemirror';
   import ConfirmDialog from '../Dialogs/ConfirmDialog.svelte';
   import FileQuickOpen from './FileQuickOpen.svelte';
 
@@ -44,12 +47,17 @@
 
   // --- Editing --------------------------------------------------------------
 
-  // The editor holds ONLY the text. Everything the textarea cannot represent —
+  // The editor holds ONLY the text. Everything the editor cannot represent —
   // the BOM, the line-ending convention, whether the file ends in a newline —
   // lives in `openedFile.shape` and is handed straight back to the save
-  // untouched. Nothing the user can do in the textarea reaches it, which is
+  // untouched. Nothing the user can do in the editor reaches it, which is
   // what makes an unmodified save byte-identical rather than merely usually
   // byte-identical.
+  //
+  // CodeMirror is pinned to an LF line separator for the same reason — see
+  // codemirror.ts's lineSeparatorLF. Without it a mixed-ending file, which the
+  // Go side passes through with its CRs embedded precisely so they can be
+  // restored, would be silently normalised on open.
   let editing = false;
   let openedFile: session.EditableFile | null = null;
   let editText = '';
@@ -60,8 +68,6 @@
   let saveError = '';
   let savedFlash = false;
   let savedFlashTimer: ReturnType<typeof setTimeout> | null = null;
-  let textareaEl: HTMLTextAreaElement | null = null;
-  let lineNumbersEl: HTMLDivElement | null = null;
   // "modified" or "deleted" while a conflict is waiting on the user; "" when
   // there is none. The user's text is never discarded to show it.
   let conflict: '' | 'modified' | 'deleted' = '';
@@ -70,39 +76,50 @@
   let pendingLeave: (() => void) | null = null;
 
   $: modified = editing && editText !== savedText;
-  $: canEdit = !!openedFile && openedFile.editable;
+  // Tied to the file currently selected, not merely to whatever was last
+  // opened for editing. Selecting a different file leaves `editing` and
+  // `openedFile` describing the previous one for a moment; without this check
+  // both views claimed to be showing, the edit view won, and its element —
+  // gated on canEdit for the OLD file — never rendered. The result was a black
+  // pane with nothing mounted into it.
+  $: canEdit = !!openedFile && openedFile.editable && samePath(openedFile.path, selectedPath);
 
-  // Soft wrap is OFF in edit mode, deliberately. The gutter is a separate
-  // element scrolled in lockstep with the textarea, and a wrapped line occupies
-  // more rows in the textarea than it has numbers — there is no way to keep the
-  // two aligned without measuring every wrap. Horizontal scrolling is the
-  // honest trade, and it is what a code editor does anyway.
-  //
-  // Built as a dense array of the numbers themselves rather than iterating
-  // Array(n): a sparse array is not reliably enumerated by {#each}, and the
-  // numbers have to be a plain list for the rows to key correctly. Capped for
-  // the same reason the read view is — a 1 MiB minified file is tens of
-  // thousands of lines, and the gutter's DOM is pure overhead past the point
-  // where the numbers stop being useful. The TEXT is never capped: the
-  // textarea always holds the whole file, so a save can never write a partial
-  // buffer.
-  const MAX_GUTTER_LINES = 20000;
-
-  $: editLineCount = editing ? Math.min(countLines(editText), MAX_GUTTER_LINES) : 0;
-  $: editLineNumbers = buildLineNumbers(editLineCount);
-
-  function buildLineNumbers(count: number): number[] {
-    const out: number[] = new Array(count);
-    for (let i = 0; i < count; i++) out[i] = i + 1;
-    return out;
+  /**
+   * Whether two of this browser's paths name the same file.
+   *
+   * The Go side returns paths through filepath.Clean, while selectedPath is
+   * whatever the tree handed over, so comparing them raw would call a file
+   * different from itself over a leading "./" — and the editor would silently
+   * refuse to open.
+   */
+  function samePath(a: string | null, b: string | null): boolean {
+    if (!a || !b) return false;
+    const norm = (p: string) => p.replace(/^\.\//, '').replace(/\/+/g, '/').replace(/\/$/, '');
+    return norm(a) === norm(b);
   }
 
-  // Rendering one <div> per line with no virtualisation is what the diff view
-  // does, and a file long enough to hurt is not readable inline anyway. The
-  // backend already caps the transfer at 1 MiB; this caps the DOM.
-  const MAX_RENDER_LINES = 3000;
-  // Above this the file is not rendered until the user asks — parsing and
-  // laying out tens of thousands of lines locks the main thread.
+  // Soft wrap is OFF in both views, deliberately, and it is CodeMirror's default
+  // — `EditorView.lineWrapping` is simply never added. Horizontal scrolling is
+  // the honest trade for a code file, and it is what the textarea did.
+  //
+  // The line numbers come from CodeMirror's own `lineNumbers()` gutter, which
+  // renders only the rows in view, so the 20 000-row cap the hand-built gutter
+  // needed is gone: a 100 000-line file now costs the same DOM as a short one.
+
+  // The total, for the footer. Read off the document rather than counted over
+  // the string: CodeMirror already maintains it, and on a large file recounting
+  // per keystroke was the expensive part.
+  let editTotalLines = 0;
+
+  // There is no render cap any more. CodeMirror draws only the lines in the
+  // viewport, so the DOM cost no longer scales with the file, and the read view
+  // shows the whole file rather than its first 3000 lines.
+  //
+  // The large-file gate below stays: the cost that remains is PARSING, and
+  // handing a multi-megabyte minified bundle to a Lezer grammar still locks the
+  // main thread. The gate is now about that, not about the DOM.
+  //
+  // Above this the file is not rendered until the user asks.
   const LARGE_FILE_LINES = 4000;
   const LARGE_FILE_BYTES = 400 * 1024;
 
@@ -232,6 +249,9 @@
     treeGeneration++;
     fileGeneration++;
     if (savedFlashTimer) clearTimeout(savedFlashTimer);
+    // A CodeMirror view holds DOM listeners and a measure loop; leaving one
+    // behind when the tab unmounts is a real leak.
+    destroyView();
     window.removeEventListener('keydown', handleWindowKeydown, true);
     // Leaving the tab mid-drag would otherwise strand the document listeners.
     stopPaneResize();
@@ -324,6 +344,9 @@
       editText = file.text;
       savedText = file.text;
       editing = true;
+      // Forces the view to rebuild around the new buffer even when the path and
+      // mode are unchanged — which is exactly the reload-from-disk case.
+      editGeneration++;
     } catch (e) {
       if (destroyed || generation !== fileGeneration) return;
       saveError = String(e);
@@ -417,48 +440,328 @@
   /** Conflict resolution: keep editing, leaving the conflict unresolved. */
   function dismissConflict() {
     conflict = '';
-    textareaEl?.focus();
+    view?.focus();
   }
 
-  function handleEditorKeydown(e: KeyboardEvent) {
-    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
-      e.preventDefault();
-      void save();
-      return;
+  // --- CodeMirror ------------------------------------------------------------
+
+  // Where the caret is, for the editor's footer. Read from state.selection on
+  // every update rather than recomputed over the text: CodeMirror already knows
+  // which line an offset falls on, so this is O(log n) instead of a scan.
+  let caretLine = 1;
+  let caretColumn = 1;
+  /** Non-zero while a selection is active, so the footer can report its size. */
+  let selectionLength = 0;
+
+  /** The live editor, for whichever view is mounted. Null when neither is. */
+  let view: EditorView | null = null;
+  /** The element the view attaches to, bound by the markup. */
+  // Two hosts, not one shared reference. With a single bind:this on both the
+  // read and the edit element, switching modes had Svelte null it as the old
+  // element unmounted — and that could land AFTER the new element bound
+  // itself, leaving the reference null and no editor mounted at all.
+  let readHost: HTMLDivElement | null = null;
+  let editHost: HTMLDivElement | null = null;
+  $: editorHost = showEditEditor ? editHost : readHost;
+  /** Swapped when a grammar finishes loading, so no rebuild is needed. */
+  let langCompartment = new Compartment();
+  /**
+   * What the mounted view was built for. Compared against the wanted state to
+   * decide whether to recreate — see the reactive block below.
+   */
+  let mountedFor = '';
+
+  /**
+   * Ctrl+S and Escape, bound inside CodeMirror rather than on the container.
+   *
+   * CodeMirror stops propagation of keys it handles, so a listener on an
+   * ancestor would see neither reliably. Bound highest-precedence so the
+   * editor's own bindings cannot claim them first.
+   */
+  const appKeymap = keymap.of([
+    {
+      key: 'Mod-s',
+      run: () => {
+        void save();
+        return true;
+      },
+    },
+    {
+      key: 'Escape',
+      run: () => {
+        guardUnsaved(leaveEditMode);
+        return true;
+      },
+    },
+  ]);
+
+  /**
+   * Mirror the document and the selection back into the Svelte state.
+   *
+   * `editText` is the single source of truth for `modified` and for what a save
+   * submits, so it has to track every document change — including undo, paste
+   * and drag, which no keydown handler would see.
+   */
+  const syncFromView = EditorView.updateListener.of((update) => {
+    if (update.docChanged) {
+      editText = update.state.doc.toString();
+      editTotalLines = update.state.doc.lines;
     }
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      guardUnsaved(leaveEditMode);
-      return;
+    if (update.docChanged || update.selectionSet) {
+      const range = update.state.selection.main;
+      const line = update.state.doc.lineAt(range.head);
+      caretLine = line.number;
+      // Columns are 1-based and counted in characters, matching what the
+      // textarea's footer reported.
+      caretColumn = range.head - line.from + 1;
+      selectionLength = Math.abs(range.to - range.from);
     }
-    if (e.key === 'Tab') {
-      // A textarea in a code editor has to insert a tab; moving focus out
-      // mid-line is never what the user meant. Shift+Tab is left alone so the
-      // editor can still be escaped by keyboard.
-      if (e.shiftKey) return;
-      e.preventDefault();
-      insertTab();
+    // Tracked continuously rather than read when a switch happens: by the time
+    // a tab or session change reaches this component, Svelte has already torn
+    // the host element down and destroyed the view, so there was nothing left
+    // to ask — every save recorded zero.
+    // viewportChanged, not geometryChanged: the latter fires when the editor
+    // is resized, not when it is scrolled, so plain scrolling recorded nothing
+    // and returning landed on whatever the last click had saved.
+    if (update.viewportChanged || update.geometryChanged ||
+        update.docChanged || update.selectionSet) {
+      recordPlaceFromUpdate(update.view);
+    }
+  });
+
+  /** Latest known spot in the file on screen, kept current by the listener. */
+  function recordPlaceFromUpdate(v: EditorView) {
+    if (!selectedPath) return;
+    const offset = showEditEditor
+      ? v.state.selection.main.head
+      : firstVisibleOffset(v);
+    if (offset > 0) placeByFile.set(placeKey(selectedPath), offset);
+  }
+
+  /** Tear the editor down. Safe to call when nothing is mounted. */
+  function destroyView() {
+    view?.destroy();
+    view = null;
+    mountedFor = '';
+  }
+
+  /**
+   * Build the editor for the current file and mode.
+   *
+   * `readOnly` is the ONLY difference between the two views: same theme, same
+   * gutter, same grammar, so reading and editing are pixel-identical rather
+   * than two renderers kept in sync by hand.
+   */
+  /**
+   * Where the user is in the current file, as a document offset.
+   *
+   * The caret in the edit view, but the TOP OF THE VIEWPORT when reading —
+   * a read-only view never moves its caret, so it sits at zero however far
+   * down the file you have scrolled, and remembering it recorded nothing.
+   */
+  /**
+   * Offset of the first line fully in view.
+   *
+   * Probed a little way below the top edge, not at it: a pane scrolled to a
+   * fraction of a line has its topmost row partly cut off, and measuring at
+   * the very edge returns THAT row. Restoring then aligned it flush, leaving
+   * the file a line higher than it was. Sampling past the partial row picks
+   * the first whole one, which is what the restore puts back.
+   */
+  function firstVisibleOffset(v: EditorView): number {
+    const top = v.scrollDOM.getBoundingClientRect().top;
+    // Roughly one line down — enough to clear a partial row at any font size
+    // this editor uses.
+    const probe = top + v.defaultLineHeight;
+    return v.posAtCoords({ x: 0, y: probe }, false) ?? 0;
+  }
+
+  function currentPlaceOffset(): number {
+    if (!view) return 0;
+    if (showEditEditor) return view.state.selection.main.head;
+    // The first line CodeMirror considers visible. Asked of the view rather
+    // than measured off scrollDOM.scrollTop, which read zero however far the
+    // pane had been scrolled — the scroller CodeMirror owns is not the element
+    // the browser was actually scrolling.
+    return firstVisibleOffset(view);
+  }
+
+  /**
+   * Put the caret back where this session was left, if anything is pending.
+   *
+   * Clamped, because the file may have shrunk while away, and scrolled to the
+   * middle — a caret outside the viewport is no more use than none. Consumes
+   * the pending offset, so it applies once and not to the next file opened.
+   */
+  function applyRestoreOffset() {
+    if (!view || restoreOffset <= 0) return;
+    const at = Math.min(restoreOffset, view.state.doc.length);
+    restoreOffset = 0;
+    if (showEditEditor) {
+      view.dispatch({
+        selection: { anchor: at },
+        effects: EditorView.scrollIntoView(at, { y: 'center' }),
+      });
+    } else {
+      // Scroll only. The read view is read-only, where moving the caret is
+      // both meaningless and refused, and the remembered offset is the top of
+      // the viewport rather than a cursor — so it belongs at the top, not
+      // centred.
+      view.dispatch({ effects: EditorView.scrollIntoView(at, { y: 'start' }) });
     }
   }
 
-  function insertTab() {
-    const el = textareaEl;
-    if (!el) return;
-    const start = el.selectionStart;
-    const end = el.selectionEnd;
-    // Written through the DOM value rather than by reassigning editText alone:
-    // setting the bound value re-renders and would drop the caret to the end.
-    el.value = el.value.slice(0, start) + '\t' + el.value.slice(end);
-    el.selectionStart = el.selectionEnd = start + 1;
-    editText = el.value;
+  function createView(host: HTMLDivElement, doc: string, readOnly: boolean, path: string) {
+    // Mounts unconditionally. An earlier attempt deferred to the next frame
+    // when the host measured 0x0, guarded by `viewKey !== mountedFor` — but
+    // that state can settle before the frame runs, so the guard rejected the
+    // very mount it was waiting for and the editor never appeared at all.
+    // CodeMirror handles being mounted into a box that gains its size later,
+    // so there is nothing to wait for.
+    destroyView();
+    langCompartment = new Compartment();
+
+    // A grammar already fetched is applied synchronously, so reopening a file of
+    // a known type never flashes uncoloured.
+    const ready = cachedLanguage(path);
+
+    const extensions = [
+      ...baseExtensions(),
+      langCompartment.of(ready ? [ready] : []),
+      syncFromView,
+      // viewportChanged only fires when CodeMirror renders new rows, so a
+      // short scroll within the rendered range recorded nothing. The DOM
+      // event fires for every scroll.
+      EditorView.domEventHandlers({
+        scroll: (_e, v) => {
+          recordPlaceFromUpdate(v);
+          return false;
+        },
+      }),
+      EditorState.readOnly.of(readOnly),
+      EditorView.editable.of(!readOnly),
+    ];
+    if (!readOnly) {
+      // Order matters: appKeymap first so Ctrl+S and Escape win, then the tab
+      // override, then the defaults — whose Tab binding would otherwise reindent
+      // rather than insert a character.
+      extensions.push(appKeymap, insertTabKeymap, history(), keymap.of([...historyKeymap, ...defaultKeymap]));
+    }
+
+    view = new EditorView({ doc, extensions, parent: host });
+    mountedFor = viewKey;
+
+    // The edit view's host is created by an {#if}, so bind:this fires before
+    // the browser has laid it out and CodeMirror sizes itself against a 0x0
+    // box. Asking it to measure again once layout has settled is CodeMirror's
+    // own remedy for exactly this, and costs nothing when the box was already
+    // correct — which it is for the read view.
+    const mounted = view;
+    requestAnimationFrame(() => {
+      if (mounted === view) mounted.requestMeasure();
+    });
+
+    // Where this file was last left, if it has been open before. Selecting a
+    // NEW file has no entry, so it starts at the top — which is what picking a
+    // file from the tree should do.
+    if (restoreOffset <= 0) restoreOffset = placeByFile.get(placeKey(path)) || 0;
+    applyRestoreOffset();
+
+    if (!readOnly) {
+      editTotalLines = view.state.doc.lines;
+      caretLine = 1;
+      caretColumn = 1;
+      selectionLength = 0;
+      view.focus();
+    }
+
+    if (!ready) void applyLanguage(path);
   }
 
-  // The gutter is a sibling element, so it only stays aligned if it is scrolled
-  // with the textarea. Wrapping is off (see editLineCount) so one line is
-  // always exactly one row in both.
-  function syncGutterScroll() {
-    if (lineNumbersEl && textareaEl) lineNumbersEl.scrollTop = textareaEl.scrollTop;
+  /**
+   * Fetch the grammar for `path` and swap it in.
+   *
+   * The view is checked again after the await: the user can switch files while
+   * a chunk is in flight, and applying a stale grammar would colour the new file
+   * as the old one's language.
+   */
+  async function applyLanguage(path: string) {
+    const wanted = mountedFor;
+    const support = await loadLanguage(path);
+    if (!support || !view || destroyed || mountedFor !== wanted) return;
+    view.dispatch({ effects: langCompartment.reconfigure([support]) });
   }
+
+  /**
+   * Identity of the editor that SHOULD be mounted right now.
+   *
+   * Recreating is keyed off this string rather than off the document, because
+   * the document changes on every keystroke and rebuilding then would destroy
+   * the view under the user's cursor. It changes only when the file, the mode or
+   * the reason to show an editor at all changes.
+   *
+   * `editGeneration` is what makes a reload-from-disk recreate the view: the
+   * path and mode are unchanged, but the buffer must be replaced wholesale.
+   */
+  let editGeneration = 0;
+  $: showReadEditor = shouldRender && !editing && !!selectedFile && !selectedFile.binary;
+  $: showEditEditor = editing && canEdit;
+  // The tab index is part of the identity even though the tabs of one session
+  // share a directory. Switching tabs tears the host element down and back up,
+  // and with a key built only from the path the read view's key was unchanged
+  // across that — so nothing remounted into the new element and the pane stayed
+  // black. The edit view happened to survive because editGeneration made its
+  // key differ anyway.
+  $: viewKey = showEditEditor
+    ? `edit:${editGeneration}:${selectedPath || ''}`
+    : showReadEditor
+      ? `read:${$selectedWindowIdx ?? 0}:${selectedPath || ''}`
+      : '';
+
+  // Mount, remount or tear down to match `viewKey`.
+  //
+  // mountedFor is assigned INSIDE this block (via createView/destroyView):
+  // Svelte 3 orders reactive statements by dependency rather than by source
+  // position, so a tracking variable updated in a separate statement could be
+  // written before this one ever ran, and the editor would not rebuild.
+  $: if (editorHost && viewKey !== mountedFor) {
+    if (!viewKey) {
+      destroyView();
+    } else {
+      // The read view shows what was loaded for browsing; the edit view shows
+      // the separately-opened buffer whose version guards the save.
+      createView(editorHost, showEditEditor ? editText : fileContent, !showEditEditor, selectedPath || '');
+    }
+  }
+
+  // The read view's text arrives AFTER the view is mounted — the file is
+  // fetched asynchronously, so viewKey settles on the new path while
+  // fileContent is still the old file's (or empty). Without this the pane
+  // showed nothing until something else forced a remount.
+  //
+  // A document swap rather than a rebuild: rebuilding on every content change
+  // would also fire on each keystroke in the edit view and drop the caret. The
+  // guard reads the view's own text, so it is a no-op once they agree.
+  $: if (view && !showEditEditor && mountedFor === viewKey &&
+         view.state.doc.toString() !== fileContent) {
+    view.dispatch({
+      changes: { from: 0, to: view.state.doc.length, insert: fileContent },
+    });
+    // The caret is restored HERE rather than at mount: the read view's text
+    // arrives after the view exists, so at mount time the document is still
+    // empty and any offset would clamp to zero.
+    applyRestoreOffset();
+  }
+
+  // The host element goes away with the {#if} that owns it, and a view left
+  // pointing at a detached node is a leak — this browser opens many files in a
+  // session.
+  //
+  // destroyView clears mountedFor, which is what lets the block above mount
+  // again into the replacement element. Without that the two would agree while
+  // no view existed, and the pane stayed empty until something else changed the
+  // key — the black pane seen after switching tabs.
+  $: if (!editorHost && view) destroyView();
 
   function resetForSession() {
     treeGeneration++;
@@ -488,10 +791,80 @@
   //
   // Gated on `active` for the same reason the diff view is: reading a directory
   // for a tab nobody is looking at is work the user never asked for.
+  // Which file was open in each session, and where the caret was in it, so
+  // switching away and back returns you to the spot rather than to an empty
+  // pane or the top of the file. In memory only: it records where you are in
+  // this sitting, not a preference worth persisting.
+  const lastFileBySession = new Map<string, string>();
+
+  /**
+   * Where the user was in each file, keyed by session and path.
+   *
+   * Per FILE rather than per session: switching tabs, sessions or away to the
+   * terminal and back should land where you were, but picking a different file
+   * should start at its top — and it does, because a file never opened has no
+   * entry here.
+   */
+  const placeByFile = new Map<string, number>();
+  /** Set just before a mount that should restore rather than start at the top. */
+  let restoreOffset = 0;
+
+  function placeKey(path: string | null): string {
+    return `${loadedSessionId || ''}|${path || ''}`;
+  }
+
+  /** Record where we are, so the next mount of this same file can return to it. */
+  function rememberPlace() {
+    // Usually a no-op: the update listener has already recorded the spot. Kept
+    // for the paths that change selectedPath before any update fires.
+    if (!view || !selectedPath) return;
+    const off = currentPlaceOffset();
+    if (off > 0) placeByFile.set(placeKey(selectedPath), off);
+  }
+
   $: if (active && $selectedSessionId !== loadedSessionId) {
+    // Unsaved work first: resetForSession discards the buffer outright, and a
+    // session switch is not the user's decision to lose what they typed. The
+    // switch itself has already happened, so the prompt offers to save or
+    // discard rather than to stay.
+    if (editing && editText !== savedText) {
+      pendingLeave = leaveEditModeQuietly;
+    }
+
+    // Both recorded before the reset clears them — the outgoing session's file
+    // is still in selectedPath at this point.
+    rememberPlace();
+    if (loadedSessionId && selectedPath) {
+      lastFileBySession.set(loadedSessionId, selectedPath);
+    }
+    const returningTo = $selectedSessionId ? lastFileBySession.get($selectedSessionId) : undefined;
+
     loadedSessionId = $selectedSessionId;
     resetForSession();
-    if ($selectedSessionId) void loadDir('');
+    if ($selectedSessionId) {
+      void loadDir('').then(() => {
+        // Only if the user hasn't picked something else while the tree loaded,
+        // and only if this is still the session they are on.
+        if (returningTo && !selectedPath && loadedSessionId === $selectedSessionId) {
+          selectFile(returningTo);
+        }
+      });
+    }
+  }
+
+  // A tab change within one session needs less than a full reset — the tabs
+  // share a working directory, so the tree stands — but the edit state must go.
+  // It belongs to one file opened from one tab, and carrying it across left the
+  // browser showing an editor for the previous tab's file, which then rendered
+  // as an empty pane. The tracking variable is assigned INSIDE this block, per
+  // Svelte 3's dependency ordering.
+  let loadedWindowIdx: number | null = null;
+  $: if (active && ($selectedWindowIdx ?? 0) !== loadedWindowIdx) {
+    // Recorded before the index moves, so the spot is filed against the tab
+    // being left. Leaving edit mode here is no longer needed: canEdit requires
+    // openedFile to be the selected file, so a stale editor cannot show.
+    rememberPlace();
+    loadedWindowIdx = $selectedWindowIdx ?? 0;
   }
 
   // Navigating away from the Files tab keeps this component mounted but hidden,
@@ -505,13 +878,27 @@
   let wasActive = false;
   $: if (active !== wasActive) {
     const leftTheView = wasActive && !active;
+    const cameBack = !wasActive && active;
     wasActive = active;
+    // Leaving for the terminal is a switch like any other: record the spot so
+    // coming back does not start at the top.
+    if (leftTheView) rememberPlace();
+
     if (leftTheView && editing && editText !== savedText) {
       // Only the prompt is raised; nothing is discarded. Confirming leaves edit
       // mode, cancelling simply leaves the buffer where it is for when the user
       // comes back.
       pendingLeave = leaveEditMode;
     }
+    // Returning to the browser with an editor still open — from another tab,
+    // say — showed a black pane: the edit host is behind {#if canEdit}, and
+    // once the file behind it has moved on there is nothing to mount into.
+    // An unmodified buffer has nothing to lose, so drop it and show the file.
+    // Coming back used to force a way out of edit mode, because a stale editor
+    // rendered as a black pane. That is now handled at the root — canEdit
+    // requires openedFile to be the file actually selected — and dropping the
+    // buffer here would have thrown away edits the user came back to finish.
+    void cameBack;
   }
 
   function refresh() {
@@ -617,6 +1004,9 @@
     // Switching files throws the buffer away, so it goes through the same
     // guard as leaving the view.
     guardUnsaved(() => {
+      // The file being left keeps its spot, so coming back to it later lands
+      // where you were rather than at the top.
+      rememberPlace();
       if (editing) leaveEditModeQuietly();
       selectedPath = path;
       void loadFile(path);
@@ -673,28 +1063,13 @@
   $: forceShow = !!selectedPath && !!forceShowPaths[selectedPath];
   $: shouldRender = active && !!selectedFile && !selectedFile.binary && (!isLargeFile || forceShow);
 
-  // Splitting a big string is itself expensive, so it only happens once the
-  // file is actually going to be rendered.
-  $: renderedLines = shouldRender ? fileContent.split('\n').slice(0, MAX_RENDER_LINES) : [];
-  $: hiddenLineCount = shouldRender
-    ? Math.max(0, countLines(fileContent) - renderedLines.length)
-    : 0;
   $: emptyFile = !!selectedFile && !selectedFile.binary && fileContent === '';
 
-  // --- Syntax highlighting --------------------------------------------------
-
-  // Hangs off `renderedLines`, so it inherits every guard already in place: it
-  // runs only when `shouldRender` is true, and only over the MAX_RENDER_LINES
-  // the pane actually draws — the cost is bounded by what is on screen, not by
-  // the file's real size. Tokenising 3000 lines is a few milliseconds, well
-  // under the cost of creating the DOM nodes for them, so it adds no stall the
-  // existing render didn't already have.
-  //
-  // detectLanguage returns null for anything we have no scanner for, and
-  // highlightLines passes that through as null, which the markup renders as
-  // plain text.
-  $: fileLanguage = shouldRender ? detectLanguage(selectedPath || '') : null;
-  $: highlighted = fileLanguage ? highlightLines(renderedLines, fileLanguage) : null;
+  // Syntax highlighting is CodeMirror's now — the grammar is fetched lazily by
+  // createView and swapped in when it arrives, so there is nothing to compute
+  // here. The read view renders only the lines on screen, so the whole file is
+  // handed to it rather than a truncated slice: scrolling to the end of a long
+  // file now shows the end of it.
 
   // Which files the user explicitly opted into rendering despite their size.
   let forceShowPaths: Record<string, boolean> = {};
@@ -914,27 +1289,23 @@
 
         {#if editing}
           {#if canEdit}
-            <div class="editor">
-              <!-- Soft wrap is off, so one text line is exactly one gutter row
-                   and the two stay aligned by construction. -->
-              <div class="editor-gutter" bind:this={lineNumbersEl} aria-hidden="true">
-                {#each editLineNumbers as n (n)}
-                  <div class="editor-line-no">{n}</div>
-                {/each}
-              </div>
-              <textarea
-                class="editor-textarea"
-                bind:this={textareaEl}
-                bind:value={editText}
-                on:keydown={handleEditorKeydown}
-                on:scroll={syncGutterScroll}
-                spellcheck="false"
-                autocomplete="off"
-                autocapitalize="off"
-                autocorrect="off"
-                wrap="off"
-                aria-label={$t('browser.editorLabel')}
-              ></textarea>
+            <!-- CodeMirror mounts itself into this element; the gutter and the
+                 line numbers are its own, so there is nothing to keep aligned
+                 by hand any more. -->
+            <div
+              class="editor"
+              bind:this={editHost}
+              role="textbox"
+              tabindex="-1"
+              aria-multiline="true"
+              aria-label={$t('browser.editorLabel')}
+            ></div>
+            <div class="editor-caret">
+              <span>{$t('browser.caretPosition', { line: caretLine, col: caretColumn })}</span>
+              {#if selectionLength > 0}
+                <span class="caret-selection">{$t('browser.caretSelection', { n: selectionLength })}</span>
+              {/if}
+              <span class="caret-total">{$t('browser.caretTotal', { n: editTotalLines })}</span>
             </div>
           {:else}
             <div class="browser-state error">
@@ -980,29 +1351,16 @@
               <span class="large-file-title">{$t('browser.largeFileTitle', { size: formatSize(selectedFile.size) })}</span>
               <span class="large-file-hint">{$t('browser.largeFileHint')}</span>
               <button class="large-file-show" on:click={showSelectedAnyway}>
-                {$t('browser.showAnyway', { count: MAX_RENDER_LINES })}
+                {$t('browser.showAnywayAll')}
               </button>
             </div>
           {:else}
             {#if selectedFile.truncated}
               <div class="file-notice">{$t('browser.fileTruncated', { size: formatSize(selectedFile.size) })}</div>
             {/if}
-            <div class="file-lines">
-              {#each renderedLines as line, idx}
-                <div class="file-line">
-                  <span class="line-no">{idx + 1}</span><code
-                    >{#if highlighted}{#each highlighted[idx] as token}<span
-                          class={token.kind ? 'tk-' + token.kind : ''}>{token.text}</span
-                        >{/each}{:else}{line}{/if}</code
-                  >
-                </div>
-              {/each}
-              {#if hiddenLineCount > 0}
-                <div class="file-line truncated">
-                  <span class="line-no"></span><code>{$t('browser.linesHidden', { count: hiddenLineCount })}</code>
-                </div>
-              {/if}
-            </div>
+            <!-- The same CodeMirror as the edit view, read-only, so the two are
+                 identical rather than merely similar. -->
+            <div class="editor read" bind:this={readHost}></div>
           {/if}
         </div>
         {/if}
@@ -1404,70 +1762,52 @@
     font-size: 12px;
   }
 
-  /* Gutter + textarea as siblings, scrolled in lockstep. */
+  /* The host CodeMirror mounts into. It owns its own gutter and scroller, so
+     this only has to give it a box to fill — the type is set in the CM6 theme
+     (codemirror.ts) so the read and edit views cannot drift apart. */
   .editor {
     flex: 1;
-    display: flex;
     min-height: 0;
     min-width: 0;
-    font-family: 'JetBrains Mono', 'Fira Code', monospace;
-    font-size: 13px;
-    /* line-height must match between the two columns exactly or the numbers
-       drift by a fraction of a row per line and are visibly wrong by the
-       bottom of a long file. */
-    line-height: 1.6;
-  }
-
-  .editor-gutter {
-    flex-shrink: 0;
-    width: 56px;
-    padding: 12px 8px 12px 0;
     overflow: hidden;
-    text-align: right;
-    color: #3f3f46;
-    background: rgba(0, 0, 0, 0.2);
-    user-select: none;
-    -webkit-user-select: none;
+    /* A flex child in its own right, so the CodeMirror view it hosts can take
+       the height. The theme asks for height:100%, which resolves against this
+       box — on a plain `flex: 1` div with no resolved height of its own that
+       percentage computes to zero and the editor renders as an empty black
+       rectangle. */
+    display: flex;
+    flex-direction: column;
   }
 
-  .editor-line-no {
-    /* Explicit, not inherited: a bare div would take the browser's normal
-       line-height and fall out of step with the textarea. */
-    line-height: 1.6;
-    height: 1.6em;
-  }
-
-  .editor-textarea {
+  /* CodeMirror mounts a child div rather than replacing the host, so the host's
+     height has to be passed down explicitly. :global because CM6 creates these
+     elements itself and Svelte's scoping never sees them. */
+  .editor :global(.cm-editor) {
     flex: 1;
-    min-width: 0;
-    padding: 12px 16px;
-    border: none;
-    outline: none;
-    resize: none;
-    background: transparent;
-    color: #d4d4d8;
-    font-family: inherit;
-    font-size: inherit;
-    line-height: inherit;
-    /* Off on purpose: with soft wrap a text line can occupy several rows in
-       the textarea while the gutter still gives it one number, and there is no
-       way to realign them without measuring every wrap. */
-    white-space: pre;
-    overflow: auto;
-    tab-size: 4;
-    -moz-tab-size: 4;
+    min-height: 0;
   }
 
-  .editor-textarea::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
+  /* Sits below the editor, not inside it: .editor is a horizontal flex row of
+     gutter and text, so a child would land beside the textarea. */
+  .editor-caret {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
+    padding: 4px 12px;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+    background: rgba(0, 0, 0, 0.2);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    color: #6b7280;
   }
-  .editor-textarea::-webkit-scrollbar-track {
-    background: transparent;
+
+  .caret-total {
+    margin-left: auto;
   }
-  .editor-textarea::-webkit-scrollbar-thumb {
-    background: rgba(var(--accent-rgb), 0.3);
-    border-radius: 3px;
+
+  .caret-selection {
+    color: var(--accent-light);
   }
 
   .conflict-banner {
@@ -1521,10 +1861,16 @@
     cursor: not-allowed;
   }
 
+  /* A column so the notice banner can sit above a CodeMirror that fills the
+     rest. Scrolling belongs to CodeMirror's own scroller, not to this box —
+     two nested scrollers would fight. */
   .file-content {
     flex: 1;
-    overflow: auto;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
     min-width: 0;
+    min-height: 0;
     font-family: 'JetBrains Mono', 'Fira Code', monospace;
     font-size: 13px;
     user-select: text;
@@ -1545,70 +1891,6 @@
     border-bottom-color: rgba(239, 68, 68, 0.25);
   }
 
-  .file-lines {
-    padding: 12px 0;
-  }
-
-  .file-line {
-    display: flex;
-    gap: 12px;
-    padding: 0 16px;
-    line-height: 1.6;
-    white-space: pre;
-  }
-
-  /* Fixed-width gutter so the code column doesn't shift as the numbers grow,
-     and unselectable so copying the file doesn't drag the numbers along. */
-  .line-no {
-    flex-shrink: 0;
-    width: 44px;
-    text-align: right;
-    color: #3f3f46;
-    user-select: none;
-    -webkit-user-select: none;
-  }
-
-  .file-line code {
-    font-family: inherit;
-    font-size: inherit;
-    color: #d4d4d8;
-  }
-
-  .file-line.truncated code {
-    color: var(--accent);
-    font-weight: 600;
-  }
-
-  /* Syntax colours.
-
-     SEMANTIC and fixed — deliberately not derived from --accent. The accent is
-     user-chosen and can be any hue (uiThemes.ts: 8 presets plus custom), so a
-     palette that tracked it would collide with it on some settings and lose the
-     meaning of the colours on others. Fixed hues sit next to any accent.
-
-     Contrast measured against the pane background (#0a0a0f), per WCAG:
-
-       comment  #6b7f8f   4.76:1     function  #82aaff   8.60:1
-       string   #9ece6a  10.81:1     property  #73daca  11.86:1
-       number   #ff9e64   9.71:1     tag       #f7768e   7.46:1
-       keyword  #c792ea   8.21:1     attr      #e0af68   9.88:1
-       type     #7dcfff  11.51:1     heading   #7aa2f7   7.84:1
-       literal  #ffc777  12.87:1     punct     #89ddff  13.03:1
-
-     All clear AA (4.5:1). Comments are the dimmest on purpose — they should
-     recede — but still pass. */
-  .file-line code :global(.tk-comment) { color: #6b7f8f; font-style: italic; }
-  .file-line code :global(.tk-string) { color: #9ece6a; }
-  .file-line code :global(.tk-number) { color: #ff9e64; }
-  .file-line code :global(.tk-keyword) { color: #c792ea; }
-  .file-line code :global(.tk-type) { color: #7dcfff; }
-  .file-line code :global(.tk-literal) { color: #ffc777; }
-  .file-line code :global(.tk-function) { color: #82aaff; }
-  .file-line code :global(.tk-property) { color: #73daca; }
-  .file-line code :global(.tk-tag) { color: #f7768e; }
-  .file-line code :global(.tk-attr) { color: #e0af68; }
-  .file-line code :global(.tk-heading) { color: #7aa2f7; font-weight: 600; }
-  .file-line code :global(.tk-punct) { color: #89ddff; }
 
   .browser-state {
     display: flex;

@@ -298,6 +298,7 @@
   "browser.largeFileTitle": "Nagy fájl ({size})",
   "browser.largeFileHint": "Ez a fájl túl nagy az automatikus megjelenítéshez (lefagyaszthatja a felületet). Csak akkor jelenítsd meg, ha tényleg szükséges.",
   "browser.showAnyway": "Mégis megjelenítés (első {count} sor)",
+  "browser.showAnywayAll": "Mégis megjelenítés",
   "browser.linesHidden": "… {count} további sor elrejtve (a fájl túl nagy az inline megjelenítéshez)",
   "browser.edit": "Szerkesztés",
   "browser.stopEditing": "Szerkesztő bezárása",
@@ -940,5 +941,8 @@
   "templates.anyDirectory": "bármely könyvtár",
   "sidebar.resizeHint": "Húzd az átméretezéshez · dupla kattintás visszaállít",
   "sidebar.favoriteShortcut": "Ugrás ide: Ctrl+Shift+{n}",
-  "help.navFavorite": "Ugrás az 1-7. kedvencre"
+  "help.navFavorite": "Ugrás az 1-7. kedvencre",
+  "browser.caretPosition": "{line}. sor, {col}. oszlop",
+  "browser.caretSelection": "{n} kijelölve",
+  "browser.caretTotal": "{n} sor"
 }

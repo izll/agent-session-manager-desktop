@@ -748,6 +748,7 @@
   "browser.largeFileTitle": "Stor fil ({size})",
   "browser.largeFileHint": "Den här filen är för stor för att visas automatiskt (gränssnittet kan frysa). Visa den bara om du verkligen behöver.",
   "browser.showAnyway": "Visa ändå (första {count} raderna)",
+  "browser.showAnywayAll": "Visa ändå",
   "browser.linesHidden": "… ytterligare {count} rader dolda (filen är för stor för att visas här)",
   "browser.edit": "Redigera",
   "browser.stopEditing": "Stäng redigeraren",
@@ -940,5 +941,8 @@
   "templates.anyDirectory": "valfri katalog",
   "sidebar.resizeHint": "Dra för att ändra storlek · dubbelklicka för att återställa",
   "sidebar.favoriteShortcut": "Hoppa hit med Ctrl+Skift+{n}",
-  "help.navFavorite": "Hoppa till favorit 1-7"
+  "help.navFavorite": "Hoppa till favorit 1-7",
+  "browser.caretPosition": "Rad {line}, Kol {col}",
+  "browser.caretSelection": "{n} markerade",
+  "browser.caretTotal": "{n} rader"
 }

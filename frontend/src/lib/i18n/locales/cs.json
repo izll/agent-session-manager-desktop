@@ -748,6 +748,7 @@
   "browser.largeFileTitle": "Velký soubor ({size})",
   "browser.largeFileHint": "Tento soubor je příliš velký na automatické zobrazení (mohl by zaseknout rozhraní). Zobraz ho jen tehdy, když to opravdu potřebuješ.",
   "browser.showAnyway": "Přesto zobrazit (prvních {count} řádků)",
+  "browser.showAnywayAll": "Přesto zobrazit",
   "browser.linesHidden": "… skryto dalších {count} řádků (soubor je příliš velký na zobrazení zde)",
   "browser.edit": "Upravit",
   "browser.stopEditing": "Zavřít editor",
@@ -940,5 +941,8 @@
   "templates.anyDirectory": "libovolný adresář",
   "sidebar.resizeHint": "Tažením změníte velikost · dvojklik obnoví",
   "sidebar.favoriteShortcut": "Přejít sem pomocí Ctrl+Shift+{n}",
-  "help.navFavorite": "Přejít na oblíbenou 1-7"
+  "help.navFavorite": "Přejít na oblíbenou 1-7",
+  "browser.caretPosition": "Ř. {line}, Sl. {col}",
+  "browser.caretSelection": "vybráno {n}",
+  "browser.caretTotal": "{n} řádků"
 }

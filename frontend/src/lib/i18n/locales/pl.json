@@ -748,6 +748,7 @@
   "browser.largeFileTitle": "Duży plik ({size})",
   "browser.largeFileHint": "Ten plik jest zbyt duży, aby wyświetlić go automatycznie (może zawiesić interfejs). Wyświetl go tylko wtedy, gdy naprawdę tego potrzebujesz.",
   "browser.showAnyway": "Pokaż mimo to (pierwsze {count} wierszy)",
+  "browser.showAnywayAll": "Pokaż mimo to",
   "browser.linesHidden": "… ukryto jeszcze {count} wierszy (plik jest zbyt duży, aby wyświetlić go tutaj)",
   "browser.edit": "Edytuj",
   "browser.stopEditing": "Zamknij edytor",
@@ -940,5 +941,8 @@
   "templates.anyDirectory": "dowolny katalog",
   "sidebar.resizeHint": "Przeciągnij, aby zmienić rozmiar · kliknij dwukrotnie, aby zresetować",
   "sidebar.favoriteShortcut": "Przejdź tutaj: Ctrl+Shift+{n}",
-  "help.navFavorite": "Przejdź do ulubionego 1-7"
+  "help.navFavorite": "Przejdź do ulubionego 1-7",
+  "browser.caretPosition": "Wiersz {line}, Kol. {col}",
+  "browser.caretSelection": "zaznaczono {n}",
+  "browser.caretTotal": "{n} wierszy"
 }

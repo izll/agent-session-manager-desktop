@@ -748,6 +748,7 @@
   "browser.largeFileTitle": "ไฟล์ขนาดใหญ่ ({size})",
   "browser.largeFileHint": "ไฟล์นี้ใหญ่เกินกว่าจะแสดงอัตโนมัติ (อาจทำให้หน้าจอค้าง) ให้แสดงเฉพาะเมื่อจำเป็นจริง ๆ",
   "browser.showAnyway": "แสดงอยู่ดี ({count} บรรทัดแรก)",
+  "browser.showAnywayAll": "แสดงอยู่ดี",
   "browser.linesHidden": "… ซ่อนอีก {count} บรรทัด (ไฟล์ใหญ่เกินกว่าจะแสดงที่นี่)",
   "browser.edit": "แก้ไข",
   "browser.stopEditing": "ปิดตัวแก้ไข",
@@ -940,5 +941,8 @@
   "templates.anyDirectory": "ไดเรกทอรีใดก็ได้",
   "sidebar.resizeHint": "ลากเพื่อปรับขนาด · ดับเบิลคลิกเพื่อรีเซ็ต",
   "sidebar.favoriteShortcut": "ไปที่นี่ด้วย Ctrl+Shift+{n}",
-  "help.navFavorite": "ไปยังรายการโปรด 1-7"
+  "help.navFavorite": "ไปยังรายการโปรด 1-7",
+  "browser.caretPosition": "บรรทัด {line}, คอลัมน์ {col}",
+  "browser.caretSelection": "เลือก {n}",
+  "browser.caretTotal": "{n} บรรทัด"
 }

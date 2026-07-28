@@ -748,6 +748,7 @@
   "browser.largeFileTitle": "Büyük dosya ({size})",
   "browser.largeFileHint": "Bu dosya otomatik gösterilemeyecek kadar büyük (arayüzü dondurabilir). Yalnızca gerçekten gerekiyorsa göster.",
   "browser.showAnyway": "Yine de göster (ilk {count} satır)",
+  "browser.showAnywayAll": "Yine de göster",
   "browser.linesHidden": "… {count} satır daha gizlendi (dosya burada gösterilemeyecek kadar büyük)",
   "browser.edit": "Düzenle",
   "browser.stopEditing": "Düzenleyiciyi kapat",
@@ -940,5 +941,8 @@
   "templates.anyDirectory": "herhangi bir dizin",
   "sidebar.resizeHint": "Sürükleyerek boyutlandır · çift tıkla sıfırla",
   "sidebar.favoriteShortcut": "Buraya git: Ctrl+Shift+{n}",
-  "help.navFavorite": "1-7 numaralı sık kullanılana git"
+  "help.navFavorite": "1-7 numaralı sık kullanılana git",
+  "browser.caretPosition": "Sat. {line}, Süt. {col}",
+  "browser.caretSelection": "{n} seçili",
+  "browser.caretTotal": "{n} satır"
 }

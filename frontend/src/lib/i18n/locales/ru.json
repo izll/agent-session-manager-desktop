@@ -748,6 +748,7 @@
   "browser.largeFileTitle": "Большой файл ({size})",
   "browser.largeFileHint": "Этот файл слишком велик для автоматического показа (интерфейс может зависнуть). Открывайте его, только если это действительно нужно.",
   "browser.showAnyway": "Всё равно показать (первые {count} строк)",
+  "browser.showAnywayAll": "Всё равно показать",
   "browser.linesHidden": "… скрыто ещё {count} строк (файл слишком велик для показа здесь)",
   "browser.edit": "Редактировать",
   "browser.stopEditing": "Закрыть редактор",
@@ -940,5 +941,8 @@
   "templates.anyDirectory": "любой каталог",
   "sidebar.resizeHint": "Перетащите для изменения · двойной щелчок сбрасывает",
   "sidebar.favoriteShortcut": "Перейти сюда: Ctrl+Shift+{n}",
-  "help.navFavorite": "Перейти к избранному 1-7"
+  "help.navFavorite": "Перейти к избранному 1-7",
+  "browser.caretPosition": "Стр. {line}, Стлб. {col}",
+  "browser.caretSelection": "выделено {n}",
+  "browser.caretTotal": "{n} строк"
 }

@@ -748,6 +748,7 @@
   "browser.largeFileTitle": "大きなファイル（{size}）",
   "browser.largeFileHint": "このファイルは大きすぎて自動表示できません（UI が固まる可能性があります）。本当に必要なときだけ表示してください。",
   "browser.showAnyway": "それでも表示（先頭 {count} 行）",
+  "browser.showAnywayAll": "それでも表示",
   "browser.linesHidden": "… 他 {count} 行は非表示です（ファイルが大きすぎてここには表示できません）",
   "browser.edit": "編集",
   "browser.stopEditing": "エディタを閉じる",
@@ -940,5 +941,8 @@
   "templates.anyDirectory": "任意のディレクトリ",
   "sidebar.resizeHint": "ドラッグで幅を変更 · ダブルクリックで既定に戻す",
   "sidebar.favoriteShortcut": "Ctrl+Shift+{n} でここへ移動",
-  "help.navFavorite": "お気に入り 1〜7 へ移動"
+  "help.navFavorite": "お気に入り 1〜7 へ移動",
+  "browser.caretPosition": "{line} 行, {col} 列",
+  "browser.caretSelection": "{n} 文字選択",
+  "browser.caretTotal": "{n} 行"
 }

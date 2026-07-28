@@ -748,6 +748,7 @@
   "browser.largeFileTitle": "Великий файл ({size})",
   "browser.largeFileHint": "Цей файл завеликий для автоматичного показу (інтерфейс може зависнути). Відкривайте його, лише якщо це справді потрібно.",
   "browser.showAnyway": "Усе одно показати (перші {count} рядків)",
+  "browser.showAnywayAll": "Усе одно показати",
   "browser.linesHidden": "… приховано ще {count} рядків (файл завеликий, щоб показати його тут)",
   "browser.edit": "Редагувати",
   "browser.stopEditing": "Закрити редактор",
@@ -940,5 +941,8 @@
   "templates.anyDirectory": "будь-який каталог",
   "sidebar.resizeHint": "Перетягніть, щоб змінити · подвійний клік скидає",
   "sidebar.favoriteShortcut": "Перейти сюди: Ctrl+Shift+{n}",
-  "help.navFavorite": "Перейти до обраного 1-7"
+  "help.navFavorite": "Перейти до обраного 1-7",
+  "browser.caretPosition": "Ряд. {line}, Стовп. {col}",
+  "browser.caretSelection": "вибрано {n}",
+  "browser.caretTotal": "{n} рядків"
 }

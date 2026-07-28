@@ -748,6 +748,7 @@
   "browser.largeFileTitle": "Groot bestand ({size})",
   "browser.largeFileHint": "Dit bestand is te groot om automatisch te tonen (de interface kan vastlopen). Toon het alleen als je het echt nodig hebt.",
   "browser.showAnyway": "Toch tonen (eerste {count} regels)",
+  "browser.showAnywayAll": "Toch tonen",
   "browser.linesHidden": "… nog {count} regels verborgen (het bestand is te groot om hier te tonen)",
   "browser.edit": "Bewerken",
   "browser.stopEditing": "Editor sluiten",
@@ -940,5 +941,8 @@
   "templates.anyDirectory": "elke map",
   "sidebar.resizeHint": "Sleep om te vergroten · dubbelklik om te herstellen",
   "sidebar.favoriteShortcut": "Spring hierheen met Ctrl+Shift+{n}",
-  "help.navFavorite": "Naar favoriet 1-7 springen"
+  "help.navFavorite": "Naar favoriet 1-7 springen",
+  "browser.caretPosition": "Rg {line}, Kol {col}",
+  "browser.caretSelection": "{n} geselecteerd",
+  "browser.caretTotal": "{n} regels"
 }

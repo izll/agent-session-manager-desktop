@@ -748,6 +748,7 @@
   "browser.largeFileTitle": "큰 파일({size})",
   "browser.largeFileHint": "이 파일은 너무 커서 자동으로 표시할 수 없습니다(화면이 멈출 수 있습니다). 정말 필요할 때만 표시하세요.",
   "browser.showAnyway": "그래도 표시(처음 {count}줄)",
+  "browser.showAnywayAll": "그래도 표시",
   "browser.linesHidden": "… {count}줄이 더 숨겨졌습니다(파일이 너무 커서 여기에 표시할 수 없습니다)",
   "browser.edit": "편집",
   "browser.stopEditing": "편집기 닫기",
@@ -940,5 +941,8 @@
   "templates.anyDirectory": "모든 디렉터리",
   "sidebar.resizeHint": "드래그하여 크기 조절 · 두 번 클릭하면 기본값",
   "sidebar.favoriteShortcut": "Ctrl+Shift+{n} 키로 이동",
-  "help.navFavorite": "즐겨찾기 1~7로 이동"
+  "help.navFavorite": "즐겨찾기 1~7로 이동",
+  "browser.caretPosition": "{line}행, {col}열",
+  "browser.caretSelection": "{n}자 선택됨",
+  "browser.caretTotal": "{n}줄"
 }

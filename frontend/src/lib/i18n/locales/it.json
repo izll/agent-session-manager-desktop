@@ -748,6 +748,7 @@
   "browser.largeFileTitle": "File di grandi dimensioni ({size})",
   "browser.largeFileHint": "Questo file è troppo grande per essere mostrato automaticamente (può bloccare l'interfaccia). Mostralo solo se ti serve davvero.",
   "browser.showAnyway": "Mostra comunque (prime {count} righe)",
+  "browser.showAnywayAll": "Mostra comunque",
   "browser.linesHidden": "… altre {count} righe nascoste (il file è troppo grande per essere mostrato qui)",
   "browser.edit": "Modifica",
   "browser.stopEditing": "Chiudi l'editor",
@@ -940,5 +941,8 @@
   "templates.anyDirectory": "qualsiasi directory",
   "sidebar.resizeHint": "Trascina per ridimensionare · doppio clic per reimpostare",
   "sidebar.favoriteShortcut": "Vai qui con Ctrl+Maiusc+{n}",
-  "help.navFavorite": "Vai al preferito 1-7"
+  "help.navFavorite": "Vai al preferito 1-7",
+  "browser.caretPosition": "Riga {line}, Col. {col}",
+  "browser.caretSelection": "{n} selezionati",
+  "browser.caretTotal": "{n} righe"
 }

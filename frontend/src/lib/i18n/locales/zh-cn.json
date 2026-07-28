@@ -748,6 +748,7 @@
   "browser.largeFileTitle": "大文件（{size}）",
   "browser.largeFileHint": "此文件过大，无法自动显示（可能导致界面卡死）。确有需要时再显示。",
   "browser.showAnyway": "仍然显示（前 {count} 行）",
+  "browser.showAnywayAll": "仍然显示",
   "browser.linesHidden": "… 另有 {count} 行已隐藏（文件太大，无法在此处显示）",
   "browser.edit": "编辑",
   "browser.stopEditing": "关闭编辑器",
@@ -940,5 +941,8 @@
   "templates.anyDirectory": "任意目录",
   "sidebar.resizeHint": "拖动调整宽度 · 双击恢复默认",
   "sidebar.favoriteShortcut": "按 Ctrl+Shift+{n} 跳转到此处",
-  "help.navFavorite": "跳转到收藏 1-7"
+  "help.navFavorite": "跳转到收藏 1-7",
+  "browser.caretPosition": "第 {line} 行，第 {col} 列",
+  "browser.caretSelection": "已选 {n} 个字符",
+  "browser.caretTotal": "{n} 行"
 }
