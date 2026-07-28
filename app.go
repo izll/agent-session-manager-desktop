@@ -20,7 +20,6 @@ import (
 	"asmgr-desktop/session/filters"
 	"asmgr-desktop/updater"
 
-	"github.com/creack/pty"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
@@ -48,7 +47,9 @@ type App struct {
 
 // ptySession represents an active PTY connection
 type ptySession struct {
-	ptmx     *os.File
+	// ptmx is a PTY master on Unix and a pipe pair on Windows — see
+	// session.StartTerminal. Only Read/Write/Close are used on it.
+	ptmx     session.TerminalStream
 	cmd      *exec.Cmd
 	session  *session.Instance
 	windowID int
@@ -2024,7 +2025,7 @@ func (a *App) AttachSession(id string, windowIdx int) (string, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cmd := session.TmuxCommandContext(ctx, "attach-session", "-t", fmt.Sprintf("%s:%d", tmuxSession, windowIdx))
 
-	ptmx, err := pty.Start(cmd)
+	ptmx, err := session.StartTerminal(cmd)
 	if err != nil {
 		cancel()
 		a.ptyMu.Unlock()
@@ -2049,7 +2050,7 @@ func (a *App) AttachSession(id string, windowIdx int) (string, error) {
 }
 
 // readPTY reads from PTY and emits events with batching for performance
-func (a *App) readPTY(ptyID string, ptmx *os.File) {
+func (a *App) readPTY(ptyID string, ptmx session.TerminalStream) {
 	buf := make([]byte, 32768) // Larger buffer
 	eventName := "pty:output:" + ptyID
 
@@ -2106,7 +2107,7 @@ func (a *App) SendInput(ptyID string, data string) error {
 		return fmt.Errorf("error.ptyNotFound")
 	}
 
-	_, err := ps.ptmx.WriteString(data)
+	_, err := ps.ptmx.Write([]byte(data))
 	return err
 }
 
@@ -2120,12 +2121,10 @@ func (a *App) ResizeTerminal(ptyID string, cols, rows int) error {
 		return fmt.Errorf("error.ptyNotFound")
 	}
 
-	// Resize PTY
-	err := pty.Setsize(ps.ptmx, &pty.Winsize{
-		Cols: uint16(cols),
-		Rows: uint16(rows),
-	})
-	if err != nil {
+	// Resize the stream itself where that means anything (the PTY ioctl on
+	// Unix). On Windows it is a no-op and the resize-window below does the
+	// whole job, so this must not be treated as the only step.
+	if err := session.SetTerminalSize(ps.ptmx, cols, rows); err != nil {
 		return err
 	}
 

@@ -18,7 +18,6 @@ import (
 
 	"asmgr-desktop/session"
 
-	"github.com/creack/pty"
 	"github.com/gorilla/websocket"
 )
 
@@ -71,8 +70,11 @@ type TerminalServer struct {
 }
 
 type termConn struct {
-	ws        *websocket.Conn
-	ptmx      *os.File
+	ws *websocket.Conn
+	// ptmx is the attached multiplexer's byte stream. It is a PTY master on
+	// Unix and a pipe pair on Windows (see session.StartTerminal); everything
+	// below only reads, writes and closes it, which is all both can do.
+	ptmx      session.TerminalStream
 	cmd       *exec.Cmd
 	done      chan struct{}
 	writeMu   sync.Mutex
@@ -101,7 +103,7 @@ func (ts *TerminalServer) WriteToTerminal(sessionID string, windowIdx int, data 
 
 	tc.writeMu.Lock()
 	defer tc.writeMu.Unlock()
-	_, err := tc.ptmx.WriteString(data)
+	_, err := tc.ptmx.Write([]byte(data))
 	return err
 }
 
@@ -330,7 +332,7 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 	// xterm.js speaks xterm-256color, so pin that for the attach PTY.
 	cmd.Env = append(os.Environ(), "TERM=xterm-256color")
 
-	ptmx, err := pty.Start(cmd)
+	ptmx, err := session.StartTerminal(cmd)
 	if err != nil {
 		// Clean up linked session on error (only if it was created)
 		if attachTarget == linkedName {
@@ -530,10 +532,10 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 						if cols < 10 || rows < 3 {
 							continue
 						}
-						pty.Setsize(ptmx, &pty.Winsize{
-							Cols: uint16(cols),
-							Rows: uint16(rows),
-						})
+						// No-op where the stream carries no window size
+						// (Windows pipes); the resize-window below is the real
+						// lever there.
+						session.SetTerminalSize(ptmx, cols, rows)
 						// Resize this mirror's window to EXACTLY this client's
 						// size. We deliberately do NOT use `-A` (aggregate =
 						// largest client): with grouped per-tab mirrors, `-A`
