@@ -260,9 +260,35 @@ func NewInstance(name, path string, autoYes bool, agent AgentType, extraArgs str
 	}, nil
 }
 
+// sanitizeSessionName strips what a multiplexer cannot carry in a session name.
+//
+// The ID becomes the tmux session name, and targets are built as
+// "session:window" in ~30 places — so a colon in the name silently addresses
+// the wrong window. On Windows a user may well name a session after its
+// directory, and "C:\Users\User\Documents\asmgr-teszt" contains both a
+// colon and backslashes. Dots are replaced too: tmux reads "session:win.pane"
+// and would take a trailing ".1" as a pane index.
+func sanitizeSessionName(name string) string {
+	var b strings.Builder
+	b.Grow(len(name))
+	for _, r := range strings.ToLower(name) {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '-':
+			b.WriteRune(r)
+		default:
+			// Everything else — spaces, colons, slashes, dots, accented
+			// letters — becomes an underscore. Collapsing runs of them keeps
+			// a path from turning into a wall of underscores.
+			if s := b.String(); s == "" || !strings.HasSuffix(s, "_") {
+				b.WriteByte('_')
+			}
+		}
+	}
+	return strings.Trim(b.String(), "_")
+}
+
 func generateID(name string, agent AgentType) string {
-	sanitized := strings.ToLower(name)
-	sanitized = strings.ReplaceAll(sanitized, " ", "_")
+	sanitized := sanitizeSessionName(name)
 	timestamp := time.Now().UnixNano()
 	agentStr := string(agent)
 	if agentStr == "" {

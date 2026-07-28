@@ -44,11 +44,15 @@ func TmuxBinary() string {
 // exec.Command(TmuxBinary(), args...): the caller still owns Env, Dir, Stdin
 // and whether the error is checked.
 func TmuxCommand(args ...string) *exec.Cmd {
-	return exec.Command(TmuxBinary(), args...)
+	cmd := exec.Command(TmuxBinary(), args...)
+	hideConsoleWindow(cmd)
+	return cmd
 }
 
 // TmuxCommandContext is TmuxCommand with a cancellable context, for the probes
 // that must not outlive the UI interaction that asked for them.
 func TmuxCommandContext(ctx context.Context, args ...string) *exec.Cmd {
-	return exec.CommandContext(ctx, TmuxBinary(), args...)
+	cmd := exec.CommandContext(ctx, TmuxBinary(), args...)
+	hideConsoleWindow(cmd)
+	return cmd
 }
