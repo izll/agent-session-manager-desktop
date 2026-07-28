@@ -12,6 +12,8 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -53,6 +55,57 @@ func checkTerminalOrigin(r *http.Request) bool {
 	default:
 		return false
 	}
+}
+
+// mirrorWindowIndexes lists the window indexes present in a mirror session.
+func mirrorWindowIndexes(sessionName string) []int {
+	out, err := session.TmuxCommand("list-windows", "-t", sessionName,
+		"-F", "#{window_index}").Output()
+	if err != nil {
+		return nil
+	}
+	var idx []int
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		if n, convErr := strconv.Atoi(strings.TrimSpace(line)); convErr == nil {
+			idx = append(idx, n)
+		}
+	}
+	return idx
+}
+
+// linkedWindowIndex reports where a window from the base session ended up in
+// the mirror.
+//
+// Matched on window_id, which a link preserves — the same window object appears
+// in both sessions — because the INDEX is not preserved: tmux honours the one
+// we asked for, psmux picks the next free one. Returns false when the id cannot
+// be established, so the caller can leave the mirror alone rather than guess.
+func linkedWindowIndex(mirror, base string, baseIdx int) (int, bool) {
+	wantOut, err := session.TmuxCommand("display-message", "-p", "-t",
+		fmt.Sprintf("%s:%d", base, baseIdx), "#{window_id}").Output()
+	if err != nil {
+		return 0, false
+	}
+	want := strings.TrimSpace(string(wantOut))
+	if want == "" {
+		return 0, false
+	}
+
+	listOut, err := session.TmuxCommand("list-windows", "-t", mirror,
+		"-F", "#{window_index} #{window_id}").Output()
+	if err != nil {
+		return 0, false
+	}
+	for _, line := range strings.Split(strings.TrimSpace(string(listOut)), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) != 2 || fields[1] != want {
+			continue
+		}
+		if n, convErr := strconv.Atoi(fields[0]); convErr == nil {
+			return n, true
+		}
+	}
+	return 0, false
 }
 
 // TerminalServer handles WebSocket connections for terminal I/O
@@ -306,10 +359,25 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 			session.TmuxCommand("kill-session", "-t", linkedName).Run()
 			session.TmuxCommand("new-session", "-d", "-s", linkedName, "-t", tmuxSession).Run()
 		} else {
-			// Drop the placeholder window 0 if it's a different index than the
-			// linked one, so the mirror contains exactly the target window.
-			if winIdx != 0 {
-				session.TmuxCommand("kill-window", "-t", fmt.Sprintf("%s:0", linkedName)).Run()
+			// Leave the mirror holding exactly the linked window.
+			//
+			// -k is meant to replace a colliding window, and tmux does — so
+			// linking onto index 0 needed no cleanup there. psmux keeps both:
+			// it puts the linked window at the next free index and leaves its
+			// own placeholder active at 0, so attaching showed an empty shell
+			// instead of the agent.
+			//
+			// Rather than trust either behaviour, find where the linked window
+			// actually ended up and drop everything else. If it cannot be
+			// found, nothing is removed — an over-full mirror still works,
+			// while killing the wrong window would take the agent with it.
+			if linked, ok := linkedWindowIndex(linkedName, tmuxSession, winIdx); ok {
+				for _, idx := range mirrorWindowIndexes(linkedName) {
+					if idx != linked {
+						session.TmuxCommand("kill-window", "-t", fmt.Sprintf("%s:%d", linkedName, idx)).Run()
+					}
+				}
+				winIdx = linked
 			}
 		}
 		// Window sizing stays manual so a resize on one mirror can't ripple.
