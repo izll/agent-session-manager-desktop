@@ -2,6 +2,7 @@ import { Terminal, type IDisposable } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { SearchAddon } from '@xterm/addon-search';
 import { CanvasAddon } from '@xterm/addon-canvas';
+import { LogFrontend } from '../../../wailsjs/go/main/App';
 import { WebglAddon } from '@xterm/addon-webgl';
 import { GetTerminalWSPort, GetTerminalWSToken } from '../../../wailsjs/go/main/App';
 import { getTerminalTheme, resolveTerminalTheme, DEFAULT_TERMINAL_THEME, resolveFontSize,
@@ -559,7 +560,8 @@ export async function attachToSession(
       scheduleFlush();
     };
 
-    ws.onclose = () => {
+    ws.onclose = (ev) => {
+      void LogFrontend(`[term] ws closed code=${ev.code} reason=${ev.reason || '(none)'} clean=${ev.wasClean}`);
       terminalInstance.ws = null;
       terminalInstance.sessionId = null;
     };
@@ -605,6 +607,7 @@ export async function detachFromSession(terminalInstance: TerminalInstance): Pro
   if (terminalInstance.ws) {
     // Null out handlers BEFORE close to prevent buffered messages from old session
     // leaking into the terminal during session switch
+    void LogFrontend('[term] detach requested by the app');
     terminalInstance.ws.onmessage = null;
     terminalInstance.ws.onclose = null;
     terminalInstance.ws.onerror = null;
