@@ -410,4 +410,13 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_TAG: ${{ needs.release.outputs.tag }}
-        run: gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false
+        # A tag carrying a pre-release suffix is published as one, so it does
+        # not become "Latest" and the in-app updater does not offer it to
+        # everybody. Without this a test build for one platform would reach
+        # every user as an upgrade.
+        run: |
+          if [[ "$RELEASE_TAG" =~ -(alpha|beta|rc)([.-]?[0-9]+)?$ ]]; then
+            gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false --prerelease
+          else
+            gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest
+          fi
