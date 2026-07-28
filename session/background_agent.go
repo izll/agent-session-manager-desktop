@@ -3,7 +3,6 @@ package session
 import (
 	"encoding/json"
 	"log"
-	"os/exec"
 	"time"
 )
 
@@ -31,7 +30,7 @@ func ReleaseClaudeBackgroundAgent(resumeID string) {
 	// field; in practice the first 8 chars of the session UUID) — the full
 	// UUID is rejected, and the command exits 0 either way, so we verify by
 	// polling the list below instead of trusting the exit code.
-	if err := exec.Command("claude", "stop", shortID).Run(); err != nil {
+	if err := Command("claude", "stop", shortID).Run(); err != nil {
 		log.Printf("[bg-agent] claude stop %s failed: %v", shortID, err)
 		return
 	}
@@ -51,7 +50,7 @@ func ReleaseClaudeBackgroundAgent(resumeID string) {
 // findBackgroundAgent reports whether a live background agent currently owns
 // the given session ID, and returns its short job id (used by `claude stop`).
 func findBackgroundAgent(resumeID string) (string, bool) {
-	out, err := exec.Command("claude", "agents", "--json").Output()
+	out, err := Command("claude", "agents", "--json").Output()
 	if err != nil {
 		return "", false // claude CLI missing/old — treat as free
 	}

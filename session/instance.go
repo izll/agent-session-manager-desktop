@@ -515,7 +515,10 @@ func (i *Instance) StartWithResume(resumeID string) error {
 		// Create new tmux session. Pass the agent command as SEPARATE argv
 		// elements so tmux execs it directly instead of via `sh -c` — this
 		// is what makes ExtraArgs/CustomCommand shell-metachars inert.
-		log.Printf("[StartWithResume] final argv: tmux new-session -d -s %s -c %s -- %v", sessionName, i.Path, argv)
+		// The binary is named from TmuxBinary rather than written in: on Windows it
+		// is psmux, and a log that always said "tmux" sent debugging down the
+		// wrong path entirely.
+		log.Printf("[StartWithResume] final argv: %s new-session -d -s %s -c %s -- %v", TmuxBinary(), sessionName, i.Path, argv)
 		tmuxArgs := append([]string{"new-session", "-d", "-s", sessionName, "-c", i.Path}, argv...)
 		cmd := TmuxCommand(tmuxArgs...)
 		// Pin a sane TERM for the session's child processes. Launched from a
@@ -608,7 +611,7 @@ func (i *Instance) saveBaseCommit() {
 	}
 
 	// Check if path is a git repo and get HEAD commit
-	cmd := exec.Command("git", "-C", i.Path, "rev-parse", "HEAD")
+	cmd := GitCommand("-C", i.Path, "rev-parse", "HEAD")
 	output, err := cmd.Output()
 	if err != nil {
 		// Not a git repo or error - no diff available
@@ -1722,7 +1725,7 @@ func (i *Instance) ForkSession() (string, error) {
 
 	// Run claude with --fork-session to get new session ID
 	// This doesn't actually run the agent, just creates the fork and returns the ID
-	cmd := exec.Command("claude", "--resume", sessionID, "--fork-session", "--output-format", "json", "-p", ".")
+	cmd := Command("claude", "--resume", sessionID, "--fork-session", "--output-format", "json", "-p", ".")
 	cmd.Dir = i.Path
 
 	output, err := cmd.Output()
@@ -2266,18 +2269,18 @@ func (i *Instance) getDiff(baseRef string) *DiffStats {
 	defer os.Remove(tmpIndexPath)
 
 	gitEnv := append(os.Environ(), "GIT_INDEX_FILE="+tmpIndexPath)
-	readTree := exec.Command("git", "-C", i.Path, "read-tree", "HEAD")
+	readTree := GitCommand("-C", i.Path, "read-tree", "HEAD")
 	readTree.Env = gitEnv
 	if err := readTree.Run(); err != nil {
 		// An unborn repository has no HEAD yet; start from an empty index.
-		readEmpty := exec.Command("git", "-C", i.Path, "read-tree", "--empty")
+		readEmpty := GitCommand("-C", i.Path, "read-tree", "--empty")
 		readEmpty.Env = gitEnv
 		if emptyErr := readEmpty.Run(); emptyErr != nil {
 			stats.Error = fmt.Errorf("failed to prepare temporary git index: %w", err)
 			return stats
 		}
 	}
-	intentToAdd := exec.Command("git", "-C", i.Path, "add", "-N", ".")
+	intentToAdd := GitCommand("-C", i.Path, "add", "-N", ".")
 	intentToAdd.Env = gitEnv
 	if err := intentToAdd.Run(); err != nil {
 		stats.Error = fmt.Errorf("failed to include untracked files in diff: %w", err)
@@ -2290,7 +2293,7 @@ func (i *Instance) getDiff(baseRef string) *DiffStats {
 		args = append(args, baseRef)
 	}
 
-	cmd := exec.Command("git", args...)
+	cmd := GitCommand(args...)
 	cmd.Env = gitEnv
 	output, err := cmd.Output()
 	if err != nil {
@@ -2306,7 +2309,7 @@ func (i *Instance) getDiff(baseRef string) *DiffStats {
 
 // isGitRepo checks if the instance path is a git repository
 func (i *Instance) isGitRepo() bool {
-	cmd := exec.Command("git", "-C", i.Path, "rev-parse", "--git-dir")
+	cmd := GitCommand("-C", i.Path, "rev-parse", "--git-dir")
 	return cmd.Run() == nil
 }
 

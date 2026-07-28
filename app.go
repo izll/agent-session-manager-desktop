@@ -1080,7 +1080,7 @@ func getClaudeSessionIDFromTmuxWindow(tmuxSession string, windowIdx int) string 
 	}
 
 	// The pane PID is the shell; find child processes (the actual claude process)
-	childOut, err := exec.Command("pgrep", "-P", panePID).Output()
+	childOut, err := session.Command("pgrep", "-P", panePID).Output()
 	if err != nil {
 		return ""
 	}

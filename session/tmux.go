@@ -45,7 +45,7 @@ func TmuxBinary() string {
 // and whether the error is checked.
 func TmuxCommand(args ...string) *exec.Cmd {
 	cmd := exec.Command(TmuxBinary(), args...)
-	hideConsoleWindow(cmd)
+	HideConsoleWindow(cmd)
 	return cmd
 }
 
@@ -53,6 +53,6 @@ func TmuxCommand(args ...string) *exec.Cmd {
 // that must not outlive the UI interaction that asked for them.
 func TmuxCommandContext(ctx context.Context, args ...string) *exec.Cmd {
 	cmd := exec.CommandContext(ctx, TmuxBinary(), args...)
-	hideConsoleWindow(cmd)
+	HideConsoleWindow(cmd)
 	return cmd
 }

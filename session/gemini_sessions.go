@@ -2,7 +2,6 @@ package session
 
 import (
 	"fmt"
-	"os/exec"
 	"regexp"
 	"strings"
 	"time"
@@ -11,7 +10,7 @@ import (
 // ListGeminiSessions lists all Gemini sessions for the given project path
 func ListGeminiSessions(projectPath string) ([]AgentSession, error) {
 	// Run gemini --list-sessions in the project directory
-	cmd := exec.Command("gemini", "--list-sessions")
+	cmd := Command("gemini", "--list-sessions")
 	cmd.Dir = projectPath
 
 	output, err := cmd.CombinedOutput()

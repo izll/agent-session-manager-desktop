@@ -11,6 +11,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"asmgr-desktop/session"
 )
 
 // JSONRPCRequest represents a JSON-RPC 2.0 request
@@ -123,7 +125,9 @@ func (c *Client) Start() error {
 
 	// Start the task-master-ai MCP server via npx
 	// Uses Claude Code provider by default - no API key required
-	c.cmd = exec.Command("npx", "-y", taskMasterPackage)
+	// The server is headless and lives as long as the app does, so on Windows
+	// its console window would sit on screen for the whole session.
+	c.cmd = session.Command("npx", "-y", taskMasterPackage)
 	c.cmd.Env = append(os.Environ(),
 		"TASK_MASTER_TOOLS=all",
 		"TASK_MASTER_AI_PROVIDER=claude-code",

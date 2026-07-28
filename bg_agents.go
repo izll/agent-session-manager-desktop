@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"os/exec"
 	"regexp"
 
 	"asmgr-desktop/session"
@@ -32,7 +31,7 @@ var bgAgentIDRe = regexp.MustCompile(`^[0-9a-f]{6,16}$`)
 
 // ListBackgroundAgents returns the currently live background agents.
 func (a *App) ListBackgroundAgents() []BackgroundAgentInfo {
-	out, err := exec.Command("claude", "agents", "--json").Output()
+	out, err := session.Command("claude", "agents", "--json").Output()
 	if err != nil {
 		return nil
 	}
@@ -72,7 +71,7 @@ func (a *App) GetBackgroundAgentLogs(shortID string) (string, error) {
 	if !bgAgentIDRe.MatchString(shortID) {
 		return "", fmt.Errorf("invalid agent id")
 	}
-	out, err := exec.Command("claude", "logs", shortID).CombinedOutput()
+	out, err := session.Command("claude", "logs", shortID).CombinedOutput()
 	if err != nil && len(out) == 0 {
 		return "", fmt.Errorf("claude logs failed: %w", err)
 	}
@@ -88,7 +87,7 @@ func (a *App) StopBackgroundAgent(shortID string) error {
 	if !bgAgentIDRe.MatchString(shortID) {
 		return fmt.Errorf("invalid agent id")
 	}
-	return exec.Command("claude", "stop", shortID).Run()
+	return session.Command("claude", "stop", shortID).Run()
 }
 
 // AttachBackgroundAgent turns a background agent into a visible asmgr

@@ -3,7 +3,6 @@ package session
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 )
@@ -189,7 +188,7 @@ func (i *Instance) RevertHunk(patch string) error {
 		patch += "\n"
 	}
 
-	cmd := exec.Command("git", "-C", i.Path, "apply", "--reverse", "-")
+	cmd := GitCommand("-C", i.Path, "apply", "--reverse", "-")
 	cmd.Stdin = strings.NewReader(patch)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		msg := strings.TrimSpace(string(out))
@@ -226,7 +225,7 @@ func (i *Instance) RevertFile(path string, baseRef string) error {
 	if ref == "" {
 		ref = "HEAD"
 	}
-	cmd := exec.Command("git", "-C", i.Path, "checkout", ref, "--", path)
+	cmd := GitCommand("-C", i.Path, "checkout", ref, "--", path)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("could not restore %s: %s", path, strings.TrimSpace(string(out)))
 	}
@@ -251,7 +250,7 @@ func (i *Instance) validateRepoPath(path string) error {
 
 // isUntracked reports whether git has no record of this path.
 func (i *Instance) isUntracked(path string) bool {
-	cmd := exec.Command("git", "-C", i.Path, "ls-files", "--error-unmatch", "--", path)
+	cmd := GitCommand("-C", i.Path, "ls-files", "--error-unmatch", "--", path)
 	return cmd.Run() != nil
 }
 

@@ -89,10 +89,10 @@ func (a *App) sendAttentionNotification(settings *session.Settings, name, status
 			var cmd *exec.Cmd
 			switch goruntime.GOOS {
 			case "linux":
-				cmd = exec.Command("notify-send", "-a", "ASMGR Desktop", "-u", "normal", title, body)
+				cmd = session.Command("notify-send", "-a", "ASMGR Desktop", "-u", "normal", title, body)
 			case "darwin":
 				script := fmt.Sprintf("display notification %q with title %q", body, title)
-				cmd = exec.Command("osascript", "-e", script)
+				cmd = session.Command("osascript", "-e", script)
 			default:
 				return
 			}

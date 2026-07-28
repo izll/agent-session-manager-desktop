@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -213,7 +212,7 @@ func inspectGitRepository(ctx context.Context, path string) ProjectGitSummary {
 }
 
 func runDashboardGit(ctx context.Context, path string, args ...string) (string, error) {
-	cmd := exec.CommandContext(ctx, "git", append([]string{"-C", path}, args...)...)
+	cmd := session.GitCommandContext(ctx, append([]string{"-C", path}, args...)...)
 	output, err := cmd.CombinedOutput()
 	return string(output), err
 }
