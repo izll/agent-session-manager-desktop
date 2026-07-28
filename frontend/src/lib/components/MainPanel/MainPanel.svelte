@@ -137,15 +137,24 @@
     if (key !== lastViewKey) {
       if (lastViewKey) tabViewMemory.set(lastViewKey, lastView);
       lastViewKey = key;
-      const restored = tabViewMemory.get(key) || 'terminal';
+      let restored = tabViewMemory.get(key) || 'terminal';
+      // A tab remembered on Tasks from before the feature was switched off must
+      // not be restored onto a view that no longer has a way out. Corrected
+      // here rather than only in the bounce below so the dead panel never
+      // appears at all, not even for a frame.
+      if (restored === 'tasks' && !$settings.taskMasterEnabled) restored = 'terminal';
       lastView = restored;
       activeView = restored;
     }
   }
 
   // Every deliberate view change goes through here, so the memory and lastView
-  // stay in step with what is on screen.
+  // stay in step with what is on screen. It is also the last gate on the Tasks
+  // view: the button is gone when the feature is off, but the palette and any
+  // future caller still route through this, and reaching Tasks is what starts
+  // the npx install the opt-in exists to prevent.
   function selectView(view: ViewName) {
+    if (view === 'tasks' && !$settings.taskMasterEnabled) return;
     activeView = view;
     lastView = view;
     if (lastViewKey) tabViewMemory.set(lastViewKey, view);
@@ -330,6 +339,16 @@
     lastView = 'terminal';
   }
 
+  // Same reasoning as the hidden view bar above, for the same reason: with the
+  // feature off there is no Tasks button to leave by, so a tab left on that
+  // view — either the one on screen or one restored later from tabViewMemory —
+  // would strand the user on a panel they can no longer navigate away from.
+  // Turning the setting off mid-session is exactly when this happens.
+  $: if (!$settings.taskMasterEnabled && activeView === 'tasks') {
+    activeView = 'terminal';
+    lastView = 'terminal';
+  }
+
   $: currentSession = $sessions.find(s => s.id === $selectedSessionId);
 
   $: canFork = currentSession?.agent === 'claude' && currentSession?.status === 'running';
@@ -438,16 +457,21 @@
               <span class="tab-dot" title={currentTabNotes}></span>
             {/if}
           </button>
-          <button
-            class="view-tab {activeView === 'tasks' ? 'active' : ''}"
-            on:click={() => selectView('tasks')}
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M9 11l3 3L22 4"/>
-              <path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
-            </svg>
-            {$t('mainPanel.tasks')}
-          </button>
+          <!-- Experimental and opt-in: the panel's first action shells out to
+               npx, so it is absent entirely rather than disabled until asked
+               for in Settings. -->
+          {#if $settings.taskMasterEnabled}
+            <button
+              class="view-tab {activeView === 'tasks' ? 'active' : ''}"
+              on:click={() => selectView('tasks')}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M9 11l3 3L22 4"/>
+                <path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
+              </svg>
+              {$t('mainPanel.tasks')}
+            </button>
+          {/if}
           <!-- Always offered: unlike the diff, a browser only needs a
                directory, and every session has one. -->
           <button
@@ -579,9 +603,15 @@
         <div class="view-panel" class:active={activeView === 'notes'}>
           <Notes active={visible && activeView === 'notes'} on:notesChange={handleNotesChange} />
         </div>
-        <div class="view-panel" class:active={activeView === 'tasks'}>
-          <TaskPanel active={visible && activeView === 'tasks'} on:taskSent={() => selectView('terminal')} />
-        </div>
+        <!-- Not merely hidden: TaskPanel queries Task Master from onMount, and
+             mounting it is what spawned npx on every launch regardless of
+             whether anyone opened the view. Keeping it out of the tree while
+             the feature is off is what makes the setting mean anything. -->
+        {#if $settings.taskMasterEnabled}
+          <div class="view-panel" class:active={activeView === 'tasks'}>
+            <TaskPanel active={visible && activeView === 'tasks'} on:taskSent={() => selectView('terminal')} />
+          </div>
+        {/if}
         <div class="view-panel" class:active={activeView === 'browser'}>
           <FileBrowser active={visible && activeView === 'browser'} on:close={() => selectView('terminal')} />
         </div>

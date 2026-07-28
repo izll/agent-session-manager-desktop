@@ -251,8 +251,13 @@ func (a *App) shutdown(ctx context.Context) {
 		a.dictation.Shutdown()
 	}
 
-	// Stop and reap every cached MCP child. Copy the values out before Stop so
-	// no potentially blocking process shutdown runs while the global lock is held.
+	stopAllTaskMasters()
+}
+
+// stopAllTaskMasters stops and reaps every cached MCP child. The values are
+// copied out before Stop so no potentially blocking process shutdown runs while
+// the global lock is held.
+func stopAllTaskMasters() {
 	taskMasterMu.Lock()
 	taskMasters := make([]*mcp.TaskMaster, 0, len(taskMasterCache))
 	for path, tm := range taskMasterCache {
@@ -2492,6 +2497,7 @@ type SettingsInfo struct {
 	GitBranchDisplay   string `json:"gitBranchDisplay"`
 	DiffFlatFileList   bool   `json:"diffFlatFileList"`
 	TrashRetentionDays int    `json:"trashRetentionDays"`
+	TaskMasterEnabled  bool   `json:"taskMasterEnabled"`
 	TerminalFontSize   int    `json:"terminalFontSize"`
 	AgentFontSize      int    `json:"agentFontSize"`
 	HideViewBar        bool   `json:"hideViewBar"`
@@ -2577,6 +2583,7 @@ func (a *App) GetSettings() (*SettingsInfo, error) {
 		GitBranchDisplay:     branchDisplay,
 		DiffFlatFileList:     settings.DiffFlatFileList,
 		TrashRetentionDays:   settings.TrashRetentionDays,
+		TaskMasterEnabled:    settings.TaskMasterEnabled,
 		TerminalFontSize:     settings.TerminalFontSize,
 		AgentFontSize:        settings.AgentFontSize,
 		HideViewBar:          settings.HideViewBar,
@@ -2601,7 +2608,7 @@ func (a *App) SaveSettings(settings SettingsInfo) error {
 	if !a.projectLocked {
 		return fmt.Errorf("project is read-only in this application instance")
 	}
-	return a.storage.UpdateSettings(func(current *session.Settings) {
+	err := a.storage.UpdateSettings(func(current *session.Settings) {
 		// Update only frontend-owned fields. Backend-only values (for example
 		// secrets and compatibility state) must survive an ordinary UI save.
 		current.CompactList = settings.CompactList
@@ -2619,6 +2626,7 @@ func (a *App) SaveSettings(settings SettingsInfo) error {
 		current.GitBranchDisplay = settings.GitBranchDisplay
 		current.DiffFlatFileList = settings.DiffFlatFileList
 		current.TrashRetentionDays = settings.TrashRetentionDays
+		current.TaskMasterEnabled = settings.TaskMasterEnabled
 		current.TerminalFontSize = settings.TerminalFontSize
 		current.AgentFontSize = settings.AgentFontSize
 		current.HideViewBar = settings.HideViewBar
@@ -2634,6 +2642,17 @@ func (a *App) SaveSettings(settings SettingsInfo) error {
 		current.NotifyNtfy = settings.NotifyNtfy
 		current.NtfyURL = settings.NtfyURL
 	})
+	if err != nil {
+		return err
+	}
+
+	// Turning the feature off has to take effect on the process too, not only
+	// on the next start: a client left running from before keeps an npx child
+	// alive, which is precisely what "off" is supposed to mean there isn't.
+	if !settings.TaskMasterEnabled {
+		stopAllTaskMasters()
+	}
+	return nil
 }
 
 // ============================================================================
@@ -3222,8 +3241,29 @@ func (a *App) SendTaskToAgent(sessionID, taskID string) error {
 var taskMasterCache = make(map[string]*mcp.TaskMaster)
 var taskMasterMu sync.RWMutex
 
-// getTaskMasterMCP returns or creates a TaskMaster MCP client for a project
+// taskMasterEnabled reports whether the user opted into the Task Master panel.
+// Read from storage on every call rather than cached: the setting can be
+// toggled while the app runs, and a stale "on" would let npx fire after the
+// user turned the feature back off.
+func (a *App) taskMasterEnabled() bool {
+	_, _, settings, err := a.storage.LoadAllWithSettings()
+	if err != nil || settings == nil {
+		return false // unreadable settings are not consent
+	}
+	return settings.TaskMasterEnabled
+}
+
+// getTaskMasterMCP returns or creates a TaskMaster MCP client for a project.
+//
+// Every exported TaskMaster* method goes through here, so this is the one place
+// the opt-in has to be enforced: starting a client runs `npx task-master-ai`,
+// which INSTALLS the package if it is missing. Refusing before that call is
+// what keeps a machine whose owner never enabled the feature untouched.
 func (a *App) getTaskMasterMCP(sessionID string) (*mcp.TaskMaster, error) {
+	if !a.taskMasterEnabled() {
+		return nil, fmt.Errorf("error.taskMasterDisabled")
+	}
+
 	sess, err := a.storage.GetInstance(sessionID)
 	if err != nil {
 		return nil, fmt.Errorf("session not found: %w", err)
@@ -3637,7 +3677,16 @@ func (a *App) TaskMasterSetSubtaskStatus(sessionID, subtaskID, status string) er
 
 // TaskMasterUpdateTaskDirect updates a task with direct field values (no AI).
 // Modifies the tasks.json file directly instead of using MCP to avoid slow AI calls.
+//
+// The only TaskMaster method that bypasses getTaskMasterMCP, so it needs its own
+// copy of the opt-in check. It spawns nothing, but it does write into the
+// project's .taskmaster directory, which a disabled feature has no business
+// touching either.
 func (a *App) TaskMasterUpdateTaskDirect(sessionID, taskID, title, description, details, priority string) error {
+	if !a.taskMasterEnabled() {
+		return fmt.Errorf("error.taskMasterDisabled")
+	}
+
 	sess, err := a.storage.GetInstance(sessionID)
 	if err != nil {
 		return fmt.Errorf("session not found: %w", err)

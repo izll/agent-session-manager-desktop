@@ -9,6 +9,7 @@
   import { activities } from '../../stores/activities';
   import { tabStatuses } from '../../stores/statusLines';
   import { showDashboard, showSessionView } from '../../stores/navigation';
+  import { settings } from '../../stores/settings';
   import { GetSessionTemplates } from '../../../../wailsjs/go/main/App';
   import type { main } from '../../../../wailsjs/go/models';
   import { t } from '../../i18n';
@@ -56,7 +57,11 @@
     show = false;
   }
 
+  // The palette lists no Tasks entry while the feature is off, so this guard is
+  // belt-and-braces — but it is the palette's own copy of the rule, so an entry
+  // added here later cannot reach the panel (and its npx install) by accident.
   function openView(view: 'terminal' | 'diff' | 'notes' | 'tasks' | 'browser') {
+    if (view === 'tasks' && !get(settings).taskMasterEnabled) return;
     if (get(selectedSessionId)) showSessionView();
     window.dispatchEvent(new CustomEvent('main-panel:set-view', { detail: { view } }));
   }
@@ -156,7 +161,17 @@
         );
       }
       result.push(
-        { id: 'view-notes', category: $t('palette.actions'), title: $t('palette.openNotes'), icon: '⌑', keywords: 'notes jegyzet', action: () => openView('notes') },
+        { id: 'view-notes', category: $t('palette.actions'), title: $t('palette.openNotes'), icon: '⌑', keywords: 'notes jegyzet', action: () => openView('notes') }
+      );
+      // Only when opted in: the panel is experimental, and offering it here
+      // would be a way to trigger its npx install without ever seeing the
+      // view bar it was deliberately removed from.
+      if ($settings.taskMasterEnabled) {
+        result.push(
+          { id: 'view-tasks', category: $t('palette.actions'), title: $t('palette.openTasks'), icon: '☑', keywords: 'tasks taskmaster feladatok', action: () => openView('tasks') }
+        );
+      }
+      result.push(
         // No git requirement: browsing only needs a directory.
         { id: 'view-browser', category: $t('palette.actions'), title: $t('palette.openBrowser'), icon: '🗀', keywords: 'files browser fajlok', action: () => openView('browser') }
       );
@@ -281,7 +296,8 @@
 
   $: allItems = show ? buildItems([
     $sessions, $projects, $activities, $tabStatuses,
-    $selectedSessionId, $selectedWindowIdx, $activeProjectId, $otherInstancePID, templates
+    $selectedSessionId, $selectedWindowIdx, $activeProjectId, $otherInstancePID, templates,
+    $settings
   ]) : [];
   $: normalizedQuery = query.trim().toLocaleLowerCase();
   $: filteredItems = normalizedQuery

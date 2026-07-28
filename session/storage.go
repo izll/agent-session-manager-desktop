@@ -76,6 +76,12 @@ type Settings struct {
 	// would leave the growing trash this was added to bound. So zero means the
 	// default and "keep everything" is stored as a negative.
 	TrashRetentionDays int `json:"trash_retention_days,omitempty"`
+	// The Task Master panel shells out to `npx task-master-ai`, which installs
+	// the package on first use — not something to do to a machine nobody asked.
+	// So it is opt-in, and plain false is the right zero value here: with
+	// omitempty an absent key and an explicit false are indistinguishable, and
+	// both mean "off", which is exactly the default we want. Still experimental.
+	TaskMasterEnabled bool `json:"task_master_enabled,omitempty"`
 	// Attention notifications: fire when an agent flips to "waiting"
 	// (needs user input). Desktop uses notify-send/osascript; ntfy POSTs
 	// to NtfyURL (e.g. https://ntfy.sh/my-topic) for mobile push.

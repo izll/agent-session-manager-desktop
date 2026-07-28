@@ -32,6 +32,12 @@ export interface Settings {
    * "unset", which every config predating this setting reports.
    */
   trashRetentionDays: number;
+  /**
+   * Show the experimental Task Master panel. Off unless asked for: opening it
+   * runs `npx task-master-ai`, which installs the package on a machine that
+   * doesn't have it.
+   */
+  taskMasterEnabled: boolean;
   /** Default terminal font size in px; 0 means the built-in default. */
   terminalFontSize: number;
   /** Same again for agent tabs; the two never fall back to each other. */
@@ -67,6 +73,7 @@ export const settings = writable<Settings>({
   gitBranchDisplay: 'header',
   diffFlatFileList: false,
   trashRetentionDays: 0,
+  taskMasterEnabled: false,
   terminalFontSize: 0,
   agentFontSize: 0,
   hideViewBar: false,

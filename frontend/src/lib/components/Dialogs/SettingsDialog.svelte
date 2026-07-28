@@ -306,7 +306,7 @@
     }
   }
 
-  function toggle(key: 'hideStatusLines' | 'showAgentIcons' | 'compactList' | 'hideViewBar' | 'agentHideViewBar' | 'hideStatusBar' | 'agentHideStatusBar' | 'notifyOnWaiting' | 'notifyDesktop' | 'notifyNtfy') {
+  function toggle(key: 'hideStatusLines' | 'showAgentIcons' | 'compactList' | 'hideViewBar' | 'agentHideViewBar' | 'hideStatusBar' | 'agentHideStatusBar' | 'notifyOnWaiting' | 'notifyDesktop' | 'notifyNtfy' | 'taskMasterEnabled') {
     saveSettings({ [key]: !$settings[key] });
   }
 
@@ -642,6 +642,32 @@
                 </div>
               {/if}
             {/if}
+          </div>
+
+          <!-- General rather than Maintenance: this switches a view on and off,
+               like the other toggles on this tab. Maintenance is for one-off
+               actions (export, update check), not for preferences. -->
+          <div class="settings-section">
+            <h3>{$t('settings.experimental')}</h3>
+
+            <label class="setting-item">
+              <span class="setting-info">
+                <span class="setting-label">
+                  {$t('settings.taskMaster')}
+                  <span class="experimental-badge">{$t('settings.experimentalBadge')}</span>
+                </span>
+                <span class="setting-desc">{$t('settings.taskMasterDesc')}</span>
+              </span>
+              <button
+                class="toggle-btn"
+                class:active={$settings.taskMasterEnabled}
+                on:click={() => toggle('taskMasterEnabled')}
+              >
+                <span class="toggle-track">
+                  <span class="toggle-thumb"></span>
+                </span>
+              </button>
+            </label>
           </div>
 
         {/if}
@@ -1498,6 +1524,25 @@
     font-size: 14px;
     font-weight: 500;
     color: #e4e4e7;
+  }
+
+  /* Marks a setting as not-yet-dependable, sitting beside its label rather
+     than in the description so it is read before the setting is turned on.
+     Amber, matching the DEV badge in the header — the app's existing signal
+     for "this build is not the ordinary one". */
+  .experimental-badge {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 1px 6px;
+    border-radius: 4px;
+    border: 1px solid rgba(255, 200, 0, 0.35);
+    background: rgba(255, 200, 0, 0.12);
+    color: #ffc800;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    vertical-align: middle;
   }
 
   .setting-desc {
