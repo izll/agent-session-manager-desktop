@@ -3,7 +3,6 @@ package session
 import (
 	"fmt"
 	"log"
-	"os/exec"
 	"strings"
 	"sync"
 	"time"
@@ -186,7 +185,7 @@ func (i *Instance) DetectActivityForWindowWithValidity(windowIdx int) (SessionAc
 		return ActivityIdle, true
 	}
 
-	cmd := exec.Command("tmux", "capture-pane", "-t", target, "-p", "-S", "-50")
+	cmd := TmuxCommand("capture-pane", "-t", target, "-p", "-S", "-50")
 	output, err := cmd.Output()
 	if err != nil {
 		return ActivityIdle, false
@@ -306,7 +305,7 @@ func (i *Instance) DetectYoloForWindow(windowIdx int) bool {
 	// the mode line scrolled out of it during work, so the YOLO badge flickered
 	// off whenever the tab was busy. Capture more rows so it stays in view. Still
 	// cheap (one capture per tab per poll).
-	out, err := exec.Command("tmux", "capture-pane", "-t", target, "-p", "-S", "-16").Output()
+	out, err := TmuxCommand("capture-pane", "-t", target, "-p", "-S", "-16").Output()
 	if err != nil {
 		return cachedYolo(target)
 	}
@@ -606,7 +605,7 @@ func isSpinnerAnimating(lines []string, spinners []string, maxLines int, target 
 	// Spinner found - wait briefly and re-capture to verify animation
 	time.Sleep(60 * time.Millisecond)
 
-	cmd := exec.Command("tmux", "capture-pane", "-t", target, "-p", "-S", "-50")
+	cmd := TmuxCommand("capture-pane", "-t", target, "-p", "-S", "-50")
 	output, err := cmd.Output()
 	if err != nil {
 		return false

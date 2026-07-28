@@ -7,7 +7,6 @@ import (
 	"io"
 	"log"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -27,7 +26,7 @@ func DetectCodexSessionIDFromTmux(tmuxSession string, windowIdx int, expectedCWD
 		return ""
 	}
 	target := fmt.Sprintf("%s:%d", tmuxSession, windowIdx)
-	out, err := exec.Command("tmux", "display-message", "-p", "-t", target, "#{pane_pid}").Output()
+	out, err := TmuxCommand("display-message", "-p", "-t", target, "#{pane_pid}").Output()
 	if err != nil {
 		return ""
 	}

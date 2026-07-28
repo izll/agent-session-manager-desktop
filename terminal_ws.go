@@ -284,7 +284,7 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 	// this mirror. Each tab is now truly isolated.
 	attachTarget := linkedName
 	// Empty placeholder session (its own throwaway window 0).
-	createCmd := exec.Command("tmux", "new-session", "-d", "-s", linkedName, "-x", "221", "-y", "44")
+	createCmd := session.TmuxCommand("new-session", "-d", "-s", linkedName, "-x", "221", "-y", "44")
 	if err := createCmd.Run(); err != nil {
 		log.Printf("Failed to create mirror session %s: %v, falling back to direct attach", linkedName, err)
 		attachTarget = tmuxSession
@@ -294,36 +294,36 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 		// Link the target window from the base into this session at the same
 		// index (-k replaces our placeholder if it collides). Same window
 		// object → the agent keeps running; only THIS window is in the mirror.
-		linkErr := exec.Command("tmux", "link-window", "-k",
+		linkErr := session.TmuxCommand("link-window", "-k",
 			"-s", fmt.Sprintf("%s:%d", tmuxSession, winIdx),
 			"-t", fmt.Sprintf("%s:%d", linkedName, winIdx)).Run()
 		if linkErr != nil {
 			// Link failed — clean up and fall back to grouped behaviour so the
 			// tab still works (just without the isolation win).
 			log.Printf("link-window failed for %s win %d: %v, falling back to grouped", tmuxSession, winIdx, linkErr)
-			exec.Command("tmux", "kill-session", "-t", linkedName).Run()
-			exec.Command("tmux", "new-session", "-d", "-s", linkedName, "-t", tmuxSession).Run()
+			session.TmuxCommand("kill-session", "-t", linkedName).Run()
+			session.TmuxCommand("new-session", "-d", "-s", linkedName, "-t", tmuxSession).Run()
 		} else {
 			// Drop the placeholder window 0 if it's a different index than the
 			// linked one, so the mirror contains exactly the target window.
 			if winIdx != 0 {
-				exec.Command("tmux", "kill-window", "-t", fmt.Sprintf("%s:0", linkedName)).Run()
+				session.TmuxCommand("kill-window", "-t", fmt.Sprintf("%s:0", linkedName)).Run()
 			}
 		}
 		// Window sizing stays manual so a resize on one mirror can't ripple.
-		exec.Command("tmux", "set-option", "-t", attachTarget, "window-size", "manual").Run()
-		exec.Command("tmux", "set-window-option", "-t", attachTarget, "aggressive-resize", "off").Run()
+		session.TmuxCommand("set-option", "-t", attachTarget, "window-size", "manual").Run()
+		session.TmuxCommand("set-window-option", "-t", attachTarget, "aggressive-resize", "off").Run()
 	}
 
 	// Hide tmux status bar in the session (the desktop app has its own UI)
-	exec.Command("tmux", "set-option", "-t", attachTarget, "status", "off").Run()
+	session.TmuxCommand("set-option", "-t", attachTarget, "status", "off").Run()
 
 	// Select the target window in the session
-	selectCmd := exec.Command("tmux", "select-window", "-t", fmt.Sprintf("%s:%d", attachTarget, winIdx))
+	selectCmd := session.TmuxCommand("select-window", "-t", fmt.Sprintf("%s:%d", attachTarget, winIdx))
 	selectCmd.Run()
 
 	// Attach to the session.
-	cmd := exec.Command("tmux", "attach-session", "-t", attachTarget)
+	cmd := session.TmuxCommand("attach-session", "-t", attachTarget)
 	// Force a sane TERM. When the app is launched from a desktop menu / KRunner
 	// instead of a shell, it inherits TERM=dumb (or empty), and tmux refuses to
 	// attach with "open terminal failed: terminal does not support clear".
@@ -334,7 +334,7 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 	if err != nil {
 		// Clean up linked session on error (only if it was created)
 		if attachTarget == linkedName {
-			exec.Command("tmux", "kill-session", "-t", linkedName).Run()
+			session.TmuxCommand("kill-session", "-t", linkedName).Run()
 		}
 		ws.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf("Error: %v", err)))
 		ws.Close()
@@ -487,7 +487,7 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 
 			// Clean up the linked tmux session (only if it was created)
 			if attachTarget == linkedName {
-				exec.Command("tmux", "kill-session", "-t", linkedName).Run()
+				session.TmuxCommand("kill-session", "-t", linkedName).Run()
 			}
 			log.Printf("[ws] detach session=%s win=%d target=%s", sessionID, winIdx, attachTarget)
 		}()
@@ -546,11 +546,11 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 						// session; on a fallback direct attach we skip it so we
 						// don't resize the shared base session under the user.
 						if attachTarget == linkedName {
-							exec.Command("tmux", "resize-window", "-t",
+							session.TmuxCommand("resize-window", "-t",
 								fmt.Sprintf("%s:%d", attachTarget, winIdx),
 								"-x", fmt.Sprintf("%d", cols),
 								"-y", fmt.Sprintf("%d", rows)).Run()
-							exec.Command("tmux", "refresh-client", "-t", attachTarget).Run()
+							session.TmuxCommand("refresh-client", "-t", attachTarget).Run()
 						}
 					}
 				} else if len(data) >= 2 && data[0] == 0x02 {
@@ -566,7 +566,7 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 						// pane so we recover everything that was dropped while
 						// hidden, in a single redraw.
 						if attachTarget == linkedName {
-							exec.Command("tmux", "refresh-client", "-t", attachTarget).Run()
+							session.TmuxCommand("refresh-client", "-t", attachTarget).Run()
 						}
 					}
 				} else {

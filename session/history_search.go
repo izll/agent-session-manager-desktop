@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -879,7 +878,7 @@ func (h *HistoryIndex) parseTerminalHistory() []HistoryEntry {
 
 // captureTerminalPane captures the scrollback buffer from a tmux pane
 func captureTerminalPane(target string, lines int) (string, error) {
-	cmd := exec.Command("tmux", "capture-pane", "-t", target, "-p", "-S", fmt.Sprintf("-%d", lines))
+	cmd := TmuxCommand("capture-pane", "-t", target, "-p", "-S", fmt.Sprintf("-%d", lines))
 	output, err := cmd.Output()
 	if err != nil {
 		return "", err

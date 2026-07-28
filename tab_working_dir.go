@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -112,7 +111,7 @@ func (a *App) cachedPaneCurrentPath(target string, query paneCurrentPathQuery) s
 // tmux tracks this itself — on Linux by reading the pane process's /proc cwd —
 // so there is no process tree to walk and no PID to chase here.
 func queryTmuxPaneCurrentPath(ctx context.Context, target string) string {
-	output, err := exec.CommandContext(ctx, "tmux", "display-message", "-p", "-t", target, "#{pane_current_path}").Output()
+	output, err := session.TmuxCommandContext(ctx, "display-message", "-p", "-t", target, "#{pane_current_path}").Output()
 	if err != nil {
 		return ""
 	}

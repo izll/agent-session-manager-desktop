@@ -1,7 +1,6 @@
 package session
 
 import (
-	"os/exec"
 	"strings"
 )
 
@@ -12,7 +11,7 @@ func (i *Instance) GetSuggestion() string {
 	}
 
 	sessionName := i.TmuxSessionName()
-	cmd := exec.Command("tmux", "capture-pane", "-t", sessionName, "-p", "-S", "-30")
+	cmd := TmuxCommand("capture-pane", "-t", sessionName, "-p", "-S", "-30")
 	output, err := cmd.Output()
 	if err != nil {
 		return ""

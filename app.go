@@ -276,7 +276,7 @@ func (a *App) cleanupOrphanedGUISessions() {
 		return
 	}
 
-	out, err := exec.Command("tmux", "list-sessions", "-F", "#{session_name}").Output()
+	out, err := session.TmuxCommand("list-sessions", "-F", "#{session_name}").Output()
 	if err != nil || len(out) == 0 {
 		return
 	}
@@ -310,7 +310,7 @@ func (a *App) cleanupOrphanedGUISessions() {
 		}
 		baseName := name[:idx]
 		if mine[baseName] && !running[baseName] {
-			exec.Command("tmux", "kill-session", "-t", name).Run()
+			session.TmuxCommand("kill-session", "-t", name).Run()
 		}
 	}
 }
@@ -328,7 +328,7 @@ func (a *App) cleanupAllGUISessions() {
 		return
 	}
 
-	out, err := exec.Command("tmux", "list-sessions", "-F", "#{session_name}").Output()
+	out, err := session.TmuxCommand("list-sessions", "-F", "#{session_name}").Output()
 	if err != nil || len(out) == 0 {
 		return
 	}
@@ -345,7 +345,7 @@ func (a *App) cleanupAllGUISessions() {
 			continue
 		}
 		if mine[name[:idx]] {
-			exec.Command("tmux", "kill-session", "-t", name).Run()
+			session.TmuxCommand("kill-session", "-t", name).Run()
 		}
 	}
 }
@@ -1065,7 +1065,7 @@ func getClaudeSessionIDFromTmux(tmuxSession string) string {
 func getClaudeSessionIDFromTmuxWindow(tmuxSession string, windowIdx int) string {
 	// Get the PID of the process in the tmux pane
 	target := fmt.Sprintf("%s:%d", tmuxSession, windowIdx)
-	out, err := exec.Command("tmux", "display-message", "-t", target, "-p", "#{pane_pid}").Output()
+	out, err := session.TmuxCommand("display-message", "-t", target, "-p", "#{pane_pid}").Output()
 	if err != nil {
 		return ""
 	}
@@ -2017,7 +2017,7 @@ func (a *App) AttachSession(id string, windowIdx int) (string, error) {
 
 	// Start tmux attach command with PTY
 	ctx, cancel := context.WithCancel(context.Background())
-	cmd := exec.CommandContext(ctx, "tmux", "attach-session", "-t", fmt.Sprintf("%s:%d", tmuxSession, windowIdx))
+	cmd := session.TmuxCommandContext(ctx, "attach-session", "-t", fmt.Sprintf("%s:%d", tmuxSession, windowIdx))
 
 	ptmx, err := pty.Start(cmd)
 	if err != nil {
@@ -2130,9 +2130,9 @@ func (a *App) ResizeTerminal(ptyID string, cols, rows int) error {
 		target := fmt.Sprintf("%s:%d", sessionName, ps.windowID)
 		go func() {
 			// Resize the specific window to fit the largest client
-			exec.Command("tmux", "resize-window", "-t", target, "-A").Run()
+			session.TmuxCommand("resize-window", "-t", target, "-A").Run()
 			// Also refresh all clients
-			exec.Command("tmux", "refresh-client", "-t", sessionName).Run()
+			session.TmuxCommand("refresh-client", "-t", sessionName).Run()
 		}()
 	}
 
@@ -2157,9 +2157,9 @@ func (a *App) RefreshWindow(sessionID string, windowIdx int) error {
 	// Clear the pane's screen buffer and resize to match attached clients.
 	// send-keys C-l clears the screen (equivalent to "clear" in most shells/TUIs).
 	// Many TUI apps (Claude, Codex, etc.) redraw their UI on SIGWINCH/clear.
-	_ = exec.Command("tmux", "send-keys", "-t", target, "C-l").Run()
-	_ = exec.Command("tmux", "resize-window", "-t", target, "-A").Run()
-	_ = exec.Command("tmux", "refresh-client", "-t", sessionName).Run()
+	_ = session.TmuxCommand("send-keys", "-t", target, "C-l").Run()
+	_ = session.TmuxCommand("resize-window", "-t", target, "-A").Run()
+	_ = session.TmuxCommand("refresh-client", "-t", sessionName).Run()
 
 	return nil
 }
