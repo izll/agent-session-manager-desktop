@@ -52,6 +52,10 @@ up exactly where you left off.
 - **Reach for the right agent instantly.** Search every session, group them
   into projects, star your favorites, and search *inside* a terminal's
   scrollback with `Ctrl+Shift+L`.
+- **Read what it wrote, without leaving.** Browse and edit the project's files
+  with syntax highlighting, search them by name or content, and review the
+  session's diff file by file — reverting a single hunk if you disagree with
+  it.
 
 ## Features
 
@@ -68,6 +72,13 @@ up exactly where you left off.
   background agents; attach one into a tab or a new session, tail its logs, or
   stop it. Accidentally sent a session to the background? It reattaches cleanly
   on the next resume.
+- **Session templates** — save an arrangement you keep rebuilding (an agent,
+  its arguments, and the tabs beside it) and create it again in one step. Pin a
+  template to a directory or leave it reusable and pick the directory when you
+  use it.
+- **Saved commands** — a searchable library on `Ctrl+P`, organised into groups.
+  Commands can take parameters — `{{name}}`, or `{{name:default}}` — and you
+  are prompted for them before the command runs.
 
 **Staying in control**
 
@@ -88,8 +99,18 @@ up exactly where you left off.
   status per repo, and Claude / Codex usage windows.
 - **Activity statistics** — locally-observed, per-project agent activity over
   time.
-- **Diff & notes** — review a session's Git changes inline (huge diffs are
-  guarded so they never freeze the UI); keep per-tab notes.
+- **Diff & notes** — review a session's Git changes file by file, grouped into
+  a directory tree, and revert a single file or a single hunk. Huge diffs are
+  guarded so they never freeze the UI. Keep per-tab notes.
+- **File browser & editor** — read and edit the files your agent is working on
+  without leaving the app. Syntax highlighting for a dozen languages while both
+  reading and editing (CodeMirror 6, with grammars loaded on demand), file
+  search by name or content with `Ctrl+Shift+O`, and colour-coded file types.
+  Saving preserves a file's line endings, BOM and trailing newline exactly, so
+  opening and saving an untouched file leaves it byte-identical.
+- **Current branch** — the working directory's Git branch beside the session
+  name or in the status bar, following the pane as you `cd` around, with a
+  read-only list of the repo's other branches.
 - **Task Master** — optional MCP-backed task list per session, right in the
   panel.
 
@@ -97,12 +118,23 @@ up exactly where you left off.
 
 - **Voice dictation** — talk to your agent instead of typing (free or API
   speech-to-text modes).
+- **Make it yours** — eight interface accents or any colour you like; per-agent
+  and per-tab terminal palettes, including ones you define; adjustable terminal
+  font size globally, per tab, or with `Ctrl` + scroll; colour a session or a
+  group, and hide the view or status bar on tabs that don't need them.
 - **Selectable terminal renderer** — canvas (default), WebGL, or DOM,
   switchable live from Settings.
+- **Undo a deletion** — deleted sessions and tabs go to a recycle bin you can
+  restore from, kept for a period you choose.
+- **Picks up where you left off** — the tab you were on, the view you had open,
+  and your place in a file all come back when you return to a session.
 - **20 languages** — the whole UI is translated.
 - **Safe alongside itself** — open a second window and it won't stomp on the
   first one's terminals; it warns you and stays read-only for that project.
-- **Self-updating** — checks for new releases and updates in place (Linux).
+- **Self-updating** — checks for new releases and updates in place (Linux),
+  including `.deb` and `.rpm` installs.
+- **Take it with you** — export sessions to a file and import them on another
+  machine.
 
 <img src="docs/screenshot-dashboard.png" alt="The project dashboard: grouped sessions with Git status and agent usage" width="900">
 
