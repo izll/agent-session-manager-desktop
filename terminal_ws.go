@@ -363,11 +363,21 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 	// contains ONLY that window, so no other window's activity can ever reach
 	// this mirror. Each tab is now truly isolated.
 	attachTarget := linkedName
-	// Empty placeholder session (its own throwaway window 0).
-	createCmd := session.TmuxCommand("new-session", "-d", "-s", linkedName, "-x", "221", "-y", "44")
-	if err := createCmd.Run(); err != nil {
-		log.Printf("Failed to create mirror session %s: %v, falling back to direct attach", linkedName, err)
+	if !session.MirrorSupported() {
+		// Straight to the session itself. psmux accepts link-window and reports
+		// success, but the window does not arrive: the mirror is left holding
+		// only its own placeholder shell, which is what the terminal then
+		// showed instead of the agent. Attaching directly works there, at the
+		// cost of the per-tab isolation the mirror buys elsewhere — a resize in
+		// one tab can reach another.
 		attachTarget = tmuxSession
+	} else {
+		// Empty placeholder session (its own throwaway window 0).
+		createCmd := session.TmuxCommand("new-session", "-d", "-s", linkedName, "-x", "221", "-y", "44")
+		if err := createCmd.Run(); err != nil {
+			log.Printf("Failed to create mirror session %s: %v, falling back to direct attach", linkedName, err)
+			attachTarget = tmuxSession
+		}
 	}
 
 	if attachTarget == linkedName {
@@ -640,7 +650,11 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 						// view independent. Only meaningful on our linked
 						// session; on a fallback direct attach we skip it so we
 						// don't resize the shared base session under the user.
-						if attachTarget == linkedName {
+						// Where mirrors are unavailable there is no shared session
+						// to protect — every attach is direct, so skipping the
+						// resize would leave the terminal stuck at its opening
+						// size for the whole run.
+						if attachTarget == linkedName || !session.MirrorSupported() {
 							session.TmuxCommand("resize-window", "-t",
 								fmt.Sprintf("%s:%d", attachTarget, winIdx),
 								"-x", fmt.Sprintf("%d", cols),
