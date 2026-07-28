@@ -396,7 +396,9 @@
   // Truncate path for display
   function truncatePath(path: string, maxLen: number = 50): string {
     if (!path || path.length <= maxLen) return path;
-    const parts = path.split('/');
+    // Both separators: this shows a working directory, which on Windows is
+    // backslash-separated and would otherwise never be shortened at all.
+    const parts = path.split(/[/\\]/);
     if (parts.length <= 3) return path;
     return '.../' + parts.slice(-3).join('/');
   }

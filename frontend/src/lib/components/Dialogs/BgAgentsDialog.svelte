@@ -69,7 +69,8 @@
   }
 
   function shortCwd(cwd: string): string {
-    const parts = cwd.split('/');
+    // Both separators — a Windows cwd has no forward slashes.
+    const parts = cwd.split(/[/\\]/);
     return parts.slice(-2).join('/') || cwd;
   }
 

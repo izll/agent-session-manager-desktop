@@ -49,9 +49,13 @@
   }
 
   // Auto-fill name from path (only if user hasn't manually edited the name field)
+  //
+  // Splits on both separators: a Windows path has no forward slashes at all, so
+  // splitting on "/" alone left the whole of
+  // "C:\Users\User\Documents\asmgr-teszt" sitting in the name field.
   let userTouchedName = false;
   $: if (path && !userTouchedName) {
-    const parts = path.replace(/\/+$/, '').split('/');
+    const parts = path.replace(/[/\\]+$/, '').split(/[/\\]/);
     const folderName = parts[parts.length - 1] || '';
     if (folderName) {
       name = folderName;

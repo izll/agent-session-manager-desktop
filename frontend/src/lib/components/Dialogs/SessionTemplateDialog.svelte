@@ -224,7 +224,8 @@
         // The folder name is the best guess for the session name, matching
         // what the new-session dialog does.
         if (!uName.trim() || uName === (useTarget?.sessionName || useTarget?.name)) {
-          const folder = picked.replace(/\/+$/, '').split('/').pop();
+          // Both separators: the directory picker returns a native path.
+          const folder = picked.replace(/[/\\]+$/, '').split(/[/\\]/).pop();
           if (folder) uName = folder;
         }
       }
