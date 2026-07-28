@@ -316,6 +316,31 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 	// We create a grouped session per-connection so each WebSocket has its own
 	// active window, preventing window switches from affecting other connections.
 	tmuxSession := inst.TmuxSessionName()
+
+	// Nothing to attach to if the multiplexer session is gone — after the user
+	// deleted it, say. Attaching anyway builds a mirror around a session that
+	// does not exist, and the client exits immediately, which reaches the
+	// browser as an unexplained socket close and the pane as whatever the
+	// multiplexer printed on its way out.
+	//
+	// Retried briefly rather than checked once: the frontend attaches straight
+	// after starting a session, and a multiplexer that has just forked its
+	// server may not answer for it yet. A session that is genuinely gone fails
+	// all three attempts in well under a second.
+	running := false
+	for attempt := 0; attempt < 3; attempt++ {
+		if err := session.TmuxCommand("has-session", "-t", tmuxSession).Run(); err == nil {
+			running = true
+			break
+		}
+		time.Sleep(150 * time.Millisecond)
+	}
+	if !running {
+		http.Error(w, "session not running", http.StatusNotFound)
+		log.Printf("[ws] refused attach: %s is not running", tmuxSession)
+		return
+	}
+
 	linkedName := fmt.Sprintf("%s_gui_%d_%d", tmuxSession, winIdx, time.Now().UnixMilli())
 
 	// Create an ISOLATED single-window mirror session.
