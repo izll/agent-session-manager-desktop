@@ -273,95 +273,104 @@ func TestControlModeReaderSplitsAcrossSmallReads(t *testing.T) {
 	}
 }
 
-func TestEncodeKeystrokes(t *testing.T) {
+func TestKeystrokeArgs(t *testing.T) {
 	tests := []struct {
 		name string
 		pane string
 		in   []byte
-		want string
+		want []string
 	}{
 		{
-			name: "plain ascii",
+			name: "plain text",
 			pane: "%1",
 			in:   []byte("ls"),
-			want: "send-keys -H -t %1 6c 73\n",
+			want: []string{"send-keys", "-t", "%1", "-l", "ls"},
 		},
 		{
-			// The bytes xterm.js sends for Enter and for the Up arrow.
-			name: "carriage return and escape sequence",
+			// The payload is one argv element, so an embedded space cannot be
+			// re-split into separate arguments.
+			name: "spaces stay inside a single argument",
 			pane: "%1",
-			in:   []byte("\r\x1b[A"),
-			want: "send-keys -H -t %1 0d 1b 5b 41\n",
+			in:   []byte("echo hello world"),
+			want: []string{"send-keys", "-t", "%1", "-l", "echo hello world"},
 		},
 		{
-			// Backspace. -l would drop or misapply this one.
-			name: "DEL",
-			pane: "%1",
-			in:   []byte{0x7f},
-			want: "send-keys -H -t %1 7f\n",
-		},
-		{
-			// -l re-encodes these as code points (c3 83 c2 a9); -H does not.
-			name: "multi-byte UTF-8",
-			pane: "%1",
-			in:   []byte("é"),
-			want: "send-keys -H -t %1 c3 a9\n",
-		},
-		{
-			// Would need quoting in any literal form; hex is inert.
-			name: "backslash and quotes need no quoting as hex",
+			// Quotes and backslashes would need escaping on a text command
+			// channel; as an argv element they need none.
+			name: "quotes and backslash pass through unescaped",
 			pane: "%1",
 			in:   []byte(`\"';`),
-			want: "send-keys -H -t %1 5c 22 27 3b\n",
+			want: []string{"send-keys", "-t", "%1", "-l", `\"';`},
 		},
 		{
-			name: "control bytes including NUL",
+			// The whole reason the hex encoding was abandoned: psmux echoed
+			// "c3 a9" into the pane as text instead of decoding it.
+			name: "multi-byte UTF-8 stays raw",
 			pane: "%1",
-			in:   []byte{0x00, 0x01, 0x03},
-			want: "send-keys -H -t %1 00 01 03\n",
+			in:   []byte("é"),
+			want: []string{"send-keys", "-t", "%1", "-l", "é"},
+		},
+		{
+			name: "escape sequence stays raw",
+			pane: "%1",
+			in:   []byte{0x1b, '[', 'A'},
+			want: []string{"send-keys", "-t", "%1", "-l", "\x1b[A"},
+		},
+		{
+			// A leading dash must not turn into a flag: it stays inside the
+			// payload argument, after -l.
+			name: "leading dash is payload, not a flag",
+			pane: "%1",
+			in:   []byte("-rf"),
+			want: []string{"send-keys", "-t", "%1", "-l", "-rf"},
+		},
+		{
+			// Empty pane means the lookup failed; -t must then be omitted
+			// entirely rather than passed as an empty target.
+			name: "no pane omits the target flag",
+			pane: "",
+			in:   []byte("a"),
+			want: []string{"send-keys", "-l", "a"},
 		},
 		{
 			name: "pane id may be a session target",
 			pane: "asm_claude_x:0",
 			in:   []byte("a"),
-			want: "send-keys -H -t asm_claude_x:0 61\n",
+			want: []string{"send-keys", "-t", "asm_claude_x:0", "-l", "a"},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := string(encodeKeystrokes(tt.pane, tt.in)); got != tt.want {
-				t.Fatalf("encodeKeystrokes = %q, want %q", got, tt.want)
+			got := keystrokeArgs(tt.pane, tt.in)
+			if len(got) != len(tt.want) {
+				t.Fatalf("keystrokeArgs = %q, want %q", got, tt.want)
+			}
+			for i := range got {
+				if got[i] != tt.want[i] {
+					t.Fatalf("keystrokeArgs = %q, want %q", got, tt.want)
+				}
 			}
 		})
 	}
 }
 
-// Every byte value must survive the encoding as its own two-digit argument;
-// this is the property the whole input path depends on.
-func TestEncodeKeystrokesCoversEveryByteValue(t *testing.T) {
+// Every byte value must reach the pane unchanged. This is the property the
+// whole input path depends on, and the one the hex encoding failed to deliver
+// on psmux: the payload must survive as raw bytes in a single argv element.
+func TestKeystrokeArgsCarriesEveryByteValue(t *testing.T) {
 	all := make([]byte, 256)
 	for i := range all {
 		all[i] = byte(i)
 	}
-	line := string(encodeKeystrokes("%1", all))
-
-	fields := strings.Fields(strings.TrimSuffix(line, "\n"))
-	// send-keys, -H, -t, %1, then one field per byte.
-	if len(fields) != 4+256 {
-		t.Fatalf("got %d fields, want %d", len(fields), 4+256)
+	args := keystrokeArgs("%1", all)
+	if len(args) != 5 {
+		t.Fatalf("got %d args, want exactly 5 (payload must not be split)", len(args))
 	}
-	for i, f := range fields[4:] {
-		if len(f) != 2 {
-			t.Fatalf("byte %d encoded as %q, want exactly two hex digits", i, f)
-		}
-	}
-	if !strings.HasSuffix(line, "\n") {
-		t.Fatal("command line must be newline-terminated or the parser never runs it")
+	if got := []byte(args[4]); !bytes.Equal(got, all) {
+		t.Fatalf("payload altered: got % x, want % x", got, all)
 	}
 }
-
-// Decoding must be the exact inverse of the multiplexer's escaping for every
 // byte value, including those that are not valid UTF-8 on their own.
 func TestDecodeOctalEscapesRoundTripsEveryByte(t *testing.T) {
 	var escaped bytes.Buffer
@@ -379,4 +388,114 @@ func TestDecodeOctalEscapesRoundTripsEveryByte(t *testing.T) {
 func octalEscape(b byte) string {
 	const digits = "01234567"
 	return string([]byte{'\\', digits[b>>6], digits[(b>>3)&7], digits[b&7]})
+}
+
+// Enter must leave as a key name, not as a literal CR byte. Measured on psmux:
+// a literal \r lands in the command line without submitting it, so a terminal
+// wired the naive way can type but never run anything.
+func TestKeystrokeCommandsSendsEnterByName(t *testing.T) {
+	tests := []struct {
+		name string
+		in   []byte
+		want [][]string
+	}{
+		{
+			name: "text with no CR is a single literal command",
+			in:   []byte("ls"),
+			want: [][]string{{"send-keys", "-t", "%1", "-l", "ls"}},
+		},
+		{
+			name: "trailing CR becomes its own Enter command",
+			in:   []byte("ls\r"),
+			want: [][]string{
+				{"send-keys", "-t", "%1", "-l", "ls"},
+				{"send-keys", "-t", "%1", "Enter"},
+			},
+		},
+		{
+			name: "a lone CR is just Enter, with no empty literal",
+			in:   []byte("\r"),
+			want: [][]string{{"send-keys", "-t", "%1", "Enter"}},
+		},
+		{
+			name: "CR in the middle splits the payload",
+			in:   []byte("a\rb"),
+			want: [][]string{
+				{"send-keys", "-t", "%1", "-l", "a"},
+				{"send-keys", "-t", "%1", "Enter"},
+				{"send-keys", "-t", "%1", "-l", "b"},
+			},
+		},
+		{
+			name: "consecutive CRs produce no empty literal between them",
+			in:   []byte("\r\r"),
+			want: [][]string{
+				{"send-keys", "-t", "%1", "Enter"},
+				{"send-keys", "-t", "%1", "Enter"},
+			},
+		},
+		{
+			// A pasted here-doc must not execute line by line.
+			name: "bare LF stays a literal byte",
+			in:   []byte("a\nb"),
+			want: [][]string{{"send-keys", "-t", "%1", "-l", "a\nb"}},
+		},
+		{
+			// CRLF: the CR submits, the LF stays data.
+			name: "CRLF submits once and keeps the LF",
+			in:   []byte("a\r\nb"),
+			want: [][]string{
+				{"send-keys", "-t", "%1", "-l", "a"},
+				{"send-keys", "-t", "%1", "Enter"},
+				{"send-keys", "-t", "%1", "-l", "\nb"},
+			},
+		},
+		{
+			name: "empty input produces no commands at all",
+			in:   nil,
+			want: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := keystrokeCommands("%1", tt.in)
+			if len(got) != len(tt.want) {
+				t.Fatalf("keystrokeCommands = %q, want %q", got, tt.want)
+			}
+			for i := range got {
+				if len(got[i]) != len(tt.want[i]) {
+					t.Fatalf("command %d = %q, want %q", i, got[i], tt.want[i])
+				}
+				for j := range got[i] {
+					if got[i][j] != tt.want[i][j] {
+						t.Fatalf("command %d = %q, want %q", i, got[i], tt.want[i])
+					}
+				}
+			}
+		})
+	}
+}
+
+// Whatever the split, concatenating the literal payloads and one CR per Enter
+// must reproduce the input exactly — no byte invented, dropped or reordered.
+func TestKeystrokeCommandsPreservesEveryByte(t *testing.T) {
+	in := make([]byte, 0, 512)
+	for i := 0; i < 256; i++ {
+		in = append(in, byte(i))
+	}
+	in = append(in, []byte("é\r\r\x1b[Aend\r")...)
+
+	var rebuilt []byte
+	for _, cmd := range keystrokeCommands("%1", in) {
+		switch cmd[len(cmd)-1] {
+		case "Enter":
+			rebuilt = append(rebuilt, '\r')
+		default:
+			rebuilt = append(rebuilt, []byte(cmd[len(cmd)-1])...)
+		}
+	}
+	if !bytes.Equal(rebuilt, in) {
+		t.Fatalf("round-trip altered the stream:\n got % x\nwant % x", rebuilt, in)
+	}
 }

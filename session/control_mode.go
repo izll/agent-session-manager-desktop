@@ -3,7 +3,6 @@ package session
 import (
 	"bufio"
 	"bytes"
-	"fmt"
 	"io"
 )
 
@@ -139,39 +138,74 @@ func (c *controlModeReader) Read(p []byte) (int, error) {
 	return n, nil
 }
 
-// encodeKeystrokes renders arbitrary input bytes as a send-keys command line.
+// keystrokeArgs builds the argv for delivering arbitrary input bytes to a pane.
 //
-// Control mode does not accept raw keyboard bytes on stdin — stdin is a command
-// channel, so every keystroke has to become a command. The encoding is
-// `send-keys -H -t <pane> <hex> <hex> …`, one two-digit hex argument per byte.
+// Keystrokes deliberately do NOT go down the control-mode stdin channel, even
+// though that channel is already open and carries every other command. That
+// channel is a text command parser, and psmux mangles payloads on it: sending
+// `echo A"B'C-Dé` arrived as `echoAB\C-D` + c3 83 c2 a9 — spaces and quotes
+// swallowed, and é (c3 a9) re-encoded per code point. Its `-H` (hex) flag,
+// which would sidestep the parser, does not exist in psmux at all: it is
+// undocumented (`psmux --help` lists only -l, -p and -t) and the hex digits are
+// echoed into the pane as literal text, which is exactly the stray "1b 5b 3c …"
+// users saw on screen.
 //
-// -H is the only form that is byte-transparent, which was established by
-// measurement rather than assumption:
+// Passing the bytes as an argv element instead skips the parser entirely —
+// Go's exec does not go through a shell, so nothing re-quotes or re-encodes
+// them. Measured on psmux 3.3.7: quote, hyphen and é all arrive intact.
 //
-//   - `send-keys -l <literal>` mangles anything non-ASCII. Each byte of a UTF-8
-//     character is taken as a code point and re-encoded, so é (c3 a9) arrives as
-//     c3 83 c2 a9. It also has to be quoted for the command parser, and a
-//     payload of arbitrary bytes is exactly what cannot be quoted safely.
-//   - bare `send-keys 0x1b 0x5b …` (no -H) is interpreted as key names first and
-//     suffers the same code-point re-encoding.
-//   - `send-keys -H` delivers every byte verbatim: ESC sequences, a literal
-//     backslash (5c), NUL (00), and multi-byte UTF-8 all round-trip exactly.
-//
-// Hex digits are also inert to the command parser, so this needs no quoting at
-// all — which is what makes it safe for bytes that would otherwise have to be
-// escaped. Verified end-to-end over control mode: the pane process received
-// `Hello \ ` + c3a9 + 1b5b41 + 7f byte-for-byte.
-func encodeKeystrokes(pane string, data []byte) []byte {
-	// "send-keys -H -t " + pane + three chars per byte (space + two digits).
-	var buf bytes.Buffer
-	buf.Grow(len(controlSendKeysPrefix) + len(pane) + 3*len(data) + 1)
-	buf.WriteString(controlSendKeysPrefix)
-	buf.WriteString(pane)
-	for _, b := range data {
-		fmt.Fprintf(&buf, " %02x", b)
+// Known gap: a bare apostrophe is still dropped by psmux itself on this path.
+// It is passed through unchanged rather than escaped, because every escaping
+// attempt measured so far corrupts more than it fixes.
+func keystrokeArgs(pane string, data []byte) []string {
+	args := make([]string, 0, 5)
+	args = append(args, "send-keys")
+	if pane != "" {
+		args = append(args, "-t", pane)
 	}
-	buf.WriteByte('\n')
-	return buf.Bytes()
+	// -l is "literal": no key-name parsing, so ESC sequences and UTF-8 pass
+	// through as the bytes they are.
+	args = append(args, "-l", string(data))
+	return args
 }
 
-const controlSendKeysPrefix = "send-keys -H -t "
+// keystrokeCommands splits input into the sequence of send-keys argv lists that
+// delivers it, because Enter cannot travel as a literal byte.
+//
+// xterm.js sends CR (0x0d) when the user presses Enter, but under -l that byte
+// is inserted into the command line as a character instead of submitting it.
+// Measured on psmux: `send-keys -l "echo CRTESZT\r"` left the prompt sitting at
+// `echo CRTESZT` unexecuted, and only a following `send-keys Enter` ran it. A
+// terminal where Enter does nothing is not a terminal, so every CR becomes its
+// own key-name command, and the literal runs between them keep byte fidelity.
+//
+// LF (0x0a) is deliberately NOT treated this way. A terminal sends CR for
+// Enter; a bare LF arriving as data (bracketed paste, a here-doc) must stay a
+// byte, or pasted multi-line text would execute line by line.
+func keystrokeCommands(pane string, data []byte) [][]string {
+	var cmds [][]string
+	for len(data) > 0 {
+		i := bytes.IndexByte(data, '\r')
+		if i < 0 {
+			cmds = append(cmds, keystrokeArgs(pane, data))
+			break
+		}
+		if i > 0 {
+			cmds = append(cmds, keystrokeArgs(pane, data[:i]))
+		}
+		cmds = append(cmds, enterArgs(pane))
+		data = data[i+1:]
+	}
+	return cmds
+}
+
+// enterArgs sends Enter by key name — the only form that submits the line.
+// Note the absence of -l: the name has to be parsed, not taken literally.
+func enterArgs(pane string) []string {
+	args := make([]string, 0, 4)
+	args = append(args, "send-keys")
+	if pane != "" {
+		args = append(args, "-t", pane)
+	}
+	return append(args, "Enter")
+}

@@ -3,6 +3,7 @@
 package session
 
 import (
+	"fmt"
 	"io"
 	"os/exec"
 	"strings"
@@ -18,9 +19,13 @@ type controlModeStream struct {
 	stop func()
 
 	// pane is the send-keys target, resolved once at attach time. Empty means
-	// the lookup failed; writes then fall back to the attach target, which
-	// still reaches the session's active pane.
+	// the lookup failed; writes then fall back to attachTarget, which still
+	// reaches the session's active pane.
 	pane string
+
+	// attachTarget is the session this client attached to — the fallback
+	// send-keys target when the pane lookup came back empty.
+	attachTarget string
 
 	// writeMu serialises command writes. A command is a whole line and two
 	// interleaved writes would produce one corrupt line — and Write is called
@@ -33,18 +38,31 @@ type controlModeStream struct {
 
 func (c *controlModeStream) Read(p []byte) (int, error) { return c.out.Read(p) }
 
-// Write encodes the keystrokes as a send-keys command. The byte count reported
-// is len(p) — the caller is told how much of ITS input was consumed, not how
-// many wire bytes the command expanded to, or io.Copy-style callers would see a
-// short-write error on every keypress.
+// Write delivers the keystrokes with a separate send-keys process rather than
+// down the control-mode command channel, because that channel mangles the
+// payload — see keystrokeArgs for the measurements.
+//
+// The byte count reported is len(p): the caller is told how much of ITS input
+// was consumed, not how many wire bytes the command expanded to, or
+// io.Copy-style callers would see a short-write error on every keypress.
 func (c *controlModeStream) Write(p []byte) (int, error) {
 	if len(p) == 0 {
 		return 0, nil
 	}
+	// Still serialised: two concurrent send-keys processes would interleave
+	// their keystrokes in the pane, so a burst could arrive out of order.
 	c.writeMu.Lock()
 	defer c.writeMu.Unlock()
-	if _, err := c.in.Write(encodeKeystrokes(c.pane, p)); err != nil {
-		return 0, err
+	target := c.pane
+	if target == "" {
+		target = c.attachTarget
+	}
+	// One input burst can need several commands: Enter has to be sent by key
+	// name, so a payload containing CR splits around it (see keystrokeCommands).
+	for _, args := range keystrokeCommands(target, p) {
+		if out, err := TmuxCommand(args...).CombinedOutput(); err != nil {
+			return 0, fmt.Errorf("send-keys: %w (%s)", err, strings.TrimSpace(string(out)))
+		}
 	}
 	return len(p), nil
 }
@@ -102,10 +120,11 @@ func StartTerminal(cmd *exec.Cmd) (TerminalStream, error) {
 	}
 
 	return &controlModeStream{
-		out:  newControlModeReader(stdout),
-		in:   stdin,
-		stop: killProcess(cmd),
-		pane: resolveActivePane(target),
+		out:          newControlModeReader(stdout),
+		in:           stdin,
+		stop:         killProcess(cmd),
+		pane:         resolveActivePane(target),
+		attachTarget: target,
 	}, nil
 }
 
