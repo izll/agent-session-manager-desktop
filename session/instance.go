@@ -2269,18 +2269,21 @@ func (i *Instance) getDiff(baseRef string) *DiffStats {
 	defer os.Remove(tmpIndexPath)
 
 	gitEnv := append(os.Environ(), "GIT_INDEX_FILE="+tmpIndexPath)
-	readTree := GitCommand("-C", i.Path, "read-tree", "HEAD")
+	readTree, cancelReadTree := GitCommandTimed("-C", i.Path, "read-tree", "HEAD")
+	defer cancelReadTree()
 	readTree.Env = gitEnv
 	if err := readTree.Run(); err != nil {
 		// An unborn repository has no HEAD yet; start from an empty index.
-		readEmpty := GitCommand("-C", i.Path, "read-tree", "--empty")
+		readEmpty, cancelReadEmpty := GitCommandTimed("-C", i.Path, "read-tree", "--empty")
+		defer cancelReadEmpty()
 		readEmpty.Env = gitEnv
 		if emptyErr := readEmpty.Run(); emptyErr != nil {
 			stats.Error = fmt.Errorf("failed to prepare temporary git index: %w", err)
 			return stats
 		}
 	}
-	intentToAdd := GitCommand("-C", i.Path, "add", "-N", ".")
+	intentToAdd, cancelIntent := GitCommandTimed("-C", i.Path, "add", "-N", ".")
+	defer cancelIntent()
 	intentToAdd.Env = gitEnv
 	if err := intentToAdd.Run(); err != nil {
 		stats.Error = fmt.Errorf("failed to include untracked files in diff: %w", err)
@@ -2293,7 +2296,8 @@ func (i *Instance) getDiff(baseRef string) *DiffStats {
 		args = append(args, baseRef)
 	}
 
-	cmd := GitCommand(args...)
+	cmd, cancelDiff := GitCommandTimed(args...)
+	defer cancelDiff()
 	cmd.Env = gitEnv
 	output, err := cmd.Output()
 	if err != nil {
@@ -2309,7 +2313,8 @@ func (i *Instance) getDiff(baseRef string) *DiffStats {
 
 // isGitRepo checks if the instance path is a git repository
 func (i *Instance) isGitRepo() bool {
-	cmd := GitCommand("-C", i.Path, "rev-parse", "--git-dir")
+	cmd, cancel := GitCommandTimed("-C", i.Path, "rev-parse", "--git-dir")
+	defer cancel()
 	return cmd.Run() == nil
 }
 

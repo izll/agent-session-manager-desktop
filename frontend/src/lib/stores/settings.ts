@@ -6,6 +6,12 @@ export type TerminalRenderer = 'canvas' | 'webgl' | 'dom';
 /** Where the session's git branch is shown, if anywhere. */
 export type GitBranchDisplay = 'header' | 'statusbar' | 'off';
 
+/**
+ * What has to happen for a terminal selection to reach the clipboard.
+ * 'shift' copies only a Shift-held drag; 'select' copies any drag.
+ */
+export type TerminalCopyMode = 'shift' | 'select';
+
 export interface Settings {
   compactList: boolean;
   hideStatusLines: boolean;
@@ -22,6 +28,12 @@ export interface Settings {
   /** Custom accent hex, used when uiTheme is 'custom'. */
   uiAccent: string;
   terminalRenderer: TerminalRenderer;
+  /**
+   * Whether a plain drag copies to the clipboard, or only a Shift-held one.
+   * Defaults to 'shift': copying is bound to mouseup either way, never to
+   * selection changes, because output-driven clipboard writes freeze WebKit.
+   */
+  terminalCopyMode: TerminalCopyMode;
   /** Where to show the session's git branch; 'header' by default. */
   gitBranchDisplay: GitBranchDisplay;
   /** Show the diff's file list as a directory tree instead of a flat list. */
@@ -70,6 +82,7 @@ export const settings = writable<Settings>({
   uiTheme: 'violet',
   uiAccent: '#8b5cf6',
   terminalRenderer: 'canvas',
+  terminalCopyMode: 'shift',
   gitBranchDisplay: 'header',
   diffFlatFileList: false,
   trashRetentionDays: 0,

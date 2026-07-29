@@ -101,6 +101,14 @@ export function setTerminalRenderer(r: 'canvas' | 'webgl' | 'dom'): void {
   if (r === 'canvas' || r === 'webgl' || r === 'dom') __terminalRenderer = r;
 }
 
+// Whether a plain drag copies, or only a Shift-held one. Read at mouseup rather
+// than captured per terminal, so changing it in Settings takes effect on panes
+// that are already open.
+let __terminalCopyMode: 'shift' | 'select' = 'shift';
+export function setTerminalCopyMode(m: 'shift' | 'select'): void {
+  if (m === 'shift' || m === 'select') __terminalCopyMode = m;
+}
+
 // Colour palettes (see terminalThemes.ts). A terminal's palette resolves
 // most-specific-first: the tab's own override, then the agent-type override,
 // then this global base. Settings pushes the whole context here so both new
@@ -293,8 +301,13 @@ export function createTerminal(
   let shiftSelecting = false;
   const onMouseDown = (e: MouseEvent) => { shiftSelecting = e.shiftKey; };
   const onMouseUp = () => {
-    if (!shiftSelecting) return;
+    const wasShift = shiftSelecting;
     shiftSelecting = false;
+    // In 'select' mode any drag copies; in 'shift' mode only a Shift-held one.
+    // Either way the trigger stays this mouseup — a user gesture — and never
+    // the selection itself, which is what kept output from driving the
+    // clipboard and freezing the UI.
+    if (__terminalCopyMode !== 'select' && !wasShift) return;
     const sel = terminal.getSelection();
     if (sel && sel.length > 0 && navigator.clipboard) {
       navigator.clipboard.writeText(sel).catch(() => { /* ignore */ });

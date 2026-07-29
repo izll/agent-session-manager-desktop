@@ -1071,6 +1071,7 @@ export namespace main {
 	    uiTheme: string;
 	    uiAccent: string;
 	    terminalRenderer: string;
+	    terminalCopyMode: string;
 	    gitBranchDisplay: string;
 	    diffFlatFileList: boolean;
 	    trashRetentionDays: number;
@@ -1108,6 +1109,7 @@ export namespace main {
 	        this.uiTheme = source["uiTheme"];
 	        this.uiAccent = source["uiAccent"];
 	        this.terminalRenderer = source["terminalRenderer"];
+	        this.terminalCopyMode = source["terminalCopyMode"];
 	        this.gitBranchDisplay = source["gitBranchDisplay"];
 	        this.diffFlatFileList = source["diffFlatFileList"];
 	        this.trashRetentionDays = source["trashRetentionDays"];

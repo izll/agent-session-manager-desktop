@@ -188,7 +188,8 @@ func (i *Instance) RevertHunk(patch string) error {
 		patch += "\n"
 	}
 
-	cmd := GitCommand("-C", i.Path, "apply", "--reverse", "-")
+	cmd, cancel := GitCommandTimed("-C", i.Path, "apply", "--reverse", "-")
+	defer cancel()
 	cmd.Stdin = strings.NewReader(patch)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		msg := strings.TrimSpace(string(out))
@@ -225,7 +226,8 @@ func (i *Instance) RevertFile(path string, baseRef string) error {
 	if ref == "" {
 		ref = "HEAD"
 	}
-	cmd := GitCommand("-C", i.Path, "checkout", ref, "--", path)
+	cmd, cancel := GitCommandTimed("-C", i.Path, "checkout", ref, "--", path)
+	defer cancel()
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("could not restore %s: %s", path, strings.TrimSpace(string(out)))
 	}
@@ -250,7 +252,8 @@ func (i *Instance) validateRepoPath(path string) error {
 
 // isUntracked reports whether git has no record of this path.
 func (i *Instance) isUntracked(path string) bool {
-	cmd := GitCommand("-C", i.Path, "ls-files", "--error-unmatch", "--", path)
+	cmd, cancel := GitCommandTimed("-C", i.Path, "ls-files", "--error-unmatch", "--", path)
+	defer cancel()
 	return cmd.Run() != nil
 }
 

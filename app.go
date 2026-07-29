@@ -2501,6 +2501,7 @@ type SettingsInfo struct {
 	UITheme            string `json:"uiTheme"`
 	UIAccent           string `json:"uiAccent"`
 	TerminalRenderer   string `json:"terminalRenderer"`
+	TerminalCopyMode   string `json:"terminalCopyMode"`
 	GitBranchDisplay   string `json:"gitBranchDisplay"`
 	DiffFlatFileList   bool   `json:"diffFlatFileList"`
 	TrashRetentionDays int    `json:"trashRetentionDays"`
@@ -2545,6 +2546,13 @@ func (a *App) GetSettings() (*SettingsInfo, error) {
 		renderer = "canvas"
 	}
 
+	// Copying stays opt-in behind Shift unless asked otherwise: a plain drag
+	// copying by itself surprises people who only meant to highlight something.
+	copyMode := settings.TerminalCopyMode
+	if copyMode == "" {
+		copyMode = "shift"
+	}
+
 	// The branch reads best next to the session name, so that's the default.
 	branchDisplay := settings.GitBranchDisplay
 	if branchDisplay == "" {
@@ -2587,6 +2595,7 @@ func (a *App) GetSettings() (*SettingsInfo, error) {
 		UITheme:              settings.UITheme,
 		UIAccent:             settings.UIAccent,
 		TerminalRenderer:     renderer,
+		TerminalCopyMode:     copyMode,
 		GitBranchDisplay:     branchDisplay,
 		DiffFlatFileList:     settings.DiffFlatFileList,
 		TrashRetentionDays:   settings.TrashRetentionDays,
@@ -2630,6 +2639,7 @@ func (a *App) SaveSettings(settings SettingsInfo) error {
 		current.UITheme = settings.UITheme
 		current.UIAccent = settings.UIAccent
 		current.TerminalRenderer = settings.TerminalRenderer
+		current.TerminalCopyMode = settings.TerminalCopyMode
 		current.GitBranchDisplay = settings.GitBranchDisplay
 		current.DiffFlatFileList = settings.DiffFlatFileList
 		current.TrashRetentionDays = settings.TrashRetentionDays

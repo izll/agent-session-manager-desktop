@@ -6,7 +6,7 @@
   import { EventsOn } from '../../../../wailsjs/runtime/runtime';
   import { LogFrontend, SetTabFontSize } from '../../../../wailsjs/go/main/App';
   import { TerminalPool } from '../../utils/terminalPool';
-  import { setTerminalRenderer, setTerminalThemeContext } from '../../utils/terminal';
+  import { setTerminalRenderer, setTerminalCopyMode, setTerminalThemeContext } from '../../utils/terminal';
   import { t } from '../../i18n';
   import '@xterm/xterm/css/xterm.css';
 
@@ -525,6 +525,10 @@
     }
     lastRenderer = r;
   }
+
+  // Copy-on-select mode. No terminal needs recreating: the handler reads the
+  // current value at mouseup, so open panes pick the change up immediately.
+  $: setTerminalCopyMode(($settings?.terminalCopyMode || 'shift') as 'shift' | 'select');
 
   // Apply palette settings immediately. Unlike the renderer, xterm accepts a
   // new theme on a live instance, so open terminals are repainted in place —

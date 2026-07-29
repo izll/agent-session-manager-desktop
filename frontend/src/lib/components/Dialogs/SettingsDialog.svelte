@@ -93,6 +93,15 @@
     saveSettings({ terminalRenderer: r as 'canvas' | 'webgl' | 'dom' });
   }
 
+  $: copyModeOptions = [
+    { value: 'shift', label: $t('settings.copyModeShift') },
+    { value: 'select', label: $t('settings.copyModeSelect') },
+  ];
+
+  function changeCopyMode(v: string) {
+    saveSettings({ terminalCopyMode: v as 'shift' | 'select' });
+  }
+
   // Rebuilt on locale change so the labels follow the chosen language.
   $: gitBranchOptions = [
     { value: 'header', label: $t('settings.gitBranchHeader') },
@@ -467,6 +476,18 @@
                 value={$settings.terminalRenderer || 'canvas'}
                 options={rendererOptions}
                 on:change={(e) => changeRenderer(e.detail)}
+              />
+            </div>
+
+            <div class="setting-item input-item">
+              <span class="setting-info">
+                <span class="setting-label">{$t('settings.terminalCopyMode')}</span>
+                <span class="setting-desc">{$t('settings.terminalCopyModeDesc')}</span>
+              </span>
+              <Select
+                value={$settings.terminalCopyMode || 'shift'}
+                options={copyModeOptions}
+                on:change={(e) => changeCopyMode(e.detail)}
               />
             </div>
           </div>

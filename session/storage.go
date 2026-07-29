@@ -63,6 +63,9 @@ type Settings struct {
 	// TerminalRenderer selects the xterm.js renderer: "canvas" (default),
 	// "webgl" (fastest but flaky on some WebKitGTK), or "dom" (most compatible).
 	TerminalRenderer string `json:"terminal_renderer,omitempty"`
+	// TerminalCopyMode decides what copies a terminal selection: "shift"
+	// (default) for a Shift-held drag only, or "select" for any drag.
+	TerminalCopyMode string `json:"terminal_copy_mode,omitempty"`
 	// GitBranchDisplay places the session's git branch: "header" (default),
 	// "statusbar" or "off".
 	GitBranchDisplay string `json:"git_branch_display,omitempty"`

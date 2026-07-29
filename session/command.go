@@ -3,6 +3,7 @@ package session
 import (
 	"context"
 	"os/exec"
+	"time"
 )
 
 // Command builds any external invocation the app makes, with the Windows
@@ -37,4 +38,27 @@ func GitCommand(args ...string) *exec.Cmd {
 // GitCommandContext is GitCommand with a cancellable context.
 func GitCommandContext(ctx context.Context, args ...string) *exec.Cmd {
 	return CommandContext(ctx, "git", args...)
+}
+
+// GitTimeout bounds a single git invocation on a user-facing path.
+//
+// Generous on purpose: a cold cache over a large repository can legitimately
+// take seconds, and killing honest work would be worse than waiting. It exists
+// for the case where git does not come back at all — an unreachable network
+// share, a stale lock, a filesystem that has stopped answering.
+const GitTimeout = 30 * time.Second
+
+// GitCommandTimed builds a git invocation that cannot hang forever.
+//
+// Every git call behind the UI needs this. The diff view sets a loading flag,
+// awaits the backend and clears the flag when it returns — so a git process
+// that never exits leaves the spinner turning with no way out, and the call
+// blocks the binding it arrived on, which is why other navigation stops
+// responding too.
+//
+// The returned cancel MUST be deferred by the caller: it releases the timer,
+// and exec.CommandContext kills the process when the context ends.
+func GitCommandTimed(args ...string) (*exec.Cmd, context.CancelFunc) {
+	ctx, cancel := context.WithTimeout(context.Background(), GitTimeout)
+	return GitCommandContext(ctx, args...), cancel
 }
