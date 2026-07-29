@@ -223,13 +223,19 @@ func attachTargetOf(cmd *exec.Cmd) string {
 	return ""
 }
 
-// resolveActivePane finds the pane send-keys should target.
+// resolveActivePane returns the send-keys target for a session.
 //
-// It must be resolved rather than assumed: pane ids are numbered per SERVER,
-// not per session, so the first pane of a fresh session is whatever number the
-// server has reached — %657 on a busy server, not %0. Targeting a guessed id
-// would deliver the user's keystrokes into an unrelated session's pane, which
-// is far worse than dropping them.
+// It deliberately does NOT return a bare pane id. Pane ids are only unique
+// within one server, and psmux runs a server per SESSION — so every session
+// numbers its panes from scratch and the first pane of each is %1. Measured:
+// with two sessions open, `send-keys -t %1` succeeded, reported no error, and
+// delivered into the OTHER session's pane. Nothing failed; the keystrokes
+// simply arrived somewhere else, leaving one terminal accepting focus and
+// clicks while swallowing everything typed into it.
+//
+// A session-qualified target resolves unambiguously — verified on the same two
+// sessions: `$61:0.0` landed in $61 and not in $62 — so the session's own
+// window.pane coordinates are used instead of the global id.
 //
 // The lookup is best-effort: on failure the caller falls back to the attach
 // target itself, which the multiplexer resolves to that session's active pane.
@@ -237,12 +243,15 @@ func resolveActivePane(target string) string {
 	if target == "" {
 		return ""
 	}
-	out, err := TmuxCommand("display-message", "-p", "-t", target, "#{pane_id}").Output()
+	// window_index.pane_index are per-session coordinates; prefixed with the
+	// session they cannot collide with an identically-numbered pane elsewhere.
+	out, err := TmuxCommand("display-message", "-p", "-t", target,
+		"#{window_index}.#{pane_index}").Output()
 	if err != nil {
 		return target
 	}
-	if pane := strings.TrimSpace(string(out)); pane != "" {
-		return pane
+	if coords := strings.TrimSpace(string(out)); coords != "" && coords != "." {
+		return target + ":" + coords
 	}
 	return target
 }
