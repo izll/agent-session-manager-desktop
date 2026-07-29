@@ -427,7 +427,20 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 	selectCmd := session.TmuxCommand("select-window", "-t", fmt.Sprintf("%s:%d", attachTarget, winIdx))
 	selectCmd.Run()
 
-	// Attach to the session.
+	// Attach to the session, by id rather than by name.
+	//
+	// Measured on psmux: two clients attached to two different sessions both
+	// ended up bound to the SAME one, leaving the other session with no client
+	// at all — which is a terminal that shows nothing and accepts no typing,
+	// while its neighbour works fine. Session ids ($61, $62) resolve exactly,
+	// where the names involved did not.
+	//
+	// Falling back to the name keeps a failed lookup from blocking the attach:
+	// worst case is the behaviour we already had.
+	if id := session.SessionIDFor(attachTarget); id != "" && id != attachTarget {
+		log.Printf("[ws] attaching by id %s (%s)", id, attachTarget)
+		attachTarget = id
+	}
 	cmd := session.TmuxCommand("attach-session", "-t", attachTarget)
 	// Force a sane TERM. When the app is launched from a desktop menu / KRunner
 	// instead of a shell, it inherits TERM=dumb (or empty), and tmux refuses to

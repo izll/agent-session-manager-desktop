@@ -3,6 +3,7 @@ package session
 import (
 	"context"
 	"os/exec"
+	"strings"
 	"sync"
 )
 
@@ -55,4 +56,47 @@ func TmuxCommandContext(ctx context.Context, args ...string) *exec.Cmd {
 	cmd := exec.CommandContext(ctx, TmuxBinary(), args...)
 	HideConsoleWindow(cmd)
 	return cmd
+}
+
+// SessionIDFor returns the multiplexer's stable id ($61) for a session name,
+// or "" if it cannot be determined.
+//
+// Attaching by name is not reliable on psmux: two clients aimed at two
+// different sessions were both bound to the same one, leaving the other with
+// no client — a terminal that neither displays nor accepts anything, next to
+// one that works. Ids resolve exactly.
+//
+// The match here is exact and done locally, deliberately. Asking the
+// multiplexer to resolve a single name is what cannot be trusted, so this
+// lists every session and compares names itself.
+func SessionIDFor(name string) string {
+	if name == "" {
+		return ""
+	}
+	out, err := TmuxCommand("list-sessions", "-F", "#{session_id} #{session_name}").Output()
+	if err != nil {
+		return ""
+	}
+	return lookupSessionID(string(out), name)
+}
+
+// lookupSessionID finds a session id in a list-sessions listing, matching the
+// name exactly. Split out from the command so the matching — the part that can
+// actually be wrong — is testable without a multiplexer.
+func lookupSessionID(listing, name string) string {
+	if name == "" {
+		return ""
+	}
+	for _, line := range strings.Split(listing, "\n") {
+		line = strings.TrimRight(line, "\r")
+		// "$61 name": split once, because a session name may contain spaces.
+		sp := strings.IndexByte(line, ' ')
+		if sp <= 0 {
+			continue
+		}
+		if line[sp+1:] == name {
+			return line[:sp]
+		}
+	}
+	return ""
 }
