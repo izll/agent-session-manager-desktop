@@ -5,6 +5,7 @@ import (
 	"os/exec"
 	"strings"
 	"sync"
+	"time"
 )
 
 // Every tmux invocation in the app is built here, so the multiplexer binary is
@@ -100,3 +101,20 @@ func lookupSessionID(listing, name string) string {
 	}
 	return ""
 }
+
+// TmuxCommandTimed builds a multiplexer invocation that cannot hang forever.
+//
+// Needed wherever a command runs while a lock is held: a multiplexer process
+// that never returns would keep that lock, and everything queued behind it
+// stops with no error and no log line. Keystroke delivery is the case that
+// matters most — the terminal goes on looking healthy while swallowing input.
+//
+// The window is short because these are local, fast commands; anything slower
+// than this is stuck rather than busy. The caller MUST call cancel.
+func TmuxCommandTimed(args ...string) (*exec.Cmd, context.CancelFunc) {
+	ctx, cancel := context.WithTimeout(context.Background(), TmuxCommandTimeout)
+	return TmuxCommandContext(ctx, args...), cancel
+}
+
+// TmuxCommandTimeout bounds one multiplexer invocation on an interactive path.
+const TmuxCommandTimeout = 10 * time.Second

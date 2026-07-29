@@ -604,9 +604,20 @@ export async function attachToSession(
     };
 
     // Send terminal input directly via WebSocket
+    let droppedInput = 0;
     terminalInstance.dataDisposable = terminal.onData((data) => {
       if (ws.readyState === WebSocket.OPEN) {
         ws.send(data);
+        return;
+      }
+      // Input silently discarded because this socket is no longer open. That
+      // produces a tab which looks alive and accepts focus but swallows every
+      // keystroke, so it must not stay invisible. Logged once per socket, not
+      // per keypress, or holding a key would flood the log.
+      if (droppedInput++ === 0) {
+        void LogFrontend(
+          `[term] input dropped, socket state=${ws.readyState} session=${sessionId} win=${windowIdx}`
+        );
       }
     });
 

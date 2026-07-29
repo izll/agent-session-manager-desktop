@@ -643,7 +643,16 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 				if ts.typingSignal != nil {
 					atomic.StoreInt64(ts.typingSignal, time.Now().UnixNano())
 				}
-				ptmx.Write(data)
+				// The error was previously discarded, which made a whole class
+				// of failure invisible: on Windows this write shells out to
+				// send-keys, so it can fail on its own while the socket stays
+				// healthy — keystrokes vanish with nothing logged anywhere.
+				if _, werr := ptmx.Write(data); werr != nil {
+					log.Printf("[ws] input write failed session=%s win=%d (%d bytes): %v",
+						sessionID, winIdx, len(data), werr)
+				} else if session.DebugLogging {
+					log.Printf("[ws] input session=%s win=%d %d bytes", sessionID, winIdx, len(data))
+				}
 				continue
 			}
 

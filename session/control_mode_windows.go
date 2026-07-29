@@ -60,7 +60,15 @@ func (c *controlModeStream) Write(p []byte) (int, error) {
 	// One input burst can need several commands: Enter has to be sent by key
 	// name, so a payload containing CR splits around it (see keystrokeCommands).
 	for _, args := range keystrokeCommands(target, p) {
-		if out, err := TmuxCommand(args...).CombinedOutput(); err != nil {
+		// Bounded, because this runs under writeMu: a send-keys that never
+		// returns would hold the lock forever and every later keystroke would
+		// block behind it — a terminal that takes focus and accepts clicks
+		// while silently swallowing everything typed into it, with the socket
+		// still healthy and nothing logged.
+		cmd, cancel := TmuxCommandTimed(args...)
+		out, err := cmd.CombinedOutput()
+		cancel()
+		if err != nil {
 			return 0, fmt.Errorf("send-keys: %w (%s)", err, strings.TrimSpace(string(out)))
 		}
 	}
