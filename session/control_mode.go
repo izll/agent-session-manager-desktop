@@ -3,6 +3,7 @@ package session
 import (
 	"bufio"
 	"bytes"
+	"fmt"
 	"io"
 )
 
@@ -175,9 +176,10 @@ func (c *controlModeReader) Read(p []byte) (int, error) {
 // Go's exec does not go through a shell, so nothing re-quotes or re-encodes
 // them. Measured on psmux 3.3.7: quote, hyphen and é all arrive intact.
 //
-// Known gap: a bare apostrophe is still dropped by psmux itself on this path.
-// It is passed through unchanged rather than escaped, because every escaping
-// attempt measured so far corrupts more than it fixes.
+// One byte does not survive it: an apostrophe is swallowed by psmux itself.
+// Sweeping every printable ASCII byte through this exact path showed 0x27 to
+// be the ONLY casualty — `abc'def` arrives as `abcdef` — so it is routed
+// around separately (see keystrokeCommands).
 func keystrokeArgs(pane string, data []byte) []string {
 	args := make([]string, 0, 5)
 	args = append(args, "send-keys")
@@ -203,21 +205,51 @@ func keystrokeArgs(pane string, data []byte) []string {
 // LF (0x0a) is deliberately NOT treated this way. A terminal sends CR for
 // Enter; a bare LF arriving as data (bracketed paste, a here-doc) must stay a
 // byte, or pasted multi-line text would execute line by line.
+//
+// An apostrophe needs the same detour for a different reason: psmux drops 0x27
+// from a -l payload outright. It travels as the key name `0x27` instead, which
+// psmux does accept — that hex-name form is undocumented but real, and it is
+// the counterpart to the -H FLAG, which does not exist.
+//
+// Why not send everything as 0x-names, which would be uniform: that form
+// re-encodes bytes per code point, so é (c3 a9) arrives as Ã©. The two routes
+// have exactly complementary blind spots, hence the split — -l for byte
+// fidelity, 0x27 for the one byte -l loses.
 func keystrokeCommands(pane string, data []byte) [][]string {
 	var cmds [][]string
-	for len(data) > 0 {
-		i := bytes.IndexByte(data, '\r')
-		if i < 0 {
-			cmds = append(cmds, keystrokeArgs(pane, data))
-			break
+	// flush emits the literal run accumulated before a byte needing its own
+	// command, skipping empty runs so consecutive specials produce no blanks.
+	flush := func(run []byte) {
+		if len(run) > 0 {
+			cmds = append(cmds, keystrokeArgs(pane, run))
 		}
-		if i > 0 {
-			cmds = append(cmds, keystrokeArgs(pane, data[:i]))
-		}
-		cmds = append(cmds, enterArgs(pane))
-		data = data[i+1:]
 	}
+	start := 0
+	for i := 0; i < len(data); i++ {
+		switch data[i] {
+		case '\r':
+			flush(data[start:i])
+			cmds = append(cmds, enterArgs(pane))
+			start = i + 1
+		case '\'':
+			flush(data[start:i])
+			cmds = append(cmds, hexNameArgs(pane, '\''))
+			start = i + 1
+		}
+	}
+	flush(data[start:])
 	return cmds
+}
+
+// hexNameArgs sends a single byte by its `0x<hex>` key name, for bytes that a
+// -l payload cannot carry. Like enterArgs it omits -l: the name must be parsed.
+func hexNameArgs(pane string, b byte) []string {
+	args := make([]string, 0, 4)
+	args = append(args, "send-keys")
+	if pane != "" {
+		args = append(args, "-t", pane)
+	}
+	return append(args, fmt.Sprintf("0x%02x", b))
 }
 
 // enterArgs sends Enter by key name — the only form that submits the line.

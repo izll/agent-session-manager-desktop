@@ -2,6 +2,7 @@ package session
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"strings"
 	"testing"
@@ -488,11 +489,19 @@ func TestKeystrokeCommandsPreservesEveryByte(t *testing.T) {
 
 	var rebuilt []byte
 	for _, cmd := range keystrokeCommands("%1", in) {
-		switch cmd[len(cmd)-1] {
-		case "Enter":
+		last := cmd[len(cmd)-1]
+		switch {
+		case last == "Enter":
 			rebuilt = append(rebuilt, '\r')
+		case strings.HasPrefix(last, "0x") && len(last) == 4:
+			// A byte routed around -l as a hex key name.
+			var b byte
+			if _, err := fmt.Sscanf(last, "0x%02x", &b); err != nil {
+				t.Fatalf("unparsable hex key name %q", last)
+			}
+			rebuilt = append(rebuilt, b)
 		default:
-			rebuilt = append(rebuilt, []byte(cmd[len(cmd)-1])...)
+			rebuilt = append(rebuilt, []byte(last)...)
 		}
 	}
 	if !bytes.Equal(rebuilt, in) {
@@ -551,5 +560,90 @@ func TestPrimeWithScreenSurvivesSmallReads(t *testing.T) {
 	}
 	if want := string(screen) + "Z"; string(got) != want {
 		t.Fatalf("got %d bytes, want %d with the snapshot intact", len(got), len(want))
+	}
+}
+
+// psmux drops 0x27 from a -l payload — a sweep of every printable ASCII byte
+// through the real path showed it to be the only casualty. It has to leave as
+// a hex key name instead, or typing an apostrophe does nothing at all.
+func TestKeystrokeCommandsRoutesApostropheAround(t *testing.T) {
+	tests := []struct {
+		name string
+		in   []byte
+		want [][]string
+	}{
+		{
+			name: "lone apostrophe becomes a hex key name",
+			in:   []byte("'"),
+			want: [][]string{{"send-keys", "-t", "%1", "0x27"}},
+		},
+		{
+			name: "apostrophe inside a word splits the literal run",
+			in:   []byte("abc'def"),
+			want: [][]string{
+				{"send-keys", "-t", "%1", "-l", "abc"},
+				{"send-keys", "-t", "%1", "0x27"},
+				{"send-keys", "-t", "%1", "-l", "def"},
+			},
+		},
+		{
+			name: "consecutive apostrophes emit no empty literal",
+			in:   []byte("''"),
+			want: [][]string{
+				{"send-keys", "-t", "%1", "0x27"},
+				{"send-keys", "-t", "%1", "0x27"},
+			},
+		},
+		{
+			// The two detours have to compose: shell quoting plus Enter is the
+			// single most ordinary thing a user types.
+			name: "apostrophe and Enter together",
+			in:   []byte("echo 'hi'\r"),
+			want: [][]string{
+				{"send-keys", "-t", "%1", "-l", "echo "},
+				{"send-keys", "-t", "%1", "0x27"},
+				{"send-keys", "-t", "%1", "-l", "hi"},
+				{"send-keys", "-t", "%1", "0x27"},
+				{"send-keys", "-t", "%1", "Enter"},
+			},
+		},
+		{
+			// A double quote is NOT affected and must stay in the literal run,
+			// or every quoted string would fragment needlessly.
+			name: "double quote stays literal",
+			in:   []byte(`say "hi"`),
+			want: [][]string{{"send-keys", "-t", "%1", "-l", `say "hi"`}},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := keystrokeCommands("%1", tt.in)
+			if len(got) != len(tt.want) {
+				t.Fatalf("keystrokeCommands = %q, want %q", got, tt.want)
+			}
+			for i := range got {
+				if len(got[i]) != len(tt.want[i]) {
+					t.Fatalf("command %d = %q, want %q", i, got[i], tt.want[i])
+				}
+				for j := range got[i] {
+					if got[i][j] != tt.want[i][j] {
+						t.Fatalf("command %d = %q, want %q", i, got[i], tt.want[i])
+					}
+				}
+			}
+		})
+	}
+}
+
+// UTF-8 must never take the hex-name route: that form re-encodes per code
+// point, so é would arrive as Ã©. Only the apostrophe is special-cased.
+func TestKeystrokeCommandsKeepsUTF8Literal(t *testing.T) {
+	cmds := keystrokeCommands("%1", []byte("héllo"))
+	if len(cmds) != 1 {
+		t.Fatalf("got %d commands, want 1 — UTF-8 must not be split", len(cmds))
+	}
+	if last := cmds[0][len(cmds[0])-1]; last != "héllo" {
+		t.Fatalf("payload = %q, want the raw UTF-8 text", last)
 	}
 }
