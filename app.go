@@ -70,6 +70,10 @@ func (a *App) startup(ctx context.Context) {
 	// Enable verbose status detection logs only in dev builds
 	session.DebugLogging = isDevMode
 
+	// Clear what the last update could not delete while it was still running.
+	// Nothing holds those files open now, so this is the moment they can go.
+	updater.CleanStaleUpdateFiles()
+
 	// Initialize storage
 	storage, err := session.NewStorage()
 	if err != nil {

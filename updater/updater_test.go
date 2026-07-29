@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 )
@@ -181,5 +182,202 @@ func writeTestArchive(t *testing.T, path, name string, content []byte) {
 	}
 	if err := f.Close(); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// buildArchive writes a .tar.gz containing the named entries, for the sidecar
+// tests below.
+func buildArchive(t *testing.T, entries map[string]string) string {
+	t.Helper()
+	p := filepath.Join(t.TempDir(), "release.tar.gz")
+	f, err := os.Create(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	gz := gzip.NewWriter(f)
+	tw := tar.NewWriter(gz)
+	for name, body := range entries {
+		if err := tw.WriteHeader(&tar.Header{
+			Name: name, Mode: 0644, Size: int64(len(body)), Typeflag: tar.TypeReg,
+		}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := tw.Write([]byte(body)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := gz.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return p
+}
+
+// The libraries beside the executable have to be refreshed from the same
+// archive, or a new binary runs against stale ones and may not start at all.
+func TestUpdateSidecarDLLsReplacesEveryLibrary(t *testing.T) {
+	archive := buildArchive(t, map[string]string{
+		"asmgr-desktop.exe":  "new binary",
+		"./libportaudio.dll": "new portaudio",
+		"./libstdc++-6.dll":  "new stdc++",
+	})
+
+	dest := t.TempDir()
+	for _, name := range []string{"libportaudio.dll", "libstdc++-6.dll"} {
+		if err := os.WriteFile(filepath.Join(dest, name), []byte("old"), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := updateSidecarDLLs(archive, dest); err != nil {
+		t.Fatalf("updateSidecarDLLs: %v", err)
+	}
+
+	for name, want := range map[string]string{
+		"libportaudio.dll": "new portaudio",
+		"libstdc++-6.dll":  "new stdc++",
+	} {
+		got, err := os.ReadFile(filepath.Join(dest, name))
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if string(got) != want {
+			t.Fatalf("%s = %q, want %q", name, got, want)
+		}
+	}
+	// The executable is handled separately; this step must not drop it here.
+	if _, err := os.Stat(filepath.Join(dest, "asmgr-desktop.exe")); !os.IsNotExist(err) {
+		t.Fatal("the executable must not be written by the sidecar step")
+	}
+}
+
+// A library present in the archive but not yet installed must still land, or a
+// newly introduced dependency would be missing after an update.
+func TestUpdateSidecarDLLsInstallsNewLibrary(t *testing.T) {
+	archive := buildArchive(t, map[string]string{"./libnew.dll": "fresh"})
+	dest := t.TempDir()
+
+	if err := updateSidecarDLLs(archive, dest); err != nil {
+		t.Fatalf("updateSidecarDLLs: %v", err)
+	}
+	got, err := os.ReadFile(filepath.Join(dest, "libnew.dll"))
+	if err != nil {
+		t.Fatalf("new library was not installed: %v", err)
+	}
+	if string(got) != "fresh" {
+		t.Fatalf("libnew.dll = %q, want %q", got, "fresh")
+	}
+}
+
+// An archive entry must never escape the install directory, whatever its name.
+func TestUpdateSidecarDLLsIgnoresPathTraversal(t *testing.T) {
+	archive := buildArchive(t, map[string]string{"../../evil.dll": "pwned"})
+	dest := t.TempDir()
+	outside := filepath.Join(filepath.Dir(filepath.Dir(dest)), "evil.dll")
+	_ = os.Remove(outside)
+
+	if err := updateSidecarDLLs(archive, dest); err != nil {
+		t.Fatalf("updateSidecarDLLs: %v", err)
+	}
+	if _, err := os.Stat(outside); err == nil {
+		_ = os.Remove(outside)
+		t.Fatal("archive entry escaped the destination directory")
+	}
+	// It should have been written under its base name instead.
+	if _, err := os.Stat(filepath.Join(dest, "evil.dll")); err != nil {
+		t.Fatalf("entry was not confined to the destination: %v", err)
+	}
+}
+
+// An oversized entry is a malformed or hostile archive and must be refused
+// rather than written to disk.
+func TestUpdateSidecarDLLsRejectsOversizedEntry(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "big.tar.gz")
+	f, err := os.Create(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gz := gzip.NewWriter(f)
+	tw := tar.NewWriter(gz)
+	// Declare a size past the limit without writing the bytes.
+	if err := tw.WriteHeader(&tar.Header{
+		Name: "huge.dll", Mode: 0644, Size: BinaryLimit + 1, Typeflag: tar.TypeReg,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	_ = tw.Close()
+	_ = gz.Close()
+	_ = f.Close()
+
+	if err := updateSidecarDLLs(p, t.TempDir()); err == nil {
+		t.Fatal("an entry past BinaryLimit must be rejected")
+	}
+}
+
+// Non-library entries must be left alone: the executable has its own path, and
+// anything else in the archive is not ours to scatter into the install dir.
+func TestUpdateSidecarDLLsIgnoresNonLibraries(t *testing.T) {
+	archive := buildArchive(t, map[string]string{
+		"README.md":     "docs",
+		"asmgr-desktop": "linux binary",
+		"./libgood.dll": "yes",
+	})
+	dest := t.TempDir()
+
+	if err := updateSidecarDLLs(archive, dest); err != nil {
+		t.Fatalf("updateSidecarDLLs: %v", err)
+	}
+	for _, name := range []string{"README.md", "asmgr-desktop"} {
+		if _, err := os.Stat(filepath.Join(dest, name)); !os.IsNotExist(err) {
+			t.Fatalf("%s should not have been written", name)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(dest, "libgood.dll")); err != nil {
+		t.Fatalf("the library should have been written: %v", err)
+	}
+}
+
+// The .old copies an update leaves behind must be cleared on the next start,
+// and nothing else may be touched.
+func TestCleanStaleUpdateFilesRemovesOnlyOldCopies(t *testing.T) {
+	dir := t.TempDir()
+	files := map[string]bool{ // name -> should survive
+		"asmgr-desktop.exe":     true,
+		"libportaudio.dll":      true,
+		"asmgr-desktop.exe.old": false,
+		"libportaudio.dll.old":  false,
+		"notes.old.txt":         true, // .old must be the suffix, not a substring
+	}
+	for name := range files {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("x"), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	cleanStaleUpdateFilesIn(dir)
+
+	for name, shouldSurvive := range files {
+		_, err := os.Stat(filepath.Join(dir, name))
+		if shouldSurvive && err != nil {
+			t.Errorf("%s was removed but should have been kept", name)
+		}
+		if !shouldSurvive && err == nil {
+			t.Errorf("%s survived but should have been removed", name)
+		}
+	}
+}
+
+// The Windows update must stay silent: no installer, no console window, no
+// elevation prompt — the same in-place file swap Linux does. Package-manager
+// handling is the only path that shells out, and it must never be taken here.
+func TestPackageManagedIsLinuxOnly(t *testing.T) {
+	if runtime.GOOS == "linux" {
+		t.Skip("this asserts the behaviour on non-Linux platforms")
+	}
+	if IsPackageManaged() {
+		t.Fatal("IsPackageManaged must be false off Linux, or the update would try to shell out to a package manager")
 	}
 }

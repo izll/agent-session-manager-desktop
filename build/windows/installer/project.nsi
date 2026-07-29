@@ -70,6 +70,19 @@ ManifestDPIAware true
 #!uninstfinalize 'signtool --file "%1"'
 #!finalize 'signtool --file "%1"'
 
+# Where to find the runtime DLLs that ship beside the executable.
+#
+# CI stages a copy in build\dlls before the -nsis build, because that build
+# rewrites build\bin and would otherwise leave the libraries behind. Falling
+# back to build\bin keeps a plain local `wails build --nsis` working, where the
+# DLLs are still sitting next to the exe.
+#
+# `wails build` offers no way to pass -D through to makensis, so this is defined
+# here rather than on the command line.
+!ifndef ARG_WAILS_DLL_DIR
+    !define ARG_WAILS_DLL_DIR "..\..\dlls"
+!endif
+
 Name "${INFO_PRODUCTNAME}"
 OutFile "..\..\bin\${INFO_PROJECTNAME}-${ARCH}-installer.exe" # Name of the installer's file.
 InstallDir "$PROGRAMFILES64\${INFO_COMPANYNAME}\${INFO_PRODUCTNAME}" # Default installing folder ($PROGRAMFILES is Program Files folder).
@@ -87,6 +100,16 @@ Section
     SetOutPath $INSTDIR
 
     !insertmacro wails.files
+
+    # The runtime DLLs the binary links against. wails.files installs the
+    # executable and nothing else, and without these the app does not start at
+    # all: portaudio backs the dictation feature, and the three MinGW libraries
+    # are what a CGO build links against. They sit beside the exe in the release
+    # archive for exactly this reason.
+    #
+    # Built with a wildcard rather than four File lines so a new dependency
+    # cannot be silently left out of the installer.
+    File /nonfatal "${ARG_WAILS_DLL_DIR}\*.dll"
 
     CreateShortcut "$SMPROGRAMS\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"
     CreateShortCut "$DESKTOP\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"

@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -495,6 +496,122 @@ func extractExecutable(archivePath, expected string, out *os.File) error {
 	return out.Sync()
 }
 
+// CleanStaleUpdateFiles removes the .old copies an update leaves behind.
+//
+// Windows refuses to delete a file that is still mapped into a running process,
+// so the update has to leave the previous executable and libraries in place and
+// clear them later. "Later" is the next start, when nothing holds them open.
+//
+// Every failure is ignored on purpose: a leftover file is harmless clutter, and
+// there is no version of "could not tidy up" worth interrupting a launch for.
+func CleanStaleUpdateFiles() {
+	execPath, err := os.Executable()
+	if err != nil {
+		return
+	}
+	cleanStaleUpdateFilesIn(filepath.Dir(execPath))
+}
+
+// cleanStaleUpdateFilesIn is the directory-scoped half, split out so it can be
+// tested without standing in for the running executable.
+func cleanStaleUpdateFilesIn(dir string) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".old") {
+			continue
+		}
+		_ = os.Remove(filepath.Join(dir, e.Name()))
+	}
+}
+
+// updateSidecarDLLs refreshes the runtime libraries that ship beside the
+// Windows executable, from the same archive the new binary came from.
+//
+// Windows will not let a loaded DLL be overwritten — measured: writing over one
+// fails with "Access is denied" — but it does allow renaming it out of the way
+// and dropping a replacement in its place. That is the same move replaceExecutable
+// makes for the exe, and it is why the stale copy is left behind as .old rather
+// than deleted: deleting it also fails while the process holds it open.
+//
+// Failures here abort the update, deliberately. A new binary beside stale
+// libraries may simply refuse to start, and that failure would surface after a
+// restart with no obvious cause; refusing now leaves a working installation.
+func updateSidecarDLLs(archivePath, destDir string) error {
+	in, err := os.Open(archivePath)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	gz, err := gzip.NewReader(in)
+	if err != nil {
+		return fmt.Errorf("failed to decompress: %w", err)
+	}
+	defer gz.Close()
+
+	tr := tar.NewReader(gz)
+	for {
+		header, nextErr := tr.Next()
+		if nextErr == io.EOF {
+			break
+		}
+		if nextErr != nil {
+			return fmt.Errorf("failed to read archive: %w", nextErr)
+		}
+		name := path.Base(filepath.ToSlash(header.Name))
+		if !strings.EqualFold(filepath.Ext(name), ".dll") {
+			continue
+		}
+		// Same guards as the executable entry: a hostile archive must not be
+		// able to write outside destDir or exhaust the disk.
+		if !header.FileInfo().Mode().IsRegular() || header.Size < 0 || header.Size > BinaryLimit {
+			return fmt.Errorf("invalid library entry %q in archive", name)
+		}
+		if err := replaceSidecarFile(filepath.Join(destDir, name), tr, header.Size); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// replaceSidecarFile writes one library next to the executable, moving any
+// currently-loaded copy aside first.
+func replaceSidecarFile(dest string, src io.Reader, size int64) error {
+	staged, err := os.CreateTemp(filepath.Dir(dest), "."+filepath.Base(dest)+"-update-*")
+	if err != nil {
+		return fmt.Errorf("cannot stage %s: %w", filepath.Base(dest), err)
+	}
+	stagedPath := staged.Name()
+	if _, err := io.CopyN(staged, src, size); err != nil {
+		_ = staged.Close()
+		_ = os.Remove(stagedPath)
+		return fmt.Errorf("cannot extract %s: %w", filepath.Base(dest), err)
+	}
+	if err := staged.Close(); err != nil {
+		_ = os.Remove(stagedPath)
+		return fmt.Errorf("cannot close %s: %w", filepath.Base(dest), err)
+	}
+
+	// Move the loaded copy aside rather than overwriting it. Renaming succeeds
+	// even while the DLL is mapped into this process; the leftover is cleaned up
+	// on the next run, once nothing holds it open.
+	old := dest + ".old"
+	_ = os.Remove(old)
+	if err := os.Rename(dest, old); err != nil && !os.IsNotExist(err) {
+		_ = os.Remove(stagedPath)
+		return fmt.Errorf("cannot move %s aside: %w", filepath.Base(dest), err)
+	}
+	if err := os.Rename(stagedPath, dest); err != nil {
+		_ = os.Rename(old, dest) // put the working library back
+		_ = os.Remove(stagedPath)
+		return fmt.Errorf("cannot install %s: %w", filepath.Base(dest), err)
+	}
+	_ = os.Remove(old)
+	return nil
+}
+
 func replaceExecutable(execPath, stagedPath string) error {
 	oldPath := execPath + ".old"
 	_ = os.Remove(oldPath)
@@ -595,7 +712,11 @@ func DownloadAndInstall(version string) error {
 	if err := validateReleaseVersion(version); err != nil {
 		return err
 	}
-	if runtime.GOOS != "linux" {
+	// macOS ships as an .app bundle, which is a directory tree rather than a
+	// single file, so replacing one executable inside it would leave the bundle
+	// inconsistent. Linux and Windows are both a plain executable plus, on
+	// Windows, the DLLs beside it — both handled below.
+	if runtime.GOOS != "linux" && runtime.GOOS != "windows" {
 		return fmt.Errorf("automatic updates are not supported on %s; download %s %s from the release page, close the app, and replace the complete application bundle", runtime.GOOS, BinaryName, version)
 	}
 	if IsPackageManaged() {
@@ -632,13 +753,30 @@ func DownloadAndInstall(version string) error {
 		_ = staged.Close()
 		return fmt.Errorf("cannot mark staged executable as runnable: %w", err)
 	}
-	if err := extractExecutable(archivePath, BinaryName, staged); err != nil {
+	// The archive names the binary as it is installed: asmgr-desktop on Linux,
+	// asmgr-desktop.exe on Windows. Looking for the bare name on Windows finds
+	// nothing and fails the update.
+	entryName := BinaryName
+	if runtime.GOOS == "windows" {
+		entryName += ".exe"
+	}
+	if err := extractExecutable(archivePath, entryName, staged); err != nil {
 		_ = staged.Close()
 		return err
 	}
 	if err := staged.Close(); err != nil {
 		_ = os.Remove(stagedPath)
 		return fmt.Errorf("cannot close staged executable: %w", err)
+	}
+
+	// Windows links against runtime DLLs shipped beside the executable. A new
+	// binary against stale libraries is the kind of breakage that only shows up
+	// as a failure to start, so they are refreshed before the swap — while the
+	// old executable is still in place and the update can still be abandoned.
+	if runtime.GOOS == "windows" {
+		if err := updateSidecarDLLs(archivePath, filepath.Dir(execPath)); err != nil {
+			return err
+		}
 	}
 	return replaceExecutable(execPath, stagedPath)
 }

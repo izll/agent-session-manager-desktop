@@ -170,11 +170,13 @@ jobs:
             - Linux (Fedora/RHEL): `.rpm`
             - Linux user-local install: `linux_amd64.tar.gz`
             - macOS (Apple Silicon; Intel via Rosetta 2): `darwin_arm64.tar.gz`
-            - Windows x64: `windows_amd64.tar.gz`
+            - Windows x64 (installer): `windows_amd64_setup.exe`
+            - Windows x64 (portable): `windows_amd64.tar.gz`
 
-            `tmux` is required at runtime on every platform. macOS and Windows
-            updates replace the complete app/archive manually; in-app binary
-            replacement is intentionally Linux-only.
+            Linux and macOS need `tmux` at runtime; Windows uses
+            [psmux](https://github.com/psmux/psmux) instead and does not require
+            tmux. In-app updates work on Linux and Windows. macOS ships as an
+            .app bundle and is updated by replacing the whole bundle.
 
             **Full Changelog**: https://github.com/izll/agent-session-manager-desktop/commits/${{ steps.ver.outputs.tag }}
           files: |
@@ -387,6 +389,50 @@ jobs:
           sha256sum "asmgr-desktop_${V}_windows_amd64.tar.gz" > "asmgr-desktop_${V}_windows_amd64.tar.gz.sha256"
           ls -la *.tar.gz *.sha256
 
+      # The installer needs the same DLLs the archive ships. They are copied out
+      # of build/bin first because the -nsis build below rewrites that directory
+      # and would otherwise leave ARG_WAILS_DLL_DIR pointing at an exe with no
+      # libraries beside it — an installer that produces an app that cannot start.
+      - name: Build NSIS installer
+        run: |
+          V="${{ steps.ver.outputs.num }}"
+          export PATH="$PATH:$(go env GOPATH)/bin"
+          export CGO_ENABLED=1
+          mkdir -p build/dlls
+          cp build/bin/*.dll build/dlls/
+          wails build -platform windows/amd64 -nsis -skipbindings \
+            -ldflags "-X main.Version=$V"
+          INSTALLER="build/bin/asmgr-desktop-amd64-installer.exe"
+          if [ ! -f "$INSTALLER" ]; then
+            echo "NSIS installer was not produced" >&2
+            ls -la build/bin >&2
+            exit 1
+          fi
+          cp "$INSTALLER" "asmgr-desktop_${V}_windows_amd64_setup.exe"
+          sha256sum "asmgr-desktop_${V}_windows_amd64_setup.exe" \
+            > "asmgr-desktop_${V}_windows_amd64_setup.exe.sha256"
+          ls -la *_setup.exe*
+
+      # The DLL glob in project.nsi is /nonfatal, so a wrong path would produce
+      # an installer that silently omits them — and an app that fails to start
+      # only on the user's machine. Size is the cheap proxy: the libraries are
+      # ~3 MB, so an installer without them is far smaller than the exe alone.
+      - name: Verify the installer bundles the runtime DLLs
+        run: |
+          V="${{ steps.ver.outputs.num }}"
+          SETUP="asmgr-desktop_${V}_windows_amd64_setup.exe"
+          EXE_SIZE=$(stat -c%s build/bin/asmgr-desktop.exe)
+          DLL_SIZE=$(cat build/dlls/*.dll | wc -c)
+          SETUP_SIZE=$(stat -c%s "$SETUP")
+          echo "exe=$EXE_SIZE dlls=$DLL_SIZE setup=$SETUP_SIZE"
+          # Compressed, so the floor is deliberately loose: half the DLL payload
+          # on top of half the exe still cannot be reached without them.
+          MIN=$(( EXE_SIZE / 2 + DLL_SIZE / 2 ))
+          if [ "$SETUP_SIZE" -lt "$MIN" ]; then
+            echo "Installer is ${SETUP_SIZE}B, below the ${MIN}B floor — the DLLs are probably missing" >&2
+            exit 1
+          fi
+
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -395,6 +441,8 @@ jobs:
           files: |
             asmgr-desktop_${{ steps.ver.outputs.num }}_windows_amd64.tar.gz
             asmgr-desktop_${{ steps.ver.outputs.num }}_windows_amd64.tar.gz.sha256
+            asmgr-desktop_${{ steps.ver.outputs.num }}_windows_amd64_setup.exe
+            asmgr-desktop_${{ steps.ver.outputs.num }}_windows_amd64_setup.exe.sha256
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
