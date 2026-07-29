@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 )
@@ -379,5 +380,172 @@ func TestPackageManagedIsLinuxOnly(t *testing.T) {
 	}
 	if IsPackageManaged() {
 		t.Fatal("IsPackageManaged must be false off Linux, or the update would try to shell out to a package manager")
+	}
+}
+
+// A bundle is found by walking up to the .app, not by assuming three levels:
+// a binary run out of a build directory has no bundle and must not have
+// unrelated parent directories mistaken for one.
+func TestBundleRootFor(t *testing.T) {
+	tests := []struct {
+		name string
+		exec string
+		want string
+	}{
+		{
+			name: "standard bundle layout",
+			exec: "/Applications/asmgr-desktop.app/Contents/MacOS/asmgr-desktop",
+			want: "/Applications/asmgr-desktop.app",
+		},
+		{
+			name: "bundle in a user directory",
+			exec: "/Users/x/Apps/Foo.app/Contents/MacOS/foo",
+			want: "/Users/x/Apps/Foo.app",
+		},
+		{
+			name: "loose binary has no bundle",
+			exec: "/usr/local/bin/asmgr-desktop",
+			want: "",
+		},
+		{
+			name: "build directory is not a bundle",
+			exec: "/home/x/project/build/bin/asmgr-desktop",
+			want: "",
+		},
+		{
+			// Deeper than the fixed layout: still not this app's bundle.
+			name: "app far above the executable is not claimed",
+			exec: "/Applications/Foo.app/Contents/Resources/a/b/c/tool",
+			want: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := bundleRootFor(tt.exec); got != tt.want {
+				t.Fatalf("bundleRootFor(%q) = %q, want %q", tt.exec, got, tt.want)
+			}
+		})
+	}
+}
+
+// The whole bundle has to come out of the archive: replacing only the binary
+// would leave resources and the code signature describing the old version.
+func TestExtractBundleRestoresTheTree(t *testing.T) {
+	archive := buildArchive(t, map[string]string{
+		"asmgr-desktop.app/Contents/MacOS/asmgr-desktop":     "binary",
+		"asmgr-desktop.app/Contents/Info.plist":              "plist",
+		"asmgr-desktop.app/Contents/Frameworks/libfoo.dylib": "dylib",
+	})
+	dest := t.TempDir()
+
+	if err := extractBundle(archive, dest); err != nil {
+		t.Fatalf("extractBundle: %v", err)
+	}
+	for rel, want := range map[string]string{
+		"asmgr-desktop.app/Contents/MacOS/asmgr-desktop":     "binary",
+		"asmgr-desktop.app/Contents/Info.plist":              "plist",
+		"asmgr-desktop.app/Contents/Frameworks/libfoo.dylib": "dylib",
+	} {
+		got, err := os.ReadFile(filepath.Join(dest, filepath.FromSlash(rel)))
+		if err != nil {
+			t.Fatalf("%s: %v", rel, err)
+		}
+		if string(got) != want {
+			t.Fatalf("%s = %q, want %q", rel, got, want)
+		}
+	}
+}
+
+// The executable bit has to survive, or the extracted bundle cannot be run.
+func TestExtractBundleKeepsTheExecutableBit(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "app.tar.gz")
+	f, err := os.Create(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gz := gzip.NewWriter(f)
+	tw := tar.NewWriter(gz)
+	body := "binary"
+	if err := tw.WriteHeader(&tar.Header{
+		Name: "Foo.app/Contents/MacOS/foo", Mode: 0755,
+		Size: int64(len(body)), Typeflag: tar.TypeReg,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tw.Write([]byte(body)); err != nil {
+		t.Fatal(err)
+	}
+	_ = tw.Close()
+	_ = gz.Close()
+	_ = f.Close()
+
+	dest := t.TempDir()
+	if err := extractBundle(p, dest); err != nil {
+		t.Fatalf("extractBundle: %v", err)
+	}
+	fi, err := os.Stat(filepath.Join(dest, "Foo.app", "Contents", "MacOS", "foo"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fi.Mode().Perm()&0100 == 0 {
+		t.Fatalf("mode is %v; the executable bit was lost", fi.Mode().Perm())
+	}
+}
+
+// An archive entry must never write outside the destination. The checksum
+// proves the file matches the release, not that the release is well-formed.
+func TestExtractBundleRefusesPathTraversal(t *testing.T) {
+	archive := buildArchive(t, map[string]string{"../../evil": "pwned"})
+	dest := t.TempDir()
+	outside := filepath.Join(filepath.Dir(filepath.Dir(dest)), "evil")
+	_ = os.Remove(outside)
+
+	err := extractBundle(archive, dest)
+	if _, statErr := os.Stat(outside); statErr == nil {
+		_ = os.Remove(outside)
+		t.Fatal("archive entry escaped the destination")
+	}
+	_ = err // confined either by refusal or by clamping; escaping is the failure
+}
+
+// safeJoin is the guard the extraction relies on; check it directly too.
+func TestSafeJoinConfinesEntries(t *testing.T) {
+	dest := "/tmp/dest"
+	for _, name := range []string{"../evil", "../../evil", "a/../../evil", "/etc/passwd"} {
+		got, err := safeJoin(dest, name)
+		if err != nil {
+			continue // refused outright: fine
+		}
+		rel, relErr := filepath.Rel(dest, got)
+		if relErr != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			t.Fatalf("safeJoin(%q, %q) = %q, which escapes", dest, name, got)
+		}
+	}
+}
+
+// The old .app is left behind as a directory, so cleanup must remove trees and
+// not just files.
+func TestCleanStaleUpdateFilesRemovesOldDirectories(t *testing.T) {
+	dir := t.TempDir()
+	stale := filepath.Join(dir, "asmgr-desktop.app.old")
+	if err := os.MkdirAll(filepath.Join(stale, "Contents", "MacOS"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(stale, "Contents", "MacOS", "foo"), []byte("x"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	keep := filepath.Join(dir, "asmgr-desktop.app")
+	if err := os.MkdirAll(keep, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	cleanStaleUpdateFilesIn(dir)
+
+	if _, err := os.Stat(stale); !os.IsNotExist(err) {
+		t.Fatal("the stale bundle was not removed")
+	}
+	if _, err := os.Stat(keep); err != nil {
+		t.Fatal("the current bundle must be left alone")
 	}
 }

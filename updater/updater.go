@@ -496,6 +496,178 @@ func extractExecutable(archivePath, expected string, out *os.File) error {
 	return out.Sync()
 }
 
+// bundleRootFor returns the .app directory containing an executable, or "" if
+// the executable is not inside one.
+//
+// A bundle's layout is fixed: Foo.app/Contents/MacOS/foo. Rather than trusting
+// that shape blindly, this walks up and checks for the .app suffix — a binary
+// run straight out of a build directory has no bundle, and must not have three
+// unrelated parent directories mistaken for one.
+func bundleRootFor(execPath string) string {
+	dir := filepath.Dir(execPath) // .../Contents/MacOS
+	for i := 0; i < 3 && dir != "" && dir != string(filepath.Separator); i++ {
+		if strings.EqualFold(filepath.Ext(dir), ".app") {
+			return dir
+		}
+		dir = filepath.Dir(dir)
+	}
+	return ""
+}
+
+// installBundleUpdate replaces a macOS .app bundle in its entirety.
+//
+// The bundle is a directory tree — executable, Info.plist, resources and a code
+// signature that covers all of it — so replacing only the binary would leave a
+// bundle whose signature no longer matches its contents, which Gatekeeper
+// rejects. The archive already contains the whole .app, so the update unpacks
+// it beside the installed one and swaps the two directories.
+//
+// The swap is two renames within the same parent, which is as close to atomic
+// as this gets: if the second fails the first is undone, so the worst case
+// leaves the previous version in place rather than no version at all.
+func installBundleUpdate(version string) error {
+	execPath, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("cannot find executable path: %w", err)
+	}
+	execPath, err = filepath.EvalSymlinks(execPath)
+	if err != nil {
+		return fmt.Errorf("cannot resolve executable path: %w", err)
+	}
+	bundle := bundleRootFor(execPath)
+	if bundle == "" {
+		return fmt.Errorf("this build is not running from an .app bundle; download %s %s from the release page and replace the application", BinaryName, version)
+	}
+
+	arch := runtime.GOARCH
+	filename := fmt.Sprintf("%s_%s_%s_%s.tar.gz", BinaryName, strings.TrimPrefix(version, "v"), runtime.GOOS, arch)
+	archivePath, err := downloadVerifiedAsset(version, filename, BinaryName+"-*.tar.gz")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(archivePath)
+
+	// Unpack beside the installed bundle: same filesystem, so the swap below is
+	// a rename rather than a copy, and /Applications stays untouched until the
+	// new bundle is complete on disk.
+	parent := filepath.Dir(bundle)
+	stageDir, err := os.MkdirTemp(parent, "."+BinaryName+"-update-*")
+	if err != nil {
+		return fmt.Errorf("cannot stage update beside the application: %w", err)
+	}
+	defer os.RemoveAll(stageDir)
+
+	if err := extractBundle(archivePath, stageDir); err != nil {
+		return err
+	}
+	staged := filepath.Join(stageDir, filepath.Base(bundle))
+	if _, err := os.Stat(staged); err != nil {
+		return fmt.Errorf("the archive did not contain %s", filepath.Base(bundle))
+	}
+
+	old := bundle + ".old"
+	_ = os.RemoveAll(old)
+	if err := os.Rename(bundle, old); err != nil {
+		return fmt.Errorf("cannot move the old application aside: %w", err)
+	}
+	if err := os.Rename(staged, bundle); err != nil {
+		_ = os.Rename(old, bundle) // put the working version back
+		return fmt.Errorf("cannot install the new application: %w", err)
+	}
+	// The running process still has files open inside the old bundle, so this
+	// may fail; CleanStaleUpdateFiles clears it on the next start.
+	_ = os.RemoveAll(old)
+	return nil
+}
+
+// extractBundle unpacks the .app tree from a release archive into destDir.
+//
+// Entries are confined to destDir explicitly: a path traversal in an archive is
+// the classic way to have an "update" write anywhere on the filesystem, and the
+// checksum only proves the file matches the release, not that the release is
+// well-formed.
+func extractBundle(archivePath, destDir string) error {
+	in, err := os.Open(archivePath)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	gz, err := gzip.NewReader(in)
+	if err != nil {
+		return fmt.Errorf("failed to decompress: %w", err)
+	}
+	defer gz.Close()
+
+	tr := tar.NewReader(gz)
+	for {
+		header, nextErr := tr.Next()
+		if nextErr == io.EOF {
+			return nil
+		}
+		if nextErr != nil {
+			return fmt.Errorf("failed to read archive: %w", nextErr)
+		}
+		target, err := safeJoin(destDir, header.Name)
+		if err != nil {
+			return err
+		}
+		switch header.Typeflag {
+		case tar.TypeDir:
+			if err := os.MkdirAll(target, 0755); err != nil {
+				return err
+			}
+		case tar.TypeReg:
+			if header.Size < 0 || header.Size > BinaryLimit {
+				return fmt.Errorf("invalid entry %q in archive", header.Name)
+			}
+			if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
+				return err
+			}
+			// Preserve the executable bit: the binary inside Contents/MacOS is
+			// unusable without it, and so is anything in Contents/Resources
+			// that the app shells out to.
+			f, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, header.FileInfo().Mode().Perm())
+			if err != nil {
+				return err
+			}
+			if _, err := io.CopyN(f, tr, header.Size); err != nil {
+				_ = f.Close()
+				return fmt.Errorf("failed to extract %s: %w", header.Name, err)
+			}
+			if err := f.Close(); err != nil {
+				return err
+			}
+		case tar.TypeSymlink:
+			// Frameworks are conventionally symlinked inside a bundle. The link
+			// target is checked the same way as a path, so a symlink cannot be
+			// used to escape destDir either.
+			if _, err := safeJoin(destDir, filepath.Join(filepath.Dir(header.Name), header.Linkname)); err != nil {
+				return err
+			}
+			if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
+				return err
+			}
+			_ = os.Remove(target)
+			if err := os.Symlink(header.Linkname, target); err != nil {
+				return err
+			}
+		}
+		// Anything else (devices, fifos) has no place in an app bundle and is
+		// skipped rather than trusted.
+	}
+}
+
+// safeJoin resolves an archive entry against destDir, refusing anything that
+// would land outside it.
+func safeJoin(destDir, name string) (string, error) {
+	target := filepath.Join(destDir, filepath.Clean("/"+filepath.ToSlash(name)))
+	rel, err := filepath.Rel(destDir, target)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("archive entry %q escapes the destination", name)
+	}
+	return target, nil
+}
+
 // CleanStaleUpdateFiles removes the .old copies an update leaves behind.
 //
 // Windows refuses to delete a file that is still mapped into a running process,
@@ -510,6 +682,12 @@ func CleanStaleUpdateFiles() {
 		return
 	}
 	cleanStaleUpdateFilesIn(filepath.Dir(execPath))
+
+	// Inside a bundle the leftovers are not next to the executable: the old
+	// .app sits beside the new one, three levels up from Contents/MacOS.
+	if bundle := bundleRootFor(execPath); bundle != "" {
+		cleanStaleUpdateFilesIn(filepath.Dir(bundle))
+	}
 }
 
 // cleanStaleUpdateFilesIn is the directory-scoped half, split out so it can be
@@ -520,10 +698,14 @@ func cleanStaleUpdateFilesIn(dir string) {
 		return
 	}
 	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".old") {
+		if !strings.HasSuffix(e.Name(), ".old") {
 			continue
 		}
-		_ = os.Remove(filepath.Join(dir, e.Name()))
+		// Directories are included: a macOS update leaves the previous .app
+		// bundle behind as one, for the same reason files are left behind
+		// elsewhere — it cannot be deleted while the process is running out
+		// of it. RemoveAll covers both cases.
+		_ = os.RemoveAll(filepath.Join(dir, e.Name()))
 	}
 }
 
@@ -712,10 +894,12 @@ func DownloadAndInstall(version string) error {
 	if err := validateReleaseVersion(version); err != nil {
 		return err
 	}
-	// macOS ships as an .app bundle, which is a directory tree rather than a
-	// single file, so replacing one executable inside it would leave the bundle
-	// inconsistent. Linux and Windows are both a plain executable plus, on
-	// Windows, the DLLs beside it — both handled below.
+	// macOS ships as an .app bundle: a directory tree, so swapping the single
+	// executable inside it would leave the bundle's resources, Info.plist and
+	// code signature describing the old version. It gets replaced whole.
+	if runtime.GOOS == "darwin" {
+		return installBundleUpdate(version)
+	}
 	if runtime.GOOS != "linux" && runtime.GOOS != "windows" {
 		return fmt.Errorf("automatic updates are not supported on %s; download %s %s from the release page, close the app, and replace the complete application bundle", runtime.GOOS, BinaryName, version)
 	}

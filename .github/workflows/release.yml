@@ -175,8 +175,8 @@ jobs:
 
             Linux and macOS need `tmux` at runtime; Windows uses
             [psmux](https://github.com/psmux/psmux) instead and does not require
-            tmux. In-app updates work on Linux and Windows. macOS ships as an
-            .app bundle and is updated by replacing the whole bundle.
+            tmux. In-app updates work on all three: macOS replaces the whole
+            .app bundle, since its code signature covers the entire tree.
 
             **Full Changelog**: https://github.com/izll/agent-session-manager-desktop/commits/${{ steps.ver.outputs.tag }}
           files: |
