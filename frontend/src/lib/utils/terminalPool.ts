@@ -236,7 +236,11 @@ export class TerminalPool {
     const settle = () => {
       if (this.showGeneration !== gen) return; // a newer show() superseded us
       const rect = entry.containerEl.getBoundingClientRect();
-      if (rect.width >= 2 && rect.height >= 2) {
+      // Also wait for the socket: fitTerminal() drops the resize silently if it
+      // is not open yet, and nothing sends it again afterwards — leaving the
+      // pane at its previous size with every line wrapped in the wrong place.
+      const wsOpen = entry.terminalInstance.ws?.readyState === WebSocket.OPEN;
+      if (rect.width >= 2 && rect.height >= 2 && wsOpen) {
         fitTerminal(entry.terminalInstance);
         // Force a full repaint of the viewport — without this the DOM/canvas
         // renderer can stay blank after display:none→block on some WebKit builds.
@@ -244,7 +248,21 @@ export class TerminalPool {
         if (canFocus()) term.focus();
         return;
       }
-      if (++tries < 30) requestAnimationFrame(settle); // ~0.5s of retries max
+      if (++tries < 30) {
+        requestAnimationFrame(settle); // ~0.5s of retries max
+        return;
+      }
+      // Out of retries. If the hold-up was only the socket, still fit and
+      // repaint: a correctly-sized terminal that has not told the backend yet
+      // beats a blank pane, and attach() sends the size itself once its socket
+      // opens. Re-measure rather than trusting the rect from the top of this
+      // frame — half a second of retries is long enough for layout to change.
+      const finalRect = entry.containerEl.getBoundingClientRect();
+      if (finalRect.width >= 2 && finalRect.height >= 2) {
+        fitTerminal(entry.terminalInstance);
+        term.refresh(0, term.rows - 1);
+        if (canFocus()) term.focus();
+      }
     };
     requestAnimationFrame(() => {
       if (this.showGeneration !== gen) return;

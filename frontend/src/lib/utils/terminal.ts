@@ -587,6 +587,27 @@ export async function attachToSession(
       }
     });
 
+    // Send the current size once, now that the socket is open.
+    //
+    // Nothing else guarantees this. onResize above only fires when the size
+    // CHANGES, so a terminal that already measures what it measured last time
+    // never announces itself; and fitTerminal() only sends if the socket was
+    // already open when the container became visible, which is a race it
+    // sometimes loses. The multiplexer is then left at whatever size it had —
+    // the size before the window was last closed, or on Windows psmux's 120x30
+    // default — and every line wraps in the wrong place until the user resizes
+    // the window by hand.
+    //
+    // Deferred a frame so the container has been laid out: measuring a
+    // still-hidden element yields the 80x24 default, which would be worse than
+    // sending nothing.
+    requestAnimationFrame(() => {
+      const { cols, rows } = terminal;
+      if (cols > 1 && rows > 1 && ws.readyState === WebSocket.OPEN) {
+        sendResize(ws, cols, rows);
+      }
+    });
+
   } catch (e) {
     console.error('Failed to attach session:', e);
     throw e;
