@@ -575,8 +575,28 @@ export async function attachToSession(
 
     ws.onclose = (ev) => {
       void LogFrontend(`[term] ws closed code=${ev.code} reason=${ev.reason || '(none)'} clean=${ev.wasClean}`);
+      const closedSessionId = terminalInstance.sessionId;
+      const closedWindowIdx = terminalInstance.windowIdx;
       terminalInstance.ws = null;
       terminalInstance.sessionId = null;
+
+      // The multiplexer can drop a client while the session itself is healthy.
+      // Without a retry the tab looks stuck in a specific, confusing way: the
+      // screen never updates again, yet typing still works, because keystrokes
+      // do not travel over this socket. Reconnecting rebinds the terminal to
+      // the session that is still running.
+      //
+      // Only for an unexpected close: detachFromSession() clears this handler
+      // before closing, so a deliberate detach never lands here.
+      if (closedSessionId === null || closedSessionId === undefined) return;
+      const delay = 750;
+      setTimeout(() => {
+        // Anything that re-attached in the meantime wins; do not fight it.
+        if (terminalInstance.ws) return;
+        void LogFrontend(`[term] reconnecting session=${closedSessionId} win=${closedWindowIdx}`);
+        attachToSession(terminalInstance, closedSessionId, closedWindowIdx ?? 0)
+          .catch((e) => { void LogFrontend(`[term] reconnect failed: ${e}`); });
+      }, delay);
     };
 
     ws.onerror = (e) => {

@@ -13,8 +13,9 @@ import (
 // (e.g., thinking ends → tool execution starts).
 const busyGracePeriod = 6 * time.Second
 
-// DebugLogging controls whether status detection writes verbose debug logs.
-// Set to true from main (dev builds only) to enable [StatusDebug]/[WaitDebug] output.
+// DebugLogging controls whether verbose diagnostics are written.
+// Set from main by a dev build, or by --debug / ASMGR_DEBUG=1 on any build, so
+// a user can produce a diagnostic log without installing a different binary.
 var DebugLogging = false
 
 func debugf(format string, args ...interface{}) {

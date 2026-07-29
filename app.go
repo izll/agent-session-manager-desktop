@@ -67,8 +67,13 @@ func NewApp() *App {
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 
-	// Enable verbose status detection logs only in dev builds
-	session.DebugLogging = isDevMode
+	// Verbose logs in a dev build, or in any build started with --debug /
+	// ASMGR_DEBUG=1 — so a user hitting a bug can produce a diagnostic log
+	// without installing a different binary.
+	session.DebugLogging = isDevMode || debugEnabled
+	if debugEnabled {
+		log.Printf("[debug] verbose logging enabled (version %s)", Version)
+	}
 
 	// Clear what the last update could not delete while it was still running.
 	// Nothing holds those files open now, so this is the moment they can go.

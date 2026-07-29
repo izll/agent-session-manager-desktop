@@ -524,6 +524,19 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 				if err != io.EOF {
 					log.Printf("PTY read error: %v", err)
 				}
+				// The stream is gone, so this terminal will never paint again.
+				// Closing the socket tells the frontend that, instead of
+				// leaving it holding an open connection to a dead pane — a tab
+				// that still accepts keystrokes (they go out over separate
+				// send-keys calls) while the screen stays frozen, which reads
+				// as "the session is stuck" when the session is perfectly fine.
+				log.Printf("[term] stream ended session=%s win=%d: %v", sessionID, winIdx, err)
+				tc.writeMu.Lock()
+				_ = ws.WriteControl(websocket.CloseMessage,
+					websocket.FormatCloseMessage(websocket.CloseNormalClosure, "terminal stream ended"),
+					time.Now().Add(time.Second))
+				tc.writeMu.Unlock()
+				_ = ws.Close()
 				return
 			case chunk := <-dataCh:
 				// Hidden (background) tab: keep draining the PTY so tmux never

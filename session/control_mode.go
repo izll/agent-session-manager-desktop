@@ -99,6 +99,23 @@ type controlModeReader struct {
 	// pending holds decoded bytes not yet handed to Read: one %output line can
 	// be far larger than the caller's buffer.
 	pending []byte
+
+	// Kept for the diagnostic on stream end: which notification came last, and
+	// how many arrived. A terminal that stops updating looks identical from the
+	// UI whether the client exited or simply went quiet — these tell them apart.
+	notifications    int
+	lastNotification string
+}
+
+// logNotification records a protocol line, and logs the ones that explain a
+// terminal going silent. Only %exit and %error are worth a line each; the rest
+// are counted so the summary on stream end has something to report.
+func (c *controlModeReader) logNotification(line []byte) {
+	c.notifications++
+	c.lastNotification = string(line)
+	if bytes.HasPrefix(line, []byte("%exit")) || bytes.HasPrefix(line, []byte("%error")) {
+		debugf("[control] %s", line)
+	}
 }
 
 func newControlModeReader(r io.Reader) *controlModeReader {
@@ -144,6 +161,14 @@ func (c *controlModeReader) Read(p []byte) (int, error) {
 			line = bytes.TrimRight(line, "\r\n")
 			if _, data, ok := parseOutputLine(line); ok {
 				c.pending = data
+			} else {
+				// Protocol chatter is consumed rather than forwarded, which
+				// also means a client dying is invisible from the outside: the
+				// terminal simply stops updating while input still works. Under
+				// --debug the notifications are logged, so a silent death can
+				// be told apart from a stall — %exit means the multiplexer let
+				// go, no %exit means something else did.
+				c.logNotification(line)
 			}
 		}
 		if err != nil {
@@ -152,6 +177,8 @@ func (c *controlModeReader) Read(p []byte) (int, error) {
 			if len(c.pending) > 0 {
 				break
 			}
+			debugf("[control] stream ended after %d notifications, last=%q: %v",
+				c.notifications, c.lastNotification, err)
 			return 0, err
 		}
 	}
