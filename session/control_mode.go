@@ -104,6 +104,27 @@ func newControlModeReader(r io.Reader) *controlModeReader {
 	return &controlModeReader{lines: bufio.NewReaderSize(r, 64*1024)}
 }
 
+// primeWithScreen seeds the reader with an initial screenful, delivered ahead of
+// anything the live stream produces.
+//
+// Control mode reports CHANGES, not state: attaching to a session whose screen
+// was already painted yields %begin/%end/%window-add/%session-changed and then
+// silence, with the first %output arriving only when something in the pane next
+// redraws. Measured against a live agent session — six protocol lines, zero
+// %output, until a keystroke was injected. For a UI that is sitting at an idle
+// prompt that means an indefinitely blank terminal, which is exactly the empty
+// window this fixes.
+//
+// The snapshot comes from capture-pane -e (escape sequences retained), so
+// colours and box drawing survive; it is written into pending so the very first
+// Read hands back the screen before any live update.
+func (c *controlModeReader) primeWithScreen(screen []byte) {
+	if len(screen) == 0 {
+		return
+	}
+	c.pending = append(append([]byte(nil), screen...), c.pending...)
+}
+
 // Read returns the decoded pane output, and nothing else.
 //
 // Long lines: bufio.Scanner is deliberately NOT used here. Its default token

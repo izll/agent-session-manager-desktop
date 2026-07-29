@@ -499,3 +499,57 @@ func TestKeystrokeCommandsPreservesEveryByte(t *testing.T) {
 		t.Fatalf("round-trip altered the stream:\n got % x\nwant % x", rebuilt, in)
 	}
 }
+
+// The opening frame must reach the caller before any live output, and must not
+// disturb what the stream delivers afterwards.
+func TestPrimeWithScreenIsDeliveredFirst(t *testing.T) {
+	r := newControlModeReader(strings.NewReader("%output %1 live\r\n"))
+	r.primeWithScreen([]byte("SNAPSHOT"))
+
+	var got []byte
+	buf := make([]byte, 64)
+	for {
+		n, err := r.Read(buf)
+		got = append(got, buf[:n]...)
+		if err != nil {
+			break
+		}
+	}
+	if string(got) != "SNAPSHOTlive" {
+		t.Fatalf("got %q, want the snapshot ahead of the live stream", got)
+	}
+}
+
+// An empty snapshot is the failure path (capture-pane errored); it must leave
+// the stream untouched rather than injecting anything.
+func TestPrimeWithScreenIgnoresEmptySnapshot(t *testing.T) {
+	r := newControlModeReader(strings.NewReader("%output %1 live\r\n"))
+	r.primeWithScreen(nil)
+
+	buf := make([]byte, 64)
+	n, _ := r.Read(buf)
+	if string(buf[:n]) != "live" {
+		t.Fatalf("got %q, want the live stream unchanged", buf[:n])
+	}
+}
+
+// The snapshot must survive a caller whose buffer is smaller than the screen —
+// a full screenful is far larger than a typical read buffer.
+func TestPrimeWithScreenSurvivesSmallReads(t *testing.T) {
+	screen := bytes.Repeat([]byte("A"), 500)
+	r := newControlModeReader(strings.NewReader("%output %1 Z\r\n"))
+	r.primeWithScreen(screen)
+
+	var got []byte
+	buf := make([]byte, 7)
+	for {
+		n, err := r.Read(buf)
+		got = append(got, buf[:n]...)
+		if err != nil {
+			break
+		}
+	}
+	if want := string(screen) + "Z"; string(got) != want {
+		t.Fatalf("got %d bytes, want %d with the snapshot intact", len(got), len(want))
+	}
+}

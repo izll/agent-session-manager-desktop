@@ -119,13 +119,40 @@ func StartTerminal(cmd *exec.Cmd) (TerminalStream, error) {
 		return nil, err
 	}
 
+	pane := resolveActivePane(target)
+	reader := newControlModeReader(stdout)
+	// Control mode sends no initial repaint, so an already-painted session would
+	// render as a blank terminal until its next redraw — see primeWithScreen.
+	reader.primeWithScreen(captureScreen(pane))
+
 	return &controlModeStream{
-		out:          newControlModeReader(stdout),
+		out:          reader,
 		in:           stdin,
 		stop:         killProcess(cmd),
-		pane:         resolveActivePane(target),
+		pane:         pane,
 		attachTarget: target,
 	}, nil
+}
+
+// captureScreen returns the pane's current contents with escape sequences
+// intact, for use as the terminal's opening frame.
+//
+// -e keeps the SGR sequences, so colours and box drawing arrive as the agent
+// drew them; without it the snapshot would be plain text and the UI would
+// flash from monochrome to colour on the first live update.
+//
+// A failure here is not fatal: an empty snapshot simply means the terminal
+// starts blank and fills in on the next redraw, which is strictly better than
+// refusing to attach at all.
+func captureScreen(pane string) []byte {
+	if pane == "" {
+		return nil
+	}
+	out, err := TmuxCommand("capture-pane", "-e", "-p", "-t", pane).Output()
+	if err != nil {
+		return nil
+	}
+	return out
 }
 
 // SetTerminalSize is a no-op on Windows: a pipe carries no window size and
