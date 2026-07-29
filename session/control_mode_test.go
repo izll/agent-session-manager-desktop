@@ -372,6 +372,8 @@ func TestKeystrokeArgsCarriesEveryByteValue(t *testing.T) {
 		t.Fatalf("payload altered: got % x, want % x", got, all)
 	}
 }
+
+// Decoding must be the exact inverse of the multiplexer's escaping for every
 // byte value, including those that are not valid UTF-8 on their own.
 func TestDecodeOctalEscapesRoundTripsEveryByte(t *testing.T) {
 	var escaped bytes.Buffer
