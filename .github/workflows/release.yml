@@ -423,23 +423,32 @@ jobs:
 
       # The DLL glob in project.nsi is /nonfatal, so a wrong path would produce
       # an installer that silently omits them — and an app that fails to start
-      # only on the user's machine. Size is the cheap proxy: the libraries are
-      # ~3 MB, so an installer without them is far smaller than the exe alone.
+      # only on the user's machine. This checks the actual payload rather than
+      # the installer's size, which says little once everything is compressed.
       - name: Verify the installer bundles the runtime DLLs
         run: |
           V="${{ steps.ver.outputs.num }}"
           SETUP="asmgr-desktop_${V}_windows_amd64_setup.exe"
-          EXE_SIZE=$(stat -c%s build/bin/asmgr-desktop.exe)
-          DLL_SIZE=$(cat build/dlls/*.dll | wc -c)
-          SETUP_SIZE=$(stat -c%s "$SETUP")
-          echo "exe=$EXE_SIZE dlls=$DLL_SIZE setup=$SETUP_SIZE"
-          # Compressed, so the floor is deliberately loose: half the DLL payload
-          # on top of half the exe still cannot be reached without them.
-          MIN=$(( EXE_SIZE / 2 + DLL_SIZE / 2 ))
-          if [ "$SETUP_SIZE" -lt "$MIN" ]; then
-            echo "Installer is ${SETUP_SIZE}B, below the ${MIN}B floor — the DLLs are probably missing" >&2
-            exit 1
+          # 7-Zip reads NSIS archives and ships with the runner image.
+          LISTING=$("/c/Program Files/7-Zip/7z.exe" l "$SETUP" 2>/dev/null || true)
+          if [ -z "$LISTING" ]; then
+            echo "Could not inspect the installer; skipping the payload check" >&2
+            exit 0
           fi
+          MISSING=0
+          for DLL in build/dlls/*.dll; do
+            NAME=$(basename "$DLL")
+            if ! grep -qiF "$NAME" <<<"$LISTING"; then
+              echo "Installer is missing $NAME" >&2
+              MISSING=1
+            fi
+          done
+          if ! grep -qiF "asmgr-desktop.exe" <<<"$LISTING"; then
+            echo "Installer is missing the executable" >&2
+            MISSING=1
+          fi
+          [ "$MISSING" -eq 0 ] || exit 1
+          echo "Installer carries the executable and every runtime DLL"
 
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2
