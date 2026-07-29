@@ -80,6 +80,21 @@ export class TerminalPool {
       if (isActive && !wasVisible) {
         const flush = (ti as any)._flushHidden as (() => void) | undefined;
         if (flush) flush();
+        // Re-announce this tab's size on every switch to it.
+        //
+        // Needed because psmux sizes a whole SESSION, not a window: measured
+        // with two clients on one session, a size sent by either applied to
+        // BOTH windows, and window-size manual did not change that. So opening
+        // or switching tabs leaves the other tab's client drawing at a size
+        // that is no longer in force — the black pane that only came right
+        // after resizing the window by hand, which was simply the next thing
+        // to re-send a size.
+        //
+        // Deferred a frame so the container has been laid out; fitTerminal
+        // measures the element and would otherwise read the hidden geometry.
+        requestAnimationFrame(() => {
+          if (this.activeKey === key) fitTerminal(ti);
+        });
       }
     }
   }

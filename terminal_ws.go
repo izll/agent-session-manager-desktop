@@ -415,10 +415,23 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 				winIdx = linked
 			}
 		}
-		// Window sizing stays manual so a resize on one mirror can't ripple.
-		session.TmuxCommand("set-option", "-t", attachTarget, "window-size", "manual").Run()
-		session.TmuxCommand("set-window-option", "-t", attachTarget, "aggressive-resize", "off").Run()
 	}
+
+	// Window sizing stays manual so one client's resize can't drag another's.
+	//
+	// Applies to a direct attach too, not just a mirror: without it psmux
+	// defaults to `window-size latest`, which resizes to whichever client
+	// connected most recently — so opening a second tab reshapes the first
+	// one's window underneath it, and that tab keeps drawing at a size that is
+	// no longer in force until something re-sends one.
+	//
+	// It is not a complete fix on psmux, which sizes per SESSION rather than
+	// per window (measured: a size from either of two clients applied to both
+	// windows, manual or not). The frontend therefore also re-announces the
+	// active tab's size on every switch; this option stops the churn, that
+	// keeps the visible tab correct.
+	session.TmuxCommand("set-option", "-t", attachTarget, "window-size", "manual").Run()
+	session.TmuxCommand("set-window-option", "-t", attachTarget, "aggressive-resize", "off").Run()
 
 	// Hide tmux status bar in the session (the desktop app has its own UI)
 	session.TmuxCommand("set-option", "-t", attachTarget, "status", "off").Run()
