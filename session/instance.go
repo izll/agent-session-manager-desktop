@@ -405,7 +405,32 @@ func (i *Instance) Start() error {
 	return i.StartWithResume("")
 }
 
+// startLocks serialises starts per session name.
+//
+// The existence check and the new-session that follows it are not atomic, and
+// the multiplexer takes seconds to register a new session — long enough for a
+// second start to look in, see nothing, and create a duplicate. That leaves two
+// servers answering to one name: one holds the client, the other does not, and
+// killing the working one appears to "fix" the broken one, which is exactly how
+// this was reported.
+//
+// Keyed by session name rather than held on Instance, because callers can hold
+// different Instance values for the same session.
+var startLocks sync.Map // map[string]*sync.Mutex
+
+func lockSessionStart(name string) func() {
+	v, _ := startLocks.LoadOrStore(name, &sync.Mutex{})
+	mu := v.(*sync.Mutex)
+	mu.Lock()
+	return mu.Unlock
+}
+
 func (i *Instance) StartWithResume(resumeID string) error {
+	// Held for the whole start: releasing after the existence check would
+	// reopen the very window this closes.
+	unlock := lockSessionStart(i.TmuxSessionName())
+	defer unlock()
+
 	log.Printf("[StartWithResume] session=%s agent=%s resumeID=%q saved_ResumeSessionID=%q", i.ID, i.Agent, resumeID, i.ResumeSessionID)
 
 	// If the conversation is currently held by a Claude background agent
@@ -429,9 +454,27 @@ func (i *Instance) StartWithResume(resumeID string) error {
 
 	sessionName := i.TmuxSessionName()
 
-	// Check if tmux session already exists
-	checkCmd := TmuxCommand("has-session", "-t", sessionName)
-	sessionExists := checkCmd.Run() == nil
+	// Check if tmux session already exists.
+	//
+	// A single negative answer is not enough when this session was started
+	// moments ago: psmux forks a server per session and takes a noticeable time
+	// to answer for it, so a start that overlaps a previous one would see
+	// nothing and create a SECOND server under the same name. Two servers for
+	// one name is not self-correcting — one holds the client and the other does
+	// not, and only killing one by hand resolves it.
+	//
+	// The wait is therefore spent only where that race is possible: right after
+	// a recent start of this same session. A cold start pays nothing.
+	sessionExists := TmuxCommand("has-session", "-t", sessionName).Run() == nil
+	if !sessionExists && recentlyStarted(sessionName) {
+		for attempt := 0; attempt < 5 && !sessionExists; attempt++ {
+			time.Sleep(300 * time.Millisecond)
+			sessionExists = TmuxCommand("has-session", "-t", sessionName).Run() == nil
+		}
+		if sessionExists {
+			log.Printf("[StartWithResume] %s appeared after a slow registration; not starting a second one", sessionName)
+		}
+	}
 
 	if !sessionExists {
 		// Build command based on agent type
@@ -525,6 +568,10 @@ func (i *Instance) StartWithResume(resumeID string) error {
 		// desktop menu / KRunner the app inherits TERM=dumb (or empty), which
 		// would propagate into the agent running inside tmux.
 		cmd.Env = append(os.Environ(), "TERM=xterm-256color")
+		// Recorded before Run: the mark is what tells a subsequent start to
+		// wait for a slow registration rather than create a duplicate, and the
+		// window it guards opens the moment the command is issued.
+		markStarted(sessionName)
 		if err := cmd.Run(); err != nil {
 			return fmt.Errorf("failed to create tmux session: %w", err)
 		}
@@ -2429,4 +2476,39 @@ func soleTmuxWindowIndex(sessionName string) (int, bool) {
 		return 0, false
 	}
 	return indices[0], true
+}
+
+// Session starts are recorded so a start that overlaps another can tell the
+// difference between "this session does not exist" and "it was created a
+// moment ago and the multiplexer has not caught up".
+//
+// Without this the second start creates a duplicate server under the same
+// name, which does not resolve itself: one server holds the terminal client
+// and the other does not, so the session appears frozen until one is killed.
+var recentStarts sync.Map // map[string]time.Time
+
+// startSettleWindow is how long after a start another start should wait for
+// the session to appear instead of assuming it is absent. Comfortably longer
+// than the registration delay measured on psmux, and it only ever delays the
+// rarer case of restarting a session that really did go away.
+const startSettleWindow = 10 * time.Second
+
+func markStarted(sessionName string) {
+	recentStarts.Store(sessionName, time.Now())
+}
+
+func recentlyStarted(sessionName string) bool {
+	v, ok := recentStarts.Load(sessionName)
+	if !ok {
+		return false
+	}
+	started, ok := v.(time.Time)
+	if !ok {
+		return false
+	}
+	if time.Since(started) > startSettleWindow {
+		recentStarts.Delete(sessionName) // keep the map from growing forever
+		return false
+	}
+	return true
 }
