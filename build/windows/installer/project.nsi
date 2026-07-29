@@ -60,6 +60,18 @@ ManifestDPIAware true
 # !insertmacro MUI_PAGE_LICENSE "resources\eula.txt" # Adds a EULA page to the installer
 !insertmacro MUI_PAGE_DIRECTORY # In which folder install page.
 !insertmacro MUI_PAGE_INSTFILES # Installing page.
+
+# Offer to launch the app from the finish page, ticked by default — finishing an
+# install and then hunting for the shortcut is a needless extra step.
+#
+# The launch goes through explorer.exe rather than starting the exe directly:
+# the installer runs elevated, and a child process inherits that, so a direct
+# call would leave the app running as administrator for the whole session.
+# Handing the path to Explorer runs it as the logged-in user instead.
+!define MUI_FINISHPAGE_RUN
+!define MUI_FINISHPAGE_RUN_FUNCTION LaunchAsUser
+!define MUI_FINISHPAGE_RUN_TEXT "Run ${INFO_PRODUCTNAME}"
+
 !insertmacro MUI_PAGE_FINISH # Finished installation page.
 
 !insertmacro MUI_UNPAGE_INSTFILES # Uinstalling page
@@ -101,6 +113,17 @@ ShowInstDetails show # This will always show the installation details.
 
 Function .onInit
    !insertmacro wails.checkArchitecture
+FunctionEnd
+
+# Launch the app without passing the installer's elevated token down to it.
+#
+# ShellExecute from an elevated installer would start the app as administrator,
+# and it would stay that way for the whole session: config written to the wrong
+# profile, and every agent it spawns running with rights it never needed.
+# Explorer runs as the logged-in user, so asking it to open the path drops back
+# to that user's privileges.
+Function LaunchAsUser
+    Exec '"$WINDIR\explorer.exe" "$INSTDIR\${PRODUCT_EXECUTABLE}"'
 FunctionEnd
 
 Section
