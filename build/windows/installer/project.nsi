@@ -85,7 +85,18 @@ ManifestDPIAware true
 
 Name "${INFO_PRODUCTNAME}"
 OutFile "..\..\bin\${INFO_PROJECTNAME}-${ARCH}-installer.exe" # Name of the installer's file.
-InstallDir "$PROGRAMFILES64\${INFO_COMPANYNAME}\${INFO_PRODUCTNAME}" # Default installing folder ($PROGRAMFILES is Program Files folder).
+# Install straight into Program Files, with no vendor folder above the product.
+# The Wails default is $PROGRAMFILES64\${INFO_COMPANYNAME}\${INFO_PRODUCTNAME},
+# but there is no company name set, so Wails falls back to the project name and
+# the path becomes asmgr-desktop\Agent Session Manager — the same name twice,
+# once machine-readable and once human-readable.
+InstallDir "$PROGRAMFILES64\${INFO_PRODUCTNAME}" # Default installing folder ($PROGRAMFILES is Program Files folder).
+
+# Reinstall over an existing copy instead of beside it. Without this an upgrade
+# would install to the default path and leave the previous install orphaned —
+# two copies, two shortcuts, and an uninstaller for the one you are not running.
+# It also keeps a user's own choice of directory across upgrades.
+InstallDirRegKey HKLM "${UNINST_KEY}" "InstallLocation"
 ShowInstDetails show # This will always show the installation details.
 
 Function .onInit
@@ -118,6 +129,13 @@ Section
     !insertmacro wails.associateCustomProtocols
 
     !insertmacro wails.writeUninstaller
+
+    # wails.writeUninstaller does not record where the app went, so InstallDirRegKey
+    # above would read an empty value and every upgrade would fall back to the
+    # default path — orphaning an install that lives anywhere else. Written here
+    # rather than in wails_tools.nsh, which the Wails CLI regenerates.
+    SetRegView 64
+    WriteRegStr HKLM "${UNINST_KEY}" "InstallLocation" "$INSTDIR"
 SectionEnd
 
 Section "uninstall"
