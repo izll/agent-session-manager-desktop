@@ -635,9 +635,12 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 						if cols < 10 || rows < 3 {
 							continue
 						}
-						// No-op where the stream carries no window size
-						// (Windows pipes); the resize-window below is the real
-						// lever there.
+						// On Unix this is the PTY ioctl. On Windows the pipe
+						// carries no size, so this sends the multiplexer's own
+						// refresh-client over the control-mode channel — and
+						// that is the ONLY lever there: psmux ignores the
+						// resize-window below entirely (exits 0, changes
+						// nothing), so this call is what sizes the pane.
 						session.SetTerminalSize(ptmx, cols, rows)
 						// Resize this mirror's window to EXACTLY this client's
 						// size. We deliberately do NOT use `-A` (aggregate =

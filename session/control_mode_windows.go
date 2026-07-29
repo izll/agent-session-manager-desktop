@@ -155,13 +155,37 @@ func captureScreen(pane string) []byte {
 	return out
 }
 
-// SetTerminalSize is a no-op on Windows: a pipe carries no window size and
-// there is no ioctl to call. Every caller already issues the multiplexer's own
-// resize-window for the target window immediately after this, and that command
-// is the whole sizing mechanism on this platform, because psmux owns the
-// ConPTY whose size actually matters.
+// SetTerminalSize tells the multiplexer how large this client's terminal is,
+// over the control-mode channel.
+//
+// A pipe carries no window size and there is no ioctl to call, so psmux falls
+// back to a default 120x30 — and a session stuck at 120 columns inside a wider
+// xterm.js wraps every line in the wrong place, which is the staircased,
+// doubled-up layout this fixes.
+//
+// It has to be `refresh-client -C <cols>,<rows>` sent DOWN THE CONTROL-MODE
+// CHANNEL. Both halves of that matter, and both were measured:
+//
+//   - psmux has no resize-window at all; the command exits 0 and changes
+//     nothing. resize-pane -x/-y is documented but equally inert here.
+//   - the same refresh-client run as a separate process is ignored, because
+//     the size belongs to a client and an outside process is not this client.
+//     Issued on our own channel it takes effect immediately: 100,25 and
+//     137,42 both applied exactly.
+//
+// A resize failure is reported but not fatal to the stream: the terminal keeps
+// working at its previous size, which beats tearing down a live session.
 func SetTerminalSize(s TerminalStream, cols, rows int) error {
-	return nil
+	c, ok := s.(*controlModeStream)
+	if !ok || cols <= 0 || rows <= 0 {
+		return nil
+	}
+	// Shares writeMu with keystrokes: this is a command on the same channel,
+	// and a half-written line would corrupt whichever command follows.
+	c.writeMu.Lock()
+	defer c.writeMu.Unlock()
+	_, err := c.in.Write([]byte(fmt.Sprintf("refresh-client -C %d,%d\n", cols, rows)))
+	return err
 }
 
 // insertControlFlag turns `attach-session -t X` into `-CC attach-session -t X`.

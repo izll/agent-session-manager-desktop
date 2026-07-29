@@ -2121,11 +2121,15 @@ func (a *App) ResizeTerminal(ptyID string, cols, rows int) error {
 		return fmt.Errorf("error.ptyNotFound")
 	}
 
-	// Resize the stream itself where that means anything (the PTY ioctl on
-	// Unix). On Windows it is a no-op and the resize-window below does the
-	// whole job, so this must not be treated as the only step.
+	// Resize the stream itself: the PTY ioctl on Unix, and on Windows the
+	// multiplexer's refresh-client over the control-mode channel — which there
+	// is the only thing that works, since psmux ignores resize-window.
+	//
+	// A failure here is reported but must not abort the resize: on Windows this
+	// is a write to a live command channel, so a client that has just gone away
+	// would otherwise turn a cosmetic resize into a hard error.
 	if err := session.SetTerminalSize(ps.ptmx, cols, rows); err != nil {
-		return err
+		log.Printf("[resize] set size %dx%d: %v", cols, rows, err)
 	}
 
 	// Force tmux to resize window and refresh
