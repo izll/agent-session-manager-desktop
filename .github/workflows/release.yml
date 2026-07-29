@@ -400,6 +400,14 @@ jobs:
           export CGO_ENABLED=1
           mkdir -p build/dlls
           cp build/bin/*.dll build/dlls/
+          # NSIS demands a numeric X.X.X.X version, so a pre-release tag like
+          # 0.9.7-beta1 has to have its suffix stripped for the resource block —
+          # project.nsi appends ".0" to whatever wails.json carries. The binary
+          # itself keeps the full version via -ldflags; this only affects the
+          # installer's file properties.
+          export NSIS_VERSION="${V%%-*}"
+          echo "installer resource version: $NSIS_VERSION (binary keeps $V)"
+          node -e 'const fs=require("fs"); const p="wails.json"; const c=JSON.parse(fs.readFileSync(p)); c.info.productVersion=process.env.NSIS_VERSION; fs.writeFileSync(p, JSON.stringify(c, null, 2)+"\n")'
           wails build -platform windows/amd64 -nsis -skipbindings \
             -ldflags "-X main.Version=$V"
           INSTALLER="build/bin/asmgr-desktop-amd64-installer.exe"
