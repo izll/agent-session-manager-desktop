@@ -3,11 +3,13 @@
 package session
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"os/exec"
 	"strings"
 	"sync"
+	"time"
 )
 
 // controlModeStream is the Windows TerminalStream: a control-mode client
@@ -131,7 +133,20 @@ func StartTerminal(cmd *exec.Cmd) (TerminalStream, error) {
 	reader := newControlModeReader(stdout)
 	// Control mode sends no initial repaint, so an already-painted session would
 	// render as a blank terminal until its next redraw — see primeWithScreen.
-	reader.primeWithScreen(captureScreen(pane))
+	//
+	// An established session captures immediately. A tab opened moments ago has
+	// not drawn anything yet, and that case is retried in the background rather
+	// than here: blocking the attach would delay every terminal for the sake of
+	// the one that is still starting.
+	if screen := captureScreen(pane); len(bytes.TrimSpace(screen)) > 0 {
+		reader.primeWithScreen(screen)
+	} else {
+		go func() {
+			if late := captureScreenWhenReady(pane); len(late) > 0 {
+				reader.primeWithScreen(late)
+			}
+		}()
+	}
 
 	return &controlModeStream{
 		out:          reader,
@@ -160,7 +175,44 @@ func captureScreen(pane string) []byte {
 	if err != nil {
 		return nil
 	}
+	screen := trimCaptureTrailer(out)
+	if len(bytes.TrimSpace(screen)) == 0 {
+		return nil
+	}
+	// Drawn from the top-left, so the snapshot lands where the pane's rows
+	// actually are rather than wherever the cursor happened to be. Without this
+	// the picture starts at the current cursor row and the whole screen is
+	// offset — and the trailing cursor-home leaves the cursor somewhere
+	// harmless until the agent's next redraw places it properly.
+	out = make([]byte, 0, len(screen)+8)
+	out = append(out, "\033[H"...)
+	out = append(out, screen...)
 	return out
+}
+
+// captureScreenWhenReady returns the pane's contents, waiting briefly for a
+// pane that has not drawn anything yet.
+//
+// A tab opened moments ago is still starting its agent, so the first capture
+// comes back blank — and blank is unrecoverable here, because control mode only
+// reports CHANGES: with no opening frame and no redraw, the terminal shows an
+// empty pane indefinitely while input still works. Measured on a freshly opened
+// tab: zero bytes on attach, zero after a refresh-client, and output only once
+// a keystroke forced a change.
+//
+// Waiting is bounded and only costs anything when the pane really is empty; an
+// established session captures on the first try and returns immediately.
+func captureScreenWhenReady(pane string) []byte {
+	const attempts = 12
+	for i := 0; i < attempts; i++ {
+		if screen := captureScreen(pane); len(bytes.TrimSpace(screen)) > 0 {
+			return screen
+		}
+		if i < attempts-1 {
+			time.Sleep(250 * time.Millisecond)
+		}
+	}
+	return nil
 }
 
 // SetTerminalSize tells the multiplexer how large this client's terminal is,
@@ -192,8 +244,51 @@ func SetTerminalSize(s TerminalStream, cols, rows int) error {
 	// and a half-written line would corrupt whichever command follows.
 	c.writeMu.Lock()
 	defer c.writeMu.Unlock()
-	_, err := c.in.Write([]byte(fmt.Sprintf("refresh-client -C %d,%d\n", cols, rows)))
-	return err
+
+	// Nudge the size before setting it, so the pane is redrawn in full.
+	//
+	// Only a CHANGE of size makes psmux repaint. Measured on an attached client
+	// whose screen had gone stale:
+	//
+	//   refresh-client                 ->     0 bytes
+	//   refresh-client -C <same size>  ->     0 bytes
+	//   refresh-client -C <different>  -> 27510 bytes
+	//   select-window                  ->     0 bytes
+	//
+	// That is why resizing the window by hand was the only thing that fixed a
+	// blank tab, and why re-sending the same dimensions never did: attaching
+	// another tab resizes the whole session (psmux sizes per session), leaving
+	// the other client's screen invalid with nothing to trigger a repaint.
+	//
+	// One column narrower is enough and is never seen: the corrected size lands
+	// immediately after, and the pane is only ever rendered by us.
+	if cols > 2 {
+		if _, err := c.in.Write([]byte(fmt.Sprintf("refresh-client -C %d,%d\n", cols-1, rows))); err != nil {
+			return err
+		}
+	}
+	if _, err := c.in.Write([]byte(fmt.Sprintf("refresh-client -C %d,%d\n", cols, rows))); err != nil {
+		return err
+	}
+
+	// Clear the terminal ahead of the repaint that is now on its way.
+	//
+	// The repaint psmux sends begins with ESC[H — cursor home — but never
+	// ESC[2J, so it paints over whatever is on screen without clearing it.
+	// Measured on a redraw triggered this way: the payload opens with
+	// `\033[?25l\033[38;5;174m\033[H` and no erase anywhere in it. Any row the
+	// new frame does not happen to overwrite survives, which offsets everything
+	// below it — the one-line shift left in a tab that was already open.
+	//
+	// Injected into the READ side, not written to the command channel: this is
+	// a sequence for the terminal emulator, not a command for the multiplexer.
+	//
+	// It has to lead the repaint, so it is queued to go out BEFORE the next
+	// %output rather than appended behind whatever is buffered now — appending
+	// would clear the frame already on screen and then let the stale rows come
+	// back underneath the new one.
+	c.out.clearBeforeNextOutput()
+	return nil
 }
 
 // insertControlFlag turns `attach-session -t X` into `-CC attach-session -t X`.
@@ -243,6 +338,22 @@ func resolveActivePane(target string) string {
 	if target == "" {
 		return ""
 	}
+	// A target that already names a window (session:index) is left alone, only
+	// gaining the pane. Re-deriving it from the session would replace the
+	// caller's window with whichever one is ACTIVE, and opening a tab changes
+	// that — which is how input for one tab ended up addressed to another.
+	if strings.Contains(target, ":") {
+		out, err := TmuxCommand("display-message", "-p", "-t", target,
+			"#{pane_index}").Output()
+		if err != nil {
+			return target
+		}
+		if pane := strings.TrimSpace(string(out)); pane != "" {
+			return target + "." + pane
+		}
+		return target
+	}
+
 	// window_index.pane_index are per-session coordinates; prefixed with the
 	// session they cannot collide with an identically-numbered pane elsewhere.
 	out, err := TmuxCommand("display-message", "-p", "-t", target,

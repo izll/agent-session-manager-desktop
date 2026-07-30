@@ -436,6 +436,13 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 	// Hide tmux status bar in the session (the desktop app has its own UI)
 	session.TmuxCommand("set-option", "-t", attachTarget, "status", "off").Run()
 
+	// Let focus reach the agent. Without it Claude Code prints a notice into its
+	// own UI — "tmux focus-events off · add 'set -g focus-events on' to
+	// ~/.tmux.conf and reattach" — which lands in the middle of its frame and
+	// reads as a rendering fault. Set globally because it is a server option;
+	// psmux accepts it, verified before relying on it.
+	session.TmuxCommand("set-option", "-g", "focus-events", "on").Run()
+
 	// Select the target window in the session
 	selectCmd := session.TmuxCommand("select-window", "-t", fmt.Sprintf("%s:%d", attachTarget, winIdx))
 	selectCmd.Run()
@@ -454,7 +461,17 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 		log.Printf("[ws] attaching by id %s (%s)", id, attachTarget)
 		attachTarget = id
 	}
-	cmd := session.TmuxCommand("attach-session", "-t", attachTarget)
+	// Name the window in the attach target, so this connection is pinned to the
+	// tab it belongs to.
+	//
+	// The keystroke target used to be derived from the session's ACTIVE window,
+	// resolved once at attach. Opening another tab makes that tab active, and
+	// from then on the older tab's client is aiming at a window that moved out
+	// from under it — measured: with tabs 0..3 open, the session reported its
+	// active window as 3, so input meant for tab 0 was addressed to tab 3's
+	// coordinates and simply vanished.
+	windowTarget := fmt.Sprintf("%s:%d", attachTarget, winIdx)
+	cmd := session.TmuxCommand("attach-session", "-t", windowTarget)
 	// Force a sane TERM. When the app is launched from a desktop menu / KRunner
 	// instead of a shell, it inherits TERM=dumb (or empty), and tmux refuses to
 	// attach with "open terminal failed: terminal does not support clear".
@@ -682,6 +699,14 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 						// measuring a still-hidden container on the frontend.
 						if cols < 10 || rows < 3 {
 							continue
+						}
+						// Logged because a mismatch between what the frontend
+						// measures and what the multiplexer renders shows up as
+						// content offset by a line or two, with nothing else to
+						// distinguish which side is wrong.
+						if session.DebugLogging {
+							log.Printf("[ws] resize session=%s win=%d %dx%d",
+								sessionID, winIdx, cols, rows)
 						}
 						// On Unix this is the PTY ioctl. On Windows the pipe
 						// carries no size, so this sends the multiplexer's own

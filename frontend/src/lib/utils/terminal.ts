@@ -682,6 +682,30 @@ export async function detachFromSession(terminalInstance: TerminalInstance): Pro
   }
 }
 
+/**
+ * Re-send a terminal's current size without re-measuring its container.
+ *
+ * fitTerminal cannot be used for a tab that is not on screen: it measures the
+ * element, and a hidden one reports no usable size, so it returns early and
+ * sends nothing. This takes the size xterm already holds, which is still the
+ * size that tab is drawing at.
+ *
+ * Needed because psmux sizes a whole SESSION: attaching a new tab reshapes the
+ * previous tab's window underneath it, and that tab goes on drawing at a size
+ * no longer in force — the black pane that only recovered when the window was
+ * resized by hand.
+ */
+export function resendTerminalSize(terminalInstance: TerminalInstance): void {
+  const ws = terminalInstance.ws;
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  const { cols, rows } = terminalInstance.terminal;
+  // Below 2 means the terminal never got a real size to begin with; sending it
+  // would tell the multiplexer to render the pane that way.
+  if (cols > 1 && rows > 1) {
+    sendResize(ws, cols, rows);
+  }
+}
+
 export function fitTerminal(terminalInstance: TerminalInstance): void {
   // Guard against fitting a detached/zero-sized container (would send bogus
   // 1×1 or similar resize to tmux, which then renders the pane that way).

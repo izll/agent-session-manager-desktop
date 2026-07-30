@@ -649,3 +649,54 @@ func TestKeystrokeCommandsKeepsUTF8Literal(t *testing.T) {
 		t.Fatalf("payload = %q, want the raw UTF-8 text", last)
 	}
 }
+
+// The erase has to lead the NEXT repaint, not the frame already on screen.
+// Appending it instead wipes the current frame and lets the stale rows come
+// back underneath the new one — which is the bug, not the fix.
+func TestClearBeforeNextOutputLeadsTheRepaint(t *testing.T) {
+	r := newControlModeReader(strings.NewReader("%output %1 FRAME\r\n"))
+	r.clearBeforeNextOutput()
+
+	var got []byte
+	buf := make([]byte, 64)
+	for {
+		n, err := r.Read(buf)
+		got = append(got, buf[:n]...)
+		if err != nil {
+			break
+		}
+	}
+	if want := "\033[2J\033[HFRAME"; string(got) != want {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+}
+
+// Only the first output after the request is cleared; later frames must not be,
+// or every repaint would flicker through a blank screen.
+func TestClearBeforeNextOutputAppliesOnce(t *testing.T) {
+	r := newControlModeReader(strings.NewReader("%output %1 ONE\r\n%output %1 TWO\r\n"))
+	r.clearBeforeNextOutput()
+
+	var got []byte
+	buf := make([]byte, 64)
+	for {
+		n, err := r.Read(buf)
+		got = append(got, buf[:n]...)
+		if err != nil {
+			break
+		}
+	}
+	if want := "\033[2J\033[HONETWO"; string(got) != want {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+}
+
+// Without a request, output passes through untouched.
+func TestOutputIsNotClearedByDefault(t *testing.T) {
+	r := newControlModeReader(strings.NewReader("%output %1 PLAIN\r\n"))
+	buf := make([]byte, 64)
+	n, _ := r.Read(buf)
+	if string(buf[:n]) != "PLAIN" {
+		t.Fatalf("got %q, want %q", buf[:n], "PLAIN")
+	}
+}

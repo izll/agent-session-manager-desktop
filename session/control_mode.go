@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"sync"
 )
 
 // Control mode is how the Windows build talks to the multiplexer. The parser
@@ -100,6 +101,14 @@ type controlModeReader struct {
 	// be far larger than the caller's buffer.
 	pending []byte
 
+	// Guards pending and clearPending: either can be set from another
+	// goroutine while Read is draining the live stream.
+	mu sync.Mutex
+
+	// clearPending makes the next pane output start with a screen erase. See
+	// clearBeforeNextOutput.
+	clearPending bool
+
 	// Kept for the diagnostic on stream end: which notification came last, and
 	// how many arrived. A terminal that stops updating looks identical from the
 	// UI whether the client exited or simply went quiet — these tell them apart.
@@ -140,7 +149,26 @@ func (c *controlModeReader) primeWithScreen(screen []byte) {
 	if len(screen) == 0 {
 		return
 	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.pending = append(append([]byte(nil), screen...), c.pending...)
+}
+
+// clearBeforeNextOutput arranges for the terminal to be cleared immediately
+// ahead of the next pane output, and not before.
+//
+// A repaint from psmux opens with ESC[H (cursor home) but never ESC[2J:
+// measured, the payload starts `\033[?25l\033[38;5;174m\033[H` with no erase
+// anywhere in it. Rows the new frame does not overwrite therefore survive from
+// the previous one — the leftover line seen above a redrawn UI.
+//
+// Order is the whole point. Appending the clear to what is already buffered
+// would wipe the frame currently on screen and leave the stale rows to reappear
+// under the new one; it has to arrive as the first bytes of the repaint itself.
+func (c *controlModeReader) clearBeforeNextOutput() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.clearPending = true
 }
 
 // Read returns the decoded pane output, and nothing else.
@@ -160,6 +188,14 @@ func (c *controlModeReader) Read(p []byte) (int, error) {
 			// reaches the terminal as a carriage return of its own.
 			line = bytes.TrimRight(line, "\r\n")
 			if _, data, ok := parseOutputLine(line); ok {
+				c.mu.Lock()
+				if c.clearPending {
+					// Lead this repaint with an erase, so no row the new frame
+					// skips survives from the previous one.
+					c.clearPending = false
+					data = append([]byte("\033[2J\033[H"), data...)
+				}
+				c.mu.Unlock()
 				c.pending = data
 			} else {
 				// Protocol chatter is consumed rather than forwarded, which
@@ -182,8 +218,10 @@ func (c *controlModeReader) Read(p []byte) (int, error) {
 			return 0, err
 		}
 	}
+	c.mu.Lock()
 	n := copy(p, c.pending)
 	c.pending = c.pending[n:]
+	c.mu.Unlock()
 	return n, nil
 }
 
@@ -288,4 +326,30 @@ func enterArgs(pane string) []string {
 		args = append(args, "-t", pane)
 	}
 	return append(args, "Enter")
+}
+
+// trimCaptureTrailer removes the one trailing newline capture-pane adds beyond
+// the pane's own rows.
+//
+// capture-pane emits one newline-terminated line per row, so an N-row pane
+// arrives with N newlines — one more than the screen holds, and that extra one
+// scrolls everything up a row when the snapshot is written to a terminal.
+//
+// Exactly one newline is removed. Trimming every trailing blank instead also
+// eats the pane's genuinely empty last rows, leaving the picture shorter than
+// the screen and shifting the content the other way — both directions were seen
+// in practice. A snapshot is a picture of the screen and has to be as tall as
+// it is, blank rows included.
+//
+// Lives here rather than beside its caller so it is compiled and tested on
+// every platform: an off-by-one in the row count is exactly the kind of bug
+// that is invisible until someone looks at a terminal.
+func trimCaptureTrailer(out []byte) []byte {
+	if n := len(out); n > 0 && out[n-1] == '\n' {
+		out = out[:n-1]
+		if n := len(out); n > 0 && out[n-1] == '\r' {
+			out = out[:n-1]
+		}
+	}
+	return out
 }

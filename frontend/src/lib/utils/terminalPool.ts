@@ -3,6 +3,7 @@ import {
   attachToSession,
   detachFromSession,
   fitTerminal,
+  resendTerminalSize,
   sendVisibility,
   type TerminalInstance
 } from './terminal';
@@ -202,6 +203,14 @@ export class TerminalPool {
     // Claim this generation so stale async calls won't override us
     const gen = ++this.showGeneration;
 
+    // Remember which tab we are leaving, before activeKey is overwritten. If
+    // the target has to be created, its attach resizes the whole session (psmux
+    // sizes per session, not per window), leaving THIS tab drawing at a size
+    // that is no longer in force — the one that went black when a new tab was
+    // opened. It gets its size re-sent once the new tab is connected.
+    const previousKey = this.activeKey;
+    const wasCached = this.entries.has(key);
+
     // Set intended target immediately (before any async work)
     this.activeKey = key;
 
@@ -216,6 +225,15 @@ export class TerminalPool {
 
     // If another show() was called while we were awaiting, bail out
     if (this.showGeneration !== gen) return;
+
+    // A newly created tab has just attached, and that attach resized the whole
+    // session. Give the tab we came from its size back, so it is not left
+    // rendering at the new tab's dimensions. Only on creation: switching
+    // between existing tabs does not re-attach and so does not disturb them.
+    if (!wasCached && previousKey && previousKey !== key) {
+      const previous = this.entries.get(previousKey);
+      if (previous) resendTerminalSize(previous.terminalInstance);
+    }
 
     // getOrCreate() clears activeKey when it evicts a stale cached entry. That
     // is normally correct for standalone callers, but this show() still owns
