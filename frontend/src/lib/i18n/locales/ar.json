@@ -954,5 +954,7 @@
   "help.navFavorite": "الانتقال إلى المفضلة 1-7",
   "browser.caretPosition": "سطر {line}، عمود {col}",
   "browser.caretSelection": "{n} محدد",
-  "browser.caretTotal": "{n} سطر"
+  "browser.caretTotal": "{n} سطر",
+  "dictation.mic_unavailable_title": "لم يتم العثور على ميكروفون",
+  "dictation.mic_unavailable_message": "الإملاء يحتاج إلى ميكروفون. قم بتوصيل واحد وحاول مرة أخرى."
 }

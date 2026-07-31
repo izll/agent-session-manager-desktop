@@ -6,9 +6,11 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"log"
 	"os/exec"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -36,6 +38,19 @@ type controlModeStream struct {
 
 	closeOnce sync.Once
 	closeErr  error
+
+	// closed is shut when Close runs, so background helpers stop with the
+	// stream instead of outliving it.
+	closed chan struct{}
+
+	// keys carries keystroke batches to the single goroutine that delivers
+	// them. See the Write comment for why delivery is not done inline.
+	keys chan []byte
+
+	// hidden is 1 while this tab is not on screen. Set by the WebSocket layer,
+	// which is the only place that knows. Kept as an atomic because the size
+	// watcher reads it from another goroutine.
+	hidden int32
 }
 
 func (c *controlModeStream) Read(p []byte) (int, error) { return c.out.Read(p) }
@@ -51,8 +66,52 @@ func (c *controlModeStream) Write(p []byte) (int, error) {
 	if len(p) == 0 {
 		return 0, nil
 	}
-	// Still serialised: two concurrent send-keys processes would interleave
-	// their keystrokes in the pane, so a burst could arrive out of order.
+	// Hand off rather than deliver inline.
+	//
+	// Delivery means launching send-keys, and waiting for that process is the
+	// entire cost: measured on Windows, 31ms per call waiting for it against
+	// 6ms when not. At 31ms a burst of input — a mouse-motion flood is 13 bytes
+	// every few milliseconds — queues up behind the launches and typing feels
+	// sluggish.
+	//
+	// A single goroutine drains this channel, so keystrokes still reach the pane
+	// in the order they were typed. Doing it without the channel, by simply not
+	// waiting, would let two launches overlap and interleave a burst.
+	buf := append([]byte(nil), p...)
+	select {
+	case c.keys <- buf:
+		return len(p), nil
+	case <-c.closed:
+		return 0, io.ErrClosedPipe
+	}
+}
+
+// deliverKeys sends queued keystrokes, one batch at a time, for the life of the
+// stream. Running in exactly one goroutine is what keeps input in order.
+func (c *controlModeStream) deliverKeys() {
+	for {
+		select {
+		case <-c.closed:
+			return
+		case p := <-c.keys:
+			// Take anything else already queued: each extra batch would
+			// otherwise be another process launch, and a burst is common.
+			for len(p) < 4096 {
+				select {
+				case more := <-c.keys:
+					p = append(p, more...)
+					continue
+				default:
+				}
+				break
+			}
+			c.sendKeys(p)
+		}
+	}
+}
+
+// sendKeys delivers one batch to the pane.
+func (c *controlModeStream) sendKeys(p []byte) {
 	c.writeMu.Lock()
 	defer c.writeMu.Unlock()
 	target := c.pane
@@ -62,19 +121,22 @@ func (c *controlModeStream) Write(p []byte) (int, error) {
 	// One input burst can need several commands: Enter has to be sent by key
 	// name, so a payload containing CR splits around it (see keystrokeCommands).
 	for _, args := range keystrokeCommands(target, p) {
-		// Bounded, because this runs under writeMu: a send-keys that never
-		// returns would hold the lock forever and every later keystroke would
-		// block behind it — a terminal that takes focus and accepts clicks
-		// while silently swallowing everything typed into it, with the socket
-		// still healthy and nothing logged.
+		// Bounded: a send-keys that never returns would block every later
+		// keystroke behind it — a terminal that accepts focus and clicks while
+		// silently swallowing everything typed into it.
 		cmd, cancel := TmuxCommandTimed(args...)
 		out, err := cmd.CombinedOutput()
 		cancel()
 		if err != nil {
-			return 0, fmt.Errorf("send-keys: %w (%s)", err, strings.TrimSpace(string(out)))
+			// Logged unconditionally, not behind --debug: input vanishing with
+			// no trace is exactly the failure that took days to find once, and
+			// the caller can no longer see this error — Write returns as soon
+			// as the batch is queued.
+			log.Printf("[control] send-keys failed for %s: %v (%s)",
+				target, err, strings.TrimSpace(string(out)))
+			return
 		}
 	}
-	return len(p), nil
 }
 
 // Close shuts the client down in the order the protocol expects: closing stdin
@@ -85,6 +147,7 @@ func (c *controlModeStream) Write(p []byte) (int, error) {
 // would hold a client slot on the session forever.
 func (c *controlModeStream) Close() error {
 	c.closeOnce.Do(func() {
+		close(c.closed)
 		c.writeMu.Lock()
 		c.closeErr = c.in.Close()
 		c.writeMu.Unlock()
@@ -131,88 +194,70 @@ func StartTerminal(cmd *exec.Cmd) (TerminalStream, error) {
 
 	pane := resolveActivePane(target)
 	reader := newControlModeReader(stdout)
-	// Control mode sends no initial repaint, so an already-painted session would
-	// render as a blank terminal until its next redraw — see primeWithScreen.
+
+	// Forward only this pane's output. A control-mode client is sent %output for
+	// every pane on the server, so without this a new tab's startup — including
+	// its screen erases — is painted into the tab the user is looking at.
 	//
-	// An established session captures immediately. A tab opened moments ago has
-	// not drawn anything yet, and that case is retried in the background rather
-	// than here: blocking the attach would delay every terminal for the sake of
-	// the one that is still starting.
-	if screen := captureScreen(pane); len(bytes.TrimSpace(screen)) > 0 {
-		reader.primeWithScreen(screen)
-	} else {
-		go func() {
-			if late := captureScreenWhenReady(pane); len(late) > 0 {
-				reader.primeWithScreen(late)
-			}
-		}()
+	// The filter needs the %output form of the id (%20), which is not the
+	// session-qualified target used for send-keys ($61:0.0), so it is resolved
+	// separately. If it cannot be resolved the filter stays off: showing another
+	// pane's output is bad, showing nothing at all is worse.
+	if id := panePrimaryID(pane); id != "" {
+		reader.setPaneFilter(id)
 	}
 
-	return &controlModeStream{
+	stream := &controlModeStream{
+		closed:       make(chan struct{}),
+		keys:         make(chan []byte, 256),
 		out:          reader,
 		in:           stdin,
 		stop:         killProcess(cmd),
 		pane:         pane,
 		attachTarget: target,
-	}, nil
+	}
+
+	// One goroutine owns keystroke delivery, so order is preserved without the
+	// caller waiting for a process to finish. See Write.
+	go stream.deliverKeys()
+
+	// Control mode sends no repaint on attach, so the first screen has to be
+	// asked for. See primeFromDumpState — the agent draws it, we do not.
+	go primeFromDumpState(stream, pane)
+
+	// Keep the pane matched to its window for as long as this terminal lives.
+	go watchPaneSize(stream, pane)
+
+	return stream, nil
 }
 
-// captureScreen returns the pane's current contents with escape sequences
-// intact, for use as the terminal's opening frame.
-//
-// -e keeps the SGR sequences, so colours and box drawing arrive as the agent
-// drew them; without it the snapshot would be plain text and the UI would
-// flash from monochrome to colour on the first live update.
-//
-// A failure here is not fatal: an empty snapshot simply means the terminal
-// starts blank and fills in on the next redraw, which is strictly better than
-// refusing to attach at all.
-func captureScreen(pane string) []byte {
-	if pane == "" {
-		return nil
-	}
-	out, err := TmuxCommand("capture-pane", "-e", "-p", "-t", pane).Output()
+// paneSize reports the pane's current dimensions.
+func paneSize(pane string) (cols, rows int, ok bool) {
+	out, err := TmuxCommand("display-message", "-p", "-t", pane,
+		"#{pane_width} #{pane_height}").Output()
 	if err != nil {
-		return nil
+		return 0, 0, false
 	}
-	screen := trimCaptureTrailer(out)
-	if len(bytes.TrimSpace(screen)) == 0 {
-		return nil
+	if _, err := fmt.Sscanf(strings.TrimSpace(string(out)), "%d %d", &cols, &rows); err != nil {
+		return 0, 0, false
 	}
-	// Drawn from the top-left, so the snapshot lands where the pane's rows
-	// actually are rather than wherever the cursor happened to be. Without this
-	// the picture starts at the current cursor row and the whole screen is
-	// offset — and the trailing cursor-home leaves the cursor somewhere
-	// harmless until the agent's next redraw places it properly.
-	out = make([]byte, 0, len(screen)+8)
-	out = append(out, "\033[H"...)
-	out = append(out, screen...)
-	return out
+	return cols, rows, true
 }
 
-// captureScreenWhenReady returns the pane's contents, waiting briefly for a
-// pane that has not drawn anything yet.
+// paneHasContent reports whether the pane has drawn anything yet.
 //
-// A tab opened moments ago is still starting its agent, so the first capture
-// comes back blank — and blank is unrecoverable here, because control mode only
-// reports CHANGES: with no opening frame and no redraw, the terminal shows an
-// empty pane indefinitely while input still works. Measured on a freshly opened
-// tab: zero bytes on attach, zero after a refresh-client, and output only once
-// a keystroke forced a change.
-//
-// Waiting is bounded and only costs anything when the pane really is empty; an
-// established session captures on the first try and returns immediately.
-func captureScreenWhenReady(pane string) []byte {
-	const attempts = 12
-	for i := 0; i < attempts; i++ {
-		if screen := captureScreen(pane); len(bytes.TrimSpace(screen)) > 0 {
-			return screen
-		}
-		if i < attempts-1 {
-			time.Sleep(250 * time.Millisecond)
-		}
+// A tab opened moments ago is still starting its agent, and asking for a repaint
+// before then paints a blank screen — after which control mode sends nothing
+// until the next change, leaving the terminal empty indefinitely.
+func paneHasContent(pane string) bool {
+	if pane == "" {
+		return false
 	}
-	return nil
+	out, err := TmuxCommand("capture-pane", "-p", "-t", pane).Output()
+	if err != nil {
+		return false
+	}
+	return len(bytes.TrimSpace(out)) > 0
 }
 
 // SetTerminalSize tells the multiplexer how large this client's terminal is,
@@ -239,6 +284,29 @@ func SetTerminalSize(s TerminalStream, cols, rows int) error {
 	c, ok := s.(*controlModeStream)
 	if !ok || cols <= 0 || rows <= 0 {
 		return nil
+	}
+
+	// Size the PANE as well as the client.
+	//
+	// A pane does not always follow its window: observed on a live session,
+	// window 20 measured 174x45 while the pane inside it was still 228x56 — the
+	// agent drawing a 56-row UI into a 45-row window, which is the content
+	// ending up in the wrong place. resize-pane aimed at the pane corrects it
+	// (verified: 228x56 -> 174x45 immediately).
+	//
+	// Note this is resize-pane on a PANE target. The same command aimed at a
+	// window does nothing on psmux, which is why an earlier attempt at this
+	// looked like the command was unsupported.
+	if c.pane != "" {
+		cmd, cancel := TmuxCommandTimed("resize-pane", "-t", c.pane,
+			"-x", fmt.Sprintf("%d", cols), "-y", fmt.Sprintf("%d", rows))
+		_ = cmd.Run()
+		cancel()
+		// The window may still disagree — resizing the app window changes the
+		// window without the pane following. Left alone the agent draws at the
+		// pane's size inside a differently-sized window, and Ctrl-L cannot help
+		// because it redraws at the size the agent believes in.
+		_ = reconcilePaneSize(c.pane)
 	}
 	// Shares writeMu with keystrokes: this is a command on the same channel,
 	// and a half-written line would corrupt whichever command follows.
@@ -271,23 +339,6 @@ func SetTerminalSize(s TerminalStream, cols, rows int) error {
 		return err
 	}
 
-	// Clear the terminal ahead of the repaint that is now on its way.
-	//
-	// The repaint psmux sends begins with ESC[H — cursor home — but never
-	// ESC[2J, so it paints over whatever is on screen without clearing it.
-	// Measured on a redraw triggered this way: the payload opens with
-	// `\033[?25l\033[38;5;174m\033[H` and no erase anywhere in it. Any row the
-	// new frame does not happen to overwrite survives, which offsets everything
-	// below it — the one-line shift left in a tab that was already open.
-	//
-	// Injected into the READ side, not written to the command channel: this is
-	// a sequence for the terminal emulator, not a command for the multiplexer.
-	//
-	// It has to lead the repaint, so it is queued to go out BEFORE the next
-	// %output rather than appended behind whatever is buffered now — appending
-	// would clear the frame already on screen and then let the stale rows come
-	// back underneath the new one.
-	c.out.clearBeforeNextOutput()
 	return nil
 }
 
@@ -365,4 +416,193 @@ func resolveActivePane(target string) string {
 		return target + ":" + coords
 	}
 	return target
+}
+
+// panePrimaryID returns a pane's %-prefixed id, the form used in %output lines.
+func panePrimaryID(pane string) string {
+	if pane == "" {
+		return ""
+	}
+	out, err := TmuxCommand("display-message", "-p", "-t", pane, "#{pane_id}").Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
+}
+
+// selectWindow points this client at a window, so commands scoped to "the
+// client's window" — a resize repaint, above all — act on the right one.
+//
+// Sent on the control-mode channel rather than as a separate process: the
+// window a client is looking at is a property of that client, and an outside
+// invocation would move some other client instead.
+func (c *controlModeStream) selectWindow(target string) {
+	if target == "" {
+		return
+	}
+	// The pane suffix has to go: select-window takes a window, and passing
+	// session:window.pane makes psmux reject the target.
+	if dot := strings.LastIndexByte(target, '.'); dot > strings.LastIndexByte(target, ':') {
+		target = target[:dot]
+	}
+	c.writeMu.Lock()
+	defer c.writeMu.Unlock()
+	_, _ = c.in.Write([]byte(fmt.Sprintf("select-window -t %s\n", target)))
+}
+
+// primeFromDumpState paints the terminal's opening frame from the
+// multiplexer's own state dump.
+//
+// Control mode sends no repaint on attach, so the first screen has to come from
+// somewhere. dump-state is the only source that is self-consistent: it reports
+// the pane's rows, its styled contents and its cursor together, in one answer.
+// Everything else disagreed with itself — capture-pane's row count depends on
+// how the trailing newline is handled, an induced repaint puts the content a
+// row off, and display-message and dump-state gave different cursor rows for
+// the same pane (43 versus 45).
+//
+// It waits for the pane to have drawn something: a tab opened moments ago is
+// still starting its agent, and a snapshot taken then is blank.
+func primeFromDumpState(s *controlModeStream, pane string) {
+	const attempts = 24
+	for i := 0; i < attempts; i++ {
+		if paneHasContent(pane) {
+			// Ask the agent to repaint, and let ITS repaint be the opening
+			// frame — do not also inject a snapshot.
+			//
+			// Ctrl-L is what the Refresh button sends (App.RefreshWindow), and
+			// it is the one thing that has always recovered a tab: the agent
+			// rebuilds its interface from scratch, and control mode carries that
+			// repaint to us like any other output.
+			//
+			// A snapshot on top of it is worse than useless. It is prepended to
+			// the read buffer, so by the time it is ready the agent's repaint
+			// has already been handed to the terminal — the snapshot then lands
+			// behind the frame it was meant to replace, and never shows.
+			// Measured: the recorded stream contained no ESC[2J and no absolute
+			// row addressing at all, meaning the snapshot never reached the
+			// terminal, while the agent's own repaint did and was correct.
+			_ = reconcilePaneSize(pane)
+			redrawPane(pane)
+			return
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
+}
+
+// redrawPane asks the agent in a pane to repaint from scratch.
+//
+// Ctrl-L is the conventional "clear and redraw" key, and TUI applications
+// rebuild their whole interface on it. Sent by key name so the multiplexer
+// delivers it as a control character rather than as text.
+func redrawPane(pane string) {
+	if pane == "" {
+		return
+	}
+	cmd, cancel := TmuxCommandTimed("send-keys", "-t", pane, "C-l")
+	_ = cmd.Run()
+	cancel()
+}
+
+// reconcilePaneSize makes a pane match the window it lives in.
+//
+// The two can drift apart: observed after the user resized the app window,
+// window 0 measured 174x45 while the pane inside it was still 228x56. The agent
+// then draws a 56-row interface into a 45-row window, and the content sits in
+// the wrong place — a state the Refresh button cannot fix, because Ctrl-L makes
+// the agent redraw at the size it believes in, which is still the wrong one.
+//
+// Done here rather than waiting for a resize message from the frontend: the
+// frontend only sends a size when ITS size changes, and after a window resize
+// the pane is the thing that is stale, not the client.
+func reconcilePaneSize(pane string) bool {
+	if pane == "" {
+		return false
+	}
+	out, err := TmuxCommand("display-message", "-p", "-t", pane,
+		"#{window_width} #{window_height} #{pane_width} #{pane_height}").Output()
+	if err != nil {
+		return false
+	}
+	var wc, wr, pc, pr int
+	if _, err := fmt.Sscanf(strings.TrimSpace(string(out)), "%d %d %d %d", &wc, &wr, &pc, &pr); err != nil {
+		return false
+	}
+	if wc <= 1 || wr <= 1 || (wc == pc && wr == pr) {
+		return false
+	}
+	cmd, cancel := TmuxCommandTimed("resize-pane", "-t", pane,
+		"-x", fmt.Sprintf("%d", wc), "-y", fmt.Sprintf("%d", wr))
+	err = cmd.Run()
+	cancel()
+	return err == nil
+}
+
+// watchPaneSize keeps a pane the same size as the window containing it.
+//
+// Panes do not reliably follow their window on psmux, and the frontend cannot
+// close the gap on its own: it sends a size only for the tab the user is
+// looking at, so maximising the app window leaves every other tab's pane behind.
+// Measured right after maximising — windows all 228x56, panes 174x45 in the two
+// tabs that had not been touched.
+//
+// A stale pane is not cosmetic: the agent draws its interface at the pane's
+// size inside a differently-sized window, so the content lands in the wrong
+// place, and Refresh cannot fix it because Ctrl-L only makes the agent redraw
+// at the size it already believes in.
+//
+// Polled, because the multiplexer sends no notification for this — but polled
+// cheaply. Each check costs one process launch, measured at 20ms on Windows, so
+// a two-second interval across five tabs would burn ~5% of a core doing nothing.
+// At ten seconds that falls to ~1%, and the delay is not felt: a size only
+// drifts when the user resizes the window, and the tab being looked at is
+// corrected immediately by its own resize message.
+//
+// Ends when the stream is closed.
+func watchPaneSize(s *controlModeStream, pane string) {
+	if pane == "" {
+		return
+	}
+	// A first check soon after attach catches a window that was resized while
+	// this tab was not open; after that the interval is what matters.
+	const (
+		firstCheck = 3 * time.Second
+		interval   = 10 * time.Second
+	)
+	next := firstCheck
+	for {
+		select {
+		case <-s.closed:
+			return
+		case <-time.After(next):
+			next = interval
+		}
+		// A hidden tab costs nothing to leave alone: it is not being looked
+		// at, and showing it sends a resize that corrects it anyway.
+		if atomic.LoadInt32(&s.hidden) == 1 {
+			continue
+		}
+		if reconcilePaneSize(pane) {
+			// The agent has to be told to repaint at the new size; without this
+			// the pane is the right shape but still holds the old drawing.
+			redrawPane(pane)
+		}
+	}
+}
+
+// SetTerminalVisible tells a stream whether its tab is on screen.
+//
+// Used to skip work that only matters for a tab the user can see: the pane-size
+// watcher does not need to run for a hidden tab, since it will be corrected by
+// its own resize message the moment it is shown.
+func SetTerminalVisible(t TerminalStream, visible bool) {
+	c, ok := t.(*controlModeStream)
+	if !ok {
+		return
+	}
+	var v int32
+	if !visible {
+		v = 1
+	}
+	atomic.StoreInt32(&c.hidden, v)
 }

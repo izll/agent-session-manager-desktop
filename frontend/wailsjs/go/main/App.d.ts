@@ -245,6 +245,8 @@ export function SendInput(arg1:string,arg2:string):Promise<void>;
 
 export function SendPrompt(arg1:string,arg2:string):Promise<void>;
 
+export function SendPromptToWindow(arg1:string,arg2:number,arg3:string):Promise<void>;
+
 export function SendTaskToAgent(arg1:string,arg2:string):Promise<void>;
 
 export function SetExtraArgs(arg1:string,arg2:number,arg3:string):Promise<void>;

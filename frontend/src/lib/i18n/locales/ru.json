@@ -954,5 +954,7 @@
   "help.navFavorite": "Перейти к избранному 1-7",
   "browser.caretPosition": "Стр. {line}, Стлб. {col}",
   "browser.caretSelection": "выделено {n}",
-  "browser.caretTotal": "{n} строк"
+  "browser.caretTotal": "{n} строк",
+  "dictation.mic_unavailable_title": "Микрофон не найден",
+  "dictation.mic_unavailable_message": "Для диктовки нужен микрофон. Подключите его и попробуйте снова."
 }

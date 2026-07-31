@@ -954,5 +954,7 @@
   "help.navFavorite": "お気に入り 1〜7 へ移動",
   "browser.caretPosition": "{line} 行, {col} 列",
   "browser.caretSelection": "{n} 文字選択",
-  "browser.caretTotal": "{n} 行"
+  "browser.caretTotal": "{n} 行",
+  "dictation.mic_unavailable_title": "マイクが見つかりません",
+  "dictation.mic_unavailable_message": "音声入力にはマイクが必要です。接続してからもう一度お試しください。"
 }

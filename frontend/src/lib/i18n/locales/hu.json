@@ -954,5 +954,7 @@
   "help.navFavorite": "Ugrás az 1-7. kedvencre",
   "browser.caretPosition": "{line}. sor, {col}. oszlop",
   "browser.caretSelection": "{n} kijelölve",
-  "browser.caretTotal": "{n} sor"
+  "browser.caretTotal": "{n} sor",
+  "dictation.mic_unavailable_title": "Nincs mikrofon",
+  "dictation.mic_unavailable_message": "A diktáláshoz mikrofon kell. Csatlakoztass egyet, és próbáld újra."
 }

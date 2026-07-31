@@ -954,5 +954,7 @@
   "help.navFavorite": "Ir para o favorito 1-7",
   "browser.caretPosition": "Lin. {line}, Col. {col}",
   "browser.caretSelection": "{n} selecionados",
-  "browser.caretTotal": "{n} linhas"
+  "browser.caretTotal": "{n} linhas",
+  "dictation.mic_unavailable_title": "Nenhum microfone encontrado",
+  "dictation.mic_unavailable_message": "O ditado precisa de um microfone. Conecte um e tente novamente."
 }

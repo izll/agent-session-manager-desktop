@@ -109,6 +109,20 @@ type controlModeReader struct {
 	// clearBeforeNextOutput.
 	clearPending bool
 
+	// paneFilter, when set, is the only pane whose output is forwarded.
+	//
+	// A control-mode client receives %output for EVERY pane on the server, not
+	// just the one it attached to — measured: opening a second tab made the
+	// first tab's client receive `%output %20 …`, the new window's PowerShell
+	// startup, complete with its ESC[2J and ESC[3J. Those erases then execute on
+	// the wrong terminal, which is what shifted a tab's contents the moment
+	// another tab was opened.
+	//
+	// Empty means forward everything, which is the old behaviour and the right
+	// fallback: dropping output because the pane could not be resolved would
+	// leave a permanently blank terminal.
+	paneFilter string
+
 	// Kept for the diagnostic on stream end: which notification came last, and
 	// how many arrived. A terminal that stops updating looks identical from the
 	// UI whether the client exited or simply went quiet — these tell them apart.
@@ -187,7 +201,11 @@ func (c *controlModeReader) Read(p []byte) (int, error) {
 			// The stream is CRLF-terminated; strip both so a stray CR never
 			// reaches the terminal as a carriage return of its own.
 			line = bytes.TrimRight(line, "\r\n")
-			if _, data, ok := parseOutputLine(line); ok {
+			if pane, data, ok := parseOutputLine(line); ok {
+				// Another pane's output must not be painted into this terminal.
+				if c.paneFilter != "" && pane != c.paneFilter {
+					continue
+				}
 				c.mu.Lock()
 				if c.clearPending {
 					// Lead this repaint with an erase, so no row the new frame
@@ -328,28 +346,9 @@ func enterArgs(pane string) []string {
 	return append(args, "Enter")
 }
 
-// trimCaptureTrailer removes the one trailing newline capture-pane adds beyond
-// the pane's own rows.
-//
-// capture-pane emits one newline-terminated line per row, so an N-row pane
-// arrives with N newlines — one more than the screen holds, and that extra one
-// scrolls everything up a row when the snapshot is written to a terminal.
-//
-// Exactly one newline is removed. Trimming every trailing blank instead also
-// eats the pane's genuinely empty last rows, leaving the picture shorter than
-// the screen and shifting the content the other way — both directions were seen
-// in practice. A snapshot is a picture of the screen and has to be as tall as
-// it is, blank rows included.
-//
-// Lives here rather than beside its caller so it is compiled and tested on
-// every platform: an off-by-one in the row count is exactly the kind of bug
-// that is invisible until someone looks at a terminal.
-func trimCaptureTrailer(out []byte) []byte {
-	if n := len(out); n > 0 && out[n-1] == '\n' {
-		out = out[:n-1]
-		if n := len(out); n > 0 && out[n-1] == '\r' {
-			out = out[:n-1]
-		}
-	}
-	return out
+// setPaneFilter restricts this reader to one pane's output.
+func (c *controlModeReader) setPaneFilter(pane string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.paneFilter = pane
 }

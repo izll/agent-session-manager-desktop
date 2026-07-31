@@ -954,5 +954,7 @@
   "help.navFavorite": "Vai al preferito 1-7",
   "browser.caretPosition": "Riga {line}, Col. {col}",
   "browser.caretSelection": "{n} selezionati",
-  "browser.caretTotal": "{n} righe"
+  "browser.caretTotal": "{n} righe",
+  "dictation.mic_unavailable_title": "Nessun microfono trovato",
+  "dictation.mic_unavailable_message": "La dettatura richiede un microfono. Collegane uno e riprova."
 }

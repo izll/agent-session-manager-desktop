@@ -954,5 +954,7 @@
   "help.navFavorite": "Hoppa till favorit 1-7",
   "browser.caretPosition": "Rad {line}, Kol {col}",
   "browser.caretSelection": "{n} markerade",
-  "browser.caretTotal": "{n} rader"
+  "browser.caretTotal": "{n} rader",
+  "dictation.mic_unavailable_title": "Ingen mikrofon hittades",
+  "dictation.mic_unavailable_message": "Diktering kräver en mikrofon. Anslut en och försök igen."
 }

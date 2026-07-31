@@ -954,5 +954,7 @@
   "help.navFavorite": "Přejít na oblíbenou 1-7",
   "browser.caretPosition": "Ř. {line}, Sl. {col}",
   "browser.caretSelection": "vybráno {n}",
-  "browser.caretTotal": "{n} řádků"
+  "browser.caretTotal": "{n} řádků",
+  "dictation.mic_unavailable_title": "Mikrofon nenalezen",
+  "dictation.mic_unavailable_message": "Diktování vyžaduje mikrofon. Připojte jej a zkuste to znovu."
 }

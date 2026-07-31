@@ -486,6 +486,10 @@ export function SendPrompt(arg1, arg2) {
   return window['go']['main']['App']['SendPrompt'](arg1, arg2);
 }
 
+export function SendPromptToWindow(arg1, arg2, arg3) {
+  return window['go']['main']['App']['SendPromptToWindow'](arg1, arg2, arg3);
+}
+
 export function SendTaskToAgent(arg1, arg2) {
   return window['go']['main']['App']['SendTaskToAgent'](arg1, arg2);
 }

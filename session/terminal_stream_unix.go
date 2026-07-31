@@ -31,3 +31,7 @@ func SetTerminalSize(s TerminalStream, cols, rows int) error {
 		Rows: uint16(rows),
 	})
 }
+
+// SetTerminalVisible is a no-op on Unix: nothing here changes behaviour based
+// on whether a tab is on screen. It exists so callers stay platform-agnostic.
+func SetTerminalVisible(t TerminalStream, visible bool) {}

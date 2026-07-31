@@ -954,5 +954,7 @@
   "help.navFavorite": "1-7 numaralı sık kullanılana git",
   "browser.caretPosition": "Sat. {line}, Süt. {col}",
   "browser.caretSelection": "{n} seçili",
-  "browser.caretTotal": "{n} satır"
+  "browser.caretTotal": "{n} satır",
+  "dictation.mic_unavailable_title": "Mikrofon bulunamadı",
+  "dictation.mic_unavailable_message": "Dikte için mikrofon gerekir. Bir tane bağlayıp tekrar deneyin."
 }

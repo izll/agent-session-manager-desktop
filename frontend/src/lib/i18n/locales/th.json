@@ -954,5 +954,7 @@
   "help.navFavorite": "ไปยังรายการโปรด 1-7",
   "browser.caretPosition": "บรรทัด {line}, คอลัมน์ {col}",
   "browser.caretSelection": "เลือก {n}",
-  "browser.caretTotal": "{n} บรรทัด"
+  "browser.caretTotal": "{n} บรรทัด",
+  "dictation.mic_unavailable_title": "ไม่พบไมโครโฟน",
+  "dictation.mic_unavailable_message": "การพิมพ์ด้วยเสียงต้องใช้ไมโครโฟน เชื่อมต่อแล้วลองอีกครั้ง"
 }

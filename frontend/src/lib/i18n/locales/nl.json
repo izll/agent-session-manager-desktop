@@ -954,5 +954,7 @@
   "help.navFavorite": "Naar favoriet 1-7 springen",
   "browser.caretPosition": "Rg {line}, Kol {col}",
   "browser.caretSelection": "{n} geselecteerd",
-  "browser.caretTotal": "{n} regels"
+  "browser.caretTotal": "{n} regels",
+  "dictation.mic_unavailable_title": "Geen microfoon gevonden",
+  "dictation.mic_unavailable_message": "Dicteren vereist een microfoon. Sluit er een aan en probeer het opnieuw."
 }

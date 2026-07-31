@@ -258,6 +258,52 @@ func (a *AppService) SetErrorCallback(callback func(title, message string)) {
 	a.onError = callback
 }
 
+// AbortListening stops dictation after a failure and puts the UI back.
+//
+// Stopping the recogniser alone is not enough: it clears its own flag but never
+// touches isListening, so the button stays lit as though recording were still
+// going. That is what someone with no microphone sees — the indicator switches
+// to "recording" and stays there while nothing is being captured.
+func (a *AppService) AbortListening() {
+	a.mu.Lock()
+	wasListening := a.isListening
+	if !wasListening {
+		a.mu.Unlock()
+		return
+	}
+	a.isListening = false
+	callback := a.onStateChange
+	muted := a.settings.MuteOutputDuringRecording
+	muteManager := a.audioMuteManager
+	a.mu.Unlock()
+
+	// The same cleanup the ordinary stop performs. Leaving it out would end
+	// dictation with the speakers still muted, which is worse than the failure
+	// that got us here.
+	a.stopSilenceMonitor()
+	if muted && muteManager != nil {
+		if err := muteManager.UnmuteOutput(); err != nil {
+			logToFile("failed to unmute output after aborting: %v\n", err)
+		}
+	}
+
+	if callback != nil {
+		callback(false)
+	}
+}
+
+// ReportError surfaces a failure to the user through the app's error channel.
+//
+// Needed because failures inside the recogniser were only written to the log
+// file: with no microphone the indicator switched to "recording" and then went
+// quiet, giving no hint that anything was wrong. Both arguments are translation
+// keys, matching how the API-key error is reported.
+func (a *AppService) ReportError(titleKey, messageKey string) {
+	if a.onError != nil {
+		a.onError(titleKey, messageKey)
+	}
+}
+
 // SetUploadingCallback sets the callback for uploading state changes
 func (a *AppService) SetUploadingCallback(callback func(bool)) {
 	a.onUploading = callback

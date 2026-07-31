@@ -745,8 +745,13 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 					// tab's input on the single webview main thread.
 					if data[1] == 0 {
 						atomic.StoreInt32(&tc.hidden, 1)
+						// Also tell the stream: on Windows its pane-size watcher
+						// skips hidden tabs, which is most of them most of the
+						// time (each check is a process launch, ~20ms).
+						session.SetTerminalVisible(ptmx, false)
 					} else {
 						atomic.StoreInt32(&tc.hidden, 0)
+						session.SetTerminalVisible(ptmx, true)
 						// Coming back to the foreground: force tmux to repaint the
 						// pane so we recover everything that was dropped while
 						// hidden, in a single redraw.

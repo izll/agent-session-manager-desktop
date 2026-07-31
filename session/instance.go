@@ -1,6 +1,7 @@
 package session
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -2217,11 +2218,25 @@ func (i *Instance) SendTextToWindow(windowIdx int, text string, pressEnter bool)
 
 // SendPrompt sends a prompt text followed by Enter key
 func (i *Instance) SendPrompt(text string) error {
+	return i.SendPromptToWindow(text, -1)
+}
+
+// SendPromptToWindow sends text to one window of the session. A negative index
+// means the session's active window, which is what SendPrompt has always used.
+//
+// Naming the window matters once a session has more than one: the target is
+// otherwise just the session, and the multiplexer resolves that to whichever
+// window is active — so dictated text landed in a different tab than the one
+// being looked at, which reads as the text never being sent at all.
+func (i *Instance) SendPromptToWindow(text string, windowIdx int) error {
 	if !i.IsAlive() {
 		return fmt.Errorf("session not running")
 	}
 
 	sessionName := i.TmuxSessionName()
+	if windowIdx >= 0 {
+		sessionName = fmt.Sprintf("%s:%d", sessionName, windowIdx)
+	}
 
 	if strings.Contains(text, "\n") {
 		// Multi-line text: use tmux's paste buffer with bracketed paste mode.
@@ -2415,8 +2430,20 @@ func (i *Instance) getMainWindowIndex() (int, bool) {
 		return 0, false
 	}
 	// Backfill the marker for sessions created by older asmgr versions.
-	target := fmt.Sprintf("%s:%d", sessionName, index)
-	_ = TmuxCommand("set-option", "-w", "-t", target, "@asmgr_main", "1").Run()
+	//
+	// Skipped where window options are not actually per-window. psmux stores a
+	// -w user option globally: setting @asmgr_probe on window 1 alone made
+	// windows 0, 1 and 2 all report its value. Writing the marker there tags
+	// EVERY window as the main one, and identifyMainWindowIndex then refuses to
+	// choose — correctly, since killing the wrong window takes the agent with
+	// it, but the result is that deleting a tab stops working entirely.
+	//
+	// Nothing is lost by not writing it: identification falls back to "the one
+	// window that is not a followed tab", which needs no marker.
+	if PerWindowOptionsSupported() && !bytes.Contains(output, []byte("\t1")) {
+		target := fmt.Sprintf("%s:%d", sessionName, index)
+		_ = TmuxCommand("set-option", "-w", "-t", target, "@asmgr_main", "1").Run()
+	}
 	return index, true
 }
 
@@ -2440,7 +2467,16 @@ func identifyMainWindowIndex(output []byte, followedWindows []FollowedWindow) (i
 	if len(marked) == 1 {
 		return marked[0], true
 	}
-	if len(marked) > 1 {
+	// Every window marked means the marker carries no information: psmux stores
+	// a -w user option globally, so one write tags the whole session, and
+	// sessions created before that was understood are stuck that way — the value
+	// cannot be unset or overwritten back. Treat it as absent and fall through
+	// to identifying the window by what it is.
+	//
+	// A PARTIAL set of marks is different: that is a session where marking did
+	// work and then went wrong, and guessing between them could kill the agent's
+	// own window. That still fails closed.
+	if len(marked) > 1 && len(marked) != len(live) {
 		return 0, false
 	}
 

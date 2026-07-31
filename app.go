@@ -1242,6 +1242,16 @@ func (a *App) SendPrompt(id string, text string) error {
 	return inst.SendPrompt(text)
 }
 
+// SendPromptToWindow sends text to a specific tab rather than to whichever
+// window the session happens to have active.
+func (a *App) SendPromptToWindow(id string, windowIdx int, text string) error {
+	inst, err := a.storage.GetInstance(id)
+	if err != nil {
+		return err
+	}
+	return inst.SendPromptToWindow(text, windowIdx)
+}
+
 // ============================================================================
 // Fork Session (Claude only)
 // ============================================================================

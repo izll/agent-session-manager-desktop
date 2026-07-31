@@ -954,5 +954,7 @@
   "help.navFavorite": "跳转到收藏 1-7",
   "browser.caretPosition": "第 {line} 行，第 {col} 列",
   "browser.caretSelection": "已选 {n} 个字符",
-  "browser.caretTotal": "{n} 行"
+  "browser.caretTotal": "{n} 行",
+  "dictation.mic_unavailable_title": "未找到麦克风",
+  "dictation.mic_unavailable_message": "听写需要麦克风。请连接后重试。"
 }

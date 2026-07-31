@@ -157,13 +157,27 @@ func (sr *SpeechRecognizer) recognitionLoop() {
 	logToFile("🎚️  Silence detection: threshold=%.6f (%.0f%%), duration=%.2fs\n",
 		threshold, thresholdPercent, minSilenceDuration)
 
+	// Re-read the device list first: PortAudio enumerates once at startup, so a
+	// microphone connected since then is invisible until it does. Without this
+	// the app had to be restarted to notice one.
+	if err := sr.app.audioCapture.RefreshDevices(); err != nil {
+		logToFile("device refresh failed: %v\n", err)
+	}
+
 	// Start audio recording
 	logToFile("DEBUG: Calling StartRecording...\n")
 	err := sr.app.audioCapture.StartRecording(settings.SilenceTimeoutSeconds)
 	logToFile("DEBUG: StartRecording returned, err=%v\n", err)
 	if err != nil {
 		logToFile("Error starting audio recording: %v\n", err)
+		// Tell the user. Without this the indicator flips to "recording" and
+		// then silently stops — the failure only reached the log file, which
+		// is exactly the case where someone has no microphone at all.
+		sr.app.ReportError("mic_unavailable_title", "mic_unavailable_message")
 		sr.Stop()
+		// Stop() only clears the recogniser's own flag; without this the app
+		// still believes it is listening and the button stays lit.
+		sr.app.AbortListening()
 		return
 	}
 

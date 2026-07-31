@@ -43,6 +43,7 @@
   import { applyUITheme, DEFAULT_UI_THEME } from './lib/utils/uiThemes';
   import { t, isRTL, loadTranslations } from './lib/i18n';
   import { focusTerminal } from './lib/utils/focus';
+  import Toast from './lib/components/common/Toast.svelte';
 
   // The accent lives in CSS variables, so applying a theme is one write to
   // the root element — no component needs to know about it.
@@ -525,6 +526,12 @@
     EventsOff('dictation:error');
   });
 
+  // Dictation failures surface here as a toast. Without one the only sign of
+  // trouble was the indicator flipping to "recording" and going quiet — which
+  // is what someone with no microphone sees.
+  let dictationErrorMessage = '';
+  let showDictationError = false;
+
   async function initDictation() {
     try {
       const settings = await DictationService.GetDictationSettings();
@@ -538,7 +545,14 @@
       });
       EventsOn('dictation:error', (error: {title: string, message: string}) => {
         console.error('Dictation error:', error.title, error.message);
-        // Could show a toast notification here
+        // The backend sends translation keys, so an unknown key still shows
+        // something readable rather than an empty toast.
+        const title = $t(`dictation.${error.title}`);
+        const message = $t(`dictation.${error.message}`);
+        dictationErrorMessage = message.startsWith('dictation.')
+          ? (title.startsWith('dictation.') ? error.message : title)
+          : message;
+        showDictationError = true;
       });
     } catch (e) {
       console.error('Failed to initialize dictation:', e);
@@ -1063,6 +1077,8 @@
     on:cancel={handleResumeCancel}
   />
 </main>
+
+<Toast bind:show={showDictationError} message={dictationErrorMessage} variant="error" />
 
 <style>
 .lock-banner {

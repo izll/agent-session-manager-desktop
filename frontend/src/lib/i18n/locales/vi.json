@@ -954,5 +954,7 @@
   "help.navFavorite": "Chuyển tới mục yêu thích 1-7",
   "browser.caretPosition": "Dòng {line}, Cột {col}",
   "browser.caretSelection": "đã chọn {n}",
-  "browser.caretTotal": "{n} dòng"
+  "browser.caretTotal": "{n} dòng",
+  "dictation.mic_unavailable_title": "Không tìm thấy micrô",
+  "dictation.mic_unavailable_message": "Đọc chính tả cần micrô. Hãy kết nối rồi thử lại."
 }

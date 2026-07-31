@@ -700,3 +700,48 @@ func TestOutputIsNotClearedByDefault(t *testing.T) {
 		t.Fatalf("got %q, want %q", buf[:n], "PLAIN")
 	}
 }
+
+// A control-mode client is sent %output for EVERY pane on the server, so a
+// reader must forward only its own pane's. Measured on Windows: opening a second
+// tab made the first tab's client receive the new window's PowerShell startup,
+// ESC[2J included — and that erase then ran on the wrong terminal, which is what
+// shifted the visible tab's contents whenever a tab was opened.
+func TestReaderForwardsOnlyItsOwnPane(t *testing.T) {
+	stream := "%output %1 MINE-A\r\n" +
+		`%output %20 \033[2JOTHER` + "\r\n" +
+		"%output %1 MINE-B\r\n"
+
+	r := newControlModeReader(strings.NewReader(stream))
+	r.setPaneFilter("%1")
+
+	got, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatalf("ReadAll: %v", err)
+	}
+	if string(got) != "MINE-AMINE-B" {
+		t.Fatalf("got %q, want %q — another pane's output leaked through", got, "MINE-AMINE-B")
+	}
+}
+
+// A pane id that is a prefix of another must not match: %1 and %10 are
+// different panes.
+func TestPaneFilterMatchesExactly(t *testing.T) {
+	stream := "%output %1 KEEP\r\n%output %10 DROP\r\n%output %11 DROP\r\n"
+	r := newControlModeReader(strings.NewReader(stream))
+	r.setPaneFilter("%1")
+
+	got, _ := io.ReadAll(r)
+	if string(got) != "KEEP" {
+		t.Fatalf("got %q, want %q", got, "KEEP")
+	}
+}
+
+// With no filter everything is forwarded: failing to resolve the pane id must
+// not blank the terminal.
+func TestNoPaneFilterForwardsEverything(t *testing.T) {
+	stream := "%output %1 A\r\n%output %2 B\r\n"
+	got, _ := io.ReadAll(newControlModeReader(strings.NewReader(stream)))
+	if string(got) != "AB" {
+		t.Fatalf("got %q, want %q", got, "AB")
+	}
+}

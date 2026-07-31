@@ -480,7 +480,11 @@
       // Direct PTY write of text+\r doesn't trigger readline submit.
       const sid = get(selectedSessionId);
       if (sid) {
-        await App.SendPrompt(sid, bufferText);
+        // Name the tab, not just the session. Targeting the session alone lets
+        // the multiplexer pick its active window, so dictated text arrived in a
+        // different tab than the one on screen — indistinguishable, from the
+        // user's side, from it never being sent.
+        await App.SendPromptToWindow(sid, get(selectedWindowIdx), bufferText);
       }
       await DictationService.ClearBuffer();
       bufferText = '';

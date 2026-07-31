@@ -85,6 +85,8 @@ export interface TerminalInstance {
   // from burning WebKit render cycles on off-screen canvases.
   visible: boolean;
   hiddenBuffer: Uint8Array[];
+  /** Last size announced to the backend, so identical ones are not resent. */
+  lastSentSize?: string;
 }
 
 // The terminal renderer is chosen in Settings (gear icon): 'canvas' (default),
@@ -355,6 +357,7 @@ export function createTerminal(
     resizeDisposable: null,
     visible: true,
     hiddenBuffer: [],
+    lastSentSize: undefined,
     cleanup: () => {
       container.removeEventListener('mousedown', onMouseDown, true);
       container.removeEventListener('mouseup', onMouseUp, true);
@@ -384,6 +387,58 @@ export function createTerminal(
 }
 
 // Send resize command via WebSocket
+/**
+ * Whether a terminal's reported size came from measuring its container, rather
+ * than being xterm's built-in default.
+ *
+ * A fresh xterm reports 80x24 until it has been fitted, and that value passes
+ * every "is this sane?" check — it looks like a perfectly ordinary terminal.
+ * Sending it is worse than sending nothing: the multiplexer sizes the pane to
+ * 80x24, the agent paints its UI to fit, and the correct size arriving a moment
+ * later MOVES that screen instead of redrawing it. Observed in the log, both
+ * within the same second:
+ *
+ *   [ws] resize win=25 80x24
+ *   [ws] resize win=25 174x45
+ *
+ * The result was a pane whose UI sat 23 rows above where its own cursor was,
+ * with no command able to put it right — only the agent redrawing fixes that,
+ * and it has no reason to.
+ */
+function measuredAgainstContainer(terminalInstance: TerminalInstance): boolean {
+  const term = terminalInstance.terminal;
+  const { cols, rows } = term;
+  if (cols <= 1 || rows <= 1) return false;
+  const el = (term as any).element as HTMLElement | undefined;
+  if (!el) return false;
+  const rect = el.getBoundingClientRect();
+  // A hidden or unlaid-out container cannot have produced this size.
+  if (rect.width < 2 || rect.height < 2) return false;
+  // 80x24 exactly, on a container far wider than 80 columns would need, is the
+  // untouched default rather than a measurement.
+  if (cols === 80 && rows === 24 && rect.width > 900) return false;
+  return true;
+}
+
+/**
+ * Announce a size only when it differs from the last one announced.
+ *
+ * Every resize message makes the Windows backend nudge the multiplexer into a
+ * repaint, and each repaint can land the agent's UI a row higher than before.
+ * Switching tabs sends a size each time — with no change to report — so a few
+ * switches were enough to walk the content up the screen: measured, a tab's UI
+ * moved from row 44 to row 40 over three switches, and stopped moving as soon
+ * as the redundant sizes were withheld.
+ */
+function sendResizeIfChanged(terminalInstance: TerminalInstance, cols: number, rows: number): void {
+  const ws = terminalInstance.ws;
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  const key = `${cols}x${rows}`;
+  if (terminalInstance.lastSentSize === key) return;
+  terminalInstance.lastSentSize = key;
+  sendResize(ws, cols, rows);
+}
+
 function sendResize(ws: WebSocket, cols: number, rows: number) {
   if (ws.readyState === WebSocket.OPEN) {
     // Resize message format: 0x01 + cols (2 bytes big-endian) + rows (2 bytes big-endian)
@@ -626,8 +681,8 @@ export async function attachToSession(
     // hidden. The real resize lands via fitTerminal once the container is
     // visible.
     terminalInstance.resizeDisposable = terminal.onResize(({ cols, rows }) => {
-      if (cols > 1 && rows > 1) {
-        sendResize(ws, cols, rows);
+      if (measuredAgainstContainer(terminalInstance)) {
+        sendResizeIfChanged(terminalInstance, cols, rows);
       }
     });
 
@@ -647,7 +702,7 @@ export async function attachToSession(
     // sending nothing.
     requestAnimationFrame(() => {
       const { cols, rows } = terminal;
-      if (cols > 1 && rows > 1 && ws.readyState === WebSocket.OPEN) {
+      if (measuredAgainstContainer(terminalInstance) && ws.readyState === WebSocket.OPEN) {
         sendResize(ws, cols, rows);
       }
     });
@@ -702,6 +757,9 @@ export function resendTerminalSize(terminalInstance: TerminalInstance): void {
   // Below 2 means the terminal never got a real size to begin with; sending it
   // would tell the multiplexer to render the pane that way.
   if (cols > 1 && rows > 1) {
+    // Deliberately bypasses the change filter: this exists to re-announce a
+    // size the backend may have lost, so suppressing it would defeat it.
+    terminalInstance.lastSentSize = `${cols}x${rows}`;
     sendResize(ws, cols, rows);
   }
 }
@@ -723,7 +781,7 @@ export function fitTerminal(terminalInstance: TerminalInstance): void {
     // Need realistic terminal dimensions; anything below 2 is almost certainly
     // the result of measuring a hidden container.
     if (cols > 1 && rows > 1) {
-      sendResize(terminalInstance.ws, cols, rows);
+      sendResizeIfChanged(terminalInstance, cols, rows);
     }
   }
 }

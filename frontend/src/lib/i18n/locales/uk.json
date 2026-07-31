@@ -954,5 +954,7 @@
   "help.navFavorite": "Перейти до обраного 1-7",
   "browser.caretPosition": "Ряд. {line}, Стовп. {col}",
   "browser.caretSelection": "вибрано {n}",
-  "browser.caretTotal": "{n} рядків"
+  "browser.caretTotal": "{n} рядків",
+  "dictation.mic_unavailable_title": "Мікрофон не знайдено",
+  "dictation.mic_unavailable_message": "Для диктування потрібен мікрофон. Підключіть його та спробуйте ще раз."
 }

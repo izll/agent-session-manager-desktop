@@ -87,6 +87,65 @@ func (ac *AudioCapture) Initialize() error {
 	return portaudio.Initialize()
 }
 
+// RefreshDevices re-reads the system's audio devices.
+//
+// PortAudio enumerates devices when it is initialised and never revisits that
+// list, so a microphone plugged in after the app started stays invisible —
+// which meant the app had to be restarted to notice one. Tearing the library
+// down and bringing it back is the documented way to re-enumerate.
+//
+// Not called while recording: Terminate closes any open stream, so refreshing
+// mid-capture would end the recording it was meant to help.
+func (ac *AudioCapture) RefreshDevices() error {
+	ac.mu.Lock()
+	recording := ac.isRecording
+	ac.mu.Unlock()
+	if recording {
+		return nil
+	}
+	// The selected device is a pointer into the list PortAudio is about to free,
+	// and its index is only meaningful within that list. Remember the NAME and
+	// re-resolve afterwards; keeping the old pointer would leave the app aiming
+	// at a device that no longer exists.
+	ac.mu.Lock()
+	var selectedName string
+	if ac.selectedDevice != nil {
+		selectedName = ac.selectedDevice.Name
+	}
+	ac.selectedDevice = nil
+	ac.mu.Unlock()
+
+	if err := portaudio.Terminate(); err != nil {
+		// Already down, or never up: initialising again is still the right
+		// next step, so this is not fatal.
+		logToFile("portaudio terminate before refresh: %v\n", err)
+	}
+	if err := portaudio.Initialize(); err != nil {
+		return err
+	}
+
+	if selectedName == "" {
+		return nil
+	}
+	// Re-attach to the same device by name. If it is gone — unplugged while the
+	// app was running — the default is used, which is better than failing to
+	// record at all.
+	devices, err := portaudio.Devices()
+	if err != nil {
+		return nil
+	}
+	for _, d := range devices {
+		if d.Name == selectedName && d.MaxInputChannels > 0 {
+			ac.mu.Lock()
+			ac.selectedDevice = d
+			ac.mu.Unlock()
+			return nil
+		}
+	}
+	logToFile("selected input device %q is gone; using the default\n", selectedName)
+	return nil
+}
+
 // Terminate terminates PortAudio
 func (ac *AudioCapture) Terminate() error {
 	return portaudio.Terminate()
