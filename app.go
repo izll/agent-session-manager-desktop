@@ -67,6 +67,12 @@ func NewApp() *App {
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 
+	// Repair PATH before anything shells out. A GUI launch on macOS inherits an
+	// empty PATH — launchctl reports none — so tmux and the agents are invisible
+	// to a Finder-started app while the same binary works from a terminal. This
+	// is also why the TUI never hit it: a terminal launch inherits a real PATH.
+	session.EnsureToolPath()
+
 	// Verbose logs in a dev build, or in any build started with --debug /
 	// ASMGR_DEBUG=1 — so a user hitting a bug can produce a diagnostic log
 	// without installing a different binary.
