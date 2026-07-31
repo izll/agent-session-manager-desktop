@@ -89,7 +89,17 @@ func detectCodexSessionIDFromProcessTree(procRoot, sessionsRoot string, rootPID 
 				continue
 			}
 			target, err = filepath.Abs(target)
-			if err != nil || !pathInsideDirectory(sessionsRoot, target) || filepath.Ext(target) != ".jsonl" {
+			if err != nil || filepath.Ext(target) != ".jsonl" {
+				continue
+			}
+			// Resolve the target too, not just sessionsRoot. On macOS /tmp is a
+			// symlink to /private/tmp, so a path reported as /tmp/... never
+			// matches a root already resolved to /private/tmp — and the file is
+			// skipped, which is why Codex session detection failed there.
+			if resolved, evalErr := filepath.EvalSymlinks(target); evalErr == nil {
+				target = resolved
+			}
+			if !pathInsideDirectory(sessionsRoot, target) {
 				continue
 			}
 

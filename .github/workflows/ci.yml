@@ -50,3 +50,23 @@ jobs:
             libxcb-xkb-dev libxinerama-dev libxrandr-dev libxt-dev xvfb
       - run: xvfb-run -a go test ./...
       - run: go vet ./...
+
+  # The Go suite had never run on macOS, and the first time it did it found a
+  # real bug: /tmp there is a symlink to /private/tmp, so a path comparison that
+  # resolved only one side silently dropped every match. Cheap insurance against
+  # the next platform assumption.
+  go-test-macos:
+    name: Go test (macOS)
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache: true
+      - name: Install native build dependencies
+        run: brew install portaudio
+      # Only the packages that build without a display. The Wails app itself is
+      # covered by the release workflow, which builds the full bundle.
+      - run: go test ./session/ ./updater/
+      - run: go vet ./session/ ./updater/
