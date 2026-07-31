@@ -26,6 +26,16 @@ func EnsureToolPath() {
 		"/usr/local/bin",    // Homebrew, Intel; MacPorts installs here too
 		"/opt/local/bin",    // MacPorts
 	}
+	// Where the agents themselves tend to land. Claude Code installs to
+	// ~/.local/bin, and without it a Finder launch reports the agent as not
+	// installed while `which claude` finds it in a terminal.
+	if home, err := os.UserHomeDir(); err == nil {
+		candidates = append(candidates,
+			filepath.Join(home, ".local", "bin"),
+			filepath.Join(home, "bin"),
+			filepath.Join(home, ".bun", "bin"),
+		)
+	}
 
 	current := os.Getenv("PATH")
 	existing := make(map[string]struct{})
