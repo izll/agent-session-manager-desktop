@@ -414,9 +414,19 @@ function measuredAgainstContainer(terminalInstance: TerminalInstance): boolean {
   const rect = el.getBoundingClientRect();
   // A hidden or unlaid-out container cannot have produced this size.
   if (rect.width < 2 || rect.height < 2) return false;
-  // 80x24 exactly, on a container far wider than 80 columns would need, is the
-  // untouched default rather than a measurement.
-  if (cols === 80 && rows === 24 && rect.width > 900) return false;
+  // 80x24 exactly is xterm's untouched default. Treat it as a real measurement
+  // only when the container could plausibly have produced it — a wide container
+  // reporting 80x24 has not been fitted yet.
+  //
+  // The comparison is against the container, not a fixed pixel width: on a
+  // small window 80x24 IS the correct size, and rejecting it outright left the
+  // multiplexer stuck at 80x24 with nothing else to correct it. Windows papered
+  // over that with its own repaint logic; macOS has none, so the terminal
+  // simply stayed tiny inside a large window.
+  if (cols === 80 && rows === 24) {
+    const fitted = terminalInstance.fitAddon.proposeDimensions();
+    if (fitted && (fitted.cols !== 80 || fitted.rows !== 24)) return false;
+  }
   return true;
 }
 

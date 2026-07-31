@@ -713,6 +713,13 @@ func (a *App) CreateSession(name, path string, agent string, autoYes bool, extra
 	if err != nil {
 		return nil, err
 	}
+	// Refuse before storing anything. The session is created first and started
+	// second, so an agent that is not installed used to leave a session in the
+	// sidebar that had never run and never could — the error appeared, and the
+	// dead entry stayed behind next to it.
+	if err := session.CheckAgentCommand(inst); err != nil {
+		return nil, err
+	}
 	if err := a.storage.AddInstance(inst); err != nil {
 		return nil, err
 	}
