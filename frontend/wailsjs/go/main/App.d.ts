@@ -195,6 +195,8 @@ export function ReadSessionDirectoryFile(arg1:string,arg2:string):Promise<sessio
 
 export function ReadSessionFile():Promise<main.PortableFileInfo>;
 
+export function RedrawWindow(arg1:string,arg2:number):Promise<void>;
+
 export function RefreshWindow(arg1:string,arg2:number):Promise<void>;
 
 export function RenameGroup(arg1:string,arg2:string):Promise<void>;

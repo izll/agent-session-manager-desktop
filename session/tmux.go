@@ -118,3 +118,42 @@ func TmuxCommandTimed(args ...string) (*exec.Cmd, context.CancelFunc) {
 
 // TmuxCommandTimeout bounds one multiplexer invocation on an interactive path.
 const TmuxCommandTimeout = 10 * time.Second
+
+// RefreshSessionClients redraws every client attached to a session.
+//
+// refresh-client's -t takes a CLIENT (a tty path such as /dev/pts/159), not a
+// session name — passing a session name fails with "can't find client" and the
+// redraw silently never happens. That is easy to miss because the error goes
+// to stderr on a call whose result is usually discarded, so the only visible
+// symptom is a pane that keeps showing stale, mis-wrapped content until the
+// user presses Refresh by hand.
+//
+// So look up the session's clients first and refresh each by name. Returns the
+// number refreshed, which is 0 when nothing is attached — a legitimate case,
+// not an error.
+func RefreshSessionClients(sessionName string) int {
+	// Clients sit on the per-tab mirror sessions, not on the base session that
+	// owns the panes — listing only the base finds nothing to refresh and the
+	// redraw is lost. Mirrors are named "<base>_gui_<n>_<stamp>", so ask for
+	// every client on the server and keep the ones belonging to this session
+	// or any of its mirrors.
+	out, err := TmuxCommand("list-clients", "-a",
+		"-F", "#{client_name}\t#{client_session}").Output()
+	if err != nil {
+		return 0
+	}
+	refreshed := 0
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		name, clientSession, ok := strings.Cut(line, "\t")
+		if !ok || name == "" {
+			continue
+		}
+		if clientSession != sessionName && !strings.HasPrefix(clientSession, sessionName+"_gui_") {
+			continue
+		}
+		if err := TmuxCommand("refresh-client", "-t", name).Run(); err == nil {
+			refreshed++
+		}
+	}
+	return refreshed
+}

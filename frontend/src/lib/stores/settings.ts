@@ -1,5 +1,6 @@
 import { writable } from 'svelte/store';
 import * as App from '../../../wailsjs/go/main/App';
+import { defaultTerminalRenderer } from '../utils/terminal';
 
 export type TerminalRenderer = 'canvas' | 'webgl' | 'dom';
 
@@ -28,6 +29,15 @@ export interface Settings {
   /** Custom accent hex, used when uiTheme is 'custom'. */
   uiAccent: string;
   terminalRenderer: TerminalRenderer;
+  /**
+   * Terminal font stack. Empty means the built-in default.
+   *
+   * Worth choosing rather than fixing: the default names JetBrains Mono first,
+   * which is installed on none of the machines this was tested on, so everyone
+   * silently gets a fallback — and which fallback decides whether accents and
+   * box-drawing characters render at all.
+   */
+  terminalFontFamily: string;
   /**
    * Whether a plain drag copies to the clipboard, or only a Shift-held one.
    * Defaults to 'shift': copying is bound to mouseup either way, never to
@@ -81,7 +91,10 @@ export const settings = writable<Settings>({
   language: 'en',
   uiTheme: 'violet',
   uiAccent: '#8b5cf6',
-  terminalRenderer: 'canvas',
+  // Platform-dependent; see defaultTerminalRenderer(). A saved setting
+  // overrides this, so it only decides what a fresh install starts with.
+  terminalRenderer: defaultTerminalRenderer(),
+  terminalFontFamily: '',
   terminalCopyMode: 'shift',
   gitBranchDisplay: 'header',
   diffFlatFileList: false,
@@ -108,7 +121,16 @@ export async function loadSettings() {
   try {
     const data = await App.GetSettings();
     if (data) {
-      settings.set(data as Settings);
+      const loaded = data as Settings;
+      // An unset renderer must fall back to the per-platform default rather
+      // than to an empty string: the backend leaves it empty when the user has
+      // never chosen one, and an empty value here would override
+      // defaultTerminalRenderer() with nothing.
+      if (!loaded.terminalRenderer) {
+        loaded.terminalRenderer = defaultTerminalRenderer();
+      }
+      settings.set(loaded);
+      void App.LogFrontend(`[settings] renderer=${loaded.terminalRenderer}`);
     }
   } catch (e) {
     console.error('Failed to load settings:', e);

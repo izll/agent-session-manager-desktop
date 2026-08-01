@@ -8,7 +8,7 @@ import {
   type TerminalInstance
 } from './terminal';
 import type { Terminal } from '@xterm/xterm';
-import { themeFor, fontSizeFor } from './terminal';
+import { themeFor, fontSizeFor, terminalFontStack } from './terminal';
 import { LogFrontend } from '../../../wailsjs/go/main/App';
 
 // Surface pool errors in the backend log file too — the packaged build has
@@ -16,6 +16,22 @@ import { LogFrontend } from '../../../wailsjs/go/main/App';
 function logPoolError(msg: string, e: unknown): void {
   console.error(msg, e);
   try { LogFrontend(`${msg}: ${e}`); } catch { /* bridge not ready */ }
+}
+
+// Drop the renderer's cached glyphs so the next frame redraws them all.
+//
+// Both accelerated renderers keep a texture atlas of already-drawn glyphs. It
+// is keyed on the attributes in play when a glyph was first drawn, and xterm
+// does not always invalidate it when those attributes change underneath it
+// (xterm.js#3548) — the stale atlas then renders characters as blank cells.
+// A no-op on the DOM renderer, which has no atlas.
+function clearGlyphCache(terminal: Terminal): void {
+  try {
+    terminal.clearTextureAtlas();
+  } catch (e) {
+    // Never let a repaint hint break the settings change that triggered it.
+    logPoolError('pool: clearing glyph cache failed', e);
+  }
 }
 
 export interface PoolEntry {
@@ -32,12 +48,43 @@ export class TerminalPool {
   private activeKey: string | null = null;
   private showGeneration = 0;
   private disposed = false;
+  /** Frame handle for fitActive()'s wait for the container to stop resizing. */
+  private fitFrame: number | undefined;
   private connecting = new Map<string, Promise<void>>();
   private terminalOptions: Partial<Terminal['options']>;
 
   constructor(parentEl: HTMLElement, terminalOptions: Partial<Terminal['options']> = {}) {
     this.parentEl = parentEl;
     this.terminalOptions = terminalOptions;
+    this.watchPixelRatio();
+  }
+
+  /**
+   * Rebuild glyph caches when the device pixel ratio changes.
+   *
+   * The atlas stores glyphs rasterised for the ratio in effect when they were
+   * drawn; moving the window to a display with a different density, or zooming,
+   * leaves it holding glyphs at the wrong scale, which renders as corrupt or
+   * missing characters (xterm.js#2137). There is no event for this, so the
+   * documented approach is a matchMedia query on the current ratio that is
+   * re-armed each time it fires.
+   */
+  private watchPixelRatio(): void {
+    if (typeof window.matchMedia !== 'function') return;
+    const arm = () => {
+      if (this.disposed) return;
+      const mql = window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`);
+      const onChange = () => {
+        mql.removeEventListener('change', onChange);
+        if (this.disposed) return;
+        for (const entry of this.entries.values()) {
+          clearGlyphCache(entry.terminalInstance.terminal);
+        }
+        arm(); // the ratio moved, so watch for the next change from here
+      };
+      mql.addEventListener('change', onChange);
+    };
+    try { arm(); } catch (e) { logPoolError('pool: watching pixel ratio failed', e); }
   }
 
   private makeKey(sessionId: string, windowIdx: number): string {
@@ -94,7 +141,7 @@ export class TerminalPool {
         // Deferred a frame so the container has been laid out; fitTerminal
         // measures the element and would otherwise read the hidden geometry.
         requestAnimationFrame(() => {
-          if (this.activeKey === key) fitTerminal(ti);
+          if (this.activeKey === key) fitTerminal(ti, 'pool-attach');
         });
       }
     }
@@ -194,7 +241,7 @@ export class TerminalPool {
     if (this.activeKey === key) {
       const entry = this.entries.get(key);
       if (entry?.terminalInstance.ws?.readyState === WebSocket.OPEN) {
-        requestAnimationFrame(() => fitTerminal(entry.terminalInstance));
+        requestAnimationFrame(() => fitTerminal(entry.terminalInstance, 'pool-reuse'));
         if (canFocus()) entry.terminalInstance.terminal.focus();
         return;
       }
@@ -266,6 +313,9 @@ export class TerminalPool {
     if (canFocus()) entry.terminalInstance.terminal.focus();
     const term = entry.terminalInstance.terminal;
     let tries = 0;
+    // Previous frame's container size, so settle() can tell a container that
+    // has finished laying out from one still on its way there.
+    let lastRect = '';
     const settle = () => {
       if (this.showGeneration !== gen) return; // a newer show() superseded us
       const rect = entry.containerEl.getBoundingClientRect();
@@ -273,10 +323,34 @@ export class TerminalPool {
       // is not open yet, and nothing sends it again afterwards — leaving the
       // pane at its previous size with every line wrapped in the wrong place.
       const wsOpen = entry.terminalInstance.ws?.readyState === WebSocket.OPEN;
-      if (rect.width >= 2 && rect.height >= 2 && wsOpen) {
-        fitTerminal(entry.terminalInstance);
+      // Wait for the container to stop changing size, not merely to be
+      // non-zero. Showing a pane while the window is being maximised finds a
+      // container that is laid out but not yet at its final width: measured,
+      // the pane announced 168x48 seven milliseconds after becoming visible,
+      // and the real 221x60 only arrived 2.4 seconds later from the
+      // ResizeObserver. The multiplexer had already reflowed for the smaller
+      // size by then, and the TUI's frame stayed wrapped for a width the
+      // window no longer had.
+      //
+      // Two consecutive equal frames is not enough on its own here. During a
+      // maximise the CONTAINER can hold one intermediate size for several
+      // frames while the WINDOW is still growing, so the check passes and the
+      // intermediate size goes out anyway (measured: 168x48 from this path
+      // after the same guard was already in place). Require the window's own
+      // outer size to have settled too — that is the thing actually still in
+      // motion, and it is what the container is waiting on.
+      const sizeKey = `${Math.round(rect.width)}x${Math.round(rect.height)}`
+        + `@${window.outerWidth}x${window.outerHeight}`;
+      const stable = sizeKey === lastRect;
+      lastRect = sizeKey;
+      if (rect.width >= 2 && rect.height >= 2 && wsOpen && stable) {
+        fitTerminal(entry.terminalInstance, 'pool-settle');
         // Force a full repaint of the viewport — without this the DOM/canvas
         // renderer can stay blank after display:none→block on some WebKit builds.
+        // Drop the glyph cache first: refresh() redraws from the atlas, so on
+        // its own it faithfully repaints whatever corruption is already in
+        // there. Hiding and showing a pane is exactly when that shows up.
+        clearGlyphCache(term);
         term.refresh(0, term.rows - 1);
         if (canFocus()) term.focus();
         return;
@@ -292,7 +366,8 @@ export class TerminalPool {
       // frame — half a second of retries is long enough for layout to change.
       const finalRect = entry.containerEl.getBoundingClientRect();
       if (finalRect.width >= 2 && finalRect.height >= 2) {
-        fitTerminal(entry.terminalInstance);
+        fitTerminal(entry.terminalInstance, 'pool-settle-timeout');
+        clearGlyphCache(term);
         term.refresh(0, term.rows - 1);
         if (canFocus()) term.focus();
       }
@@ -377,6 +452,12 @@ export class TerminalPool {
       try {
         entry.terminalInstance.terminal.options.theme =
           themeFor(entry.themeCtx?.tabTheme, entry.themeCtx?.agent);
+        // The canvas renderer caches rendered glyphs in a texture atlas keyed
+        // by colour, and does not invalidate it when the theme changes
+        // (xterm.js#3548). The stale entries show up as characters that are
+        // simply missing from the pane — including plain ASCII, which is how
+        // this is told apart from a font or character-width problem.
+        clearGlyphCache(entry.terminalInstance.terminal);
       } catch (e) {
         logPoolError('pool: applying theme failed', e);
       }
@@ -390,12 +471,34 @@ export class TerminalPool {
    * new dimensions pushed to tmux — otherwise the pty keeps the old geometry
    * and output wraps at the wrong column.
    */
+  /** Apply the current font stack to every open terminal. */
+  applyFontFamily(): void {
+    const stack = terminalFontStack();
+    for (const entry of this.entries.values()) {
+      try {
+        if (entry.terminalInstance.terminal.options.fontFamily === stack) continue;
+        entry.terminalInstance.terminal.options.fontFamily = stack;
+        // Cached glyphs were drawn with the old font; keeping them mixes two
+        // typefaces in one pane, or drops characters the atlas no longer has.
+        clearGlyphCache(entry.terminalInstance.terminal);
+        // A different font means a different cell size, so the pane no longer
+        // matches its container until it is measured again.
+        entry.terminalInstance.fitAddon?.fit();
+      } catch (e) {
+        logPoolError('pool: applying font family failed', e);
+      }
+    }
+  }
+
   applyFontSize(): void {
     for (const entry of this.entries.values()) {
       try {
         const size = fontSizeFor(entry.themeCtx?.fontSize, entry.themeCtx?.agent);
         if (entry.terminalInstance.terminal.options.fontSize === size) continue;
         entry.terminalInstance.terminal.options.fontSize = size;
+        // Same reason as the font family: the atlas holds glyphs at the old
+        // size.
+        clearGlyphCache(entry.terminalInstance.terminal);
         entry.terminalInstance.fitAddon?.fit();
       } catch (e) {
         logPoolError('pool: applying font size failed', e);
@@ -426,7 +529,10 @@ export class TerminalPool {
    * key, fully tear down, then re-show — bumping showGeneration first so any
    * in-flight settle()/rAF from the old terminals can't write to the new ones.
    */
-  async recreateActiveForRenderer(shouldFocus: boolean | (() => boolean) = true): Promise<void> {
+  async recreateActiveForRenderer(
+    shouldFocus: boolean | (() => boolean) = true,
+    themeCtxOverride?: { tabTheme?: string; agent?: string; fontSize?: number }
+  ): Promise<void> {
     const key = this.activeKey;
     if (!key) return;
     const sessionId = key.slice(0, key.lastIndexOf(':'));
@@ -434,6 +540,16 @@ export class TerminalPool {
 
     // Invalidate any pending async work tied to current entries.
     this.showGeneration++;
+
+    // Keep the pane's palette across the rebuild. It lives on the entry, and
+    // every entry is about to be thrown away; show() defaults it to {}, which
+    // resolves to the global terminal theme — so without this, switching
+    // renderer silently repaints every agent tab in the terminal colours, and
+    // they stay that way because nothing re-applies the real one afterwards.
+    // The caller's value is preferred — it is resolved from the session, so it
+    // reflects a theme changed in this same visit to Settings. The stored one
+    // is the fallback for callers that do not pass it.
+    const themeCtx = themeCtxOverride ?? this.entries.get(key)?.themeCtx;
 
     for (const [, entry] of this.entries) {
       try { await detachFromSession(entry.terminalInstance); } catch { /* ignore */ }
@@ -443,7 +559,7 @@ export class TerminalPool {
     this.entries.clear();
     this.activeKey = null;
 
-    await this.show(sessionId, widx, shouldFocus);
+    await this.show(sessionId, widx, shouldFocus, themeCtx);
   }
 
   hideAll(): void {
@@ -454,6 +570,11 @@ export class TerminalPool {
 
   async dispose(): Promise<void> {
     this.disposed = true;
+    // A queued fit would otherwise run against a torn-down entry.
+    if (this.fitFrame !== undefined) {
+      cancelAnimationFrame(this.fitFrame);
+      this.fitFrame = undefined;
+    }
     await this.destroyAll();
   }
 
@@ -464,7 +585,42 @@ export class TerminalPool {
       // Skip fit when container is hidden (display: none) — prevents 0×0 resize
       const rect = entry.containerEl.getBoundingClientRect();
       if (rect.width === 0 || rect.height === 0) return;
-      fitTerminal(entry.terminalInstance);
+
+      // Fit once the container has stopped changing size, not on the first
+      // frame after a change.
+      //
+      // This runs from a ResizeObserver, which fires for every intermediate
+      // size a maximise or a drag passes through. Fitting immediately sends
+      // whichever one happened to be current: measured, this path announced
+      // 168x48 while the window was on its way to 221x60, the multiplexer
+      // reflowed for it, and the TUI's already-drawn frame stayed wrapped at
+      // that width — the mis-aligned top of the pane that survived a Refresh.
+      //
+      // Frames rather than a delay, for the same reason as the resize settle
+      // in terminal.ts: a fixed timeout encodes an assumed frame rate and
+      // expires mid-burst on a slow machine.
+      if (this.fitFrame !== undefined) cancelAnimationFrame(this.fitFrame);
+      let stableFor = 0;
+      // Includes the window's outer size: during a maximise the container can
+      // sit at an intermediate size for several frames while the window is
+      // still growing, and watching the container alone declares that settled.
+      let lastSize = `${Math.round(rect.width)}x${Math.round(rect.height)}`
+        + `@${window.outerWidth}x${window.outerHeight}`;
+      const settleFit = () => {
+        const r = entry.containerEl.getBoundingClientRect();
+        if (r.width === 0 || r.height === 0) { this.fitFrame = undefined; return; }
+        const size = `${Math.round(r.width)}x${Math.round(r.height)}`
+          + `@${window.outerWidth}x${window.outerHeight}`;
+        stableFor = size === lastSize ? stableFor + 1 : 0;
+        lastSize = size;
+        if (stableFor >= 2) {
+          this.fitFrame = undefined;
+          fitTerminal(entry.terminalInstance, 'pool-fitActive');
+          return;
+        }
+        this.fitFrame = requestAnimationFrame(settleFit);
+      };
+      this.fitFrame = requestAnimationFrame(settleFit);
     }
   }
 

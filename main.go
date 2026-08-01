@@ -48,6 +48,10 @@ func main() {
 		defer lf.Close()
 	}
 	log.SetOutput(logOut)
+	// Millisecond timestamps: the timing questions this log gets used for —
+	// how long after an attach a resize lands, whether two sizes arrive in one
+	// burst or seconds apart — are invisible at second resolution.
+	log.SetFlags(log.Ldate | log.Lmicroseconds)
 
 	// Create an instance of the app structure
 	app := NewApp()

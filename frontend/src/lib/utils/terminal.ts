@@ -2,7 +2,7 @@ import { Terminal, type IDisposable } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { SearchAddon } from '@xterm/addon-search';
 import { CanvasAddon } from '@xterm/addon-canvas';
-import { LogFrontend } from '../../../wailsjs/go/main/App';
+import { LogFrontend, RedrawWindow } from '../../../wailsjs/go/main/App';
 import { WebglAddon } from '@xterm/addon-webgl';
 import { GetTerminalWSPort, GetTerminalWSToken } from '../../../wailsjs/go/main/App';
 import { getTerminalTheme, resolveTerminalTheme, DEFAULT_TERMINAL_THEME, resolveFontSize,
@@ -87,25 +87,79 @@ export interface TerminalInstance {
   hiddenBuffer: Uint8Array[];
   /** Last size announced to the backend, so identical ones are not resent. */
   lastSentSize?: string;
+  /** Wall-clock backstop for the pending size announcement, if any. */
+  pendingResize?: ReturnType<typeof setTimeout>;
+  /** Frame handle for the settle loop watching the size hold still. */
+  pendingResizeFrame?: number;
 }
 
-// The terminal renderer is chosen in Settings (gear icon): 'canvas' (default),
-// 'webgl' (fastest; can be flaky on some WebKitGTK — glyphs/repaint), or 'dom'
-// (most compatible, but Paint-heavy). Set via setTerminalRenderer() from the
-// settings store so a new terminal picks up the current choice.
-//
-// Background: the DOM renderer Paint-dominated WebKitGTK CPU on every Claude
-// prompt redraw. Canvas renders to a 2D canvas WebKit repaints normally and is
-// much cheaper. WebGL is fastest but on this stack sometimes only repainted
-// after a manual resize — kept available so users can try it on their hardware.
-let __terminalRenderer: 'canvas' | 'webgl' | 'dom' = 'canvas';
-export function setTerminalRenderer(r: 'canvas' | 'webgl' | 'dom'): void {
+export type TerminalRendererMode = 'canvas' | 'webgl' | 'dom';
+
+/**
+ * The renderer to use when the user has not picked one.
+ *
+ * Not the same everywhere, though the two reasons are not equally strong:
+ *
+ *  - macOS/Windows get DOM. The canvas renderer drops characters there —
+ *    accented letters, arrows, box drawing — while the same pane renders
+ *    correctly under DOM. The bytes were measured intact all the way to the
+ *    renderer, and this is a known canvas issue (xtermjs/xterm.js#1637).
+ *  - Linux keeps canvas, because that is what it was measured fastest at on
+ *    WebKitGTK when the selector was added. Treat that as weaker evidence: it
+ *    was a comparison between renderers, not a finding that DOM is too slow to
+ *    use, and two UI freezes blamed on rendering at the time turned out to be
+ *    the diff view's untimed git calls and copy-on-select writing to the
+ *    clipboard on every buffer shift. Both are fixed. If DOM holds up on Linux
+ *    now, it is the better default everywhere, since the dropped characters
+ *    above are the one problem that is definitely real.
+ *
+ * Settings still overrides this; it is only the starting point.
+ */
+export function rendererForUserAgent(ua: string): TerminalRendererMode {
+  return /Linux/i.test(ua) && !/Android/i.test(ua) ? 'canvas' : 'dom';
+}
+
+export function defaultTerminalRenderer(): TerminalRendererMode {
+  // Wails runs each platform's native webview, so the user agent is a reliable
+  // way to tell them apart without a round trip to the backend.
+  return rendererForUserAgent(typeof navigator === 'undefined' ? '' : navigator.userAgent);
+}
+
+// The terminal renderer is chosen in Settings (gear icon), defaulting to
+// defaultTerminalRenderer() above. 'webgl' is fastest but on this stack
+// sometimes only repainted after a manual resize — kept available so users can
+// try it on their hardware. Set via setTerminalRenderer() from the settings
+// store so a new terminal picks up the current choice.
+let __terminalRenderer: TerminalRendererMode = defaultTerminalRenderer();
+export function setTerminalRenderer(r: TerminalRendererMode): void {
   if (r === 'canvas' || r === 'webgl' || r === 'dom') __terminalRenderer = r;
 }
 
 // Whether a plain drag copies, or only a Shift-held one. Read at mouseup rather
 // than captured per terminal, so changing it in Settings takes effect on panes
 // that are already open.
+// The terminal's font stack, chosen in Settings. Empty means the default
+// below. Kept here rather than read per terminal so a change applies to panes
+// that are already open.
+let __terminalFontFamily = '';
+export function setTerminalFontFamily(f: string): void {
+  __terminalFontFamily = (f || '').trim();
+}
+
+/** The font stack a terminal should use, honouring the user's choice. */
+export function terminalFontStack(): string {
+  // Quoted, because a family name containing a space is invalid unquoted and
+  // invalidates the whole list — the browser then falls back to a proportional
+  // default, which is how accented characters went missing.
+  const fallback = '"JetBrains Mono", Menlo, Monaco, Consolas, monospace';
+  if (!__terminalFontFamily) return fallback;
+  // Always keep a generic at the end: a name the system does not have would
+  // otherwise leave nothing to fall back to.
+  return __terminalFontFamily.includes('monospace')
+    ? __terminalFontFamily
+    : `${__terminalFontFamily}, monospace`;
+}
+
 let __terminalCopyMode: 'shift' | 'select' = 'shift';
 export function setTerminalCopyMode(m: 'shift' | 'select'): void {
   if (m === 'shift' || m === 'select') __terminalCopyMode = m;
@@ -228,10 +282,17 @@ export function createTerminal(
     smoothScrollDuration: 0,
     allowTransparency: false,
     minimumContrastRatio: 1,
-    fontFamily: 'JetBrains Mono, Menlo, Monaco, Consolas, monospace',
+    fontFamily: terminalFontStack(),
     theme: themeFor(themeCtx.tabTheme, themeCtx.agent),
     ...options
   });
+
+  // No Unicode 11 width tables here, deliberately. Switching them on looked
+  // like a fix for accented characters going missing, but the bytes were
+  // measured to be intact at every stage (pane, pty, socket, write), so there
+  // was nothing for it to fix — and xterm classes unicode handling as
+  // experimental, which is not what belongs on the path every pane takes. It
+  // was followed by panes intermittently freezing on Linux.
 
   const fitAddon = new FitAddon();
   terminal.loadAddon(fitAddon);
@@ -414,19 +475,20 @@ function measuredAgainstContainer(terminalInstance: TerminalInstance): boolean {
   const rect = el.getBoundingClientRect();
   // A hidden or unlaid-out container cannot have produced this size.
   if (rect.width < 2 || rect.height < 2) return false;
-  // 80x24 exactly is xterm's untouched default. Treat it as a real measurement
-  // only when the container could plausibly have produced it — a wide container
-  // reporting 80x24 has not been fitted yet.
+  // The terminal's own cols/rows must agree with what the container can hold.
   //
-  // The comparison is against the container, not a fixed pixel width: on a
-  // small window 80x24 IS the correct size, and rejecting it outright left the
-  // multiplexer stuck at 80x24 with nothing else to correct it. Windows papered
-  // over that with its own repaint logic; macOS has none, so the terminal
-  // simply stayed tiny inside a large window.
-  if (cols === 80 && rows === 24) {
-    const fitted = terminalInstance.fitAddon.proposeDimensions();
-    if (fitted && (fitted.cols !== 80 || fitted.rows !== 24)) return false;
-  }
+  // This used to check only 80x24, xterm's untouched default, and wave through
+  // everything else — but a pane measured mid-layout reports a real-looking
+  // size that is simply too small (168x48 inside a container good for 221x60
+  // was the observed case). That got sent, and since the multiplexer only
+  // repaints on a size CHANGE, whichever value arrived last won: land on the
+  // stale one and the tab stays mis-wrapped until the user hits Refresh.
+  //
+  // Comparing against the fit addon rather than a fixed pixel width matters:
+  // on a genuinely small window 80x24 IS correct, and rejecting it outright
+  // once left the multiplexer stuck at 80x24 with nothing to correct it.
+  const fitted = terminalInstance.fitAddon.proposeDimensions();
+  if (fitted && (fitted.cols !== cols || fitted.rows !== rows)) return false;
   return true;
 }
 
@@ -440,17 +502,117 @@ function measuredAgainstContainer(terminalInstance: TerminalInstance): boolean {
  * moved from row 44 to row 40 over three switches, and stopped moving as soon
  * as the redundant sizes were withheld.
  */
-function sendResizeIfChanged(terminalInstance: TerminalInstance, cols: number, rows: number): void {
+/**
+ * How many animation frames a size must survive unchanged before it is sent.
+ *
+ * Frames, not milliseconds, because the thing being waited for is layout, and
+ * layout runs per frame. A fixed delay assumes a frame rate: 80ms is five
+ * frames on an idle machine but less than one on a loaded WebKitGTK, where it
+ * would expire mid-burst and send exactly the intermediate size it exists to
+ * suppress — the failure mode would appear only on slow machines, which is the
+ * hardest place to notice it.
+ *
+ * Three frames is enough for the observed bursts (a couple of intermediate
+ * sizes) while staying imperceptible: ~50ms when idle, and proportionally
+ * longer exactly when frames are slow, which is when it is needed.
+ */
+const RESIZE_SETTLE_FRAMES = 3;
+
+/**
+ * A wall-clock ceiling on the settle wait.
+ *
+ * requestAnimationFrame does not fire in a hidden window, so a pane resized
+ * while the app is in the background would hold its announcement indefinitely
+ * and come back mis-wrapped. This bounds that; it is deliberately far above
+ * three normal frames so it only takes over when frames have stopped.
+ */
+const RESIZE_SETTLE_MAX_MS = 1000;
+
+function sendResizeIfChanged(terminalInstance: TerminalInstance, cols: number, rows: number, origin = 'ifchanged'): void {
   const ws = terminalInstance.ws;
   if (!ws || ws.readyState !== WebSocket.OPEN) return;
   const key = `${cols}x${rows}`;
   if (terminalInstance.lastSentSize === key) return;
-  terminalInstance.lastSentSize = key;
-  sendResize(ws, cols, rows);
+
+  // Wait for the size to settle before announcing it.
+  //
+  // Layout produces a burst of sizes — showing a pane, or a window drag, walks
+  // through intermediate values before landing. Both look equally valid when
+  // measured (mid-layout the terminal element really is that small, so the fit
+  // addon agrees with it), so no property of a single sample distinguishes an
+  // intermediate size from the final one. Time does: intermediates are
+  // replaced within a frame or two, the final one is not.
+  //
+  // Sending an intermediate costs more than a wasted round trip. The
+  // multiplexer reflows the pane for it, and a TUI that already redrew its
+  // frame at that width leaves those lines in the buffer — the top of the pane
+  // then stays wrapped for a width the window no longer has.
+  //
+  // This settles a layout burst, not a whole gesture. A drag lasts seconds
+  // (measured: 168x48 then 221x60 two seconds apart); waiting that out would
+  // visibly lag the pane behind the window, so each step of a drag settles on
+  // its own.
+  cancelPendingResize(terminalInstance);
+
+  let framesStable = 0;
+  let lastSeen = key;
+  const deadline = Date.now() + RESIZE_SETTLE_MAX_MS;
+
+  const announce = () => {
+    cancelPendingResize(terminalInstance);
+    const sock = terminalInstance.ws;
+    if (!sock || sock.readyState !== WebSocket.OPEN) return;
+    // Re-read rather than trusting the value captured on entry: several frames
+    // have passed and the terminal may have been resized again since.
+    const { cols: c, rows: r } = terminalInstance.terminal;
+    const now = `${c}x${r}`;
+    if (terminalInstance.lastSentSize === now) return;
+    terminalInstance.lastSentSize = now;
+    sendResize(sock, c, r, origin);
+  };
+
+  const tick = () => {
+    const now = `${terminalInstance.terminal.cols}x${terminalInstance.terminal.rows}`;
+    // Any change restarts the count: only a size that stops moving is final.
+    framesStable = now === lastSeen ? framesStable + 1 : 0;
+    lastSeen = now;
+    if (framesStable >= RESIZE_SETTLE_FRAMES || Date.now() >= deadline) {
+      announce();
+      return;
+    }
+    terminalInstance.pendingResizeFrame = requestAnimationFrame(tick);
+  };
+
+  terminalInstance.pendingResizeFrame = requestAnimationFrame(tick);
+  // Backstop for a window that stops producing frames entirely (minimised or
+  // in the background): rAF simply never fires there, so without this the
+  // announcement would wait for the window to come back.
+  terminalInstance.pendingResize = setTimeout(announce, RESIZE_SETTLE_MAX_MS);
 }
 
-function sendResize(ws: WebSocket, cols: number, rows: number) {
+/** Drop any queued size announcement, both its frame and its timer. */
+function cancelPendingResize(terminalInstance: TerminalInstance): void {
+  if (terminalInstance.pendingResizeFrame !== undefined) {
+    cancelAnimationFrame(terminalInstance.pendingResizeFrame);
+    terminalInstance.pendingResizeFrame = undefined;
+  }
+  if (terminalInstance.pendingResize !== undefined) {
+    clearTimeout(terminalInstance.pendingResize);
+    terminalInstance.pendingResize = undefined;
+  }
+}
+
+/**
+ * Announce a size to the backend.
+ *
+ * `origin` names the call site and is logged with it. Seven different paths can
+ * send a size, and when a wrong one goes out the log alone cannot say which was
+ * responsible — several rounds of fixes were aimed at the wrong path because of
+ * that. It is worth the one extra argument.
+ */
+function sendResize(ws: WebSocket, cols: number, rows: number, origin = 'unknown') {
   if (ws.readyState === WebSocket.OPEN) {
+    void LogFrontend(`[term] send resize ${cols}x${rows} from ${origin}`);
     // Resize message format: 0x01 + cols (2 bytes big-endian) + rows (2 bytes big-endian)
     const buf = new Uint8Array(5);
     buf[0] = 0x01; // Resize command
@@ -494,6 +656,9 @@ export async function attachToSession(
     terminalInstance.resizeDisposable.dispose();
     terminalInstance.resizeDisposable = null;
   }
+  // A queued size announcement would otherwise fire against a closed socket,
+  // or worse, re-announce a size for a pane that has already been torn down.
+  cancelPendingResize(terminalInstance);
 
   try {
     // Ask the backend which port it actually bound (may differ from 9753
@@ -622,9 +787,15 @@ export async function attachToSession(
         terminalInstance.hiddenBuffer = [];
         // A tmux refresh-client is cheaper than replaying the dropped bytes;
         // sending a resize (0x01) with current size nudges tmux.
+        //
+        // Only if the size agrees with the container: a tab coming back from
+        // hidden can still be mid-layout, and announcing that stale size makes
+        // the multiplexer wrap its content for a pane narrower than the one on
+        // screen. Skipping it is safe — the pane is about to be fitted anyway.
         const { cols, rows } = terminal;
-        if (cols > 1 && rows > 1 && ws.readyState === WebSocket.OPEN) {
-          sendResize(ws, cols, rows);
+        if (cols > 1 && rows > 1 && ws.readyState === WebSocket.OPEN
+            && measuredAgainstContainer(terminalInstance)) {
+          sendResize(ws, cols, rows, 'unhide');
         }
         return;
       }
@@ -692,8 +863,27 @@ export async function attachToSession(
     // visible.
     terminalInstance.resizeDisposable = terminal.onResize(({ cols, rows }) => {
       if (measuredAgainstContainer(terminalInstance)) {
-        sendResizeIfChanged(terminalInstance, cols, rows);
+        sendResizeIfChanged(terminalInstance, cols, rows, 'onResize');
+        return;
       }
+      // The size was rejected because the container was not laid out yet. It
+      // cannot simply be dropped: onResize only fires on a CHANGE, so this
+      // size will never be offered again, and the multiplexer only repaints
+      // when its size changes — it sits on the old geometry, showing a pane
+      // that never updates until the user hits Refresh by hand.
+      //
+      // So retry on later frames, until the container can be measured.
+      let tries = 0;
+      const retry = () => {
+        if (!terminalInstance.ws || terminalInstance.ws.readyState !== WebSocket.OPEN) return;
+        if (measuredAgainstContainer(terminalInstance)) {
+          const t = terminalInstance.terminal;
+          sendResizeIfChanged(terminalInstance, t.cols, t.rows, 'onResize-retry');
+          return;
+        }
+        if (++tries < 30) requestAnimationFrame(retry); // ~0.5s, as elsewhere
+      };
+      requestAnimationFrame(retry);
     });
 
     // Send the current size once, now that the socket is open.
@@ -709,13 +899,42 @@ export async function attachToSession(
     //
     // Deferred a frame so the container has been laid out: measuring a
     // still-hidden element yields the 80x24 default, which would be worse than
-    // sending nothing.
-    requestAnimationFrame(() => {
-      const { cols, rows } = terminal;
-      if (measuredAgainstContainer(terminalInstance) && ws.readyState === WebSocket.OPEN) {
-        sendResize(ws, cols, rows);
+    // sending nothing. One frame is not always enough, though, so keep trying
+    // — giving up here is what leaves a pane frozen until a manual Refresh.
+    let initialTries = 0;
+    const sendInitialSize = () => {
+      if (ws.readyState !== WebSocket.OPEN) return;
+      if (measuredAgainstContainer(terminalInstance)) {
+        sendResizeIfChanged(terminalInstance, terminal.cols, terminal.rows, 'initial');
+        return;
       }
-    });
+      if (++initialTries < 30) requestAnimationFrame(sendInitialSize);
+    };
+    requestAnimationFrame(sendInitialSize);
+
+    // Always ask the multiplexer for a fresh frame once the pane has attached.
+    //
+    // Nothing else reliably produces one. A resize only repaints when the size
+    // actually CHANGES, and reattaching to a window that is already the right
+    // size — the common case — changes nothing, so no repaint follows. What
+    // the pane shows is then whatever was in its buffer, laid out for whatever
+    // it was before, until the user presses Refresh by hand.
+    //
+    // Two earlier attempts guarded this and both were wrong, which is why it
+    // is now unconditional:
+    //  - terminal.onRender: xterm paints its own blank screen on open, so this
+    //    fired immediately and the backstop never ran.
+    //  - bytes received: the multiplexer does send output on attach, it is just
+    //    the stale frame, so this was always non-zero and skipped too.
+    // The redraw is cheap (a clear plus a repaint the TUI does anyway on
+    // SIGWINCH), and running it once per attach is far cheaper than a pane the
+    // user has to fix by hand.
+    setTimeout(() => {
+      if (!terminalInstance.ws || terminalInstance.ws.readyState !== WebSocket.OPEN) return;
+      void RedrawWindow(sessionId, windowIdx).catch((e) => {
+        void LogFrontend(`[term] redraw request failed session=${sessionId} win=${windowIdx}: ${e}`);
+      });
+    }, 250);
 
   } catch (e) {
     console.error('Failed to attach session:', e);
@@ -733,6 +952,9 @@ export async function detachFromSession(terminalInstance: TerminalInstance): Pro
     terminalInstance.resizeDisposable.dispose();
     terminalInstance.resizeDisposable = null;
   }
+  // A queued size announcement would otherwise fire against a closed socket,
+  // or worse, re-announce a size for a pane that has already been torn down.
+  cancelPendingResize(terminalInstance);
 
   if (terminalInstance.ws) {
     // Null out handlers BEFORE close to prevent buffered messages from old session
@@ -766,15 +988,18 @@ export function resendTerminalSize(terminalInstance: TerminalInstance): void {
   const { cols, rows } = terminalInstance.terminal;
   // Below 2 means the terminal never got a real size to begin with; sending it
   // would tell the multiplexer to render the pane that way.
-  if (cols > 1 && rows > 1) {
+  // Re-announcing is only useful if the size is right: this runs while a pane
+  // is being shown, which is exactly when a half-laid-out container reports
+  // something too small, and re-announcing that pins the multiplexer to it.
+  if (cols > 1 && rows > 1 && measuredAgainstContainer(terminalInstance)) {
     // Deliberately bypasses the change filter: this exists to re-announce a
     // size the backend may have lost, so suppressing it would defeat it.
     terminalInstance.lastSentSize = `${cols}x${rows}`;
-    sendResize(ws, cols, rows);
+    sendResize(ws, cols, rows, 'resend');
   }
 }
 
-export function fitTerminal(terminalInstance: TerminalInstance): void {
+export function fitTerminal(terminalInstance: TerminalInstance, origin = 'fit'): void {
   // Guard against fitting a detached/zero-sized container (would send bogus
   // 1×1 or similar resize to tmux, which then renders the pane that way).
   const el = (terminalInstance.terminal as any).element as HTMLElement | undefined;
@@ -791,7 +1016,7 @@ export function fitTerminal(terminalInstance: TerminalInstance): void {
     // Need realistic terminal dimensions; anything below 2 is almost certainly
     // the result of measuring a hidden container.
     if (cols > 1 && rows > 1) {
-      sendResizeIfChanged(terminalInstance, cols, rows);
+      sendResizeIfChanged(terminalInstance, cols, rows, origin);
     }
   }
 }

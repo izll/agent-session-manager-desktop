@@ -2172,7 +2172,7 @@ func (a *App) ResizeTerminal(ptyID string, cols, rows int) error {
 			// Resize the specific window to fit the largest client
 			session.TmuxCommand("resize-window", "-t", target, "-A").Run()
 			// Also refresh all clients
-			session.TmuxCommand("refresh-client", "-t", sessionName).Run()
+			session.RefreshSessionClients(sessionName)
 		}()
 	}
 
@@ -2197,9 +2197,45 @@ func (a *App) RefreshWindow(sessionID string, windowIdx int) error {
 	// Clear the pane's screen buffer and resize to match attached clients.
 	// send-keys C-l clears the screen (equivalent to "clear" in most shells/TUIs).
 	// Many TUI apps (Claude, Codex, etc.) redraw their UI on SIGWINCH/clear.
+	//
+	// This sends INPUT to whatever is running in the pane, so it belongs only
+	// on the Refresh button, where the user has asked for it. Not all readers
+	// treat Ctrl-L as a screen clear — an agent prompt takes it as text, and
+	// Claude Code turned it into a stray "/clear" in the composer. Automatic
+	// callers must use RedrawWindow() instead.
+	// Always sent here, unlike the automatic path: the button exists precisely
+	// for when the pane looks wrong, so suppressing it would defeat the only
+	// manual recovery there is. Pressing it twice is the user's choice.
 	_ = session.TmuxCommand("send-keys", "-t", target, "C-l").Run()
 	_ = session.TmuxCommand("resize-window", "-t", target, "-A").Run()
-	_ = session.TmuxCommand("refresh-client", "-t", sessionName).Run()
+	_ = session.RefreshSessionClients(sessionName)
+
+	return nil
+}
+
+// RedrawWindow repaints a window without sending it any input.
+//
+// The automatic counterpart to RefreshWindow: it re-announces the size and asks
+// the multiplexer to repaint, but never injects keystrokes into a running
+// agent. It cannot make a bottom-aligned TUI lay itself out again — only the
+// program can do that, and asking it costs a keystroke — so a pane may stay
+// visually offset until something else prompts a redraw. That is the right
+// trade for something that runs on its own: a cosmetic offset is recoverable,
+// text typed into an agent's prompt is not.
+func (a *App) RedrawWindow(sessionID string, windowIdx int) error {
+	inst, err := a.storage.GetInstance(sessionID)
+	if err != nil {
+		return err
+	}
+	if !inst.IsAlive() {
+		return fmt.Errorf("error.sessionNotRunning")
+	}
+
+	sessionName := inst.TmuxSessionName()
+	target := fmt.Sprintf("%s:%d", sessionName, windowIdx)
+
+	_ = session.TmuxCommand("resize-window", "-t", target, "-A").Run()
+	_ = session.RefreshSessionClients(sessionName)
 
 	return nil
 }
@@ -2530,6 +2566,7 @@ type SettingsInfo struct {
 	UIAccent           string `json:"uiAccent"`
 	TerminalRenderer   string `json:"terminalRenderer"`
 	TerminalCopyMode   string `json:"terminalCopyMode"`
+	TerminalFontFamily string `json:"terminalFontFamily"`
 	GitBranchDisplay   string `json:"gitBranchDisplay"`
 	DiffFlatFileList   bool   `json:"diffFlatFileList"`
 	TrashRetentionDays int    `json:"trashRetentionDays"`
@@ -2568,11 +2605,12 @@ func (a *App) GetSettings() (*SettingsInfo, error) {
 		lang = "en"
 	}
 
-	// Default the terminal renderer to canvas if unset.
+	// Leave the renderer empty when unset, so the frontend can apply its own
+	// per-platform default (defaultTerminalRenderer): DOM on macOS/Windows,
+	// where the canvas renderer drops accented characters and box drawing, and
+	// canvas on Linux. Defaulting to "canvas" here overrode that for every
+	// fresh install on the platforms that must not have it.
 	renderer := settings.TerminalRenderer
-	if renderer == "" {
-		renderer = "canvas"
-	}
 
 	// Copying stays opt-in behind Shift unless asked otherwise: a plain drag
 	// copying by itself surprises people who only meant to highlight something.
@@ -2624,6 +2662,7 @@ func (a *App) GetSettings() (*SettingsInfo, error) {
 		UIAccent:             settings.UIAccent,
 		TerminalRenderer:     renderer,
 		TerminalCopyMode:     copyMode,
+		TerminalFontFamily:   settings.TerminalFontFamily,
 		GitBranchDisplay:     branchDisplay,
 		DiffFlatFileList:     settings.DiffFlatFileList,
 		TrashRetentionDays:   settings.TrashRetentionDays,
@@ -2668,6 +2707,7 @@ func (a *App) SaveSettings(settings SettingsInfo) error {
 		current.UIAccent = settings.UIAccent
 		current.TerminalRenderer = settings.TerminalRenderer
 		current.TerminalCopyMode = settings.TerminalCopyMode
+		current.TerminalFontFamily = settings.TerminalFontFamily
 		current.GitBranchDisplay = settings.GitBranchDisplay
 		current.DiffFlatFileList = settings.DiffFlatFileList
 		current.TrashRetentionDays = settings.TrashRetentionDays

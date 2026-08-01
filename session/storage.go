@@ -66,6 +66,9 @@ type Settings struct {
 	// TerminalCopyMode decides what copies a terminal selection: "shift"
 	// (default) for a Shift-held drag only, or "select" for any drag.
 	TerminalCopyMode string `json:"terminal_copy_mode,omitempty"`
+	// TerminalFontFamily overrides the terminal's font stack. Empty means the
+	// built-in default.
+	TerminalFontFamily string `json:"terminal_font_family,omitempty"`
 	// GitBranchDisplay places the session's git branch: "header" (default),
 	// "statusbar" or "off".
 	GitBranchDisplay string `json:"git_branch_display,omitempty"`

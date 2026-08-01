@@ -6,7 +6,7 @@
   import { EventsOn } from '../../../../wailsjs/runtime/runtime';
   import { LogFrontend, SetTabFontSize } from '../../../../wailsjs/go/main/App';
   import { TerminalPool } from '../../utils/terminalPool';
-  import { setTerminalRenderer, setTerminalCopyMode, setTerminalThemeContext } from '../../utils/terminal';
+  import { setTerminalRenderer, setTerminalCopyMode, setTerminalFontFamily, setTerminalThemeContext, defaultTerminalRenderer } from '../../utils/terminal';
   import { t } from '../../i18n';
   import '@xterm/xterm/css/xterm.css';
 
@@ -518,10 +518,21 @@
   // open one so the switch takes effect without restarting the app.
   let lastRenderer: string | undefined;
   $: {
-    const r = $settings?.terminalRenderer || 'canvas';
+    const r = $settings?.terminalRenderer || defaultTerminalRenderer();
     setTerminalRenderer(r as 'canvas' | 'webgl' | 'dom');
     if (lastRenderer !== undefined && lastRenderer !== r && pool) {
-      pool.recreateActiveForRenderer(() => mounted && active && focusOwner && focusAllowed);
+      // Pass the palette explicitly: the rebuild drops every pooled entry, and
+      // with it the theme each pane was resolved with. Resolving it fresh here
+      // rather than reusing what the entry held also means a theme changed in
+      // the same visit to Settings is picked up.
+      //
+      // Read through the helpers, NOT $-store references: a store reference
+      // here would make this block depend on the selected session, so it would
+      // re-run on every session change and rebuild all terminals each time.
+      pool.recreateActiveForRenderer(
+        () => mounted && active && focusOwner && focusAllowed,
+        themeCtxFor(currentTargetSessionId(), currentTargetWindowIdx())
+      );
     }
     lastRenderer = r;
   }
@@ -529,6 +540,18 @@
   // Copy-on-select mode. No terminal needs recreating: the handler reads the
   // current value at mouseup, so open panes pick the change up immediately.
   $: setTerminalCopyMode(($settings?.terminalCopyMode || 'shift') as 'shift' | 'select');
+
+  // Font choice. Applied to open panes directly — xterm re-measures its glyphs
+  // and reflows, so no terminal has to be rebuilt.
+  let lastFont: string | undefined;
+  $: {
+    const f = $settings?.terminalFontFamily || '';
+    setTerminalFontFamily(f);
+    if (lastFont !== undefined && lastFont !== f && pool) {
+      pool.applyFontFamily();
+    }
+    lastFont = f;
+  }
 
   // Apply palette settings immediately. Unlike the renderer, xterm accepts a
   // new theme on a live instance, so open terminals are repainted in place —

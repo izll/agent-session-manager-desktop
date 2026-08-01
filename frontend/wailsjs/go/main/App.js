@@ -386,6 +386,10 @@ export function ReadSessionFile() {
   return window['go']['main']['App']['ReadSessionFile']();
 }
 
+export function RedrawWindow(arg1, arg2) {
+  return window['go']['main']['App']['RedrawWindow'](arg1, arg2);
+}
+
 export function RefreshWindow(arg1, arg2) {
   return window['go']['main']['App']['RefreshWindow'](arg1, arg2);
 }

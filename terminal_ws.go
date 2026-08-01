@@ -457,6 +457,18 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 	//
 	// Falling back to the name keeps a failed lookup from blocking the attach:
 	// worst case is the behaviour we already had.
+	// Whether this connection owns a mirror session, recorded BEFORE the name is
+	// swapped for an id below.
+	//
+	// Resizing is allowed only on our own mirror — never on the shared base
+	// session, which would resize it under every other client. That check used
+	// to compare attachTarget against linkedName at resize time, but by then
+	// attachTarget holds a session id ($700) while linkedName is still a name,
+	// so it never matched and the resize was skipped: the window stayed at the
+	// size it was created with while the client asked for something else, and
+	// every line wrapped in the wrong place until the user pressed Refresh.
+	attachedToOwnMirror := attachTarget == linkedName
+
 	if id := session.SessionIDFor(attachTarget); id != "" && id != attachTarget {
 		log.Printf("[ws] attaching by id %s (%s)", id, attachTarget)
 		attachTarget = id
@@ -477,11 +489,22 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 	// attach with "open terminal failed: terminal does not support clear".
 	// xterm.js speaks xterm-256color, so pin that for the attach PTY.
 	cmd.Env = append(os.Environ(), "TERM=xterm-256color")
+	// Force a UTF-8 locale for the same reason.
+	//
+	// tmux decides whether to run in UTF-8 mode from LC_ALL/LC_CTYPE/LANG. A
+	// GUI launch inherits none of them — `launchctl getenv LANG` is empty on
+	// macOS, and a .desktop launch is no better — so tmux falls back to a
+	// non-UTF-8 mode and mangles every multi-byte character on its way to the
+	// client. The pane's own contents stay correct (verified with
+	// capture-pane: "Zoltán" arrives intact), which is what makes this look
+	// like a font or renderer fault: accented letters, box drawing and emoji
+	// come out as replacement blocks no matter which renderer draws them.
+	cmd.Env = append(cmd.Env, "LANG=en_US.UTF-8", "LC_ALL=en_US.UTF-8")
 
 	ptmx, err := session.StartTerminal(cmd)
 	if err != nil {
 		// Clean up linked session on error (only if it was created)
-		if attachTarget == linkedName {
+		if attachedToOwnMirror {
 			session.TmuxCommand("kill-session", "-t", linkedName).Run()
 		}
 		ws.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf("Error: %v", err)))
@@ -647,9 +670,10 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 			_ = cmd.Wait()
 
 			// Clean up the linked tmux session (only if it was created)
-			if attachTarget == linkedName {
+			if attachedToOwnMirror {
 				session.TmuxCommand("kill-session", "-t", linkedName).Run()
 			}
+			forgetRedrawSizes(sessionID, winIdx)
 			log.Printf("[ws] detach session=%s win=%d target=%s", sessionID, winIdx, attachTarget)
 		}()
 
@@ -730,12 +754,31 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 						// to protect — every attach is direct, so skipping the
 						// resize would leave the terminal stuck at its opening
 						// size for the whole run.
-						if attachTarget == linkedName || !session.MirrorSupported() {
+						if attachedToOwnMirror || !session.MirrorSupported() {
 							session.TmuxCommand("resize-window", "-t",
 								fmt.Sprintf("%s:%d", attachTarget, winIdx),
 								"-x", fmt.Sprintf("%d", cols),
 								"-y", fmt.Sprintf("%d", rows)).Run()
-							session.TmuxCommand("refresh-client", "-t", attachTarget).Run()
+							session.RefreshSessionClients(attachTarget)
+							// Ask the program itself to redraw at the new geometry.
+							//
+							// Only Ctrl-L does this: resize-window and refresh-client
+							// repaint what is already in the pane buffer, so a
+							// bottom-aligned TUI keeps the frame the old geometry gave
+							// it and the pane comes out offset.
+							//
+							// Rate-limited because sending TWO in quick succession is
+							// what misbehaves. One Ctrl-L is handled as a redraw and
+							// leaves the composer untouched (verified against a live
+							// Claude Code pane, before and after). Two arriving back to
+							// back — a resize immediately followed by another — put the
+							// prompt into a different state, which is where the stray
+							// "/clear" came from. A resize burst can easily produce
+							// several, so allow one per window per interval.
+							if allowRedrawKey(sessionID, winIdx, cols, rows) {
+								session.TmuxCommand("send-keys", "-t",
+									fmt.Sprintf("%s:%d", attachTarget, winIdx), "C-l").Run()
+							}
 						}
 					}
 				} else if len(data) >= 2 && data[0] == 0x02 {
@@ -755,8 +798,8 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 						// Coming back to the foreground: force tmux to repaint the
 						// pane so we recover everything that was dropped while
 						// hidden, in a single redraw.
-						if attachTarget == linkedName {
-							session.TmuxCommand("refresh-client", "-t", attachTarget).Run()
+						if attachedToOwnMirror {
+							session.RefreshSessionClients(attachTarget)
 						}
 					}
 				} else {
@@ -776,4 +819,60 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 // GetPort returns the WebSocket server port
 func (ts *TerminalServer) GetPort() int {
 	return ts.port
+}
+
+// redrawKeyGuard decides when the Ctrl-L that makes a TUI redraw may be sent.
+//
+// Ctrl-L is input. One is read as "redraw" and leaves an agent's composer
+// alone; two arriving close together do not behave the same way, and that pair
+// is what put a stray "/clear" into Claude Code's prompt.
+//
+// The rule is per-size, not per-interval, and not per-history:
+//
+//   - Not an interval. Measured gaps between real resizes ran from 206ms to
+//     6.5s, overlapping completely with the gaps inside a burst, so no
+//     threshold separates them.
+//   - Not "has this size been drawn before". That was tried and it broke
+//     restoring a window: the geometry it returns to is one the program drew at
+//     earlier, so the redraw was suppressed exactly when it was needed, and the
+//     pane came back offset. Both sizes in a maximise/restore are real —
+//     verified in the geometry log, where container, window and outer size all
+//     agree in each state.
+//
+// What is left is the one case that is genuinely redundant: the same size
+// arriving again with nothing changed in between. A resize burst repeats its
+// final value, and the repeats are what pair up.
+var redrawKeyGuard struct {
+	sync.Mutex
+	// The size each window was last asked to redraw at.
+	lastSize map[string]string
+}
+
+// allowRedrawKey reports whether a redraw keystroke is worth sending for this
+// window at this size, recording the size when it is.
+func allowRedrawKey(sessionID string, winIdx, cols, rows int) bool {
+	key := fmt.Sprintf("%s:%d", sessionID, winIdx)
+	size := fmt.Sprintf("%dx%d", cols, rows)
+
+	redrawKeyGuard.Lock()
+	defer redrawKeyGuard.Unlock()
+	if redrawKeyGuard.lastSize == nil {
+		redrawKeyGuard.lastSize = make(map[string]string)
+	}
+	if redrawKeyGuard.lastSize[key] == size {
+		return false // same geometry again: nothing moved, nothing to redraw
+	}
+	redrawKeyGuard.lastSize[key] = size
+	return true
+}
+
+// forgetRedrawSizes drops a window's recorded geometry, so the next resize is
+// treated as new. Called when a pane is torn down: the program behind it will
+// have been replaced by then, and what the old one was drawn at says nothing
+// about the new one.
+func forgetRedrawSizes(sessionID string, winIdx int) {
+	key := fmt.Sprintf("%s:%d", sessionID, winIdx)
+	redrawKeyGuard.Lock()
+	defer redrawKeyGuard.Unlock()
+	delete(redrawKeyGuard.lastSize, key)
 }
