@@ -46,6 +46,7 @@
   "mainPanel.notes": "บันทึก",
   "mainPanel.tasks": "งาน",
   "mainPanel.browser": "ไฟล์",
+  "mainPanel.openInFileManager": "เปิดในตัวจัดการไฟล์",
   "mainPanel.yoloOn": "โหมด YOLO เปิดอยู่ - คลิกเพื่อปิด",
   "mainPanel.yoloEnable": "เปิดโหมด YOLO (อนุมัติอัตโนมัติ)",
   "mainPanel.yoloLabel": "YOLO",
@@ -960,5 +961,9 @@
   "browser.caretSelection": "เลือก {n}",
   "browser.caretTotal": "{n} บรรทัด",
   "dictation.mic_unavailable_title": "ไม่พบไมโครโฟน",
-  "dictation.mic_unavailable_message": "การพิมพ์ด้วยเสียงต้องใช้ไมโครโฟน เชื่อมต่อแล้วลองอีกครั้ง"
+  "dictation.mic_unavailable_message": "การพิมพ์ด้วยเสียงต้องใช้ไมโครโฟน เชื่อมต่อแล้วลองอีกครั้ง",
+  "error.directoryNotFound": "ไม่พบโฟลเดอร์",
+  "error.notADirectory": "ไม่พบโฟลเดอร์",
+  "error.fileManagerFailed": "ไม่สามารถเปิดตัวจัดการไฟล์ได้",
+  "error.noDirectory": "ไม่พบโฟลเดอร์"
 }

@@ -46,6 +46,7 @@
   "mainPanel.notes": "Заметки",
   "mainPanel.tasks": "Задачи",
   "mainPanel.browser": "Файлы",
+  "mainPanel.openInFileManager": "Открыть в файловом менеджере",
   "mainPanel.yoloOn": "Режим YOLO ВКЛЮЧЁН - нажмите для отключения",
   "mainPanel.yoloEnable": "Включить режим YOLO (автоодобрение)",
   "mainPanel.yoloLabel": "YOLO",
@@ -960,5 +961,9 @@
   "browser.caretSelection": "выделено {n}",
   "browser.caretTotal": "{n} строк",
   "dictation.mic_unavailable_title": "Микрофон не найден",
-  "dictation.mic_unavailable_message": "Для диктовки нужен микрофон. Подключите его и попробуйте снова."
+  "dictation.mic_unavailable_message": "Для диктовки нужен микрофон. Подключите его и попробуйте снова.",
+  "error.directoryNotFound": "Папка не найдена",
+  "error.notADirectory": "Папка не найдена",
+  "error.fileManagerFailed": "Не удалось открыть файловый менеджер",
+  "error.noDirectory": "Папка не найдена"
 }

@@ -46,6 +46,7 @@
   "mainPanel.notes": "Notlar",
   "mainPanel.tasks": "Görevler",
   "mainPanel.browser": "Dosyalar",
+  "mainPanel.openInFileManager": "Dosya yöneticisinde aç",
   "mainPanel.yoloOn": "YOLO modu AÇIK - devre dışı bırakmak için tıklayın",
   "mainPanel.yoloEnable": "YOLO modunu etkinleştir (otomatik onay)",
   "mainPanel.yoloLabel": "YOLO",
@@ -960,5 +961,9 @@
   "browser.caretSelection": "{n} seçili",
   "browser.caretTotal": "{n} satır",
   "dictation.mic_unavailable_title": "Mikrofon bulunamadı",
-  "dictation.mic_unavailable_message": "Dikte için mikrofon gerekir. Bir tane bağlayıp tekrar deneyin."
+  "dictation.mic_unavailable_message": "Dikte için mikrofon gerekir. Bir tane bağlayıp tekrar deneyin.",
+  "error.directoryNotFound": "Klasör bulunamadı",
+  "error.notADirectory": "Klasör bulunamadı",
+  "error.fileManagerFailed": "Dosya yöneticisi açılamadı",
+  "error.noDirectory": "Klasör bulunamadı"
 }

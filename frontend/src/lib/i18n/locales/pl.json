@@ -46,6 +46,7 @@
   "mainPanel.notes": "Notatki",
   "mainPanel.tasks": "Zadania",
   "mainPanel.browser": "Pliki",
+  "mainPanel.openInFileManager": "Otwórz w menedżerze plików",
   "mainPanel.yoloOn": "Tryb YOLO WŁĄCZONY - kliknij, aby wyłączyć",
   "mainPanel.yoloEnable": "Włącz tryb YOLO (automatyczne zatwierdzanie)",
   "mainPanel.yoloLabel": "YOLO",
@@ -960,5 +961,9 @@
   "browser.caretSelection": "zaznaczono {n}",
   "browser.caretTotal": "{n} wierszy",
   "dictation.mic_unavailable_title": "Nie znaleziono mikrofonu",
-  "dictation.mic_unavailable_message": "Dyktowanie wymaga mikrofonu. Podłącz go i spróbuj ponownie."
+  "dictation.mic_unavailable_message": "Dyktowanie wymaga mikrofonu. Podłącz go i spróbuj ponownie.",
+  "error.directoryNotFound": "Nie znaleziono katalogu",
+  "error.notADirectory": "Nie znaleziono katalogu",
+  "error.fileManagerFailed": "Nie można otworzyć menedżera plików",
+  "error.noDirectory": "Nie znaleziono katalogu"
 }

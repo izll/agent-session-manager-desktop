@@ -2240,6 +2240,16 @@ func (a *App) RedrawWindow(sessionID string, windowIdx int) error {
 	return nil
 }
 
+// OpenFolder shows a directory in the desktop's file manager.
+//
+// Takes a path rather than a session id because the caller is the status bar,
+// which shows the TAB's directory resolved live from the pane: a tab can be
+// opened in its own directory, and the pane may have been cd-ed elsewhere
+// since. The session's own path would be the wrong one in both cases.
+func (a *App) OpenFolder(path string) error {
+	return session.OpenInFileManager(path)
+}
+
 // ============================================================================
 // Diff View
 // ============================================================================

@@ -200,6 +200,7 @@
   "mainPanel.notes": "Jegyzetek",
   "mainPanel.tasks": "Feladatok",
   "mainPanel.browser": "Fájlok",
+  "mainPanel.openInFileManager": "Megnyitás fájlkezelőben",
   "mainPanel.yoloOn": "YOLO mód BE - kattints a kikapcsoláshoz",
   "mainPanel.yoloEnable": "YOLO mód bekapcsolása (automatikus jóváhagyás)",
   "mainPanel.yoloLabel": "YOLO",
@@ -960,5 +961,9 @@
   "browser.caretSelection": "{n} kijelölve",
   "browser.caretTotal": "{n} sor",
   "dictation.mic_unavailable_title": "Nincs mikrofon",
-  "dictation.mic_unavailable_message": "A diktáláshoz mikrofon kell. Csatlakoztass egyet, és próbáld újra."
+  "dictation.mic_unavailable_message": "A diktáláshoz mikrofon kell. Csatlakoztass egyet, és próbáld újra.",
+  "error.directoryNotFound": "A mappa nem található",
+  "error.notADirectory": "A mappa nem található",
+  "error.fileManagerFailed": "A fájlkezelő megnyitása nem sikerült",
+  "error.noDirectory": "A mappa nem található"
 }

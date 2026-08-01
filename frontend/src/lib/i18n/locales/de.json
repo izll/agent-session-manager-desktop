@@ -46,6 +46,7 @@
   "mainPanel.notes": "Notizen",
   "mainPanel.tasks": "Aufgaben",
   "mainPanel.browser": "Dateien",
+  "mainPanel.openInFileManager": "Im Dateimanager öffnen",
   "mainPanel.yoloOn": "YOLO-Modus AN - zum Deaktivieren klicken",
   "mainPanel.yoloEnable": "YOLO-Modus aktivieren (automatische Genehmigung)",
   "mainPanel.yoloLabel": "YOLO",
@@ -960,5 +961,9 @@
   "browser.caretSelection": "{n} ausgewählt",
   "browser.caretTotal": "{n} Zeilen",
   "dictation.mic_unavailable_title": "Kein Mikrofon gefunden",
-  "dictation.mic_unavailable_message": "Für das Diktieren wird ein Mikrofon benötigt. Schließe eines an und versuche es erneut."
+  "dictation.mic_unavailable_message": "Für das Diktieren wird ein Mikrofon benötigt. Schließe eines an und versuche es erneut.",
+  "error.directoryNotFound": "Verzeichnis nicht gefunden",
+  "error.notADirectory": "Verzeichnis nicht gefunden",
+  "error.fileManagerFailed": "Dateimanager konnte nicht geöffnet werden",
+  "error.noDirectory": "Verzeichnis nicht gefunden"
 }

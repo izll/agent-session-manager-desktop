@@ -46,6 +46,7 @@
   "mainPanel.notes": "ملاحظات",
   "mainPanel.tasks": "المهام",
   "mainPanel.browser": "الملفات",
+  "mainPanel.openInFileManager": "فتح في مدير الملفات",
   "mainPanel.yoloOn": "وضع YOLO مُفعّل - انقر للتعطيل",
   "mainPanel.yoloEnable": "تفعيل وضع YOLO (موافقة تلقائية)",
   "mainPanel.yoloLabel": "YOLO",
@@ -960,5 +961,9 @@
   "browser.caretSelection": "{n} محدد",
   "browser.caretTotal": "{n} سطر",
   "dictation.mic_unavailable_title": "لم يتم العثور على ميكروفون",
-  "dictation.mic_unavailable_message": "الإملاء يحتاج إلى ميكروفون. قم بتوصيل واحد وحاول مرة أخرى."
+  "dictation.mic_unavailable_message": "الإملاء يحتاج إلى ميكروفون. قم بتوصيل واحد وحاول مرة أخرى.",
+  "error.directoryNotFound": "المجلد غير موجود",
+  "error.notADirectory": "المجلد غير موجود",
+  "error.fileManagerFailed": "تعذر فتح مدير الملفات",
+  "error.noDirectory": "المجلد غير موجود"
 }

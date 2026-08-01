@@ -181,6 +181,8 @@ export function MoveSessionToIndex(arg1:string,arg2:number):Promise<void>;
 
 export function MoveTask(arg1:string,arg2:string,arg3:string):Promise<void>;
 
+export function OpenFolder(arg1:string):Promise<void>;
+
 export function OpenSessionFileForEdit(arg1:string,arg2:string):Promise<session.EditableFile>;
 
 export function PendingUpdate():Promise<string>;

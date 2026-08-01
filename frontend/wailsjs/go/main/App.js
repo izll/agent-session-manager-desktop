@@ -358,6 +358,10 @@ export function MoveTask(arg1, arg2, arg3) {
   return window['go']['main']['App']['MoveTask'](arg1, arg2, arg3);
 }
 
+export function OpenFolder(arg1) {
+  return window['go']['main']['App']['OpenFolder'](arg1);
+}
+
 export function OpenSessionFileForEdit(arg1, arg2) {
   return window['go']['main']['App']['OpenSessionFileForEdit'](arg1, arg2);
 }

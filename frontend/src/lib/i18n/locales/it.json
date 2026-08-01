@@ -46,6 +46,7 @@
   "mainPanel.notes": "Note",
   "mainPanel.tasks": "Attività",
   "mainPanel.browser": "File",
+  "mainPanel.openInFileManager": "Apri nel file manager",
   "mainPanel.yoloOn": "Modalità YOLO ATTIVA - clicca per disattivare",
   "mainPanel.yoloEnable": "Attiva modalità YOLO (approvazione automatica)",
   "mainPanel.yoloLabel": "YOLO",
@@ -960,5 +961,9 @@
   "browser.caretSelection": "{n} selezionati",
   "browser.caretTotal": "{n} righe",
   "dictation.mic_unavailable_title": "Nessun microfono trovato",
-  "dictation.mic_unavailable_message": "La dettatura richiede un microfono. Collegane uno e riprova."
+  "dictation.mic_unavailable_message": "La dettatura richiede un microfono. Collegane uno e riprova.",
+  "error.directoryNotFound": "Cartella non trovata",
+  "error.notADirectory": "Cartella non trovata",
+  "error.fileManagerFailed": "Impossibile aprire il file manager",
+  "error.noDirectory": "Cartella non trovata"
 }

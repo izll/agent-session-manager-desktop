@@ -46,6 +46,7 @@
   "mainPanel.notes": "메모",
   "mainPanel.tasks": "작업",
   "mainPanel.browser": "파일",
+  "mainPanel.openInFileManager": "파일 관리자에서 열기",
   "mainPanel.yoloOn": "YOLO 모드 켜짐 - 클릭하여 비활성화",
   "mainPanel.yoloEnable": "YOLO 모드 활성화 (자동 승인)",
   "mainPanel.yoloLabel": "YOLO",
@@ -960,5 +961,9 @@
   "browser.caretSelection": "{n}자 선택됨",
   "browser.caretTotal": "{n}줄",
   "dictation.mic_unavailable_title": "마이크를 찾을 수 없습니다",
-  "dictation.mic_unavailable_message": "받아쓰기에는 마이크가 필요합니다. 연결한 후 다시 시도하세요."
+  "dictation.mic_unavailable_message": "받아쓰기에는 마이크가 필요합니다. 연결한 후 다시 시도하세요.",
+  "error.directoryNotFound": "폴더를 찾을 수 없습니다",
+  "error.notADirectory": "폴더를 찾을 수 없습니다",
+  "error.fileManagerFailed": "파일 관리자를 열 수 없습니다",
+  "error.noDirectory": "폴더를 찾을 수 없습니다"
 }

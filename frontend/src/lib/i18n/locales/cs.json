@@ -46,6 +46,7 @@
   "mainPanel.notes": "Poznámky",
   "mainPanel.tasks": "Úkoly",
   "mainPanel.browser": "Soubory",
+  "mainPanel.openInFileManager": "Otevřít ve správci souborů",
   "mainPanel.yoloOn": "Režim YOLO ZAPNUT - klikněte pro vypnutí",
   "mainPanel.yoloEnable": "Zapnout režim YOLO (automatické schvalování)",
   "mainPanel.yoloLabel": "YOLO",
@@ -960,5 +961,9 @@
   "browser.caretSelection": "vybráno {n}",
   "browser.caretTotal": "{n} řádků",
   "dictation.mic_unavailable_title": "Mikrofon nenalezen",
-  "dictation.mic_unavailable_message": "Diktování vyžaduje mikrofon. Připojte jej a zkuste to znovu."
+  "dictation.mic_unavailable_message": "Diktování vyžaduje mikrofon. Připojte jej a zkuste to znovu.",
+  "error.directoryNotFound": "Složka nenalezena",
+  "error.notADirectory": "Složka nenalezena",
+  "error.fileManagerFailed": "Správce souborů se nepodařilo otevřít",
+  "error.noDirectory": "Složka nenalezena"
 }

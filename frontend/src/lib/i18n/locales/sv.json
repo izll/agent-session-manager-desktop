@@ -46,6 +46,7 @@
   "mainPanel.notes": "Anteckningar",
   "mainPanel.tasks": "Uppgifter",
   "mainPanel.browser": "Filer",
+  "mainPanel.openInFileManager": "Öppna i filhanteraren",
   "mainPanel.yoloOn": "YOLO-läge PÅ - klicka för att inaktivera",
   "mainPanel.yoloEnable": "Aktivera YOLO-läge (automatiskt godkännande)",
   "mainPanel.yoloLabel": "YOLO",
@@ -960,5 +961,9 @@
   "browser.caretSelection": "{n} markerade",
   "browser.caretTotal": "{n} rader",
   "dictation.mic_unavailable_title": "Ingen mikrofon hittades",
-  "dictation.mic_unavailable_message": "Diktering kräver en mikrofon. Anslut en och försök igen."
+  "dictation.mic_unavailable_message": "Diktering kräver en mikrofon. Anslut en och försök igen.",
+  "error.directoryNotFound": "Mappen hittades inte",
+  "error.notADirectory": "Mappen hittades inte",
+  "error.fileManagerFailed": "Det gick inte att öppna filhanteraren",
+  "error.noDirectory": "Mappen hittades inte"
 }

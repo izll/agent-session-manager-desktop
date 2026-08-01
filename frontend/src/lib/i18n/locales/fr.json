@@ -46,6 +46,7 @@
   "mainPanel.notes": "Notes",
   "mainPanel.tasks": "Tâches",
   "mainPanel.browser": "Fichiers",
+  "mainPanel.openInFileManager": "Ouvrir dans le gestionnaire de fichiers",
   "mainPanel.yoloOn": "Mode YOLO ACTIVÉ - cliquez pour désactiver",
   "mainPanel.yoloEnable": "Activer le mode YOLO (approbation automatique)",
   "mainPanel.yoloLabel": "YOLO",
@@ -960,5 +961,9 @@
   "browser.caretSelection": "{n} sélectionnés",
   "browser.caretTotal": "{n} lignes",
   "dictation.mic_unavailable_title": "Aucun microphone trouvé",
-  "dictation.mic_unavailable_message": "La dictée nécessite un microphone. Branchez-en un et réessayez."
+  "dictation.mic_unavailable_message": "La dictée nécessite un microphone. Branchez-en un et réessayez.",
+  "error.directoryNotFound": "Dossier introuvable",
+  "error.notADirectory": "Dossier introuvable",
+  "error.fileManagerFailed": "Impossible d'ouvrir le gestionnaire de fichiers",
+  "error.noDirectory": "Dossier introuvable"
 }

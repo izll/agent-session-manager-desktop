@@ -46,6 +46,7 @@
   "mainPanel.notes": "Notas",
   "mainPanel.tasks": "Tareas",
   "mainPanel.browser": "Archivos",
+  "mainPanel.openInFileManager": "Abrir en el explorador de archivos",
   "mainPanel.yoloOn": "Modo YOLO ACTIVADO - clic para desactivar",
   "mainPanel.yoloEnable": "Activar modo YOLO (aprobación automática)",
   "mainPanel.yoloLabel": "YOLO",
@@ -960,5 +961,9 @@
   "browser.caretSelection": "{n} seleccionados",
   "browser.caretTotal": "{n} líneas",
   "dictation.mic_unavailable_title": "No se encontró micrófono",
-  "dictation.mic_unavailable_message": "El dictado necesita un micrófono. Conecta uno e inténtalo de nuevo."
+  "dictation.mic_unavailable_message": "El dictado necesita un micrófono. Conecta uno e inténtalo de nuevo.",
+  "error.directoryNotFound": "Carpeta no encontrada",
+  "error.notADirectory": "Carpeta no encontrada",
+  "error.fileManagerFailed": "No se pudo abrir el explorador de archivos",
+  "error.noDirectory": "Carpeta no encontrada"
 }

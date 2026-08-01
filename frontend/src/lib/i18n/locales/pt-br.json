@@ -46,6 +46,7 @@
   "mainPanel.notes": "Notas",
   "mainPanel.tasks": "Tarefas",
   "mainPanel.browser": "Arquivos",
+  "mainPanel.openInFileManager": "Abrir no gerenciador de arquivos",
   "mainPanel.yoloOn": "Modo YOLO ATIVADO - clique para desativar",
   "mainPanel.yoloEnable": "Ativar modo YOLO (aprovação automática)",
   "mainPanel.yoloLabel": "YOLO",
@@ -960,5 +961,9 @@
   "browser.caretSelection": "{n} selecionados",
   "browser.caretTotal": "{n} linhas",
   "dictation.mic_unavailable_title": "Nenhum microfone encontrado",
-  "dictation.mic_unavailable_message": "O ditado precisa de um microfone. Conecte um e tente novamente."
+  "dictation.mic_unavailable_message": "O ditado precisa de um microfone. Conecte um e tente novamente.",
+  "error.directoryNotFound": "Pasta não encontrada",
+  "error.notADirectory": "Pasta não encontrada",
+  "error.fileManagerFailed": "Não foi possível abrir o gerenciador de arquivos",
+  "error.noDirectory": "Pasta não encontrada"
 }

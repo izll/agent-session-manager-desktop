@@ -46,6 +46,7 @@
   "mainPanel.notes": "笔记",
   "mainPanel.tasks": "任务",
   "mainPanel.browser": "文件",
+  "mainPanel.openInFileManager": "在文件管理器中打开",
   "mainPanel.yoloOn": "YOLO 模式已开启 - 点击关闭",
   "mainPanel.yoloEnable": "启用 YOLO 模式（自动批准）",
   "mainPanel.yoloLabel": "YOLO",
@@ -960,5 +961,9 @@
   "browser.caretSelection": "已选 {n} 个字符",
   "browser.caretTotal": "{n} 行",
   "dictation.mic_unavailable_title": "未找到麦克风",
-  "dictation.mic_unavailable_message": "听写需要麦克风。请连接后重试。"
+  "dictation.mic_unavailable_message": "听写需要麦克风。请连接后重试。",
+  "error.directoryNotFound": "未找到文件夹",
+  "error.notADirectory": "未找到文件夹",
+  "error.fileManagerFailed": "无法打开文件管理器",
+  "error.noDirectory": "未找到文件夹"
 }

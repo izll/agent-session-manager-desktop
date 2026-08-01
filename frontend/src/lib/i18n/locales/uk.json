@@ -46,6 +46,7 @@
   "mainPanel.notes": "Нотатки",
   "mainPanel.tasks": "Завдання",
   "mainPanel.browser": "Файли",
+  "mainPanel.openInFileManager": "Відкрити у файловому менеджері",
   "mainPanel.yoloOn": "Режим YOLO УВІМКНЕНО - натисніть для вимкнення",
   "mainPanel.yoloEnable": "Увімкнути режим YOLO (автоматичне підтвердження)",
   "mainPanel.yoloLabel": "YOLO",
@@ -960,5 +961,9 @@
   "browser.caretSelection": "вибрано {n}",
   "browser.caretTotal": "{n} рядків",
   "dictation.mic_unavailable_title": "Мікрофон не знайдено",
-  "dictation.mic_unavailable_message": "Для диктування потрібен мікрофон. Підключіть його та спробуйте ще раз."
+  "dictation.mic_unavailable_message": "Для диктування потрібен мікрофон. Підключіть його та спробуйте ще раз.",
+  "error.directoryNotFound": "Теку не знайдено",
+  "error.notADirectory": "Теку не знайдено",
+  "error.fileManagerFailed": "Не вдалося відкрити файловий менеджер",
+  "error.noDirectory": "Теку не знайдено"
 }

@@ -46,6 +46,7 @@
   "mainPanel.notes": "メモ",
   "mainPanel.tasks": "タスク",
   "mainPanel.browser": "ファイル",
+  "mainPanel.openInFileManager": "ファイルマネージャーで開く",
   "mainPanel.yoloOn": "YOLO モード ON - クリックで無効化",
   "mainPanel.yoloEnable": "YOLO モードを有効化（自動承認）",
   "mainPanel.yoloLabel": "YOLO",
@@ -960,5 +961,9 @@
   "browser.caretSelection": "{n} 文字選択",
   "browser.caretTotal": "{n} 行",
   "dictation.mic_unavailable_title": "マイクが見つかりません",
-  "dictation.mic_unavailable_message": "音声入力にはマイクが必要です。接続してからもう一度お試しください。"
+  "dictation.mic_unavailable_message": "音声入力にはマイクが必要です。接続してからもう一度お試しください。",
+  "error.directoryNotFound": "フォルダーが見つかりません",
+  "error.notADirectory": "フォルダーが見つかりません",
+  "error.fileManagerFailed": "ファイルマネージャーを開けませんでした",
+  "error.noDirectory": "フォルダーが見つかりません"
 }

@@ -17,6 +17,7 @@
   import { resolveViewBarHidden } from '../../utils/terminalThemes';
   import * as App from '../../../../wailsjs/go/main/App';
   import { t } from '../../i18n';
+  import Toast from '../common/Toast.svelte';
 
   const dispatch = createEventDispatcher();
 
@@ -402,6 +403,25 @@
     if (parts.length <= 3) return path;
     return '.../' + parts.slice(-3).join('/');
   }
+
+  // Open the directory shown in the status bar in the desktop's file manager.
+  //
+  // Sends the path rather than the session id: the status bar shows the TAB's
+  // directory, resolved live from the pane, so a tab opened elsewhere — or
+  // cd-ed since — opens what the user is actually looking at.
+  let folderErrorMessage = '';
+  let showFolderError = false;
+  async function handleOpenFolder() {
+    if (!currentTabPath) return;
+    try {
+      await App.OpenFolder(currentTabPath);
+    } catch (e) {
+      const key = String(e);
+      const translated = $t(key);
+      folderErrorMessage = translated === key ? String(e) : translated;
+      showFolderError = true;
+    }
+  }
 </script>
 
 <div class="main-panel h-full flex flex-col">
@@ -623,11 +643,24 @@
     <!-- Status Bar -->
     <div class="status-bar" class:hidden={statusBarHidden}>
       <div class="status-left">
-        <!-- Path -->
-        <div class="status-item" title={currentTabPath}>
+        <!-- Open the current directory in the desktop's file manager.
+             Sits in the status bar rather than the header because the path it
+             opens is the one shown right beside it, which is per TAB: a tab can
+             be opened in its own directory, and the pane may have been cd-ed
+             elsewhere since. -->
+        <button
+          class="status-item status-folder"
+          title={currentTabPath ? $t('mainPanel.openInFileManager') : ''}
+          disabled={!currentTabPath}
+          on:click={handleOpenFolder}
+        >
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/>
           </svg>
+        </button>
+
+        <!-- Path -->
+        <div class="status-item" title={currentTabPath}>
           <span class="status-path">{truncatePath(currentTabPath)}</span>
         </div>
 
@@ -681,6 +714,8 @@
     </div>
   {/if}
 </div>
+
+<Toast bind:show={showFolderError} message={folderErrorMessage} variant="error" />
 
 <ForkDialog bind:show={showForkDialog} />
 
@@ -918,6 +953,30 @@
 
   .status-item svg {
     flex-shrink: 0;
+  }
+
+  /* The folder icon doubles as the button that opens it, so it has to look
+     clickable without growing the status bar — hence a bare button reset with
+     hover feedback rather than a control of its own. */
+  .status-folder {
+    background: none;
+    border: none;
+    padding: 2px 4px;
+    margin: 0 -2px 0 0;
+    border-radius: 4px;
+    cursor: pointer;
+    color: inherit;
+    transition: background 0.12s, color 0.12s;
+  }
+
+  .status-folder:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.08);
+    color: #a5b4fc;
+  }
+
+  .status-folder:disabled {
+    cursor: default;
+    opacity: 0.5;
   }
 
   .status-path {

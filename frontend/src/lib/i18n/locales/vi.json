@@ -46,6 +46,7 @@
   "mainPanel.notes": "Ghi chú",
   "mainPanel.tasks": "Công việc",
   "mainPanel.browser": "Tệp",
+  "mainPanel.openInFileManager": "Mở trong trình quản lý tệp",
   "mainPanel.yoloOn": "Chế độ YOLO BẬT - nhấp để tắt",
   "mainPanel.yoloEnable": "Bật chế độ YOLO (tự động duyệt)",
   "mainPanel.yoloLabel": "YOLO",
@@ -960,5 +961,9 @@
   "browser.caretSelection": "đã chọn {n}",
   "browser.caretTotal": "{n} dòng",
   "dictation.mic_unavailable_title": "Không tìm thấy micrô",
-  "dictation.mic_unavailable_message": "Đọc chính tả cần micrô. Hãy kết nối rồi thử lại."
+  "dictation.mic_unavailable_message": "Đọc chính tả cần micrô. Hãy kết nối rồi thử lại.",
+  "error.directoryNotFound": "Không tìm thấy thư mục",
+  "error.notADirectory": "Không tìm thấy thư mục",
+  "error.fileManagerFailed": "Không thể mở trình quản lý tệp",
+  "error.noDirectory": "Không tìm thấy thư mục"
 }

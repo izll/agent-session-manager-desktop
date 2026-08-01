@@ -46,6 +46,7 @@
   "mainPanel.notes": "Notities",
   "mainPanel.tasks": "Taken",
   "mainPanel.browser": "Bestanden",
+  "mainPanel.openInFileManager": "Openen in bestandsbeheer",
   "mainPanel.yoloOn": "YOLO-modus AAN - klik om uit te schakelen",
   "mainPanel.yoloEnable": "YOLO-modus inschakelen (automatisch goedkeuren)",
   "mainPanel.yoloLabel": "YOLO",
@@ -960,5 +961,9 @@
   "browser.caretSelection": "{n} geselecteerd",
   "browser.caretTotal": "{n} regels",
   "dictation.mic_unavailable_title": "Geen microfoon gevonden",
-  "dictation.mic_unavailable_message": "Dicteren vereist een microfoon. Sluit er een aan en probeer het opnieuw."
+  "dictation.mic_unavailable_message": "Dicteren vereist een microfoon. Sluit er een aan en probeer het opnieuw.",
+  "error.directoryNotFound": "Map niet gevonden",
+  "error.notADirectory": "Map niet gevonden",
+  "error.fileManagerFailed": "Kan bestandsbeheer niet openen",
+  "error.noDirectory": "Map niet gevonden"
 }
