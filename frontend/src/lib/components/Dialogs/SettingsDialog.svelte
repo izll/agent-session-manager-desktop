@@ -93,6 +93,23 @@
     saveSettings({ terminalRenderer: r as 'canvas' | 'webgl' | 'dom' });
   }
 
+  // Stacks that exist without installing anything, plus the app's own default.
+  // Named families are quoted where they contain a space; the terminal appends
+  // a generic if the user's own entry lacks one.
+  $: fontOptions = [
+    { value: '', label: $t('settings.fontDefault') },
+    { value: 'Menlo, monospace', label: 'Menlo' },
+    { value: '"DejaVu Sans Mono", monospace', label: 'DejaVu Sans Mono' },
+    { value: '"Liberation Mono", monospace', label: 'Liberation Mono' },
+    { value: 'Consolas, monospace', label: 'Consolas' },
+    { value: '"Courier New", monospace', label: 'Courier New' },
+    { value: 'monospace', label: $t('settings.fontSystemMono') },
+  ];
+
+  function changeFontFamily(v: string) {
+    saveSettings({ terminalFontFamily: v });
+  }
+
   $: copyModeOptions = [
     { value: 'shift', label: $t('settings.copyModeShift') },
     { value: 'select', label: $t('settings.copyModeSelect') },
@@ -476,6 +493,18 @@
                 value={$settings.terminalRenderer || 'canvas'}
                 options={rendererOptions}
                 on:change={(e) => changeRenderer(e.detail)}
+              />
+            </div>
+
+            <div class="setting-item input-item">
+              <span class="setting-info">
+                <span class="setting-label">{$t('settings.terminalFont')}</span>
+                <span class="setting-desc">{$t('settings.terminalFontDesc')}</span>
+              </span>
+              <Select
+                value={$settings.terminalFontFamily || ''}
+                options={fontOptions}
+                on:change={(e) => changeFontFamily(e.detail)}
               />
             </div>
 

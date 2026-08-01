@@ -59,7 +59,23 @@ export PKG_CONFIG_PATH="$CACHE/pkgconfig"
 export CGO_ENABLED=1
 export CC=x86_64-w64-mingw32-gcc
 export CXX=x86_64-w64-mingw32-g++
+
+# -clean empties build/bin, which is shared with the Linux build — cross-
+# building for Windows would otherwise delete the binary the user actually
+# runs (via ~/zbin/asmgrd), leaving "asmgr-desktop-run: not found" behind.
+# Set them aside and put them back afterwards.
+PRESERVE_DIR="$(mktemp -d)"
+trap 'rm -rf "$PRESERVE_DIR"' EXIT
+for f in asmgr-desktop asmgr-desktop-dev asmgr-desktop-run; do
+  [ -f "$REPO/build/bin/$f" ] && cp -p "$REPO/build/bin/$f" "$PRESERVE_DIR/"
+done
+
 "$WAILS" build -platform windows/amd64 -clean -ldflags "-X main.Version=$VERSION"
+
+# Restore whatever was preserved above; -clean has run by now.
+for f in "$PRESERVE_DIR"/*; do
+  [ -e "$f" ] && cp -p "$f" "$REPO/build/bin/"
+done
 
 # The DLLs the binary links against have to sit beside it, exactly as the
 # release archive ships them — the app does not start without them.

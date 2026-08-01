@@ -239,10 +239,18 @@ func NewAppService() *AppService {
 		}()
 	}, "send")
 
-	// Enable hotkey
-	err = app.hotkeyManager.Enable()
-	if err != nil {
-		fmt.Printf("Warning: Failed to enable hotkey: %v\n", err)
+	// Start the global hotkey listener only when dictation is actually on.
+	//
+	// It installs a system-wide keyboard hook, and on macOS that makes the OS
+	// demand Accessibility permission — a modal the user gets on every launch,
+	// for a feature they may never use. (Worse with an ad-hoc signature: the
+	// permission is tied to the signature, so each new build asks again.)
+	// Turning dictation on in Settings calls Enable() from SaveSettings, so
+	// nothing is lost by waiting until then.
+	if app.settings.Enabled {
+		if err = app.hotkeyManager.Enable(); err != nil {
+			fmt.Printf("Warning: Failed to enable hotkey: %v\n", err)
+		}
 	}
 
 	return app
@@ -490,6 +498,16 @@ func (a *AppService) SaveSettings(settings Settings) error {
 	}
 
 	fmt.Printf("✅ Settings saved to: %s\n", settingsPath)
+
+	// Start the global hotkey listener the moment dictation is switched on.
+	// Startup deliberately skips it while dictation is off (it triggers the
+	// macOS Accessibility prompt), so this is what makes the hotkey work
+	// without restarting the app. Enable() returns early if already running.
+	if settings.Enabled && a.hotkeyManager != nil {
+		if err := a.hotkeyManager.Enable(); err != nil {
+			fmt.Printf("Warning: Failed to enable hotkey: %v\n", err)
+		}
+	}
 
 	// If mode changed while recording, restart recording with new mode
 	if wasListening && oldMode != newMode {
