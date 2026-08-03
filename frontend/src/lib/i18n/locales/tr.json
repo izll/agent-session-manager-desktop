@@ -972,5 +972,6 @@
   "diff.group.deleted": "Silinen",
   "diff.filterAll": "Tümü",
   "settings.restoreLastSession": "Son oturumu yeniden aç",
-  "settings.restoreLastSessionDesc": "Panel yerine kapatırken açık olan oturumda başlat"
+  "settings.restoreLastSessionDesc": "Panel yerine kapatırken açık olan oturumda başlat",
+  "terminal.refreshing": "Yenileniyor…"
 }

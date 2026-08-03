@@ -972,5 +972,6 @@
   "diff.group.deleted": "Đã xóa",
   "diff.filterAll": "Tất cả",
   "settings.restoreLastSession": "Mở lại phiên gần nhất",
-  "settings.restoreLastSessionDesc": "Khởi động trong phiên đang mở khi đóng ứng dụng, thay vì bảng điều khiển"
+  "settings.restoreLastSessionDesc": "Khởi động trong phiên đang mở khi đóng ứng dụng, thay vì bảng điều khiển",
+  "terminal.refreshing": "Đang làm mới…"
 }

@@ -972,5 +972,6 @@
   "diff.group.deleted": "Deleted",
   "diff.filterAll": "All",
   "settings.restoreLastSession": "Reopen last session",
-  "settings.restoreLastSessionDesc": "Start in the session that was open when you last closed the app, instead of on the dashboard"
+  "settings.restoreLastSessionDesc": "Start in the session that was open when you last closed the app, instead of on the dashboard",
+  "terminal.refreshing": "Refreshing…"
 }

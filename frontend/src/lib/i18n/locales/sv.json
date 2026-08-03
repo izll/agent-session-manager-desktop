@@ -972,5 +972,6 @@
   "diff.group.deleted": "Borttagna",
   "diff.filterAll": "Alla",
   "settings.restoreLastSession": "Öppna senaste sessionen",
-  "settings.restoreLastSessionDesc": "Starta i sessionen som var öppen vid avslut, i stället för översikten"
+  "settings.restoreLastSessionDesc": "Starta i sessionen som var öppen vid avslut, i stället för översikten",
+  "terminal.refreshing": "Uppdaterar…"
 }

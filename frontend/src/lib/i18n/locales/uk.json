@@ -972,5 +972,6 @@
   "diff.group.deleted": "Видалені",
   "diff.filterAll": "Усі",
   "settings.restoreLastSession": "Відкривати останню сесію",
-  "settings.restoreLastSessionDesc": "Запускатися в сесії, відкритій при закритті, замість панелі"
+  "settings.restoreLastSessionDesc": "Запускатися в сесії, відкритій при закритті, замість панелі",
+  "terminal.refreshing": "Оновлення…"
 }

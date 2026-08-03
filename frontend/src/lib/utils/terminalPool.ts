@@ -52,6 +52,12 @@ export class TerminalPool {
   private fitFrame: number | undefined;
   private connecting = new Map<string, Promise<void>>();
   private terminalOptions: Partial<Terminal['options']>;
+  /**
+   * Told whether the visible pane is waiting for its redraw, so the view can
+   * show a spinner. Set by the owner; the pool reports the ACTIVE pane only,
+   * since a hidden one waiting has nothing to show for it.
+   */
+  onAwaitingRedraw?: (waiting: boolean) => void;
 
   constructor(parentEl: HTMLElement, terminalOptions: Partial<Terminal['options']> = {}) {
     this.parentEl = parentEl;
@@ -126,6 +132,33 @@ export class TerminalPool {
         sendVisibility(ti, isActive);
       }
       if (isActive && !wasVisible) {
+        // A tab returning from the background shows whatever was on screen when
+        // it was hidden: its output was dropped at the source while it was away,
+        // and the redraw that fixes that is queued rather than immediate. Mark
+        // it as waiting so the view can say so; the first byte of output clears
+        // it. Only for a tab that really was hidden — one that never left has
+        // nothing to wait for.
+        // Clear this side of the screen before the redraw arrives.
+        //
+        // A hidden tab's output is dropped at the source, so what xterm holds
+        // is the frame from when the tab was hidden — and tmux, which thinks
+        // the client is up to date, sends only what it considers changed. The
+        // leftovers are the parts of the old frame nothing overwrites. Only
+        // the client can remove those, because tmux does not know they are
+        // there.
+        //
+        // reset() rather than clear(): clear() keeps the current line and the
+        // scrollback, and the stale frame is exactly what has to go.
+        try { ti.terminal.reset(); } catch { /* terminal already torn down */ }
+        if (!ti.awaitingRedraw) {
+          ti.awaitingRedraw = true;
+          ti.onAwaitingRedraw = (waiting) => {
+            // Only the pane on screen; a background one finishing its wait
+            // must not clear a spinner belonging to the visible tab.
+            if (this.activeKey === key) this.onAwaitingRedraw?.(waiting);
+          };
+          this.onAwaitingRedraw?.(true);
+        }
         const flush = (ti as any)._flushHidden as (() => void) | undefined;
         if (flush) flush();
         // Re-announce this tab's size on every switch to it.

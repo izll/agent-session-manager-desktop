@@ -972,5 +972,6 @@
   "diff.group.deleted": "Eliminados",
   "diff.filterAll": "Todos",
   "settings.restoreLastSession": "Reabrir la última sesión",
-  "settings.restoreLastSessionDesc": "Iniciar en la sesión que estaba abierta al cerrar, en lugar del panel"
+  "settings.restoreLastSessionDesc": "Iniciar en la sesión que estaba abierta al cerrar, en lugar del panel",
+  "terminal.refreshing": "Actualizando…"
 }

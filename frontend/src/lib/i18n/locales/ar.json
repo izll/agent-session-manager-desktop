@@ -972,5 +972,6 @@
   "diff.group.deleted": "محذوفة",
   "diff.filterAll": "الكل",
   "settings.restoreLastSession": "إعادة فتح آخر جلسة",
-  "settings.restoreLastSessionDesc": "البدء في الجلسة التي كانت مفتوحة عند الإغلاق بدلاً من لوحة المعلومات"
+  "settings.restoreLastSessionDesc": "البدء في الجلسة التي كانت مفتوحة عند الإغلاق بدلاً من لوحة المعلومات",
+  "terminal.refreshing": "جارٍ التحديث…"
 }

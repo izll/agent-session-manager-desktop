@@ -77,6 +77,26 @@ func checkTerminalOrigin(r *http.Request) bool {
 var redrawQueue struct {
 	sync.Mutex
 	timers map[string]*time.Timer
+	// When each tab last had a redraw sent outright. A resize arriving just
+	// after one has nothing to add: the pane has only now been redrawn in full.
+	sentAt map[string]time.Time
+}
+
+// redrawSettled is how long after an immediate redraw a queued one is treated
+// as redundant. Covers the resize that arrives with a tab becoming visible,
+// without reaching as far as the user's next deliberate action.
+const redrawSettled = 1500 * time.Millisecond
+
+// noteRedrawSent records an immediate redraw, so the requests that follow it
+// within redrawSettled are dropped rather than queued.
+func noteRedrawSent(sessionID string, winIdx int) {
+	key := fmt.Sprintf("%s:%d", sessionID, winIdx)
+	redrawQueue.Lock()
+	defer redrawQueue.Unlock()
+	if redrawQueue.sentAt == nil {
+		redrawQueue.sentAt = make(map[string]time.Time)
+	}
+	redrawQueue.sentAt[key] = time.Now()
 }
 
 // How long the requests have to stop before the keystroke goes out.
@@ -109,6 +129,15 @@ func queueRedraw(sessionID, target string, winIdx int, reason string, quiet time
 	defer redrawQueue.Unlock()
 	if redrawQueue.timers == nil {
 		redrawQueue.timers = make(map[string]*time.Timer)
+	}
+
+	// A redraw went out moments ago; the pane is already current.
+	if at, ok := redrawQueue.sentAt[key]; ok && time.Since(at) < redrawSettled {
+		if session.DebugLogging {
+			log.Printf("[ws] redraw queued (%s) dropped, just redrawn session=%s win=%d",
+				reason, sessionID, winIdx)
+		}
+		return
 	}
 
 	// Restarting an existing timer is what collapses a burst: the keystroke is
@@ -922,7 +951,29 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 							// together are what produced the stray "/clear".
 							// Whichever of the two arrives first sends it; the
 							// other is suppressed as a repeat.
-							queueRedraw(sessionID, attachTarget, winIdx, "show", redrawQuiet)
+							// Sent immediately, not queued.
+							//
+							// refresh-client only sends what tmux believes changed,
+							// and while this tab was hidden its output was dropped
+							// at the source — so tmux's idea of what the client
+							// already has is wrong. The result is a partial repaint:
+							// missing lines, and leftover characters from the old
+							// frame that nothing clears. Only Ctrl-L makes the
+							// program redraw itself in full.
+							//
+							// Waiting out the quiet period would mean showing that
+							// broken frame for two and a half seconds. Pairing is
+							// still avoided, because the queue is cleared here: the
+							// resize that follows a tab switch joins this redraw
+							// instead of sending its own.
+							cancelQueuedRedraw(sessionID, winIdx)
+							noteRedrawSent(sessionID, winIdx)
+							err := session.TmuxCommand("send-keys", "-t",
+								fmt.Sprintf("%s:%d", attachTarget, winIdx), "C-l").Run()
+							if session.DebugLogging {
+								log.Printf("[ws] redraw sent on show session=%s win=%d err=%v",
+									sessionID, winIdx, err)
+							}
 						}
 					}
 				} else {

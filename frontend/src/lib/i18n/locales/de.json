@@ -972,5 +972,6 @@
   "diff.group.deleted": "Gelöscht",
   "diff.filterAll": "Alle",
   "settings.restoreLastSession": "Letzte Sitzung öffnen",
-  "settings.restoreLastSessionDesc": "Beim Start die zuletzt geöffnete Sitzung wiederherstellen statt des Dashboards"
+  "settings.restoreLastSessionDesc": "Beim Start die zuletzt geöffnete Sitzung wiederherstellen statt des Dashboards",
+  "terminal.refreshing": "Wird aktualisiert…"
 }

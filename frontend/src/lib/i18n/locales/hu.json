@@ -972,5 +972,6 @@
   "diff.group.deleted": "Törölt",
   "diff.filterAll": "Mind",
   "settings.restoreLastSession": "Utolsó session megnyitása",
-  "settings.restoreLastSessionDesc": "Indításkor abban a sessionben folytatja, ami kilépéskor nyitva volt, a vezérlőpult helyett"
+  "settings.restoreLastSessionDesc": "Indításkor abban a sessionben folytatja, ami kilépéskor nyitva volt, a vezérlőpult helyett",
+  "terminal.refreshing": "Frissítés…"
 }

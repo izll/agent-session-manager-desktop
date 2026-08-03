@@ -972,5 +972,6 @@
   "diff.group.deleted": "ลบแล้ว",
   "diff.filterAll": "ทั้งหมด",
   "settings.restoreLastSession": "เปิดเซสชันล่าสุดอีกครั้ง",
-  "settings.restoreLastSessionDesc": "เริ่มต้นในเซสชันที่เปิดอยู่ตอนปิดแอป แทนแดชบอร์ด"
+  "settings.restoreLastSessionDesc": "เริ่มต้นในเซสชันที่เปิดอยู่ตอนปิดแอป แทนแดชบอร์ด",
+  "terminal.refreshing": "กำลังรีเฟรช…"
 }

@@ -972,5 +972,6 @@
   "diff.group.deleted": "削除",
   "diff.filterAll": "すべて",
   "settings.restoreLastSession": "前回のセッションを開く",
-  "settings.restoreLastSessionDesc": "ダッシュボードではなく、終了時に開いていたセッションで起動します"
+  "settings.restoreLastSessionDesc": "ダッシュボードではなく、終了時に開いていたセッションで起動します",
+  "terminal.refreshing": "更新中…"
 }

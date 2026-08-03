@@ -972,5 +972,6 @@
   "diff.group.deleted": "Eliminati",
   "diff.filterAll": "Tutti",
   "settings.restoreLastSession": "Riapri l'ultima sessione",
-  "settings.restoreLastSessionDesc": "Avvia nella sessione aperta all'ultima chiusura, invece della dashboard"
+  "settings.restoreLastSessionDesc": "Avvia nella sessione aperta all'ultima chiusura, invece della dashboard",
+  "terminal.refreshing": "Aggiornamento…"
 }

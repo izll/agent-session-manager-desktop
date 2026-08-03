@@ -972,5 +972,6 @@
   "diff.group.deleted": "Smazané",
   "diff.filterAll": "Vše",
   "settings.restoreLastSession": "Otevřít poslední relaci",
-  "settings.restoreLastSessionDesc": "Spustit v relaci otevřené při zavření místo přehledu"
+  "settings.restoreLastSessionDesc": "Spustit v relaci otevřené při zavření místo přehledu",
+  "terminal.refreshing": "Obnovování…"
 }

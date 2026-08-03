@@ -15,10 +15,12 @@ import (
 // and Claude Code turned stray ones into "/clear" in the composer.
 //
 // What produced those was never one keystroke but several close together, from
-// a resize, a tab switch, and the resize that follows a tab switch. So every
-// automatic redraw goes through the queue, which sends one per tab after the
-// requests stop.
-func TestAutomaticRedrawsGoThroughTheQueue(t *testing.T) {
+// a resize, a tab switch, and the resize that follows a tab switch. Two paths
+// send one now: the queue, which coalesces a run of requests into one; and a
+// tab becoming visible, which sends at once because its repaint is otherwise
+// partial — and which clears the queue and records the send so the resize
+// following it cannot pair with it.
+func TestAutomaticRedrawsAreCoalesced(t *testing.T) {
 	b, err := os.ReadFile("terminal_ws.go")
 	if err != nil {
 		t.Fatalf("reading terminal_ws.go: %v", err)
@@ -33,6 +35,12 @@ func TestAutomaticRedrawsGoThroughTheQueue(t *testing.T) {
 	}
 	queueEnd := queueStart + strings.Index(src[queueStart:], "\n}\n")
 
+	showStart := strings.Index(src, "wasHidden := atomic.SwapInt32(&tc.hidden, 0) == 1")
+	showEnd := showStart
+	if showStart >= 0 {
+		showEnd = showStart + strings.Index(src[showStart:], "} else {")
+	}
+
 	for i, line := range strings.Split(src, "\n") {
 		if !strings.Contains(line, `"send-keys"`) || strings.Contains(line, "//") {
 			continue
@@ -40,6 +48,9 @@ func TestAutomaticRedrawsGoThroughTheQueue(t *testing.T) {
 		at := strings.Index(src, line)
 		if at >= queueStart && at <= queueEnd {
 			continue // inside queueRedraw
+		}
+		if showStart >= 0 && at >= showStart && at <= showEnd {
+			continue // the immediate redraw when a tab becomes visible
 		}
 		t.Errorf("terminal_ws.go:%d sends a keystroke outside the queue; several "+
 			"arriving close together are what put a stray \"/clear\" into the "+
@@ -190,4 +201,59 @@ func funcBody(t *testing.T, file, signature string) string {
 		body = body[:end]
 	}
 	return body
+}
+
+// A tab becoming visible is redrawn at once, not after the quiet period.
+//
+// refresh-client only sends what tmux believes changed, and a hidden tab's
+// output was dropped at the source — so tmux's idea of what this client already
+// has is wrong. The repaint comes out partial: missing lines, and leftover
+// characters from the old frame that nothing clears. Queueing that redraw meant
+// showing the broken frame for the whole quiet period.
+func TestShowRedrawsImmediately(t *testing.T) {
+	b, err := os.ReadFile("terminal_ws.go")
+	if err != nil {
+		t.Fatalf("reading terminal_ws.go: %v", err)
+	}
+	src := string(b)
+
+	at := strings.Index(src, "wasHidden := atomic.SwapInt32(&tc.hidden, 0) == 1")
+	if at < 0 {
+		t.Fatal("un-hide branch not found; if it moved, update this test")
+	}
+	window := src[at:]
+	if end := strings.Index(window, "} else {"); end > 0 {
+		window = window[:end]
+	}
+
+	if strings.Contains(window, "queueRedraw") {
+		t.Error("showing a tab queues its redraw, so the partial repaint stays on " +
+			"screen for the whole quiet period")
+	}
+	if !strings.Contains(window, `"send-keys"`) {
+		t.Error("showing a tab no longer redraws it at all")
+	}
+	// The queue is cleared and the send recorded, so the resize that arrives
+	// with the tab switch joins this redraw rather than sending a second one —
+	// two close together are what produced the stray "/clear".
+	if !strings.Contains(window, "cancelQueuedRedraw") || !strings.Contains(window, "noteRedrawSent") {
+		t.Error("the immediate redraw does not suppress the queued one that follows it")
+	}
+}
+
+// A request arriving just after an immediate redraw has nothing to add.
+func TestQueuedRedrawDroppedAfterImmediateOne(t *testing.T) {
+	const sid = "settled-test"
+	defer cancelQueuedRedraw(sid, 0)
+
+	noteRedrawSent(sid, 0)
+	queueRedraw(sid, "no-such-session", 0, "resize", time.Second)
+
+	redrawQueue.Lock()
+	_, pending := redrawQueue.timers[sid+":0"]
+	redrawQueue.Unlock()
+	if pending {
+		t.Error("a redraw was queued moments after one was sent; the pane had just " +
+			"been redrawn in full, and two close together are what produced \"/clear\"")
+	}
 }

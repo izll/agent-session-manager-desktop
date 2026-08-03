@@ -91,6 +91,17 @@ export interface TerminalInstance {
   pendingResize?: ReturnType<typeof setTimeout>;
   /** Frame handle for the settle loop watching the size hold still. */
   pendingResizeFrame?: number;
+  /**
+   * Set while a tab that was hidden is waiting for its first output.
+   *
+   * A tab in the background has its output dropped at the source, so on return
+   * the pane shows a stale frame until the queued redraw lands — up to a couple
+   * of seconds later. Without a sign that something is coming, that reads as
+   * the app having hung.
+   */
+  awaitingRedraw?: boolean;
+  /** Called when awaitingRedraw changes, so the view can show a spinner. */
+  onAwaitingRedraw?: (waiting: boolean) => void;
 }
 
 export type TerminalRendererMode = 'canvas' | 'webgl' | 'dom';
@@ -760,6 +771,12 @@ export async function attachToSession(
       const chunk = event.data instanceof ArrayBuffer
         ? new Uint8Array(event.data)
         : new TextEncoder().encode(event.data as string);
+
+      // Output means the pane has been redrawn, whatever prompted it.
+      if (terminalInstance.awaitingRedraw) {
+        terminalInstance.awaitingRedraw = false;
+        terminalInstance.onAwaitingRedraw?.(false);
+      }
 
       if (terminalInstance.visible) {
         visibleQueue.push(chunk);

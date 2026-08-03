@@ -972,5 +972,6 @@
   "diff.group.deleted": "삭제됨",
   "diff.filterAll": "전체",
   "settings.restoreLastSession": "마지막 세션 다시 열기",
-  "settings.restoreLastSessionDesc": "대시보드 대신 종료 시 열려 있던 세션에서 시작합니다"
+  "settings.restoreLastSessionDesc": "대시보드 대신 종료 시 열려 있던 세션에서 시작합니다",
+  "terminal.refreshing": "새로 고치는 중…"
 }

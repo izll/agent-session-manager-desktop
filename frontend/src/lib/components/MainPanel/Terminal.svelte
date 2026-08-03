@@ -12,6 +12,10 @@
 
   let poolContainerEl: HTMLElement;
   let pool: TerminalPool | null = null;
+  // Whether the visible pane is waiting for its redraw after coming back from
+  // the background. Owned here rather than read from the instance so Svelte
+  // sees the change.
+  let awaitingRedraw = false;
   let error = '';
   let mounted = false;
   const pendingTimeouts = new Set<ReturnType<typeof setTimeout>>();
@@ -264,6 +268,7 @@
   onMount(() => {
     mounted = true;
     pool = new TerminalPool(poolContainerEl, terminalOptions);
+    pool.onAwaitingRedraw = (waiting) => { awaitingRedraw = waiting; };
 
     // Ctrl+wheel already resized the pane; store it so the tab keeps that size
     // next time. Saving is best-effort — a failed write must not undo what the
@@ -648,6 +653,14 @@
 
 <div class="terminal-wrapper" on:mousedown={() => dispatch('focus')}>
   <div class="terminal-pool-container" bind:this={poolContainerEl}></div>
+  {#if awaitingRedraw}
+    <!-- A tab returning from the background shows a stale frame until the
+         queued redraw arrives. Without this the wait reads as a hang. -->
+    <div class="redraw-pending" aria-live="polite">
+      <span class="redraw-spinner"></span>
+      <span>{$t('terminal.refreshing')}</span>
+    </div>
+  {/if}
   {#if searchOpen}
     <div class="terminal-search">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
@@ -716,6 +729,39 @@
   }
   .search-nav:hover { color: #e4e4e7; background: rgba(var(--accent-rgb), 0.15); }
   .search-nav.close { font-size: 15px; line-height: 1; }
+
+  /* Centred and non-interactive: it reports on the pane behind it rather than
+     replacing it, so the stale content stays visible and clickable. */
+  .redraw-pending {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    border-radius: 8px;
+    background: rgba(24, 24, 28, 0.88);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: #d1d5db;
+    font-size: 12px;
+    pointer-events: none;
+    z-index: 5;
+  }
+
+  .redraw-spinner {
+    width: 12px;
+    height: 12px;
+    border: 2px solid rgba(255, 255, 255, 0.18);
+    border-top-color: #a5b4fc;
+    border-radius: 50%;
+    animation: redraw-spin 0.7s linear infinite;
+  }
+
+  @keyframes redraw-spin {
+    to { transform: rotate(360deg); }
+  }
 
   .terminal-pool-container {
     flex: 1;

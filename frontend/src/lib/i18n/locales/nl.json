@@ -972,5 +972,6 @@
   "diff.group.deleted": "Verwijderd",
   "diff.filterAll": "Alle",
   "settings.restoreLastSession": "Laatste sessie heropenen",
-  "settings.restoreLastSessionDesc": "Start in de sessie die openstond bij afsluiten, in plaats van het dashboard"
+  "settings.restoreLastSessionDesc": "Start in de sessie die openstond bij afsluiten, in plaats van het dashboard",
+  "terminal.refreshing": "Vernieuwen…"
 }

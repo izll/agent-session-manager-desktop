@@ -972,5 +972,6 @@
   "diff.group.deleted": "已删除",
   "diff.filterAll": "全部",
   "settings.restoreLastSession": "重新打开上次会话",
-  "settings.restoreLastSessionDesc": "启动时进入上次关闭时打开的会话，而不是仪表板"
+  "settings.restoreLastSessionDesc": "启动时进入上次关闭时打开的会话，而不是仪表板",
+  "terminal.refreshing": "正在刷新…"
 }
