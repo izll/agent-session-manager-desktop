@@ -429,10 +429,15 @@
   const GROUP_ORDER = ['modified', 'added', 'renamed', 'deleted'] as const;
   type StatusFilter = 'all' | typeof GROUP_ORDER[number];
 
-  // Which kinds of change are on screen. Reset per session and per mode: a
-  // filter that made sense for one set of changes is rarely right for the next,
-  // and a list that silently hides files is worse than one that is long.
-  let statusFilter: StatusFilter = 'all';
+  // Which kinds of change are on screen.
+  //
+  // Starts on modified, because that is nearly always the work being reviewed
+  // and it is what a flood of new files buries: one real repository here had
+  // ten modified files against 2291 untracked ones from an IDE directory that
+  // is not in .gitignore. The reset below turns this back to 'all' when there
+  // is nothing modified, so a change made entirely of new files still shows
+  // rather than opening on an empty list.
+  let statusFilter: StatusFilter = 'modified';
 
   // Counts come from the unfiltered list, so a button always says how many
   // files it would show — including the one currently active.
@@ -449,6 +454,19 @@
   // A filter whose files have all gone (reverted, or the build finished) would
   // leave an empty list with no obvious way back.
   $: if (statusFilter !== 'all' && filterCounts[statusFilter] === 0) statusFilter = 'all';
+
+  // Back to the default when the diff being shown changes. Carrying a filter
+  // across sessions means the one session where a flood of new files makes it
+  // matter is the one that has lost it, because you widened the filter
+  // somewhere else.
+  let filterKey = '';
+  $: {
+    const key = `${$selectedSessionId || ''}:${diffMode}`;
+    if (key !== filterKey) {
+      filterKey = key;
+      statusFilter = 'modified';
+    }
+  }
 
   $: visibleFiles = statusFilter === 'all'
     ? files
