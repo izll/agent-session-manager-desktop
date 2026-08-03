@@ -154,31 +154,50 @@ jobs:
           done
           ls -la *.deb *.rpm *.tar.gz *.sha256
 
+      # The release notes come from CHANGELOG.md, so the release page says what
+      # changed rather than repeating the project description every time.
+      # Falls back to a note pointing at the changelog if the version has no
+      # section — better than silently publishing an empty body.
+      - name: Extract release notes from CHANGELOG
+        id: notes
+        run: |
+          V="${{ steps.ver.outputs.num }}"
+          if [ -f CHANGELOG.md ]; then
+            awk -v ver="$V" '
+              $0 ~ "^## " ver " " || $0 == "## " ver { found = 1; next }
+              found && /^## / { exit }
+              found { print }
+            ' CHANGELOG.md > release-notes.md
+          fi
+          if [ ! -s release-notes.md ]; then
+            echo "See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/master/CHANGELOG.md)." > release-notes.md
+          fi
+          {
+            echo 'body<<CHANGELOG_EOF'
+            cat release-notes.md
+            echo
+            cat <<'FOOTER'
+          **Downloads**
+          - Linux (Debian/Ubuntu): `.deb`
+          - Linux (Fedora/RHEL): `.rpm`
+          - Linux user-local install: `linux_amd64.tar.gz`
+          - macOS (Apple Silicon; Intel via Rosetta 2): `darwin_arm64.tar.gz`
+          - Windows x64 (installer): `windows_amd64_setup.exe`
+          - Windows x64 (portable): `windows_amd64.tar.gz`
+
+          Linux and macOS need `tmux` at runtime; Windows uses
+          [psmux](https://github.com/psmux/psmux) instead and does not require tmux.
+          FOOTER
+            echo CHANGELOG_EOF
+          } >> "$GITHUB_OUTPUT"
+
       - name: Create / update GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           draft: true
           tag_name: ${{ steps.ver.outputs.tag }}
           name: ${{ steps.ver.outputs.tag }}
-          # A fixed body (no generate_release_notes) so re-running the workflow
-          # for the same tag does NOT append the changelog again and again.
-          body: |
-            Cross-platform desktop GUI for managing multiple AI coding-agent sessions.
-
-            **Downloads**
-            - Linux (Debian/Ubuntu): `.deb`
-            - Linux (Fedora/RHEL): `.rpm`
-            - Linux user-local install: `linux_amd64.tar.gz`
-            - macOS (Apple Silicon; Intel via Rosetta 2): `darwin_arm64.tar.gz`
-            - Windows x64 (installer): `windows_amd64_setup.exe`
-            - Windows x64 (portable): `windows_amd64.tar.gz`
-
-            Linux and macOS need `tmux` at runtime; Windows uses
-            [psmux](https://github.com/psmux/psmux) instead and does not require
-            tmux. In-app updates work on all three: macOS replaces the whole
-            .app bundle, since its code signature covers the entire tree.
-
-            **Full Changelog**: https://github.com/izll/agent-session-manager-desktop/commits/${{ steps.ver.outputs.tag }}
+          body: ${{ steps.notes.outputs.body }}
           files: |
             asmgr-desktop_${{ steps.ver.outputs.num }}_linux_x86_64.deb
             asmgr-desktop_${{ steps.ver.outputs.num }}_linux_x86_64.deb.sha256
