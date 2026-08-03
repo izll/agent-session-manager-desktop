@@ -965,5 +965,10 @@
   "error.directoryNotFound": "Cartella non trovata",
   "error.notADirectory": "Cartella non trovata",
   "error.fileManagerFailed": "Impossibile aprire il file manager",
-  "error.noDirectory": "Cartella non trovata"
+  "error.noDirectory": "Cartella non trovata",
+  "diff.group.modified": "Modificati",
+  "diff.group.added": "Nuovi",
+  "diff.group.renamed": "Rinominati",
+  "diff.group.deleted": "Eliminati",
+  "diff.filterAll": "Tutti"
 }

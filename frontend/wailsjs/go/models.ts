@@ -1556,6 +1556,28 @@ export namespace session {
 		    return a;
 		}
 	}
+	export class DiffFileSummary {
+	    path: string;
+	    oldPath: string;
+	    status: string;
+	    added: number;
+	    removed: number;
+	    binary: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new DiffFileSummary(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.path = source["path"];
+	        this.oldPath = source["oldPath"];
+	        this.status = source["status"];
+	        this.added = source["added"];
+	        this.removed = source["removed"];
+	        this.binary = source["binary"];
+	    }
+	}
 	
 	export class FileShape {
 	    bom: boolean;

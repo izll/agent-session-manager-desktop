@@ -89,7 +89,11 @@ export function GetExtraArgs(arg1:string,arg2:number):Promise<string>;
 
 export function GetFullDiff(arg1:string):Promise<main.DiffData>;
 
+export function GetFullDiffFileList(arg1:string):Promise<Array<session.DiffFileSummary>>;
+
 export function GetFullDiffFiles(arg1:string):Promise<Array<session.DiffFile>>;
+
+export function GetFullDiffForFile(arg1:string,arg2:string):Promise<session.DiffFile>;
 
 export function GetGitBranch(arg1:string):Promise<main.GitBranchInfo>;
 
@@ -117,7 +121,11 @@ export function GetResumeSessions(arg1:string,arg2:string):Promise<Array<main.Ag
 
 export function GetSessionDiff(arg1:string):Promise<main.DiffData>;
 
+export function GetSessionDiffFileList(arg1:string):Promise<Array<session.DiffFileSummary>>;
+
 export function GetSessionDiffFiles(arg1:string):Promise<Array<session.DiffFile>>;
+
+export function GetSessionDiffForFile(arg1:string,arg2:string):Promise<session.DiffFile>;
 
 export function GetSessionTemplates():Promise<Array<main.SessionTemplateInfo>>;
 

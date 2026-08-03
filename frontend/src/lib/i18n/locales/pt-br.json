@@ -965,5 +965,10 @@
   "error.directoryNotFound": "Pasta não encontrada",
   "error.notADirectory": "Pasta não encontrada",
   "error.fileManagerFailed": "Não foi possível abrir o gerenciador de arquivos",
-  "error.noDirectory": "Pasta não encontrada"
+  "error.noDirectory": "Pasta não encontrada",
+  "diff.group.modified": "Modificados",
+  "diff.group.added": "Novos",
+  "diff.group.renamed": "Renomeados",
+  "diff.group.deleted": "Excluídos",
+  "diff.filterAll": "Todos"
 }

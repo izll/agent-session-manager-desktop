@@ -23,6 +23,13 @@
   let diff: DiffData | null = null;
   let files: session.DiffFile[] = [];
   let selectedPath: string | null = null;
+  // The selected file's hunks, fetched on demand and kept for as long as the
+  // list is unchanged — reopening a file already looked at should be instant.
+  let fileCache: Record<string, session.DiffFile | null> = {};
+  let loadingFile = false;
+  // Identifies the current set of changes, so the cache is dropped when the
+  // files or their line counts move.
+  let listKey = '';
   let loading = false;
   let error = '';
   let lastSessionId: string | null = null;
@@ -156,13 +163,23 @@
   }
 
   async function copyDiff() {
-    if (!diffContent || loading || copying || loadedDiffKey !== currentDiffKey) return;
-    const content = diffContent;
+    if (!files.length || loading || copying || loadedDiffKey !== currentDiffKey) return;
+    const sessionId = get(selectedSessionId);
+    if (!sessionId) return;
     const generation = ++copyGeneration;
     copying = true;
     try {
+      // Fetched here rather than kept in memory: this is the whole diff, the
+      // one thing that is genuinely expensive, and it is only needed when the
+      // button is actually pressed.
+      const whole = diffMode === 'session'
+        ? await App.GetSessionDiff(sessionId)
+        : await App.GetFullDiff(sessionId);
+      if (destroyed || generation !== copyGeneration) return;
+      const content = whole?.content || '';
+      if (!content) { copying = false; return; }
       const copied = await ClipboardSetText(content);
-      if (destroyed || generation !== copyGeneration || content !== diffContent) return;
+      if (destroyed || generation !== copyGeneration) return;
       copyState = copied ? 'copied' : 'failed';
     } catch {
       if (destroyed || generation !== copyGeneration) return;
@@ -206,23 +223,28 @@
       // The raw diff still backs the copy-to-clipboard button; the file list is
       // what we render. Both come from the same snapshot so the header stats and
       // the per-file rows can't disagree.
-      let result: DiffData;
-      let fileResult: session.DiffFile[];
-      if (mode === 'session') {
-        [result, fileResult] = await Promise.all([
-          App.GetSessionDiff(sessionId),
-          App.GetSessionDiffFiles(sessionId),
-        ]);
-      } else {
-        [result, fileResult] = await Promise.all([
-          App.GetFullDiff(sessionId),
-          App.GetFullDiffFiles(sessionId),
-        ]);
-      }
+      // Only the file LIST is fetched here. Loading every file's contents up
+      // front is what made this view unusable while something was writing a lot
+      // of files — a build dropping its output into the tree produced a diff the
+      // webview never finished rendering. A file's hunks are fetched when it is
+      // opened, so the cost of listing does not depend on what the files hold.
+      const fileResult = mode === 'session'
+        ? await App.GetSessionDiffFileList(sessionId)
+        : await App.GetFullDiffFileList(sessionId);
       if (generation !== loadGeneration || sessionId !== get(selectedSessionId) || mode !== diffMode || !active) return;
-      if (diff?.content !== result.content) resetCopyState();
-      diff = result;
-      files = fileResult || [];
+      const summaries = fileResult || [];
+      const totals = summaries.reduce(
+        (acc, f) => ({ added: acc.added + (f.added || 0), removed: acc.removed + (f.removed || 0) }),
+        { added: 0, removed: 0 }
+      );
+      const nextKey = summaries.map(f => `${f.path}:${f.added}:${f.removed}`).join('|');
+      if (listKey !== nextKey) {
+        resetCopyState();
+        listKey = nextKey;
+        fileCache = {};
+      }
+      diff = { content: '', added: totals.added, removed: totals.removed };
+      files = summaries;
       syncSelection();
       loadedDiffKey = requestedKey;
     } catch (e) {
@@ -396,17 +418,93 @@
   // while small-diff sessions (asmgr-desktop) stayed fluid.
   const MAX_DIFF_LINES = 2000;
 
-  $: diffContent = diff?.content || '';
   $: currentDiffKey = `${$selectedSessionId || ''}:${diffMode}`;
-  $: selectedFile = files.find(f => f.path === selectedPath) || null;
+  // Grouped by what happened to the file, because those are different kinds of
+  // change to review: a modification is read line by line, a new file is read
+  // as a whole, and a deletion usually only needs confirming. Mixed together
+  // they are hard to scan, especially when a run has touched many files.
+  //
+  // Order is deliberate: modified first (the usual work), then added, then
+  // renamed, then deleted last (least often what you came to look at).
+  const GROUP_ORDER = ['modified', 'added', 'renamed', 'deleted'] as const;
+  type StatusFilter = 'all' | typeof GROUP_ORDER[number];
+
+  // Which kinds of change are on screen. Reset per session and per mode: a
+  // filter that made sense for one set of changes is rarely right for the next,
+  // and a list that silently hides files is worse than one that is long.
+  let statusFilter: StatusFilter = 'all';
+
+  // Counts come from the unfiltered list, so a button always says how many
+  // files it would show — including the one currently active.
+  $: filterCounts = {
+    all: files.length,
+    modified: files.filter(f => (f.status || 'modified') === 'modified').length,
+    added: files.filter(f => f.status === 'added').length,
+    renamed: files.filter(f => f.status === 'renamed').length,
+    deleted: files.filter(f => f.status === 'deleted').length,
+  };
+  // Only offer a filter there is something to filter to.
+  $: availableFilters = (['all', ...GROUP_ORDER] as StatusFilter[])
+    .filter(f => f === 'all' || filterCounts[f] > 0);
+  // A filter whose files have all gone (reverted, or the build finished) would
+  // leave an empty list with no obvious way back.
+  $: if (statusFilter !== 'all' && filterCounts[statusFilter] === 0) statusFilter = 'all';
+
+  $: visibleFiles = statusFilter === 'all'
+    ? files
+    : files.filter(f => (f.status || 'modified') === statusFilter);
+
+  // Keep the selection on something the filter actually shows: leaving it on a
+  // hidden file means the pane displays a diff for a row the user cannot see.
+  $: if (visibleFiles.length && selectedPath &&
+         !visibleFiles.some(f => f.path === selectedPath)) {
+    selectFile(visibleFiles[0].path);
+  }
+
+  $: fileGroups = GROUP_ORDER
+    .map(status => ({
+      status,
+      label: $t(`diff.group.${status}`),
+      files: visibleFiles.filter(f => (f.status || 'modified') === status),
+    }))
+    .filter(g => g.files.length > 0);
+
+  $: selectedSummary = files.find(f => f.path === selectedPath) || null;
+  $: selectedFile = selectedPath ? fileCache[selectedPath] ?? null : null;
+  // Fetch the hunks the first time a file is opened.
+  $: if (selectedPath && !(selectedPath in fileCache)) void loadSelectedFile(selectedPath);
+
+  async function loadSelectedFile(path: string) {
+    const sessionId = get(selectedSessionId);
+    const mode = diffMode;
+    if (!sessionId) return;
+    loadingFile = true;
+    try {
+      const loaded = mode === 'session'
+        ? await App.GetSessionDiffForFile(sessionId, path)
+        : await App.GetFullDiffForFile(sessionId, path);
+      // Ignore a result that arrived after the user moved on, so a slow file
+      // cannot overwrite the one now on screen.
+      if (path !== selectedPath || mode !== diffMode || sessionId !== get(selectedSessionId)) return;
+      fileCache = { ...fileCache, [path]: loaded };
+    } catch (e) {
+      if (path !== selectedPath) return;
+      // Cached as null: a file that fails to load should not be retried on
+      // every reactive pass.
+      fileCache = { ...fileCache, [path]: null };
+      error = String(e);
+    } finally {
+      if (path === selectedPath) loadingFile = false;
+    }
+  }
   // Split here rather than in the markup so the header can dim the directory
   // and keep the file name intact when the path is too long to fit.
-  $: selectedParts = splitPath(selectedFile?.path || '');
+  $: selectedParts = splitPath(selectedSummary?.path || '');
 
   // Only ONE file renders at a time now, so the large-diff guard measures the
   // selected file rather than the whole diff — a big repo with many small files
   // is perfectly readable and shouldn't trip the warning.
-  $: selectedContent = selectedFile && !selectedFile.binary
+  $: selectedContent = selectedFile && !selectedFile.binary && selectedFile.hunks
     ? selectedFile.hunks.map(h => `${h.header}\n${h.body}`).join('\n')
     : '';
   $: isLargeFile =
@@ -462,7 +560,7 @@
   $: treeView = !$settings.diffFlatFileList;
   // Rebuilt whenever the file list or the fold state changes; the builder is
   // cheap (one pass per file) and the list is at most a few hundred rows.
-  $: treeRows = treeView ? buildTreeRows<session.DiffFile>(files, collapsedDirs) : [];
+  $: treeRows = treeView ? buildTreeRows<session.DiffFileSummary>(visibleFiles, collapsedDirs) : [];
 
   function toggleTreeView() {
     void saveSettings({ diffFlatFileList: treeView });
@@ -509,7 +607,7 @@
       {/if}
     </div>
     <div class="header-right">
-      <button class="copy-btn" on:click={copyDiff} disabled={!diffContent || loading || copying || loadedDiffKey !== currentDiffKey} title={$t('diff.copy')}>
+      <button class="copy-btn" on:click={copyDiff} disabled={!files.length || loading || copying || loadedDiffKey !== currentDiffKey} title={$t('diff.copy')}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           {#if copyState === 'copied'}
             <polyline points="20 6 9 17 4 12"/>
@@ -589,6 +687,20 @@
             </svg>
           </button>
         </div>
+        {#if files.length > 0}
+          <div class="status-filters">
+            {#each availableFilters as f (f)}
+              <button
+                class="status-filter"
+                class:active={statusFilter === f}
+                on:click={() => statusFilter = f}
+              >
+                {f === 'all' ? $t('diff.filterAll') : $t(`diff.group.${f}`)}
+                <span class="status-filter-count">{filterCounts[f]}</span>
+              </button>
+            {/each}
+          </div>
+        {/if}
         {#if treeView}
           <div class="file-list">
             {#each treeRows as row (row.kind + ':' + row.path)}
@@ -664,7 +776,12 @@
           </div>
         {:else}
         <div class="file-list">
-          {#each files as file (file.path)}
+          {#each fileGroups as group (group.status)}
+            <div class="file-group-header">
+              <span class="file-group-name">{group.label}</span>
+              <span class="file-group-count">{group.files.length}</span>
+            </div>
+          {#each group.files as file (file.path)}
             {@const parts = splitPath(file.path)}
             {@const type = fileTypeOf(file.path)}
             <div
@@ -702,6 +819,7 @@
                 </button>
               </div>
             </div>
+          {/each}
           {/each}
         </div>
         {/if}
@@ -1089,6 +1207,74 @@
     flex: 1;
     overflow: auto;
     min-height: 0;
+  }
+
+  /* Shown whenever there are files. Hiding the row until several kinds of
+     change existed meant it was missing exactly when someone went looking for
+     it, and a filter you have to discover by accident is not much use. */
+  .status-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 8px 10px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  }
+
+  .status-filter {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 8px;
+    border: 1px solid transparent;
+    border-radius: 5px;
+    background: rgba(255, 255, 255, 0.04);
+    color: #9ca3af;
+    font-size: 11px;
+    cursor: pointer;
+    transition: background 0.12s, color 0.12s, border-color 0.12s;
+  }
+
+  .status-filter:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: #d1d5db;
+  }
+
+  .status-filter.active {
+    background: rgba(139, 92, 246, 0.16);
+    border-color: rgba(139, 92, 246, 0.4);
+    color: #c4b5fd;
+  }
+
+  .status-filter-count {
+    font-size: 10px;
+    opacity: 0.75;
+  }
+
+  /* A quiet divider rather than a heading: the groups are there to make the
+     list scannable, not to compete with the file names for attention. */
+  .file-group-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 10px 4px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #6b7280;
+  }
+
+  .file-group-header:first-child {
+    padding-top: 4px;
+  }
+
+  .file-group-count {
+    padding: 0 5px;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.06);
+    font-size: 9px;
+    font-weight: 500;
+    letter-spacing: 0;
   }
 
   .file-row {

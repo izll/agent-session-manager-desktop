@@ -965,5 +965,10 @@
   "error.directoryNotFound": "Mappen hittades inte",
   "error.notADirectory": "Mappen hittades inte",
   "error.fileManagerFailed": "Det gick inte att öppna filhanteraren",
-  "error.noDirectory": "Mappen hittades inte"
+  "error.noDirectory": "Mappen hittades inte",
+  "diff.group.modified": "Ändrade",
+  "diff.group.added": "Nya",
+  "diff.group.renamed": "Omdöpta",
+  "diff.group.deleted": "Borttagna",
+  "diff.filterAll": "Alla"
 }

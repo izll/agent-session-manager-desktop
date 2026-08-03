@@ -174,8 +174,16 @@ export function GetFullDiff(arg1) {
   return window['go']['main']['App']['GetFullDiff'](arg1);
 }
 
+export function GetFullDiffFileList(arg1) {
+  return window['go']['main']['App']['GetFullDiffFileList'](arg1);
+}
+
 export function GetFullDiffFiles(arg1) {
   return window['go']['main']['App']['GetFullDiffFiles'](arg1);
+}
+
+export function GetFullDiffForFile(arg1, arg2) {
+  return window['go']['main']['App']['GetFullDiffForFile'](arg1, arg2);
 }
 
 export function GetGitBranch(arg1) {
@@ -230,8 +238,16 @@ export function GetSessionDiff(arg1) {
   return window['go']['main']['App']['GetSessionDiff'](arg1);
 }
 
+export function GetSessionDiffFileList(arg1) {
+  return window['go']['main']['App']['GetSessionDiffFileList'](arg1);
+}
+
 export function GetSessionDiffFiles(arg1) {
   return window['go']['main']['App']['GetSessionDiffFiles'](arg1);
+}
+
+export function GetSessionDiffForFile(arg1, arg2) {
+  return window['go']['main']['App']['GetSessionDiffForFile'](arg1, arg2);
 }
 
 export function GetSessionTemplates() {

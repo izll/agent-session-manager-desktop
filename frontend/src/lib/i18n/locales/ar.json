@@ -965,5 +965,10 @@
   "error.directoryNotFound": "المجلد غير موجود",
   "error.notADirectory": "المجلد غير موجود",
   "error.fileManagerFailed": "تعذر فتح مدير الملفات",
-  "error.noDirectory": "المجلد غير موجود"
+  "error.noDirectory": "المجلد غير موجود",
+  "diff.group.modified": "معدّلة",
+  "diff.group.added": "جديدة",
+  "diff.group.renamed": "معاد تسميتها",
+  "diff.group.deleted": "محذوفة",
+  "diff.filterAll": "الكل"
 }

@@ -965,5 +965,10 @@
   "error.directoryNotFound": "未找到文件夹",
   "error.notADirectory": "未找到文件夹",
   "error.fileManagerFailed": "无法打开文件管理器",
-  "error.noDirectory": "未找到文件夹"
+  "error.noDirectory": "未找到文件夹",
+  "diff.group.modified": "已修改",
+  "diff.group.added": "新增",
+  "diff.group.renamed": "已重命名",
+  "diff.group.deleted": "已删除",
+  "diff.filterAll": "全部"
 }

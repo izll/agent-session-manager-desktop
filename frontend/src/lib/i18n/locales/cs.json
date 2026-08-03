@@ -965,5 +965,10 @@
   "error.directoryNotFound": "Složka nenalezena",
   "error.notADirectory": "Složka nenalezena",
   "error.fileManagerFailed": "Správce souborů se nepodařilo otevřít",
-  "error.noDirectory": "Složka nenalezena"
+  "error.noDirectory": "Složka nenalezena",
+  "diff.group.modified": "Změněné",
+  "diff.group.added": "Nové",
+  "diff.group.renamed": "Přejmenované",
+  "diff.group.deleted": "Smazané",
+  "diff.filterAll": "Vše"
 }

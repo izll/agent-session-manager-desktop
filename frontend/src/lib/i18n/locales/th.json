@@ -965,5 +965,10 @@
   "error.directoryNotFound": "ไม่พบโฟลเดอร์",
   "error.notADirectory": "ไม่พบโฟลเดอร์",
   "error.fileManagerFailed": "ไม่สามารถเปิดตัวจัดการไฟล์ได้",
-  "error.noDirectory": "ไม่พบโฟลเดอร์"
+  "error.noDirectory": "ไม่พบโฟลเดอร์",
+  "diff.group.modified": "แก้ไข",
+  "diff.group.added": "เพิ่มใหม่",
+  "diff.group.renamed": "เปลี่ยนชื่อ",
+  "diff.group.deleted": "ลบแล้ว",
+  "diff.filterAll": "ทั้งหมด"
 }

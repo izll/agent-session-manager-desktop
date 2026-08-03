@@ -2309,6 +2309,49 @@ func (a *App) GetFullDiffFiles(id string) ([]session.DiffFile, error) {
 	return inst.GetFullDiffFiles()
 }
 
+// GetSessionDiffFileList lists files changed since the session started, without
+// their contents.
+//
+// The diff view lists first and loads a file when it is opened. Fetching every
+// file's hunks up front is what made the view unusable while something was
+// writing a lot of files — a build dropping its output into the tree produced a
+// diff the webview never finished rendering. Listing costs the same whatever
+// the files contain.
+func (a *App) GetSessionDiffFileList(id string) ([]session.DiffFileSummary, error) {
+	inst, err := a.storage.GetInstance(id)
+	if err != nil {
+		return nil, err
+	}
+	return inst.GetSessionDiffFileList()
+}
+
+// GetFullDiffFileList lists files with uncommitted changes, without contents.
+func (a *App) GetFullDiffFileList(id string) ([]session.DiffFileSummary, error) {
+	inst, err := a.storage.GetInstance(id)
+	if err != nil {
+		return nil, err
+	}
+	return inst.GetFullDiffFileList()
+}
+
+// GetSessionDiffForFile returns one file's diff since the session started.
+func (a *App) GetSessionDiffForFile(id, path string) (*session.DiffFile, error) {
+	inst, err := a.storage.GetInstance(id)
+	if err != nil {
+		return nil, err
+	}
+	return inst.GetSessionDiffForFile(path)
+}
+
+// GetFullDiffForFile returns one file's uncommitted diff.
+func (a *App) GetFullDiffForFile(id, path string) (*session.DiffFile, error) {
+	inst, err := a.storage.GetInstance(id)
+	if err != nil {
+		return nil, err
+	}
+	return inst.GetFullDiffForFile(path)
+}
+
 // RevertDiffFile discards every pending change to one file.
 func (a *App) RevertDiffFile(id, path string, sessionScope bool) error {
 	a.projectMu.RLock()

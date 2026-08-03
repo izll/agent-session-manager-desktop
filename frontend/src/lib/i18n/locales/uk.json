@@ -965,5 +965,10 @@
   "error.directoryNotFound": "Теку не знайдено",
   "error.notADirectory": "Теку не знайдено",
   "error.fileManagerFailed": "Не вдалося відкрити файловий менеджер",
-  "error.noDirectory": "Теку не знайдено"
+  "error.noDirectory": "Теку не знайдено",
+  "diff.group.modified": "Змінені",
+  "diff.group.added": "Нові",
+  "diff.group.renamed": "Перейменовані",
+  "diff.group.deleted": "Видалені",
+  "diff.filterAll": "Усі"
 }

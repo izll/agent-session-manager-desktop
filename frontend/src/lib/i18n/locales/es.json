@@ -965,5 +965,10 @@
   "error.directoryNotFound": "Carpeta no encontrada",
   "error.notADirectory": "Carpeta no encontrada",
   "error.fileManagerFailed": "No se pudo abrir el explorador de archivos",
-  "error.noDirectory": "Carpeta no encontrada"
+  "error.noDirectory": "Carpeta no encontrada",
+  "diff.group.modified": "Modificados",
+  "diff.group.added": "Nuevos",
+  "diff.group.renamed": "Renombrados",
+  "diff.group.deleted": "Eliminados",
+  "diff.filterAll": "Todos"
 }

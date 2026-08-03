@@ -965,5 +965,10 @@
   "error.directoryNotFound": "Directory not found",
   "error.notADirectory": "Directory not found",
   "error.fileManagerFailed": "Could not open the file manager",
-  "error.noDirectory": "Directory not found"
+  "error.noDirectory": "Directory not found",
+  "diff.group.modified": "Modified",
+  "diff.group.added": "Added",
+  "diff.group.renamed": "Renamed",
+  "diff.group.deleted": "Deleted",
+  "diff.filterAll": "All"
 }

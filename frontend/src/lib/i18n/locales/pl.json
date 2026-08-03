@@ -965,5 +965,10 @@
   "error.directoryNotFound": "Nie znaleziono katalogu",
   "error.notADirectory": "Nie znaleziono katalogu",
   "error.fileManagerFailed": "Nie można otworzyć menedżera plików",
-  "error.noDirectory": "Nie znaleziono katalogu"
+  "error.noDirectory": "Nie znaleziono katalogu",
+  "diff.group.modified": "Zmodyfikowane",
+  "diff.group.added": "Nowe",
+  "diff.group.renamed": "Zmieniona nazwa",
+  "diff.group.deleted": "Usunięte",
+  "diff.filterAll": "Wszystkie"
 }

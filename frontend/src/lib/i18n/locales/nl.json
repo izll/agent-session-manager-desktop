@@ -965,5 +965,10 @@
   "error.directoryNotFound": "Map niet gevonden",
   "error.notADirectory": "Map niet gevonden",
   "error.fileManagerFailed": "Kan bestandsbeheer niet openen",
-  "error.noDirectory": "Map niet gevonden"
+  "error.noDirectory": "Map niet gevonden",
+  "diff.group.modified": "Gewijzigd",
+  "diff.group.added": "Nieuw",
+  "diff.group.renamed": "Hernoemd",
+  "diff.group.deleted": "Verwijderd",
+  "diff.filterAll": "Alle"
 }

@@ -965,5 +965,10 @@
   "error.directoryNotFound": "폴더를 찾을 수 없습니다",
   "error.notADirectory": "폴더를 찾을 수 없습니다",
   "error.fileManagerFailed": "파일 관리자를 열 수 없습니다",
-  "error.noDirectory": "폴더를 찾을 수 없습니다"
+  "error.noDirectory": "폴더를 찾을 수 없습니다",
+  "diff.group.modified": "수정됨",
+  "diff.group.added": "새 파일",
+  "diff.group.renamed": "이름 변경",
+  "diff.group.deleted": "삭제됨",
+  "diff.filterAll": "전체"
 }

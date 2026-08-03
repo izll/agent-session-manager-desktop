@@ -965,5 +965,10 @@
   "error.directoryNotFound": "Dossier introuvable",
   "error.notADirectory": "Dossier introuvable",
   "error.fileManagerFailed": "Impossible d'ouvrir le gestionnaire de fichiers",
-  "error.noDirectory": "Dossier introuvable"
+  "error.noDirectory": "Dossier introuvable",
+  "diff.group.modified": "Modifiés",
+  "diff.group.added": "Ajoutés",
+  "diff.group.renamed": "Renommés",
+  "diff.group.deleted": "Supprimés",
+  "diff.filterAll": "Tous"
 }

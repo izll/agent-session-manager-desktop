@@ -965,5 +965,10 @@
   "error.directoryNotFound": "Không tìm thấy thư mục",
   "error.notADirectory": "Không tìm thấy thư mục",
   "error.fileManagerFailed": "Không thể mở trình quản lý tệp",
-  "error.noDirectory": "Không tìm thấy thư mục"
+  "error.noDirectory": "Không tìm thấy thư mục",
+  "diff.group.modified": "Đã sửa",
+  "diff.group.added": "Mới",
+  "diff.group.renamed": "Đã đổi tên",
+  "diff.group.deleted": "Đã xóa",
+  "diff.filterAll": "Tất cả"
 }

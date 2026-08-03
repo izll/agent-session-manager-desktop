@@ -965,5 +965,10 @@
   "error.directoryNotFound": "フォルダーが見つかりません",
   "error.notADirectory": "フォルダーが見つかりません",
   "error.fileManagerFailed": "ファイルマネージャーを開けませんでした",
-  "error.noDirectory": "フォルダーが見つかりません"
+  "error.noDirectory": "フォルダーが見つかりません",
+  "diff.group.modified": "変更",
+  "diff.group.added": "新規",
+  "diff.group.renamed": "名前変更",
+  "diff.group.deleted": "削除",
+  "diff.filterAll": "すべて"
 }

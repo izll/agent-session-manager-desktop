@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -283,4 +284,151 @@ func (i *Instance) GetSessionDiffFiles() ([]DiffFile, error) {
 // GetFullDiffFiles returns the per-file uncommitted diff.
 func (i *Instance) GetFullDiffFiles() ([]DiffFile, error) {
 	return i.diffFiles("")
+}
+
+// DiffFileSummary is one changed file without its contents.
+//
+// The diff view lists files first and loads a file's hunks when it is opened.
+// Listing used to mean running the whole diff and parsing it, which is fine
+// until something writes a lot of files — a build dropping its output into the
+// tree produced a diff large enough that the view never finished loading.
+// numstat costs the same whether a file changed by one line or fifty thousand.
+type DiffFileSummary struct {
+	Path    string `json:"path"`
+	OldPath string `json:"oldPath"`
+	Status  string `json:"status"`
+	Added   int    `json:"added"`
+	Removed int    `json:"removed"`
+	// Binary marks files git reports as binary (numstat gives "-" for those).
+	Binary bool `json:"binary"`
+}
+
+// diffFileSummaries lists the changed files and their line counts, without
+// reading any file's contents.
+func (i *Instance) diffFileSummaries(baseRef string) ([]DiffFileSummary, error) {
+	gitEnv, cleanup, err := i.diffIndexEnv()
+	if err != nil {
+		return nil, err
+	}
+	defer cleanup()
+
+	args := []string{"-C", i.Path, "--no-pager", "diff", "--numstat", "-z", "--find-renames"}
+	if baseRef != "" {
+		args = append(args, baseRef)
+	}
+	cmd, cancel := GitCommandTimed(args...)
+	defer cancel()
+	cmd.Env = gitEnv
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("git diff --numstat failed: %w", err)
+	}
+	return parseNumstatZ(string(out)), nil
+}
+
+// parseNumstatZ reads `git diff --numstat -z` output.
+//
+// The -z form is used because a path with a space, a quote or a newline in it
+// is not distinguishable in the plain output — git quotes those, and the quoted
+// form then has to be unescaped. With -z the fields are NUL-separated and the
+// paths are literal.
+func parseNumstatZ(out string) []DiffFileSummary {
+	fields := strings.Split(out, "\x00")
+	var files []DiffFileSummary
+
+	for idx := 0; idx < len(fields); idx++ {
+		record := fields[idx]
+		if record == "" {
+			continue
+		}
+		// "<added>\t<removed>\t<path>", or for a rename "<added>\t<removed>\t"
+		// followed by two more NUL-separated fields: old path, then new path.
+		parts := strings.Split(record, "\t")
+		if len(parts) < 3 {
+			continue
+		}
+		f := DiffFileSummary{Status: "modified"}
+		// git writes "-" for both counts on a binary file.
+		if parts[0] == "-" || parts[1] == "-" {
+			f.Binary = true
+		} else {
+			f.Added, _ = strconv.Atoi(parts[0])
+			f.Removed, _ = strconv.Atoi(parts[1])
+		}
+
+		if parts[2] == "" && idx+2 < len(fields) {
+			f.OldPath = fields[idx+1]
+			f.Path = fields[idx+2]
+			f.Status = "renamed"
+			idx += 2
+		} else {
+			f.Path = parts[2]
+		}
+		files = append(files, f)
+	}
+	return files
+}
+
+// diffForFile returns the diff of a single file, parsed into hunks.
+//
+// Scoped to one path so opening a file costs what that file costs, rather than
+// what the whole tree costs.
+func (i *Instance) diffForFile(baseRef, path string) (*DiffFile, error) {
+	if path == "" {
+		return nil, fmt.Errorf("no file given")
+	}
+	gitEnv, cleanup, err := i.diffIndexEnv()
+	if err != nil {
+		return nil, err
+	}
+	defer cleanup()
+
+	args := []string{"-C", i.Path, "--no-pager", "diff", "--find-renames"}
+	if baseRef != "" {
+		args = append(args, baseRef)
+	}
+	// "--" keeps a path that looks like a revision from being read as one.
+	args = append(args, "--", path)
+
+	cmd, cancel := GitCommandTimed(args...)
+	defer cancel()
+	cmd.Env = gitEnv
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("git diff failed for %s: %w", path, err)
+	}
+
+	parsed := ParseDiffFiles(string(out))
+	if len(parsed) == 0 {
+		// The file was listed but has no diff now: it changed back, or was
+		// reverted between listing and opening. An empty result is honest.
+		return nil, nil
+	}
+	return &parsed[0], nil
+}
+
+// GetSessionDiffFileList lists files changed since the session started.
+func (i *Instance) GetSessionDiffFileList() ([]DiffFileSummary, error) {
+	if i.BaseCommitSHA == "" {
+		return nil, fmt.Errorf("no base commit (not a git repo or session started before tracking)")
+	}
+	return i.diffFileSummaries(i.BaseCommitSHA)
+}
+
+// GetFullDiffFileList lists files with uncommitted changes.
+func (i *Instance) GetFullDiffFileList() ([]DiffFileSummary, error) {
+	return i.diffFileSummaries("")
+}
+
+// GetSessionDiffForFile returns one file's diff since the session started.
+func (i *Instance) GetSessionDiffForFile(path string) (*DiffFile, error) {
+	if i.BaseCommitSHA == "" {
+		return nil, fmt.Errorf("no base commit (not a git repo or session started before tracking)")
+	}
+	return i.diffForFile(i.BaseCommitSHA, path)
+}
+
+// GetFullDiffForFile returns one file's uncommitted diff.
+func (i *Instance) GetFullDiffForFile(path string) (*DiffFile, error) {
+	return i.diffForFile("", path)
 }

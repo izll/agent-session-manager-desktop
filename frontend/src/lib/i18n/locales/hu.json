@@ -965,5 +965,10 @@
   "error.directoryNotFound": "A mappa nem található",
   "error.notADirectory": "A mappa nem található",
   "error.fileManagerFailed": "A fájlkezelő megnyitása nem sikerült",
-  "error.noDirectory": "A mappa nem található"
+  "error.noDirectory": "A mappa nem található",
+  "diff.group.modified": "Módosított",
+  "diff.group.added": "Új",
+  "diff.group.renamed": "Átnevezett",
+  "diff.group.deleted": "Törölt",
+  "diff.filterAll": "Mind"
 }

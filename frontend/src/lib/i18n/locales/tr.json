@@ -965,5 +965,10 @@
   "error.directoryNotFound": "Klasör bulunamadı",
   "error.notADirectory": "Klasör bulunamadı",
   "error.fileManagerFailed": "Dosya yöneticisi açılamadı",
-  "error.noDirectory": "Klasör bulunamadı"
+  "error.noDirectory": "Klasör bulunamadı",
+  "diff.group.modified": "Değiştirilen",
+  "diff.group.added": "Yeni",
+  "diff.group.renamed": "Yeniden adlandırılan",
+  "diff.group.deleted": "Silinen",
+  "diff.filterAll": "Tümü"
 }

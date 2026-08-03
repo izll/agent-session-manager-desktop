@@ -2310,25 +2310,25 @@ func (i *Instance) GetFullDiff() *DiffStats {
 }
 
 // getDiff executes git diff and parses the result
-func (i *Instance) getDiff(baseRef string) *DiffStats {
-	stats := &DiffStats{}
-
+// diffIndexEnv prepares a private git index so a diff can include untracked
+// files without touching the user's staging area.
+//
+// Returns the environment to run git with and a cleanup to call when done. Both
+// the whole-tree diff and the per-file one need this, so it lives here rather
+// than being repeated: the intent-to-add is what makes new files appear at all.
+func (i *Instance) diffIndexEnv() ([]string, func(), error) {
 	if !i.isGitRepo() {
-		stats.Error = fmt.Errorf("not a git repository")
-		return stats
+		return nil, nil, fmt.Errorf("not a git repository")
 	}
 
-	// Use a private temporary index so intent-to-add can make untracked files
-	// visible without mutating the user's real staging area.
 	tmpIndex, err := os.CreateTemp("", "asmgr-git-index-*")
 	if err != nil {
-		stats.Error = fmt.Errorf("failed to create temporary git index: %w", err)
-		return stats
+		return nil, nil, fmt.Errorf("failed to create temporary git index: %w", err)
 	}
 	tmpIndexPath := tmpIndex.Name()
 	tmpIndex.Close()
 	os.Remove(tmpIndexPath) // Git expects a missing or valid index, not an empty file.
-	defer os.Remove(tmpIndexPath)
+	cleanup := func() { os.Remove(tmpIndexPath) }
 
 	gitEnv := append(os.Environ(), "GIT_INDEX_FILE="+tmpIndexPath)
 	readTree, cancelReadTree := GitCommandTimed("-C", i.Path, "read-tree", "HEAD")
@@ -2340,19 +2340,31 @@ func (i *Instance) getDiff(baseRef string) *DiffStats {
 		defer cancelReadEmpty()
 		readEmpty.Env = gitEnv
 		if emptyErr := readEmpty.Run(); emptyErr != nil {
-			stats.Error = fmt.Errorf("failed to prepare temporary git index: %w", err)
-			return stats
+			cleanup()
+			return nil, nil, fmt.Errorf("failed to prepare temporary git index: %w", err)
 		}
 	}
+
 	intentToAdd, cancelIntent := GitCommandTimed("-C", i.Path, "add", "-N", ".")
 	defer cancelIntent()
 	intentToAdd.Env = gitEnv
 	if err := intentToAdd.Run(); err != nil {
-		stats.Error = fmt.Errorf("failed to include untracked files in diff: %w", err)
+		cleanup()
+		return nil, nil, fmt.Errorf("failed to include untracked files in diff: %w", err)
+	}
+	return gitEnv, cleanup, nil
+}
+
+func (i *Instance) getDiff(baseRef string) *DiffStats {
+	stats := &DiffStats{}
+
+	gitEnv, cleanup, err := i.diffIndexEnv()
+	if err != nil {
+		stats.Error = err
 		return stats
 	}
+	defer cleanup()
 
-	// Build git diff command
 	args := []string{"-C", i.Path, "--no-pager", "diff"}
 	if baseRef != "" {
 		args = append(args, baseRef)
