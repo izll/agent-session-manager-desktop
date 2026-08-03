@@ -25,10 +25,26 @@ func TestWindowsInstallerIsPerUser(t *testing.T) {
 	}
 	src := string(b)
 
-	if !strings.Contains(src, "RequestExecutionLevel user") {
-		t.Error("the installer still asks for elevation; a per-user install needs none")
+	// The constant, not the directive: wails_tools.nsh issues
+	// RequestExecutionLevel itself and defaults this to "admin", and its
+	// setShellContext macro reads the same constant to choose between the
+	// all-users and per-user shell folders. Setting the directive further down
+	// leaves the constant alone — which is how shortcuts ended up aimed at a
+	// Start menu the unelevated installer could not write to, and were silently
+	// not created.
+	if !strings.Contains(src, `!define REQUEST_EXECUTION_LEVEL "user"`) {
+		t.Error("REQUEST_EXECUTION_LEVEL is not defined as \"user\" before " +
+			"wails_tools.nsh; the macros would still resolve to all-users paths")
 	}
-	if strings.Contains(src, "$PROGRAMFILES64") || strings.Contains(src, "$PROGRAMFILES\\") {
+	if idx := strings.Index(src, `!define REQUEST_EXECUTION_LEVEL`); idx >= 0 {
+		if inc := strings.Index(src, `!include "wails_tools.nsh"`); inc >= 0 && idx > inc {
+			t.Error("REQUEST_EXECUTION_LEVEL is defined after wails_tools.nsh, which " +
+				"reads it — by then the default has already been applied")
+		}
+	}
+	// Program Files may still be named, but only to find a previous
+	// machine-wide install; it must not be where this one goes.
+	if strings.Contains(src, `InstallDir "$PROGRAMFILES`) {
 		t.Error("the installer still targets Program Files, which the self-update " +
 			"cannot write to without administrator rights")
 	}

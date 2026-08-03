@@ -28,7 +28,16 @@ Unicode true
 ## !define PRODUCT_EXECUTABLE  "Application.exe"      # Default "${INFO_PROJECTNAME}.exe"
 ## !define UNINST_KEY_NAME     "UninstKeyInRegistry"  # Default "${INFO_COMPANYNAME}${INFO_PRODUCTNAME}"
 ####
-## !define REQUEST_EXECUTION_LEVEL "admin"            # Default "admin"  see also https://nsis.sourceforge.io/Docs/Chapter4.html
+# Per-user install: no elevation to install, and none to update.
+#
+# This has to be defined BEFORE wails_tools.nsh, which issues the
+# RequestExecutionLevel itself and defaults the constant to "admin" — and whose
+# wails.setShellContext macro reads the same constant to decide between
+# SetShellVarContext all and current. Setting RequestExecutionLevel further down
+# instead left the constant at "admin", so the installer ran unelevated while
+# aiming its shortcuts at the all-users Start menu, where it could not write:
+# the shortcut was simply never created.
+!define REQUEST_EXECUTION_LEVEL "user"
 ####
 ## Include the wails tools
 ####
@@ -124,12 +133,10 @@ InstallDir "$LOCALAPPDATA\Programs\${INFO_PRODUCTNAME}"
 InstallDirRegKey HKCU "${UNINST_KEY}" "InstallLocation"
 ShowInstDetails show # This will always show the installation details.
 
-# No elevation: everything this installer touches belongs to the current user.
-RequestExecutionLevel user
-
 Function .onInit
    !insertmacro wails.checkArchitecture
-   # Shortcuts and uninstall entries go to the user's own, not all users'.
+   # Shortcut and uninstall paths resolve per user; the sections do this too,
+   # via wails.setShellContext, but .onInit runs before any of them.
    SetShellVarContext current
 
    # Offer to clear out a previous machine-wide install.
@@ -138,8 +145,22 @@ Function .onInit
    # This installer looks in HKCU, finds nothing, and installs to LocalAppData —
    # leaving the old copy behind with its own shortcuts and its own uninstaller,
    # so the Start menu offers two of the same app and the wrong one may launch.
+   # Both registry views: a 32-bit installer writes under WOW6432Node, and
+   # which one an earlier release used is not something to assume.
    SetRegView 64
    ReadRegStr $R0 HKLM "${UNINST_KEY}" "UninstallString"
+   ${If} $R0 == ""
+      SetRegView 32
+      ReadRegStr $R0 HKLM "${UNINST_KEY}" "UninstallString"
+      SetRegView 64
+   ${EndIf}
+   # Fall back to the uninstaller on disk. A registry entry can be missing
+   # while the install is still there — a failed uninstall, a cleaner, or a
+   # write that never happened — and the leftover copy is just as confusing.
+   ${If} $R0 == ""
+      IfFileExists "$PROGRAMFILES64\${INFO_PRODUCTNAME}\uninstall.exe" 0 +2
+         StrCpy $R0 '"$PROGRAMFILES64\${INFO_PRODUCTNAME}\uninstall.exe"'
+   ${EndIf}
    ${If} $R0 != ""
       MessageBox MB_YESNO|MB_ICONQUESTION "An older system-wide installation was found. Remove it first? This version installs for the current user only, so it can update itself without administrator rights. Removing the old one needs administrator approval." /SD IDYES IDNO skip_old_uninstall
       # Waited for: an uninstaller still running would delete files underneath
