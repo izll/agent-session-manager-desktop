@@ -38,6 +38,13 @@ Unicode true
 # aiming its shortcuts at the all-users Start menu, where it could not write:
 # the shortcut was simply never created.
 !define REQUEST_EXECUTION_LEVEL "user"
+
+# Pinned, because the default is "${INFO_COMPANYNAME}${INFO_PRODUCTNAME}" and a
+# company name was added after 0.9.11 shipped. Letting the key follow that would
+# make an upgrade look for a registry entry no existing install has: it would
+# not find the previous version, would install beside it, and leave two entries
+# in Add/Remove Programs. The value below is what installs up to 0.9.11 wrote.
+!define UNINST_KEY_NAME "asmgr-desktopAgent Session Manager"
 ####
 ## Include the wails tools
 ####

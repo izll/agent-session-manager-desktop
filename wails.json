@@ -9,7 +9,8 @@
   "tags": "webkit2_41",
   "info": {
     "productName": "Agent Session Manager",
-    "productVersion": "0.9.11"
+    "productVersion": "0.9.11",
+    "companyName": "izll"
   },
   "author": {
     "name": "izll"
