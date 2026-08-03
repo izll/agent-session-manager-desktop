@@ -500,6 +500,15 @@
     const currentSettings = get(settings);
     await loadTranslations(currentSettings.language || 'en');
 
+    // Reopen the session that was selected when the app last closed, and with
+    // it the tab that session remembers. Validated against the list that
+    // actually loaded: a session deleted since, or belonging to a project not
+    // open now, must not leave the panel pointing at nothing.
+    const remembered = currentSettings.restoreLastSession ? currentSettings.lastSessionId : '';
+    if (remembered && !get(selectedSessionId) && get(sessions).some(s => s.id === remembered)) {
+      selectSession(remembered);
+    }
+
     // Check dev mode
     try { devMode = await IsDevMode(); } catch(_) {}
 

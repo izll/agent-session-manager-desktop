@@ -970,5 +970,7 @@
   "diff.group.added": "Nowe",
   "diff.group.renamed": "Zmieniona nazwa",
   "diff.group.deleted": "Usunięte",
-  "diff.filterAll": "Wszystkie"
+  "diff.filterAll": "Wszystkie",
+  "settings.restoreLastSession": "Otwórz ostatnią sesję",
+  "settings.restoreLastSessionDesc": "Uruchom w sesji otwartej przy zamknięciu zamiast panelu"
 }

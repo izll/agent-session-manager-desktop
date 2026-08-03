@@ -2613,6 +2613,7 @@ type SettingsInfo struct {
 	ShowResumeBadge    bool   `json:"showResumeBadge"`
 	SplitView          bool   `json:"splitView"`
 	MarkedSessionID    string `json:"markedSessionId"`
+	LastSessionID      string `json:"lastSessionId"`
 	MarkedWindowIdx    int    `json:"markedWindowIdx"`
 	Language           string `json:"language"`
 	UITheme            string `json:"uiTheme"`
@@ -2624,6 +2625,7 @@ type SettingsInfo struct {
 	DiffFlatFileList   bool   `json:"diffFlatFileList"`
 	TrashRetentionDays int    `json:"trashRetentionDays"`
 	TaskMasterEnabled  bool   `json:"taskMasterEnabled"`
+	RestoreLastSession bool   `json:"restoreLastSession"`
 	TerminalFontSize   int    `json:"terminalFontSize"`
 	AgentFontSize      int    `json:"agentFontSize"`
 	HideViewBar        bool   `json:"hideViewBar"`
@@ -2709,6 +2711,7 @@ func (a *App) GetSettings() (*SettingsInfo, error) {
 		ShowResumeBadge:      settings.ShowResumeBadge,
 		SplitView:            settings.SplitView,
 		MarkedSessionID:      settings.MarkedSessionID,
+		LastSessionID:        settings.LastSessionID,
 		MarkedWindowIdx:      settings.MarkedWindowIdx,
 		Language:             lang,
 		UITheme:              settings.UITheme,
@@ -2720,6 +2723,7 @@ func (a *App) GetSettings() (*SettingsInfo, error) {
 		DiffFlatFileList:     settings.DiffFlatFileList,
 		TrashRetentionDays:   settings.TrashRetentionDays,
 		TaskMasterEnabled:    settings.TaskMasterEnabled,
+		RestoreLastSession:   settings.RestoreLastSession,
 		TerminalFontSize:     settings.TerminalFontSize,
 		AgentFontSize:        settings.AgentFontSize,
 		HideViewBar:          settings.HideViewBar,
@@ -2754,6 +2758,7 @@ func (a *App) SaveSettings(settings SettingsInfo) error {
 		current.ShowResumeBadge = settings.ShowResumeBadge
 		current.SplitView = settings.SplitView
 		current.MarkedSessionID = settings.MarkedSessionID
+		current.LastSessionID = settings.LastSessionID
 		current.MarkedWindowIdx = settings.MarkedWindowIdx
 		current.Language = settings.Language
 		current.UITheme = settings.UITheme
@@ -2765,6 +2770,7 @@ func (a *App) SaveSettings(settings SettingsInfo) error {
 		current.DiffFlatFileList = settings.DiffFlatFileList
 		current.TrashRetentionDays = settings.TrashRetentionDays
 		current.TaskMasterEnabled = settings.TaskMasterEnabled
+		current.RestoreLastSession = settings.RestoreLastSession
 		current.TerminalFontSize = settings.TerminalFontSize
 		current.AgentFontSize = settings.AgentFontSize
 		current.HideViewBar = settings.HideViewBar

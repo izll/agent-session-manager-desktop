@@ -970,5 +970,7 @@
   "diff.group.added": "Ajoutés",
   "diff.group.renamed": "Renommés",
   "diff.group.deleted": "Supprimés",
-  "diff.filterAll": "Tous"
+  "diff.filterAll": "Tous",
+  "settings.restoreLastSession": "Rouvrir la dernière session",
+  "settings.restoreLastSessionDesc": "Démarrer dans la session ouverte à la fermeture, au lieu du tableau de bord"
 }

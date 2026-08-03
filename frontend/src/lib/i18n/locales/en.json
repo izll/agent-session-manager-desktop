@@ -970,5 +970,7 @@
   "diff.group.added": "Added",
   "diff.group.renamed": "Renamed",
   "diff.group.deleted": "Deleted",
-  "diff.filterAll": "All"
+  "diff.filterAll": "All",
+  "settings.restoreLastSession": "Reopen last session",
+  "settings.restoreLastSessionDesc": "Start in the session that was open when you last closed the app, instead of on the dashboard"
 }

@@ -106,10 +106,14 @@
     // its "open diff" action still lands somewhere. Outside a git repo there
     // is no diff to open, so the request is simply ignored.
     if (view === 'diff') {
-      if (currentSession?.isGitRepo) fullDiffActive = true;
+      if (currentSession?.isGitRepo) {
+        fullDiffActive = true;
+        if (lastViewKey) tabDiffMemory.add(lastViewKey);
+      }
       return;
     }
     fullDiffActive = false;
+    if (lastViewKey) tabDiffMemory.delete(lastViewKey);
     selectView(view);
   }
 
@@ -124,6 +128,12 @@
     return `${sessionId || ''}:${windowIdx}`;
   }
 
+  // Whether each tab was left on the diff. Tracked alongside tabViewMemory
+  // rather than as one flag for the whole panel: the diff lives in the tab bar
+  // instead of the view bar, so it was never part of the per-tab memory, and
+  // opening it on one session left every other session showing a diff too.
+  const tabDiffMemory = new Set<string>();
+
   // Restore on tab/session change.
   //
   // This block deliberately does NOT read activeView. Doing so would make
@@ -136,8 +146,16 @@
   $: {
     const key = tabViewKey($selectedSessionId, $selectedWindowIdx ?? 0);
     if (key !== lastViewKey) {
-      if (lastViewKey) tabViewMemory.set(lastViewKey, lastView);
+      if (lastViewKey) {
+        tabViewMemory.set(lastViewKey, lastView);
+        if (fullDiffActive) tabDiffMemory.add(lastViewKey);
+        else tabDiffMemory.delete(lastViewKey);
+      }
       lastViewKey = key;
+      // Restore the diff only for a tab that was left on it, and only where
+      // there is a diff to show — a session outside a repository would open an
+      // empty panel with no way to tell why.
+      fullDiffActive = tabDiffMemory.has(key) && !!currentSession?.isGitRepo;
       let restored = tabViewMemory.get(key) || 'terminal';
       // A tab remembered on Tasks from before the feature was switched off must
       // not be restored onto a view that no longer has a way out. Corrected
@@ -168,6 +186,7 @@
   // reveals whichever view the tab was already on.
   function closeFullDiff() {
     fullDiffActive = false;
+    if (lastViewKey) tabDiffMemory.delete(lastViewKey);
   }
 
   onMount(() => window.addEventListener('main-panel:set-view', handleSetView));
@@ -431,7 +450,10 @@
       {fullDiffActive}
       {activeView}
       {visible}
-      on:openFullDiff={() => fullDiffActive = true}
+      on:openFullDiff={() => {
+        fullDiffActive = true;
+        if (lastViewKey) tabDiffMemory.add(lastViewKey);
+      }}
       on:closeFullDiff={closeFullDiff}
       on:openColorDialog={() => dispatch('openColorDialog')}
       on:requestStop={() => dispatch('requestStop')}

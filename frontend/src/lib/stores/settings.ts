@@ -22,6 +22,13 @@ export interface Settings {
   showResumeBadge: boolean;
   splitView: boolean;
   markedSessionId: string;
+  /** Session selected when the app last closed, so it reopens there. */
+  lastSessionId: string;
+  /**
+   * Start in the session that was open at shutdown instead of on the
+   * dashboard. Off by default — the dashboard is the neutral starting point.
+   */
+  restoreLastSession: boolean;
   markedWindowIdx: number;
   language: string;
   /** Interface accent colour id (see uiThemes.ts). */
@@ -87,6 +94,8 @@ export const settings = writable<Settings>({
   showResumeBadge: false,
   splitView: false,
   markedSessionId: '',
+  lastSessionId: '',
+  restoreLastSession: false,
   markedWindowIdx: 0,
   language: 'en',
   uiTheme: 'violet',

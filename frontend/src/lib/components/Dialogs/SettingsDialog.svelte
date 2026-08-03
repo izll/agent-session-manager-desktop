@@ -332,7 +332,7 @@
     }
   }
 
-  function toggle(key: 'hideStatusLines' | 'showAgentIcons' | 'compactList' | 'hideViewBar' | 'agentHideViewBar' | 'hideStatusBar' | 'agentHideStatusBar' | 'notifyOnWaiting' | 'notifyDesktop' | 'notifyNtfy' | 'taskMasterEnabled') {
+  function toggle(key: 'hideStatusLines' | 'showAgentIcons' | 'compactList' | 'hideViewBar' | 'agentHideViewBar' | 'hideStatusBar' | 'agentHideStatusBar' | 'notifyOnWaiting' | 'notifyDesktop' | 'notifyNtfy' | 'taskMasterEnabled' | 'restoreLastSession') {
     saveSettings({ [key]: !$settings[key] });
   }
 
@@ -616,6 +616,22 @@
                 class="toggle-btn"
                 class:active={$settings.compactList}
                 on:click={() => toggle('compactList')}
+              >
+                <span class="toggle-track">
+                  <span class="toggle-thumb"></span>
+                </span>
+              </button>
+            </label>
+
+            <label class="setting-item">
+              <span class="setting-info">
+                <span class="setting-label">{$t('settings.restoreLastSession')}</span>
+                <span class="setting-desc">{$t('settings.restoreLastSessionDesc')}</span>
+              </span>
+              <button
+                class="toggle-btn"
+                class:active={$settings.restoreLastSession}
+                on:click={() => toggle('restoreLastSession')}
               >
                 <span class="toggle-track">
                   <span class="toggle-thumb"></span>

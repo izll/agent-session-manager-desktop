@@ -495,6 +495,9 @@ export function selectSession(id: string | null) {
   selectedSessionId.set(id);
   // Restore the remembered tab, validated against the tabs that still exist
   selectedWindowIdx.set(id ? resolveInitialWindow(id) : 0);
+  // Persist which session this is, so the next launch opens it. Best-effort:
+  // failing to record it must never get in the way of switching.
+  if (id) void persistLastSession(id);
   if (id) showSessionView();
 }
 
@@ -507,6 +510,17 @@ function persistLastWindow(id: string, idx: number) {
   void App.SetLastWindowIndex(id, idx).catch(e => {
     console.warn('could not persist last tab', id, e);
   });
+}
+
+// Record which session is selected, so the next launch opens it. The tab within
+// it is stored separately, on the session itself.
+//
+// Written on every switch rather than on shutdown: the app can be closed in
+// ways that run no exit handler, and a preference that only survives a clean
+// quit is one the user cannot rely on.
+function persistLastSession(id: string) {
+  if (get(settings).lastSessionId === id) return;
+  void saveSettings({ lastSessionId: id });
 }
 
 export function selectWindow(idx: number) {

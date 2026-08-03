@@ -51,6 +51,10 @@ type Settings struct {
 	ShowResumeBadge bool   `json:"show_resume_badge,omitempty"`
 	SplitView       bool   `json:"split_view,omitempty"`
 	MarkedSessionID string `json:"marked_session_id,omitempty"`
+	// LastSessionID is the session that was selected when the app last closed,
+	// so it reopens where the user left off. The tab within it is remembered
+	// separately, per session (Instance.LastWindowIndex).
+	LastSessionID string `json:"last_session_id,omitempty"`
 	MarkedWindowIdx int    `json:"marked_window_idx,omitempty"`
 	Cursor          int    `json:"cursor,omitempty"`
 	SplitFocus      int    `json:"split_focus,omitempty"`
@@ -88,6 +92,11 @@ type Settings struct {
 	// omitempty an absent key and an explicit false are indistinguishable, and
 	// both mean "off", which is exactly the default we want. Still experimental.
 	TaskMasterEnabled bool `json:"task_master_enabled,omitempty"`
+	// RestoreLastSession reopens the session that was selected at shutdown
+	// instead of starting on the dashboard. Off by default: the dashboard is
+	// the neutral starting point, and landing straight in a session is a
+	// preference rather than an obvious improvement.
+	RestoreLastSession bool `json:"restore_last_session,omitempty"`
 	// Attention notifications: fire when an agent flips to "waiting"
 	// (needs user input). Desktop uses notify-send/osascript; ntfy POSTs
 	// to NtfyURL (e.g. https://ntfy.sh/my-topic) for mobile push.

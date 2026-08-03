@@ -970,5 +970,7 @@
   "diff.group.added": "Нові",
   "diff.group.renamed": "Перейменовані",
   "diff.group.deleted": "Видалені",
-  "diff.filterAll": "Усі"
+  "diff.filterAll": "Усі",
+  "settings.restoreLastSession": "Відкривати останню сесію",
+  "settings.restoreLastSessionDesc": "Запускатися в сесії, відкритій при закритті, замість панелі"
 }

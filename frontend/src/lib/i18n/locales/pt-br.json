@@ -970,5 +970,7 @@
   "diff.group.added": "Novos",
   "diff.group.renamed": "Renomeados",
   "diff.group.deleted": "Excluídos",
-  "diff.filterAll": "Todos"
+  "diff.filterAll": "Todos",
+  "settings.restoreLastSession": "Reabrir última sessão",
+  "settings.restoreLastSessionDesc": "Iniciar na sessão que estava aberta ao fechar, em vez do painel"
 }

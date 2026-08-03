@@ -970,5 +970,7 @@
   "diff.group.added": "Новые",
   "diff.group.renamed": "Переименованные",
   "diff.group.deleted": "Удалённые",
-  "diff.filterAll": "Все"
+  "diff.filterAll": "Все",
+  "settings.restoreLastSession": "Открывать последнюю сессию",
+  "settings.restoreLastSessionDesc": "Запускаться в сессии, открытой при закрытии, вместо панели"
 }

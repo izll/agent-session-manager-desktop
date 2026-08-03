@@ -1066,6 +1066,7 @@ export namespace main {
 	    showResumeBadge: boolean;
 	    splitView: boolean;
 	    markedSessionId: string;
+	    lastSessionId: string;
 	    markedWindowIdx: number;
 	    language: string;
 	    uiTheme: string;
@@ -1077,6 +1078,7 @@ export namespace main {
 	    diffFlatFileList: boolean;
 	    trashRetentionDays: number;
 	    taskMasterEnabled: boolean;
+	    restoreLastSession: boolean;
 	    terminalFontSize: number;
 	    agentFontSize: number;
 	    hideViewBar: boolean;
@@ -1105,6 +1107,7 @@ export namespace main {
 	        this.showResumeBadge = source["showResumeBadge"];
 	        this.splitView = source["splitView"];
 	        this.markedSessionId = source["markedSessionId"];
+	        this.lastSessionId = source["lastSessionId"];
 	        this.markedWindowIdx = source["markedWindowIdx"];
 	        this.language = source["language"];
 	        this.uiTheme = source["uiTheme"];
@@ -1116,6 +1119,7 @@ export namespace main {
 	        this.diffFlatFileList = source["diffFlatFileList"];
 	        this.trashRetentionDays = source["trashRetentionDays"];
 	        this.taskMasterEnabled = source["taskMasterEnabled"];
+	        this.restoreLastSession = source["restoreLastSession"];
 	        this.terminalFontSize = source["terminalFontSize"];
 	        this.agentFontSize = source["agentFontSize"];
 	        this.hideViewBar = source["hideViewBar"];

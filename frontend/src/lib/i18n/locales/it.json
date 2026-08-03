@@ -970,5 +970,7 @@
   "diff.group.added": "Nuovi",
   "diff.group.renamed": "Rinominati",
   "diff.group.deleted": "Eliminati",
-  "diff.filterAll": "Tutti"
+  "diff.filterAll": "Tutti",
+  "settings.restoreLastSession": "Riapri l'ultima sessione",
+  "settings.restoreLastSessionDesc": "Avvia nella sessione aperta all'ultima chiusura, invece della dashboard"
 }

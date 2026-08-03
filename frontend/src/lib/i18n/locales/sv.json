@@ -970,5 +970,7 @@
   "diff.group.added": "Nya",
   "diff.group.renamed": "Omdöpta",
   "diff.group.deleted": "Borttagna",
-  "diff.filterAll": "Alla"
+  "diff.filterAll": "Alla",
+  "settings.restoreLastSession": "Öppna senaste sessionen",
+  "settings.restoreLastSessionDesc": "Starta i sessionen som var öppen vid avslut, i stället för översikten"
 }

@@ -970,5 +970,7 @@
   "diff.group.added": "Nové",
   "diff.group.renamed": "Přejmenované",
   "diff.group.deleted": "Smazané",
-  "diff.filterAll": "Vše"
+  "diff.filterAll": "Vše",
+  "settings.restoreLastSession": "Otevřít poslední relaci",
+  "settings.restoreLastSessionDesc": "Spustit v relaci otevřené při zavření místo přehledu"
 }
