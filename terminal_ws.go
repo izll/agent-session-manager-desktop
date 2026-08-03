@@ -57,6 +57,100 @@ func checkTerminalOrigin(r *http.Request) bool {
 	}
 }
 
+// Redraw queue: at most one Ctrl-L per tab, sent once the requests stop.
+//
+// Ctrl-L is the only thing that makes a bottom-aligned TUI lay itself out again
+// — resize-window and refresh-client repaint the pane buffer, not the program's
+// idea of its own geometry. But it is also INPUT: an agent prompt reads it as
+// text rather than as a redraw, and Claude Code turned stray ones into "/clear"
+// in the composer.
+//
+// What made that happen was never a single keystroke: it was several arriving
+// close together, from a resize and a tab switch and the resize that follows a
+// tab switch, each firing its own. So the rule is one queue per tab, and the
+// timer restarts on every new request — a run of activity produces exactly one
+// keystroke, after the activity has stopped.
+//
+// The queue runs whether or not the tab is visible. A tab working in the
+// background has its output dropped at the source, so it is precisely the one
+// that needs a redraw before the user looks at it again.
+var redrawQueue struct {
+	sync.Mutex
+	timers map[string]*time.Timer
+}
+
+// How long the requests have to stop before the keystroke goes out.
+//
+// Two values, because the risk is not the same everywhere. What made a stray
+// keystroke costly was Claude Code turning it into "/clear" in the composer, so
+// its panes wait long enough that any burst has certainly settled. Other agents
+// have no such command — a keystroke that arrives at an awkward moment is at
+// worst ignored — so they get a shorter wait and a pane that comes right
+// sooner.
+const (
+	redrawQuietPeriodClaude = 2500 * time.Millisecond
+	redrawQuietPeriod       = 1000 * time.Millisecond
+)
+
+// redrawQuietFor returns the wait to use for one tab.
+func redrawQuietFor(agent session.AgentType) time.Duration {
+	if agent == session.AgentClaude {
+		return redrawQuietPeriodClaude
+	}
+	return redrawQuietPeriod
+}
+
+// queueRedraw asks for a redraw of one tab, coalescing with any request already
+// waiting for it. Returns immediately; the keystroke is sent later.
+func queueRedraw(sessionID, target string, winIdx int, reason string, quiet time.Duration) {
+	key := fmt.Sprintf("%s:%d", sessionID, winIdx)
+
+	redrawQueue.Lock()
+	defer redrawQueue.Unlock()
+	if redrawQueue.timers == nil {
+		redrawQueue.timers = make(map[string]*time.Timer)
+	}
+
+	// Restarting an existing timer is what collapses a burst: the keystroke is
+	// only sent once nothing new has been asked for.
+	if t, ok := redrawQueue.timers[key]; ok {
+		t.Reset(quiet)
+		if session.DebugLogging {
+			log.Printf("[ws] redraw queued (%s, coalesced) session=%s win=%d",
+				reason, sessionID, winIdx)
+		}
+		return
+	}
+
+	if session.DebugLogging {
+		log.Printf("[ws] redraw queued (%s) session=%s win=%d", reason, sessionID, winIdx)
+	}
+	redrawQueue.timers[key] = time.AfterFunc(quiet, func() {
+		redrawQueue.Lock()
+		delete(redrawQueue.timers, key)
+		redrawQueue.Unlock()
+
+		err := session.TmuxCommand("send-keys", "-t",
+			fmt.Sprintf("%s:%d", target, winIdx), "C-l").Run()
+		if session.DebugLogging {
+			log.Printf("[ws] redraw sent session=%s win=%d err=%v", sessionID, winIdx, err)
+		}
+	})
+}
+
+// cancelQueuedRedraw drops a tab's pending redraw. Called when its connection
+// goes away: the target would no longer exist, and the program that was going
+// to be redrawn is gone.
+func cancelQueuedRedraw(sessionID string, winIdx int) {
+	key := fmt.Sprintf("%s:%d", sessionID, winIdx)
+	redrawQueue.Lock()
+	defer redrawQueue.Unlock()
+	if t, ok := redrawQueue.timers[key]; ok {
+		t.Stop()
+		delete(redrawQueue.timers, key)
+	}
+}
+
 // mirrorWindowIndexes lists the window indexes present in a mirror session.
 func mirrorWindowIndexes(sessionName string) []int {
 	out, err := session.TmuxCommand("list-windows", "-t", sessionName,
@@ -316,6 +410,18 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 	// We create a grouped session per-connection so each WebSocket has its own
 	// active window, preventing window switches from affecting other connections.
 	tmuxSession := inst.TmuxSessionName()
+
+	// The wait before an automatic redraw keystroke depends on which agent
+	// reads this pane, so resolve it once here. A tab can run a different agent
+	// from the session's main window.
+	tabAgent := inst.Agent
+	for _, fw := range inst.FollowedWindows {
+		if fw.Index == winIdx && fw.Agent != "" {
+			tabAgent = fw.Agent
+			break
+		}
+	}
+	redrawQuiet := redrawQuietFor(tabAgent)
 
 	// Nothing to attach to if the multiplexer session is gone — after the user
 	// deleted it, say. Attaching anyway builds a mirror around a session that
@@ -673,7 +779,8 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 			if attachedToOwnMirror {
 				session.TmuxCommand("kill-session", "-t", linkedName).Run()
 			}
-			forgetRedrawSizes(sessionID, winIdx)
+			// A redraw waiting for this tab has nowhere to go now.
+			cancelQueuedRedraw(sessionID, winIdx)
 			log.Printf("[ws] detach session=%s win=%d target=%s", sessionID, winIdx, attachTarget)
 		}()
 
@@ -775,10 +882,7 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 							// prompt into a different state, which is where the stray
 							// "/clear" came from. A resize burst can easily produce
 							// several, so allow one per window per interval.
-							if allowRedrawKey(sessionID, winIdx, cols, rows) {
-								session.TmuxCommand("send-keys", "-t",
-									fmt.Sprintf("%s:%d", attachTarget, winIdx), "C-l").Run()
-							}
+							queueRedraw(sessionID, attachTarget, winIdx, "resize", redrawQuiet)
 						}
 					}
 				} else if len(data) >= 2 && data[0] == 0x02 {
@@ -793,13 +897,32 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 						// time (each check is a process launch, ~20ms).
 						session.SetTerminalVisible(ptmx, false)
 					} else {
-						atomic.StoreInt32(&tc.hidden, 0)
+						// Was this tab actually hidden? The flag starts at 0, so
+						// the first "become visible" after an attach reports a
+						// transition that never happened.
+						wasHidden := atomic.SwapInt32(&tc.hidden, 0) == 1
 						session.SetTerminalVisible(ptmx, true)
 						// Coming back to the foreground: force tmux to repaint the
 						// pane so we recover everything that was dropped while
 						// hidden, in a single redraw.
-						if attachedToOwnMirror {
+						if attachedToOwnMirror && wasHidden {
 							session.RefreshSessionClients(attachTarget)
+							// And ask the program to redraw itself, which
+							// refresh-client cannot do — it repaints the pane
+							// buffer, and this client's view of that buffer is
+							// exactly what went stale: output produced while the
+							// tab was hidden is dropped at the source, so
+							// whatever the agent drew in the meantime never
+							// arrived. Leaving a tab to work, coming back, and
+							// having to press Refresh is this gap.
+							//
+							// Still goes through the guard, because showing a tab
+							// can be accompanied by a resize — the pane is being
+							// laid out as it appears — and two Ctrl-L close
+							// together are what produced the stray "/clear".
+							// Whichever of the two arrives first sends it; the
+							// other is suppressed as a repeat.
+							queueRedraw(sessionID, attachTarget, winIdx, "show", redrawQuiet)
 						}
 					}
 				} else {
@@ -821,58 +944,3 @@ func (ts *TerminalServer) GetPort() int {
 	return ts.port
 }
 
-// redrawKeyGuard decides when the Ctrl-L that makes a TUI redraw may be sent.
-//
-// Ctrl-L is input. One is read as "redraw" and leaves an agent's composer
-// alone; two arriving close together do not behave the same way, and that pair
-// is what put a stray "/clear" into Claude Code's prompt.
-//
-// The rule is per-size, not per-interval, and not per-history:
-//
-//   - Not an interval. Measured gaps between real resizes ran from 206ms to
-//     6.5s, overlapping completely with the gaps inside a burst, so no
-//     threshold separates them.
-//   - Not "has this size been drawn before". That was tried and it broke
-//     restoring a window: the geometry it returns to is one the program drew at
-//     earlier, so the redraw was suppressed exactly when it was needed, and the
-//     pane came back offset. Both sizes in a maximise/restore are real —
-//     verified in the geometry log, where container, window and outer size all
-//     agree in each state.
-//
-// What is left is the one case that is genuinely redundant: the same size
-// arriving again with nothing changed in between. A resize burst repeats its
-// final value, and the repeats are what pair up.
-var redrawKeyGuard struct {
-	sync.Mutex
-	// The size each window was last asked to redraw at.
-	lastSize map[string]string
-}
-
-// allowRedrawKey reports whether a redraw keystroke is worth sending for this
-// window at this size, recording the size when it is.
-func allowRedrawKey(sessionID string, winIdx, cols, rows int) bool {
-	key := fmt.Sprintf("%s:%d", sessionID, winIdx)
-	size := fmt.Sprintf("%dx%d", cols, rows)
-
-	redrawKeyGuard.Lock()
-	defer redrawKeyGuard.Unlock()
-	if redrawKeyGuard.lastSize == nil {
-		redrawKeyGuard.lastSize = make(map[string]string)
-	}
-	if redrawKeyGuard.lastSize[key] == size {
-		return false // same geometry again: nothing moved, nothing to redraw
-	}
-	redrawKeyGuard.lastSize[key] = size
-	return true
-}
-
-// forgetRedrawSizes drops a window's recorded geometry, so the next resize is
-// treated as new. Called when a pane is torn down: the program behind it will
-// have been replaced by then, and what the old one was drawn at says nothing
-// about the new one.
-func forgetRedrawSizes(sessionID string, winIdx int) {
-	key := fmt.Sprintf("%s:%d", sessionID, winIdx)
-	redrawKeyGuard.Lock()
-	defer redrawKeyGuard.Unlock()
-	delete(redrawKeyGuard.lastSize, key)
-}
