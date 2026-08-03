@@ -21,7 +21,7 @@
   }
 
   let diff: DiffData | null = null;
-  let files: session.DiffFile[] = [];
+  let files: session.DiffFileSummary[] = [];
   let selectedPath: string | null = null;
   // The selected file's hunks, fetched on demand and kept for as long as the
   // list is unchanged — reopening a file already looked at should be instant.
@@ -325,7 +325,7 @@
 
   // --- Revert -------------------------------------------------------------
 
-  function askRevertFile(file: session.DiffFile) {
+  function askRevertFile(file: session.DiffFileSummary) {
     if (reverting) return;
     // An untracked file has no committed version to restore — reverting DELETES
     // it. Say so explicitly; the generic "discard changes" wording would be a
@@ -590,8 +590,8 @@
 
   // Hoisted out of the markup: Svelte's template can't narrow the row union,
   // and casts aren't allowed there.
-  function rowFile(row: TreeRow<session.DiffFile>): session.DiffFile {
-    return (row as { kind: 'file'; file: session.DiffFile }).file;
+  function rowFile(row: TreeRow<session.DiffFileSummary>): session.DiffFileSummary {
+    return (row as { kind: 'file'; file: session.DiffFileSummary }).file;
   }
 </script>
 
