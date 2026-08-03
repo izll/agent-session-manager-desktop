@@ -5,6 +5,11 @@
         <string>APPL</string>
         <key>CFBundleName</key>
         <string>{{.Info.ProductName}}</string>
+        <!-- What Finder, the Dock and Launchpad show. Without it they fall back
+             to the bundle's directory name, which is the executable's — so the
+             app appeared as "asmgr-desktop" rather than under its own name. -->
+        <key>CFBundleDisplayName</key>
+        <string>{{.Info.ProductName}}</string>
         <key>CFBundleExecutable</key>
         <string>{{.OutputFilename}}</string>
         <key>CFBundleIdentifier</key>

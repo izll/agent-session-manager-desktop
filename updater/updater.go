@@ -514,6 +514,32 @@ func bundleRootFor(execPath string) string {
 	return ""
 }
 
+// findBundleIn returns the single .app directory at the top of dir.
+//
+// Used when the archive's bundle is not named the same as the installed one,
+// which happens across the rename. Refuses to guess when there is more than
+// one: replacing the wrong directory is worse than failing with a message.
+func findBundleIn(dir string) (string, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return "", err
+	}
+	var found string
+	for _, e := range entries {
+		if !e.IsDir() || !strings.EqualFold(filepath.Ext(e.Name()), ".app") {
+			continue
+		}
+		if found != "" {
+			return "", fmt.Errorf("the archive holds more than one .app bundle")
+		}
+		found = filepath.Join(dir, e.Name())
+	}
+	if found == "" {
+		return "", fmt.Errorf("no .app bundle in the archive")
+	}
+	return found, nil
+}
+
 // installBundleUpdate replaces a macOS .app bundle in its entirety.
 //
 // The bundle is a directory tree — executable, Info.plist, resources and a code
@@ -560,17 +586,32 @@ func installBundleUpdate(version string) error {
 	if err := extractBundle(archivePath, stageDir); err != nil {
 		return err
 	}
+	// Find the .app in the archive rather than assuming it matches the one on
+	// disk. The bundle was renamed from asmgr-desktop.app to the product name
+	// (macOS shows the DIRECTORY name in Finder and Launchpad, whatever
+	// CFBundleDisplayName says), so an older install updating to a newer
+	// release is looking for a name the archive no longer uses.
 	staged := filepath.Join(stageDir, filepath.Base(bundle))
 	if _, err := os.Stat(staged); err != nil {
-		return fmt.Errorf("the archive did not contain %s", filepath.Base(bundle))
+		found, findErr := findBundleIn(stageDir)
+		if findErr != nil {
+			return fmt.Errorf("the archive did not contain an .app bundle: %w", findErr)
+		}
+		staged = found
 	}
+
+	// Install under the archive's own name, so an update also carries the
+	// rename across: macOS shows the directory name in Finder and Launchpad, so
+	// keeping the old path would leave the app displayed as "asmgr-desktop"
+	// forever. Same directory, so this stays a rename within one filesystem.
+	target := filepath.Join(filepath.Dir(bundle), filepath.Base(staged))
 
 	old := bundle + ".old"
 	_ = os.RemoveAll(old)
 	if err := os.Rename(bundle, old); err != nil {
 		return fmt.Errorf("cannot move the old application aside: %w", err)
 	}
-	if err := os.Rename(staged, bundle); err != nil {
+	if err := os.Rename(staged, target); err != nil {
 		_ = os.Rename(old, bundle) // put the working version back
 		return fmt.Errorf("cannot install the new application: %w", err)
 	}

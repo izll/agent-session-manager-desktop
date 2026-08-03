@@ -16,6 +16,9 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 MAC_HOST="${ASMGR_MAC_HOST:-izll@192.168.1.120}"
+# Installed under the product name: macOS shows a bundle's directory name in
+# Finder and Launchpad, whatever CFBundleDisplayName says.
+APP_NAME="Agent Session Manager.app"
 MAC_DIR="${ASMGR_MAC_DIR:-\$HOME/asmgr-build}"
 REMOTE_PATH='export PATH=/opt/homebrew/bin:$HOME/go/bin:$PATH'
 
@@ -36,9 +39,9 @@ echo "==> Installing to ~/Applications"
 # Replaced rather than merged: a stale file left inside an .app bundle from a
 # previous build is the kind of thing that only shows up at runtime.
 ssh "$MAC_HOST" "$REMOTE_PATH; pkill -f asmgr-desktop 2>/dev/null || true; \
-  rm -rf \$HOME/Applications/asmgr-desktop.app && \
-  cp -R $MAC_DIR/build/bin/asmgr-desktop.app \$HOME/Applications/ && \
-  codesign --force --deep --sign - \$HOME/Applications/asmgr-desktop.app && \
-  echo 'installed:' && ls -ld \$HOME/Applications/asmgr-desktop.app"
+  rm -rf \"\$HOME/Applications/asmgr-desktop.app\" \"\$HOME/Applications/$APP_NAME\" && \
+  cp -R $MAC_DIR/build/bin/asmgr-desktop.app \"\$HOME/Applications/$APP_NAME\" && \
+  codesign --force --deep --sign - \"\$HOME/Applications/$APP_NAME\" && \
+  echo 'installed:' && ls -ld \"\$HOME/Applications/$APP_NAME\""
 
 echo "==> Done. Launch it from ~/Applications on the Mac."

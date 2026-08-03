@@ -274,10 +274,17 @@ jobs:
           codesign --force --deep --sign - "$APP"
           codesign --verify --deep --strict "$APP"
 
+      # Renamed before packaging, so the archive carries the new name and an
+      # update applies it. macOS shows the bundle's DIRECTORY name in Finder and
+      # Launchpad whatever CFBundleDisplayName says — verified with mdls — so
+      # this is the only way the app appears under its own name.
+      - name: Rename the bundle to the product name
+        run: mv "build/bin/asmgr-desktop.app" "build/bin/Agent Session Manager.app"
+
       - name: Package .tar.gz (name matches the in-app updater)
         run: |
           V="${{ steps.ver.outputs.num }}"
-          tar -C build/bin -czf "asmgr-desktop_${V}_darwin_arm64.tar.gz" "asmgr-desktop.app"
+          tar -C build/bin -czf "asmgr-desktop_${V}_darwin_arm64.tar.gz" "Agent Session Manager.app"
           shasum -a 256 "asmgr-desktop_${V}_darwin_arm64.tar.gz" > "asmgr-desktop_${V}_darwin_arm64.tar.gz.sha256"
           ls -la *.tar.gz *.sha256
 
