@@ -78,3 +78,56 @@ func TestParseNumstatZ(t *testing.T) {
 		_ = parseNumstatZ(out) // must not panic
 	})
 }
+
+// numstat says nothing about what happened to a file — a new file and an edited
+// one are both "<added> <removed> <path>" — so every file came out labelled
+// "modified" in the diff list. name-status is the side that knows.
+func TestApplyNameStatus(t *testing.T) {
+	t.Run("added and modified are distinguished", func(t *testing.T) {
+		files := []DiffFileSummary{
+			{Path: "existing.txt", Status: "modified"},
+			{Path: "brand-new.txt", Status: "modified"},
+		}
+		applyNameStatus(files, "M\x00existing.txt\x00A\x00brand-new.txt\x00")
+
+		if files[0].Status != "modified" {
+			t.Errorf("existing.txt is %q, want \"modified\"", files[0].Status)
+		}
+		if files[1].Status != "added" {
+			t.Errorf("brand-new.txt is %q, want \"added\" — this is the bug where every "+
+				"new file was listed under Modified", files[1].Status)
+		}
+	})
+
+	t.Run("deletions", func(t *testing.T) {
+		files := []DiffFileSummary{{Path: "gone.txt", Status: "modified"}}
+		applyNameStatus(files, "D\x00gone.txt\x00")
+		if files[0].Status != "deleted" {
+			t.Errorf("status is %q, want \"deleted\"", files[0].Status)
+		}
+	})
+
+	t.Run("renames carry a score and two paths", func(t *testing.T) {
+		// "R100" plus old and new path; the new one is what the list shows.
+		files := []DiffFileSummary{{Path: "new/name.go", Status: "modified"}}
+		applyNameStatus(files, "R100\x00old/name.go\x00new/name.go\x00")
+		if files[0].Status != "renamed" {
+			t.Errorf("status is %q, want \"renamed\"", files[0].Status)
+		}
+	})
+
+	t.Run("a path only name-status knows about is ignored", func(t *testing.T) {
+		// Must not panic or corrupt the entries it does have.
+		files := []DiffFileSummary{{Path: "known.txt", Status: "modified"}}
+		applyNameStatus(files, "A\x00unknown.txt\x00M\x00known.txt\x00")
+		if len(files) != 1 || files[0].Status != "modified" {
+			t.Errorf("files became %+v", files)
+		}
+	})
+
+	t.Run("truncated output", func(t *testing.T) {
+		files := []DiffFileSummary{{Path: "a.txt", Status: "modified"}}
+		applyNameStatus(files, "R100\x00only-old-path.txt\x00") // no new path
+		applyNameStatus(files, "A\x00")                          // no path at all
+	})
+}

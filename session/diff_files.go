@@ -323,7 +323,80 @@ func (i *Instance) diffFileSummaries(baseRef string) ([]DiffFileSummary, error) 
 	if err != nil {
 		return nil, fmt.Errorf("git diff --numstat failed: %w", err)
 	}
-	return parseNumstatZ(string(out)), nil
+	files := parseNumstatZ(string(out))
+
+	// numstat gives line counts and paths but says nothing about what happened
+	// to a file: a new file and an edited one are both just "<added> <removed>
+	// <path>", so everything came out labelled "modified". name-status is the
+	// side that knows — A, M, D, R — so the two are read together.
+	statusArgs := []string{"-C", i.Path, "--no-pager", "diff", "--name-status", "-z", "--find-renames"}
+	if baseRef != "" {
+		statusArgs = append(statusArgs, baseRef)
+	}
+	statusCmd, cancelStatus := GitCommandTimed(statusArgs...)
+	defer cancelStatus()
+	statusCmd.Env = gitEnv
+	statusOut, statusErr := statusCmd.Output()
+	if statusErr != nil {
+		// The counts are still useful without it; better a list labelled
+		// "modified" than no list at all.
+		return files, nil
+	}
+	applyNameStatus(files, string(statusOut))
+	return files, nil
+}
+
+// applyNameStatus fills in each file's status from `git diff --name-status -z`.
+//
+// Records are "<letter>\x00<path>", except renames and copies, which carry a
+// similarity score on the letter (R100) and two paths. Matched by path rather
+// than by position: the two commands agree on order in practice, but a mismatch
+// would silently label the wrong files.
+func applyNameStatus(files []DiffFileSummary, out string) {
+	byPath := make(map[string]*DiffFileSummary, len(files))
+	for idx := range files {
+		byPath[files[idx].Path] = &files[idx]
+	}
+
+	fields := strings.Split(out, "\x00")
+	for idx := 0; idx < len(fields); idx++ {
+		letter := fields[idx]
+		if letter == "" {
+			continue
+		}
+		var path string
+		switch letter[0] {
+		case 'R', 'C':
+			// Old path, then new path; the new one is what the list shows.
+			if idx+2 >= len(fields) {
+				return
+			}
+			path = fields[idx+2]
+			idx += 2
+		default:
+			if idx+1 >= len(fields) {
+				return
+			}
+			path = fields[idx+1]
+			idx++
+		}
+		f, ok := byPath[path]
+		if !ok {
+			continue
+		}
+		switch letter[0] {
+		case 'A':
+			f.Status = "added"
+		case 'D':
+			f.Status = "deleted"
+		case 'R':
+			f.Status = "renamed"
+		case 'C':
+			f.Status = "added" // a copy is a new file as far as reviewing goes
+		default:
+			f.Status = "modified"
+		}
+	}
 }
 
 // parseNumstatZ reads `git diff --numstat -z` output.
