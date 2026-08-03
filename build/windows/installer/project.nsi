@@ -34,6 +34,9 @@ Unicode true
 ####
 !include "wails_tools.nsh"
 
+# For ${If}/${EndIf} in .onInit, used to detect a previous machine-wide install.
+!include "LogicLib.nsh"
+
 # The version information for this two must consist of 4 parts
 VIProductVersion "${INFO_PRODUCTVERSION}.0"
 VIFileVersion    "${INFO_PRODUCTVERSION}.0"
@@ -97,22 +100,53 @@ ManifestDPIAware true
 
 Name "${INFO_PRODUCTNAME}"
 OutFile "..\..\bin\${INFO_PROJECTNAME}-${ARCH}-installer.exe" # Name of the installer's file.
-# Install straight into Program Files, with no vendor folder above the product.
-# The Wails default is $PROGRAMFILES64\${INFO_COMPANYNAME}\${INFO_PRODUCTNAME},
-# but there is no company name set, so Wails falls back to the project name and
-# the path becomes asmgr-desktop\Agent Session Manager — the same name twice,
-# once machine-readable and once human-readable.
-InstallDir "$PROGRAMFILES64\${INFO_PRODUCTNAME}" # Default installing folder ($PROGRAMFILES is Program Files folder).
+# Installed per user, under LocalAppData, rather than into Program Files.
+#
+# The app updates itself in place: it writes the new build beside the running
+# executable and swaps it. Program Files is not writable without elevation, so
+# that failed with "Access is denied" and the only way to update was to download
+# the installer by hand. Every update would otherwise need a UAC prompt, which
+# also rules out the quiet background update Linux and macOS get.
+#
+# Per-user install is what Chrome, VS Code and Discord do, for this reason. It
+# also means the installer needs no administrator rights at all.
+#
+# No vendor folder above the product: the Wails default is
+# ${INFO_COMPANYNAME}\${INFO_PRODUCTNAME}, but with no company name set Wails
+# falls back to the project name, and the path becomes asmgr-desktop\Agent
+# Session Manager — the same name twice, once machine-readable and once not.
+InstallDir "$LOCALAPPDATA\Programs\${INFO_PRODUCTNAME}"
 
 # Reinstall over an existing copy instead of beside it. Without this an upgrade
 # would install to the default path and leave the previous install orphaned —
 # two copies, two shortcuts, and an uninstaller for the one you are not running.
 # It also keeps a user's own choice of directory across upgrades.
-InstallDirRegKey HKLM "${UNINST_KEY}" "InstallLocation"
+InstallDirRegKey HKCU "${UNINST_KEY}" "InstallLocation"
 ShowInstDetails show # This will always show the installation details.
+
+# No elevation: everything this installer touches belongs to the current user.
+RequestExecutionLevel user
 
 Function .onInit
    !insertmacro wails.checkArchitecture
+   # Shortcuts and uninstall entries go to the user's own, not all users'.
+   SetShellVarContext current
+
+   # Offer to clear out a previous machine-wide install.
+   #
+   # Installs before this one went to Program Files and registered under HKLM.
+   # This installer looks in HKCU, finds nothing, and installs to LocalAppData —
+   # leaving the old copy behind with its own shortcuts and its own uninstaller,
+   # so the Start menu offers two of the same app and the wrong one may launch.
+   SetRegView 64
+   ReadRegStr $R0 HKLM "${UNINST_KEY}" "UninstallString"
+   ${If} $R0 != ""
+      MessageBox MB_YESNO|MB_ICONQUESTION "An older system-wide installation was found. Remove it first? This version installs for the current user only, so it can update itself without administrator rights. Removing the old one needs administrator approval." /SD IDYES IDNO skip_old_uninstall
+      # Waited for: an uninstaller still running would delete files underneath
+      # the install that follows it.
+      ExecWait '$R0 /S'
+      skip_old_uninstall:
+   ${EndIf}
 FunctionEnd
 
 # Launch the app without passing the installer's elevated token down to it.
@@ -158,7 +192,7 @@ Section
     # default path — orphaning an install that lives anywhere else. Written here
     # rather than in wails_tools.nsh, which the Wails CLI regenerates.
     SetRegView 64
-    WriteRegStr HKLM "${UNINST_KEY}" "InstallLocation" "$INSTDIR"
+    WriteRegStr HKCU "${UNINST_KEY}" "InstallLocation" "$INSTDIR"
 SectionEnd
 
 Section "uninstall"
