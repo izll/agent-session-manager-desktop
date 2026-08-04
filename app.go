@@ -725,6 +725,15 @@ func (a *App) CreateSession(name, path string, agent string, autoYes bool, extra
 	// second, so an agent that is not installed used to leave a session in the
 	// sidebar that had never run and never could — the error appeared, and the
 	// dead entry stayed behind next to it.
+	//
+	// Both halves of what a session needs are checked: the multiplexer it runs
+	// in, and the agent it runs. Only the agent was, so a missing multiplexer
+	// still produced that dead entry — and on Windows, where the multiplexer is
+	// a separate download rather than something most machines already have,
+	// that is the likelier one to be missing.
+	if err := session.CheckMultiplexer(); err != nil {
+		return nil, err
+	}
 	if err := session.CheckAgentCommand(inst); err != nil {
 		return nil, err
 	}
@@ -2876,6 +2885,41 @@ type UpdateInfo struct {
 // GetVersion returns the current application version (for the UI/about).
 func (a *App) GetVersion() string {
 	return Version
+}
+
+// MultiplexerStatus describes whether the terminal multiplexer is present.
+type MultiplexerStatus struct {
+	Available bool   `json:"available"`
+	Name      string `json:"name"`
+	Version   string `json:"version,omitempty"`
+	// Hint is the install command for this platform, present only when the
+	// multiplexer is missing.
+	Hint string `json:"hint,omitempty"`
+	// CanInstall is true where the app can install it for the user — Windows
+	// only, where winget does it without elevation. Elsewhere the hint is a
+	// command for the user to run themselves.
+	CanInstall bool `json:"canInstall,omitempty"`
+}
+
+// GetMultiplexerStatus reports whether the multiplexer this platform needs is
+// installed, so the interface can say so before the user tries to create a
+// session and is refused.
+func (a *App) GetMultiplexerStatus() MultiplexerStatus {
+	status := MultiplexerStatus{Name: session.MultiplexerName()}
+	if err := session.CheckMultiplexer(); err != nil {
+		status.Hint = session.MultiplexerInstallHint()
+		status.CanInstall = session.InstallMultiplexerSupported()
+		return status
+	}
+	status.Available = true
+	status.Version = session.MultiplexerVersion()
+	return status
+}
+
+// InstallMultiplexer installs the multiplexer where the platform allows it,
+// returning what the package manager printed so a failure is diagnosable.
+func (a *App) InstallMultiplexer() (string, error) {
+	return session.InstallMultiplexer()
 }
 
 // SetTabTerminalTheme sets a tab's own colour palette. An empty id clears

@@ -38,7 +38,7 @@
   import { startSidebarPolling, stopSidebarPolling } from './lib/stores/sidebarPolling';
   import { WindowMinimise, WindowToggleMaximise, Quit, EventsOn, EventsOff, EventsEmit } from '../wailsjs/runtime/runtime';
   import * as DictationService from '../wailsjs/go/main/DictationService';
-  import { IsDevMode } from '../wailsjs/go/main/App';
+  import { IsDevMode, GetMultiplexerStatus, InstallMultiplexer } from '../wailsjs/go/main/App';
   import asmgrIcon from './assets/icons/asmgr.svg';
   import { applyUITheme, DEFAULT_UI_THEME } from './lib/utils/uiThemes';
   import { t, isRTL, loadTranslations } from './lib/i18n';
@@ -57,6 +57,37 @@
   // knows why terminals won't connect (instead of silent black tabs). The PID
   // lives in the projects store so it updates on every project switch.
   let lockBannerDismissed = false;
+
+  // Every session runs inside a terminal multiplexer — tmux on Linux and macOS,
+  // psmux on Windows — so without one the app can do nothing at all. Said here,
+  // once, rather than left for the user to discover by creating a session and
+  // being refused. Not dismissable: unlike the lock banner, this does not
+  // resolve on its own and nothing works until it is fixed.
+  let missingMultiplexer: { name: string; hint: string; canInstall: boolean } | null = null;
+  // Windows can install psmux itself, with winget. Nothing else can — see
+  // session/multiplexer_install_other.go for why the other platforms only
+  // print the command.
+  let installingMultiplexer = false;
+  let multiplexerInstallError = '';
+
+  async function installMultiplexer() {
+    if (installingMultiplexer) return;
+    installingMultiplexer = true;
+    multiplexerInstallError = '';
+    try {
+      await InstallMultiplexer();
+      const s = await GetMultiplexerStatus();
+      // Cleared only once the backend agrees it can find it — winget exiting 0
+      // is not proof this process can run it.
+      missingMultiplexer = s?.available === false
+        ? { name: s.name, hint: s.hint, canInstall: !!s.canInstall }
+        : null;
+    } catch (e: any) {
+      multiplexerInstallError = e?.message || String(e);
+    } finally {
+      installingMultiplexer = false;
+    }
+  }
   // Reset the "dismissed" state whenever the lock owner changes (e.g. after
   // a project switch), so the banner reappears for a newly-locked project.
   let prevOtherPID = 0;
@@ -466,6 +497,12 @@
   }
 
   onMount(async () => {
+    GetMultiplexerStatus().then((s) => {
+      missingMultiplexer = s?.available === false
+        ? { name: s.name, hint: s.hint, canInstall: !!s.canInstall }
+        : null;
+    }).catch(() => { /* an older backend has no such call; say nothing */ });
+
     // The backend checks for a release once a day, shortly after launch. It
     // only ever notifies — a dot on the update button, not a popup that
     // interrupts what the user is doing.
@@ -763,6 +800,25 @@
     <div class="lock-banner export-error">
       <span>{exportError}</span>
       <button class="lock-dismiss" on:click={() => exportError = ''}>×</button>
+    </div>
+  {/if}
+  {#if missingMultiplexer}
+    <div class="lock-banner multiplexer-missing">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M12 9v4"/><path d="M12 17h.01"/>
+        <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+      </svg>
+      <span>
+        {$t('multiplexer.missing', { name: missingMultiplexer.name, hint: missingMultiplexer.hint })}
+        {#if multiplexerInstallError}
+          — {$t('multiplexer.installFailed', { error: multiplexerInstallError })}
+        {/if}
+      </span>
+      {#if missingMultiplexer.canInstall}
+        <button class="multiplexer-install" on:click={installMultiplexer} disabled={installingMultiplexer}>
+          {installingMultiplexer ? $t('multiplexer.installing') : $t('multiplexer.install')}
+        </button>
+      {/if}
     </div>
   {/if}
   {#if $otherInstancePID > 0 && !lockBannerDismissed}
@@ -1464,6 +1520,27 @@
     border-bottom-color: rgba(239, 68, 68, 0.3);
     color: #fca5a5;
   }
+  /* Red rather than the lock banner's amber: nothing in the app works until
+     this is resolved, where a locked project still allows everything but
+     terminals. The install command is selectable so it can be copied. */
+  .multiplexer-missing {
+    background: rgba(239, 68, 68, 0.12);
+    border-bottom-color: rgba(239, 68, 68, 0.3);
+    color: #fca5a5;
+    user-select: text;
+  }
+  .multiplexer-install {
+    flex-shrink: 0;
+    border: 1px solid rgba(239, 68, 68, 0.5);
+    background: rgba(239, 68, 68, 0.15);
+    color: #fecaca;
+    border-radius: 4px;
+    padding: 3px 12px;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .multiplexer-install:hover:not(:disabled) { background: rgba(239, 68, 68, 0.28); }
+  .multiplexer-install:disabled { opacity: 0.6; cursor: default; }
 
   .update-btn {
     position: relative;

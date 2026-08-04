@@ -210,6 +210,10 @@ export function GetLockStatus() {
   return window['go']['main']['App']['GetLockStatus']();
 }
 
+export function GetMultiplexerStatus() {
+  return window['go']['main']['App']['GetMultiplexerStatus']();
+}
+
 export function GetNextTask(arg1) {
   return window['go']['main']['App']['GetNextTask'](arg1);
 }
@@ -336,6 +340,10 @@ export function ImportSessions(arg1, arg2) {
 
 export function InitHistorySearch() {
   return window['go']['main']['App']['InitHistorySearch']();
+}
+
+export function InstallMultiplexer() {
+  return window['go']['main']['App']['InstallMultiplexer']();
 }
 
 export function InvalidateSessionFileIndex(arg1) {

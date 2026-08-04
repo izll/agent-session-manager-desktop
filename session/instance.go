@@ -427,6 +427,14 @@ func lockSessionStart(name string) func() {
 }
 
 func (i *Instance) StartWithResume(resumeID string) error {
+	// Nothing below can work without the multiplexer, and every command that
+	// tries fails on its own terms — "exec: no such file", repeated once per
+	// call. Said plainly once, before any of them run, and with how to install
+	// it, since a user meeting this has no other way to find out.
+	if err := CheckMultiplexer(); err != nil {
+		return err
+	}
+
 	// Held for the whole start: releasing after the existence check would
 	// reopen the very window this closes.
 	unlock := lockSessionStart(i.TmuxSessionName())

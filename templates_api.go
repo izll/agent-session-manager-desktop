@@ -239,6 +239,15 @@ func (a *App) CreateSessionFromTemplate(id, name, path string) (*SessionInfo, er
 	if err != nil {
 		return nil, err
 	}
+	// Same refusal as CreateSession, for the same reason: a session saved
+	// without the multiplexer or the agent it needs is a permanent sidebar entry
+	// that can never run. This path was missing both checks.
+	if err := session.CheckMultiplexer(); err != nil {
+		return nil, err
+	}
+	if err := session.CheckAgentCommand(inst); err != nil {
+		return nil, err
+	}
 	if err := a.storage.AddInstance(inst); err != nil {
 		return nil, err
 	}

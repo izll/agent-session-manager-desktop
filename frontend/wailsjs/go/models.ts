@@ -684,6 +684,26 @@ export namespace main {
 		    return a;
 		}
 	}
+	export class MultiplexerStatus {
+	    available: boolean;
+	    name: string;
+	    version?: string;
+	    hint?: string;
+	    canInstall?: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new MultiplexerStatus(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.available = source["available"];
+	        this.name = source["name"];
+	        this.version = source["version"];
+	        this.hint = source["hint"];
+	        this.canInstall = source["canInstall"];
+	    }
+	}
 	export class OnlineSchemeInfo {
 	    name: string;
 	    file: string;

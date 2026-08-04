@@ -107,6 +107,8 @@ export function GetLastLine(arg1:string):Promise<string>;
 
 export function GetLockStatus():Promise<main.LockStatusInfo>;
 
+export function GetMultiplexerStatus():Promise<main.MultiplexerStatus>;
+
 export function GetNextTask(arg1:string):Promise<main.TaskInfo>;
 
 export function GetPreview(arg1:string,arg2:number):Promise<main.PreviewData>;
@@ -170,6 +172,8 @@ export function ImportSessionFile(arg1:string,arg2:Array<string>):Promise<number
 export function ImportSessions(arg1:string,arg2:Array<string>):Promise<number>;
 
 export function InitHistorySearch():Promise<void>;
+
+export function InstallMultiplexer():Promise<string>;
 
 export function InvalidateSessionFileIndex(arg1:string):Promise<void>;
 
