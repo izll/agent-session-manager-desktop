@@ -973,5 +973,14 @@
   "diff.filterAll": "Tutti",
   "settings.restoreLastSession": "Riapri l'ultima sessione",
   "settings.restoreLastSessionDesc": "Avvia nella sessione aperta all'ultima chiusura, invece della dashboard",
-  "terminal.refreshing": "Aggiornamento…"
+  "terminal.refreshing": "Aggiornamento…",
+  "settings.refreshPatterns": "Rilevamento attività",
+  "settings.refreshPatternsDesc": "Aggiorna i criteri che riconoscono se un agente sta lavorando o ti sta aspettando, senza aggiornare l'app",
+  "settings.refreshPatternsAction": "Aggiorna",
+  "settings.refreshPatternsBusy": "Controllo…",
+  "settings.refreshPatternsUpdated": "Aggiornato a v{version}",
+  "settings.refreshPatternsCurrent": "Già aggiornato",
+  "error.patternsUnreachable": "File dei criteri irraggiungibile",
+  "error.patternsInvalid": "Il file dei criteri scaricato non è utilizzabile",
+  "error.patternsNotWritten": "Impossibile salvare il file dei criteri"
 }

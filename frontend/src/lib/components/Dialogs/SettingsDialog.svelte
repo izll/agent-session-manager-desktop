@@ -3,6 +3,7 @@
   import { createEventDispatcher } from 'svelte';
   import { settings, saveSettings } from '../../stores/settings';
   import * as DictationService from '../../../../wailsjs/go/main/DictationService';
+  import * as App from '../../../../wailsjs/go/main/App';
   import type { main } from '../../../../wailsjs/go/models';
   import { EventsEmit } from '../../../../wailsjs/runtime/runtime';
   import Select from '../common/Select.svelte';
@@ -168,6 +169,40 @@
   // Tab state
   let activeTab: 'general' | 'terminal' | 'agents' | 'dictation' | 'maintenance' = 'general';
 
+  // Activity-detection patterns: which version is in force, and the result of a
+  // manual check. Shown because "already up to date" and a check that quietly
+  // failed are otherwise indistinguishable.
+  let patternsVersion = 0;
+  let refreshingPatterns = false;
+  let patternsMessage = '';
+
+  async function loadPatternsVersion() {
+    try {
+      patternsVersion = await App.DetectionPatternsVersion();
+    } catch {
+      patternsVersion = 0;
+    }
+  }
+
+  async function refreshPatterns() {
+    refreshingPatterns = true;
+    patternsMessage = '';
+    try {
+      const result = await App.RefreshDetectionPatterns();
+      patternsVersion = result?.version ?? patternsVersion;
+      patternsMessage = result?.updated
+        ? $t('settings.refreshPatternsUpdated').replace('{version}', String(patternsVersion))
+        : $t('settings.refreshPatternsCurrent');
+    } catch (e) {
+      // The backend returns translation keys, so an unknown one still shows
+      // something readable rather than an empty line.
+      const key = String(e);
+      const translated = $t(key);
+      patternsMessage = translated === key ? String(e) : translated;
+    }
+    refreshingPatterns = false;
+  }
+
   // Dictation settings state
   let dictationSettings: main.DictationSettings | null = null;
   let languages: Array<{code: string, name: string}> = [];
@@ -227,6 +262,10 @@
   };
 
   // Load dictation settings when dialog opens
+  // Read the pattern version when the dialog opens, so the maintenance tab can
+  // show it without a round trip on every render.
+  $: if (show && patternsVersion === 0) void loadPatternsVersion();
+
   $: if (show && dictationSettings === null) {
     loadDictationSettings();
   }
@@ -1304,6 +1343,29 @@
                 {$t('settings.checkUpdatesAction')}
               </button>
             </div>
+
+            <div class="setting-item">
+              <span class="setting-info">
+                <span class="setting-label">
+                  {$t('settings.refreshPatterns')}
+                  {#if patternsVersion > 0}
+                    <span class="patterns-version">v{patternsVersion}</span>
+                  {/if}
+                </span>
+                <span class="setting-desc">
+                  {patternsMessage || $t('settings.refreshPatternsDesc')}
+                </span>
+              </span>
+              <button
+                class="action-btn"
+                disabled={refreshingPatterns}
+                on:click={refreshPatterns}
+              >
+                {refreshingPatterns
+                  ? $t('settings.refreshPatternsBusy')
+                  : $t('settings.refreshPatternsAction')}
+              </button>
+            </div>
           </div>
 
           <div class="settings-section">
@@ -1674,6 +1736,18 @@
   }
 
   .theme-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* A quiet marker beside the label: useful when comparing against what the
+     repository holds, but not something to lead with. */
+  .patterns-version {
+    margin-left: 6px;
+    padding: 1px 5px;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.06);
+    color: #9ca3af;
+    font-size: 10px;
+    font-weight: 500;
+  }
 
   .action-btn {
     flex-shrink: 0;

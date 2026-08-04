@@ -973,5 +973,14 @@
   "diff.filterAll": "すべて",
   "settings.restoreLastSession": "前回のセッションを開く",
   "settings.restoreLastSessionDesc": "ダッシュボードではなく、終了時に開いていたセッションで起動します",
-  "terminal.refreshing": "更新中…"
+  "terminal.refreshing": "更新中…",
+  "settings.refreshPatterns": "動作検出",
+  "settings.refreshPatternsDesc": "エージェントが作業中か入力待ちかを判別するパターンを、アプリの更新を待たずに更新します",
+  "settings.refreshPatternsAction": "更新",
+  "settings.refreshPatternsBusy": "確認中…",
+  "settings.refreshPatternsUpdated": "v{version} に更新しました",
+  "settings.refreshPatternsCurrent": "すでに最新です",
+  "error.patternsUnreachable": "パターンファイルに接続できませんでした",
+  "error.patternsInvalid": "ダウンロードしたパターンファイルは使用できません",
+  "error.patternsNotWritten": "パターンファイルを保存できませんでした"
 }

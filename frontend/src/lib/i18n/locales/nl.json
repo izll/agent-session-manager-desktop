@@ -973,5 +973,14 @@
   "diff.filterAll": "Alle",
   "settings.restoreLastSession": "Laatste sessie heropenen",
   "settings.restoreLastSessionDesc": "Start in de sessie die openstond bij afsluiten, in plaats van het dashboard",
-  "terminal.refreshing": "Vernieuwen…"
+  "terminal.refreshing": "Vernieuwen…",
+  "settings.refreshPatterns": "Activiteitsdetectie",
+  "settings.refreshPatternsDesc": "Vernieuwt de patronen die herkennen of een agent werkt of op je wacht, zonder app-update",
+  "settings.refreshPatternsAction": "Vernieuwen",
+  "settings.refreshPatternsBusy": "Controleren…",
+  "settings.refreshPatternsUpdated": "Bijgewerkt naar v{version}",
+  "settings.refreshPatternsCurrent": "Al up-to-date",
+  "error.patternsUnreachable": "Patroonbestand niet bereikbaar",
+  "error.patternsInvalid": "Het gedownloade patroonbestand is onbruikbaar",
+  "error.patternsNotWritten": "Patroonbestand kon niet worden opgeslagen"
 }

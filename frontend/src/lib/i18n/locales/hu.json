@@ -973,5 +973,14 @@
   "diff.filterAll": "Mind",
   "settings.restoreLastSession": "Utolsó session megnyitása",
   "settings.restoreLastSessionDesc": "Indításkor abban a sessionben folytatja, ami kilépéskor nyitva volt, a vezérlőpult helyett",
-  "terminal.refreshing": "Frissítés…"
+  "terminal.refreshing": "Frissítés…",
+  "settings.refreshPatterns": "Aktivitás-felismerés",
+  "settings.refreshPatternsDesc": "Frissíti azokat a mintákat, amelyekből az app felismeri, hogy egy agent dolgozik vagy rád vár — alkalmazásfrissítés nélkül",
+  "settings.refreshPatternsAction": "Frissítés",
+  "settings.refreshPatternsBusy": "Ellenőrzés…",
+  "settings.refreshPatternsUpdated": "Frissítve: v{version}",
+  "settings.refreshPatternsCurrent": "Már naprakész",
+  "error.patternsUnreachable": "A mintafájl nem érhető el",
+  "error.patternsInvalid": "A letöltött mintafájl nem használható",
+  "error.patternsNotWritten": "A mintafájlt nem sikerült menteni"
 }

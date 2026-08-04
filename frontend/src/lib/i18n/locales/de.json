@@ -973,5 +973,14 @@
   "diff.filterAll": "Alle",
   "settings.restoreLastSession": "Letzte Sitzung öffnen",
   "settings.restoreLastSessionDesc": "Beim Start die zuletzt geöffnete Sitzung wiederherstellen statt des Dashboards",
-  "terminal.refreshing": "Wird aktualisiert…"
+  "terminal.refreshing": "Wird aktualisiert…",
+  "settings.refreshPatterns": "Aktivitätserkennung",
+  "settings.refreshPatternsDesc": "Aktualisiert die Muster, an denen erkannt wird, ob ein Agent arbeitet oder wartet — ohne App-Update",
+  "settings.refreshPatternsAction": "Aktualisieren",
+  "settings.refreshPatternsBusy": "Wird geprüft…",
+  "settings.refreshPatternsUpdated": "Auf v{version} aktualisiert",
+  "settings.refreshPatternsCurrent": "Bereits aktuell",
+  "error.patternsUnreachable": "Musterdatei nicht erreichbar",
+  "error.patternsInvalid": "Die geladene Musterdatei ist unbrauchbar",
+  "error.patternsNotWritten": "Musterdatei konnte nicht gespeichert werden"
 }

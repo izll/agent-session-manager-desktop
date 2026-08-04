@@ -73,6 +73,14 @@ func (a *App) startup(ctx context.Context) {
 	// is also why the TUI never hit it: a terminal launch inherits a real PATH.
 	session.EnsureToolPath()
 
+	// Refresh the activity-detection patterns in the background. Agents reword
+	// their prompts on their own schedule, and a changed phrase means the app
+	// stops noticing one waiting for an answer; this makes that fixable by
+	// editing a file rather than by shipping a release. Off the startup path
+	// because it reaches the network, and every failure leaves the patterns
+	// already in place.
+	go session.RefreshPatterns()
+
 	// Verbose logs in a dev build, or in any build started with --debug /
 	// ASMGR_DEBUG=1 — so a user hitting a bug can produce a diagnostic log
 	// without installing a different binary.
@@ -2307,6 +2315,32 @@ func (a *App) GetFullDiffFiles(id string) ([]session.DiffFile, error) {
 		return nil, err
 	}
 	return inst.GetFullDiffFiles()
+}
+
+// PatternRefreshResult is what the Settings dialog shows after a manual check.
+type PatternRefreshResult struct {
+	Version int  `json:"version"`
+	Updated bool `json:"updated"`
+}
+
+// RefreshDetectionPatterns fetches the activity-detection patterns now.
+//
+// The background refresh runs at most once a day, which is right for something
+// nobody asked for but wrong when a fix has just been published and the user
+// wants it. Reports the version in force afterwards, and whether it changed, so
+// "already up to date" and "updated to 4" are distinguishable — otherwise a
+// working check and a silently failing one look the same.
+func (a *App) RefreshDetectionPatterns() (*PatternRefreshResult, error) {
+	version, updated, err := session.ForceRefreshPatterns()
+	if err != nil {
+		return nil, err
+	}
+	return &PatternRefreshResult{Version: version, Updated: updated}, nil
+}
+
+// DetectionPatternsVersion reports the pattern version in force.
+func (a *App) DetectionPatternsVersion() int {
+	return session.PatternsVersion()
 }
 
 // GetSessionDiffFileList lists files changed since the session started, without

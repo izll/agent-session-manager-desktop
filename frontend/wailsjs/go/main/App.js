@@ -106,6 +106,10 @@ export function DetachSession(arg1) {
   return window['go']['main']['App']['DetachSession'](arg1);
 }
 
+export function DetectionPatternsVersion() {
+  return window['go']['main']['App']['DetectionPatternsVersion']();
+}
+
 export function DiscoverLocalSchemes() {
   return window['go']['main']['App']['DiscoverLocalSchemes']();
 }
@@ -408,6 +412,10 @@ export function ReadSessionFile() {
 
 export function RedrawWindow(arg1, arg2) {
   return window['go']['main']['App']['RedrawWindow'](arg1, arg2);
+}
+
+export function RefreshDetectionPatterns() {
+  return window['go']['main']['App']['RefreshDetectionPatterns']();
 }
 
 export function RefreshWindow(arg1, arg2) {

@@ -973,5 +973,14 @@
   "diff.filterAll": "Усі",
   "settings.restoreLastSession": "Відкривати останню сесію",
   "settings.restoreLastSessionDesc": "Запускатися в сесії, відкритій при закритті, замість панелі",
-  "terminal.refreshing": "Оновлення…"
+  "terminal.refreshing": "Оновлення…",
+  "settings.refreshPatterns": "Визначення активності",
+  "settings.refreshPatternsDesc": "Оновлює шаблони, за якими розпізнається, чи агент працює, чи чекає на вас — без оновлення застосунку",
+  "settings.refreshPatternsAction": "Оновити",
+  "settings.refreshPatternsBusy": "Перевірка…",
+  "settings.refreshPatternsUpdated": "Оновлено до v{version}",
+  "settings.refreshPatternsCurrent": "Уже актуально",
+  "error.patternsUnreachable": "Файл шаблонів недоступний",
+  "error.patternsInvalid": "Завантажений файл шаблонів непридатний",
+  "error.patternsNotWritten": "Не вдалося зберегти файл шаблонів"
 }

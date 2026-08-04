@@ -973,5 +973,14 @@
   "diff.filterAll": "Wszystkie",
   "settings.restoreLastSession": "Otwórz ostatnią sesję",
   "settings.restoreLastSessionDesc": "Uruchom w sesji otwartej przy zamknięciu zamiast panelu",
-  "terminal.refreshing": "Odświeżanie…"
+  "terminal.refreshing": "Odświeżanie…",
+  "settings.refreshPatterns": "Wykrywanie aktywności",
+  "settings.refreshPatternsDesc": "Odświeża wzorce rozpoznające, czy agent pracuje, czy na Ciebie czeka — bez aktualizacji aplikacji",
+  "settings.refreshPatternsAction": "Odśwież",
+  "settings.refreshPatternsBusy": "Sprawdzanie…",
+  "settings.refreshPatternsUpdated": "Zaktualizowano do v{version}",
+  "settings.refreshPatternsCurrent": "Już aktualne",
+  "error.patternsUnreachable": "Nie można pobrać pliku wzorców",
+  "error.patternsInvalid": "Pobrany plik wzorców jest nieprawidłowy",
+  "error.patternsNotWritten": "Nie udało się zapisać pliku wzorców"
 }

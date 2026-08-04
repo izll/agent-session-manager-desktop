@@ -973,5 +973,14 @@
   "diff.filterAll": "Vše",
   "settings.restoreLastSession": "Otevřít poslední relaci",
   "settings.restoreLastSessionDesc": "Spustit v relaci otevřené při zavření místo přehledu",
-  "terminal.refreshing": "Obnovování…"
+  "terminal.refreshing": "Obnovování…",
+  "settings.refreshPatterns": "Detekce aktivity",
+  "settings.refreshPatternsDesc": "Aktualizuje vzory, podle kterých se pozná, zda agent pracuje nebo čeká na vás — bez aktualizace aplikace",
+  "settings.refreshPatternsAction": "Aktualizovat",
+  "settings.refreshPatternsBusy": "Kontrola…",
+  "settings.refreshPatternsUpdated": "Aktualizováno na v{version}",
+  "settings.refreshPatternsCurrent": "Již aktuální",
+  "error.patternsUnreachable": "Soubor se vzory není dostupný",
+  "error.patternsInvalid": "Stažený soubor se vzory je nepoužitelný",
+  "error.patternsNotWritten": "Soubor se vzory se nepodařilo uložit"
 }

@@ -973,5 +973,14 @@
   "diff.filterAll": "Tous",
   "settings.restoreLastSession": "Rouvrir la dernière session",
   "settings.restoreLastSessionDesc": "Démarrer dans la session ouverte à la fermeture, au lieu du tableau de bord",
-  "terminal.refreshing": "Actualisation…"
+  "terminal.refreshing": "Actualisation…",
+  "settings.refreshPatterns": "Détection d'activité",
+  "settings.refreshPatternsDesc": "Actualise les motifs qui reconnaissent si un agent travaille ou vous attend, sans mise à jour de l'application",
+  "settings.refreshPatternsAction": "Actualiser",
+  "settings.refreshPatternsBusy": "Vérification…",
+  "settings.refreshPatternsUpdated": "Mis à jour vers v{version}",
+  "settings.refreshPatternsCurrent": "Déjà à jour",
+  "error.patternsUnreachable": "Fichier de motifs inaccessible",
+  "error.patternsInvalid": "Le fichier de motifs téléchargé est inutilisable",
+  "error.patternsNotWritten": "Impossible d'enregistrer le fichier de motifs"
 }

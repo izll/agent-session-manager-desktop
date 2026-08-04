@@ -55,6 +55,8 @@ export function DeleteTask(arg1:string,arg2:string):Promise<void>;
 
 export function DetachSession(arg1:string):Promise<void>;
 
+export function DetectionPatternsVersion():Promise<number>;
+
 export function DiscoverLocalSchemes():Promise<Array<main.ImportedScheme>>;
 
 export function EmptyTrash():Promise<void>;
@@ -206,6 +208,8 @@ export function ReadSessionDirectoryFile(arg1:string,arg2:string):Promise<sessio
 export function ReadSessionFile():Promise<main.PortableFileInfo>;
 
 export function RedrawWindow(arg1:string,arg2:number):Promise<void>;
+
+export function RefreshDetectionPatterns():Promise<main.PatternRefreshResult>;
 
 export function RefreshWindow(arg1:string,arg2:number):Promise<void>;
 

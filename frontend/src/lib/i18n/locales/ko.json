@@ -973,5 +973,14 @@
   "diff.filterAll": "전체",
   "settings.restoreLastSession": "마지막 세션 다시 열기",
   "settings.restoreLastSessionDesc": "대시보드 대신 종료 시 열려 있던 세션에서 시작합니다",
-  "terminal.refreshing": "새로 고치는 중…"
+  "terminal.refreshing": "새로 고치는 중…",
+  "settings.refreshPatterns": "활동 감지",
+  "settings.refreshPatternsDesc": "에이전트가 작업 중인지 대기 중인지 인식하는 패턴을 앱 업데이트 없이 새로 고칩니다",
+  "settings.refreshPatternsAction": "새로 고침",
+  "settings.refreshPatternsBusy": "확인 중…",
+  "settings.refreshPatternsUpdated": "v{version}(으)로 업데이트됨",
+  "settings.refreshPatternsCurrent": "이미 최신입니다",
+  "error.patternsUnreachable": "패턴 파일에 연결할 수 없습니다",
+  "error.patternsInvalid": "내려받은 패턴 파일을 사용할 수 없습니다",
+  "error.patternsNotWritten": "패턴 파일을 저장하지 못했습니다"
 }

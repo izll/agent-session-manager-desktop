@@ -973,5 +973,14 @@
   "diff.filterAll": "Tümü",
   "settings.restoreLastSession": "Son oturumu yeniden aç",
   "settings.restoreLastSessionDesc": "Panel yerine kapatırken açık olan oturumda başlat",
-  "terminal.refreshing": "Yenileniyor…"
+  "terminal.refreshing": "Yenileniyor…",
+  "settings.refreshPatterns": "Etkinlik algılama",
+  "settings.refreshPatternsDesc": "Bir aracının çalıştığını mı yoksa sizi mi beklediğini tanıyan kalıpları uygulama güncellemesi olmadan yeniler",
+  "settings.refreshPatternsAction": "Yenile",
+  "settings.refreshPatternsBusy": "Denetleniyor…",
+  "settings.refreshPatternsUpdated": "v{version} sürümüne güncellendi",
+  "settings.refreshPatternsCurrent": "Zaten güncel",
+  "error.patternsUnreachable": "Kalıp dosyasına ulaşılamadı",
+  "error.patternsInvalid": "İndirilen kalıp dosyası kullanılamıyor",
+  "error.patternsNotWritten": "Kalıp dosyası kaydedilemedi"
 }

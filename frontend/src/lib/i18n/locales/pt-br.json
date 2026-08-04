@@ -973,5 +973,14 @@
   "diff.filterAll": "Todos",
   "settings.restoreLastSession": "Reabrir última sessão",
   "settings.restoreLastSessionDesc": "Iniciar na sessão que estava aberta ao fechar, em vez do painel",
-  "terminal.refreshing": "Atualizando…"
+  "terminal.refreshing": "Atualizando…",
+  "settings.refreshPatterns": "Detecção de atividade",
+  "settings.refreshPatternsDesc": "Atualiza os padrões que reconhecem se um agente está trabalhando ou esperando por você, sem atualizar o app",
+  "settings.refreshPatternsAction": "Atualizar",
+  "settings.refreshPatternsBusy": "Verificando…",
+  "settings.refreshPatternsUpdated": "Atualizado para v{version}",
+  "settings.refreshPatternsCurrent": "Já está atualizado",
+  "error.patternsUnreachable": "Não foi possível acessar o arquivo de padrões",
+  "error.patternsInvalid": "O arquivo de padrões baixado não é utilizável",
+  "error.patternsNotWritten": "Não foi possível salvar o arquivo de padrões"
 }

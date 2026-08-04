@@ -698,6 +698,20 @@ export namespace main {
 	        this.file = source["file"];
 	    }
 	}
+	export class PatternRefreshResult {
+	    version: number;
+	    updated: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new PatternRefreshResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.version = source["version"];
+	        this.updated = source["updated"];
+	    }
+	}
 	export class PortableSessionInfo {
 	    name: string;
 	    path: string;

@@ -973,5 +973,14 @@
   "diff.filterAll": "All",
   "settings.restoreLastSession": "Reopen last session",
   "settings.restoreLastSessionDesc": "Start in the session that was open when you last closed the app, instead of on the dashboard",
-  "terminal.refreshing": "Refreshing…"
+  "terminal.refreshing": "Refreshing…",
+  "settings.refreshPatterns": "Activity detection",
+  "settings.refreshPatternsDesc": "Refresh the patterns that recognise when an agent is working or waiting for you, without waiting for an app update",
+  "settings.refreshPatternsAction": "Refresh",
+  "settings.refreshPatternsBusy": "Checking…",
+  "settings.refreshPatternsUpdated": "Updated to v{version}",
+  "settings.refreshPatternsCurrent": "Already up to date",
+  "error.patternsUnreachable": "Could not reach the pattern file",
+  "error.patternsInvalid": "The downloaded pattern file is not usable",
+  "error.patternsNotWritten": "The pattern file could not be saved"
 }

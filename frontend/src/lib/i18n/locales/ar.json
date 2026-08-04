@@ -973,5 +973,14 @@
   "diff.filterAll": "الكل",
   "settings.restoreLastSession": "إعادة فتح آخر جلسة",
   "settings.restoreLastSessionDesc": "البدء في الجلسة التي كانت مفتوحة عند الإغلاق بدلاً من لوحة المعلومات",
-  "terminal.refreshing": "جارٍ التحديث…"
+  "terminal.refreshing": "جارٍ التحديث…",
+  "settings.refreshPatterns": "اكتشاف النشاط",
+  "settings.refreshPatternsDesc": "يحدّث الأنماط التي تتعرف على ما إذا كان الوكيل يعمل أم ينتظرك، دون تحديث التطبيق",
+  "settings.refreshPatternsAction": "تحديث",
+  "settings.refreshPatternsBusy": "جارٍ التحقق…",
+  "settings.refreshPatternsUpdated": "تم التحديث إلى v{version}",
+  "settings.refreshPatternsCurrent": "محدّث بالفعل",
+  "error.patternsUnreachable": "تعذّر الوصول إلى ملف الأنماط",
+  "error.patternsInvalid": "ملف الأنماط الذي تم تنزيله غير صالح",
+  "error.patternsNotWritten": "تعذّر حفظ ملف الأنماط"
 }

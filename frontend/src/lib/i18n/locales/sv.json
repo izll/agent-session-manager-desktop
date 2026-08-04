@@ -973,5 +973,14 @@
   "diff.filterAll": "Alla",
   "settings.restoreLastSession": "Öppna senaste sessionen",
   "settings.restoreLastSessionDesc": "Starta i sessionen som var öppen vid avslut, i stället för översikten",
-  "terminal.refreshing": "Uppdaterar…"
+  "terminal.refreshing": "Uppdaterar…",
+  "settings.refreshPatterns": "Aktivitetsdetektering",
+  "settings.refreshPatternsDesc": "Uppdaterar mönstren som känner igen om en agent arbetar eller väntar på dig, utan appuppdatering",
+  "settings.refreshPatternsAction": "Uppdatera",
+  "settings.refreshPatternsBusy": "Kontrollerar…",
+  "settings.refreshPatternsUpdated": "Uppdaterad till v{version}",
+  "settings.refreshPatternsCurrent": "Redan aktuell",
+  "error.patternsUnreachable": "Mönsterfilen kunde inte nås",
+  "error.patternsInvalid": "Den hämtade mönsterfilen är oanvändbar",
+  "error.patternsNotWritten": "Mönsterfilen kunde inte sparas"
 }

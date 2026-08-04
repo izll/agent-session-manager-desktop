@@ -973,5 +973,14 @@
   "diff.filterAll": "ทั้งหมด",
   "settings.restoreLastSession": "เปิดเซสชันล่าสุดอีกครั้ง",
   "settings.restoreLastSessionDesc": "เริ่มต้นในเซสชันที่เปิดอยู่ตอนปิดแอป แทนแดชบอร์ด",
-  "terminal.refreshing": "กำลังรีเฟรช…"
+  "terminal.refreshing": "กำลังรีเฟรช…",
+  "settings.refreshPatterns": "การตรวจจับกิจกรรม",
+  "settings.refreshPatternsDesc": "รีเฟรชรูปแบบที่ใช้ระบุว่าเอเจนต์กำลังทำงานหรือรอคุณอยู่ โดยไม่ต้องอัปเดตแอป",
+  "settings.refreshPatternsAction": "รีเฟรช",
+  "settings.refreshPatternsBusy": "กำลังตรวจสอบ…",
+  "settings.refreshPatternsUpdated": "อัปเดตเป็น v{version} แล้ว",
+  "settings.refreshPatternsCurrent": "เป็นเวอร์ชันล่าสุดแล้ว",
+  "error.patternsUnreachable": "ไม่สามารถเข้าถึงไฟล์รูปแบบได้",
+  "error.patternsInvalid": "ไฟล์รูปแบบที่ดาวน์โหลดใช้งานไม่ได้",
+  "error.patternsNotWritten": "ไม่สามารถบันทึกไฟล์รูปแบบได้"
 }

@@ -1,0 +1,99 @@
+{
+  "$comment": [
+    "Activity-detection patterns, read from here rather than compiled in.",
+    "",
+    "An agent's wording is not ours to control: Claude, Codex and the rest",
+    "reword their prompts whenever they like, and a changed phrase used to mean",
+    "the app no longer noticed that agent waiting for an answer — fixable only",
+    "by a new release. This file ships inside the binary as a fallback, and the",
+    "app refreshes it from the repository in the background, so a wording change",
+    "can be fixed by editing this file alone.",
+    "",
+    "waiting: lowercase substrings matched against the pane's last lines. Keep",
+    "them distinctive: a phrase that also appears in ordinary output makes the",
+    "agent look permanently stuck.",
+    "",
+    "spinners: characters an agent animates while it works. Presence of one is",
+    "the primary busy signal, so a character the agent prints for other reasons",
+    "would make it look permanently busy.",
+    "",
+    "version: increment when changing anything here. The app only replaces its",
+    "copy with a higher version, so an older file cannot overwrite a newer one."
+  ],
+  "version": 1,
+
+  "defaultSpinners": ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"],
+
+  "thinkingIndicators": ["✽", "✻"],
+
+  "agents": {
+    "claude": {
+      "waiting": [
+        "do you want to proceed",
+        "would you like to proceed",
+        "esc to cancel",
+        "allow once",
+        "allow always",
+        "yes, allow",
+        "yes, and always allow"
+      ]
+    },
+    "gemini": {
+      "waiting": [
+        "allow once",
+        "allow always",
+        "waiting for user",
+        "do you want to proceed",
+        "keep trying",
+        "high demand"
+      ],
+      "extraSpinners": ["∴", "∵", "⋮", "⋯", "✦"]
+    },
+    "aider": {
+      "waiting": [
+        "allow once",
+        "allow always",
+        "do you want to proceed",
+        "waiting for user"
+      ]
+    },
+    "codex": {
+      "$comment": "Codex phrases its approval prompt its own way; the generic wording never appears, so those alone left every Codex question undetected.",
+      "waiting": [
+        "would you like to run",
+        "press enter to confirm",
+        "yes, proceed",
+        "yes, and don't ask again",
+        "tell codex what to do differently",
+        "allow once",
+        "allow always",
+        "do you want to proceed",
+        "waiting for user"
+      ]
+    },
+    "amazonq": {
+      "waiting": [
+        "allow once",
+        "allow always",
+        "do you want to proceed",
+        "waiting for user"
+      ]
+    },
+    "opencode": {
+      "waiting": [
+        "allow once",
+        "allow always",
+        "do you want to proceed",
+        "waiting for user"
+      ]
+    },
+    "custom": {
+      "waiting": [
+        "allow once",
+        "allow always",
+        "do you want to proceed",
+        "waiting for user"
+      ]
+    }
+  }
+}

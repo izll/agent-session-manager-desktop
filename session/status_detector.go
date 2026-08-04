@@ -56,6 +56,16 @@ var defaultSpinners = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", 
 // After completion they show "✻ Cogitated for Xs" (no ellipsis)
 var thinkingIndicators = []string{"✽", "✻"}
 
+// activeThinkingIndicators prefers the configured markers, falling back to the
+// compiled ones — same reasoning as the waiting patterns: these are an agent's
+// own characters, and it may change them.
+func activeThinkingIndicators() []string {
+	if fromFile := thinkingIndicatorsFromFile(); len(fromFile) > 0 {
+		return fromFile
+	}
+	return thinkingIndicators
+}
+
 // Agent-specific patterns
 var agentPatterns = map[AgentType]AgentPatterns{
 	AgentClaude: {
@@ -136,8 +146,15 @@ var agentPatterns = map[AgentType]AgentPatterns{
 	},
 }
 
-// getAgentPatterns returns patterns for the given agent type
+// getAgentPatterns returns patterns for the given agent type.
+//
+// The JSON file first — that is what can be corrected without a release when an
+// agent rewords a prompt. The map below is the fallback, and stays as the
+// answer if the file is missing an agent or will not parse.
 func getAgentPatterns(agent AgentType) AgentPatterns {
+	if fromFile, ok := patternsFor(agent); ok {
+		return fromFile
+	}
 	if patterns, ok := agentPatterns[agent]; ok {
 		return patterns
 	}
@@ -677,7 +694,7 @@ func hasActiveThinking(lines []string, maxLines int) bool {
 		if sepCount > 20 {
 			return false
 		}
-		for _, indicator := range thinkingIndicators {
+		for _, indicator := range activeThinkingIndicators() {
 			if strings.HasPrefix(cleanLine, indicator) && strings.Contains(cleanLine, "…") {
 				return true
 			}

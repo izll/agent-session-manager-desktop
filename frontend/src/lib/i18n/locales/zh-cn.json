@@ -973,5 +973,14 @@
   "diff.filterAll": "全部",
   "settings.restoreLastSession": "重新打开上次会话",
   "settings.restoreLastSessionDesc": "启动时进入上次关闭时打开的会话，而不是仪表板",
-  "terminal.refreshing": "正在刷新…"
+  "terminal.refreshing": "正在刷新…",
+  "settings.refreshPatterns": "活动检测",
+  "settings.refreshPatternsDesc": "无需更新应用即可刷新用于识别代理正在工作还是等待你的匹配规则",
+  "settings.refreshPatternsAction": "刷新",
+  "settings.refreshPatternsBusy": "检查中…",
+  "settings.refreshPatternsUpdated": "已更新至 v{version}",
+  "settings.refreshPatternsCurrent": "已是最新",
+  "error.patternsUnreachable": "无法访问规则文件",
+  "error.patternsInvalid": "下载的规则文件不可用",
+  "error.patternsNotWritten": "无法保存规则文件"
 }
