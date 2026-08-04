@@ -54,7 +54,7 @@ type Settings struct {
 	// LastSessionID is the session that was selected when the app last closed,
 	// so it reopens where the user left off. The tab within it is remembered
 	// separately, per session (Instance.LastWindowIndex).
-	LastSessionID string `json:"last_session_id,omitempty"`
+	LastSessionID   string `json:"last_session_id,omitempty"`
 	MarkedWindowIdx int    `json:"marked_window_idx,omitempty"`
 	Cursor          int    `json:"cursor,omitempty"`
 	SplitFocus      int    `json:"split_focus,omitempty"`
@@ -902,10 +902,20 @@ func (s *Storage) UpdateInstanceForProject(projectID string, instance *Instance)
 	return fmt.Errorf("instance not found")
 }
 
-// MergeResumeSessionIDsForProject atomically fills only missing conversation
-// IDs on the latest stored instance. Sidebar polling works from an earlier
+// MergeResumeSessionIDsForProject atomically records detected conversation IDs
+// on the latest stored instance. Sidebar polling works from an earlier
 // snapshot, so replacing the entire instance here could otherwise undo a
 // concurrent tab rename/create/stop or notes edit.
+//
+// It records a detected ID that DIFFERS from the stored one, not only one
+// filling a gap. Resuming inside an agent moves the tab to another conversation
+// without restarting it, so the stored ID goes stale the moment the user
+// switches — and refusing to overwrite kept the tab pointing at the
+// conversation they had left. Restarting it then reopened that one.
+//
+// Callers pass only what they actually detected. An agent whose detection is a
+// filesystem guess must not reach here with a differing ID, because overwriting
+// on a guess is worse than missing a switch.
 func (s *Storage) MergeResumeSessionIDsForProject(projectID string, detected *Instance) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -928,8 +938,8 @@ func (s *Storage) MergeResumeSessionIDsForProject(projectID string, detected *In
 		changed := false
 		if detected.Agent != AgentCodex &&
 			current.Agent == detected.Agent &&
-			current.ResumeSessionID == "" &&
-			detected.ResumeSessionID != "" {
+			detected.ResumeSessionID != "" &&
+			detected.ResumeSessionID != current.ResumeSessionID {
 			current.ResumeSessionID = detected.ResumeSessionID
 			changed = true
 		}
@@ -942,12 +952,11 @@ func (s *Storage) MergeResumeSessionIDsForProject(projectID string, detected *In
 		}
 		for idx := range current.FollowedWindows {
 			window := &current.FollowedWindows[idx]
-			if window.ResumeSessionID != "" {
+			detectedWindow, ok := detectedByIndex[window.Index]
+			if !ok || detectedWindow.ResumeSessionID == window.ResumeSessionID {
 				continue
 			}
-			detectedWindow, ok := detectedByIndex[window.Index]
-			if ok &&
-				window.Agent == detectedWindow.Agent &&
+			if window.Agent == detectedWindow.Agent &&
 				window.WorkDir == detectedWindow.WorkDir {
 				window.ResumeSessionID = detectedWindow.ResumeSessionID
 				changed = true

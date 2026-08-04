@@ -1110,14 +1110,38 @@ func getClaudeSessionIDFromTmuxWindow(tmuxSession string, windowIdx int) string 
 		return ""
 	}
 
-	// The pane PID is the shell; find child processes (the actual claude process)
-	childOut, err := session.Command("pgrep", "-P", panePID).Output()
-	if err != nil {
-		return ""
+	// Look at the pane's own process first, then its children.
+	//
+	// The pane process is USUALLY the agent itself: a tab runs the agent
+	// directly, so tmux reports its pid, and the children are the MCP servers it
+	// spawned. Checking only children — which this did — therefore inspected
+	// every MCP server and never the agent. It went unnoticed because the id it
+	// was looking for is one we put on the command line ourselves at launch, so
+	// the value was already known; what it could never see was the user moving
+	// the tab to a different conversation.
+	//
+	// Children still matter: a tab whose command is a shell wrapper has the
+	// agent one level down.
+	pids := []string{panePID}
+	if childOut, err := session.Command("pgrep", "-P", panePID).Output(); err == nil {
+		pids = append(pids, strings.Fields(string(childOut))...)
+	}
+	candidatePIDs := pids
+
+	// Ask Claude which conversation it is on, before falling back to reading the
+	// arguments it was started with.
+	//
+	// Those arguments are fixed at launch. Running /resume inside a session
+	// switches the same process to another conversation without restarting it,
+	// so from then on argv names the conversation the user moved AWAY from —
+	// which is what got resumed on restart, or nothing at all when the session
+	// was started from the picker with no id on the command line.
+	if id := session.ClaudeSessionIDForPIDs(candidatePIDs); id != "" {
+		return id
 	}
 
 	// Check each child process for --resume or --session-id flag
-	for _, pidStr := range strings.Fields(string(childOut)) {
+	for _, pidStr := range candidatePIDs {
 		cmdline, err := os.ReadFile(fmt.Sprintf("/proc/%s/cmdline", pidStr))
 		if err != nil {
 			continue
@@ -1761,22 +1785,27 @@ func (a *App) GetSidebarUpdates() SidebarUpdate {
 				log.Printf("[SidebarPoll] failed to capture Codex session IDs for session=%s: %v", inst.ID, err)
 			}
 		}
-		if inst.ResumeSessionID == "" && inst.Agent == session.AgentClaude {
-			if sid := getClaudeSessionIDFromTmux(inst.TmuxSessionName()); sid != "" {
+		// Detected on every poll, not only while nothing is recorded: /resume
+		// inside a session moves it to another conversation, and stopping at the
+		// first answer left us pointing at the one the user had left behind.
+		// Detection reads Claude's own record of what each process is on, so a
+		// value that disagrees is the stale one; finding nothing changes nothing.
+		if inst.Agent == session.AgentClaude {
+			if sid := getClaudeSessionIDFromTmux(inst.TmuxSessionName()); sid != "" && sid != inst.ResumeSessionID {
+				log.Printf("[SidebarPoll] ResumeSessionID=%s (was %q) for session=%s", sid, inst.ResumeSessionID, inst.ID)
 				inst.ResumeSessionID = sid
 				needSave = true
-				log.Printf("[SidebarPoll] auto-detected and saved ResumeSessionID=%s for session=%s", sid, inst.ID)
 			}
 		}
 
 		// Auto-detect Claude session ID for followed windows (tabs)
 		for idx := range inst.FollowedWindows {
 			fw := &inst.FollowedWindows[idx]
-			if fw.ResumeSessionID == "" && fw.Agent == session.AgentClaude {
-				if sid := getClaudeSessionIDFromTmuxWindow(inst.TmuxSessionName(), fw.Index); sid != "" {
+			if fw.Agent == session.AgentClaude {
+				if sid := getClaudeSessionIDFromTmuxWindow(inst.TmuxSessionName(), fw.Index); sid != "" && sid != fw.ResumeSessionID {
+					log.Printf("[SidebarPoll] Claude sessionID=%s (was %q) for tab=%s/%d", sid, fw.ResumeSessionID, inst.ID, fw.Index)
 					fw.ResumeSessionID = sid
 					needSave = true
-					log.Printf("[SidebarPoll] auto-detected Claude sessionID=%s for tab=%s/%d", sid, inst.ID, fw.Index)
 				}
 			}
 		}
