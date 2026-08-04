@@ -203,14 +203,16 @@ func funcBody(t *testing.T, file, signature string) string {
 	return body
 }
 
-// A tab becoming visible is redrawn at once, not after the quiet period.
+// A tab returning from the background is recovered by replaying what it
+// produced, not by asking the program to redraw itself.
 //
-// refresh-client only sends what tmux believes changed, and a hidden tab's
-// output was dropped at the source — so tmux's idea of what this client already
-// has is wrong. The repaint comes out partial: missing lines, and leftover
-// characters from the old frame that nothing clears. Queueing that redraw meant
-// showing the broken frame for the whole quiet period.
-func TestShowRedrawsImmediately(t *testing.T) {
+// Output from a hidden tab used to be dropped. tmux then believed the client
+// was current and sent only differences against a screen it never received, so
+// the pane came back half-repainted with leftovers — recoverable only with a
+// Ctrl-L, which is input, and which repeatedly ended up in an agent's composer
+// as "/clear". Eight attempts were made to send that keystroke only when safe;
+// holding the bytes instead removes the need for it.
+func TestReturningTabReplaysHeldOutput(t *testing.T) {
 	b, err := os.ReadFile("terminal_ws.go")
 	if err != nil {
 		t.Fatalf("reading terminal_ws.go: %v", err)
@@ -226,18 +228,78 @@ func TestShowRedrawsImmediately(t *testing.T) {
 		window = window[:end]
 	}
 
-	if strings.Contains(window, "queueRedraw") {
-		t.Error("showing a tab queues its redraw, so the partial repaint stays on " +
-			"screen for the whole quiet period")
+	if !strings.Contains(window, "takeHeldWhileHidden") {
+		t.Error("a returning tab does not replay what it produced while hidden")
 	}
-	if !strings.Contains(window, `"send-keys"`) {
-		t.Error("showing a tab no longer redraws it at all")
+	if strings.Contains(window, `"C-l"`) {
+		t.Error("a returning tab still sends a redraw keystroke; the replay makes it " +
+			"unnecessary, and the keystroke is what reached agents' composers")
 	}
-	// The queue is cleared and the send recorded, so the resize that arrives
-	// with the tab switch joins this redraw rather than sending a second one —
-	// two close together are what produced the stray "/clear".
-	if !strings.Contains(window, "cancelQueuedRedraw") || !strings.Contains(window, "noteRedrawSent") {
-		t.Error("the immediate redraw does not suppress the queued one that follows it")
+}
+
+// Hidden output must be held, not dropped — that is the whole fix.
+func TestHiddenOutputIsHeldNotDropped(t *testing.T) {
+	b, err := os.ReadFile("terminal_ws.go")
+	if err != nil {
+		t.Fatalf("reading terminal_ws.go: %v", err)
+	}
+	src := string(b)
+
+	at := strings.Index(src, "if atomic.LoadInt32(&tc.hidden) == 1 {")
+	if at < 0 {
+		t.Fatal("the hidden-tab branch was not found")
+	}
+	branch := src[at:]
+	if end := strings.Index(branch, "\n\t\t\t\t}"); end > 0 {
+		branch = branch[:end]
+	}
+	if !strings.Contains(branch, "holdWhileHidden") {
+		t.Error("a hidden tab's output is discarded rather than held, so a returning " +
+			"tab has nothing to replay and needs a repaint it cannot get cleanly")
+	}
+}
+
+// The hold has to be bounded: an agent in a loop would otherwise grow it
+// without limit while its tab sits in the background.
+func TestHeldOutputIsBounded(t *testing.T) {
+	tc := &termConn{}
+	chunk := make([]byte, 1024*1024)
+
+	for i := 0; i < 10; i++ {
+		tc.holdWhileHidden(chunk)
+	}
+
+	held, overflowed := tc.takeHeldWhileHidden()
+	if !overflowed {
+		t.Error("ten megabytes were accepted without reporting an overflow")
+	}
+	if len(held) != 0 {
+		t.Errorf("%d bytes were kept after overflowing; a partial prefix replays the "+
+			"start of what happened and then jumps, which reads as corruption",
+			len(held))
+	}
+}
+
+// What is held has to come back in the order it was produced, or the replay
+// scrambles the screen it is meant to restore.
+func TestHeldOutputKeepsOrder(t *testing.T) {
+	tc := &termConn{}
+	tc.holdWhileHidden([]byte("first "))
+	tc.holdWhileHidden([]byte("second"))
+
+	held, overflowed := tc.takeHeldWhileHidden()
+	if overflowed {
+		t.Fatal("overflowed on a few bytes")
+	}
+	if string(held) != "first second" {
+		t.Errorf("held %q, want %q", held, "first second")
+	}
+
+	// Taking clears it: replaying the same bytes on the next switch would
+	// duplicate them.
+	again, _ := tc.takeHeldWhileHidden()
+	if len(again) != 0 {
+		t.Errorf("%d bytes survived being taken", len(again))
 	}
 }
 
@@ -255,5 +317,70 @@ func TestQueuedRedrawDroppedAfterImmediateOne(t *testing.T) {
 	if pending {
 		t.Error("a redraw was queued moments after one was sent; the pane had just " +
 			"been redrawn in full, and two close together are what produced \"/clear\"")
+	}
+}
+
+// A plain terminal session gets no redraw keystroke.
+//
+// Ctrl-L exists here to make a bottom-aligned TUI lay itself out again for a
+// new geometry. A shell has no such frame, so the keystroke does nothing useful
+// — it just lands on the command line the user is in the middle of typing.
+func TestPlainTerminalGetsNoRedraw(t *testing.T) {
+	b, err := os.ReadFile("terminal_ws.go")
+	if err != nil {
+		t.Fatalf("reading terminal_ws.go: %v", err)
+	}
+	src := string(b)
+
+	if !strings.Contains(src, "tabAgent != session.AgentTerminal") {
+		t.Fatal("nothing excludes a plain terminal from the redraw")
+	}
+
+	// Only one sender is left — the resize queue. A returning tab is recovered
+	// by replaying its held output, which needs no keystroke at all.
+	marker := `queueRedraw(sessionID, attachTarget, winIdx, "resize"`
+	at := strings.Index(src, marker)
+	if at < 0 {
+		t.Fatalf("could not find %q; if it moved, update this test", marker)
+	}
+	start := at - 400
+	if start < 0 {
+		start = 0
+	}
+	if !strings.Contains(src[start:at], "redrawWanted") {
+		t.Error("the resize redraw is not gated on redrawWanted, so a shell session " +
+			"receives a keystroke it has no use for")
+	}
+}
+
+// The immediate redraw is rate-limited too.
+//
+// It used to clear the queue and record the send, so a queued redraw would not
+// follow it — but nothing stopped a second immediate one. Two tab switches in
+// quick succession each sent a keystroke: measured in the log at 838ms and
+// 968ms apart, which is the pairing that produces the stray "/clear".
+func TestImmediateRedrawIsRateLimited(t *testing.T) {
+	const sid = "immediate-limit-test"
+
+	if !mayRedrawNow(sid, 0) {
+		t.Fatal("the first redraw was refused; a returning tab would never repaint")
+	}
+	noteRedrawSent(sid, 0)
+	if mayRedrawNow(sid, 0) {
+		t.Error("a second immediate redraw was allowed right after the first")
+	}
+	// Per window: switching to a different tab must still repaint it.
+	if !mayRedrawNow(sid, 1) {
+		t.Error("a different window was refused")
+	}
+}
+
+// The interval has to clear the gaps measured between tab switches.
+func TestRedrawSettledCoversObservedSwitches(t *testing.T) {
+	for _, gap := range []int{838, 968} {
+		if redrawSettled <= time.Duration(gap)*time.Millisecond {
+			t.Errorf("redrawSettled is %v, which lets through two tab switches "+
+				"measured %dms apart", redrawSettled, gap)
+		}
 	}
 }

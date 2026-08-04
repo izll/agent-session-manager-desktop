@@ -132,24 +132,19 @@ export class TerminalPool {
         sendVisibility(ti, isActive);
       }
       if (isActive && !wasVisible) {
-        // A tab returning from the background shows whatever was on screen when
-        // it was hidden: its output was dropped at the source while it was away,
-        // and the redraw that fixes that is queued rather than immediate. Mark
-        // it as waiting so the view can say so; the first byte of output clears
-        // it. Only for a tab that really was hidden — one that never left has
-        // nothing to wait for.
-        // Clear this side of the screen before the redraw arrives.
+        // A tab returning from the background is a moment behind: the backend
+        // held its output while it was away and sends it now. Mark it as
+        // waiting so the view can say so; the first byte clears it.
         //
-        // A hidden tab's output is dropped at the source, so what xterm holds
-        // is the frame from when the tab was hidden — and tmux, which thinks
-        // the client is up to date, sends only what it considers changed. The
-        // leftovers are the parts of the old frame nothing overwrites. Only
-        // the client can remove those, because tmux does not know they are
-        // there.
+        // The screen is NOT cleared here, deliberately.
         //
-        // reset() rather than clear(): clear() keeps the current line and the
-        // scrollback, and the stale frame is exactly what has to go.
-        try { ti.terminal.reset(); } catch { /* terminal already torn down */ }
+        // It was, back when a hidden tab's output was dropped and recovery
+        // meant asking the program to redraw itself: the leftovers of the old
+        // frame had to go, because nothing else would overwrite them. Now the
+        // bytes produced while hidden are held and replayed, and those are
+        // differences against the screen as it was — clearing it first would
+        // leave the replay writing into a blank pane, so most of the content
+        // would simply be missing.
         if (!ti.awaitingRedraw) {
           ti.awaitingRedraw = true;
           ti.onAwaitingRedraw = (waiting) => {

@@ -87,6 +87,25 @@ var redrawQueue struct {
 // without reaching as far as the user's next deliberate action.
 const redrawSettled = 1500 * time.Millisecond
 
+// mayRedrawNow reports whether enough time has passed since this window's last
+// redraw to send another.
+//
+// The immediate path had no such check: it cleared the queue and recorded the
+// send, so a queued redraw would not follow it — but two tab switches in quick
+// succession each sent one outright. Measured in the log: keystrokes 838ms and
+// 968ms apart, which is exactly the pairing that puts a stray "/clear" into an
+// agent's composer.
+//
+// Skipping is safe here in a way it is not for a resize: the pane's geometry has
+// not changed, and it was redrawn in full a moment ago.
+func mayRedrawNow(sessionID string, winIdx int) bool {
+	key := fmt.Sprintf("%s:%d", sessionID, winIdx)
+	redrawQueue.Lock()
+	defer redrawQueue.Unlock()
+	at, ok := redrawQueue.sentAt[key]
+	return !ok || time.Since(at) >= redrawSettled
+}
+
 // noteRedrawSent records an immediate redraw, so the requests that follow it
 // within redrawSettled are dropped rather than queued.
 func noteRedrawSent(sessionID string, winIdx int) {
@@ -263,6 +282,56 @@ type termConn struct {
 	// heavy background agent made typing in the visible tab unbearably laggy.
 	// The agent keeps running; on un-hide the frontend asks tmux to redraw.
 	hidden int32
+
+	// Output produced while this tab was hidden, replayed when it comes back.
+	//
+	// Held rather than dropped: dropping it left tmux believing the client was
+	// current, so it sent only differences against a screen this client never
+	// received — a half-repainted pane with leftovers, recoverable only by a
+	// Ctrl-L, which is input and repeatedly landed in an agent's composer.
+	heldMu   sync.Mutex
+	held     []byte
+	heldOver bool
+}
+
+// maxHeldWhileHidden bounds what one hidden tab may accumulate.
+//
+// A terminal screen is on the order of ten kilobytes, so this is several
+// hundred screens' worth — comfortably more than a tab produces while the user
+// looks at another one. Past it the held bytes are dropped and the tab falls
+// back to asking tmux for a repaint, because an agent in a loop must not be
+// able to grow this without limit.
+const maxHeldWhileHidden = 4 * 1024 * 1024
+
+// holdWhileHidden stores output for a hidden tab.
+func (tc *termConn) holdWhileHidden(data []byte) {
+	if len(data) == 0 {
+		return
+	}
+	tc.heldMu.Lock()
+	defer tc.heldMu.Unlock()
+	if tc.heldOver {
+		return
+	}
+	if len(tc.held)+len(data) > maxHeldWhileHidden {
+		// Over the limit: drop what was held rather than keep a partial
+		// prefix. A prefix would replay the start of what happened and then
+		// jump, which reads as corruption; an honest repaint is better.
+		tc.held = nil
+		tc.heldOver = true
+		return
+	}
+	tc.held = append(tc.held, data...)
+}
+
+// takeHeldWhileHidden returns and clears what was held, and whether the limit
+// was hit — in which case the caller has to fall back to a repaint.
+func (tc *termConn) takeHeldWhileHidden() (data []byte, overflowed bool) {
+	tc.heldMu.Lock()
+	defer tc.heldMu.Unlock()
+	data, overflowed = tc.held, tc.heldOver
+	tc.held, tc.heldOver = nil, false
+	return data, overflowed
 }
 
 // WriteToTerminal writes data directly to a PTY connection (for dictation)
@@ -451,6 +520,10 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 		}
 	}
 	redrawQuiet := redrawQuietFor(tabAgent)
+	// A plain terminal has no TUI to lay itself out again — a shell redraws
+	// nothing in response to Ctrl-L that matters here, and the keystroke just
+	// lands on the command line the user is typing.
+	redrawWanted := tabAgent != session.AgentTerminal
 
 	// Nothing to attach to if the multiplexer session is gone — after the user
 	// deleted it, say. Attaching anyway builds a mirror around a session that
@@ -740,12 +813,27 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 				_ = ws.Close()
 				return
 			case chunk := <-dataCh:
-				// Hidden (background) tab: keep draining the PTY so tmux never
-				// blocks, but DROP the bytes — sending WS frames to a hidden tab
-				// only burns the webview's single main thread and starves the
-				// foreground tab's input. On un-hide the frontend triggers a
-				// tmux redraw, so nothing is permanently lost.
+				// Hidden (background) tab: hold the bytes here instead of
+				// sending them.
+				//
+				// Not sending is the point — every WS frame is dispatched on the
+				// webview's single main thread, and a background agent's output
+				// would starve the foreground tab's keystrokes. But they used to
+				// be DROPPED, and that is what made a returning tab show a
+				// half-repainted screen with leftovers: tmux then believes the
+				// client is current and sends only differences against a state
+				// it never received. Recovering from that needed a Ctrl-L, which
+				// is input, and repeatedly ended up in an agent's composer.
+				//
+				// Held in the backend rather than the frontend: this is Go
+				// memory rather than the webview's, and the frontend's own
+				// hidden buffer never saw any of this anyway, because the bytes
+				// were gone before they reached it.
 				if atomic.LoadInt32(&tc.hidden) == 1 {
+					// Anything already queued goes in first, then this chunk,
+					// so the held bytes stay in the order tmux produced them.
+					tc.holdWhileHidden(pendingData)
+					tc.holdWhileHidden(chunk)
 					pendingData = pendingData[:0]
 					continue
 				}
@@ -911,7 +999,9 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 							// prompt into a different state, which is where the stray
 							// "/clear" came from. A resize burst can easily produce
 							// several, so allow one per window per interval.
-							queueRedraw(sessionID, attachTarget, winIdx, "resize", redrawQuiet)
+							if redrawWanted {
+								queueRedraw(sessionID, attachTarget, winIdx, "resize", redrawQuiet)
+							}
 						}
 					}
 				} else if len(data) >= 2 && data[0] == 0x02 {
@@ -931,48 +1021,39 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 						// transition that never happened.
 						wasHidden := atomic.SwapInt32(&tc.hidden, 0) == 1
 						session.SetTerminalVisible(ptmx, true)
-						// Coming back to the foreground: force tmux to repaint the
-						// pane so we recover everything that was dropped while
-						// hidden, in a single redraw.
-						if attachedToOwnMirror && wasHidden {
-							session.RefreshSessionClients(attachTarget)
-							// And ask the program to redraw itself, which
-							// refresh-client cannot do — it repaints the pane
-							// buffer, and this client's view of that buffer is
-							// exactly what went stale: output produced while the
-							// tab was hidden is dropped at the source, so
-							// whatever the agent drew in the meantime never
-							// arrived. Leaving a tab to work, coming back, and
-							// having to press Refresh is this gap.
-							//
-							// Still goes through the guard, because showing a tab
-							// can be accompanied by a resize — the pane is being
-							// laid out as it appears — and two Ctrl-L close
-							// together are what produced the stray "/clear".
-							// Whichever of the two arrives first sends it; the
-							// other is suppressed as a repeat.
-							// Sent immediately, not queued.
-							//
-							// refresh-client only sends what tmux believes changed,
-							// and while this tab was hidden its output was dropped
-							// at the source — so tmux's idea of what the client
-							// already has is wrong. The result is a partial repaint:
-							// missing lines, and leftover characters from the old
-							// frame that nothing clears. Only Ctrl-L makes the
-							// program redraw itself in full.
-							//
-							// Waiting out the quiet period would mean showing that
-							// broken frame for two and a half seconds. Pairing is
-							// still avoided, because the queue is cleared here: the
-							// resize that follows a tab switch joins this redraw
-							// instead of sending its own.
-							cancelQueuedRedraw(sessionID, winIdx)
-							noteRedrawSent(sessionID, winIdx)
-							err := session.TmuxCommand("send-keys", "-t",
-								fmt.Sprintf("%s:%d", attachTarget, winIdx), "C-l").Run()
-							if session.DebugLogging {
-								log.Printf("[ws] redraw sent on show session=%s win=%d err=%v",
-									sessionID, winIdx, err)
+
+						// Coming back to the foreground: send what was held
+						// while this tab was hidden.
+						//
+						// This is the whole recovery. The bytes are the ones
+						// tmux already produced, in order, so replaying them
+						// leaves the client's screen exactly where the pane is —
+						// no repaint to ask for, and no Ctrl-L, which is input
+						// and repeatedly ended up in an agent's composer.
+						if wasHidden {
+							held, overflowed := tc.takeHeldWhileHidden()
+							if len(held) > 0 {
+								tc.writeMu.Lock()
+								werr := ws.WriteMessage(websocket.BinaryMessage, held)
+								tc.writeMu.Unlock()
+								if session.DebugLogging {
+									log.Printf("[ws] replayed %d held bytes session=%s win=%d err=%v",
+										len(held), sessionID, winIdx, werr)
+								}
+							}
+							if overflowed {
+								// More was produced than is worth holding, so
+								// the screen cannot be reconstructed from the
+								// stream. Ask tmux to repaint instead: that is
+								// incomplete on its own, but it is the honest
+								// fallback and it sends no input.
+								if attachedToOwnMirror {
+									session.RefreshSessionClients(attachTarget)
+								}
+								if session.DebugLogging {
+									log.Printf("[ws] held output overflowed, repainting session=%s win=%d",
+										sessionID, winIdx)
+								}
 							}
 						}
 					}
@@ -994,4 +1075,3 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 func (ts *TerminalServer) GetPort() int {
 	return ts.port
 }
-
