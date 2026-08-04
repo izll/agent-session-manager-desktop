@@ -6,6 +6,27 @@ Entries describe what changed for someone using the app. Internal refactoring,
 test and CI work is left out unless it changed behaviour. Dates are release
 dates; the format follows [Keep a Changelog](https://keepachangelog.com).
 
+## 0.9.12 — 2026-08-04
+
+### Added
+
+- **Activity detection patterns can be corrected without a release.** The
+  phrases that tell the app an agent is working or waiting for an answer were
+  compiled in, so when Claude or Codex reworded a prompt the app stopped
+  noticing that agent waiting — and the fix had to wait for a new version. They
+  live in a file now, which ships inside the binary and is refreshed from the
+  repository in the background. **Settings → Maintenance** has a manual refresh,
+  showing the version in force and whether anything changed.
+- A changelog, and release notes taken from it. Every release page previously
+  carried the same description of the app rather than what had changed.
+
+### Fixed
+
+- **Windows: the installer named "asmgr-desktop" as its publisher.** No company
+  name was set, so Wails fell back to the project name. It says "izll" now.
+  SmartScreen will still warn — that needs a code signing certificate — but the
+  publisher is no longer the project's internal name.
+
 ## 0.9.11 — 2026-08-03
 
 ### Fixed
