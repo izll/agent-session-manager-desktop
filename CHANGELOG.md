@@ -6,6 +6,27 @@ Entries describe what changed for someone using the app. Internal refactoring,
 test and CI work is left out unless it changed behaviour. Dates are release
 dates; the format follows [Keep a Changelog](https://keepachangelog.com).
 
+## 0.9.15 — 2026-08-04
+
+### Added
+
+- **The app says when the terminal multiplexer is missing, instead of failing
+  around it.** Every session runs inside tmux (Linux, macOS) or psmux
+  (Windows), and neither was ever checked for — so creating a session appeared
+  to work, saved the session, and only then failed, leaving a permanent entry
+  in the sidebar for a session that had never run and never could. A banner now
+  says what is missing and gives the command that installs it. On Windows it
+  also offers to install psmux with winget, which needs no administrator
+  rights. The `.deb` and `.rpm` packages depend on tmux, so a package install
+  never sees this.
+
+### Fixed
+
+- **The open tab could not be clicked while the diff was showing.** Clicking
+  the tab you were already on did nothing, so with the diff open there was no
+  way back to it by mouse. Introduced in 0.9.13, along with the fix that keeps
+  the diff open when switching between tabs.
+
 ## 0.9.14 — 2026-08-04
 
 ### Fixed
