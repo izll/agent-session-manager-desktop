@@ -706,15 +706,22 @@
   let tabContextMenuIndex: number | null = null;
   let tabContextMenuName = '';
 
-  // Switching tabs does not close the diff, by either route — clicking a tab or
-  // Ctrl+PageUp/PageDown. Each tab remembers whether it was left on the diff
-  // (MainPanel's tabDiffMemory), so the incoming tab decides what it shows.
+  // Moving to ANOTHER tab leaves the diff alone: each tab remembers whether it
+  // was left on it (MainPanel's tabDiffMemory), so the incoming tab decides.
+  // Closing it here unconditionally was worse than redundant — selectWindow
+  // updates the store first, so the reactive block has already restored the
+  // incoming tab's state, and the close then wiped THAT tab's memory instead of
+  // the one being left.
   //
-  // Closing it here was worse than redundant: selectWindow updates the store
-  // first, so MainPanel's reactive block has already restored the INCOMING
-  // tab's diff by the time a close would run, and the close then wiped that
-  // tab's memory instead of the one being left.
+  // Clicking the tab you are already on is the exception, and the only way back
+  // from the diff by mouse. The store does not change, so nothing reacts and
+  // the click did nothing at all — the tab looked unclickable while the diff
+  // was open. Here the click can only mean "show me this tab".
   function handleTabClick(index: number) {
+    if (index === $selectedWindowIdx && fullDiffActive) {
+      dispatch('closeFullDiff');
+      return;
+    }
     selectWindow(index);
   }
 
