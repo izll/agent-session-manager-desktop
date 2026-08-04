@@ -6,6 +6,38 @@ Entries describe what changed for someone using the app. Internal refactoring,
 test and CI work is left out unless it changed behaviour. Dates are release
 dates; the format follows [Keep a Changelog](https://keepachangelog.com).
 
+## 0.9.13 — 2026-08-04
+
+### Fixed
+
+- **Switching to another conversation inside a tab was not noticed.** Both
+  Claude and Codex let you move to a different conversation from inside a
+  running session, without restarting anything — so the id recorded when the tab
+  opened still pointed at the conversation you had left, and restarting the tab
+  reopened that one, or an empty one. Each tab now follows what its agent is
+  actually on. For Claude this took three fixes: detection was inspecting the
+  MCP servers a tab had spawned rather than the agent itself, it was reading the
+  arguments the process was started with rather than what the agent reports, and
+  both the poll and the save step were discarding a detected change because a
+  value was already stored.
+- **Stray keystrokes reached agents that were not expecting them.** The app sent
+  a redraw keystroke automatically — after a resize, from a pane-size check on a
+  timer, and once when a tab attached. It only means "redraw" to a program that
+  chooses to read it that way: Codex's `/resume` picker took it as a keystroke
+  and cleared its own screen, and Claude Code turned a run of them into a
+  `/clear` typed into the composer. Nothing sends one automatically now; a
+  resize signals the program on its own, which is what makes it lay itself out
+  again. The Refresh button still sends one.
+- **Leftover characters after returning to a background tab.** A hidden tab's
+  output was dropped rather than held, so the multiplexer believed the tab was
+  up to date and sent only what it thought had changed. Output is now kept while
+  a tab is in the background and replayed when it comes back.
+- **The diff closed when switching tabs.** Each tab already remembered whether
+  it was left on the diff, but the switch itself cleared that memory — and
+  cleared it for the tab being opened rather than the one being left, so the
+  diff never survived either way. `Ctrl+PageUp`/`PageDown` behaves the same as
+  clicking a tab.
+
 ## 0.9.12 — 2026-08-04
 
 ### Added
