@@ -221,9 +221,9 @@ func StartTerminal(cmd *exec.Cmd) (TerminalStream, error) {
 	// caller waiting for a process to finish. See Write.
 	go stream.deliverKeys()
 
-	// Control mode sends no repaint on attach, so the first screen has to be
-	// asked for. See primeFromDumpState — the agent draws it, we do not.
-	go primeFromDumpState(stream, pane)
+	// Control mode sends no repaint on attach; the size the frontend sends
+	// straight after is what produces the opening frame. See primePaneSize.
+	go primePaneSize(pane)
 
 	// Keep the pane matched to its window for as long as this terminal lives.
 	go watchPaneSize(stream, pane)
@@ -450,58 +450,41 @@ func (c *controlModeStream) selectWindow(target string) {
 	_, _ = c.in.Write([]byte(fmt.Sprintf("select-window -t %s\n", target)))
 }
 
-// primeFromDumpState paints the terminal's opening frame from the
-// multiplexer's own state dump.
+// primePaneSize gets the pane's opening frame onto the screen.
 //
-// Control mode sends no repaint on attach, so the first screen has to come from
-// somewhere. dump-state is the only source that is self-consistent: it reports
-// the pane's rows, its styled contents and its cursor together, in one answer.
-// Everything else disagreed with itself — capture-pane's row count depends on
-// how the trailing newline is handled, an induced repaint puts the content a
-// row off, and display-message and dump-state gave different cursor rows for
-// the same pane (43 versus 45).
+// Control mode sends no repaint on attach, so the first screen has to be asked
+// for — but not with a keystroke. Changing the size is what makes psmux repaint,
+// and it repaints in full. Measured on an attached client whose screen had gone
+// stale (see SetTerminalSize):
+//
+//	refresh-client                 ->     0 bytes
+//	refresh-client -C <same size>  ->     0 bytes
+//	refresh-client -C <different>  -> 27510 bytes
+//
+// SetTerminalSize nudges the size by a column for exactly this reason, and the
+// frontend always sends a size after attaching, because a pipe carries no
+// window dimensions and psmux would otherwise sit at its 120x30 default. So the
+// opening frame arrives on its own; all that is needed here is for the pane to
+// match its window first, so that frame is drawn at the right size.
+//
+// This used to send Ctrl-L. It is input, and attaching to an existing tab is
+// precisely where that hurts: whatever was left on screen — an open /resume
+// list, a prompt half-typed — reads the keystroke as a keystroke. On the Unix
+// path the same keystroke cleared Codex's /resume list and put a stray "/clear"
+// into Claude Code's composer.
 //
 // It waits for the pane to have drawn something: a tab opened moments ago is
-// still starting its agent, and a snapshot taken then is blank.
-func primeFromDumpState(s *controlModeStream, pane string) {
+// still starting its agent, and sizing a pane with nothing in it achieves
+// nothing.
+func primePaneSize(pane string) {
 	const attempts = 24
 	for i := 0; i < attempts; i++ {
 		if paneHasContent(pane) {
-			// Ask the agent to repaint, and let ITS repaint be the opening
-			// frame — do not also inject a snapshot.
-			//
-			// Ctrl-L is what the Refresh button sends (App.RefreshWindow), and
-			// it is the one thing that has always recovered a tab: the agent
-			// rebuilds its interface from scratch, and control mode carries that
-			// repaint to us like any other output.
-			//
-			// A snapshot on top of it is worse than useless. It is prepended to
-			// the read buffer, so by the time it is ready the agent's repaint
-			// has already been handed to the terminal — the snapshot then lands
-			// behind the frame it was meant to replace, and never shows.
-			// Measured: the recorded stream contained no ESC[2J and no absolute
-			// row addressing at all, meaning the snapshot never reached the
-			// terminal, while the agent's own repaint did and was correct.
 			_ = reconcilePaneSize(pane)
-			redrawPane(pane)
 			return
 		}
 		time.Sleep(250 * time.Millisecond)
 	}
-}
-
-// redrawPane asks the agent in a pane to repaint from scratch.
-//
-// Ctrl-L is the conventional "clear and redraw" key, and TUI applications
-// rebuild their whole interface on it. Sent by key name so the multiplexer
-// delivers it as a control character rather than as text.
-func redrawPane(pane string) {
-	if pane == "" {
-		return
-	}
-	cmd, cancel := TmuxCommandTimed("send-keys", "-t", pane, "C-l")
-	_ = cmd.Run()
-	cancel()
 }
 
 // reconcilePaneSize makes a pane match the window it lives in.
@@ -548,8 +531,9 @@ func reconcilePaneSize(pane string) bool {
 //
 // A stale pane is not cosmetic: the agent draws its interface at the pane's
 // size inside a differently-sized window, so the content lands in the wrong
-// place, and Refresh cannot fix it because Ctrl-L only makes the agent redraw
-// at the size it already believes in.
+// place, and Refresh cannot fix it on its own — Ctrl-L only makes the agent
+// redraw at the size it already believes in, which is why the size is corrected
+// here rather than left to that button.
 //
 // Polled, because the multiplexer sends no notification for this — but polled
 // cheaply. Each check costs one process launch, measured at 20ms on Windows, so
@@ -582,11 +566,15 @@ func watchPaneSize(s *controlModeStream, pane string) {
 		if atomic.LoadInt32(&s.hidden) == 1 {
 			continue
 		}
-		if reconcilePaneSize(pane) {
-			// The agent has to be told to repaint at the new size; without this
-			// the pane is the right shape but still holds the old drawing.
-			redrawPane(pane)
-		}
+		// No redraw keystroke here, deliberately. resize-pane signals the
+		// program, which lays itself out again on its own.
+		//
+		// Sending Ctrl-L as well would put input into the pane at a moment
+		// nothing here can predict — this fires on a timer, so it can land in
+		// the middle of anything. On the Unix path the equivalent keystroke,
+		// sent after a resize, is what cleared Codex's /resume list and put a
+		// stray "/clear" into Claude Code's composer.
+		reconcilePaneSize(pane)
 	}
 }
 
