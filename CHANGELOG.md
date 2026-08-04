@@ -6,6 +6,19 @@ Entries describe what changed for someone using the app. Internal refactoring,
 test and CI work is left out unless it changed behaviour. Dates are release
 dates; the format follows [Keep a Changelog](https://keepachangelog.com).
 
+## 0.9.14 — 2026-08-04
+
+### Fixed
+
+- **Windows: the terminal was slow to catch up after resizing the window.**
+  Every size change ran three separate multiplexer processes, each costing
+  20-31ms here, and one of them re-derived a size that had just been set — from
+  the containing window rather than the pane, so on a resize it fought the value
+  it followed. Maximising walks through sizes, and they all arrived on the same
+  lock keystrokes use, so the pane stopped accepting typing while it caught up.
+  One process runs on that path now, and the pane-size check that used to follow
+  it happens shortly afterwards, off the interactive path.
+
 ## 0.9.13 — 2026-08-04
 
 ### Fixed

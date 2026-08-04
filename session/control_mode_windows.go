@@ -51,6 +51,14 @@ type controlModeStream struct {
 	// which is the only place that knows. Kept as an atomic because the size
 	// watcher reads it from another goroutine.
 	hidden int32
+
+	// recheckSize asks the size watcher to look again soon rather than at its
+	// next scheduled tick. SetTerminalSize raises it: a resize is exactly when
+	// the pane and its window can end up disagreeing, and waiting a full
+	// interval to notice leaves the agent drawing at the wrong size for that
+	// long. Buffered and written without blocking, so the interactive path
+	// never waits on the watcher.
+	recheckSize chan struct{}
 }
 
 func (c *controlModeStream) Read(p []byte) (int, error) { return c.out.Read(p) }
@@ -210,6 +218,7 @@ func StartTerminal(cmd *exec.Cmd) (TerminalStream, error) {
 	stream := &controlModeStream{
 		closed:       make(chan struct{}),
 		keys:         make(chan []byte, 256),
+		recheckSize:  make(chan struct{}, 1),
 		out:          reader,
 		in:           stdin,
 		stop:         killProcess(cmd),
@@ -297,16 +306,27 @@ func SetTerminalSize(s TerminalStream, cols, rows int) error {
 	// Note this is resize-pane on a PANE target. The same command aimed at a
 	// window does nothing on psmux, which is why an earlier attempt at this
 	// looked like the command was unsupported.
+	// Only one process launch here, deliberately. Every launch on Windows costs
+	// 20-31ms (measured), and this runs on the interactive path: maximising the
+	// window walks through sizes, each one arriving here, and the writeMu below
+	// is the same lock keystrokes take — so time spent in this function is time
+	// the pane accepts no typing.
+	//
+	// reconcilePaneSize used to follow this call, adding two more launches to
+	// re-derive a size we had just set. It also aimed at a DIFFERENT size, the
+	// containing window's, so on a resize it fought the value above. The pane
+	// can genuinely drift from its window, but watchPaneSize already corrects
+	// that on its own timer, off the interactive path.
 	if c.pane != "" {
 		cmd, cancel := TmuxCommandTimed("resize-pane", "-t", c.pane,
 			"-x", fmt.Sprintf("%d", cols), "-y", fmt.Sprintf("%d", rows))
 		_ = cmd.Run()
 		cancel()
-		// The window may still disagree — resizing the app window changes the
-		// window without the pane following. Left alone the agent draws at the
-		// pane's size inside a differently-sized window, and Ctrl-L cannot help
-		// because it redraws at the size the agent believes in.
-		_ = reconcilePaneSize(c.pane)
+		// Have the watcher confirm the pane took, shortly, off this path.
+		select {
+		case c.recheckSize <- struct{}{}:
+		default: // one already pending: that check covers this resize too
+		}
 	}
 	// Shares writeMu with keystrokes: this is a command on the same channel,
 	// and a half-written line would corrupt whichever command follows.
@@ -553,11 +573,28 @@ func watchPaneSize(s *controlModeStream, pane string) {
 		firstCheck = 3 * time.Second
 		interval   = 10 * time.Second
 	)
+	// How soon a resize is confirmed. Long enough that a burst of sizes settles
+	// into one check, short enough that a pane left at the wrong size is not
+	// visible as an agent drawing into the wrong shape.
+	const afterResize = 400 * time.Millisecond
+
 	next := firstCheck
 	for {
 		select {
 		case <-s.closed:
 			return
+		case <-s.recheckSize:
+			// Drain anything that arrived while we were waiting, so a burst of
+			// resizes costs one check rather than one each.
+			for {
+				select {
+				case <-s.recheckSize:
+					continue
+				case <-time.After(afterResize):
+				}
+				break
+			}
+			next = interval
 		case <-time.After(next):
 			next = interval
 		}
