@@ -257,7 +257,9 @@
     } else {
       newIdx = (currentIdx - 1 + windows.length) % windows.length;
     }
-    selectWindow(windows[newIdx].Index);
+    // Same path as a click, so the keyboard and the mouse agree on what a tab
+    // switch does — including leaving the diff to the incoming tab's memory.
+    handleTabClick(windows[newIdx].Index);
   }
 
   onMount(async () => {
@@ -704,6 +706,14 @@
   let tabContextMenuIndex: number | null = null;
   let tabContextMenuName = '';
 
+  // Switching tabs does not close the diff, by either route — clicking a tab or
+  // Ctrl+PageUp/PageDown. Each tab remembers whether it was left on the diff
+  // (MainPanel's tabDiffMemory), so the incoming tab decides what it shows.
+  //
+  // Closing it here was worse than redundant: selectWindow updates the store
+  // first, so MainPanel's reactive block has already restored the INCOMING
+  // tab's diff by the time a close would run, and the close then wiped that
+  // tab's memory instead of the one being left.
   function handleTabClick(index: number) {
     selectWindow(index);
   }
@@ -1257,7 +1267,7 @@
             class:tab-dropped={droppedTabWindowIdx === win.Index}
             style={tabStyle(win)}
             draggable={true}
-            on:click={() => { if (renamingTabIndex === null) { handleTabClick(win.Index); dispatch('closeFullDiff'); } }}
+            on:click={() => { if (renamingTabIndex === null) handleTabClick(win.Index); }}
             on:contextmenu={(e) => handleTabContextMenu(e, win.Index, win.Name)}
             on:dragstart={(e) => handleTabDragStart(e, winArrayIdx)}
             on:dragend={handleTabDragEnd}
