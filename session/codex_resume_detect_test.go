@@ -152,8 +152,14 @@ func TestCaptureCodexResumeIDs(t *testing.T) {
 			return "main-id"
 		case 2:
 			return "tab-id"
+		case 3:
+			// This pane already holds an id, and the live process reports a
+			// different one — which is what happens when the user resumes an
+			// earlier conversation inside Codex. The new one wins: the stored
+			// one now points at the conversation they moved away from.
+			return "resumed-id"
 		default:
-			return "unexpected"
+			return ""
 		}
 	}
 
@@ -166,10 +172,16 @@ func TestCaptureCodexResumeIDs(t *testing.T) {
 	if instance.FollowedWindows[0].ResumeSessionID != "tab-id" {
 		t.Fatalf("followed ResumeSessionID = %q, want tab-id", instance.FollowedWindows[0].ResumeSessionID)
 	}
-	if instance.FollowedWindows[1].ResumeSessionID != "manual-id" {
-		t.Fatalf("manual ResumeSessionID overwritten: %q", instance.FollowedWindows[1].ResumeSessionID)
+	// Updated, not preserved. Resuming inside Codex starts a new session, so a
+	// stored id that disagrees with the running process is the stale one —
+	// keeping it reopened the wrong conversation, or an empty one, on restart.
+	if instance.FollowedWindows[1].ResumeSessionID != "resumed-id" {
+		t.Fatalf("ResumeSessionID = %q, want it updated to resumed-id",
+			instance.FollowedWindows[1].ResumeSessionID)
 	}
-	if got, want := strings.Join(calls, ","), "0:/work/main,2:/work/tab"; got != want {
+	// A stopped pane has no process to read, and a Claude pane is not ours to
+	// touch, so neither is probed.
+	if got, want := strings.Join(calls, ","), "0:/work/main,2:/work/tab,3:/work/main"; got != want {
 		t.Fatalf("detector calls = %q, want %q", got, want)
 	}
 }
@@ -198,5 +210,61 @@ func linkProcessFD(t *testing.T, procRoot string, pid int, fd, target string) {
 	}
 	if err := os.Symlink(target, filepath.Join(fdDir, fd)); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// Resuming a conversation inside Codex starts a new session, and the id we hold
+// then points at the one the user moved away from.
+//
+// The capture used to run only for panes with no id recorded, so that stale id
+// survived: restarting the tab reopened the old conversation, or an empty one,
+// rather than what was on screen.
+func TestCodexResumeIDFollowsTheLiveSession(t *testing.T) {
+	t.Parallel()
+
+	instance := &Instance{
+		ID:              "instance",
+		Path:            "/work",
+		Status:          StatusRunning,
+		Agent:           AgentCodex,
+		ResumeSessionID: "the-one-we-started-with",
+	}
+
+	// A pane that already has an id must still be probed, or a switch inside
+	// Codex can never be noticed.
+	if !instance.NeedsCodexResumeCapture() {
+		t.Fatal("a running Codex pane with an id recorded is not probed, so resuming " +
+			"inside Codex can never be picked up")
+	}
+
+	detector := func(_ string, _ int, _ string) string { return "the-one-in-use-now" }
+	if !instance.captureCodexResumeIDsAtMainWindow(detector, 0, true) {
+		t.Fatal("no change reported although the live session differs")
+	}
+	if instance.ResumeSessionID != "the-one-in-use-now" {
+		t.Errorf("ResumeSessionID = %q, want the live session", instance.ResumeSessionID)
+	}
+}
+
+// Detection reads the running process's open files, so finding nothing means
+// nothing was found — it must not clear what is already recorded.
+func TestCodexResumeIDSurvivesAFailedDetection(t *testing.T) {
+	t.Parallel()
+
+	instance := &Instance{
+		ID:              "instance",
+		Path:            "/work",
+		Status:          StatusRunning,
+		Agent:           AgentCodex,
+		ResumeSessionID: "known-good",
+	}
+
+	detector := func(_ string, _ int, _ string) string { return "" }
+	if instance.captureCodexResumeIDsAtMainWindow(detector, 0, true) {
+		t.Error("a change was reported although nothing was detected")
+	}
+	if instance.ResumeSessionID != "known-good" {
+		t.Errorf("ResumeSessionID = %q; a failed probe must not discard a working id",
+			instance.ResumeSessionID)
 	}
 }

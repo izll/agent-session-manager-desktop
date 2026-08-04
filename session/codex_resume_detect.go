@@ -214,16 +214,26 @@ func (i *Instance) CaptureCodexResumeIDs() bool {
 	return i.captureCodexResumeIDs(DetectCodexSessionIDFromTmux)
 }
 
+// NeedsCodexResumeCapture reports whether any Codex pane here should have its
+// session id read from the live process.
+//
+// Every running Codex pane qualifies, not only one with no id recorded yet.
+// Codex starts a new session when the user resumes an earlier conversation
+// inside it, and the id we hold then refers to the conversation they moved away
+// from — so restarting the tab reopened that one, or an empty one, rather than
+// what was on screen. The capture is a read of the process's own open files, so
+// re-reading it costs a directory scan and cannot invent an id that is not
+// there.
 func (i *Instance) NeedsCodexResumeCapture() bool {
 	if i.Status != StatusRunning {
 		return false
 	}
-	if i.Agent == AgentCodex && i.ResumeSessionID == "" && !i.MainWindowStopped {
+	if i.Agent == AgentCodex && !i.MainWindowStopped {
 		return true
 	}
 	for idx := range i.FollowedWindows {
 		window := &i.FollowedWindows[idx]
-		if window.Agent == AgentCodex && window.ResumeSessionID == "" && !window.Stopped {
+		if window.Agent == AgentCodex && !window.Stopped {
 			return true
 		}
 	}
@@ -242,29 +252,43 @@ func (i *Instance) captureCodexResumeIDsAtMainWindow(detect codexSessionDetector
 	changed := false
 	sessionName := i.TmuxSessionName()
 
-	if i.Agent == AgentCodex && i.ResumeSessionID == "" && !i.MainWindowStopped {
+	// Recorded whenever it differs, not only when nothing is recorded yet.
+	//
+	// Resuming an earlier conversation inside Codex starts a new session, and
+	// the id held here then points at the conversation the user moved away from
+	// — so restarting the tab reopened that one, or an empty one, instead of
+	// what was on screen. The detection reads the live process's own open
+	// files, so it either finds the session in use or returns nothing; it
+	// cannot substitute a wrong id for a right one.
+	if i.Agent == AgentCodex && !i.MainWindowStopped {
 		if mainWindowOK {
-			if sessionID := detect(sessionName, mainWindowIdx, i.Path); sessionID != "" {
+			if sessionID := detect(sessionName, mainWindowIdx, i.Path); sessionID != "" &&
+				sessionID != i.ResumeSessionID {
+				previous := i.ResumeSessionID
 				i.ResumeSessionID = sessionID
 				changed = true
-				log.Printf("[CodexResume] captured sessionID=%s for session=%s", sessionID, i.ID)
+				log.Printf("[CodexResume] captured sessionID=%s (was %q) for session=%s",
+					sessionID, previous, i.ID)
 			}
 		}
 	}
 
 	for idx := range i.FollowedWindows {
 		window := &i.FollowedWindows[idx]
-		if window.Agent != AgentCodex || window.ResumeSessionID != "" || window.Stopped {
+		if window.Agent != AgentCodex || window.Stopped {
 			continue
 		}
 		workDir := window.WorkDir
 		if workDir == "" {
 			workDir = i.Path
 		}
-		if sessionID := detect(sessionName, window.Index, workDir); sessionID != "" {
+		if sessionID := detect(sessionName, window.Index, workDir); sessionID != "" &&
+			sessionID != window.ResumeSessionID {
+			previous := window.ResumeSessionID
 			window.ResumeSessionID = sessionID
 			changed = true
-			log.Printf("[CodexResume] captured sessionID=%s for tab=%s/%d", sessionID, i.ID, window.Index)
+			log.Printf("[CodexResume] captured sessionID=%s (was %q) for tab=%s/%d",
+				sessionID, previous, i.ID, window.Index)
 		}
 	}
 
