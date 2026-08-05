@@ -471,7 +471,7 @@
       <!-- View Selector. Hidden on request to give the terminal another row;
            the tab bar keeps a button to bring it back, and the views stay
            reachable from the command palette meanwhile. -->
-      <div class="view-tabs" class:hidden={viewBarHidden}>
+      <div class="view-tabs" class:is-hidden={viewBarHidden}>
         <div class="view-tabs-left">
           <button
             class="view-tab {activeView === 'terminal' ? 'active' : ''}"
@@ -663,7 +663,7 @@
     {/if}
 
     <!-- Status Bar -->
-    <div class="status-bar" class:hidden={statusBarHidden}>
+    <div class="status-bar" class:is-hidden={statusBarHidden}>
       <div class="status-left">
         <!-- Open the current directory in the desktop's file manager.
              Sits in the status bar rather than the header because the path it
@@ -746,7 +746,11 @@
     background: linear-gradient(180deg, rgba(15, 15, 26, 0.8) 0%, rgba(10, 10, 15, 0.9) 100%);
   }
 
-  .view-tabs.hidden {
+  /* Not ".hidden": Tailwind ships that name as a global utility, so the
+     component's own rule and the utility both apply and neither name is
+     protected by Svelte's scoping. Harmless while both mean display:none,
+     but it is the same trap that made the shortcut rows position:fixed. */
+  .view-tabs.is-hidden {
     display: none;
   }
 
@@ -940,7 +944,7 @@
   .split-placeholder strong { font-size: 13px; color: #a1a1aa; }
   .split-placeholder small { max-width: 260px; font-size: 11px; }
 
-  .status-bar.hidden {
+  .status-bar.is-hidden {
     display: none;
   }
 

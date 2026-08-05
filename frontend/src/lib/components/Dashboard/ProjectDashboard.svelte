@@ -447,7 +447,7 @@
         {#if sections.length > 1 || section.id !== ''}
           <button
             class="group-section-header"
-            class:static={!section.id}
+            class:not-collapsible={!section.id}
             on:click={() => section.id && toggleGroupCollapse(section.id)}
           >
             {#if section.id}
@@ -622,8 +622,9 @@
   .session-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(315px,1fr)); gap:13px; }
   .session-grid:not(:last-child) { margin-bottom:24px; }
   .group-section-header { width:100%; display:flex; align-items:center; gap:8px; margin:2px 0 11px; padding:4px 2px; text-align:left; background:none; border:0; border-radius:7px; cursor:pointer; }
-  .group-section-header:hover:not(.static) { background:rgba(var(--accent-rgb), .06); }
-  .group-section-header.static { cursor:default; }
+  .group-section-header:hover:not(.not-collapsible) { background:rgba(var(--accent-rgb), .06); }
+  /* Not ".static": that is a Tailwind utility name (position:static). */
+  .group-section-header.not-collapsible { cursor:default; }
   .group-chevron { display:flex; flex-shrink:0; color:#a1a1aa; transition:transform .2s ease; }
   .group-chevron.expanded { transform:rotate(90deg); }
   /* Same treatment as the sidebar's GroupItem: amber folder with a soft glow */
