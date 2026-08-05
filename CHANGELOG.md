@@ -6,6 +6,31 @@ Entries describe what changed for someone using the app. Internal refactoring,
 test and CI work is left out unless it changed behaviour. Dates are release
 dates; the format follows [Keep a Changelog](https://keepachangelog.com).
 
+## 0.9.21 — 2026-08-06
+
+### Added
+
+- **Terminal tabs remember where you left them.** A terminal tab you had
+  navigated into a subdirectory used to come back at the project root, so you
+  had to find your way there again. Agent tabs keep their configured
+  directory, since that is part of what identifies the conversation they
+  resume.
+- **The shell a terminal tab runs is selectable** in Settings → Terminal. On
+  Windows that means Command Prompt or PowerShell; elsewhere the list is the
+  shells the system actually has.
+
+### Fixed
+
+- **A restarted terminal tab could start the wrong shell — or none at all.**
+  Creating a tab lets the multiplexer pick the shell, but restarting one had
+  to name it, and the name it used was the `$SHELL` variable. Windows has no
+  `$SHELL`, so every restart asked for bash and got an empty pane that died on
+  arrival. On Linux and macOS the tab could quietly come back running a
+  different shell from the one it was created with, since tmux starts the
+  shell from your account entry and ignores `$SHELL`.
+- **Two settings sections were both called "Megjelenés" in Hungarian.** The
+  second one is the terminal's rendering options, and now says so.
+
 ## 0.9.20 — 2026-08-06
 
 ### Fixed
