@@ -3,6 +3,7 @@ package dictation
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"sync"
@@ -127,6 +128,25 @@ func NewAppService() *AppService {
 
 	// Copy default config files to home directory (first run)
 	copyDefaultConfigFiles()
+
+	// Open the log file before the settings decide what to do with it.
+	//
+	// This call used to be missing entirely, which made the whole logging
+	// system a no-op: logFile stayed nil, so logToFile discarded every line it
+	// was ever handed — including with logging switched on in settings. A user
+	// chasing a dictation failure found a zero-byte log and nothing to go on.
+	//
+	// Appends rather than truncates: a failure worth investigating often
+	// happened in a previous run, and clearing the log on every start is how
+	// that evidence disappears. The log is capped elsewhere, and it can be
+	// cleared on demand from the log dialog.
+	if err := InitLogging(false); err != nil {
+		// The one failure that cannot be written to the dictation log, since
+		// the log is what failed to open. Goes to the standard logger, which
+		// the app routes to its own log file — visible in the log viewer even
+		// when launched from a desktop menu with no terminal attached.
+		log.Printf("dictation logging unavailable: %v", err)
+	}
 
 	// Load settings from file
 	app.LoadSettings()

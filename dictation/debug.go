@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 )
@@ -83,9 +84,20 @@ func ApplyLoggingSettings(enableLogging, enableDebug bool) {
 			}
 			fmt.Printf("✅ Logging enabled - %d buffered messages written to file\n", len(logBuffer))
 		}
-	} else {
-		// Discard buffer
-		fmt.Printf("🚫 Logging disabled - %d buffered messages discarded\n", len(logBuffer))
+	} else if logFile != nil {
+		// Verbose lines buffered before the settings loaded are dropped, but
+		// errors are not: they are the reason someone opens this file, and
+		// discarding them because tracing is off is how a startup failure
+		// becomes invisible.
+		kept := 0
+		for _, msg := range logBuffer {
+			if strings.Contains(msg, "[ERROR]") {
+				logFile.WriteString(msg)
+				kept++
+			}
+		}
+		fmt.Printf("🚫 Verbose logging disabled - %d buffered messages dropped, %d errors kept\n",
+			len(logBuffer)-kept, kept)
 	}
 
 	// Clear buffer
@@ -121,6 +133,31 @@ func logToFile(format string, args ...interface{}) {
 		logFile.WriteString(logMessage)
 	}
 	// If logging disabled and not buffering - do nothing (discard)
+}
+
+// logError records a failure, whatever the logging setting says.
+//
+// Verbose tracing is opt-in because it is noise most of the time. A failure is
+// not: it is the one thing worth having a record of, and it is discovered
+// after the fact, when turning logging on and reproducing it is no longer
+// possible. Tying both to the same switch meant the log was empty in exactly
+// the situation someone opened it — a dictation that silently transcribed
+// nothing left no trace of why.
+//
+// Errors are prefixed so they can be picked out of a long log at a glance.
+func logError(format string, args ...interface{}) {
+	message := fmt.Sprintf(format, args...)
+	timestamp := time.Now().Format("15:04:05")
+	logMessage := fmt.Sprintf("[%s] [ERROR] %s", timestamp, message)
+
+	logMutex.Lock()
+	defer logMutex.Unlock()
+
+	if bufferingMode {
+		logBuffer = append(logBuffer, logMessage)
+	} else if logFile != nil {
+		logFile.WriteString(logMessage)
+	}
 }
 
 // debugLog writes a debug message to log file only (only if debug mode enabled)
