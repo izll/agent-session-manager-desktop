@@ -726,7 +726,9 @@
           { value: 'priority', label: $t('tasks.sortPriority') },
           { value: 'status', label: $t('tasks.sortStatus') },
           { value: 'created-desc', label: $t('tasks.sortCreatedDesc') },
-          { value: 'created-asc', label: $t('tasks.sortCreatedAsc') }
+          { value: 'created-asc', label: $t('tasks.sortCreatedAsc') },
+          { value: 'completed-desc', label: $t('tasks.sortCompletedDesc') },
+          { value: 'completed-asc', label: $t('tasks.sortCompletedAsc') }
         ]}
         on:change={handleSortChange}
       />

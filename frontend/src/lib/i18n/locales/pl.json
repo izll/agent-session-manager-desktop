@@ -1034,5 +1034,7 @@
   "tasks.priorityCritical": "Krytyczny",
   "tasks.currentDependencies": "Bieżące zależności",
   "quit.inProgress": "Zamykanie…",
-  "quit.inProgressDetail": "Zapisujemy stan każdej sesji i odłączamy się poprawnie. Twoje agenty działają dalej."
+  "quit.inProgressDetail": "Zapisujemy stan każdej sesji i odłączamy się poprawnie. Twoje agenty działają dalej.",
+  "tasks.sortCompletedDesc": "Sortuj: ukończone, najnowsze",
+  "tasks.sortCompletedAsc": "Sortuj: ukończone, najstarsze"
 }

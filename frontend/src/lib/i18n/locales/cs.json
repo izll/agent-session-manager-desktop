@@ -1034,5 +1034,7 @@
   "tasks.priorityCritical": "Kritická",
   "tasks.currentDependencies": "Současné závislosti",
   "quit.inProgress": "Ukončování…",
-  "quit.inProgressDetail": "Ukládá se stav každé relace a probíhá čisté odpojení. Vaši agenti běží dál."
+  "quit.inProgressDetail": "Ukládá se stav každé relace a probíhá čisté odpojení. Vaši agenti běží dál.",
+  "tasks.sortCompletedDesc": "Řadit: hotové, nejnovější",
+  "tasks.sortCompletedAsc": "Řadit: hotové, nejstarší"
 }

@@ -1034,5 +1034,7 @@
   "tasks.priorityCritical": "حرجة",
   "tasks.currentDependencies": "التبعيات الحالية",
   "quit.inProgress": "جارٍ الإغلاق…",
-  "quit.inProgressDetail": "يجري حفظ موضع كل جلسة والانفصال بشكل سليم. عملاؤك يواصلون العمل."
+  "quit.inProgressDetail": "يجري حفظ موضع كل جلسة والانفصال بشكل سليم. عملاؤك يواصلون العمل.",
+  "tasks.sortCompletedDesc": "الترتيب: المنجزة، الأحدث",
+  "tasks.sortCompletedAsc": "الترتيب: المنجزة، الأقدم"
 }

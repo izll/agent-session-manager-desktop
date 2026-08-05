@@ -1034,5 +1034,7 @@
   "tasks.priorityCritical": "วิกฤต",
   "tasks.currentDependencies": "การพึ่งพาปัจจุบัน",
   "quit.inProgress": "กำลังปิด…",
-  "quit.inProgressDetail": "กำลังบันทึกสถานะของแต่ละเซสชันและตัดการเชื่อมต่ออย่างเรียบร้อย เอเจนต์ของคุณยังทำงานต่อ"
+  "quit.inProgressDetail": "กำลังบันทึกสถานะของแต่ละเซสชันและตัดการเชื่อมต่ออย่างเรียบร้อย เอเจนต์ของคุณยังทำงานต่อ",
+  "tasks.sortCompletedDesc": "เรียง: เสร็จแล้ว ล่าสุดก่อน",
+  "tasks.sortCompletedAsc": "เรียง: เสร็จแล้ว เก่าสุดก่อน"
 }

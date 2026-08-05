@@ -1034,5 +1034,7 @@
   "tasks.priorityCritical": "Kritisk",
   "tasks.currentDependencies": "Nuvarande beroenden",
   "quit.inProgress": "Avslutar…",
-  "quit.inProgressDetail": "Sparar var varje session slutade och kopplar från ordentligt. Dina agenter fortsätter köra."
+  "quit.inProgressDetail": "Sparar var varje session slutade och kopplar från ordentligt. Dina agenter fortsätter köra.",
+  "tasks.sortCompletedDesc": "Sortera: klara, nyaste först",
+  "tasks.sortCompletedAsc": "Sortera: klara, äldsta först"
 }

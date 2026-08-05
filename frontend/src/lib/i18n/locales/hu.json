@@ -1034,5 +1034,7 @@
   "tasks.priorityCritical": "Kritikus",
   "tasks.currentDependencies": "Jelenlegi függőségek",
   "quit.inProgress": "Kilépés folyamatban…",
-  "quit.inProgressDetail": "Elmentjük, hol tart minden munkamenet, és rendben lecsatlakozunk. Az agentek tovább futnak."
+  "quit.inProgressDetail": "Elmentjük, hol tart minden munkamenet, és rendben lecsatlakozunk. Az agentek tovább futnak.",
+  "tasks.sortCompletedDesc": "Rendezés: elvégzett, legújabb elöl",
+  "tasks.sortCompletedAsc": "Rendezés: elvégzett, legrégebbi elöl"
 }

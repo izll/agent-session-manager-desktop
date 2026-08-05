@@ -1034,5 +1034,7 @@
   "tasks.priorityCritical": "Crítica",
   "tasks.currentDependencies": "Dependencias actuales",
   "quit.inProgress": "Cerrando…",
-  "quit.inProgressDetail": "Guardando el estado de cada sesión y desconectando limpiamente. Tus agentes siguen funcionando."
+  "quit.inProgressDetail": "Guardando el estado de cada sesión y desconectando limpiamente. Tus agentes siguen funcionando.",
+  "tasks.sortCompletedDesc": "Orden: completadas, más recientes",
+  "tasks.sortCompletedAsc": "Orden: completadas, más antiguas"
 }

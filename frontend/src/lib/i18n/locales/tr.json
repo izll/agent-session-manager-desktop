@@ -1034,5 +1034,7 @@
   "tasks.priorityCritical": "Kritik",
   "tasks.currentDependencies": "Mevcut bağımlılıklar",
   "quit.inProgress": "Kapatılıyor…",
-  "quit.inProgressDetail": "Her oturumun kaldığı yer kaydediliyor ve düzgün şekilde ayrılıyor. Agent'larınız çalışmaya devam ediyor."
+  "quit.inProgressDetail": "Her oturumun kaldığı yer kaydediliyor ve düzgün şekilde ayrılıyor. Agent'larınız çalışmaya devam ediyor.",
+  "tasks.sortCompletedDesc": "Sırala: tamamlanan, en yeni",
+  "tasks.sortCompletedAsc": "Sırala: tamamlanan, en eski"
 }

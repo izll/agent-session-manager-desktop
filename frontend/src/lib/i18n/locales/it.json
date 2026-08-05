@@ -1034,5 +1034,7 @@
   "tasks.priorityCritical": "Critica",
   "tasks.currentDependencies": "Dipendenze attuali",
   "quit.inProgress": "Chiusura in corso…",
-  "quit.inProgressDetail": "Salvataggio dello stato di ogni sessione e disconnessione pulita. I tuoi agent restano in esecuzione."
+  "quit.inProgressDetail": "Salvataggio dello stato di ogni sessione e disconnessione pulita. I tuoi agent restano in esecuzione.",
+  "tasks.sortCompletedDesc": "Ordina: completate, più recenti",
+  "tasks.sortCompletedAsc": "Ordina: completate, meno recenti"
 }

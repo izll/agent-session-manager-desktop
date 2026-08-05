@@ -1034,5 +1034,7 @@
   "tasks.priorityCritical": "最優先",
   "tasks.currentDependencies": "現在の依存関係",
   "quit.inProgress": "終了しています…",
-  "quit.inProgressDetail": "各セッションの状態を保存し、正しく切断しています。エージェントは動作を続けます。"
+  "quit.inProgressDetail": "各セッションの状態を保存し、正しく切断しています。エージェントは動作を続けます。",
+  "tasks.sortCompletedDesc": "並び替え: 完了、新しい順",
+  "tasks.sortCompletedAsc": "並び替え: 完了、古い順"
 }

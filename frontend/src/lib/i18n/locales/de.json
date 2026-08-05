@@ -1034,5 +1034,7 @@
   "tasks.priorityCritical": "Kritisch",
   "tasks.currentDependencies": "Aktuelle Abhängigkeiten",
   "quit.inProgress": "Wird beendet…",
-  "quit.inProgressDetail": "Der Stand jeder Sitzung wird gesichert und sauber getrennt. Deine Agents laufen weiter."
+  "quit.inProgressDetail": "Der Stand jeder Sitzung wird gesichert und sauber getrennt. Deine Agents laufen weiter.",
+  "tasks.sortCompletedDesc": "Sortierung: Erledigt, neueste zuerst",
+  "tasks.sortCompletedAsc": "Sortierung: Erledigt, älteste zuerst"
 }

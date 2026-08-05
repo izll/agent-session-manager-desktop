@@ -25,6 +25,8 @@ export interface Task {
   complexity?: number;
   details?: string;
   createdAt?: string;
+  /** When the task was ticked off. Absent while it is still open. */
+  completedAt?: string;
 }
 
 export interface TaskFilter {
@@ -40,7 +42,13 @@ export interface TaskMasterStatus {
   tools?: number;
 }
 
-export type TaskSortBy = 'priority' | 'status' | 'created-asc' | 'created-desc';
+export type TaskSortBy =
+  | 'priority'
+  | 'status'
+  | 'created-asc'
+  | 'created-desc'
+  | 'completed-desc'
+  | 'completed-asc';
 
 // Stores
 export const tasks = writable<Task[]>([]);
@@ -179,6 +187,24 @@ const statusOrder: Record<string, number> = {
   'done': 4
 };
 
+/**
+ * Two finished tasks, most recently completed first.
+ *
+ * Returns 0 when neither carries a completion time — tasks finished before the
+ * field was recorded, or through a path that does not set it — so the caller
+ * falls through to its usual ordering rather than shuffling them arbitrarily.
+ * One that has a time sorts above one that does not: it is the one we know
+ * something about.
+ */
+function compareCompletion(a: Task, b: Task): number {
+  const ca = a.completedAt || '';
+  const cb = b.completedAt || '';
+  if (ca && cb) return cb.localeCompare(ca);
+  if (ca) return -1;
+  if (cb) return 1;
+  return 0;
+}
+
 export const sortedFilteredTasks = derived(
   [filteredTasks, taskSortBy],
   ([$filtered, $sortBy]) => {
@@ -188,6 +214,13 @@ export const sortedFilteredTasks = derived(
         const sa = statusOrder[a.status] ?? 2;
         const sb = statusOrder[b.status] ?? 2;
         if (sa !== sb) return sa - sb;
+        // Finished tasks read as a record of what was done, so they go in the
+        // order they were ticked off, most recent first. Priority is the wrong
+        // key for them: it says what to do next, and there is no next.
+        if (a.status === 'done' && b.status === 'done') {
+          const done = compareCompletion(a, b);
+          if (done !== 0) return done;
+        }
         // Then by priority
         const pa = priorityOrder[a.priority] ?? 3;
         const pb = priorityOrder[b.priority] ?? 3;
@@ -196,6 +229,25 @@ export const sortedFilteredTasks = derived(
         const idA = parseFloat(a.id) || 0;
         const idB = parseFloat(b.id) || 0;
         return idA - idB;
+      }
+
+      if ($sortBy === 'completed-desc' || $sortBy === 'completed-asc') {
+        const ascending = $sortBy === 'completed-asc';
+        const ca = a.completedAt || '';
+        const cb = b.completedAt || '';
+        if (ca && cb) return ascending ? ca.localeCompare(cb) : cb.localeCompare(ca);
+        // Unfinished tasks have no completion time. They go last in both
+        // directions rather than at whichever end the sort puts empty strings:
+        // sorting BY completion is a question about what is done, so the ones
+        // that are not belong out of the way.
+        if (ca) return -1;
+        if (cb) return 1;
+        // Among the unfinished, keep the default ordering rather than leaving
+        // them in whatever order they arrived.
+        const pa = priorityOrder[a.priority] ?? 3;
+        const pb = priorityOrder[b.priority] ?? 3;
+        if (pa !== pb) return pa - pb;
+        return (parseFloat(a.id) || 0) - (parseFloat(b.id) || 0);
       }
 
       if ($sortBy === 'created-desc' || $sortBy === 'created-asc') {
@@ -287,12 +339,18 @@ function mergeCreatedAt(newTasks: Task[]): Task[] {
   const existing = get(tasks);
   if (existing.length === 0) return newTasks;
   const createdAtMap = new Map<string, string>();
+  // completedAt travels with createdAt for the same reason: Task Master does
+  // not always return it, and losing it would drop a finished task out of the
+  // order it was ticked off in.
+  const completedAtMap = new Map<string, string>();
   for (const t of existing) {
     if (t.createdAt) createdAtMap.set(t.id, t.createdAt);
+    if (t.completedAt) completedAtMap.set(t.id, t.completedAt);
   }
   return newTasks.map(t => ({
     ...t,
-    createdAt: t.createdAt || createdAtMap.get(t.id)
+    createdAt: t.createdAt || createdAtMap.get(t.id),
+    completedAt: t.completedAt || completedAtMap.get(t.id),
   }));
 }
 

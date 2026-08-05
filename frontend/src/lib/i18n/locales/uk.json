@@ -1034,5 +1034,7 @@
   "tasks.priorityCritical": "Критичний",
   "tasks.currentDependencies": "Поточні залежності",
   "quit.inProgress": "Завершення роботи…",
-  "quit.inProgressDetail": "Зберігаємо стан кожної сесії та коректно від'єднуємось. Ваші агенти продовжують працювати."
+  "quit.inProgressDetail": "Зберігаємо стан кожної сесії та коректно від'єднуємось. Ваші агенти продовжують працювати.",
+  "tasks.sortCompletedDesc": "Сортування: завершені, новіші",
+  "tasks.sortCompletedAsc": "Сортування: завершені, старіші"
 }

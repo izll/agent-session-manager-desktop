@@ -1034,5 +1034,7 @@
   "tasks.priorityCritical": "Critical",
   "tasks.currentDependencies": "Current dependencies",
   "quit.inProgress": "Closing down…",
-  "quit.inProgressDetail": "Saving where each session left off and detaching cleanly. Your agents keep running."
+  "quit.inProgressDetail": "Saving where each session left off and detaching cleanly. Your agents keep running.",
+  "tasks.sortCompletedDesc": "Sort: Completed, newest",
+  "tasks.sortCompletedAsc": "Sort: Completed, oldest"
 }
