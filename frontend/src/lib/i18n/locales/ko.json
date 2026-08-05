@@ -142,7 +142,7 @@
   "tasks.addTaskBtn": "작업 추가",
   "tasks.adding": "추가 중...",
   "tasks.complexityAnalysis": "복잡도 분석",
-  "tasks.editTask": "작업 #{id} 편집",
+  "tasks.editTask": "작업 편집",
   "tasks.subtasks": "하위 작업",
   "tasks.addSubtask": "+ 추가",
   "tasks.expandSubtasks": "하위 작업으로 확장 (AI)",

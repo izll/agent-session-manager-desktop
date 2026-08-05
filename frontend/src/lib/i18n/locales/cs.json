@@ -142,7 +142,7 @@
   "tasks.addTaskBtn": "Přidat úkol",
   "tasks.adding": "Přidávání...",
   "tasks.complexityAnalysis": "Analýza složitosti",
-  "tasks.editTask": "Upravit úkol #{id}",
+  "tasks.editTask": "Upravit úkol",
   "tasks.subtasks": "Podúkoly",
   "tasks.addSubtask": "+ Přidat",
   "tasks.expandSubtasks": "Rozbalit na podúkoly (AI)",

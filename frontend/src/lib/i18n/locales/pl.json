@@ -142,7 +142,7 @@
   "tasks.addTaskBtn": "Dodaj zadanie",
   "tasks.adding": "Dodawanie...",
   "tasks.complexityAnalysis": "Analiza złożoności",
-  "tasks.editTask": "Edytuj zadanie #{id}",
+  "tasks.editTask": "Edytuj zadanie",
   "tasks.subtasks": "Podzadania",
   "tasks.addSubtask": "+ Dodaj",
   "tasks.expandSubtasks": "Rozwiń na podzadania (AI)",

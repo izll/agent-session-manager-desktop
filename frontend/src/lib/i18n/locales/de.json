@@ -142,7 +142,7 @@
   "tasks.addTaskBtn": "Aufgabe hinzufügen",
   "tasks.adding": "Wird hinzugefügt...",
   "tasks.complexityAnalysis": "Komplexitätsanalyse",
-  "tasks.editTask": "Aufgabe #{id} bearbeiten",
+  "tasks.editTask": "Aufgabe bearbeiten",
   "tasks.subtasks": "Unteraufgaben",
   "tasks.addSubtask": "+ Hinzufügen",
   "tasks.expandSubtasks": "In Unteraufgaben aufteilen (KI)",

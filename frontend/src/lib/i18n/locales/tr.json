@@ -142,7 +142,7 @@
   "tasks.addTaskBtn": "Görev Ekle",
   "tasks.adding": "Ekleniyor...",
   "tasks.complexityAnalysis": "Karmaşıklık Analizi",
-  "tasks.editTask": "Görev #{id} Düzenle",
+  "tasks.editTask": "Görevi düzenle",
   "tasks.subtasks": "Alt Görevler",
   "tasks.addSubtask": "+ Ekle",
   "tasks.expandSubtasks": "Alt Görevlere Genişlet (AI)",

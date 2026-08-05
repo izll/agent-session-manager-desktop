@@ -142,7 +142,7 @@
   "tasks.addTaskBtn": "Thêm công việc",
   "tasks.adding": "Đang thêm...",
   "tasks.complexityAnalysis": "Phân tích độ phức tạp",
-  "tasks.editTask": "Chỉnh sửa công việc #{id}",
+  "tasks.editTask": "Sửa công việc",
   "tasks.subtasks": "Công việc con",
   "tasks.addSubtask": "+ Thêm",
   "tasks.expandSubtasks": "Mở rộng thành công việc con (AI)",

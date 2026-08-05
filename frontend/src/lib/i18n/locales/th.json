@@ -142,7 +142,7 @@
   "tasks.addTaskBtn": "เพิ่มงาน",
   "tasks.adding": "กำลังเพิ่ม...",
   "tasks.complexityAnalysis": "การวิเคราะห์ความซับซ้อน",
-  "tasks.editTask": "แก้ไขงาน #{id}",
+  "tasks.editTask": "แก้ไขงาน",
   "tasks.subtasks": "งานย่อย",
   "tasks.addSubtask": "+ เพิ่ม",
   "tasks.expandSubtasks": "ขยายเป็นงานย่อย (AI)",

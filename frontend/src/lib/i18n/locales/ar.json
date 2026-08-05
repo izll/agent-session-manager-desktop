@@ -142,7 +142,7 @@
   "tasks.addTaskBtn": "إضافة مهمة",
   "tasks.adding": "جارٍ الإضافة...",
   "tasks.complexityAnalysis": "تحليل التعقيد",
-  "tasks.editTask": "تعديل المهمة #{id}",
+  "tasks.editTask": "تعديل المهمة",
   "tasks.subtasks": "المهام الفرعية",
   "tasks.addSubtask": "+ إضافة",
   "tasks.expandSubtasks": "توسيع إلى مهام فرعية (AI)",

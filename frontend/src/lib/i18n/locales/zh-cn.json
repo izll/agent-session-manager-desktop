@@ -142,7 +142,7 @@
   "tasks.addTaskBtn": "添加任务",
   "tasks.adding": "添加中...",
   "tasks.complexityAnalysis": "复杂度分析",
-  "tasks.editTask": "编辑任务 #{id}",
+  "tasks.editTask": "编辑任务",
   "tasks.subtasks": "子任务",
   "tasks.addSubtask": "+ 添加",
   "tasks.expandSubtasks": "展开为子任务（AI）",

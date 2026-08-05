@@ -142,7 +142,7 @@
   "tasks.addTaskBtn": "Lägg till uppgift",
   "tasks.adding": "Lägger till...",
   "tasks.complexityAnalysis": "Komplexitetsanalys",
-  "tasks.editTask": "Redigera uppgift #{id}",
+  "tasks.editTask": "Redigera uppgift",
   "tasks.subtasks": "Deluppgifter",
   "tasks.addSubtask": "+ Lägg till",
   "tasks.expandSubtasks": "Expandera till deluppgifter (AI)",

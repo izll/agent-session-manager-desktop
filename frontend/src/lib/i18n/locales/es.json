@@ -142,7 +142,7 @@
   "tasks.addTaskBtn": "Añadir tarea",
   "tasks.adding": "Añadiendo...",
   "tasks.complexityAnalysis": "Análisis de complejidad",
-  "tasks.editTask": "Editar tarea #{id}",
+  "tasks.editTask": "Editar tarea",
   "tasks.subtasks": "Subtareas",
   "tasks.addSubtask": "+ Añadir",
   "tasks.expandSubtasks": "Expandir en subtareas (IA)",

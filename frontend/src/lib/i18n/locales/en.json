@@ -365,7 +365,7 @@
   "tasks.addTaskBtn": "Add Task",
   "tasks.adding": "Adding...",
   "tasks.complexityAnalysis": "Complexity Analysis",
-  "tasks.editTask": "Edit Task #{id}",
+  "tasks.editTask": "Edit task",
   "tasks.subtasks": "Subtasks",
   "tasks.addSubtask": "+ Add",
   "tasks.expandSubtasks": "Expand into Subtasks (AI)",

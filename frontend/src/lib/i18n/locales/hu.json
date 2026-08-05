@@ -361,7 +361,7 @@
   "tasks.addTaskBtn": "Feladat hozzáadása",
   "tasks.adding": "Hozzáadás...",
   "tasks.complexityAnalysis": "Komplexitás elemzés",
-  "tasks.editTask": "Feladat szerkesztése #{id}",
+  "tasks.editTask": "Feladat szerkesztése",
   "tasks.subtasks": "Részfeladatok",
   "tasks.addSubtask": "+ Hozzáadás",
   "tasks.expandSubtasks": "Kibontás részfeladatokra (MI)",

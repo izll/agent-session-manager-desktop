@@ -142,7 +142,7 @@
   "tasks.addTaskBtn": "Aggiungi Attività",
   "tasks.adding": "Aggiunta in corso...",
   "tasks.complexityAnalysis": "Analisi della Complessità",
-  "tasks.editTask": "Modifica Attività #{id}",
+  "tasks.editTask": "Modifica attività",
   "tasks.subtasks": "Sotto-attività",
   "tasks.addSubtask": "+ Aggiungi",
   "tasks.expandSubtasks": "Espandi in Sotto-attività (IA)",

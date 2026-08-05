@@ -142,7 +142,7 @@
   "tasks.addTaskBtn": "タスクを追加",
   "tasks.adding": "追加中...",
   "tasks.complexityAnalysis": "複雑度分析",
-  "tasks.editTask": "タスク #{id} を編集",
+  "tasks.editTask": "タスクを編集",
   "tasks.subtasks": "サブタスク",
   "tasks.addSubtask": "+ 追加",
   "tasks.expandSubtasks": "サブタスクに展開 (AI)",

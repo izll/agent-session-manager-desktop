@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy, createEventDispatcher } from 'svelte';
   import { claimMenu, releaseMenu } from '../../utils/openMenu';
+  import { autoFocusField } from '../../utils/dialogActions';
   import { get } from 'svelte/store';
   import { selectedSessionId } from '../../stores/sessions';
   import { settings } from '../../stores/settings';
@@ -985,7 +986,7 @@
 
 <!-- PRD Modal -->
 {#if showPRDModal}
-  <div class="dialog-overlay" on:click={() => showPRDModal = false}>
+  <div class="dialog-overlay" use:autoFocusField on:click={() => showPRDModal = false}>
     <div class="dialog-content large" on:click|stopPropagation>
       <div class="dialog-header">
         <h2>{$t('tasks.parsePRDTitle')}</h2>
@@ -1020,7 +1021,7 @@
 
 <!-- Add Task Modal -->
 {#if showAddTaskModal}
-  <div class="dialog-overlay" on:click={() => showAddTaskModal = false}>
+  <div class="dialog-overlay" use:autoFocusField on:click={() => showAddTaskModal = false}>
     <div class="dialog-content large" on:click|stopPropagation on:focusin={handleDialogFocusIn}>
       <div class="dialog-header">
         <h2>{$t('tasks.addNewTask')}</h2>
@@ -1157,10 +1158,10 @@
 
 <!-- Edit Task Modal -->
 {#if showEditTaskModal}
-  <div class="dialog-overlay" on:click={() => showEditTaskModal = false}>
+  <div class="dialog-overlay" use:autoFocusField on:click={() => showEditTaskModal = false}>
     <div class="dialog-content large" on:click|stopPropagation on:focusin={handleDialogFocusIn}>
       <div class="dialog-header">
-        <h2>{$t('tasks.editTask', { id: editTaskId })}</h2>
+        <h2>{$t('tasks.editTask')}</h2>
         <div class="header-actions">
           <button class="mic-btn" class:active={$dictationListening} on:click|preventDefault={toggleModalDictation} title={$t('tabBar.dictateToField')}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
@@ -1232,7 +1233,7 @@
 
 <!-- Add Subtask Modal -->
 {#if showAddSubtaskModal}
-  <div class="dialog-overlay" on:click={() => showAddSubtaskModal = false}>
+  <div class="dialog-overlay" use:autoFocusField on:click={() => showAddSubtaskModal = false}>
     <div class="dialog-content small" on:click|stopPropagation on:focusin={handleDialogFocusIn}>
       <div class="dialog-header">
         <h2>{$t('tasks.addSubtaskMenu')} - #{addSubtaskTaskId}</h2>

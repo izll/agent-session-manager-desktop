@@ -142,7 +142,7 @@
   "tasks.addTaskBtn": "Добавить задачу",
   "tasks.adding": "Добавление...",
   "tasks.complexityAnalysis": "Анализ сложности",
-  "tasks.editTask": "Редактировать задачу #{id}",
+  "tasks.editTask": "Изменить задачу",
   "tasks.subtasks": "Подзадачи",
   "tasks.addSubtask": "+ Добавить",
   "tasks.expandSubtasks": "Разбить на подзадачи (ИИ)",

@@ -142,7 +142,7 @@
   "tasks.addTaskBtn": "Taak toevoegen",
   "tasks.adding": "Toevoegen...",
   "tasks.complexityAnalysis": "Complexiteitsanalyse",
-  "tasks.editTask": "Taak #{id} bewerken",
+  "tasks.editTask": "Taak bewerken",
   "tasks.subtasks": "Subtaken",
   "tasks.addSubtask": "+ Toevoegen",
   "tasks.expandSubtasks": "Uitvouwen naar subtaken (AI)",
