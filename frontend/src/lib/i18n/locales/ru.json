@@ -1065,5 +1065,9 @@
   "dictation.quota_title": "Квота исчерпана",
   "dictation.quota_message": "У проекта Google Cloud закончилась квота Speech-to-Text или не включена оплата.",
   "dictation.stream_failed_title": "Диктовка не удалась",
-  "dictation.request_rejected_title": "Запрос распознавания отклонён"
+  "dictation.request_rejected_title": "Запрос распознавания отклонён",
+  "settings.terminalShell": "Оболочка терминала",
+  "settings.terminalShellDesc": "Что запускает обычная вкладка терминала",
+  "settings.shellSystemDefault": "Системная по умолчанию",
+  "settings.shellSection": "Оболочка"
 }

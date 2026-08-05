@@ -1065,5 +1065,9 @@
   "dictation.quota_title": "Quota exhausted",
   "dictation.quota_message": "The Google Cloud project has no Speech-to-Text quota left, or billing is not enabled for it.",
   "dictation.stream_failed_title": "Dictation failed",
-  "dictation.request_rejected_title": "Speech request rejected"
+  "dictation.request_rejected_title": "Speech request rejected",
+  "settings.terminalShell": "Terminal shell",
+  "settings.terminalShellDesc": "What a plain terminal tab starts",
+  "settings.shellSystemDefault": "System default",
+  "settings.shellSection": "Shell"
 }

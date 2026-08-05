@@ -1065,5 +1065,9 @@
   "dictation.quota_title": "Quota épuisé",
   "dictation.quota_message": "Le projet Google Cloud n'a plus de quota Speech-to-Text, ou la facturation n'y est pas activée.",
   "dictation.stream_failed_title": "Échec de la dictée",
-  "dictation.request_rejected_title": "Requête vocale refusée"
+  "dictation.request_rejected_title": "Requête vocale refusée",
+  "settings.terminalShell": "Interpréteur du terminal",
+  "settings.terminalShellDesc": "Ce que lance un onglet terminal simple",
+  "settings.shellSystemDefault": "Valeur par défaut du système",
+  "settings.shellSection": "Interpréteur"
 }

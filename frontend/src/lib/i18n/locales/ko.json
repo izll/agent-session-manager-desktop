@@ -1065,5 +1065,9 @@
   "dictation.quota_title": "할당량이 소진되었습니다",
   "dictation.quota_message": "Google Cloud 프로젝트에 Speech-to-Text 할당량이 없거나 결제가 활성화되지 않았습니다.",
   "dictation.stream_failed_title": "받아쓰기 실패",
-  "dictation.request_rejected_title": "음성 요청이 거부되었습니다"
+  "dictation.request_rejected_title": "음성 요청이 거부되었습니다",
+  "settings.terminalShell": "터미널 셸",
+  "settings.terminalShellDesc": "일반 터미널 탭이 시작하는 것",
+  "settings.shellSystemDefault": "시스템 기본값",
+  "settings.shellSection": "셸"
 }

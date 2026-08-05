@@ -1065,5 +1065,9 @@
   "dictation.quota_title": "استُنفدت الحصة",
   "dictation.quota_message": "لم يعد لدى مشروع Google Cloud حصة لـ Speech-to-Text، أو أن الفوترة غير مفعّلة.",
   "dictation.stream_failed_title": "فشل الإملاء",
-  "dictation.request_rejected_title": "تم رفض طلب التعرف على الكلام"
+  "dictation.request_rejected_title": "تم رفض طلب التعرف على الكلام",
+  "settings.terminalShell": "صدفة الطرفية",
+  "settings.terminalShellDesc": "ما يشغّله تبويب الطرفية العادي",
+  "settings.shellSystemDefault": "الافتراضي للنظام",
+  "settings.shellSection": "الصدفة"
 }

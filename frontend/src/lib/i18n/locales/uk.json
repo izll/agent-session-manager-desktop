@@ -1065,5 +1065,9 @@
   "dictation.quota_title": "Квоту вичерпано",
   "dictation.quota_message": "У проєкті Google Cloud закінчилася квота Speech-to-Text або не ввімкнено оплату.",
   "dictation.stream_failed_title": "Диктування не вдалося",
-  "dictation.request_rejected_title": "Запит розпізнавання відхилено"
+  "dictation.request_rejected_title": "Запит розпізнавання відхилено",
+  "settings.terminalShell": "Оболонка термінала",
+  "settings.terminalShellDesc": "Що запускає звичайна вкладка термінала",
+  "settings.shellSystemDefault": "Системна за умовчанням",
+  "settings.shellSection": "Оболонка"
 }

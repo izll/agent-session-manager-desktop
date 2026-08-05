@@ -1065,5 +1065,9 @@
   "dictation.quota_title": "Đã hết hạn mức",
   "dictation.quota_message": "Dự án Google Cloud đã hết hạn mức Speech-to-Text, hoặc chưa bật thanh toán.",
   "dictation.stream_failed_title": "Đọc chính tả thất bại",
-  "dictation.request_rejected_title": "Yêu cầu giọng nói bị từ chối"
+  "dictation.request_rejected_title": "Yêu cầu giọng nói bị từ chối",
+  "settings.terminalShell": "Shell của terminal",
+  "settings.terminalShellDesc": "Thứ mà một tab terminal thường khởi chạy",
+  "settings.shellSystemDefault": "Mặc định hệ thống",
+  "settings.shellSection": "Shell"
 }

@@ -54,6 +54,10 @@ export interface Settings {
    * box-drawing characters render at all.
    */
   terminalFontFamily: string;
+  /** What a plain terminal tab runs. Empty means the system default. */
+  terminalShell: string;
+  /** What this platform offers for terminalShell; supplied by the backend. */
+  shellChoices?: Array<{ command: string; label: string }>;
   /**
    * Whether a plain drag copies to the clipboard, or only a Shift-held one.
    * Defaults to 'shift': copying is bound to mouseup either way, never to
@@ -113,6 +117,7 @@ export const settings = writable<Settings>({
   // overrides this, so it only decides what a fresh install starts with.
   terminalRenderer: defaultTerminalRenderer(),
   terminalFontFamily: '',
+  terminalShell: '',
   terminalCopyMode: 'shift',
   gitBranchDisplay: 'header',
   diffFlatFileList: false,

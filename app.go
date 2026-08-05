@@ -101,6 +101,13 @@ func (a *App) startup(ctx context.Context) {
 	}
 	a.storage = storage
 
+	// Apply the configured shell before anything can restart a pane. Left
+	// until the first settings save, a tab restarted early in the session
+	// would use the platform default instead of the chosen shell.
+	if _, _, settings, err := storage.LoadAllWithSettings(); err == nil && settings != nil {
+		session.SetTerminalShell(settings.TerminalShell)
+	}
+
 	// Single-instance-per-project guard. Two GUIs on the same project attach
 	// to the same tmux sessions and rip each other's ptys out
 	// ("read /dev/ptmx: input/output error"), silently killing tabs. Try to
@@ -2767,23 +2774,28 @@ type SettingsInfo struct {
 	TerminalRenderer   string `json:"terminalRenderer"`
 	TerminalCopyMode   string `json:"terminalCopyMode"`
 	TerminalFontFamily string `json:"terminalFontFamily"`
-	GitBranchDisplay   string `json:"gitBranchDisplay"`
-	DiffFlatFileList   bool   `json:"diffFlatFileList"`
-	TrashRetentionDays int    `json:"trashRetentionDays"`
-	TaskMasterEnabled  bool   `json:"taskMasterEnabled"`
-	RestoreLastSession bool   `json:"restoreLastSession"`
-	TerminalFontSize   int    `json:"terminalFontSize"`
-	AgentFontSize      int    `json:"agentFontSize"`
-	HideViewBar        bool   `json:"hideViewBar"`
-	AgentHideViewBar   bool   `json:"agentHideViewBar"`
-	HideStatusBar      bool   `json:"hideStatusBar"`
-	AgentHideStatusBar bool   `json:"agentHideStatusBar"`
-	NotifyOnWaiting    bool   `json:"notifyOnWaiting"`
-	NotifyDesktop      bool   `json:"notifyDesktop"`
-	NotifyNtfy         bool   `json:"notifyNtfy"`
-	NtfyURL            string `json:"ntfyUrl"`
-	TerminalTheme      string `json:"terminalTheme"`
-	AgentDefaultTheme  string `json:"agentDefaultTheme"`
+	TerminalShell      string `json:"terminalShell"`
+	// ShellChoices is what this platform offers for TerminalShell. Supplied by
+	// the backend because the answer is platform-specific and the frontend has
+	// no way to know which platform it is running on.
+	ShellChoices       []session.ShellChoice `json:"shellChoices"`
+	GitBranchDisplay   string                `json:"gitBranchDisplay"`
+	DiffFlatFileList   bool                  `json:"diffFlatFileList"`
+	TrashRetentionDays int                   `json:"trashRetentionDays"`
+	TaskMasterEnabled  bool                  `json:"taskMasterEnabled"`
+	RestoreLastSession bool                  `json:"restoreLastSession"`
+	TerminalFontSize   int                   `json:"terminalFontSize"`
+	AgentFontSize      int                   `json:"agentFontSize"`
+	HideViewBar        bool                  `json:"hideViewBar"`
+	AgentHideViewBar   bool                  `json:"agentHideViewBar"`
+	HideStatusBar      bool                  `json:"hideStatusBar"`
+	AgentHideStatusBar bool                  `json:"agentHideStatusBar"`
+	NotifyOnWaiting    bool                  `json:"notifyOnWaiting"`
+	NotifyDesktop      bool                  `json:"notifyDesktop"`
+	NotifyNtfy         bool                  `json:"notifyNtfy"`
+	NtfyURL            string                `json:"ntfyUrl"`
+	TerminalTheme      string                `json:"terminalTheme"`
+	AgentDefaultTheme  string                `json:"agentDefaultTheme"`
 	// ShortcutOverrides holds only the shortcuts the user has rebound, keyed by
 	// shortcut id. Passed through untouched: the frontend owns what a binding
 	// looks like, because that is where key events are matched.
@@ -2868,6 +2880,8 @@ func (a *App) GetSettings() (*SettingsInfo, error) {
 		UITheme:              settings.UITheme,
 		UIAccent:             settings.UIAccent,
 		TerminalRenderer:     renderer,
+		TerminalShell:        settings.TerminalShell,
+		ShellChoices:         session.ShellChoices(),
 		TerminalCopyMode:     copyMode,
 		TerminalFontFamily:   settings.TerminalFontFamily,
 		GitBranchDisplay:     branchDisplay,
@@ -2919,6 +2933,10 @@ func (a *App) SaveSettings(settings SettingsInfo) error {
 		current.TerminalRenderer = settings.TerminalRenderer
 		current.TerminalCopyMode = settings.TerminalCopyMode
 		current.TerminalFontFamily = settings.TerminalFontFamily
+		current.TerminalShell = settings.TerminalShell
+		// Applied immediately: a tab restarted before the next launch should
+		// use the shell that was just chosen, not the previous one.
+		session.SetTerminalShell(settings.TerminalShell)
 		current.GitBranchDisplay = settings.GitBranchDisplay
 		current.DiffFlatFileList = settings.DiffFlatFileList
 		current.TrashRetentionDays = settings.TrashRetentionDays

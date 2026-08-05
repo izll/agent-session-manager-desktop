@@ -1065,5 +1065,9 @@
   "dictation.quota_title": "Quotum op",
   "dictation.quota_message": "Het Google Cloud-project heeft geen Speech-to-Text-quotum meer, of facturering staat uit.",
   "dictation.stream_failed_title": "Dictaat mislukt",
-  "dictation.request_rejected_title": "Spraakverzoek geweigerd"
+  "dictation.request_rejected_title": "Spraakverzoek geweigerd",
+  "settings.terminalShell": "Terminal-shell",
+  "settings.terminalShellDesc": "Wat een gewoon terminaltabblad start",
+  "settings.shellSystemDefault": "Systeemstandaard",
+  "settings.shellSection": "Shell"
 }

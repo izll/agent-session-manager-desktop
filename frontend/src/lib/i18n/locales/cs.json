@@ -1065,5 +1065,9 @@
   "dictation.quota_title": "Kvóta vyčerpána",
   "dictation.quota_message": "Projekt Google Cloud už nemá kvótu pro Speech-to-Text, nebo pro něj není zapnuta fakturace.",
   "dictation.stream_failed_title": "Diktování selhalo",
-  "dictation.request_rejected_title": "Požadavek na rozpoznávání odmítnut"
+  "dictation.request_rejected_title": "Požadavek na rozpoznávání odmítnut",
+  "settings.terminalShell": "Shell terminálu",
+  "settings.terminalShellDesc": "Co spustí obyčejná záložka terminálu",
+  "settings.shellSystemDefault": "Výchozí systémový",
+  "settings.shellSection": "Shell"
 }

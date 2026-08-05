@@ -842,6 +842,10 @@ func (i *Instance) Stop() error {
 	// exist, before killing the tmux session.
 	i.CaptureCodexResumeIDs()
 
+	// Same reason: once the session is killed, where each terminal tab had been
+	// navigated to is gone with it.
+	i.CaptureTerminalWorkingDirs()
+
 	if i.Status != StatusRunning {
 		return nil
 	}
@@ -959,6 +963,10 @@ func (i *Instance) StopWindow(windowIdx int) error {
 	// Capture before respawn-pane terminates the agent process.
 	i.CaptureCodexResumeIDs()
 
+	// And before the pane is gone, so a terminal tab restarts where it was
+	// left rather than back at the session root.
+	i.CaptureTerminalWorkingDir(windowIdx)
+
 	if i.Status != StatusRunning {
 		return fmt.Errorf("instance not running")
 	}
@@ -1040,12 +1048,17 @@ func (i *Instance) RestartWindowWithResume(windowIdx int, resumeID string) error
 		// start command ("exit 0" for a stopped window), so pass the shell
 		// explicitly — same as a terminal TAB restart below.
 		if i.Agent == AgentTerminal {
-			shell := os.Getenv("SHELL")
-			if shell == "" {
-				shell = "bash"
-			}
+			shell := defaultShell()
 			target := fmt.Sprintf("%s:%d", sessionName, windowIdx)
-			if err := TmuxCommand("respawn-pane", "-k", "-t", target, shell).Run(); err != nil {
+			// The session's main window has nowhere to record a directory of
+			// its own — only followed tabs carry WorkDir — so it comes back at
+			// the session path, which is also where it started. Passing it
+			// explicitly matters because respawn-pane would otherwise reuse
+			// wherever the dead pane happened to be left.
+			args := []string{"respawn-pane", "-k"}
+			args = append(args, restartDirArgs(i.Path)...)
+			args = append(args, "-t", target, shell)
+			if err := TmuxCommand(args...).Run(); err != nil {
 				return fmt.Errorf("failed to restart terminal window: %w", err)
 			}
 			i.MainWindowStopped = false
@@ -1129,13 +1142,9 @@ func (i *Instance) RestartWindowWithResume(windowIdx int, resumeID string) error
 
 	var argv []string
 	if fw.Agent == AgentTerminal {
-		// Use $SHELL or fallback to bash — respawn-pane without a command
-		// re-runs the pane's original start command, which is "exit 0" for stopped tabs
-		shell := os.Getenv("SHELL")
-		if shell == "" {
-			shell = "bash"
-		}
-		argv = []string{shell}
+		// respawn-pane without a command re-runs the pane's original start
+		// command, which is "exit 0" for a stopped tab.
+		argv = []string{defaultShell()}
 	} else if fw.Agent == AgentCustom {
 		argv = customCommandArgv(fw.CustomCommand)
 	} else {
@@ -1188,14 +1197,18 @@ func (i *Instance) RestartWindowWithResume(windowIdx int, resumeID string) error
 	// Ensure we always have an explicit command — respawn-pane without one
 	// re-runs the pane's original start command ("exit 0" for stopped tabs)
 	if len(argv) == 0 {
-		shell := os.Getenv("SHELL")
-		if shell == "" {
-			shell = "bash"
-		}
-		argv = []string{shell}
+		argv = []string{defaultShell()}
 	}
 	log.Printf("[RestartWindow] followed win final argv: tmux respawn-pane -k -t %s -- %v", target, argv)
-	tmuxArgs := append([]string{"respawn-pane", "-k", "-t", target}, argv...)
+	tmuxArgs := []string{"respawn-pane", "-k"}
+	// A terminal tab restarts where it was left; an agent tab keeps whatever
+	// directory it was configured with, since that is part of what identifies
+	// the conversation it resumes.
+	if fw.Agent == AgentTerminal {
+		tmuxArgs = append(tmuxArgs, restartDirArgs(fw.WorkDir)...)
+	}
+	tmuxArgs = append(tmuxArgs, "-t", target)
+	tmuxArgs = append(tmuxArgs, argv...)
 	if err := TmuxCommand(tmuxArgs...).Run(); err != nil {
 		return fmt.Errorf("failed to restart window %d: %w", windowIdx, err)
 	}

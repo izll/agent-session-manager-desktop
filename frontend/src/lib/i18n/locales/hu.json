@@ -720,7 +720,7 @@
   "settings.paletteDefault": "Alapértelmezett paletta",
   "settings.palettePerAgent": "Paletta agentenként",
   "settings.paletteCustom": "Saját palettáid",
-  "settings.terminalRendering": "Megjelenítés",
+  "settings.terminalRendering": "Terminál megjelenítése",
   "settings.terminalRenderer": "Terminál renderer",
   "settings.terminalRendererDesc": "Minden terminálnézetre érvényes — az agent-session-ökre is —, a következő megnyitástól. Canvas = ajánlott; WebGL = leggyorsabb, de egyes gépeken hibás lehet; DOM = legkompatibilisebb, de lassabb.",
   "settings.terminalFont": "Terminál betűtípus",
@@ -1065,5 +1065,9 @@
   "dictation.quota_title": "Elfogyott a kvóta",
   "dictation.quota_message": "A Google Cloud projektnek elfogyott a Speech-to-Text kvótája, vagy nincs bekapcsolva rajta a számlázás.",
   "dictation.stream_failed_title": "A diktálás nem sikerült",
-  "dictation.request_rejected_title": "A beszédfelismerés elutasítva"
+  "dictation.request_rejected_title": "A beszédfelismerés elutasítva",
+  "settings.terminalShell": "Terminál parancsértelmező",
+  "settings.terminalShellDesc": "Mit indítson egy sima terminál fül",
+  "settings.shellSystemDefault": "Rendszer alapértelmezett",
+  "settings.shellSection": "Parancsértelmező"
 }

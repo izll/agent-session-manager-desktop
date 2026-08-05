@@ -73,6 +73,15 @@ type Settings struct {
 	// TerminalFontFamily overrides the terminal's font stack. Empty means the
 	// built-in default.
 	TerminalFontFamily string `json:"terminal_font_family,omitempty"`
+	// TerminalShell is the command a plain terminal tab starts. Empty means the
+	// system default — $SHELL on Unix, COMSPEC on Windows — which is what a
+	// newly created tab gets from the multiplexer itself.
+	//
+	// It exists mainly for Windows, where "the shell" is genuinely ambiguous:
+	// cmd.exe and PowerShell are both reasonable and neither is discoverable
+	// from the environment alone. Elsewhere it is an override for anyone whose
+	// login shell is not what they want their tabs to run.
+	TerminalShell string `json:"terminal_shell,omitempty"`
 	// GitBranchDisplay places the session's git branch: "header" (default),
 	// "statusbar" or "off".
 	GitBranchDisplay string `json:"git_branch_display,omitempty"`

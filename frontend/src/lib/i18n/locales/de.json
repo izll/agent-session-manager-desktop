@@ -1065,5 +1065,9 @@
   "dictation.quota_title": "Kontingent aufgebraucht",
   "dictation.quota_message": "Das Google-Cloud-Projekt hat kein Speech-to-Text-Kontingent mehr, oder die Abrechnung ist nicht aktiviert.",
   "dictation.stream_failed_title": "Diktat fehlgeschlagen",
-  "dictation.request_rejected_title": "Sprachanfrage abgelehnt"
+  "dictation.request_rejected_title": "Sprachanfrage abgelehnt",
+  "settings.terminalShell": "Terminal-Shell",
+  "settings.terminalShellDesc": "Was ein einfacher Terminal-Tab startet",
+  "settings.shellSystemDefault": "Systemstandard",
+  "settings.shellSection": "Shell"
 }

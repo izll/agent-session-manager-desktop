@@ -1065,5 +1065,9 @@
   "dictation.quota_title": "Kota tükendi",
   "dictation.quota_message": "Google Cloud projesinin Speech-to-Text kotası kalmadı ya da faturalandırma açık değil.",
   "dictation.stream_failed_title": "Dikte başarısız",
-  "dictation.request_rejected_title": "Konuşma isteği reddedildi"
+  "dictation.request_rejected_title": "Konuşma isteği reddedildi",
+  "settings.terminalShell": "Terminal kabuğu",
+  "settings.terminalShellDesc": "Düz bir terminal sekmesinin başlattığı şey",
+  "settings.shellSystemDefault": "Sistem varsayılanı",
+  "settings.shellSection": "Kabuk"
 }

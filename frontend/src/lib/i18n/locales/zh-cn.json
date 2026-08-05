@@ -1065,5 +1065,9 @@
   "dictation.quota_title": "配额已用尽",
   "dictation.quota_message": "该 Google Cloud 项目的 Speech-to-Text 配额已用完，或未启用结算。",
   "dictation.stream_failed_title": "听写失败",
-  "dictation.request_rejected_title": "语音请求被拒绝"
+  "dictation.request_rejected_title": "语音请求被拒绝",
+  "settings.terminalShell": "终端 Shell",
+  "settings.terminalShellDesc": "普通终端标签页启动的程序",
+  "settings.shellSystemDefault": "系统默认",
+  "settings.shellSection": "Shell"
 }

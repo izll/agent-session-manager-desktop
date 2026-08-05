@@ -1065,5 +1065,9 @@
   "dictation.quota_title": "Cota esgotada",
   "dictation.quota_message": "O projeto do Google Cloud não tem mais cota de Speech-to-Text, ou a cobrança não está ativada.",
   "dictation.stream_failed_title": "Falha no ditado",
-  "dictation.request_rejected_title": "Solicitação de voz recusada"
+  "dictation.request_rejected_title": "Solicitação de voz recusada",
+  "settings.terminalShell": "Shell do terminal",
+  "settings.terminalShellDesc": "O que uma aba de terminal simples inicia",
+  "settings.shellSystemDefault": "Padrão do sistema",
+  "settings.shellSection": "Shell"
 }

@@ -121,6 +121,21 @@
     saveSettings({ terminalCopyMode: v as 'shift' | 'select' });
   }
 
+  // The backend supplies the list, because which shells make sense is a
+  // property of the platform and the frontend cannot tell which it is on.
+  // A single entry means there is nothing to choose between — Unix, where
+  // $SHELL already answers the question — so the row is hidden entirely
+  // rather than offered as a menu of one.
+  $: shellOptions = ($settings.shellChoices ?? []).map((choice) => ({
+    value: choice.command,
+    label: choice.label || $t('settings.shellSystemDefault'),
+  }));
+  $: showShellChoice = shellOptions.length > 1;
+
+  function changeShell(v: string) {
+    saveSettings({ terminalShell: v });
+  }
+
   // Rebuilt on locale change so the labels follow the chosen language.
   $: gitBranchOptions = [
     { value: 'header', label: $t('settings.gitBranchHeader') },
@@ -812,6 +827,24 @@
 
         <!-- Terminal Tab -->
         {#if activeTab === 'terminal'}
+          {#if showShellChoice}
+            <div class="settings-section">
+              <h3>{$t('settings.shellSection')}</h3>
+
+              <div class="setting-item input-item">
+                <span class="setting-info">
+                  <span class="setting-label">{$t('settings.terminalShell')}</span>
+                  <span class="setting-desc">{$t('settings.terminalShellDesc')}</span>
+                </span>
+                <Select
+                  value={$settings.terminalShell || ''}
+                  options={shellOptions}
+                  on:change={(e) => changeShell(e.detail)}
+                />
+              </div>
+            </div>
+          {/if}
+
           <div class="settings-section">
             <h3>{$t('settings.paletteTerminalDefault')}</h3>
 

@@ -1126,6 +1126,8 @@ export namespace main {
 	    terminalRenderer: string;
 	    terminalCopyMode: string;
 	    terminalFontFamily: string;
+	    terminalShell: string;
+	    shellChoices: session.ShellChoice[];
 	    gitBranchDisplay: string;
 	    diffFlatFileList: boolean;
 	    trashRetentionDays: number;
@@ -1169,6 +1171,8 @@ export namespace main {
 	        this.terminalRenderer = source["terminalRenderer"];
 	        this.terminalCopyMode = source["terminalCopyMode"];
 	        this.terminalFontFamily = source["terminalFontFamily"];
+	        this.terminalShell = source["terminalShell"];
+	        this.shellChoices = this.convertValues(source["shellChoices"], session.ShellChoice);
 	        this.gitBranchDisplay = source["gitBranchDisplay"];
 	        this.diffFlatFileList = source["diffFlatFileList"];
 	        this.trashRetentionDays = source["trashRetentionDays"];
@@ -1831,6 +1835,20 @@ export namespace session {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.sessionId = source["sessionId"];
 	        this.windowIdx = source["windowIdx"];
+	    }
+	}
+	export class ShellChoice {
+	    command: string;
+	    label: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ShellChoice(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.command = source["command"];
+	        this.label = source["label"];
 	    }
 	}
 	export class WindowInfo {

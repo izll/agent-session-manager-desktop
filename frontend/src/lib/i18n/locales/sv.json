@@ -1065,5 +1065,9 @@
   "dictation.quota_title": "Kvoten är slut",
   "dictation.quota_message": "Google Cloud-projektet har ingen Speech-to-Text-kvot kvar, eller så är fakturering inte aktiverad.",
   "dictation.stream_failed_title": "Dikteringen misslyckades",
-  "dictation.request_rejected_title": "Talbegäran avvisades"
+  "dictation.request_rejected_title": "Talbegäran avvisades",
+  "settings.terminalShell": "Terminalskal",
+  "settings.terminalShellDesc": "Vad en vanlig terminalflik startar",
+  "settings.shellSystemDefault": "Systemstandard",
+  "settings.shellSection": "Skal"
 }

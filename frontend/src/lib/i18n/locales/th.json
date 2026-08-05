@@ -1065,5 +1065,9 @@
   "dictation.quota_title": "โควตาหมดแล้ว",
   "dictation.quota_message": "โปรเจกต์ Google Cloud ไม่มีโควตา Speech-to-Text เหลือ หรือยังไม่ได้เปิดการเรียกเก็บเงิน",
   "dictation.stream_failed_title": "การบอกตามคำล้มเหลว",
-  "dictation.request_rejected_title": "คำขอเสียงถูกปฏิเสธ"
+  "dictation.request_rejected_title": "คำขอเสียงถูกปฏิเสธ",
+  "settings.terminalShell": "เชลล์ของเทอร์มินัล",
+  "settings.terminalShellDesc": "สิ่งที่แท็บเทอร์มินัลธรรมดาจะเริ่ม",
+  "settings.shellSystemDefault": "ค่าเริ่มต้นของระบบ",
+  "settings.shellSection": "เชลล์"
 }

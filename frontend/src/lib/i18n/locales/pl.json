@@ -1065,5 +1065,9 @@
   "dictation.quota_title": "Wyczerpany limit",
   "dictation.quota_message": "Projekt Google Cloud nie ma już limitu Speech-to-Text lub nie ma włączonych płatności.",
   "dictation.stream_failed_title": "Dyktowanie nie powiodło się",
-  "dictation.request_rejected_title": "Żądanie mowy odrzucone"
+  "dictation.request_rejected_title": "Żądanie mowy odrzucone",
+  "settings.terminalShell": "Powłoka terminala",
+  "settings.terminalShellDesc": "Co uruchamia zwykła karta terminala",
+  "settings.shellSystemDefault": "Domyślna systemowa",
+  "settings.shellSection": "Powłoka"
 }
