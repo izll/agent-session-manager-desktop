@@ -1064,5 +1064,6 @@
   "dictation.api_key_invalid_message": "Google Cloud の API キーが無効か期限切れ、または Speech-to-Text API へのアクセス権がありません。設定 → ディクテーションで確認してください。",
   "dictation.quota_title": "割り当てを使い切りました",
   "dictation.quota_message": "Google Cloud プロジェクトの Speech-to-Text の割り当てが残っていないか、課金が有効ではありません。",
-  "dictation.stream_failed_title": "ディクテーションに失敗しました"
+  "dictation.stream_failed_title": "ディクテーションに失敗しました",
+  "dictation.request_rejected_title": "音声リクエストが拒否されました"
 }

@@ -1064,5 +1064,6 @@
   "dictation.api_key_invalid_message": "คีย์ Google Cloud API ไม่ถูกต้อง หมดอายุ หรือไม่มีสิทธิ์เข้าถึง Speech-to-Text API ตรวจสอบได้ที่ ตั้งค่า → การบอกตามคำ",
   "dictation.quota_title": "โควตาหมดแล้ว",
   "dictation.quota_message": "โปรเจกต์ Google Cloud ไม่มีโควตา Speech-to-Text เหลือ หรือยังไม่ได้เปิดการเรียกเก็บเงิน",
-  "dictation.stream_failed_title": "การบอกตามคำล้มเหลว"
+  "dictation.stream_failed_title": "การบอกตามคำล้มเหลว",
+  "dictation.request_rejected_title": "คำขอเสียงถูกปฏิเสธ"
 }

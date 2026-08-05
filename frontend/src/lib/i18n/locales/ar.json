@@ -1064,5 +1064,6 @@
   "dictation.api_key_invalid_message": "مفتاح Google Cloud API غير صالح أو منتهي الصلاحية أو لا يملك وصولًا إلى واجهة Speech-to-Text. تحقق منه في الإعدادات ← الإملاء.",
   "dictation.quota_title": "استُنفدت الحصة",
   "dictation.quota_message": "لم يعد لدى مشروع Google Cloud حصة لـ Speech-to-Text، أو أن الفوترة غير مفعّلة.",
-  "dictation.stream_failed_title": "فشل الإملاء"
+  "dictation.stream_failed_title": "فشل الإملاء",
+  "dictation.request_rejected_title": "تم رفض طلب التعرف على الكلام"
 }

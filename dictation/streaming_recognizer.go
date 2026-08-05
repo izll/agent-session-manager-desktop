@@ -47,6 +47,10 @@ func (sr *StreamingRecognizer) reportStreamFailure(err error) {
 	if status.Code(err) == codes.Canceled {
 		return
 	}
+	// Logged as well as shown: the toast is gone once dismissed, and the
+	// question that follows a failed dictation is asked later, over a log.
+	logError("streaming recognition failed: %v\n", err)
+
 	if sr.app == nil || sr.app.onError == nil {
 		return
 	}
@@ -54,14 +58,45 @@ func (sr *StreamingRecognizer) reportStreamFailure(err error) {
 	// Translation keys, not sentences. The frontend looks each one up as
 	// dictation.<key>; handed a whole sentence it finds nothing and the toast
 	// ends up showing something other than what was meant.
+	// The code alone is not enough to tell these apart. Google returns
+	// InvalidArgument both for "API key expired. Please renew the API key."
+	// and for a malformed request such as "RecognitionAudio not set" — the
+	// first is entirely about the key, the second not at all. Treating the
+	// whole code as a key problem sent users to check a valid key; treating
+	// none of it as one hid a genuinely expired key behind a generic message.
+	// So the code narrows it and the message decides.
 	title, message := "stream_failed_title", err.Error()
 	switch status.Code(err) {
-	case codes.Unauthenticated, codes.PermissionDenied, codes.InvalidArgument:
+	case codes.Unauthenticated, codes.PermissionDenied:
 		title, message = "api_key_invalid_title", "api_key_invalid_message"
 	case codes.ResourceExhausted:
 		title, message = "quota_title", "quota_message"
+	case codes.InvalidArgument:
+		if mentionsAPIKey(err.Error()) {
+			title, message = "api_key_invalid_title", "api_key_invalid_message"
+		}
 	}
 	go sr.app.onError(title, message)
+}
+
+// mentionsAPIKey reports whether a failure is about the credentials rather
+// than the request. Matched on Google's own wording, which names the key
+// explicitly when the key is the problem.
+func mentionsAPIKey(message string) bool {
+	lower := strings.ToLower(message)
+	for _, phrase := range []string{
+		"api key expired",
+		"api key not valid",
+		"api_key_invalid",
+		"api key is invalid",
+		"invalid api key",
+		"renew the api key",
+	} {
+		if strings.Contains(lower, phrase) {
+			return true
+		}
+	}
+	return false
 }
 
 func NewStreamingRecognizer(app *AppService, apiKey string) (*StreamingRecognizer, error) {
@@ -203,7 +238,7 @@ func (sr *StreamingRecognizer) streamingLoop() {
 	// Create streaming recognize call
 	stream, err := sr.client.StreamingRecognize(sr.ctx)
 	if err != nil {
-		logToFile("❌ Failed to create streaming recognize: %v\n", err)
+		logError("Failed to create streaming recognize: %v\n", err)
 		return
 	}
 	sr.stream = stream
@@ -214,7 +249,7 @@ func (sr *StreamingRecognizer) streamingLoop() {
 			StreamingConfig: streamingConfig,
 		},
 	}); err != nil {
-		logToFile("❌ Failed to send streaming config: %v\n", err)
+		logError("Failed to send streaming config: %v\n", err)
 		return
 	}
 

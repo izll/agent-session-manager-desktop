@@ -1064,5 +1064,6 @@
   "dictation.api_key_invalid_message": "A Google Cloud API-kulcs érvénytelen, lejárt, vagy nincs hozzáférése a Speech-to-Text API-hoz. Ellenőrizd a Beállítások → Diktálás alatt.",
   "dictation.quota_title": "Elfogyott a kvóta",
   "dictation.quota_message": "A Google Cloud projektnek elfogyott a Speech-to-Text kvótája, vagy nincs bekapcsolva rajta a számlázás.",
-  "dictation.stream_failed_title": "A diktálás nem sikerült"
+  "dictation.stream_failed_title": "A diktálás nem sikerült",
+  "dictation.request_rejected_title": "A beszédfelismerés elutasítva"
 }

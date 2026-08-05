@@ -1064,5 +1064,6 @@
   "dictation.api_key_invalid_message": "De Google Cloud-API-sleutel is ongeldig, verlopen of heeft geen toegang tot de Speech-to-Text-API. Controleer hem bij Instellingen → Dictaat.",
   "dictation.quota_title": "Quotum op",
   "dictation.quota_message": "Het Google Cloud-project heeft geen Speech-to-Text-quotum meer, of facturering staat uit.",
-  "dictation.stream_failed_title": "Dictaat mislukt"
+  "dictation.stream_failed_title": "Dictaat mislukt",
+  "dictation.request_rejected_title": "Spraakverzoek geweigerd"
 }

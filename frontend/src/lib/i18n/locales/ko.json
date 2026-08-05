@@ -1064,5 +1064,6 @@
   "dictation.api_key_invalid_message": "Google Cloud API 키가 유효하지 않거나 만료되었거나 Speech-to-Text API 권한이 없습니다. 설정 → 받아쓰기에서 확인하세요.",
   "dictation.quota_title": "할당량이 소진되었습니다",
   "dictation.quota_message": "Google Cloud 프로젝트에 Speech-to-Text 할당량이 없거나 결제가 활성화되지 않았습니다.",
-  "dictation.stream_failed_title": "받아쓰기 실패"
+  "dictation.stream_failed_title": "받아쓰기 실패",
+  "dictation.request_rejected_title": "음성 요청이 거부되었습니다"
 }

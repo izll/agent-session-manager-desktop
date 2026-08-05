@@ -1064,5 +1064,6 @@
   "dictation.api_key_invalid_message": "Ключ API Google Cloud недействителен, истёк или не имеет доступа к Speech-to-Text API. Проверьте его в Настройки → Диктовка.",
   "dictation.quota_title": "Квота исчерпана",
   "dictation.quota_message": "У проекта Google Cloud закончилась квота Speech-to-Text или не включена оплата.",
-  "dictation.stream_failed_title": "Диктовка не удалась"
+  "dictation.stream_failed_title": "Диктовка не удалась",
+  "dictation.request_rejected_title": "Запрос распознавания отклонён"
 }

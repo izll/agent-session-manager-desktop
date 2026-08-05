@@ -1064,5 +1064,6 @@
   "dictation.api_key_invalid_message": "Klucz API Google Cloud jest nieprawidłowy, wygasł lub nie ma dostępu do API Speech-to-Text. Sprawdź go w Ustawienia → Dyktowanie.",
   "dictation.quota_title": "Wyczerpany limit",
   "dictation.quota_message": "Projekt Google Cloud nie ma już limitu Speech-to-Text lub nie ma włączonych płatności.",
-  "dictation.stream_failed_title": "Dyktowanie nie powiodło się"
+  "dictation.stream_failed_title": "Dyktowanie nie powiodło się",
+  "dictation.request_rejected_title": "Żądanie mowy odrzucone"
 }

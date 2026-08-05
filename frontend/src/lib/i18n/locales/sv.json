@@ -1064,5 +1064,6 @@
   "dictation.api_key_invalid_message": "Google Cloud-API-nyckeln är ogiltig, har gått ut eller saknar åtkomst till Speech-to-Text-API:et. Kontrollera den under Inställningar → Diktering.",
   "dictation.quota_title": "Kvoten är slut",
   "dictation.quota_message": "Google Cloud-projektet har ingen Speech-to-Text-kvot kvar, eller så är fakturering inte aktiverad.",
-  "dictation.stream_failed_title": "Dikteringen misslyckades"
+  "dictation.stream_failed_title": "Dikteringen misslyckades",
+  "dictation.request_rejected_title": "Talbegäran avvisades"
 }

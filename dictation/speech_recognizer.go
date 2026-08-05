@@ -532,21 +532,37 @@ func (sr *SpeechRecognizer) recognizeWithGoogleCloud(audioData []byte, language 
 				return "", fmt.Errorf("API billing required: %d", resp.StatusCode)
 			}
 
-			// Check if error message contains API key related error
-			isAPIKeyError := strings.Contains(bodyStr, "API key") ||
-				strings.Contains(bodyStr, "API_KEY_INVALID") ||
-				strings.Contains(bodyStr, "INVALID_ARGUMENT")
+			// Only reasons that are actually about the key.
+			//
+			// INVALID_ARGUMENT used to be on this list, which made every
+			// malformed request read as a dead key: it is Google's catch-all
+			// for a bad request, and "RecognitionAudio not set" — an audio
+			// problem — arrives under it. A user whose key was demonstrably
+			// valid was told to go and check the key, which is the one place
+			// the fault was not, and the real cause stayed hidden behind a
+			// confident wrong answer.
+			isAPIKeyError := mentionsAPIKey(bodyStr) ||
+				strings.Contains(bodyStr, "SERVICE_DISABLED") ||
+				strings.Contains(bodyStr, "PERMISSION_DENIED")
 
 			if isAPIKeyError {
-				// Notify user about invalid API key
 				if sr.app.onError != nil {
-					go sr.app.onError("Invalid API Key",
-						"The Google Cloud API key is invalid or expired. Please check your API key in settings.")
+					go sr.app.onError("api_key_invalid_title", "api_key_invalid_message")
 				}
-				// Stop recording
+				logError("API rejected the key: %s\n", bodyStr)
 				go sr.Stop()
-				return "", fmt.Errorf("API authentication failed: invalid or expired API key")
+				return "", fmt.Errorf("API authentication failed: %s", bodyStr)
 			}
+
+			// Anything else that failed: say what Google said, rather than
+			// guessing. The message is what makes the difference between
+			// "your key is dead" and "the audio never arrived".
+			if sr.app.onError != nil {
+				go sr.app.onError("request_rejected_title", bodyStr)
+			}
+			logError("API rejected the request (%d): %s\n", resp.StatusCode, bodyStr)
+			go sr.Stop()
+			return "", fmt.Errorf("API request rejected (%d): %s", resp.StatusCode, bodyStr)
 		}
 
 		return "", fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
@@ -846,7 +862,7 @@ func (sr *SpeechRecognizer) streamingRecognitionLoop() {
 
 	// Validate API key
 	if settings.GoogleAPIKey == "" {
-		logToFile("❌ ERROR: API key is required for streaming mode\n")
+		logError("API key is required for streaming mode\n")
 		sr.Stop()
 		return
 	}
@@ -854,7 +870,7 @@ func (sr *SpeechRecognizer) streamingRecognitionLoop() {
 	// Create streaming recognizer
 	streamingRecognizer, err := NewStreamingRecognizer(sr.app, settings.GoogleAPIKey)
 	if err != nil {
-		logToFile("❌ Failed to create streaming recognizer: %v\n", err)
+		logError("Failed to create streaming recognizer: %v\n", err)
 		sr.Stop()
 		return
 	}
@@ -863,7 +879,7 @@ func (sr *SpeechRecognizer) streamingRecognitionLoop() {
 	// Start streaming recognizer
 	err = streamingRecognizer.Start()
 	if err != nil {
-		logToFile("❌ Failed to start streaming recognizer: %v\n", err)
+		logError("Failed to start streaming recognizer: %v\n", err)
 		sr.Stop()
 		return
 	}
@@ -871,7 +887,7 @@ func (sr *SpeechRecognizer) streamingRecognitionLoop() {
 	// Start audio recording
 	err = sr.app.audioCapture.StartRecording(settings.SilenceTimeoutSeconds)
 	if err != nil {
-		logToFile("❌ Failed to start audio recording: %v\n", err)
+		logError("Failed to start audio recording: %v\n", err)
 		streamingRecognizer.Stop()
 		sr.Stop()
 		return

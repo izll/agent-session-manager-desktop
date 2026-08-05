@@ -1064,5 +1064,6 @@
   "dictation.api_key_invalid_message": "Khóa API Google Cloud không hợp lệ, đã hết hạn, hoặc không có quyền dùng Speech-to-Text API. Kiểm tra trong Cài đặt → Đọc chính tả.",
   "dictation.quota_title": "Đã hết hạn mức",
   "dictation.quota_message": "Dự án Google Cloud đã hết hạn mức Speech-to-Text, hoặc chưa bật thanh toán.",
-  "dictation.stream_failed_title": "Đọc chính tả thất bại"
+  "dictation.stream_failed_title": "Đọc chính tả thất bại",
+  "dictation.request_rejected_title": "Yêu cầu giọng nói bị từ chối"
 }

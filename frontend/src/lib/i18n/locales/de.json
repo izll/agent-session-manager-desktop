@@ -1064,5 +1064,6 @@
   "dictation.api_key_invalid_message": "Der Google-Cloud-API-Schlüssel ist ungültig, abgelaufen oder hat keinen Zugriff auf die Speech-to-Text-API. Prüfe ihn unter Einstellungen → Diktat.",
   "dictation.quota_title": "Kontingent aufgebraucht",
   "dictation.quota_message": "Das Google-Cloud-Projekt hat kein Speech-to-Text-Kontingent mehr, oder die Abrechnung ist nicht aktiviert.",
-  "dictation.stream_failed_title": "Diktat fehlgeschlagen"
+  "dictation.stream_failed_title": "Diktat fehlgeschlagen",
+  "dictation.request_rejected_title": "Sprachanfrage abgelehnt"
 }

@@ -1064,5 +1064,6 @@
   "dictation.api_key_invalid_message": "La clave de API de Google Cloud no es válida, ha caducado o no tiene acceso a la API de Speech-to-Text. Compruébala en Ajustes → Dictado.",
   "dictation.quota_title": "Cuota agotada",
   "dictation.quota_message": "El proyecto de Google Cloud no tiene cuota de Speech-to-Text, o no tiene la facturación activada.",
-  "dictation.stream_failed_title": "Error en el dictado"
+  "dictation.stream_failed_title": "Error en el dictado",
+  "dictation.request_rejected_title": "Solicitud de voz rechazada"
 }

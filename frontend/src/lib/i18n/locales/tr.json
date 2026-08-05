@@ -1064,5 +1064,6 @@
   "dictation.api_key_invalid_message": "Google Cloud API anahtarı geçersiz, süresi dolmuş ya da Speech-to-Text API'sine erişimi yok. Ayarlar → Dikte bölümünden kontrol edin.",
   "dictation.quota_title": "Kota tükendi",
   "dictation.quota_message": "Google Cloud projesinin Speech-to-Text kotası kalmadı ya da faturalandırma açık değil.",
-  "dictation.stream_failed_title": "Dikte başarısız"
+  "dictation.stream_failed_title": "Dikte başarısız",
+  "dictation.request_rejected_title": "Konuşma isteği reddedildi"
 }

@@ -1064,5 +1064,6 @@
   "dictation.api_key_invalid_message": "Google Cloud API 密钥无效、已过期，或无权访问 Speech-to-Text API。请在“设置 → 听写”中检查。",
   "dictation.quota_title": "配额已用尽",
   "dictation.quota_message": "该 Google Cloud 项目的 Speech-to-Text 配额已用完，或未启用结算。",
-  "dictation.stream_failed_title": "听写失败"
+  "dictation.stream_failed_title": "听写失败",
+  "dictation.request_rejected_title": "语音请求被拒绝"
 }
