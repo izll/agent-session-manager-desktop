@@ -7,6 +7,9 @@
   import type { session } from '../../../../wailsjs/go/models';
   import ConfirmDialog from '../Dialogs/ConfirmDialog.svelte';
   import { t } from '../../i18n';
+  import { highlightLine } from '../../utils/highlightLine';
+  import { cachedLanguage, loadLanguage } from '../../utils/codemirror';
+  import type { LanguageSupport } from '@codemirror/language';
   import { settings, saveSettings } from '../../stores/settings';
   import { buildTreeRows, type TreeRow } from '../../utils/fileTree';
   import { fileTypeOf } from '../../utils/fileTypes';
@@ -551,6 +554,25 @@
   // Only parse when the tab is active AND (the file is small OR the user opted
   // in). Parsing a huge diff string is itself expensive, so we skip it entirely
   // while showing the warning.
+  // The grammar for the file being viewed, loaded on demand and only for a file
+  // we are actually going to render. Null until it arrives (and for file types
+  // we have no grammar for), which highlightLine takes as "plain text" — so the
+  // diff shows immediately and gains its colours a moment later, rather than
+  // waiting on a chunk fetch.
+  let lineLanguage: LanguageSupport | null = null;
+  let languageForPath = '';
+  $: if (selectedPath && selectedPath !== languageForPath) {
+    languageForPath = selectedPath;
+    lineLanguage = cachedLanguage(selectedPath);
+    if (!lineLanguage) {
+      const wanted = selectedPath;
+      void loadLanguage(wanted).then((lang) => {
+        // Guard against a slow load landing after the user moved on.
+        if (wanted === languageForPath) lineLanguage = lang;
+      });
+    }
+  }
+
   $: shouldRender = active && !!selectedFile && !selectedFile.binary && (!isLargeFile || forceShow);
   $: renderedHunks = shouldRender && selectedFile
     ? buildHunkViews(selectedFile)
@@ -926,7 +948,10 @@
                   </div>
                   {#each view.lines as line}
                     <div class="diff-line {line.type}">
-                      <code>{line.text}</code>
+                      <!-- highlightLine escapes everything it emits; the diff
+                           contains whatever the repository holds, including
+                           files that are themselves HTML. -->
+                      <code>{@html highlightLine(line.text, lineLanguage)}</code>
                     </div>
                   {/each}
                 </div>
@@ -1565,14 +1590,19 @@
     font-size: inherit;
   }
 
+  /* The tint carries added/removed, not the text colour: syntax highlighting
+     colours the code itself, and a line-wide colour would either fight it or
+     win and undo it. The background is also the more legible signal — it marks
+     the whole line, including its indentation. */
+  /* The tint alone carries added/removed. The text keeps its syntax colours —
+     or the ordinary foreground where there are none — so a line reads the same
+     here as it does in the editor, and the eye is not asked to tell green code
+     from green-because-added. */
   .diff-line.add {
-    background: rgba(34, 197, 94, 0.1);
-    color: #4ade80;
+    background: rgba(34, 197, 94, 0.08);
   }
-
   .diff-line.remove {
-    background: rgba(239, 68, 68, 0.1);
-    color: #f87171;
+    background: rgba(239, 68, 68, 0.08);
   }
 
   .diff-line.header {
