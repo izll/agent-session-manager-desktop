@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
+  import { onMount, onDestroy, tick } from 'svelte';
   import { get } from 'svelte/store';
   import SessionTree from './lib/components/Sidebar/SessionTree.svelte';
   import ProjectSelector from './lib/components/Sidebar/ProjectSelector.svelte';
@@ -136,6 +136,8 @@
   let colorDialogSession: Session | null = null;
   let showDeleteConfirm = false;
   let showQuitConfirm = false;
+  /** True from the moment quitting is confirmed until the window goes away. */
+  let quitting = false;
   let showStopDialog = false;
   let showStartDialog = false;
   let showResumeChoice = false;
@@ -638,7 +640,24 @@
     showQuitConfirm = true;
   }
 
-  function confirmQuit() {
+  /**
+   * Shutdown is not instant: the app saves where each session left off, detaches
+   * its mirrors and reaps the processes it started, and on a machine with
+   * several busy sessions that takes long enough to look like a hang.
+   *
+   * The overlay goes up first and the quit is asked for a frame later, so the
+   * message is painted before the main thread is busy tearing things down —
+   * requesting both in the same frame would show nothing at all.
+   */
+  async function confirmQuit() {
+    quitting = true;
+    // tick() first: setting the flag only queues the DOM update, and a frame
+    // callback can run before Svelte has applied it — so the frame we waited
+    // for would paint the old DOM, without the overlay in it.
+    await tick();
+    // Then two frames, so the painted overlay is on screen before Quit() takes
+    // the main thread for the length of the teardown.
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     Quit();
   }
 
@@ -778,6 +797,25 @@
     <div class="lock-banner export-error">
       <span>{exportError}</span>
       <button class="lock-dismiss" on:click={() => exportError = ''}>×</button>
+    </div>
+  {/if}
+  {#if quitting}
+    <!-- Covers everything, and is not dismissable: the app is on its way out
+         and nothing behind this can be acted on any more. -->
+    <div class="quit-overlay">
+      <div class="quit-box">
+        <!-- A still icon, not a spinner. Quit() holds the main thread for the
+             whole teardown, so CSS animation stops the moment it starts — a
+             frozen spinner says "hung", which is the opposite of what this is
+             here to say. -->
+        <svg class="quit-icon" width="26" height="26" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+          <path d="M18.36 6.64a9 9 0 1 1-12.73 0"/>
+          <line x1="12" y1="2" x2="12" y2="12"/>
+        </svg>
+        <strong>{$t('quit.inProgress')}</strong>
+        <span>{$t('quit.inProgressDetail')}</span>
+      </div>
     </div>
   {/if}
   {#if missingMultiplexer}
@@ -1507,6 +1545,34 @@
     color: #fca5a5;
     user-select: text;
   }
+  .quit-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(17, 21, 30, 0.85);
+    backdrop-filter: blur(2px);
+  }
+  .quit-box {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    padding: 26px 34px;
+    border-radius: 10px;
+    background: #1f2430;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    text-align: center;
+    max-width: 380px;
+  }
+  .quit-box strong { font-size: 15px; }
+  .quit-box span { font-size: 12px; opacity: 0.7; line-height: 1.5; }
+  .quit-icon {
+    color: rgba(var(--accent-rgb), 0.9);
+  }
+
   .multiplexer-install {
     flex-shrink: 0;
     border: 1px solid rgba(239, 68, 68, 0.5);

@@ -1032,5 +1032,7 @@
   "tasks.priorityMedium": "Średni",
   "tasks.priorityHigh": "Wysoki",
   "tasks.priorityCritical": "Krytyczny",
-  "tasks.currentDependencies": "Bieżące zależności"
+  "tasks.currentDependencies": "Bieżące zależności",
+  "quit.inProgress": "Zamykanie…",
+  "quit.inProgressDetail": "Zapisujemy stan każdej sesji i odłączamy się poprawnie. Twoje agenty działają dalej."
 }

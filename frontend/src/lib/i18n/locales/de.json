@@ -1032,5 +1032,7 @@
   "tasks.priorityMedium": "Mittel",
   "tasks.priorityHigh": "Hoch",
   "tasks.priorityCritical": "Kritisch",
-  "tasks.currentDependencies": "Aktuelle Abhängigkeiten"
+  "tasks.currentDependencies": "Aktuelle Abhängigkeiten",
+  "quit.inProgress": "Wird beendet…",
+  "quit.inProgressDetail": "Der Stand jeder Sitzung wird gesichert und sauber getrennt. Deine Agents laufen weiter."
 }

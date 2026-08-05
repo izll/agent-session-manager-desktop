@@ -1032,5 +1032,7 @@
   "tasks.priorityMedium": "Середній",
   "tasks.priorityHigh": "Високий",
   "tasks.priorityCritical": "Критичний",
-  "tasks.currentDependencies": "Поточні залежності"
+  "tasks.currentDependencies": "Поточні залежності",
+  "quit.inProgress": "Завершення роботи…",
+  "quit.inProgressDetail": "Зберігаємо стан кожної сесії та коректно від'єднуємось. Ваші агенти продовжують працювати."
 }

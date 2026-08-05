@@ -1032,5 +1032,7 @@
   "tasks.priorityMedium": "보통",
   "tasks.priorityHigh": "높음",
   "tasks.priorityCritical": "긴급",
-  "tasks.currentDependencies": "현재 의존성"
+  "tasks.currentDependencies": "현재 의존성",
+  "quit.inProgress": "종료하는 중…",
+  "quit.inProgressDetail": "각 세션의 진행 위치를 저장하고 안전하게 분리하는 중입니다. 에이전트는 계속 실행됩니다."
 }

@@ -1032,5 +1032,7 @@
   "tasks.priorityMedium": "متوسطة",
   "tasks.priorityHigh": "عالية",
   "tasks.priorityCritical": "حرجة",
-  "tasks.currentDependencies": "التبعيات الحالية"
+  "tasks.currentDependencies": "التبعيات الحالية",
+  "quit.inProgress": "جارٍ الإغلاق…",
+  "quit.inProgressDetail": "يجري حفظ موضع كل جلسة والانفصال بشكل سليم. عملاؤك يواصلون العمل."
 }

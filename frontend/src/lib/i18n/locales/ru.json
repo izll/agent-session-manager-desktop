@@ -1032,5 +1032,7 @@
   "tasks.priorityMedium": "Средний",
   "tasks.priorityHigh": "Высокий",
   "tasks.priorityCritical": "Критический",
-  "tasks.currentDependencies": "Текущие зависимости"
+  "tasks.currentDependencies": "Текущие зависимости",
+  "quit.inProgress": "Завершение работы…",
+  "quit.inProgressDetail": "Сохраняем состояние каждой сессии и корректно отключаемся. Ваши агенты продолжают работать."
 }

@@ -1032,5 +1032,7 @@
   "tasks.priorityMedium": "Trung bình",
   "tasks.priorityHigh": "Cao",
   "tasks.priorityCritical": "Khẩn cấp",
-  "tasks.currentDependencies": "Phụ thuộc hiện tại"
+  "tasks.currentDependencies": "Phụ thuộc hiện tại",
+  "quit.inProgress": "Đang đóng…",
+  "quit.inProgressDetail": "Đang lưu tiến độ của từng phiên và ngắt kết nối an toàn. Các agent vẫn tiếp tục chạy."
 }

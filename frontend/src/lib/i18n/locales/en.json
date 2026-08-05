@@ -1032,5 +1032,7 @@
   "tasks.priorityMedium": "Medium",
   "tasks.priorityHigh": "High",
   "tasks.priorityCritical": "Critical",
-  "tasks.currentDependencies": "Current dependencies"
+  "tasks.currentDependencies": "Current dependencies",
+  "quit.inProgress": "Closing down…",
+  "quit.inProgressDetail": "Saving where each session left off and detaching cleanly. Your agents keep running."
 }

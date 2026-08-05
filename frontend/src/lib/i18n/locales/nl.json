@@ -1032,5 +1032,7 @@
   "tasks.priorityMedium": "Gemiddeld",
   "tasks.priorityHigh": "Hoog",
   "tasks.priorityCritical": "Kritiek",
-  "tasks.currentDependencies": "Huidige afhankelijkheden"
+  "tasks.currentDependencies": "Huidige afhankelijkheden",
+  "quit.inProgress": "Bezig met afsluiten…",
+  "quit.inProgressDetail": "De stand van elke sessie wordt opgeslagen en netjes losgekoppeld. Je agents blijven draaien."
 }

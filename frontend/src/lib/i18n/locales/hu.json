@@ -1032,5 +1032,7 @@
   "tasks.priorityMedium": "Közepes",
   "tasks.priorityHigh": "Magas",
   "tasks.priorityCritical": "Kritikus",
-  "tasks.currentDependencies": "Jelenlegi függőségek"
+  "tasks.currentDependencies": "Jelenlegi függőségek",
+  "quit.inProgress": "Kilépés folyamatban…",
+  "quit.inProgressDetail": "Elmentjük, hol tart minden munkamenet, és rendben lecsatlakozunk. Az agentek tovább futnak."
 }

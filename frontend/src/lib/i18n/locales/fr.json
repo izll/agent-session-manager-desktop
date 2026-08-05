@@ -1032,5 +1032,7 @@
   "tasks.priorityMedium": "Moyenne",
   "tasks.priorityHigh": "Haute",
   "tasks.priorityCritical": "Critique",
-  "tasks.currentDependencies": "Dépendances actuelles"
+  "tasks.currentDependencies": "Dépendances actuelles",
+  "quit.inProgress": "Fermeture en cours…",
+  "quit.inProgressDetail": "Enregistrement de l'état de chaque session et détachement propre. Vos agents continuent de tourner."
 }

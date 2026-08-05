@@ -1032,5 +1032,7 @@
   "tasks.priorityMedium": "Média",
   "tasks.priorityHigh": "Alta",
   "tasks.priorityCritical": "Crítica",
-  "tasks.currentDependencies": "Dependências atuais"
+  "tasks.currentDependencies": "Dependências atuais",
+  "quit.inProgress": "Encerrando…",
+  "quit.inProgressDetail": "Salvando onde cada sessão parou e desconectando com segurança. Seus agentes continuam rodando."
 }

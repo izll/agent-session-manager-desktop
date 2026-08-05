@@ -1032,5 +1032,7 @@
   "tasks.priorityMedium": "Orta",
   "tasks.priorityHigh": "Yüksek",
   "tasks.priorityCritical": "Kritik",
-  "tasks.currentDependencies": "Mevcut bağımlılıklar"
+  "tasks.currentDependencies": "Mevcut bağımlılıklar",
+  "quit.inProgress": "Kapatılıyor…",
+  "quit.inProgressDetail": "Her oturumun kaldığı yer kaydediliyor ve düzgün şekilde ayrılıyor. Agent'larınız çalışmaya devam ediyor."
 }

@@ -1032,5 +1032,7 @@
   "tasks.priorityMedium": "Střední",
   "tasks.priorityHigh": "Vysoká",
   "tasks.priorityCritical": "Kritická",
-  "tasks.currentDependencies": "Současné závislosti"
+  "tasks.currentDependencies": "Současné závislosti",
+  "quit.inProgress": "Ukončování…",
+  "quit.inProgressDetail": "Ukládá se stav každé relace a probíhá čisté odpojení. Vaši agenti běží dál."
 }

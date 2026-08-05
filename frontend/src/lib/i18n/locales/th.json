@@ -1032,5 +1032,7 @@
   "tasks.priorityMedium": "ปานกลาง",
   "tasks.priorityHigh": "สูง",
   "tasks.priorityCritical": "วิกฤต",
-  "tasks.currentDependencies": "การพึ่งพาปัจจุบัน"
+  "tasks.currentDependencies": "การพึ่งพาปัจจุบัน",
+  "quit.inProgress": "กำลังปิด…",
+  "quit.inProgressDetail": "กำลังบันทึกสถานะของแต่ละเซสชันและตัดการเชื่อมต่ออย่างเรียบร้อย เอเจนต์ของคุณยังทำงานต่อ"
 }

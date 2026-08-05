@@ -1032,5 +1032,7 @@
   "tasks.priorityMedium": "Medel",
   "tasks.priorityHigh": "Hög",
   "tasks.priorityCritical": "Kritisk",
-  "tasks.currentDependencies": "Nuvarande beroenden"
+  "tasks.currentDependencies": "Nuvarande beroenden",
+  "quit.inProgress": "Avslutar…",
+  "quit.inProgressDetail": "Sparar var varje session slutade och kopplar från ordentligt. Dina agenter fortsätter köra."
 }
