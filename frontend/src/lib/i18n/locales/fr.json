@@ -1038,5 +1038,14 @@
   "tasks.sortCompletedDesc": "Tri : terminées, plus récentes",
   "tasks.sortCompletedAsc": "Tri : terminées, plus anciennes",
   "settings.showApiKey": "Afficher la clé",
-  "settings.hideApiKey": "Masquer la clé"
+  "settings.hideApiKey": "Masquer la clé",
+  "settings.logSection": "Journal de l'application",
+  "settings.logDesc": "Ce que cette exécution a enregistré. Utile quand quelque chose n'a pas fonctionné sans raison visible.",
+  "settings.logView": "Voir le journal",
+  "settings.logHide": "Masquer le journal",
+  "settings.logRefresh": "Actualiser",
+  "settings.logCopy": "Copier",
+  "settings.logOpenFolder": "Ouvrir le dossier",
+  "settings.logEmpty": "Rien de journalisé pour l'instant.",
+  "settings.logTruncated": "Affichage des {count} dernières lignes."
 }

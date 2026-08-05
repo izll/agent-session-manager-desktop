@@ -1038,5 +1038,14 @@
   "tasks.sortCompletedDesc": "Сортировка: завершённые, новые",
   "tasks.sortCompletedAsc": "Сортировка: завершённые, старые",
   "settings.showApiKey": "Показать ключ",
-  "settings.hideApiKey": "Скрыть ключ"
+  "settings.hideApiKey": "Скрыть ключ",
+  "settings.logSection": "Журнал приложения",
+  "settings.logDesc": "Что записал текущий запуск. Полезно, когда что-то не сработало, а причина не видна.",
+  "settings.logView": "Показать журнал",
+  "settings.logHide": "Скрыть журнал",
+  "settings.logRefresh": "Обновить",
+  "settings.logCopy": "Копировать",
+  "settings.logOpenFolder": "Открыть папку",
+  "settings.logEmpty": "Пока ничего не записано.",
+  "settings.logTruncated": "Показаны последние {count} строк."
 }

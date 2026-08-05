@@ -1038,5 +1038,14 @@
   "tasks.sortCompletedDesc": "Sort: Completed, newest",
   "tasks.sortCompletedAsc": "Sort: Completed, oldest",
   "settings.showApiKey": "Show the key",
-  "settings.hideApiKey": "Hide the key"
+  "settings.hideApiKey": "Hide the key",
+  "settings.logSection": "Application log",
+  "settings.logDesc": "What this run has recorded. Useful when something did not work and the reason is not on screen.",
+  "settings.logView": "View log",
+  "settings.logHide": "Hide log",
+  "settings.logRefresh": "Refresh",
+  "settings.logCopy": "Copy",
+  "settings.logOpenFolder": "Open folder",
+  "settings.logEmpty": "Nothing logged yet.",
+  "settings.logTruncated": "Showing the most recent {count} lines."
 }

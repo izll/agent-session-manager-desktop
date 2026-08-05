@@ -1038,5 +1038,14 @@
   "tasks.sortCompletedDesc": "Sắp xếp: đã xong, mới nhất",
   "tasks.sortCompletedAsc": "Sắp xếp: đã xong, cũ nhất",
   "settings.showApiKey": "Hiện khóa",
-  "settings.hideApiKey": "Ẩn khóa"
+  "settings.hideApiKey": "Ẩn khóa",
+  "settings.logSection": "Nhật ký ứng dụng",
+  "settings.logDesc": "Những gì lần chạy này đã ghi lại. Hữu ích khi có thứ không hoạt động mà không rõ lý do.",
+  "settings.logView": "Xem nhật ký",
+  "settings.logHide": "Ẩn nhật ký",
+  "settings.logRefresh": "Làm mới",
+  "settings.logCopy": "Sao chép",
+  "settings.logOpenFolder": "Mở thư mục",
+  "settings.logEmpty": "Chưa có nhật ký nào.",
+  "settings.logTruncated": "Đang hiện {count} dòng gần nhất."
 }

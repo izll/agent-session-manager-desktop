@@ -98,3 +98,55 @@ func (w *filteredLogWriter) Write(p []byte) (int, error) {
 }
 
 var _ io.Writer = (*filteredLogWriter)(nil)
+
+// AppLog is the tail of the current run's log, for the viewer in Settings.
+type AppLog struct {
+	// Path is shown so the user can open the whole file themselves, and so a
+	// bug report can name it.
+	Path string `json:"path"`
+	// Lines are the most recent ones, oldest first.
+	Lines []string `json:"lines"`
+	// Truncated is true when older lines were dropped to fit the limit.
+	Truncated bool `json:"truncated"`
+	// Missing is true when there is no log file — logging could not be set up,
+	// or this build writes only to stderr. Distinct from an empty log.
+	Missing bool `json:"missing"`
+}
+
+// maxLogLines bounds what the viewer receives.
+//
+// The log is chatty by design — the sidebar poll writes on every tick — so a
+// long-running session's file reaches megabytes. Everything after a problem is
+// what explains it, so the tail is what gets read; sending the whole file would
+// mostly ship poll noise from hours ago.
+const maxLogLines = 2000
+
+// ReadAppLog returns the end of the current run's log.
+func ReadAppLog() AppLog {
+	path := defaultLogPath()
+	result := AppLog{Path: path}
+	if path == "" {
+		result.Missing = true
+		return result
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		// A missing file is the ordinary case before anything has been logged,
+		// not an error worth showing as one.
+		result.Missing = true
+		return result
+	}
+
+	lines := strings.Split(strings.TrimRight(string(data), "\n"), "\n")
+	// A file holding only a trailing newline splits to one empty string.
+	if len(lines) == 1 && lines[0] == "" {
+		lines = nil
+	}
+	if len(lines) > maxLogLines {
+		lines = lines[len(lines)-maxLogLines:]
+		result.Truncated = true
+	}
+	result.Lines = lines
+	return result
+}

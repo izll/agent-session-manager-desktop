@@ -1038,5 +1038,14 @@
   "tasks.sortCompletedDesc": "並び替え: 完了、新しい順",
   "tasks.sortCompletedAsc": "並び替え: 完了、古い順",
   "settings.showApiKey": "キーを表示",
-  "settings.hideApiKey": "キーを隠す"
+  "settings.hideApiKey": "キーを隠す",
+  "settings.logSection": "アプリケーションログ",
+  "settings.logDesc": "今回の実行で記録された内容。うまくいかず、理由が画面に出ないときに役立ちます。",
+  "settings.logView": "ログを表示",
+  "settings.logHide": "ログを隠す",
+  "settings.logRefresh": "更新",
+  "settings.logCopy": "コピー",
+  "settings.logOpenFolder": "フォルダを開く",
+  "settings.logEmpty": "まだ記録はありません。",
+  "settings.logTruncated": "直近の {count} 行を表示しています。"
 }

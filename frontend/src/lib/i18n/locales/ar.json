@@ -1038,5 +1038,14 @@
   "tasks.sortCompletedDesc": "الترتيب: المنجزة، الأحدث",
   "tasks.sortCompletedAsc": "الترتيب: المنجزة، الأقدم",
   "settings.showApiKey": "إظهار المفتاح",
-  "settings.hideApiKey": "إخفاء المفتاح"
+  "settings.hideApiKey": "إخفاء المفتاح",
+  "settings.logSection": "سجل التطبيق",
+  "settings.logDesc": "ما سجّلته هذه الجلسة. مفيد عندما لا يعمل شيء ولا يظهر السبب.",
+  "settings.logView": "عرض السجل",
+  "settings.logHide": "إخفاء السجل",
+  "settings.logRefresh": "تحديث",
+  "settings.logCopy": "نسخ",
+  "settings.logOpenFolder": "فتح المجلد",
+  "settings.logEmpty": "لا يوجد شيء في السجل بعد.",
+  "settings.logTruncated": "يتم عرض آخر {count} سطر."
 }

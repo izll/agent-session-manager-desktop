@@ -1038,5 +1038,14 @@
   "tasks.sortCompletedDesc": "Sortuj: ukończone, najnowsze",
   "tasks.sortCompletedAsc": "Sortuj: ukończone, najstarsze",
   "settings.showApiKey": "Pokaż klucz",
-  "settings.hideApiKey": "Ukryj klucz"
+  "settings.hideApiKey": "Ukryj klucz",
+  "settings.logSection": "Dziennik aplikacji",
+  "settings.logDesc": "Co zapisał bieżący uruchomiony proces. Przydatne, gdy coś nie zadziałało, a powodu nie widać.",
+  "settings.logView": "Pokaż dziennik",
+  "settings.logHide": "Ukryj dziennik",
+  "settings.logRefresh": "Odśwież",
+  "settings.logCopy": "Kopiuj",
+  "settings.logOpenFolder": "Otwórz folder",
+  "settings.logEmpty": "Nic jeszcze nie zapisano.",
+  "settings.logTruncated": "Pokazano ostatnie {count} wierszy."
 }

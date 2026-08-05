@@ -2984,6 +2984,24 @@ type MultiplexerStatus struct {
 	CanInstall bool `json:"canInstall,omitempty"`
 }
 
+// GetAppLog returns the tail of this run's log, for the viewer in Settings.
+// Reported straight from the file rather than buffered in memory: the log is
+// written by the standard logger from every goroutine, and a second copy would
+// be one more thing to keep in step.
+func (a *App) GetAppLog() AppLog {
+	return ReadAppLog()
+}
+
+// OpenAppLogFolder shows the log file in the desktop's file manager, for when
+// the tail is not enough and the whole file is wanted.
+func (a *App) OpenAppLogFolder() error {
+	path := LogFilePath()
+	if path == "" {
+		return fmt.Errorf("no log file for this run")
+	}
+	return a.OpenFolder(filepath.Dir(path))
+}
+
 // GetMultiplexerStatus reports whether the multiplexer this platform needs is
 // installed, so the interface can say so before the user tries to create a
 // session and is refused.

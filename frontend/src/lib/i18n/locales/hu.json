@@ -1038,5 +1038,14 @@
   "tasks.sortCompletedDesc": "Rendezés: elvégzett, legújabb elöl",
   "tasks.sortCompletedAsc": "Rendezés: elvégzett, legrégebbi elöl",
   "settings.showApiKey": "Kulcs megjelenítése",
-  "settings.hideApiKey": "Kulcs elrejtése"
+  "settings.hideApiKey": "Kulcs elrejtése",
+  "settings.logSection": "Alkalmazásnapló",
+  "settings.logDesc": "Amit a mostani futás rögzített. Akkor hasznos, ha valami nem működött, és az ok nem látszik a képernyőn.",
+  "settings.logView": "Napló megtekintése",
+  "settings.logHide": "Napló elrejtése",
+  "settings.logRefresh": "Frissítés",
+  "settings.logCopy": "Másolás",
+  "settings.logOpenFolder": "Mappa megnyitása",
+  "settings.logEmpty": "Még nincs naplóbejegyzés.",
+  "settings.logTruncated": "A legutóbbi {count} sor látszik."
 }

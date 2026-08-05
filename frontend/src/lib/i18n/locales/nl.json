@@ -1038,5 +1038,14 @@
   "tasks.sortCompletedDesc": "Sorteren: voltooid, nieuwste eerst",
   "tasks.sortCompletedAsc": "Sorteren: voltooid, oudste eerst",
   "settings.showApiKey": "Sleutel tonen",
-  "settings.hideApiKey": "Sleutel verbergen"
+  "settings.hideApiKey": "Sleutel verbergen",
+  "settings.logSection": "Toepassingslogboek",
+  "settings.logDesc": "Wat deze sessie heeft vastgelegd. Handig als iets niet werkte en de reden niet zichtbaar is.",
+  "settings.logView": "Logboek bekijken",
+  "settings.logHide": "Logboek verbergen",
+  "settings.logRefresh": "Vernieuwen",
+  "settings.logCopy": "Kopiëren",
+  "settings.logOpenFolder": "Map openen",
+  "settings.logEmpty": "Nog niets gelogd.",
+  "settings.logTruncated": "De laatste {count} regels worden getoond."
 }

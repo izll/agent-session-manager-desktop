@@ -1038,5 +1038,14 @@
   "tasks.sortCompletedDesc": "เรียง: เสร็จแล้ว ล่าสุดก่อน",
   "tasks.sortCompletedAsc": "เรียง: เสร็จแล้ว เก่าสุดก่อน",
   "settings.showApiKey": "แสดงคีย์",
-  "settings.hideApiKey": "ซ่อนคีย์"
+  "settings.hideApiKey": "ซ่อนคีย์",
+  "settings.logSection": "บันทึกของแอป",
+  "settings.logDesc": "สิ่งที่การรันครั้งนี้บันทึกไว้ มีประโยชน์เมื่อบางอย่างไม่ทำงานและไม่เห็นสาเหตุบนหน้าจอ",
+  "settings.logView": "ดูบันทึก",
+  "settings.logHide": "ซ่อนบันทึก",
+  "settings.logRefresh": "รีเฟรช",
+  "settings.logCopy": "คัดลอก",
+  "settings.logOpenFolder": "เปิดโฟลเดอร์",
+  "settings.logEmpty": "ยังไม่มีบันทึก",
+  "settings.logTruncated": "แสดง {count} บรรทัดล่าสุด"
 }

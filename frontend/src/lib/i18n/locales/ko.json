@@ -1038,5 +1038,14 @@
   "tasks.sortCompletedDesc": "정렬: 완료, 최신순",
   "tasks.sortCompletedAsc": "정렬: 완료, 오래된순",
   "settings.showApiKey": "키 표시",
-  "settings.hideApiKey": "키 숨기기"
+  "settings.hideApiKey": "키 숨기기",
+  "settings.logSection": "애플리케이션 로그",
+  "settings.logDesc": "이번 실행이 기록한 내용. 무언가 실패했는데 이유가 화면에 없을 때 유용합니다.",
+  "settings.logView": "로그 보기",
+  "settings.logHide": "로그 숨기기",
+  "settings.logRefresh": "새로 고침",
+  "settings.logCopy": "복사",
+  "settings.logOpenFolder": "폴더 열기",
+  "settings.logEmpty": "아직 기록이 없습니다.",
+  "settings.logTruncated": "최근 {count}줄을 표시합니다."
 }

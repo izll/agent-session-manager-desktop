@@ -150,6 +150,10 @@ export function GetAgents() {
   return window['go']['main']['App']['GetAgents']();
 }
 
+export function GetAppLog() {
+  return window['go']['main']['App']['GetAppLog']();
+}
+
 export function GetBackgroundAgentLogs(arg1) {
   return window['go']['main']['App']['GetBackgroundAgentLogs'](arg1);
 }
@@ -384,6 +388,10 @@ export function MoveSessionToIndex(arg1, arg2) {
 
 export function MoveTask(arg1, arg2, arg3) {
   return window['go']['main']['App']['MoveTask'](arg1, arg2, arg3);
+}
+
+export function OpenAppLogFolder() {
+  return window['go']['main']['App']['OpenAppLogFolder']();
 }
 
 export function OpenFolder(arg1) {

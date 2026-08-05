@@ -1038,5 +1038,14 @@
   "tasks.sortCompletedDesc": "Sırala: tamamlanan, en yeni",
   "tasks.sortCompletedAsc": "Sırala: tamamlanan, en eski",
   "settings.showApiKey": "Anahtarı göster",
-  "settings.hideApiKey": "Anahtarı gizle"
+  "settings.hideApiKey": "Anahtarı gizle",
+  "settings.logSection": "Uygulama günlüğü",
+  "settings.logDesc": "Bu çalışmanın kaydettikleri. Bir şey çalışmadığında ve nedeni görünmediğinde işe yarar.",
+  "settings.logView": "Günlüğü görüntüle",
+  "settings.logHide": "Günlüğü gizle",
+  "settings.logRefresh": "Yenile",
+  "settings.logCopy": "Kopyala",
+  "settings.logOpenFolder": "Klasörü aç",
+  "settings.logEmpty": "Henüz kayıt yok.",
+  "settings.logTruncated": "Son {count} satır gösteriliyor."
 }

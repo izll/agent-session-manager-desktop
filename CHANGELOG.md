@@ -6,6 +6,23 @@ Entries describe what changed for someone using the app. Internal refactoring,
 test and CI work is left out unless it changed behaviour. Dates are release
 dates; the format follows [Keep a Changelog](https://keepachangelog.com).
 
+## 0.9.18 — 2026-08-05
+
+### Added
+
+- **The application log is viewable from Settings → Maintenance**, with buttons
+  to refresh it, copy it, and open the folder it lives in. It shows the end of
+  the current run, which is where the explanation for something going wrong
+  usually is.
+
+### Fixed
+
+- **Forking could hang with no way out.** The call that branches a conversation
+  had no time limit, and it replays the whole conversation before answering — a
+  stalled one left the dialog spinning indefinitely. It now gives up after
+  three minutes and says so, and a refusal from Claude is reported in its own
+  words rather than as "exit status 1".
+
 ## 0.9.17 — 2026-08-05
 
 ### Fixed

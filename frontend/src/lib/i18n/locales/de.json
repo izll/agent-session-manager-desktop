@@ -1038,5 +1038,14 @@
   "tasks.sortCompletedDesc": "Sortierung: Erledigt, neueste zuerst",
   "tasks.sortCompletedAsc": "Sortierung: Erledigt, älteste zuerst",
   "settings.showApiKey": "Schlüssel anzeigen",
-  "settings.hideApiKey": "Schlüssel verbergen"
+  "settings.hideApiKey": "Schlüssel verbergen",
+  "settings.logSection": "Anwendungsprotokoll",
+  "settings.logDesc": "Was dieser Lauf aufgezeichnet hat. Nützlich, wenn etwas nicht funktioniert hat und der Grund nicht sichtbar ist.",
+  "settings.logView": "Protokoll ansehen",
+  "settings.logHide": "Protokoll ausblenden",
+  "settings.logRefresh": "Aktualisieren",
+  "settings.logCopy": "Kopieren",
+  "settings.logOpenFolder": "Ordner öffnen",
+  "settings.logEmpty": "Noch nichts protokolliert.",
+  "settings.logTruncated": "Es werden die letzten {count} Zeilen angezeigt."
 }

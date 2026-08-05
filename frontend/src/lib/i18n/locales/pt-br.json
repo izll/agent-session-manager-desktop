@@ -1038,5 +1038,14 @@
   "tasks.sortCompletedDesc": "Ordenar: concluídas, mais recentes",
   "tasks.sortCompletedAsc": "Ordenar: concluídas, mais antigas",
   "settings.showApiKey": "Mostrar a chave",
-  "settings.hideApiKey": "Ocultar a chave"
+  "settings.hideApiKey": "Ocultar a chave",
+  "settings.logSection": "Log do aplicativo",
+  "settings.logDesc": "O que esta execução registrou. Útil quando algo não funcionou e o motivo não está visível.",
+  "settings.logView": "Ver o log",
+  "settings.logHide": "Ocultar o log",
+  "settings.logRefresh": "Atualizar",
+  "settings.logCopy": "Copiar",
+  "settings.logOpenFolder": "Abrir a pasta",
+  "settings.logEmpty": "Nada registrado ainda.",
+  "settings.logTruncated": "Mostrando as últimas {count} linhas."
 }

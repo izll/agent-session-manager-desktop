@@ -1038,5 +1038,14 @@
   "tasks.sortCompletedDesc": "Řadit: hotové, nejnovější",
   "tasks.sortCompletedAsc": "Řadit: hotové, nejstarší",
   "settings.showApiKey": "Zobrazit klíč",
-  "settings.hideApiKey": "Skrýt klíč"
+  "settings.hideApiKey": "Skrýt klíč",
+  "settings.logSection": "Protokol aplikace",
+  "settings.logDesc": "Co zaznamenal tento běh. Užitečné, když něco nefungovalo a důvod není vidět.",
+  "settings.logView": "Zobrazit protokol",
+  "settings.logHide": "Skrýt protokol",
+  "settings.logRefresh": "Obnovit",
+  "settings.logCopy": "Kopírovat",
+  "settings.logOpenFolder": "Otevřít složku",
+  "settings.logEmpty": "Zatím nic zaznamenáno.",
+  "settings.logTruncated": "Zobrazeno posledních {count} řádků."
 }

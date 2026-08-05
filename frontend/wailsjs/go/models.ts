@@ -130,6 +130,24 @@ export namespace main {
 	        this.timestamp = source["timestamp"];
 	    }
 	}
+	export class AppLog {
+	    path: string;
+	    lines: string[];
+	    truncated: boolean;
+	    missing: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new AppLog(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.path = source["path"];
+	        this.lines = source["lines"];
+	        this.truncated = source["truncated"];
+	        this.missing = source["missing"];
+	    }
+	}
 	export class BackgroundAgentInfo {
 	    id: string;
 	    sessionId: string;

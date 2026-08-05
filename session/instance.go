@@ -2,6 +2,7 @@ package session
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -1768,6 +1769,11 @@ func (i *Instance) NewAgentWindow(name string, agent AgentType, customCmd string
 
 // ForkSession creates a fork of the current Claude session using --fork-session
 // Returns the new session ID
+// forkTimeout bounds the fork call. Generous, because it replays the whole
+// conversation before answering — but finite, so a stalled one ends in a
+// message rather than a spinner that never stops.
+const forkTimeout = 3 * time.Minute
+
 // ForkSession branches the conversation running in one window.
 //
 // windowIdx names the tab to branch. It used to take none and always read the
@@ -1783,13 +1789,39 @@ func (i *Instance) ForkSession(windowIdx int) (string, error) {
 		return "", fmt.Errorf("no session ID to fork - session may not have started yet")
 	}
 
-	// Run claude with --fork-session to get new session ID
-	// This doesn't actually run the agent, just creates the fork and returns the ID
-	cmd := Command("claude", "--resume", sessionID, "--fork-session", "--output-format", "json", "-p", ".")
+	// Branch the conversation and read back the new id.
+	//
+	// The prompt is not optional, however much it looks like it should be:
+	// --fork-session needs one, and both an absent and an empty -p are refused
+	// ("Provide a prompt to continue the conversation" — measured against the
+	// installed CLI). So a fork does replay the conversation and costs a turn.
+	// A single "." is the smallest thing that satisfies it.
+	//
+	// Bounded, like every other external call here. This one replays a whole
+	// conversation, so it is slow even when healthy and can stall outright on a
+	// network hiccup or an auth prompt — and an unbounded call would leave the
+	// dialog's spinner turning with no way out, which is the reasoning the git
+	// and multiplexer timeouts already carry.
+	ctx, cancel := context.WithTimeout(context.Background(), forkTimeout)
+	defer cancel()
+
+	cmd := CommandContext(ctx, "claude", "--resume", sessionID, "--fork-session",
+		"--output-format", "json", "-p", ".")
 	cmd.Dir = i.Path
 
+	// Captured rather than discarded: without it a refusal from claude reaches
+	// the user as a bare "exit status 1".
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
 	output, err := cmd.Output()
+	if ctx.Err() == context.DeadlineExceeded {
+		return "", fmt.Errorf("forking timed out after %s", forkTimeout)
+	}
 	if err != nil {
+		if detail := strings.TrimSpace(stderr.String()); detail != "" {
+			return "", fmt.Errorf("failed to fork session: %s", detail)
+		}
 		return "", fmt.Errorf("failed to fork session: %w", err)
 	}
 

@@ -1038,5 +1038,14 @@
   "tasks.sortCompletedDesc": "Сортування: завершені, новіші",
   "tasks.sortCompletedAsc": "Сортування: завершені, старіші",
   "settings.showApiKey": "Показати ключ",
-  "settings.hideApiKey": "Сховати ключ"
+  "settings.hideApiKey": "Сховати ключ",
+  "settings.logSection": "Журнал застосунку",
+  "settings.logDesc": "Що записав поточний запуск. Корисно, коли щось не спрацювало, а причини не видно.",
+  "settings.logView": "Показати журнал",
+  "settings.logHide": "Сховати журнал",
+  "settings.logRefresh": "Оновити",
+  "settings.logCopy": "Копіювати",
+  "settings.logOpenFolder": "Відкрити теку",
+  "settings.logEmpty": "Поки нічого не записано.",
+  "settings.logTruncated": "Показано останні {count} рядків."
 }

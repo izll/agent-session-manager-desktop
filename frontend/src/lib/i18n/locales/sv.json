@@ -1038,5 +1038,14 @@
   "tasks.sortCompletedDesc": "Sortera: klara, nyaste först",
   "tasks.sortCompletedAsc": "Sortera: klara, äldsta först",
   "settings.showApiKey": "Visa nyckeln",
-  "settings.hideApiKey": "Dölj nyckeln"
+  "settings.hideApiKey": "Dölj nyckeln",
+  "settings.logSection": "Programlogg",
+  "settings.logDesc": "Vad den här körningen har registrerat. Användbart när något inte fungerade och orsaken inte syns.",
+  "settings.logView": "Visa loggen",
+  "settings.logHide": "Dölj loggen",
+  "settings.logRefresh": "Uppdatera",
+  "settings.logCopy": "Kopiera",
+  "settings.logOpenFolder": "Öppna mappen",
+  "settings.logEmpty": "Inget loggat ännu.",
+  "settings.logTruncated": "Visar de senaste {count} raderna."
 }
