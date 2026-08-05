@@ -1036,5 +1036,7 @@
   "quit.inProgress": "Đang đóng…",
   "quit.inProgressDetail": "Đang lưu tiến độ của từng phiên và ngắt kết nối an toàn. Các agent vẫn tiếp tục chạy.",
   "tasks.sortCompletedDesc": "Sắp xếp: đã xong, mới nhất",
-  "tasks.sortCompletedAsc": "Sắp xếp: đã xong, cũ nhất"
+  "tasks.sortCompletedAsc": "Sắp xếp: đã xong, cũ nhất",
+  "settings.showApiKey": "Hiện khóa",
+  "settings.hideApiKey": "Ẩn khóa"
 }

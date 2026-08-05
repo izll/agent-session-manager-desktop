@@ -1036,5 +1036,7 @@
   "quit.inProgress": "Bezig met afsluiten…",
   "quit.inProgressDetail": "De stand van elke sessie wordt opgeslagen en netjes losgekoppeld. Je agents blijven draaien.",
   "tasks.sortCompletedDesc": "Sorteren: voltooid, nieuwste eerst",
-  "tasks.sortCompletedAsc": "Sorteren: voltooid, oudste eerst"
+  "tasks.sortCompletedAsc": "Sorteren: voltooid, oudste eerst",
+  "settings.showApiKey": "Sleutel tonen",
+  "settings.hideApiKey": "Sleutel verbergen"
 }

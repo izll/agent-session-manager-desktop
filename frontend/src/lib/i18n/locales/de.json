@@ -1036,5 +1036,7 @@
   "quit.inProgress": "Wird beendet…",
   "quit.inProgressDetail": "Der Stand jeder Sitzung wird gesichert und sauber getrennt. Deine Agents laufen weiter.",
   "tasks.sortCompletedDesc": "Sortierung: Erledigt, neueste zuerst",
-  "tasks.sortCompletedAsc": "Sortierung: Erledigt, älteste zuerst"
+  "tasks.sortCompletedAsc": "Sortierung: Erledigt, älteste zuerst",
+  "settings.showApiKey": "Schlüssel anzeigen",
+  "settings.hideApiKey": "Schlüssel verbergen"
 }

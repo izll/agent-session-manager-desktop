@@ -54,29 +54,35 @@
     error = '';
 
     try {
-      // First, create the fork to get new session ID
-      const result = await App.ForkSession(sessionId);
+      // Branch the conversation in THIS tab. Without the window index the
+      // backend read the session's main window, so forking from a second Claude
+      // tab produced a branch of a different conversation.
+      const result = await App.ForkSession(sessionId, $selectedWindowIdx ?? 0);
       if (!result || !result.sessionId) {
         throw new Error('Fork failed - no session ID returned');
       }
 
       if (forkMode === 'tab') {
-        // Create new tab with forked session
-        await App.ForkToNewTab(sessionId, name.trim(), result.sessionId);
-        // Refresh session list to get new windows
+        const newIdx = await App.ForkToNewTab(sessionId, name.trim(), result.sessionId);
         await loadSessions();
+        // Switch to the branch. It was created and then left for the user to
+        // find, which is half a feature.
+        selectWindow(newIdx);
+        close();
+        dispatch('forked', { sessionId, windowIdx: newIdx, name: name.trim() });
       } else {
-        // Create entirely new session with forked Claude session
         const newSession = await App.ForkToNewSession(sessionId, name.trim(), result.sessionId);
-        if (newSession) {
-          // Refresh and select the new session
-          await loadSessions();
-          dispatch('forked', { sessionId: newSession.id, name: name.trim(), isNewSession: true });
+        if (!newSession) {
+          // Closing silently here would look like it had worked.
+          throw new Error('Fork failed - no session was created');
         }
+        await loadSessions();
+        close();
+        // One event per fork, and its sessionId is always this app's session
+        // id. It used to fire twice for a new session, the second time carrying
+        // the Claude conversation id under the same field name.
+        dispatch('forked', { sessionId: newSession.id, name: name.trim(), isNewSession: true });
       }
-
-      close();
-      dispatch('forked', { sessionId: result.sessionId, name: name.trim() });
     } catch (e) {
       error = String(e);
     } finally {

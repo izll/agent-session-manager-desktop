@@ -1768,13 +1768,17 @@ func (i *Instance) NewAgentWindow(name string, agent AgentType, customCmd string
 
 // ForkSession creates a fork of the current Claude session using --fork-session
 // Returns the new session ID
-func (i *Instance) ForkSession() (string, error) {
-	if i.Agent != AgentClaude {
+// ForkSession branches the conversation running in one window.
+//
+// windowIdx names the tab to branch. It used to take none and always read the
+// main window's conversation, so forking from a second Claude tab silently
+// produced a branch of something else entirely — under a name the user had
+// chosen for the tab they were looking at.
+func (i *Instance) ForkSession(windowIdx int) (string, error) {
+	agent, sessionID := i.conversationInWindow(windowIdx)
+	if agent != AgentClaude {
 		return "", fmt.Errorf("fork is only supported for Claude sessions")
 	}
-
-	// Get current session ID
-	sessionID := i.ResumeSessionID
 	if sessionID == "" {
 		return "", fmt.Errorf("no session ID to fork - session may not have started yet")
 	}
@@ -1804,11 +1808,45 @@ func (i *Instance) ForkSession() (string, error) {
 	return result.SessionID, nil
 }
 
-// NewForkedTab creates a new tab with a forked Claude session
-func (i *Instance) NewForkedTab(name string, sessionID string) error {
-	if i.Status != StatusRunning {
-		return fmt.Errorf("instance not running")
+// conversationInWindow reports which agent a window runs and which conversation
+// it is on. A tab can run a different agent from the session's main window, and
+// carries its own conversation id.
+func (i *Instance) conversationInWindow(windowIdx int) (AgentType, string) {
+	if windowIdx == i.GetMainWindowIndex() {
+		return i.Agent, i.ResumeSessionID
 	}
+	for _, fw := range i.FollowedWindows {
+		if fw.Index == windowIdx {
+			agent := fw.Agent
+			if agent == "" {
+				agent = i.Agent
+			}
+			return agent, fw.ResumeSessionID
+		}
+	}
+	// No such window: answer for the session itself rather than inventing one.
+	return i.Agent, i.ResumeSessionID
+}
+
+// NewForkedTab creates a new tab with a forked Claude session
+// NewForkedTab creates the tab and reports which window index it landed on, so
+// the caller can switch to it — a branch you have to go and find is a branch
+// you half-made.
+func (i *Instance) NewForkedTab(name string, sessionID string) (int, error) {
+	if i.Status != StatusRunning {
+		return 0, fmt.Errorf("instance not running")
+	}
+
+	// The same two guards every other Claude resume applies.
+	//
+	// A conversation held by a background agent (Ctrl+B / --bg) makes
+	// `claude --resume` refuse to start, so a fork of one produced a tab that
+	// died on launch. And an id that is not a safe shape has no business
+	// reaching a command line, however it got here.
+	if !IsSafeResumeID(sessionID) {
+		return 0, fmt.Errorf("forked session id has an unexpected shape: %q", sessionID)
+	}
+	ReleaseClaudeBackgroundAgent(sessionID)
 
 	sessionName := i.TmuxSessionName()
 
@@ -1824,17 +1862,21 @@ func (i *Instance) NewForkedTab(name string, sessionID string) error {
 	// Add resume flag with forked session ID
 	args = append(args, config.ResumeFlag, sessionID)
 
-	argv := buildAgentArgv(config.Command, args, "")
+	// Carry the session's extra arguments, as every other way of starting a
+	// Claude tab does. A fork is the same conversation with the same setup, so
+	// dropping them here gave the branch a differently-configured agent —
+	// ForkToNewSession passes them, and this did not.
+	argv := buildAgentArgv(config.Command, args, i.ExtraArgs)
 
 	// Create new window with forked agent (argv form, no shell layer).
 	output, err := newTmuxWindowCommand(sessionName, i.Path, name, false, argv).Output()
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	newIdx, err := parseTmuxWindowIndex(output)
 	if err != nil {
-		return fmt.Errorf("invalid forked window index: %w", err)
+		return 0, fmt.Errorf("invalid forked window index: %w", err)
 	}
 
 	// Add to followed windows with fork info
@@ -1854,7 +1896,7 @@ func (i *Instance) NewForkedTab(name string, sessionID string) error {
 	TmuxCommand("set-option", "-t", target, "remain-on-exit", "on").Run()
 	TmuxCommand("set-option", "-t", target, "automatic-rename", "off").Run()
 
-	return nil
+	return newIdx, nil
 }
 
 func (i *Instance) IsAlive() bool {

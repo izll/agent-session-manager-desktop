@@ -1036,5 +1036,7 @@
   "quit.inProgress": "Cerrando…",
   "quit.inProgressDetail": "Guardando el estado de cada sesión y desconectando limpiamente. Tus agentes siguen funcionando.",
   "tasks.sortCompletedDesc": "Orden: completadas, más recientes",
-  "tasks.sortCompletedAsc": "Orden: completadas, más antiguas"
+  "tasks.sortCompletedAsc": "Orden: completadas, más antiguas",
+  "settings.showApiKey": "Mostrar la clave",
+  "settings.hideApiKey": "Ocultar la clave"
 }

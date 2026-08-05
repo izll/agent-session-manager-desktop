@@ -1036,5 +1036,7 @@
   "quit.inProgress": "Ukončování…",
   "quit.inProgressDetail": "Ukládá se stav každé relace a probíhá čisté odpojení. Vaši agenti běží dál.",
   "tasks.sortCompletedDesc": "Řadit: hotové, nejnovější",
-  "tasks.sortCompletedAsc": "Řadit: hotové, nejstarší"
+  "tasks.sortCompletedAsc": "Řadit: hotové, nejstarší",
+  "settings.showApiKey": "Zobrazit klíč",
+  "settings.hideApiKey": "Skrýt klíč"
 }

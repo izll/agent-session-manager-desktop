@@ -1036,5 +1036,7 @@
   "quit.inProgress": "종료하는 중…",
   "quit.inProgressDetail": "각 세션의 진행 위치를 저장하고 안전하게 분리하는 중입니다. 에이전트는 계속 실행됩니다.",
   "tasks.sortCompletedDesc": "정렬: 완료, 최신순",
-  "tasks.sortCompletedAsc": "정렬: 완료, 오래된순"
+  "tasks.sortCompletedAsc": "정렬: 완료, 오래된순",
+  "settings.showApiKey": "키 표시",
+  "settings.hideApiKey": "키 숨기기"
 }

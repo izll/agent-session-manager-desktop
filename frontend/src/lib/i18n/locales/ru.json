@@ -1036,5 +1036,7 @@
   "quit.inProgress": "Завершение работы…",
   "quit.inProgressDetail": "Сохраняем состояние каждой сессии и корректно отключаемся. Ваши агенты продолжают работать.",
   "tasks.sortCompletedDesc": "Сортировка: завершённые, новые",
-  "tasks.sortCompletedAsc": "Сортировка: завершённые, старые"
+  "tasks.sortCompletedAsc": "Сортировка: завершённые, старые",
+  "settings.showApiKey": "Показать ключ",
+  "settings.hideApiKey": "Скрыть ключ"
 }

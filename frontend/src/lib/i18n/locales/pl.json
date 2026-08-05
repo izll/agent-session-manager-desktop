@@ -1036,5 +1036,7 @@
   "quit.inProgress": "Zamykanie…",
   "quit.inProgressDetail": "Zapisujemy stan każdej sesji i odłączamy się poprawnie. Twoje agenty działają dalej.",
   "tasks.sortCompletedDesc": "Sortuj: ukończone, najnowsze",
-  "tasks.sortCompletedAsc": "Sortuj: ukończone, najstarsze"
+  "tasks.sortCompletedAsc": "Sortuj: ukończone, najstarsze",
+  "settings.showApiKey": "Pokaż klucz",
+  "settings.hideApiKey": "Ukryj klucz"
 }

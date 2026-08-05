@@ -425,7 +425,12 @@
 
   $: currentSession = $sessions.find(s => s.id === $selectedSessionId);
 
-  $: canFork = currentSession?.agent === 'claude' && currentSession?.status === 'running';
+  // The TAB's agent, not the session's — a Claude session can hold a terminal
+  // tab, and a Codex session can hold a Claude one. Testing the session offered
+  // Fork on tabs with no conversation at all, and withheld it from the tabs it
+  // was made for. currentTabAgent above already resolves this for the status
+  // bars; canFork simply never used it.
+  $: canFork = currentTabAgent === 'claude' && currentSession?.status === 'running';
   $: agentConfig = $agents.find(a => a.type === currentSession?.agent);
   $: canAutoYes = agentConfig?.supportsAutoYes && currentSession?.status === 'running';
 

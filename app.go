@@ -1316,17 +1316,33 @@ type ForkResult struct {
 }
 
 // ForkSession forks a Claude session
-func (a *App) ForkSession(id string) (*ForkResult, error) {
+// ForkSession branches the conversation in one window into a new one.
+//
+// windowIdx names the tab being forked. Without it this read the session's main
+// window every time, so forking from a second Claude tab branched a different
+// conversation than the one on screen.
+func (a *App) ForkSession(id string, windowIdx int) (*ForkResult, error) {
 	inst, err := a.storage.GetInstance(id)
 	if err != nil {
 		return nil, err
 	}
 
-	if inst.Agent != session.AgentClaude {
-		return nil, fmt.Errorf("error.forkClaudeOnly")
+	// Ask the running process which conversation it is on before branching it.
+	//
+	// The stored id is what the tab was started with, and /resume inside Claude
+	// Code moves the same process to another conversation without restarting
+	// it. The sidebar poll notices within a couple of seconds, but a fork asked
+	// for in that window branched the conversation the user had just left
+	// rather than the one on screen.
+	if live := getClaudeSessionIDFromTmuxWindow(inst.TmuxSessionName(), windowIdx); live != "" {
+		if a.recordLiveConversation(inst, windowIdx, live) {
+			if err := a.storage.UpdateInstance(inst); err != nil {
+				log.Printf("[Fork] could not store the refreshed id for %s: %v", inst.ID, err)
+			}
+		}
 	}
 
-	sessionID, err := inst.ForkSession()
+	sessionID, err := inst.ForkSession(windowIdx)
 	if err != nil {
 		return nil, err
 	}
@@ -1334,16 +1350,52 @@ func (a *App) ForkSession(id string) (*ForkResult, error) {
 	return &ForkResult{SessionID: sessionID}, nil
 }
 
+// recordLiveConversation stores a freshly detected conversation id on the right
+// window, reporting whether anything changed. The tab it was forked from stops
+// pointing at a stale conversation too — the poll would get there eventually,
+// but the fork already knows.
+func (a *App) recordLiveConversation(inst *session.Instance, windowIdx int, live string) bool {
+	if windowIdx == inst.GetMainWindowIndex() {
+		if inst.ResumeSessionID == live {
+			return false
+		}
+		log.Printf("[Fork] session=%s branching the live conversation %s (stored %q)",
+			inst.ID, live, inst.ResumeSessionID)
+		inst.ResumeSessionID = live
+		return true
+	}
+	for idx := range inst.FollowedWindows {
+		fw := &inst.FollowedWindows[idx]
+		if fw.Index != windowIdx {
+			continue
+		}
+		if fw.ResumeSessionID == live {
+			return false
+		}
+		log.Printf("[Fork] session=%s tab %d branching the live conversation %s (stored %q)",
+			inst.ID, windowIdx, live, fw.ResumeSessionID)
+		fw.ResumeSessionID = live
+		return true
+	}
+	return false
+}
+
 // ForkToNewTab forks to a new tab
-func (a *App) ForkToNewTab(id, name, sessionID string) error {
+// ForkToNewTab creates the forked tab and returns its window index, so the
+// frontend can switch to it immediately — the same as CreateTab.
+func (a *App) ForkToNewTab(id, name, sessionID string) (int, error) {
 	inst, err := a.storage.GetInstance(id)
 	if err != nil {
-		return err
+		return 0, err
 	}
-	if err := inst.NewForkedTab(name, sessionID); err != nil {
-		return err
+	newIdx, err := inst.NewForkedTab(name, sessionID)
+	if err != nil {
+		return 0, err
 	}
-	return a.storage.UpdateInstance(inst)
+	if err := a.storage.UpdateInstance(inst); err != nil {
+		return 0, err
+	}
+	return newIdx, nil
 }
 
 // ForkToNewSession creates a new session from forked Claude conversation
@@ -1367,15 +1419,34 @@ func (a *App) ForkToNewSession(id, name, sessionID string) (*SessionInfo, error)
 	newInst.Notes = fmt.Sprintf("Forked from: %s", origInst.Name)
 	newInst.ResumeSessionID = sessionID
 
+	// Refuse before storing anything, as CreateSession does. A fork that cannot
+	// start otherwise left a session in the sidebar that had never run and never
+	// could — the dialog closed as though it had worked, and the only way to
+	// find out was to press Start and watch it fail again.
+	if err := session.CheckMultiplexer(); err != nil {
+		return nil, err
+	}
+	if err := session.CheckAgentCommand(newInst); err != nil {
+		return nil, err
+	}
+
 	// Save new session
 	if err := a.storage.AddInstance(newInst); err != nil {
 		return nil, err
 	}
 
-	// Start the forked session with resume
+	// Start the forked session with resume.
+	//
+	// A failure here removes the session again rather than leaving a dead entry
+	// behind: it was created for this branch and has nothing else in it, so
+	// there is nothing to keep. The error goes to the caller, which is what puts
+	// it in front of the user instead of only in the log.
 	if err := newInst.StartWithResume(sessionID); err != nil {
-		// Don't fail if start fails, session is still created
 		runtime.LogWarning(a.ctx, fmt.Sprintf("Failed to auto-start forked session: %v", err))
+		if delErr := a.storage.RemoveInstance(newInst.ID); delErr != nil {
+			runtime.LogWarning(a.ctx, fmt.Sprintf("Failed to clean up the forked session: %v", delErr))
+		}
+		return nil, err
 	}
 	a.storage.UpdateInstance(newInst)
 

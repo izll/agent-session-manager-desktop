@@ -1036,5 +1036,7 @@
   "quit.inProgress": "正在关闭…",
   "quit.inProgressDetail": "正在保存各会话的进度并安全断开。你的智能体会继续运行。",
   "tasks.sortCompletedDesc": "排序：已完成，最新优先",
-  "tasks.sortCompletedAsc": "排序：已完成，最早优先"
+  "tasks.sortCompletedAsc": "排序：已完成，最早优先",
+  "settings.showApiKey": "显示密钥",
+  "settings.hideApiKey": "隐藏密钥"
 }

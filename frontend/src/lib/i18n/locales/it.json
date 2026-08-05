@@ -1036,5 +1036,7 @@
   "quit.inProgress": "Chiusura in corso…",
   "quit.inProgressDetail": "Salvataggio dello stato di ogni sessione e disconnessione pulita. I tuoi agent restano in esecuzione.",
   "tasks.sortCompletedDesc": "Ordina: completate, più recenti",
-  "tasks.sortCompletedAsc": "Ordina: completate, meno recenti"
+  "tasks.sortCompletedAsc": "Ordina: completate, meno recenti",
+  "settings.showApiKey": "Mostra la chiave",
+  "settings.hideApiKey": "Nascondi la chiave"
 }

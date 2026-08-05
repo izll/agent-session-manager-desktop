@@ -1036,5 +1036,7 @@
   "quit.inProgress": "Closing down…",
   "quit.inProgressDetail": "Saving where each session left off and detaching cleanly. Your agents keep running.",
   "tasks.sortCompletedDesc": "Sort: Completed, newest",
-  "tasks.sortCompletedAsc": "Sort: Completed, oldest"
+  "tasks.sortCompletedAsc": "Sort: Completed, oldest",
+  "settings.showApiKey": "Show the key",
+  "settings.hideApiKey": "Hide the key"
 }

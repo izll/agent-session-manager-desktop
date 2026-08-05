@@ -1036,5 +1036,7 @@
   "quit.inProgress": "Kilépés folyamatban…",
   "quit.inProgressDetail": "Elmentjük, hol tart minden munkamenet, és rendben lecsatlakozunk. Az agentek tovább futnak.",
   "tasks.sortCompletedDesc": "Rendezés: elvégzett, legújabb elöl",
-  "tasks.sortCompletedAsc": "Rendezés: elvégzett, legrégebbi elöl"
+  "tasks.sortCompletedAsc": "Rendezés: elvégzett, legrégebbi elöl",
+  "settings.showApiKey": "Kulcs megjelenítése",
+  "settings.hideApiKey": "Kulcs elrejtése"
 }

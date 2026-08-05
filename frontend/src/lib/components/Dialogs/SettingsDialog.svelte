@@ -169,6 +169,15 @@
 
   // Tab state
   let activeTab: 'general' | 'terminal' | 'shortcuts' | 'agents' | 'dictation' | 'maintenance' = 'general';
+  /**
+   * Whether the API key is currently readable.
+   *
+   * Component state, so it resets on its own: the dialog is wrapped in
+   * {#if show}, which tears it down on close, and the next visit starts
+   * covered. A key left revealed by a previous visit is not something to
+   * inherit.
+   */
+  let showApiKey = false;
 
   // Activity-detection patterns: which version is in force, and the result of a
   // manual check. Shown because "already up to date" and a check that quietly
@@ -1039,13 +1048,39 @@
                       <span class="setting-label">{$t('settings.googleApiKey')}</span>
                       <span class="setting-desc">{$t('settings.googleApiKeyDesc')}</span>
                     </span>
-                    <input
-                      type="password"
-                      class="setting-input"
-                      value={dictationSettings.googleApiKey}
-                      placeholder={$t('settings.googleApiKeyPlaceholder')}
-                      on:change={(e) => updateDictation('googleApiKey', e.currentTarget.value)}
-                    />
+                    <!-- Revealable, because a key is pasted in and typos are
+                         invisible behind dots: the usual failure is a stray
+                         character or a truncated paste, and the only way to see
+                         one is to look. Hidden by default, and never persisted
+                         as shown — the next visit starts covered. -->
+                    <span class="key-field">
+                      <input
+                        type={showApiKey ? 'text' : 'password'}
+                        class="setting-input"
+                        value={dictationSettings.googleApiKey}
+                        placeholder={$t('settings.googleApiKeyPlaceholder')}
+                        on:change={(e) => updateDictation('googleApiKey', e.currentTarget.value)}
+                      />
+                      <button
+                        class="key-reveal"
+                        type="button"
+                        title={showApiKey ? $t('settings.hideApiKey') : $t('settings.showApiKey')}
+                        aria-label={showApiKey ? $t('settings.hideApiKey') : $t('settings.showApiKey')}
+                        on:click={() => showApiKey = !showApiKey}
+                      >
+                        {#if showApiKey}
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
+                            <line x1="1" y1="1" x2="23" y2="23"/>
+                          </svg>
+                        {:else}
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                            <circle cx="12" cy="12" r="3"/>
+                          </svg>
+                        {/if}
+                      </button>
+                    </span>
                   </div>
                 {/if}
 
@@ -1801,6 +1836,31 @@
     font-size: 13px;
     color: #a1a1aa;
   }
+
+  /* Full width, like the bare input it replaced: .setting-input is width:100%,
+     so it sizes to its parent — and an inline-flex wrapper shrinks to its
+     contents, which took the field down with it. */
+  .key-field {
+    position: relative;
+    display: flex;
+    align-items: center;
+    width: 100%;
+  }
+  .key-field .setting-input {
+    padding-right: 34px;
+  }
+  .key-reveal {
+    position: absolute;
+    right: 6px;
+    display: flex;
+    align-items: center;
+    padding: 2px;
+    border: 0;
+    background: transparent;
+    color: #9ca3af;
+    cursor: pointer;
+  }
+  .key-reveal:hover { color: #e4e4e7; }
 
   .setting-input {
     width: 100%;

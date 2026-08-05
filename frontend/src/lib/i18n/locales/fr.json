@@ -1036,5 +1036,7 @@
   "quit.inProgress": "Fermeture en cours…",
   "quit.inProgressDetail": "Enregistrement de l'état de chaque session et détachement propre. Vos agents continuent de tourner.",
   "tasks.sortCompletedDesc": "Tri : terminées, plus récentes",
-  "tasks.sortCompletedAsc": "Tri : terminées, plus anciennes"
+  "tasks.sortCompletedAsc": "Tri : terminées, plus anciennes",
+  "settings.showApiKey": "Afficher la clé",
+  "settings.hideApiKey": "Masquer la clé"
 }

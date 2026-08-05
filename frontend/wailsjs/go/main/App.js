@@ -126,8 +126,8 @@ export function FetchOnlineSchemes(arg1) {
   return window['go']['main']['App']['FetchOnlineSchemes'](arg1);
 }
 
-export function ForkSession(arg1) {
-  return window['go']['main']['App']['ForkSession'](arg1);
+export function ForkSession(arg1, arg2) {
+  return window['go']['main']['App']['ForkSession'](arg1, arg2);
 }
 
 export function ForkToNewSession(arg1, arg2, arg3) {
