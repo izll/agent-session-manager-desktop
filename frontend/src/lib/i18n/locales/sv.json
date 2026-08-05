@@ -1007,5 +1007,9 @@
   "help.navMoveUp": "Flytta sessionen uppåt",
   "help.navMoveDown": "Flytta sessionen nedåt",
   "help.navTabNext": "Nästa flik",
-  "help.navTabPrev": "Föregående flik"
+  "help.navTabPrev": "Föregående flik",
+  "diff.above": "Diff ovanför",
+  "diff.showAbove": "Visa diffen ovanför denna vy",
+  "diff.hideAbove": "Dölj diffen ovanför",
+  "diff.dragToResize": "Dra för att ändra storlek · dubbelklick återställer"
 }

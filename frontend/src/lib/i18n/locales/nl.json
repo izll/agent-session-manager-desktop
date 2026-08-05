@@ -1007,5 +1007,9 @@
   "help.navMoveUp": "Sessie omhoog verplaatsen",
   "help.navMoveDown": "Sessie omlaag verplaatsen",
   "help.navTabNext": "Volgend tabblad",
-  "help.navTabPrev": "Vorig tabblad"
+  "help.navTabPrev": "Vorig tabblad",
+  "diff.above": "Diff boven",
+  "diff.showAbove": "Toon de diff boven deze weergave",
+  "diff.hideAbove": "Verberg de diff hierboven",
+  "diff.dragToResize": "Sleep om te vergroten · dubbelklik om te herstellen"
 }

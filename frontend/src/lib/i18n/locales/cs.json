@@ -1007,5 +1007,9 @@
   "help.navMoveUp": "Posunout relaci nahoru",
   "help.navMoveDown": "Posunout relaci dolů",
   "help.navTabNext": "Další panel",
-  "help.navTabPrev": "Předchozí panel"
+  "help.navTabPrev": "Předchozí panel",
+  "diff.above": "Diff nahoře",
+  "diff.showAbove": "Zobrazit diff nad tímto pohledem",
+  "diff.hideAbove": "Skrýt diff nahoře",
+  "diff.dragToResize": "Tažením změníte velikost · dvojklik obnoví"
 }

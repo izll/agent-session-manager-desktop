@@ -2714,6 +2714,7 @@ type SettingsInfo struct {
 	// shortcut id. Passed through untouched: the frontend owns what a binding
 	// looks like, because that is where key events are matched.
 	ShortcutOverrides map[string]any `json:"shortcutOverrides"`
+	DiffAboveHeight   int            `json:"diffAboveHeight"`
 	// Per-agent-type palette overrides ("claude" → "dracula", …) and the
 	// user-defined palette used when a theme id is "custom".
 	AgentTerminalThemes  map[string]string             `json:"agentTerminalThemes"`
@@ -2811,6 +2812,7 @@ func (a *App) GetSettings() (*SettingsInfo, error) {
 		NotifyNtfy:           settings.NotifyNtfy,
 		NtfyURL:              settings.NtfyURL,
 		ShortcutOverrides:    settings.ShortcutOverrides,
+		DiffAboveHeight:      settings.DiffAboveHeight,
 		TerminalTheme:        theme,
 		AgentDefaultTheme:    agentTheme,
 		AgentTerminalThemes:  settings.AgentTerminalThemes,
@@ -2863,6 +2865,7 @@ func (a *App) SaveSettings(settings SettingsInfo) error {
 		current.NotifyNtfy = settings.NotifyNtfy
 		current.NtfyURL = settings.NtfyURL
 		current.ShortcutOverrides = settings.ShortcutOverrides
+		current.DiffAboveHeight = settings.DiffAboveHeight
 	})
 	if err != nil {
 		return err

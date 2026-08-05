@@ -17,6 +17,9 @@ export interface Settings {
   /** Rebound keyboard shortcuts, keyed by shortcut id. Only what the user has
    *  changed — see stores/shortcuts.ts. */
   shortcutOverrides?: Record<string, unknown>;
+  /** Height in px of the diff shown above a view. Pixels, not a fraction: the
+   *  pane below is a terminal measured in whole rows. */
+  diffAboveHeight?: number;
   compactList: boolean;
   hideStatusLines: boolean;
   showAgentIcons: boolean;

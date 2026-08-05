@@ -1007,5 +1007,9 @@
   "help.navMoveUp": "Di chuyển phiên lên",
   "help.navMoveDown": "Di chuyển phiên xuống",
   "help.navTabNext": "Tab tiếp theo",
-  "help.navTabPrev": "Tab trước"
+  "help.navTabPrev": "Tab trước",
+  "diff.above": "Diff ở trên",
+  "diff.showAbove": "Hiện diff phía trên khung này",
+  "diff.hideAbove": "Ẩn diff phía trên",
+  "diff.dragToResize": "Kéo để đổi kích thước · nhấp đúp để đặt lại"
 }

@@ -1007,5 +1007,9 @@
   "help.navMoveUp": "Przesuń sesję w górę",
   "help.navMoveDown": "Przesuń sesję w dół",
   "help.navTabNext": "Następna karta",
-  "help.navTabPrev": "Poprzednia karta"
+  "help.navTabPrev": "Poprzednia karta",
+  "diff.above": "Diff u góry",
+  "diff.showAbove": "Pokaż diff nad tym widokiem",
+  "diff.hideAbove": "Ukryj diff u góry",
+  "diff.dragToResize": "Przeciągnij, aby zmienić rozmiar · dwuklik przywraca"
 }

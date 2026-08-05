@@ -141,6 +141,9 @@ type Settings struct {
 	// backend stores and returns it without interpreting it, since what counts
 	// as a valid binding is decided where the key events are.
 	ShortcutOverrides map[string]any `json:"shortcut_overrides,omitempty"`
+	// Height in pixels of the diff pane shown above a view. Zero means the
+	// built-in default, so a config written before this existed opens at it.
+	DiffAboveHeight int `json:"diff_above_height,omitempty"`
 }
 
 type StorageData struct {

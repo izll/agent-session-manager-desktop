@@ -1007,5 +1007,9 @@
   "help.navMoveUp": "Mover sessão para cima",
   "help.navMoveDown": "Mover sessão para baixo",
   "help.navTabNext": "Próxima aba",
-  "help.navTabPrev": "Aba anterior"
+  "help.navTabPrev": "Aba anterior",
+  "diff.above": "Diff acima",
+  "diff.showAbove": "Mostrar o diff acima desta visão",
+  "diff.hideAbove": "Ocultar o diff acima",
+  "diff.dragToResize": "Arraste para redimensionar · clique duplo para redefinir"
 }

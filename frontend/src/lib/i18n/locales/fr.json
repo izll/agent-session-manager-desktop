@@ -1007,5 +1007,9 @@
   "help.navMoveUp": "Déplacer la session vers le haut",
   "help.navMoveDown": "Déplacer la session vers le bas",
   "help.navTabNext": "Onglet suivant",
-  "help.navTabPrev": "Onglet précédent"
+  "help.navTabPrev": "Onglet précédent",
+  "diff.above": "Diff au-dessus",
+  "diff.showAbove": "Afficher le diff au-dessus de cette vue",
+  "diff.hideAbove": "Masquer le diff au-dessus",
+  "diff.dragToResize": "Glisser pour redimensionner · double-clic pour réinitialiser"
 }

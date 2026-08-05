@@ -1007,5 +1007,9 @@
   "help.navMoveUp": "上移会话",
   "help.navMoveDown": "下移会话",
   "help.navTabNext": "下一个标签页",
-  "help.navTabPrev": "上一个标签页"
+  "help.navTabPrev": "上一个标签页",
+  "diff.above": "上方差异",
+  "diff.showAbove": "在此视图上方显示差异",
+  "diff.hideAbove": "隐藏上方差异",
+  "diff.dragToResize": "拖动调整大小 · 双击重置"
 }

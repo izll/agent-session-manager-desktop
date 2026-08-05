@@ -1007,5 +1007,9 @@
   "help.navMoveUp": "نقل الجلسة لأعلى",
   "help.navMoveDown": "نقل الجلسة لأسفل",
   "help.navTabNext": "علامة التبويب التالية",
-  "help.navTabPrev": "علامة التبويب السابقة"
+  "help.navTabPrev": "علامة التبويب السابقة",
+  "diff.above": "الفروق بالأعلى",
+  "diff.showAbove": "عرض الفروق أعلى هذا العرض",
+  "diff.hideAbove": "إخفاء الفروق بالأعلى",
+  "diff.dragToResize": "اسحب لتغيير الحجم · انقر نقرًا مزدوجًا لإعادة التعيين"
 }

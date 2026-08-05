@@ -1007,5 +1007,9 @@
   "help.navMoveUp": "Sposta la sessione in alto",
   "help.navMoveDown": "Sposta la sessione in basso",
   "help.navTabNext": "Scheda successiva",
-  "help.navTabPrev": "Scheda precedente"
+  "help.navTabPrev": "Scheda precedente",
+  "diff.above": "Diff sopra",
+  "diff.showAbove": "Mostra il diff sopra questa vista",
+  "diff.hideAbove": "Nascondi il diff sopra",
+  "diff.dragToResize": "Trascina per ridimensionare · doppio clic per reimpostare"
 }

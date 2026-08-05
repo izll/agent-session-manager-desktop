@@ -1007,5 +1007,9 @@
   "help.navMoveUp": "Mover la sesión hacia arriba",
   "help.navMoveDown": "Mover la sesión hacia abajo",
   "help.navTabNext": "Pestaña siguiente",
-  "help.navTabPrev": "Pestaña anterior"
+  "help.navTabPrev": "Pestaña anterior",
+  "diff.above": "Diff arriba",
+  "diff.showAbove": "Mostrar el diff sobre esta vista",
+  "diff.hideAbove": "Ocultar el diff de arriba",
+  "diff.dragToResize": "Arrastra para cambiar el tamaño · doble clic para restablecer"
 }

@@ -1007,5 +1007,9 @@
   "help.navMoveUp": "Munkamenet mozgatása felfelé",
   "help.navMoveDown": "Munkamenet mozgatása lefelé",
   "help.navTabNext": "Következő fül",
-  "help.navTabPrev": "Előző fül"
+  "help.navTabPrev": "Előző fül",
+  "diff.above": "Diff felül",
+  "diff.showAbove": "Diff megjelenítése a nézet fölött",
+  "diff.hideAbove": "Felső diff elrejtése",
+  "diff.dragToResize": "Húzd az átméretezéshez · dupla kattintás: alaphelyzet"
 }

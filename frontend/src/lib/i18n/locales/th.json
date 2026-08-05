@@ -1007,5 +1007,9 @@
   "help.navMoveUp": "เลื่อนเซสชันขึ้น",
   "help.navMoveDown": "เลื่อนเซสชันลง",
   "help.navTabNext": "แท็บถัดไป",
-  "help.navTabPrev": "แท็บก่อนหน้า"
+  "help.navTabPrev": "แท็บก่อนหน้า",
+  "diff.above": "diff ด้านบน",
+  "diff.showAbove": "แสดง diff เหนือมุมมองนี้",
+  "diff.hideAbove": "ซ่อน diff ด้านบน",
+  "diff.dragToResize": "ลากเพื่อปรับขนาด · ดับเบิลคลิกเพื่อรีเซ็ต"
 }

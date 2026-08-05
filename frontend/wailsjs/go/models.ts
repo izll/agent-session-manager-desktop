@@ -1126,6 +1126,7 @@ export namespace main {
 	    terminalTheme: string;
 	    agentDefaultTheme: string;
 	    shortcutOverrides: Record<string, any>;
+	    diffAboveHeight: number;
 	    agentTerminalThemes: Record<string, string>;
 	    customTerminalThemes: session.CustomTerminalTheme[];
 	
@@ -1168,6 +1169,7 @@ export namespace main {
 	        this.terminalTheme = source["terminalTheme"];
 	        this.agentDefaultTheme = source["agentDefaultTheme"];
 	        this.shortcutOverrides = source["shortcutOverrides"];
+	        this.diffAboveHeight = source["diffAboveHeight"];
 	        this.agentTerminalThemes = source["agentTerminalThemes"];
 	        this.customTerminalThemes = this.convertValues(source["customTerminalThemes"], session.CustomTerminalTheme);
 	    }

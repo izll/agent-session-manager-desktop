@@ -1007,5 +1007,9 @@
   "help.navMoveUp": "Sitzung nach oben verschieben",
   "help.navMoveDown": "Sitzung nach unten verschieben",
   "help.navTabNext": "Nächster Tab",
-  "help.navTabPrev": "Vorheriger Tab"
+  "help.navTabPrev": "Vorheriger Tab",
+  "diff.above": "Diff oben",
+  "diff.showAbove": "Diff über dieser Ansicht anzeigen",
+  "diff.hideAbove": "Diff oben ausblenden",
+  "diff.dragToResize": "Ziehen zum Ändern · Doppelklick setzt zurück"
 }

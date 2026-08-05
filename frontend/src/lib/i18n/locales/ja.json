@@ -1007,5 +1007,9 @@
   "help.navMoveUp": "セッションを上へ移動",
   "help.navMoveDown": "セッションを下へ移動",
   "help.navTabNext": "次のタブ",
-  "help.navTabPrev": "前のタブ"
+  "help.navTabPrev": "前のタブ",
+  "diff.above": "上に差分",
+  "diff.showAbove": "このビューの上に差分を表示",
+  "diff.hideAbove": "上の差分を隠す",
+  "diff.dragToResize": "ドラッグでサイズ変更・ダブルクリックでリセット"
 }

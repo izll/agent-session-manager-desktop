@@ -1007,5 +1007,9 @@
   "help.navMoveUp": "Oturumu yukarı taşı",
   "help.navMoveDown": "Oturumu aşağı taşı",
   "help.navTabNext": "Sonraki sekme",
-  "help.navTabPrev": "Önceki sekme"
+  "help.navTabPrev": "Önceki sekme",
+  "diff.above": "Üstte diff",
+  "diff.showAbove": "Diff'i bu görünümün üstünde göster",
+  "diff.hideAbove": "Üstteki diff'i gizle",
+  "diff.dragToResize": "Boyutlandırmak için sürükleyin · sıfırlamak için çift tıklayın"
 }

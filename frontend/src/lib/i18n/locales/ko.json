@@ -1007,5 +1007,9 @@
   "help.navMoveUp": "세션을 위로 이동",
   "help.navMoveDown": "세션을 아래로 이동",
   "help.navTabNext": "다음 탭",
-  "help.navTabPrev": "이전 탭"
+  "help.navTabPrev": "이전 탭",
+  "diff.above": "위에 차이",
+  "diff.showAbove": "이 보기 위에 차이 표시",
+  "diff.hideAbove": "위쪽 차이 숨기기",
+  "diff.dragToResize": "드래그하여 크기 조절 · 더블클릭으로 초기화"
 }

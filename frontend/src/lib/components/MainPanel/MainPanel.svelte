@@ -134,6 +134,14 @@
   // opening it on one session left every other session showing a diff too.
   const tabDiffMemory = new Set<string>();
 
+  // The diff shown ABOVE the current view, rather than instead of it, so a
+  // change can be read beside the agent that made it.
+  //
+  // Per tab, like fullDiffActive: opening it on one session left every other
+  // session showing a diff too when this was a single flag for the panel.
+  const tabDiffAbove = new Set<string>();
+  let diffAbove = false;
+
   // Restore on tab/session change.
   //
   // This block deliberately does NOT read activeView. Doing so would make
@@ -150,12 +158,15 @@
         tabViewMemory.set(lastViewKey, lastView);
         if (fullDiffActive) tabDiffMemory.add(lastViewKey);
         else tabDiffMemory.delete(lastViewKey);
+        if (diffAbove) tabDiffAbove.add(lastViewKey);
+        else tabDiffAbove.delete(lastViewKey);
       }
       lastViewKey = key;
       // Restore the diff only for a tab that was left on it, and only where
       // there is a diff to show — a session outside a repository would open an
       // empty panel with no way to tell why.
       fullDiffActive = tabDiffMemory.has(key) && !!currentSession?.isGitRepo;
+      diffAbove = tabDiffAbove.has(key) && !!currentSession?.isGitRepo;
       let restored = tabViewMemory.get(key) || 'terminal';
       // A tab remembered on Tasks from before the feature was switched off must
       // not be restored onto a view that no longer has a way out. Corrected
@@ -184,6 +195,61 @@
   // overwrote the view tabViewMemory had just restored — the reason a
   // remembered view never survived a tab switch. Hiding the diff simply
   // reveals whichever view the tab was already on.
+  // Height in pixels rather than a fraction. The pane below is a terminal
+  // measured in whole rows, and a fraction of a resized window lands between
+  // two of them — the diff creeps a pixel at a time and the terminal reflows
+  // for it. A pixel height stays put when the window changes.
+  const DIFF_ABOVE_DEFAULT = 300;
+  const DIFF_ABOVE_MIN = 120;
+  // Leaves room for a usable terminal underneath: without a floor the splitter
+  // can be dragged until the pane below is a sliver that cannot be dragged back.
+  const BELOW_MIN = 140;
+  let diffAboveHeight = DIFF_ABOVE_DEFAULT;
+  // Adopt the saved height once, when settings arrive. Not a running binding:
+  // that would fight the drag, which writes the setting on release.
+  let heightRestored = false;
+  $: if (!heightRestored && $settings.diffAboveHeight) {
+    heightRestored = true;
+    diffAboveHeight = $settings.diffAboveHeight;
+  }
+  let draggingSplitter = false;
+
+  function toggleDiffAbove() {
+    if (!currentSession?.isGitRepo) return;
+    diffAbove = !diffAbove;
+    if (!lastViewKey) return;
+    if (diffAbove) tabDiffAbove.add(lastViewKey);
+    else tabDiffAbove.delete(lastViewKey);
+  }
+
+  function startSplitterDrag(event: MouseEvent) {
+    event.preventDefault();
+    draggingSplitter = true;
+    const stackTop = (event.currentTarget as HTMLElement)
+      .parentElement?.getBoundingClientRect().top ?? 0;
+    const stackHeight = (event.currentTarget as HTMLElement)
+      .parentElement?.getBoundingClientRect().height ?? 0;
+
+    const onMove = (move: MouseEvent) => {
+      const wanted = move.clientY - stackTop;
+      const ceiling = Math.max(DIFF_ABOVE_MIN, stackHeight - BELOW_MIN);
+      diffAboveHeight = Math.min(Math.max(wanted, DIFF_ABOVE_MIN), ceiling);
+    };
+    const onUp = () => {
+      draggingSplitter = false;
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      void saveSettings({ diffAboveHeight });
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }
+
+  function resetDiffHeight() {
+    diffAboveHeight = DIFF_ABOVE_DEFAULT;
+    void saveSettings({ diffAboveHeight });
+  }
+
   function closeFullDiff() {
     fullDiffActive = false;
     if (lastViewKey) tabDiffMemory.delete(lastViewKey);
@@ -529,6 +595,23 @@
           </button>
         </div>
         <div class="view-tabs-right">
+          <!-- Shows the diff above the current view instead of replacing it.
+               Only where there is a diff to show; outside a repository the
+               button would open an empty pane with no way to tell why. -->
+          {#if currentSession?.isGitRepo}
+            <button
+              class="split-btn"
+              class:active={diffAbove}
+              on:click={toggleDiffAbove}
+              title={diffAbove ? $t('diff.hideAbove') : $t('diff.showAbove')}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="4" width="18" height="16" rx="2"/>
+                <line x1="3" y1="12" x2="21" y2="12"/>
+              </svg>
+              {$t('diff.above')}
+            </button>
+          {/if}
           <button
             class="split-btn"
             class:active={splitEnabled}
@@ -596,6 +679,25 @@
       </div>
 
       <!-- Content Area - Keep components mounted, use CSS to show/hide -->
+      <div class="content-stack" class:with-diff={diffAbove}>
+        {#if diffAbove}
+          <!-- The diff sits above whichever view is open, not only the
+               terminal: reviewing a change while reading the file it came
+               from is as useful as reviewing it beside the agent. -->
+          <div class="diff-above" style="height: {diffAboveHeight}px">
+            <Diff active={visible} initialMode="full" />
+          </div>
+          <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
+          <div
+            class="diff-splitter"
+            class:dragging={draggingSplitter}
+            role="separator"
+            aria-orientation="horizontal"
+            title={$t('diff.dragToResize')}
+            on:mousedown={startSplitterDrag}
+            on:dblclick={resetDiffHeight}
+          ></div>
+        {/if}
       <div class="flex-1 overflow-hidden content-area">
         <div class="view-panel" class:active={activeView === 'terminal'}>
           <div class="terminal-layout" class:split={splitEnabled}>
@@ -659,6 +761,7 @@
         <div class="view-panel" class:active={activeView === 'browser'}>
           <FileBrowser active={visible && activeView === 'browser'} on:close={() => selectView('terminal')} />
         </div>
+      </div>
       </div>
     {/if}
 
@@ -840,6 +943,34 @@
     cursor: not-allowed;
   }
 
+  /* Column, so the diff and the view below it share the height rather than
+     overlapping. Without with-diff it is a plain wrapper and the view keeps
+     the whole area, exactly as before. */
+  .content-stack {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .diff-above {
+    /* flex-shrink so a small window cannot push the pane below off-screen;
+       the inline height is the wish, this is the limit. */
+    flex-shrink: 1;
+    min-height: 0;
+    overflow: hidden;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  }
+  .diff-splitter {
+    flex-shrink: 0;
+    height: 6px;
+    cursor: row-resize;
+    background: rgba(255, 255, 255, 0.06);
+  }
+  .diff-splitter:hover,
+  .diff-splitter.dragging {
+    background: rgba(var(--accent-rgb), 0.5);
+  }
   .content-area {
     background: rgba(0, 0, 0, 0.1);
     position: relative;
