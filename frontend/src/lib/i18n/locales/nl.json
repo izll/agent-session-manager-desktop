@@ -615,8 +615,8 @@
   "settings.notifications": "Meldingen",
   "settings.experimental": "Experimenteel",
   "settings.experimentalBadge": "Experimenteel",
-  "settings.taskMaster": "Task Master-paneel",
-  "settings.taskMasterDesc": "Voegt een Taken-weergave toe voor het beheren van de takenlijst van het project. Installeert het pakket task-master-ai via npx bij het eerste gebruik.",
+  "settings.taskMaster": "Task Master-integratie",
+  "settings.taskMasterDesc": "De Takenweergave werkt hier zonder. Ingeschakeld komen de AI-acties erbij — een PRD verwerken, een taak opsplitsen, complexiteit inschatten — en wordt task-master-ai bij het eerste gebruik via npx geïnstalleerd.",
   "settings.notifyOnWaiting": "Melden wanneer een agent wacht",
   "settings.notifyOnWaitingDesc": "Een melding sturen wanneer een sessie op jouw invoer gaat wachten",
   "settings.notifyDesktop": "Bureaubladmelding",
@@ -1021,5 +1021,15 @@
   "diff.nextChangeHint": "Volgende wijziging · loopt door naar het volgende bestand",
   "diff.prevChangeHint": "Vorige wijziging · gaat terug naar het vorige bestand",
   "diff.nextGoesTo": "Volgende wijziging · gaat naar {file}",
-  "diff.prevGoesTo": "Vorige wijziging · gaat terug naar {file}"
+  "diff.prevGoesTo": "Vorige wijziging · gaat terug naar {file}",
+  "tasks.statusAll": "Alle statussen",
+  "tasks.statusPending": "Openstaand",
+  "tasks.statusInProgress": "Bezig",
+  "tasks.statusDone": "Klaar",
+  "tasks.statusBlocked": "Geblokkeerd",
+  "tasks.statusDeferred": "Uitgesteld",
+  "tasks.priorityLow": "Laag",
+  "tasks.priorityMedium": "Gemiddeld",
+  "tasks.priorityHigh": "Hoog",
+  "tasks.priorityCritical": "Kritiek"
 }

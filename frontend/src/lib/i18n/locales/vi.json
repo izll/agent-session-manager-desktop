@@ -615,8 +615,8 @@
   "settings.notifications": "Thông báo",
   "settings.experimental": "Thử nghiệm",
   "settings.experimentalBadge": "Thử nghiệm",
-  "settings.taskMaster": "Bảng Task Master",
-  "settings.taskMasterDesc": "Thêm chế độ xem Công việc để quản lý danh sách công việc của dự án. Cài gói task-master-ai qua npx trong lần dùng đầu tiên.",
+  "settings.taskMaster": "Tích hợp Task Master",
+  "settings.taskMasterDesc": "Khung Công việc vẫn dùng được khi tắt. Bật lên sẽ thêm các thao tác dùng AI — phân tích PRD, tách nhỏ công việc, đánh giá độ phức tạp — và cài task-master-ai qua npx trong lần dùng đầu tiên.",
   "settings.notifyOnWaiting": "Thông báo khi agent đang chờ",
   "settings.notifyOnWaitingDesc": "Gửi thông báo khi một phiên bắt đầu chờ bạn nhập liệu",
   "settings.notifyDesktop": "Thông báo trên máy tính",
@@ -1021,5 +1021,15 @@
   "diff.nextChangeHint": "Thay đổi tiếp theo · sang tệp kế tiếp",
   "diff.prevChangeHint": "Thay đổi trước · quay lại tệp trước",
   "diff.nextGoesTo": "Thay đổi tiếp theo · sang {file}",
-  "diff.prevGoesTo": "Thay đổi trước · quay lại {file}"
+  "diff.prevGoesTo": "Thay đổi trước · quay lại {file}",
+  "tasks.statusAll": "Mọi trạng thái",
+  "tasks.statusPending": "Chờ xử lý",
+  "tasks.statusInProgress": "Đang làm",
+  "tasks.statusDone": "Xong",
+  "tasks.statusBlocked": "Bị chặn",
+  "tasks.statusDeferred": "Hoãn lại",
+  "tasks.priorityLow": "Thấp",
+  "tasks.priorityMedium": "Trung bình",
+  "tasks.priorityHigh": "Cao",
+  "tasks.priorityCritical": "Khẩn cấp"
 }

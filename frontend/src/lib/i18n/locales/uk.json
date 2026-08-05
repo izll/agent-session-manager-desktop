@@ -615,8 +615,8 @@
   "settings.notifications": "Сповіщення",
   "settings.experimental": "Експериментальні",
   "settings.experimentalBadge": "Експерим.",
-  "settings.taskMaster": "Панель Task Master",
-  "settings.taskMasterDesc": "Додає подання «Завдання» для керування списком завдань проєкту. Під час першого використання встановлює пакунок task-master-ai через npx.",
+  "settings.taskMaster": "Інтеграція з Task Master",
+  "settings.taskMasterDesc": "Вигляд «Завдання» працює й без цього. Увімкнення додає дії з ШІ — розбір PRD, поділ завдання, оцінка складності — і за першого використання встановлює task-master-ai через npx.",
   "settings.notifyOnWaiting": "Сповіщати, коли агент очікує",
   "settings.notifyOnWaitingDesc": "Надсилати сповіщення, коли сеанс починає чекати на ваше введення",
   "settings.notifyDesktop": "Сповіщення на робочому столі",
@@ -1021,5 +1021,15 @@
   "diff.nextChangeHint": "Наступна зміна · переходить до наступного файлу",
   "diff.prevChangeHint": "Попередня зміна · повертається до попереднього файлу",
   "diff.nextGoesTo": "Наступна зміна · перейде до {file}",
-  "diff.prevGoesTo": "Попередня зміна · повернеться до {file}"
+  "diff.prevGoesTo": "Попередня зміна · повернеться до {file}",
+  "tasks.statusAll": "Усі статуси",
+  "tasks.statusPending": "Очікує",
+  "tasks.statusInProgress": "У роботі",
+  "tasks.statusDone": "Готово",
+  "tasks.statusBlocked": "Заблоковано",
+  "tasks.statusDeferred": "Відкладено",
+  "tasks.priorityLow": "Низький",
+  "tasks.priorityMedium": "Середній",
+  "tasks.priorityHigh": "Високий",
+  "tasks.priorityCritical": "Критичний"
 }

@@ -615,8 +615,8 @@
   "settings.notifications": "通知",
   "settings.experimental": "実験的機能",
   "settings.experimentalBadge": "実験的",
-  "settings.taskMaster": "Task Master パネル",
-  "settings.taskMasterDesc": "プロジェクトのタスク一覧を管理するタスクビューを追加します。初回使用時に npx で task-master-ai パッケージをインストールします。",
+  "settings.taskMaster": "Task Master 連携",
+  "settings.taskMasterDesc": "タスクビューはこれなしでも動作します。有効にすると AI による操作（PRD の解析、タスクの分割、複雑度の評価）が加わり、初回使用時に task-master-ai を npx で導入します。",
   "settings.notifyOnWaiting": "エージェントの待機時に通知",
   "settings.notifyOnWaitingDesc": "セッションが入力待ちになったら通知を出します",
   "settings.notifyDesktop": "デスクトップ通知",
@@ -1021,5 +1021,15 @@
   "diff.nextChangeHint": "次の変更・末尾で次のファイルへ",
   "diff.prevChangeHint": "前の変更・先頭で前のファイルへ",
   "diff.nextGoesTo": "次の変更・{file} へ移動",
-  "diff.prevGoesTo": "前の変更・{file} へ戻る"
+  "diff.prevGoesTo": "前の変更・{file} へ戻る",
+  "tasks.statusAll": "すべての状態",
+  "tasks.statusPending": "未着手",
+  "tasks.statusInProgress": "進行中",
+  "tasks.statusDone": "完了",
+  "tasks.statusBlocked": "ブロック中",
+  "tasks.statusDeferred": "保留",
+  "tasks.priorityLow": "低",
+  "tasks.priorityMedium": "中",
+  "tasks.priorityHigh": "高",
+  "tasks.priorityCritical": "最優先"
 }

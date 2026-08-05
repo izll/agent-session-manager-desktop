@@ -615,8 +615,8 @@
   "settings.notifications": "通知",
   "settings.experimental": "实验性功能",
   "settings.experimentalBadge": "实验性",
-  "settings.taskMaster": "Task Master 面板",
-  "settings.taskMasterDesc": "添加一个用于管理项目任务列表的任务视图。首次使用时会通过 npx 安装 task-master-ai 软件包。",
+  "settings.taskMaster": "Task Master 集成",
+  "settings.taskMasterDesc": "任务视图无需此项也能使用。开启后会加入 AI 操作——解析 PRD、拆分任务、评估复杂度——并在首次使用时通过 npx 安装 task-master-ai。",
   "settings.notifyOnWaiting": "代理等待时通知",
   "settings.notifyOnWaitingDesc": "当会话开始等待你的输入时发出通知",
   "settings.notifyDesktop": "桌面通知",
@@ -1021,5 +1021,15 @@
   "diff.nextChangeHint": "下一处更改 · 到文件末尾后进入下一个文件",
   "diff.prevChangeHint": "上一处更改 · 到文件开头后进入上一个文件",
   "diff.nextGoesTo": "下一处更改 · 转到 {file}",
-  "diff.prevGoesTo": "上一处更改 · 返回 {file}"
+  "diff.prevGoesTo": "上一处更改 · 返回 {file}",
+  "tasks.statusAll": "所有状态",
+  "tasks.statusPending": "待处理",
+  "tasks.statusInProgress": "进行中",
+  "tasks.statusDone": "已完成",
+  "tasks.statusBlocked": "已阻塞",
+  "tasks.statusDeferred": "已推迟",
+  "tasks.priorityLow": "低",
+  "tasks.priorityMedium": "中",
+  "tasks.priorityHigh": "高",
+  "tasks.priorityCritical": "紧急"
 }

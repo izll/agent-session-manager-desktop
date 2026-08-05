@@ -615,8 +615,8 @@
   "settings.notifications": "Powiadomienia",
   "settings.experimental": "Eksperymentalne",
   "settings.experimentalBadge": "Eksperymentalne",
-  "settings.taskMaster": "Panel Task Master",
-  "settings.taskMasterDesc": "Dodaje widok Zadania do zarządzania listą zadań projektu. Przy pierwszym użyciu instaluje pakiet task-master-ai przez npx.",
+  "settings.taskMaster": "Integracja z Task Master",
+  "settings.taskMasterDesc": "Widok Zadań działa bez tego. Po włączeniu dochodzą akcje AI — analiza PRD, podział zadania, ocena złożoności — a przy pierwszym użyciu instaluje task-master-ai przez npx.",
   "settings.notifyOnWaiting": "Powiadom, gdy agent oczekuje",
   "settings.notifyOnWaitingDesc": "Wyślij powiadomienie, gdy sesja zacznie oczekiwać na dane wejściowe",
   "settings.notifyDesktop": "Powiadomienie systemowe",
@@ -1021,5 +1021,15 @@
   "diff.nextChangeHint": "Następna zmiana · przechodzi do kolejnego pliku",
   "diff.prevChangeHint": "Poprzednia zmiana · wraca do poprzedniego pliku",
   "diff.nextGoesTo": "Następna zmiana · przechodzi do {file}",
-  "diff.prevGoesTo": "Poprzednia zmiana · wraca do {file}"
+  "diff.prevGoesTo": "Poprzednia zmiana · wraca do {file}",
+  "tasks.statusAll": "Wszystkie stany",
+  "tasks.statusPending": "Oczekujące",
+  "tasks.statusInProgress": "W toku",
+  "tasks.statusDone": "Gotowe",
+  "tasks.statusBlocked": "Zablokowane",
+  "tasks.statusDeferred": "Odłożone",
+  "tasks.priorityLow": "Niski",
+  "tasks.priorityMedium": "Średni",
+  "tasks.priorityHigh": "Wysoki",
+  "tasks.priorityCritical": "Krytyczny"
 }

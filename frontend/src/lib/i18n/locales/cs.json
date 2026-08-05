@@ -615,8 +615,8 @@
   "settings.notifications": "Oznámení",
   "settings.experimental": "Experimentální",
   "settings.experimentalBadge": "Experimentální",
-  "settings.taskMaster": "Panel Task Master",
-  "settings.taskMasterDesc": "Přidá zobrazení Úkoly pro správu seznamu úkolů projektu. Při prvním použití nainstaluje balíček task-master-ai pomocí npx.",
+  "settings.taskMaster": "Integrace Task Master",
+  "settings.taskMasterDesc": "Zobrazení Úkoly funguje i bez toho. Po zapnutí přibudou akce s AI — zpracování PRD, rozdělení úkolu, hodnocení složitosti — a při prvním použití se přes npx nainstaluje task-master-ai.",
   "settings.notifyOnWaiting": "Upozornit, když agent čeká",
   "settings.notifyOnWaitingDesc": "Odeslat oznámení, když relace začne čekat na váš vstup",
   "settings.notifyDesktop": "Oznámení na ploše",
@@ -1021,5 +1021,15 @@
   "diff.nextChangeHint": "Další změna · pokračuje do dalšího souboru",
   "diff.prevChangeHint": "Předchozí změna · vrací se k předchozímu souboru",
   "diff.nextGoesTo": "Další změna · přejde na {file}",
-  "diff.prevGoesTo": "Předchozí změna · vrátí se na {file}"
+  "diff.prevGoesTo": "Předchozí změna · vrátí se na {file}",
+  "tasks.statusAll": "Všechny stavy",
+  "tasks.statusPending": "Čeká",
+  "tasks.statusInProgress": "Probíhá",
+  "tasks.statusDone": "Hotovo",
+  "tasks.statusBlocked": "Blokováno",
+  "tasks.statusDeferred": "Odloženo",
+  "tasks.priorityLow": "Nízká",
+  "tasks.priorityMedium": "Střední",
+  "tasks.priorityHigh": "Vysoká",
+  "tasks.priorityCritical": "Kritická"
 }

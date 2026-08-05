@@ -615,8 +615,8 @@
   "settings.notifications": "การแจ้งเตือน",
   "settings.experimental": "ฟีเจอร์ทดลอง",
   "settings.experimentalBadge": "ทดลอง",
-  "settings.taskMaster": "แผง Task Master",
-  "settings.taskMasterDesc": "เพิ่มมุมมองงานสำหรับจัดการรายการงานของโปรเจกต์ จะติดตั้งแพ็กเกจ task-master-ai ผ่าน npx เมื่อใช้งานครั้งแรก",
+  "settings.taskMaster": "การเชื่อมต่อ Task Master",
+  "settings.taskMasterDesc": "มุมมองงานใช้งานได้โดยไม่ต้องเปิดสิ่งนี้ เมื่อเปิดจะเพิ่มการทำงานด้วย AI — วิเคราะห์ PRD, แตกงานย่อย, ประเมินความซับซ้อน — และติดตั้ง task-master-ai ผ่าน npx ในการใช้ครั้งแรก",
   "settings.notifyOnWaiting": "แจ้งเตือนเมื่อ agent กำลังรอ",
   "settings.notifyOnWaitingDesc": "ส่งการแจ้งเตือนเมื่อเซสชันเริ่มรอข้อมูลจากคุณ",
   "settings.notifyDesktop": "การแจ้งเตือนบนเดสก์ท็อป",
@@ -1021,5 +1021,15 @@
   "diff.nextChangeHint": "การเปลี่ยนแปลงถัดไป · ไปต่อยังไฟล์ถัดไป",
   "diff.prevChangeHint": "การเปลี่ยนแปลงก่อนหน้า · ย้อนไปไฟล์ก่อนหน้า",
   "diff.nextGoesTo": "การเปลี่ยนแปลงถัดไป · ไปยัง {file}",
-  "diff.prevGoesTo": "การเปลี่ยนแปลงก่อนหน้า · ย้อนไปยัง {file}"
+  "diff.prevGoesTo": "การเปลี่ยนแปลงก่อนหน้า · ย้อนไปยัง {file}",
+  "tasks.statusAll": "ทุกสถานะ",
+  "tasks.statusPending": "รอดำเนินการ",
+  "tasks.statusInProgress": "กำลังดำเนินการ",
+  "tasks.statusDone": "เสร็จแล้ว",
+  "tasks.statusBlocked": "ถูกบล็อก",
+  "tasks.statusDeferred": "เลื่อนออกไป",
+  "tasks.priorityLow": "ต่ำ",
+  "tasks.priorityMedium": "ปานกลาง",
+  "tasks.priorityHigh": "สูง",
+  "tasks.priorityCritical": "วิกฤต"
 }

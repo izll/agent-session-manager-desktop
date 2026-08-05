@@ -615,8 +615,8 @@
   "settings.notifications": "Notifications",
   "settings.experimental": "Expérimental",
   "settings.experimentalBadge": "Expérimental",
-  "settings.taskMaster": "Panneau Task Master",
-  "settings.taskMasterDesc": "Ajoute une vue Tâches pour gérer la liste des tâches du projet. Installe le paquet task-master-ai via npx lors de la première utilisation.",
+  "settings.taskMaster": "Intégration Task Master",
+  "settings.taskMasterDesc": "La vue Tâches fonctionne sans cela. Activé, elle ajoute les actions assistées par IA — analyse d'un PRD, découpage d'une tâche, évaluation de la complexité — et installe task-master-ai via npx à la première utilisation.",
   "settings.notifyOnWaiting": "Notifier quand un agent attend",
   "settings.notifyOnWaitingDesc": "Envoyer une notification quand une session attend votre saisie",
   "settings.notifyDesktop": "Notification bureau",
@@ -1021,5 +1021,15 @@
   "diff.nextChangeHint": "Modification suivante · continue dans le fichier suivant",
   "diff.prevChangeHint": "Modification précédente · revient au fichier précédent",
   "diff.nextGoesTo": "Modification suivante · passe à {file}",
-  "diff.prevGoesTo": "Modification précédente · revient à {file}"
+  "diff.prevGoesTo": "Modification précédente · revient à {file}",
+  "tasks.statusAll": "Tous les statuts",
+  "tasks.statusPending": "En attente",
+  "tasks.statusInProgress": "En cours",
+  "tasks.statusDone": "Terminé",
+  "tasks.statusBlocked": "Bloqué",
+  "tasks.statusDeferred": "Reporté",
+  "tasks.priorityLow": "Basse",
+  "tasks.priorityMedium": "Moyenne",
+  "tasks.priorityHigh": "Haute",
+  "tasks.priorityCritical": "Critique"
 }

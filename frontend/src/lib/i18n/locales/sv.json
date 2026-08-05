@@ -615,8 +615,8 @@
   "settings.notifications": "Aviseringar",
   "settings.experimental": "Experimentellt",
   "settings.experimentalBadge": "Experimentell",
-  "settings.taskMaster": "Task Master-panel",
-  "settings.taskMasterDesc": "Lägger till en Uppgifter-vy för att hantera projektets uppgiftslista. Installerar paketet task-master-ai via npx första gången det används.",
+  "settings.taskMaster": "Task Master-integration",
+  "settings.taskMasterDesc": "Uppgiftsvyn fungerar utan detta. Påslaget tillkommer AI-åtgärderna — tolka en PRD, dela upp en uppgift, bedöma komplexitet — och task-master-ai installeras via npx vid första användningen.",
   "settings.notifyOnWaiting": "Avisera när en agent väntar",
   "settings.notifyOnWaitingDesc": "Skicka en avisering när en session börjar vänta på din inmatning",
   "settings.notifyDesktop": "Skrivbordsavisering",
@@ -1021,5 +1021,15 @@
   "diff.nextChangeHint": "Nästa ändring · fortsätter till nästa fil",
   "diff.prevChangeHint": "Föregående ändring · går tillbaka till förra filen",
   "diff.nextGoesTo": "Nästa ändring · går vidare till {file}",
-  "diff.prevGoesTo": "Föregående ändring · tillbaka till {file}"
+  "diff.prevGoesTo": "Föregående ändring · tillbaka till {file}",
+  "tasks.statusAll": "Alla statusar",
+  "tasks.statusPending": "Väntar",
+  "tasks.statusInProgress": "Pågår",
+  "tasks.statusDone": "Klar",
+  "tasks.statusBlocked": "Blockerad",
+  "tasks.statusDeferred": "Uppskjuten",
+  "tasks.priorityLow": "Låg",
+  "tasks.priorityMedium": "Medel",
+  "tasks.priorityHigh": "Hög",
+  "tasks.priorityCritical": "Kritisk"
 }

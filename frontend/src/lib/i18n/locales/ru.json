@@ -615,8 +615,8 @@
   "settings.notifications": "Уведомления",
   "settings.experimental": "Экспериментальные",
   "settings.experimentalBadge": "Эксперим.",
-  "settings.taskMaster": "Панель Task Master",
-  "settings.taskMasterDesc": "Добавляет представление «Задачи» для управления списком задач проекта. При первом использовании устанавливает пакет task-master-ai через npx.",
+  "settings.taskMaster": "Интеграция с Task Master",
+  "settings.taskMasterDesc": "Вид «Задачи» работает и без этого. При включении добавляются действия с ИИ — разбор PRD, разбиение задачи, оценка сложности — и при первом использовании через npx ставится task-master-ai.",
   "settings.notifyOnWaiting": "Уведомлять, когда агент ожидает",
   "settings.notifyOnWaitingDesc": "Отправлять уведомление, когда сессия начинает ждать вашего ввода",
   "settings.notifyDesktop": "Уведомление на рабочем столе",
@@ -1021,5 +1021,15 @@
   "diff.nextChangeHint": "Следующее изменение · переходит к следующему файлу",
   "diff.prevChangeHint": "Предыдущее изменение · возвращается к предыдущему файлу",
   "diff.nextGoesTo": "Следующее изменение · перейдёт к {file}",
-  "diff.prevGoesTo": "Предыдущее изменение · вернётся к {file}"
+  "diff.prevGoesTo": "Предыдущее изменение · вернётся к {file}",
+  "tasks.statusAll": "Все статусы",
+  "tasks.statusPending": "Ожидает",
+  "tasks.statusInProgress": "В работе",
+  "tasks.statusDone": "Готово",
+  "tasks.statusBlocked": "Заблокировано",
+  "tasks.statusDeferred": "Отложено",
+  "tasks.priorityLow": "Низкий",
+  "tasks.priorityMedium": "Средний",
+  "tasks.priorityHigh": "Высокий",
+  "tasks.priorityCritical": "Критический"
 }

@@ -615,8 +615,8 @@
   "settings.notifications": "Bildirimler",
   "settings.experimental": "Deneysel",
   "settings.experimentalBadge": "Deneysel",
-  "settings.taskMaster": "Task Master paneli",
-  "settings.taskMasterDesc": "Proje görev listesini yönetmek için bir Görevler görünümü ekler. İlk kullanımda task-master-ai paketini npx ile kurar.",
+  "settings.taskMaster": "Task Master entegrasyonu",
+  "settings.taskMasterDesc": "Görevler görünümü bunsuz da çalışır. Açıldığında yapay zekâ destekli işlemler eklenir — PRD çözümleme, görevi alt görevlere ayırma, karmaşıklık değerlendirme — ve ilk kullanımda task-master-ai npx ile kurulur.",
   "settings.notifyOnWaiting": "Ajan beklerken bildir",
   "settings.notifyOnWaitingDesc": "Bir oturum girdinizi beklemeye başladığında bildirim gönder",
   "settings.notifyDesktop": "Masaüstü bildirimi",
@@ -1021,5 +1021,15 @@
   "diff.nextChangeHint": "Sonraki değişiklik · sonraki dosyaya geçer",
   "diff.prevChangeHint": "Önceki değişiklik · önceki dosyaya döner",
   "diff.nextGoesTo": "Sonraki değişiklik · {file} dosyasına geçer",
-  "diff.prevGoesTo": "Önceki değişiklik · {file} dosyasına döner"
+  "diff.prevGoesTo": "Önceki değişiklik · {file} dosyasına döner",
+  "tasks.statusAll": "Tüm durumlar",
+  "tasks.statusPending": "Beklemede",
+  "tasks.statusInProgress": "Devam ediyor",
+  "tasks.statusDone": "Tamamlandı",
+  "tasks.statusBlocked": "Engellendi",
+  "tasks.statusDeferred": "Ertelendi",
+  "tasks.priorityLow": "Düşük",
+  "tasks.priorityMedium": "Orta",
+  "tasks.priorityHigh": "Yüksek",
+  "tasks.priorityCritical": "Kritik"
 }

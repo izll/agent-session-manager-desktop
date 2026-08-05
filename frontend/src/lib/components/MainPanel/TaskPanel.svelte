@@ -3,6 +3,7 @@
   import { claimMenu, releaseMenu } from '../../utils/openMenu';
   import { get } from 'svelte/store';
   import { selectedSessionId } from '../../stores/sessions';
+  import { settings } from '../../stores/settings';
   import Select from '../common/Select.svelte';
   import ConfirmDialog from '../Dialogs/ConfirmDialog.svelte';
   import { createFieldDictation } from '../../utils/dictationField';
@@ -73,6 +74,10 @@
   let newTaskPriority: TaskPriority = 'medium';
   let newTaskResearch = true;
   let useManualMode = true; // Default to manual mode (no API key required)
+  // Without Task Master there is no AI mode to fall into — a dialog opened
+  // while it was on, then reopened after switching it off, would otherwise
+  // still be on a tab whose button is gone.
+  $: if (!$settings.taskMasterEnabled) useManualMode = true;
   let newTaskTitle = '';
   let newTaskDescription = '';
   let newTaskDetails = '';
@@ -268,8 +273,16 @@
     const generation = ++taskPanelLoadGeneration;
     lastSessionId = sessionId;
 
-    await checkTaskMasterStatus(sessionId);
-    if (generation !== taskPanelLoadGeneration || sessionId !== get(selectedSessionId)) return;
+    // Only ask about Task Master when it is switched on. The check runs it, and
+    // running it is what triggers the npx install the opt-in exists to prevent
+    // — the whole point of the setting. Off, the panel uses the app's own task
+    // storage and never reaches for it.
+    const useTaskMaster = get(settings).taskMasterEnabled;
+    useMCPMode.set(useTaskMaster);
+    if (useTaskMaster) {
+      await checkTaskMasterStatus(sessionId);
+      if (generation !== taskPanelLoadGeneration || sessionId !== get(selectedSessionId)) return;
+    }
     await loadTasks(sessionId);
   }
 
@@ -315,20 +328,22 @@
     low: '#22c55e'
   };
 
-  const priorityLabels: Record<TaskPriority, string> = {
-    critical: 'Critical',
-    high: 'High',
-    medium: 'Medium',
-    low: 'Low'
-  };
+  // Reactive, not const: a const map is built once with whatever language was
+  // loaded at the time, so switching language left the badges in the old one.
+  $: priorityLabels = {
+    critical: $t('tasks.priorityCritical'),
+    high: $t('tasks.priorityHigh'),
+    medium: $t('tasks.priorityMedium'),
+    low: $t('tasks.priorityLow'),
+  } as Record<TaskPriority, string>;
 
-  const statusLabels: Record<string, string> = {
-    pending: 'Pending',
-    'in-progress': 'In Progress',
-    done: 'Done',
-    blocked: 'Blocked',
-    deferred: 'Deferred'
-  };
+  $: statusLabels = {
+    pending: $t('tasks.statusPending'),
+    'in-progress': $t('tasks.statusInProgress'),
+    done: $t('tasks.statusDone'),
+    blocked: $t('tasks.statusBlocked'),
+    deferred: $t('tasks.statusDeferred'),
+  } as Record<string, string>;
 
   const statusColors: Record<string, string> = {
     pending: '#9ca3af',
@@ -672,7 +687,7 @@
           {$taskStats.done}/{$taskStats.total}
         </span>
       {/if}
-      {#if $taskMasterStatus.running}
+      {#if $settings.taskMasterEnabled && $taskMasterStatus.running}
         <span class="mcp-badge">{$t('tasks.mcp')}</span>
       {/if}
     </div>
@@ -708,39 +723,46 @@
         small
         value={$taskFilter.status}
         options={[
-          { value: 'all', label: 'All Status' },
-          { value: 'pending', label: 'Pending' },
-          { value: 'in-progress', label: 'In Progress' },
-          { value: 'done', label: 'Done' },
-          { value: 'blocked', label: 'Blocked' }
+          { value: 'all', label: $t('tasks.statusAll') },
+          { value: 'pending', label: $t('tasks.statusPending') },
+          { value: 'in-progress', label: $t('tasks.statusInProgress') },
+          { value: 'done', label: $t('tasks.statusDone') },
+          { value: 'blocked', label: $t('tasks.statusBlocked') }
         ]}
         on:change={handleStatusFilterChange}
       />
     </div>
   </div>
 
-  <!-- Action Bar -->
+  <!-- Action Bar
+       Keeping a task list needs nothing from Task Master: tasks are stored by
+       the app itself (session/tasks.go), and adding, editing and completing
+       them work on their own. Only the actions that CALL Task Master are gated
+       — parsing a PRD, expanding a task into subtasks, scoring complexity —
+       along with the button that installs it. -->
   <div class="action-bar">
-    {#if !$taskMasterStatus.running}
-      <button class="action-btn init" on:click={handleInit} disabled={$isLoadingTasks}>
-        {$t('tasks.initialize')}
-      </button>
-    {:else}
-      <button class="action-btn" on:click={() => showPRDModal = true} disabled={$isLoadingTasks}>
-        {$t('tasks.parsePRD')}
-      </button>
-      <button class="action-btn" on:click={() => showAddTaskModal = true} disabled={$isLoadingTasks}>
-        {$t('tasks.addTask')}
-      </button>
-      <button class="action-btn" on:click={handleExpandAll} disabled={$isLoadingTasks}>
-        {$t('tasks.expandAll')}
-      </button>
-      <button class="action-btn" on:click={handleAnalyzeComplexity} disabled={$isLoadingTasks}>
-        {$t('tasks.analyze')}
-      </button>
-      <button class="action-btn next" on:click={handleGetNextTask} disabled={$isLoadingTasks}>
-        {$t('tasks.nextTask')}
-      </button>
+    <button class="action-btn" on:click={() => showAddTaskModal = true} disabled={$isLoadingTasks}>
+      {$t('tasks.addTask')}
+    </button>
+    <button class="action-btn next" on:click={handleGetNextTask} disabled={$isLoadingTasks}>
+      {$t('tasks.nextTask')}
+    </button>
+    {#if $settings.taskMasterEnabled}
+      {#if !$taskMasterStatus.running}
+        <button class="action-btn init" on:click={handleInit} disabled={$isLoadingTasks}>
+          {$t('tasks.initialize')}
+        </button>
+      {:else}
+        <button class="action-btn" on:click={() => showPRDModal = true} disabled={$isLoadingTasks}>
+          {$t('tasks.parsePRD')}
+        </button>
+        <button class="action-btn" on:click={handleExpandAll} disabled={$isLoadingTasks}>
+          {$t('tasks.expandAll')}
+        </button>
+        <button class="action-btn" on:click={handleAnalyzeComplexity} disabled={$isLoadingTasks}>
+          {$t('tasks.analyze')}
+        </button>
+      {/if}
     {/if}
   </div>
 
@@ -755,7 +777,7 @@
       <div class="loading">{$t('tasks.loading')}</div>
     {:else if $sortedFilteredTasks.length === 0}
       <div class="empty">
-        {#if !$taskMasterStatus.running}
+        {#if $settings.taskMasterEnabled && !$taskMasterStatus.running}
           {$t('tasks.initHint')}
         {:else if $tasks.length === 0}
           {$t('tasks.noTasks')}
@@ -865,7 +887,8 @@
                       </button>
                     </div>
                   {/each}
-                {:else}
+                {:else if $settings.taskMasterEnabled}
+                  <!-- Breaking a task into subtasks is Task Master's, not ours. -->
                   <button class="expand-btn" on:click|stopPropagation={() => handleExpandTask(task.id)}>
                     {$t('tasks.expandSubtasks')}
                   </button>
@@ -907,9 +930,11 @@
                 <button class="action-btn edit" on:click|stopPropagation={() => openEditTaskModal(task)}>
                   {$t('tasks.edit')}
                 </button>
-                <button class="action-btn" on:click|stopPropagation={() => handleExpandTask(task.id)}>
-                  {$t('tasks.expand')}
-                </button>
+                {#if $settings.taskMasterEnabled}
+                  <button class="action-btn" on:click|stopPropagation={() => handleExpandTask(task.id)}>
+                    {$t('tasks.expand')}
+                  </button>
+                {/if}
                 <button class="action-btn danger" on:click|stopPropagation={() => handleDeleteTask(task.id)}>
                   {$t('common.delete')}
                 </button>
@@ -931,7 +956,9 @@
   >
     <button on:click={() => handleSendToAgent(contextMenuTask.id)}>{$t('tasks.sendToAgent')}</button>
     <button on:click={() => openEditTaskModal(contextMenuTask)}>{$t('tasks.editTaskMenu')}</button>
-    <button on:click={() => handleExpandTask(contextMenuTask.id)}>{$t('tasks.expandTask')}</button>
+    {#if $settings.taskMasterEnabled}
+      <button on:click={() => handleExpandTask(contextMenuTask.id)}>{$t('tasks.expandTask')}</button>
+    {/if}
     <button on:click={() => openAddSubtaskModal(contextMenuTask.id)}>{$t('tasks.addSubtaskMenu')}</button>
     <button on:click={() => openDependencyModal(contextMenuTask.id)}>{$t('tasks.manageDependencies')}</button>
     <div class="menu-divider"></div>
@@ -993,23 +1020,27 @@
         </div>
       </div>
       <div class="dialog-body">
-        <!-- Mode toggle -->
-        <div class="mode-toggle">
-          <button
-            class="mode-btn"
-            class:active={useManualMode}
-            on:click={() => useManualMode = true}
-          >
-            {$t('tasks.manual')}
-          </button>
-          <button
-            class="mode-btn"
-            class:active={!useManualMode}
-            on:click={() => useManualMode = false}
-          >
-            {$t('tasks.aiGenerated')}
-          </button>
-        </div>
+        <!-- Mode toggle. The AI half asks Task Master to write the task from a
+             description, so with the integration off there is only one way to
+             add a task and no choice to present. -->
+        {#if $settings.taskMasterEnabled}
+          <div class="mode-toggle">
+            <button
+              class="mode-btn"
+              class:active={useManualMode}
+              on:click={() => useManualMode = true}
+            >
+              {$t('tasks.manual')}
+            </button>
+            <button
+              class="mode-btn"
+              class:active={!useManualMode}
+              on:click={() => useManualMode = false}
+            >
+              {$t('tasks.aiGenerated')}
+            </button>
+          </div>
+        {/if}
 
         {#if useManualMode}
           <p class="dialog-hint">
@@ -1071,10 +1102,10 @@
           <Select
             value={newTaskPriority}
             options={[
-              { value: 'low', label: 'Low' },
-              { value: 'medium', label: 'Medium' },
-              { value: 'high', label: 'High' },
-              { value: 'critical', label: 'Critical' }
+              { value: 'low', label: $t('tasks.priorityLow') },
+              { value: 'medium', label: $t('tasks.priorityMedium') },
+              { value: 'high', label: $t('tasks.priorityHigh') },
+              { value: 'critical', label: $t('tasks.priorityCritical') }
             ]}
             on:change={handleNewPriorityChange}
           />
@@ -1161,10 +1192,10 @@
           <Select
             value={editTaskPriority}
             options={[
-              { value: 'low', label: 'Low' },
-              { value: 'medium', label: 'Medium' },
-              { value: 'high', label: 'High' },
-              { value: 'critical', label: 'Critical' }
+              { value: 'low', label: $t('tasks.priorityLow') },
+              { value: 'medium', label: $t('tasks.priorityMedium') },
+              { value: 'high', label: $t('tasks.priorityHigh') },
+              { value: 'critical', label: $t('tasks.priorityCritical') }
             ]}
             on:change={handleEditPriorityChange}
           />

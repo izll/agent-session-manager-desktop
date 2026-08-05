@@ -615,8 +615,8 @@
   "settings.notifications": "알림",
   "settings.experimental": "실험적 기능",
   "settings.experimentalBadge": "실험적",
-  "settings.taskMaster": "Task Master 패널",
-  "settings.taskMasterDesc": "프로젝트 작업 목록을 관리하는 작업 보기를 추가합니다. 처음 사용할 때 npx로 task-master-ai 패키지를 설치합니다.",
+  "settings.taskMaster": "Task Master 연동",
+  "settings.taskMasterDesc": "작업 보기는 이것 없이도 동작합니다. 켜면 AI 기반 동작(PRD 해석, 작업 분할, 복잡도 평가)이 추가되고, 처음 사용할 때 npx로 task-master-ai를 설치합니다.",
   "settings.notifyOnWaiting": "에이전트 대기 시 알림",
   "settings.notifyOnWaitingDesc": "세션이 입력을 기다리기 시작하면 알림을 보냅니다",
   "settings.notifyDesktop": "데스크톱 알림",
@@ -1021,5 +1021,15 @@
   "diff.nextChangeHint": "다음 변경 · 파일 끝에서 다음 파일로",
   "diff.prevChangeHint": "이전 변경 · 파일 처음에서 이전 파일로",
   "diff.nextGoesTo": "다음 변경 · {file}(으)로 이동",
-  "diff.prevGoesTo": "이전 변경 · {file}(으)로 돌아감"
+  "diff.prevGoesTo": "이전 변경 · {file}(으)로 돌아감",
+  "tasks.statusAll": "모든 상태",
+  "tasks.statusPending": "대기 중",
+  "tasks.statusInProgress": "진행 중",
+  "tasks.statusDone": "완료",
+  "tasks.statusBlocked": "차단됨",
+  "tasks.statusDeferred": "보류",
+  "tasks.priorityLow": "낮음",
+  "tasks.priorityMedium": "보통",
+  "tasks.priorityHigh": "높음",
+  "tasks.priorityCritical": "긴급"
 }
