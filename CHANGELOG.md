@@ -6,6 +6,24 @@ Entries describe what changed for someone using the app. Internal refactoring,
 test and CI work is left out unless it changed behaviour. Dates are release
 dates; the format follows [Keep a Changelog](https://keepachangelog.com).
 
+## 0.9.20 — 2026-08-06
+
+### Fixed
+
+- **The dictation log never wrote anything, in any release.** The file was
+  opened by a function nobody called, so every line was discarded — turning
+  logging on in Settings changed nothing and the log stayed empty. Anyone
+  looking there for the reason a dictation had failed found nothing at all.
+  It now records what happened, and failures are written whether or not
+  verbose logging is switched on: a failure is discovered after the fact,
+  when turning logging on and reproducing it is no longer possible.
+- **A failed dictation blamed the API key, whatever the actual cause.** Google
+  reports an expired key and a malformed request under the same error code, so
+  everything from an audio problem upwards was reported as an invalid or
+  expired key — sending you to check the one thing that was fine. Failures now
+  say what Google actually said, and only name the key when the key is the
+  problem.
+
 ## 0.9.19 — 2026-08-05
 
 ### Added
