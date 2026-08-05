@@ -1047,5 +1047,22 @@
   "settings.logCopy": "복사",
   "settings.logOpenFolder": "폴더 열기",
   "settings.logEmpty": "아직 기록이 없습니다.",
-  "settings.logTruncated": "최근 {count}줄을 표시합니다."
+  "settings.logTruncated": "최근 {count}줄을 표시합니다.",
+  "settings.logFilter": "필터…",
+  "settings.logMatches": "{total}줄 중 {shown}줄",
+  "settings.logHideNoise": "폴링 잡음 숨기기",
+  "logs.title": "로그",
+  "logs.app": "애플리케이션",
+  "logs.dictation": "받아쓰기",
+  "logs.close": "닫기",
+  "logs.clear": "비우기",
+  "logs.clearConfirm": "이 로그를 비울까요? 지금 있는 내용은 사라지고, 새 기록은 계속 쌓입니다.",
+  "settings.dictationProblem": "받아쓰기가 입력할 수 없습니다",
+  "dictation.api_key_missing_title": "API 키가 필요합니다",
+  "dictation.api_key_missing_message": "이 받아쓰기 모드에는 Google Cloud API 키가 필요합니다. 설정 → 받아쓰기에서 추가하세요.",
+  "dictation.api_key_invalid_title": "API 키가 거부되었습니다",
+  "dictation.api_key_invalid_message": "Google Cloud API 키가 유효하지 않거나 만료되었거나 Speech-to-Text API 권한이 없습니다. 설정 → 받아쓰기에서 확인하세요.",
+  "dictation.quota_title": "할당량이 소진되었습니다",
+  "dictation.quota_message": "Google Cloud 프로젝트에 Speech-to-Text 할당량이 없거나 결제가 활성화되지 않았습니다.",
+  "dictation.stream_failed_title": "받아쓰기 실패"
 }

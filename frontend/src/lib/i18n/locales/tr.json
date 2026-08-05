@@ -1047,5 +1047,22 @@
   "settings.logCopy": "Kopyala",
   "settings.logOpenFolder": "Klasörü aç",
   "settings.logEmpty": "Henüz kayıt yok.",
-  "settings.logTruncated": "Son {count} satır gösteriliyor."
+  "settings.logTruncated": "Son {count} satır gösteriliyor.",
+  "settings.logFilter": "Süz…",
+  "settings.logMatches": "{total} satırdan {shown} tanesi",
+  "settings.logHideNoise": "Yoklama gürültüsünü gizle",
+  "logs.title": "Günlükler",
+  "logs.app": "Uygulama",
+  "logs.dictation": "Dikte",
+  "logs.close": "Kapat",
+  "logs.clear": "Temizle",
+  "logs.clearConfirm": "Bu günlük temizlensin mi? Şu anki içerik silinir; yeni kayıtlar gelmeye devam eder.",
+  "settings.dictationProblem": "Dikte yazamıyor",
+  "dictation.api_key_missing_title": "API anahtarı gerekli",
+  "dictation.api_key_missing_message": "Bu dikte modu bir Google Cloud API anahtarı gerektirir. Ayarlar → Dikte bölümünden ekleyin.",
+  "dictation.api_key_invalid_title": "API anahtarı reddedildi",
+  "dictation.api_key_invalid_message": "Google Cloud API anahtarı geçersiz, süresi dolmuş ya da Speech-to-Text API'sine erişimi yok. Ayarlar → Dikte bölümünden kontrol edin.",
+  "dictation.quota_title": "Kota tükendi",
+  "dictation.quota_message": "Google Cloud projesinin Speech-to-Text kotası kalmadı ya da faturalandırma açık değil.",
+  "dictation.stream_failed_title": "Dikte başarısız"
 }

@@ -14,9 +14,9 @@ import (
 
 // Global timestamp to indicate when typing last occurred (used by hotkey manager to ignore events)
 var (
-	lastTypingTimestamp   int64 // Unix timestamp in milliseconds
-	typingTimestampMutex  sync.Mutex
-	typingCooldownMs      int64 = 150 // Ignore key events for this many ms after typing
+	lastTypingTimestamp  int64 // Unix timestamp in milliseconds
+	typingTimestampMutex sync.Mutex
+	typingCooldownMs     int64 = 150 // Ignore key events for this many ms after typing
 )
 
 // IsTypingInProgress returns true if keyboard simulation recently typed
@@ -52,12 +52,12 @@ type PopupTextHandler interface {
 
 // KeyboardSimulatorSimple handles keyboard simulation using xdotool/ydotool
 type KeyboardSimulatorSimple struct {
-	wordHistory   []string   // History of typed words (last 50)
-	mu            sync.Mutex // Mutex for thread-safe access
-	sessionType   string     // "x11", "wayland", or empty for non-Linux
-	isTerminal    bool       // Cache for terminal detection (updated on each delete)
-	popupHandler  PopupTextHandler // If set, typing goes to popup instead of xdotool
-	popupDirect   bool             // If true, IsPopupMode() returns false but handler stays active (for buffer mode)
+	wordHistory  []string         // History of typed words (last 50)
+	mu           sync.Mutex       // Mutex for thread-safe access
+	sessionType  string           // "x11", "wayland", or empty for non-Linux
+	isTerminal   bool             // Cache for terminal detection (updated on each delete)
+	popupHandler PopupTextHandler // If set, typing goes to popup instead of xdotool
+	popupDirect  bool             // If true, IsPopupMode() returns false but handler stays active (for buffer mode)
 }
 
 // NewKeyboardSimulatorSimple creates a new KeyboardSimulatorSimple
@@ -72,25 +72,33 @@ func NewKeyboardSimulatorSimple() (*KeyboardSimulatorSimple, error) {
 		sessionType := os.Getenv("XDG_SESSION_TYPE")
 		ks.sessionType = strings.ToLower(sessionType)
 
+		// Logged, not just printed. What is missing here is the whole reason
+		// dictation can recognise speech perfectly and type nothing: the audio
+		// path works, the API answers, and the last step has no tool to press
+		// keys with. Printing said so only on a terminal nobody sees when the
+		// app is launched from a desktop menu, and the log — which is where
+		// anyone would look — carried none of it.
 		if ks.sessionType == "wayland" {
 			// Wayland: use ydotool
 			if hasYdotool() {
 				ensureYdotoold()
-				fmt.Println("🖥️  Wayland detected, using ydotool")
+				logToFile("🖥️  Wayland detected, using ydotool\n")
 			} else {
-				fmt.Println("⚠️  WARNING: Wayland detected but ydotool not found!")
-				fmt.Println("   Keyboard simulation will NOT work on Wayland without ydotool.")
-				fmt.Println("   Please install: sudo apt-get install ydotool")
-				fmt.Println("   Then start the daemon: ydotoold &")
+				logToFile("❌ Wayland detected but ydotool is not installed. " +
+					"Speech will be recognised and nothing will be typed. " +
+					"Install it with: sudo apt-get install ydotool, then run: ydotoold &\n")
 				return nil, fmt.Errorf("ydotool not found for Wayland. Please install: sudo apt-get install ydotool")
 			}
 		} else {
 			// X11: use xdotool
 			_, err := exec.LookPath("xdotool")
 			if err != nil {
+				logToFile("❌ xdotool is not installed (session type %q). "+
+					"Speech will be recognised and nothing will be typed. "+
+					"Install it with: sudo apt-get install xdotool\n", sessionType)
 				return nil, fmt.Errorf("xdotool not found. Please install: sudo apt-get install xdotool")
 			}
-			debugLog("🖥️  X11 detected, using xdotool\n")
+			logToFile("🖥️  X11 detected, using xdotool\n")
 		}
 	}
 	// On Windows/macOS, robotgo will be used (no check needed)
@@ -105,9 +113,9 @@ func (ks *KeyboardSimulatorSimple) SetPopupHandler(handler PopupTextHandler) {
 	defer ks.mu.Unlock()
 	ks.popupHandler = handler
 	if handler != nil {
-		fmt.Println("🪟 Popup mode enabled - keyboard output redirected to popup")
+		logToFile("🪟 Popup mode enabled - keyboard output redirected to popup" + "\n")
 	} else {
-		fmt.Println("🪟 Popup mode disabled - keyboard output goes to active window")
+		logToFile("🪟 Popup mode disabled - keyboard output goes to active window" + "\n")
 	}
 }
 
@@ -170,7 +178,7 @@ func ensureYdotoold() {
 	}
 
 	// Start ydotoold in background
-	fmt.Println("🚀 Starting ydotoold daemon...")
+	logToFile("🚀 Starting ydotoold daemon..." + "\n")
 	cmd = exec.Command("ydotoold")
 	cmd.Start() // Don't wait, run in background
 
@@ -455,11 +463,11 @@ func (ks *KeyboardSimulatorSimple) deleteLastWordWithBackspaces(lastWord string)
 	if len(ks.wordHistory) > 0 {
 		// There are more words before this one → delete the trailing space too
 		deleteCount = characterCount + 1
-		fmt.Printf("🗑️  Deleting last word: '%s' (%d characters + 1 space = %d backspaces, %d words remain)\n",
+		logToFile("🗑️  Deleting last word: '%s' (%d characters + 1 space = %d backspaces, %d words remain)\n",
 			lastWord, characterCount, deleteCount, len(ks.wordHistory))
 	} else {
 		// This was the last word → no trailing space to delete
-		fmt.Printf("🗑️  Deleting last word: '%s' (%d characters, no space = %d backspaces, history empty)\n",
+		logToFile("🗑️  Deleting last word: '%s' (%d characters, no space = %d backspaces, history empty)\n",
 			lastWord, characterCount, deleteCount)
 	}
 
@@ -506,9 +514,9 @@ func (ks *KeyboardSimulatorSimple) deleteLastWordWithBackspaces(lastWord string)
 // Uses Ctrl+Backspace on all platforms (works in most GUI apps and modern terminals)
 func (ks *KeyboardSimulatorSimple) deleteLastWordWithShortcut(lastWord string) error {
 	if lastWord == "" {
-		fmt.Println("🗑️  Deleting word (using Ctrl+Backspace)")
+		logToFile("🗑️  Deleting word (using Ctrl+Backspace)" + "\n")
 	} else {
-		fmt.Printf("🗑️  Deleting word: '%s' (using Ctrl+Backspace)\n", lastWord)
+		logToFile("🗑️  Deleting word: '%s' (using Ctrl+Backspace)\n", lastWord)
 	}
 
 	// Platform-specific deletion - always use Ctrl+Backspace
@@ -558,7 +566,7 @@ func (ks *KeyboardSimulatorSimple) DeleteLastWord() error {
 	// If no words in history, return error - caller should check history size first
 	if len(ks.wordHistory) == 0 {
 		ks.mu.Unlock()
-		fmt.Println("⚠️ No words in history - nothing to delete")
+		logToFile("⚠️ No words in history - nothing to delete" + "\n")
 		return fmt.Errorf("no words in history")
 	}
 
@@ -601,5 +609,5 @@ func (ks *KeyboardSimulatorSimple) RemoveFromHistory(count int) {
 	}
 
 	ks.wordHistory = ks.wordHistory[:len(ks.wordHistory)-count]
-	fmt.Printf("🗑️  Removed %d word(s) from history (no Backspace), remaining: %d\n", count, len(ks.wordHistory))
+	logToFile("🗑️  Removed %d word(s) from history (no Backspace), remaining: %d\n", count, len(ks.wordHistory))
 }

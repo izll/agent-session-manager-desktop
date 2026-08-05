@@ -1047,5 +1047,22 @@
   "settings.logCopy": "Копировать",
   "settings.logOpenFolder": "Открыть папку",
   "settings.logEmpty": "Пока ничего не записано.",
-  "settings.logTruncated": "Показаны последние {count} строк."
+  "settings.logTruncated": "Показаны последние {count} строк.",
+  "settings.logFilter": "Фильтр…",
+  "settings.logMatches": "{shown} из {total} строк",
+  "settings.logHideNoise": "Скрыть шум опроса",
+  "logs.title": "Журналы",
+  "logs.app": "Приложение",
+  "logs.dictation": "Диктовка",
+  "logs.close": "Закрыть",
+  "logs.clear": "Очистить",
+  "logs.clearConfirm": "Очистить этот журнал? Текущее содержимое будет удалено; новые записи продолжат появляться.",
+  "settings.dictationProblem": "Диктовка не может печатать",
+  "dictation.api_key_missing_title": "Нужен ключ API",
+  "dictation.api_key_missing_message": "Для этого режима диктовки нужен ключ API Google Cloud. Добавьте его в Настройки → Диктовка.",
+  "dictation.api_key_invalid_title": "Ключ API отклонён",
+  "dictation.api_key_invalid_message": "Ключ API Google Cloud недействителен, истёк или не имеет доступа к Speech-to-Text API. Проверьте его в Настройки → Диктовка.",
+  "dictation.quota_title": "Квота исчерпана",
+  "dictation.quota_message": "У проекта Google Cloud закончилась квота Speech-to-Text или не включена оплата.",
+  "dictation.stream_failed_title": "Диктовка не удалась"
 }

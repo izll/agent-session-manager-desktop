@@ -1047,5 +1047,22 @@
   "settings.logCopy": "Copier",
   "settings.logOpenFolder": "Ouvrir le dossier",
   "settings.logEmpty": "Rien de journalisé pour l'instant.",
-  "settings.logTruncated": "Affichage des {count} dernières lignes."
+  "settings.logTruncated": "Affichage des {count} dernières lignes.",
+  "settings.logFilter": "Filtrer…",
+  "settings.logMatches": "{shown} lignes sur {total}",
+  "settings.logHideNoise": "Masquer le bruit du sondage",
+  "logs.title": "Journaux",
+  "logs.app": "Application",
+  "logs.dictation": "Dictée",
+  "logs.close": "Fermer",
+  "logs.clear": "Vider",
+  "logs.clearConfirm": "Vider ce journal ? Son contenu actuel sera perdu ; les nouvelles entrées continueront d'arriver.",
+  "settings.dictationProblem": "La dictée ne peut pas écrire",
+  "dictation.api_key_missing_title": "Clé API requise",
+  "dictation.api_key_missing_message": "Ce mode de dictée nécessite une clé API Google Cloud. Ajoutez-la dans Paramètres → Dictée.",
+  "dictation.api_key_invalid_title": "Clé API refusée",
+  "dictation.api_key_invalid_message": "La clé API Google Cloud est invalide, expirée, ou n'a pas accès à l'API Speech-to-Text. Vérifiez-la dans Paramètres → Dictée.",
+  "dictation.quota_title": "Quota épuisé",
+  "dictation.quota_message": "Le projet Google Cloud n'a plus de quota Speech-to-Text, ou la facturation n'y est pas activée.",
+  "dictation.stream_failed_title": "Échec de la dictée"
 }

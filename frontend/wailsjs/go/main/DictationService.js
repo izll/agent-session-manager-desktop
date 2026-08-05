@@ -18,6 +18,10 @@ export function GetBufferText() {
   return window['go']['main']['DictationService']['GetBufferText']();
 }
 
+export function GetDictationProblems() {
+  return window['go']['main']['DictationService']['GetDictationProblems']();
+}
+
 export function GetDictationSettings() {
   return window['go']['main']['DictationService']['GetDictationSettings']();
 }

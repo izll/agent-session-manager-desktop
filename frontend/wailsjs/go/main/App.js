@@ -30,6 +30,10 @@ export function CheckForUpdate() {
   return window['go']['main']['App']['CheckForUpdate']();
 }
 
+export function ClearLog(arg1) {
+  return window['go']['main']['App']['ClearLog'](arg1);
+}
+
 export function CloseTab(arg1, arg2) {
   return window['go']['main']['App']['CloseTab'](arg1, arg2);
 }
@@ -214,6 +218,10 @@ export function GetLockStatus() {
   return window['go']['main']['App']['GetLockStatus']();
 }
 
+export function GetLog(arg1) {
+  return window['go']['main']['App']['GetLog'](arg1);
+}
+
 export function GetMultiplexerStatus() {
   return window['go']['main']['App']['GetMultiplexerStatus']();
 }
@@ -396,6 +404,10 @@ export function OpenAppLogFolder() {
 
 export function OpenFolder(arg1) {
   return window['go']['main']['App']['OpenFolder'](arg1);
+}
+
+export function OpenLogFolder(arg1) {
+  return window['go']['main']['App']['OpenLogFolder'](arg1);
 }
 
 export function OpenSessionFileForEdit(arg1, arg2) {

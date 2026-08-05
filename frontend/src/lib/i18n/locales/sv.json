@@ -1047,5 +1047,22 @@
   "settings.logCopy": "Kopiera",
   "settings.logOpenFolder": "Öppna mappen",
   "settings.logEmpty": "Inget loggat ännu.",
-  "settings.logTruncated": "Visar de senaste {count} raderna."
+  "settings.logTruncated": "Visar de senaste {count} raderna.",
+  "settings.logFilter": "Filtrera…",
+  "settings.logMatches": "{shown} av {total} rader",
+  "settings.logHideNoise": "Dölj pollningsbrus",
+  "logs.title": "Loggar",
+  "logs.app": "Program",
+  "logs.dictation": "Diktering",
+  "logs.close": "Stäng",
+  "logs.clear": "Rensa",
+  "logs.clearConfirm": "Rensa den här loggen? Det som finns nu försvinner; nya rader fortsätter komma.",
+  "settings.dictationProblem": "Dikteringen kan inte skriva",
+  "dictation.api_key_missing_title": "API-nyckel krävs",
+  "dictation.api_key_missing_message": "Det här dikteringsläget kräver en Google Cloud-API-nyckel. Lägg till en under Inställningar → Diktering.",
+  "dictation.api_key_invalid_title": "API-nyckeln avvisades",
+  "dictation.api_key_invalid_message": "Google Cloud-API-nyckeln är ogiltig, har gått ut eller saknar åtkomst till Speech-to-Text-API:et. Kontrollera den under Inställningar → Diktering.",
+  "dictation.quota_title": "Kvoten är slut",
+  "dictation.quota_message": "Google Cloud-projektet har ingen Speech-to-Text-kvot kvar, eller så är fakturering inte aktiverad.",
+  "dictation.stream_failed_title": "Dikteringen misslyckades"
 }

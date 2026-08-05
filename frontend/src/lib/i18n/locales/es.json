@@ -1047,5 +1047,22 @@
   "settings.logCopy": "Copiar",
   "settings.logOpenFolder": "Abrir la carpeta",
   "settings.logEmpty": "Todavía no hay registros.",
-  "settings.logTruncated": "Se muestran las últimas {count} líneas."
+  "settings.logTruncated": "Se muestran las últimas {count} líneas.",
+  "settings.logFilter": "Filtrar…",
+  "settings.logMatches": "{shown} de {total} líneas",
+  "settings.logHideNoise": "Ocultar el ruido del sondeo",
+  "logs.title": "Registros",
+  "logs.app": "Aplicación",
+  "logs.dictation": "Dictado",
+  "logs.close": "Cerrar",
+  "logs.clear": "Vaciar",
+  "logs.clearConfirm": "¿Vaciar este registro? Lo que hay ahora se perderá; las nuevas entradas seguirán llegando.",
+  "settings.dictationProblem": "El dictado no puede escribir",
+  "dictation.api_key_missing_title": "Se necesita clave de API",
+  "dictation.api_key_missing_message": "Este modo de dictado necesita una clave de API de Google Cloud. Añádela en Ajustes → Dictado.",
+  "dictation.api_key_invalid_title": "Clave de API rechazada",
+  "dictation.api_key_invalid_message": "La clave de API de Google Cloud no es válida, ha caducado o no tiene acceso a la API de Speech-to-Text. Compruébala en Ajustes → Dictado.",
+  "dictation.quota_title": "Cuota agotada",
+  "dictation.quota_message": "El proyecto de Google Cloud no tiene cuota de Speech-to-Text, o no tiene la facturación activada.",
+  "dictation.stream_failed_title": "Error en el dictado"
 }

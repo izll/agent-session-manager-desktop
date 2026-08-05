@@ -255,7 +255,14 @@ func (sr *SpeechRecognizer) processAudioChunk() {
 	// Check if buffer actually contains sound (not just silence)
 	hasSound := sr.app.audioCapture.HasSound(audioDataCopy)
 	if !hasSound {
-		logToFile("⚪ Buffer contains only silence, skipping API call to save costs\n")
+		// The measured level, not just the verdict. "Only silence" says the
+		// recording produced nothing worth sending, but not why — a muted or
+		// misrouted input reads as a flat zero, while a microphone that is
+		// simply too quiet lands just under the threshold. The two need
+		// different fixes and looked identical in the log.
+		level, threshold := sr.app.audioCapture.SoundLevel(audioDataCopy)
+		logToFile("⚪ Buffer contains only silence (level=%.6f threshold=%.6f, %d bytes), "+
+			"skipping API call to save costs\n", level, threshold, len(audioDataCopy))
 		return
 	}
 
@@ -748,7 +755,7 @@ func (sr *SpeechRecognizer) updateUsageStats(audioDataLen int) {
 	logToFile("💰 [API] Audio: %.2fs, Estimated cost: $%.6f\n", audioDuration, estimatedCost)
 
 	if err := sr.app.AddUsage(1, audioDuration); err != nil {
-		fmt.Printf("Error saving usage stats: %v\n", err)
+		logToFile("Error saving usage stats: %v\n", err)
 	}
 }
 
@@ -766,7 +773,7 @@ func (sr *SpeechRecognizer) ProcessText(text string, language string) (string, i
 	// Load delete commands
 	deleteCommands, err := sr.app.LoadDeleteCommands()
 	if err != nil {
-		fmt.Printf("⚠️ Error loading delete commands: %v\n", err)
+		logToFile("⚠️ Error loading delete commands: %v\n", err)
 		// Use default fallback
 		deleteCommands = map[string]map[string]string{
 			"en": {
@@ -798,12 +805,12 @@ func (sr *SpeechRecognizer) ProcessText(text string, language string) (string, i
 	for _, word := range words {
 		if _, ok := langDeleteCommands[word]; ok {
 			deleteCount++
-			fmt.Printf("🗑️  Delete command detected: '%s'\n", word)
+			logToFile("🗑️  Delete command detected: '%s'\n", word)
 		}
 	}
 
 	if deleteCount > 0 {
-		fmt.Printf("🗑️  Total delete count: %d\n", deleteCount)
+		logToFile("🗑️  Total delete count: %d\n", deleteCount)
 		return "", deleteCount
 	}
 
@@ -907,7 +914,7 @@ func (sr *SpeechRecognizer) streamingRecognitionLoop() {
 // executeDeleteAction executes a delete action based on the command type
 func (sr *SpeechRecognizer) executeDeleteAction(action string, originalText string) {
 	if sr.app.keyboard == nil {
-		fmt.Println("⚠️  Keyboard simulator not available")
+		logToFile("⚠️  Keyboard simulator not available" + "\n")
 		return
 	}
 
@@ -917,9 +924,9 @@ func (sr *SpeechRecognizer) executeDeleteAction(action string, originalText stri
 		// This is the existing DeleteLastWord functionality
 		err := sr.app.keyboard.DeleteLastWord()
 		if err != nil {
-			fmt.Printf("❌ Error executing buffer delete: %v\n", err)
+			logToFile("❌ Error executing buffer delete: %v\n", err)
 		} else {
-			fmt.Printf("🗑️  Deleted last word (buffer/szusi)\n")
+			logToFile("🗑️  Deleted last word (buffer/szusi)\n")
 		}
 
 	case "ctrl_backspace":
@@ -928,9 +935,9 @@ func (sr *SpeechRecognizer) executeDeleteAction(action string, originalText stri
 		// so we only need to delete ONE word (the target word)
 		err := sr.app.keyboard.PressCtrlBackspace()
 		if err != nil {
-			fmt.Printf("❌ Error executing Ctrl+Backspace: %v\n", err)
+			logToFile("❌ Error executing Ctrl+Backspace: %v\n", err)
 		} else {
-			fmt.Println("🗑️  Executed Ctrl+Backspace (vegeta - deleted previous word)")
+			logToFile("🗑️  Executed Ctrl+Backspace (vegeta - deleted previous word)" + "\n")
 		}
 
 	case "ctrl_alt_backspace":
@@ -939,12 +946,12 @@ func (sr *SpeechRecognizer) executeDeleteAction(action string, originalText stri
 		// so we only need to delete ONE line (the target line)
 		err := sr.app.keyboard.PressCtrlAltBackspace()
 		if err != nil {
-			fmt.Printf("❌ Error executing Ctrl+Alt+Backspace: %v\n", err)
+			logToFile("❌ Error executing Ctrl+Alt+Backspace: %v\n", err)
 		} else {
-			fmt.Println("🗑️  Executed Ctrl+Alt+Backspace (goku - deleted line)")
+			logToFile("🗑️  Executed Ctrl+Alt+Backspace (goku - deleted line)" + "\n")
 		}
 
 	default:
-		fmt.Printf("⚠️  Unknown delete action: %s\n", action)
+		logToFile("⚠️  Unknown delete action: %s\n", action)
 	}
 }

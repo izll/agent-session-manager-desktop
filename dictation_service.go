@@ -339,6 +339,37 @@ func (d *DictationService) ToggleDictation() (bool, error) {
 }
 
 // IsListening returns whether the service is currently listening
+// GetDictationProblems returns anything that stopped dictation setting itself
+// up properly — most usefully a missing xdotool or ydotool, without which
+// speech is recognised and nothing is typed.
+//
+// The dictation package has collected these since it was written; nothing ever
+// asked for them, so the one failure a user cannot diagnose from the outside
+// was also the one nothing reported.
+func (d *DictationService) GetDictationProblems() []string {
+	// Read the pointer under the lock, then release it before touching what it
+	// points at. Initialize holds this same lock for the whole of
+	// NewAppService — which starts the audio subsystem and probes for input
+	// tools, and takes long enough to be visible — so a caller that kept the
+	// lock while reading would wait for all of it. That is what made opening
+	// the Dictation tab appear to freeze the app.
+	d.mu.Lock()
+	app := d.app
+	d.mu.Unlock()
+
+	// An empty slice, never nil. A nil slice crosses the bridge as JSON null,
+	// and the caller reads .length off it — which throws during render, and a
+	// component that throws while rendering stops updating: hover still worked
+	// (that is CSS) while nothing responded to a click.
+	if app == nil {
+		return []string{}
+	}
+	if problems := app.GetInitErrors(); problems != nil {
+		return problems
+	}
+	return []string{}
+}
+
 func (d *DictationService) IsListening() bool {
 	d.mu.Lock()
 	defer d.mu.Unlock()

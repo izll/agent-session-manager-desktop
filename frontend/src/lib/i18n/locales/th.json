@@ -1047,5 +1047,22 @@
   "settings.logCopy": "คัดลอก",
   "settings.logOpenFolder": "เปิดโฟลเดอร์",
   "settings.logEmpty": "ยังไม่มีบันทึก",
-  "settings.logTruncated": "แสดง {count} บรรทัดล่าสุด"
+  "settings.logTruncated": "แสดง {count} บรรทัดล่าสุด",
+  "settings.logFilter": "กรอง…",
+  "settings.logMatches": "{shown} จาก {total} บรรทัด",
+  "settings.logHideNoise": "ซ่อนสัญญาณรบกวนจากการโพล",
+  "logs.title": "บันทึก",
+  "logs.app": "แอปพลิเคชัน",
+  "logs.dictation": "การบอกตามคำ",
+  "logs.close": "ปิด",
+  "logs.clear": "ล้าง",
+  "logs.clearConfirm": "ล้างบันทึกนี้หรือไม่ เนื้อหาปัจจุบันจะหายไป แต่รายการใหม่จะยังคงถูกบันทึกต่อ",
+  "settings.dictationProblem": "การบอกตามคำไม่สามารถพิมพ์ได้",
+  "dictation.api_key_missing_title": "ต้องใช้คีย์ API",
+  "dictation.api_key_missing_message": "โหมดบอกตามคำนี้ต้องใช้คีย์ Google Cloud API เพิ่มได้ที่ ตั้งค่า → การบอกตามคำ",
+  "dictation.api_key_invalid_title": "คีย์ API ถูกปฏิเสธ",
+  "dictation.api_key_invalid_message": "คีย์ Google Cloud API ไม่ถูกต้อง หมดอายุ หรือไม่มีสิทธิ์เข้าถึง Speech-to-Text API ตรวจสอบได้ที่ ตั้งค่า → การบอกตามคำ",
+  "dictation.quota_title": "โควตาหมดแล้ว",
+  "dictation.quota_message": "โปรเจกต์ Google Cloud ไม่มีโควตา Speech-to-Text เหลือ หรือยังไม่ได้เปิดการเรียกเก็บเงิน",
+  "dictation.stream_failed_title": "การบอกตามคำล้มเหลว"
 }

@@ -1047,5 +1047,22 @@
   "settings.logCopy": "Копіювати",
   "settings.logOpenFolder": "Відкрити теку",
   "settings.logEmpty": "Поки нічого не записано.",
-  "settings.logTruncated": "Показано останні {count} рядків."
+  "settings.logTruncated": "Показано останні {count} рядків.",
+  "settings.logFilter": "Фільтр…",
+  "settings.logMatches": "{shown} з {total} рядків",
+  "settings.logHideNoise": "Сховати шум опитування",
+  "logs.title": "Журнали",
+  "logs.app": "Застосунок",
+  "logs.dictation": "Диктування",
+  "logs.close": "Закрити",
+  "logs.clear": "Очистити",
+  "logs.clearConfirm": "Очистити цей журнал? Поточний вміст зникне; нові записи й далі надходитимуть.",
+  "settings.dictationProblem": "Диктування не може друкувати",
+  "dictation.api_key_missing_title": "Потрібен ключ API",
+  "dictation.api_key_missing_message": "Для цього режиму диктування потрібен ключ API Google Cloud. Додайте його в Налаштування → Диктування.",
+  "dictation.api_key_invalid_title": "Ключ API відхилено",
+  "dictation.api_key_invalid_message": "Ключ API Google Cloud недійсний, прострочений або не має доступу до Speech-to-Text API. Перевірте його в Налаштування → Диктування.",
+  "dictation.quota_title": "Квоту вичерпано",
+  "dictation.quota_message": "У проєкті Google Cloud закінчилася квота Speech-to-Text або не ввімкнено оплату.",
+  "dictation.stream_failed_title": "Диктування не вдалося"
 }

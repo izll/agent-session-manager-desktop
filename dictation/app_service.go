@@ -138,7 +138,7 @@ func NewAppService() *AppService {
 	app.audioCapture = NewAudioCapture()
 	err := app.audioCapture.Initialize()
 	if err != nil {
-		fmt.Printf("Warning: Failed to initialize audio: %v\n", err)
+		logToFile("Warning: Failed to initialize audio: %v\n", err)
 	}
 
 	// Set voice level callback for taskbar icon pulsing
@@ -161,7 +161,7 @@ func NewAppService() *AppService {
 	if app.settings.InputDeviceIndex != -1 {
 		err = app.audioCapture.SetInputDevice(app.settings.InputDeviceIndex)
 		if err != nil {
-			fmt.Printf("Warning: Failed to set input device: %v (using default)\n", err)
+			logToFile("Warning: Failed to set input device: %v (using default)\n", err)
 			app.settings.InputDeviceIndex = -1 // Reset to default on error
 		}
 	}
@@ -189,7 +189,7 @@ func NewAppService() *AppService {
 	// Initialize keyboard simulator
 	app.keyboard, err = NewKeyboardSimulatorSimple()
 	if err != nil {
-		fmt.Printf("Warning: Failed to initialize keyboard simulator: %v\n", err)
+		logToFile("Warning: Failed to initialize keyboard simulator: %v\n", err)
 		// Store error for UI notification - xdotool is required for text input on Linux X11
 		app.initErrors = append(app.initErrors, fmt.Sprintf("xdotool not found.\n\nThe application cannot type text without xdotool.\n\nPlease install it:\nsudo apt-get install xdotool"))
 	}
@@ -214,7 +214,7 @@ func NewAppService() *AppService {
 				// Direct mode: toggle listening directly
 				err := app.ToggleListening()
 				if err != nil {
-					fmt.Printf("Error toggling from hotkey: %v\n", err)
+					logToFile("Error toggling from hotkey: %v\n", err)
 				}
 			}
 		}()
@@ -249,7 +249,7 @@ func NewAppService() *AppService {
 	// nothing is lost by waiting until then.
 	if app.settings.Enabled {
 		if err = app.hotkeyManager.Enable(); err != nil {
-			fmt.Printf("Warning: Failed to enable hotkey: %v\n", err)
+			logToFile("Warning: Failed to enable hotkey: %v\n", err)
 		}
 	}
 
@@ -438,7 +438,7 @@ func getConfigPath(filename string) (string, error) {
 func (a *AppService) LoadSettings() error {
 	settingsPath, err := getConfigPath("settings.json")
 	if err != nil {
-		fmt.Printf("⚠️ Warning: Failed to get config path: %v\n", err)
+		logToFile("⚠️ Warning: Failed to get config path: %v\n", err)
 		return nil // Use default settings
 	}
 
@@ -497,7 +497,7 @@ func (a *AppService) SaveSettings(settings Settings) error {
 		return fmt.Errorf("failed to secure settings permissions: %w", err)
 	}
 
-	fmt.Printf("✅ Settings saved to: %s\n", settingsPath)
+	logToFile("✅ Settings saved to: %s\n", settingsPath)
 
 	// Start the global hotkey listener the moment dictation is switched on.
 	// Startup deliberately skips it while dictation is off (it triggers the
@@ -505,13 +505,13 @@ func (a *AppService) SaveSettings(settings Settings) error {
 	// without restarting the app. Enable() returns early if already running.
 	if settings.Enabled && a.hotkeyManager != nil {
 		if err := a.hotkeyManager.Enable(); err != nil {
-			fmt.Printf("Warning: Failed to enable hotkey: %v\n", err)
+			logToFile("Warning: Failed to enable hotkey: %v\n", err)
 		}
 	}
 
 	// If mode changed while recording, restart recording with new mode
 	if wasListening && oldMode != newMode {
-		fmt.Printf("🔄 Mode changed from '%s' to '%s' while recording - restarting...\n", oldMode, newMode)
+		logToFile("🔄 Mode changed from '%s' to '%s' while recording - restarting...\n", oldMode, newMode)
 		// Run restart in goroutine to avoid blocking UI
 		go func() {
 			// Stop current recording
@@ -805,13 +805,13 @@ func (a *AppService) ToggleListening() error {
 		if a.settings.MuteOutputDuringRecording && a.audioMuteManager != nil {
 			err = a.audioMuteManager.UnmuteOutput()
 			if err != nil {
-				fmt.Printf("⚠️ Failed to unmute output: %v\n", err)
+				logToFile("⚠️ Failed to unmute output: %v\n", err)
 			}
 		}
 
 		a.isListening = false
 		newState = false
-		fmt.Println("Stopped listening")
+		logToFile("Stopped listening" + "\n")
 
 		// Restore original PulseAudio source AFTER stream is closed
 		// Use goroutine with delay to ensure PortAudio has fully released resources
@@ -879,7 +879,7 @@ func (a *AppService) ToggleListening() error {
 			err = a.audioMuteManager.MuteOutput()
 			if err != nil {
 				logToFile("⚠️ Failed to mute output: %v\n", err)
-				fmt.Printf("⚠️ Failed to mute output: %v\n", err)
+				logToFile("⚠️ Failed to mute output: %v\n", err)
 				// Don't fail the recording, just warn
 			} else {
 				logToFile("✅ Audio output muted\n")
@@ -911,7 +911,7 @@ func (a *AppService) ToggleListening() error {
 		a.isListening = true
 		newState = true
 		logToFile("✅ Listening started successfully\n")
-		fmt.Println("Started listening")
+		logToFile("Started listening" + "\n")
 	}
 
 	callback := a.onStateChange
@@ -987,29 +987,29 @@ func (a *AppService) ForceProcessAudio() {
 
 // Shutdown performs cleanup on application shutdown
 func (a *AppService) Shutdown() {
-	fmt.Println("Shutting down AppService...")
+	logToFile("Shutting down AppService..." + "\n")
 
 	// Stop listening if active
 	a.mu.Lock()
 	if a.isListening && a.speechRecognizer != nil {
-		fmt.Println("Stopping speech recognizer...")
+		logToFile("Stopping speech recognizer..." + "\n")
 		a.speechRecognizer.Stop()
 	}
 
 	// Restore audio output if muted
 	if a.audioMuteManager != nil {
-		fmt.Println("Restoring audio output...")
+		logToFile("Restoring audio output..." + "\n")
 		a.audioMuteManager.UnmuteOutput()
 	}
 
 	// Restore original PulseAudio source if we changed it (Linux)
 	if a.originalPulseSource != "" {
-		fmt.Printf("Restoring PulseAudio source to: %s\n", a.originalPulseSource)
+		logToFile("Restoring PulseAudio source to: %s\n", a.originalPulseSource)
 		err := SetPulseAudioDefaultSource(a.originalPulseSource)
 		if err != nil {
-			fmt.Printf("⚠️ Failed to restore PulseAudio source: %v\n", err)
+			logToFile("⚠️ Failed to restore PulseAudio source: %v\n", err)
 		} else {
-			fmt.Println("✅ PulseAudio source restored")
+			logToFile("✅ PulseAudio source restored" + "\n")
 		}
 		a.originalPulseSource = ""
 	}
@@ -1017,31 +1017,31 @@ func (a *AppService) Shutdown() {
 
 	// Disable hotkey manager
 	if a.hotkeyManager != nil {
-		fmt.Println("Disabling hotkey manager...")
+		logToFile("Disabling hotkey manager..." + "\n")
 		a.hotkeyManager.Disable()
 	}
 
 	// Stop and cleanup audio
 	if a.audioCapture != nil {
-		fmt.Println("Stopping audio capture...")
+		logToFile("Stopping audio capture..." + "\n")
 		err := a.audioCapture.StopRecording()
 		if err != nil {
-			fmt.Printf("⚠️  Error stopping audio: %v\n", err)
+			logToFile("⚠️  Error stopping audio: %v\n", err)
 		}
 
 		// Give extra time for any remaining goroutines to finish
 		// Increased from 500ms to 1500ms to ensure clean shutdown before Terminate()
-		fmt.Println("Waiting for audio cleanup...")
+		logToFile("Waiting for audio cleanup..." + "\n")
 		time.Sleep(1500 * time.Millisecond)
 
-		fmt.Println("Terminating PortAudio...")
+		logToFile("Terminating PortAudio..." + "\n")
 		err = a.audioCapture.Terminate()
 		if err != nil {
-			fmt.Printf("⚠️  Error terminating PortAudio: %v\n", err)
+			logToFile("⚠️  Error terminating PortAudio: %v\n", err)
 		}
 	}
 
-	fmt.Println("AppService shutdown complete.")
+	logToFile("AppService shutdown complete." + "\n")
 }
 
 // UpdateLastSpeechTime updates the last speech time (called after successful recognition)
@@ -1058,7 +1058,7 @@ func (a *AppService) startSilenceMonitor() {
 	a.silenceMonitorDone = make(chan bool)
 
 	timeout := a.settings.SilenceTimeoutSeconds
-	fmt.Printf("🔔 Auto-stop enabled (%d sec silence timeout)\n", timeout)
+	logToFile("🔔 Auto-stop enabled (%d sec silence timeout)\n", timeout)
 
 	go func() {
 		ticker := time.NewTicker(500 * time.Millisecond)
@@ -1067,7 +1067,7 @@ func (a *AppService) startSilenceMonitor() {
 		for {
 			select {
 			case <-a.silenceMonitorDone:
-				fmt.Println("Silence monitor stopped")
+				logToFile("Silence monitor stopped" + "\n")
 				return
 			case <-ticker.C:
 				// Check if auto-stop is still enabled
@@ -1087,7 +1087,7 @@ func (a *AppService) startSilenceMonitor() {
 
 				// If silence timeout exceeded, stop listening
 				if silenceDuration > int64(silenceTimeout) {
-					fmt.Printf("⏱️ %d sec silence - auto-stopping\n", silenceTimeout)
+					logToFile("⏱️ %d sec silence - auto-stopping\n", silenceTimeout)
 
 					// Stop listening (this will also stop the silence monitor)
 					go a.ToggleListening()
@@ -1123,9 +1123,9 @@ func (a *AppService) UpdateHotkey(ctrl, alt, shift bool, key string) {
 
 		err := a.hotkeyManager.UpdateConfig(config, "toggle")
 		if err != nil {
-			fmt.Printf("Warning: Failed to update hotkey config: %v\n", err)
+			logToFile("Warning: Failed to update hotkey config: %v\n", err)
 		} else {
-			fmt.Printf("✅ Hotkey updated: %v\n", config)
+			logToFile("✅ Hotkey updated: %v\n", config)
 		}
 	}
 }
@@ -1142,9 +1142,9 @@ func (a *AppService) UpdateInstantSendHotkey(ctrl, alt, shift bool, key string) 
 
 		err := a.hotkeyManager.UpdateConfig(config, "send")
 		if err != nil {
-			fmt.Printf("Warning: Failed to update instant send hotkey config: %v\n", err)
+			logToFile("Warning: Failed to update instant send hotkey config: %v\n", err)
 		} else {
-			fmt.Printf("✅ Instant send hotkey updated: %v\n", config)
+			logToFile("✅ Instant send hotkey updated: %v\n", config)
 		}
 	}
 }

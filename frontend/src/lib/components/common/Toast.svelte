@@ -105,7 +105,11 @@
     border: 1px solid rgba(239, 68, 68, 0.3);
     border-radius: 12px;
     box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
-    z-index: 200;
+    /* Above everything, dialogs included. A toast reports something that just
+       went wrong, and the dialog on screen is usually where it went wrong —
+       settings, while testing dictation. At 200 it sat under the log dialog
+       and the select dropdowns, which use four figures. */
+    z-index: 20000;
     max-width: 400px;
   }
 

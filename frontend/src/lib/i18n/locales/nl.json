@@ -1047,5 +1047,22 @@
   "settings.logCopy": "Kopiëren",
   "settings.logOpenFolder": "Map openen",
   "settings.logEmpty": "Nog niets gelogd.",
-  "settings.logTruncated": "De laatste {count} regels worden getoond."
+  "settings.logTruncated": "De laatste {count} regels worden getoond.",
+  "settings.logFilter": "Filteren…",
+  "settings.logMatches": "{shown} van {total} regels",
+  "settings.logHideNoise": "Pollruis verbergen",
+  "logs.title": "Logboeken",
+  "logs.app": "Toepassing",
+  "logs.dictation": "Dictaat",
+  "logs.close": "Sluiten",
+  "logs.clear": "Wissen",
+  "logs.clearConfirm": "Dit logboek wissen? De huidige inhoud gaat verloren; nieuwe regels blijven binnenkomen.",
+  "settings.dictationProblem": "Dictaat kan niet typen",
+  "dictation.api_key_missing_title": "API-sleutel vereist",
+  "dictation.api_key_missing_message": "Deze dictaatmodus heeft een Google Cloud-API-sleutel nodig. Voeg er een toe bij Instellingen → Dictaat.",
+  "dictation.api_key_invalid_title": "API-sleutel geweigerd",
+  "dictation.api_key_invalid_message": "De Google Cloud-API-sleutel is ongeldig, verlopen of heeft geen toegang tot de Speech-to-Text-API. Controleer hem bij Instellingen → Dictaat.",
+  "dictation.quota_title": "Quotum op",
+  "dictation.quota_message": "Het Google Cloud-project heeft geen Speech-to-Text-quotum meer, of facturering staat uit.",
+  "dictation.stream_failed_title": "Dictaat mislukt"
 }

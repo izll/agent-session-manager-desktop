@@ -14,6 +14,7 @@
   import ImportDialog from './lib/components/Dialogs/ImportDialog.svelte';
   import SessionFileDialog from './lib/components/Dialogs/SessionFileDialog.svelte';
   import SettingsDialog from './lib/components/Dialogs/SettingsDialog.svelte';
+  import LogDialog from './lib/components/Dialogs/LogDialog.svelte';
   import RecoveryCenterDialog from './lib/components/Dialogs/RecoveryCenterDialog.svelte';
   import CommandPalette from './lib/components/Dialogs/CommandPalette.svelte';
   import CommandPickerDialog from './lib/components/Dialogs/CommandPickerDialog.svelte';
@@ -120,6 +121,7 @@
   /** Export failures are rare but must not vanish silently. */
   let exportError = '';
   let showSettingsDialog = false;
+  let showLogDialog = false;
   let showRecoveryCenter = false;
   let showCommandPalette = false;
   /** Saved-command library: Ctrl+P picker and its editor. */
@@ -158,6 +160,7 @@
     showNewSessionDialog || showNewGroupDialog || showGlobalSearch || showBgAgents ||
     showHelpDialog || showUpdateDialog || showImportDialog || showFileImportDialog ||
     showSettingsDialog || showRecoveryCenter || showCommandPalette || showColorDialog || showDeleteConfirm ||
+    showLogDialog ||
     showCommandPicker || showCommandManager || showTemplateDialog ||
     showQuitConfirm || showStopDialog || showStartDialog ||
     showResumeChoice || showResumeSessionPicker;
@@ -1091,6 +1094,7 @@
     bind:show={showSettingsDialog}
     on:dictationEnabledChange={handleDictationEnabledChange}
     on:openUpdate={() => { showSettingsDialog = false; showUpdateDialog = true; }}
+    on:openLogs={() => { showSettingsDialog = false; showLogDialog = true; }}
     on:openImport={() => { showSettingsDialog = false; showImportDialog = true; }}
     on:openFileImport={() => { showSettingsDialog = false; showFileImportDialog = true; }}
     on:exportSessions={exportSessions}
@@ -1127,6 +1131,7 @@
     variant="warning"
     on:confirm={confirmQuit}
   />
+  <LogDialog bind:show={showLogDialog} />
   <StopDialog
     bind:show={showStopDialog}
     sessionName={$selectedSession?.name || ''}

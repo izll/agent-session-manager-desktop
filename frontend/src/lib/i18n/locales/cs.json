@@ -1047,5 +1047,22 @@
   "settings.logCopy": "Kopírovat",
   "settings.logOpenFolder": "Otevřít složku",
   "settings.logEmpty": "Zatím nic zaznamenáno.",
-  "settings.logTruncated": "Zobrazeno posledních {count} řádků."
+  "settings.logTruncated": "Zobrazeno posledních {count} řádků.",
+  "settings.logFilter": "Filtrovat…",
+  "settings.logMatches": "{shown} z {total} řádků",
+  "settings.logHideNoise": "Skrýt šum dotazování",
+  "logs.title": "Protokoly",
+  "logs.app": "Aplikace",
+  "logs.dictation": "Diktování",
+  "logs.close": "Zavřít",
+  "logs.clear": "Vyprázdnit",
+  "logs.clearConfirm": "Vyprázdnit tento protokol? Současný obsah bude pryč; nové záznamy budou přibývat dál.",
+  "settings.dictationProblem": "Diktování nemůže psát",
+  "dictation.api_key_missing_title": "Je potřeba klíč API",
+  "dictation.api_key_missing_message": "Tento režim diktování vyžaduje klíč API Google Cloud. Zadejte jej v Nastavení → Diktování.",
+  "dictation.api_key_invalid_title": "Klíč API odmítnut",
+  "dictation.api_key_invalid_message": "Klíč API Google Cloud je neplatný, vypršel, nebo nemá přístup k API Speech-to-Text. Zkontrolujte jej v Nastavení → Diktování.",
+  "dictation.quota_title": "Kvóta vyčerpána",
+  "dictation.quota_message": "Projekt Google Cloud už nemá kvótu pro Speech-to-Text, nebo pro něj není zapnuta fakturace.",
+  "dictation.stream_failed_title": "Diktování selhalo"
 }

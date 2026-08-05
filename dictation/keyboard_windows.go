@@ -9,12 +9,12 @@ import (
 )
 
 var (
-	user32           = syscall.NewLazyDLL("user32.dll")
-	procSendInput    = user32.NewProc("SendInput")
+	user32        = syscall.NewLazyDLL("user32.dll")
+	procSendInput = user32.NewProc("SendInput")
 )
 
 const (
-	INPUT_KEYBOARD = 1
+	INPUT_KEYBOARD    = 1
 	KEYEVENTF_UNICODE = 0x0004
 	KEYEVENTF_KEYUP   = 0x0002
 )
@@ -30,7 +30,7 @@ type KEYBDINPUT struct {
 type INPUT struct {
 	inputType uint32
 	ki        KEYBDINPUT
-	padding   [8]byte  // Padding to ensure correct struct size
+	padding   [8]byte // Padding to ensure correct struct size
 }
 
 // typeUnicodeChar types a single Unicode character using Windows SendInput
@@ -75,7 +75,7 @@ func typeTextWindows(text string) error {
 		if err := typeUnicodeChar(char); err != nil {
 			return err
 		}
-		time.Sleep(5 * time.Millisecond)  // Small delay between characters
+		time.Sleep(5 * time.Millisecond) // Small delay between characters
 	}
 	return nil
 }

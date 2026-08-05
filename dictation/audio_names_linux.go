@@ -3,10 +3,12 @@
 package dictation
 
 import (
+	"context"
 	"fmt"
 	"os/exec"
 	"regexp"
 	"strings"
+	"time"
 )
 
 // PulseAudioSource represents a PulseAudio/PipeWire source with friendly name
@@ -17,11 +19,30 @@ type PulseAudioSource struct {
 
 // getPulseAudioSources returns a map of PulseAudio source names to their friendly descriptions
 // This works with both PulseAudio and PipeWire (which provides PulseAudio compatibility)
+// pactlTimeout bounds every PulseAudio query.
+//
+// pactl blocks indefinitely when the sound server is not answering — a stopped
+// or wedged daemon, a session without one. GetInputDevices calls it on the way
+// into the Dictation settings tab, so an unbounded call froze the whole window:
+// the tab is opened by someone whose audio is already misbehaving, which is
+// exactly when the daemon is least likely to reply.
+//
+// Generous enough that a busy machine still answers, short enough that a dead
+// daemon costs a noticeable pause rather than the app.
+const pactlTimeout = 3 * time.Second
+
+// pactlCommand builds a bounded pactl invocation. The caller must call cancel.
+func pactlCommand(args ...string) (*exec.Cmd, context.CancelFunc) {
+	ctx, cancel := context.WithTimeout(context.Background(), pactlTimeout)
+	return exec.CommandContext(ctx, "pactl", args...), cancel
+}
+
 func getPulseAudioSources() map[string]string {
 	result := make(map[string]string)
 
 	// Run pactl to get source list with descriptions
-	cmd := exec.Command("pactl", "list", "sources")
+	cmd, cancel := pactlCommand("list", "sources")
+	defer cancel()
 	cmd.Env = append(cmd.Environ(), "LANG=C") // Force English output for consistent parsing
 	output, err := cmd.Output()
 	if err != nil {
@@ -60,7 +81,11 @@ func getPulseAudioSources() map[string]string {
 func getALSACardInfo() map[string]string {
 	result := make(map[string]string)
 
-	cmd := exec.Command("cat", "/proc/asound/cards")
+	// Bounded like the rest. /proc is normally instant, but a wedged sound
+	// driver can leave a read on it blocking, and this runs on the same path
+	// into the settings tab.
+	cmd, cancel := audioCommand("cat", "/proc/asound/cards")
+	defer cancel()
 	output, err := cmd.Output()
 	if err != nil {
 		return result
@@ -103,7 +128,7 @@ func matchPortAudioToPulseAudio(portAudioName string, pulseSources map[string]st
 		for pulseName, description := range pulseSources {
 			// For USB devices: match by "usb" in both names
 			if strings.Contains(strings.ToLower(portAudioName), "usb") &&
-			   strings.Contains(strings.ToLower(pulseName), "usb") {
+				strings.Contains(strings.ToLower(pulseName), "usb") {
 				// Further verify by checking if ALSA card name matches
 				if alsaCardName != "" && strings.Contains(strings.ToLower(pulseName), strings.ToLower(alsaCardName)) {
 					return description
@@ -171,7 +196,8 @@ func GetPulseAudioInputDevices() []PulseSource {
 	var sources []PulseSource
 
 	// Run pactl to get source list
-	cmd := exec.Command("pactl", "list", "sources")
+	cmd, cancel := pactlCommand("list", "sources")
+	defer cancel()
 	cmd.Env = append(cmd.Environ(), "LANG=C")
 	output, err := cmd.Output()
 	if err != nil {
@@ -226,7 +252,8 @@ func GetPulseAudioInputDevices() []PulseSource {
 
 // SetPulseAudioDefaultSource sets the default PulseAudio/PipeWire input source
 func SetPulseAudioDefaultSource(sourceName string) error {
-	cmd := exec.Command("pactl", "set-default-source", sourceName)
+	cmd, cancel := pactlCommand("set-default-source", sourceName)
+	defer cancel()
 	err := cmd.Run()
 	if err != nil {
 		return fmt.Errorf("failed to set default source: %w", err)
@@ -236,7 +263,8 @@ func SetPulseAudioDefaultSource(sourceName string) error {
 
 // GetPulseAudioDefaultSource returns the current default PulseAudio/PipeWire input source name
 func GetPulseAudioDefaultSource() string {
-	cmd := exec.Command("pactl", "get-default-source")
+	cmd, cancel := pactlCommand("get-default-source")
+	defer cancel()
 	output, err := cmd.Output()
 	if err != nil {
 		return ""

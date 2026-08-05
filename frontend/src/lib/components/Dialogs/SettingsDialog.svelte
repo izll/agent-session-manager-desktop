@@ -1,11 +1,11 @@
 <script lang="ts">
   import { autoFocusDialog } from '../../utils/dialogActions';
-  import { createEventDispatcher, tick } from 'svelte';
+  import { createEventDispatcher } from 'svelte';
   import { settings, saveSettings } from '../../stores/settings';
   import * as DictationService from '../../../../wailsjs/go/main/DictationService';
   import * as App from '../../../../wailsjs/go/main/App';
   import type { main } from '../../../../wailsjs/go/models';
-  import { EventsEmit, ClipboardSetText } from '../../../../wailsjs/runtime/runtime';
+  import { EventsEmit } from '../../../../wailsjs/runtime/runtime';
   import Select from '../common/Select.svelte';
   import { TERMINAL_THEMES, CUSTOM_THEME_KEYS, getTerminalTheme, allPalettes, nextCustomId,
            MIN_FONT_SIZE, MAX_FONT_SIZE, DEFAULT_FONT_SIZE, type CustomPalette } from '../../utils/terminalThemes';
@@ -178,42 +178,18 @@
    * inherit.
    */
   let showApiKey = false;
+  let dictationProblems: string[] = [];
 
-  // The application log, read on demand rather than followed: it is opened when
-  // something has already gone wrong, and a live tail would mean polling a file
-  // nobody is looking at the rest of the time.
-  let showLog = false;
-  let appLog: { path: string; lines: string[]; truncated: boolean; missing: boolean } | null = null;
-  let logBody: HTMLPreElement | null = null;
-
-  async function loadLog() {
+  // Asked for once when settings open: the answer is fixed at startup, so
+  // polling it would be re-reading a constant.
+  async function loadDictationProblems() {
     try {
-      appLog = await App.GetAppLog();
-      await tick();
-      // The end is what matters, so start there rather than at the top.
-      if (logBody) logBody.scrollTop = logBody.scrollHeight;
-    } catch (e) {
-      appLog = { path: '', lines: [String(e)], truncated: false, missing: false };
+      dictationProblems = (await DictationService.GetDictationProblems()) ?? [];
+    } catch {
+      dictationProblems = [];
     }
   }
 
-  async function toggleLog() {
-    showLog = !showLog;
-    if (showLog) await loadLog();
-  }
-
-  async function copyLog() {
-    if (!appLog?.lines?.length) return;
-    await ClipboardSetText(appLog.lines.join('\n'));
-  }
-
-  async function openLogFolder() {
-    try {
-      await App.OpenAppLogFolder();
-    } catch (e) {
-      console.error('Failed to open the log folder:', e);
-    }
-  }
 
   // Activity-detection patterns: which version is in force, and the result of a
   // manual check. Shown because "already up to date" and a check that quietly
@@ -314,6 +290,7 @@
 
   $: if (show && dictationSettings === null) {
     loadDictationSettings();
+    void loadDictationProblems();
   }
 
   // Update commands when language changes
@@ -1039,6 +1016,19 @@
 
         <!-- Dictation Tab -->
         {#if activeTab === 'dictation'}
+          <!-- Anything that stopped dictation setting itself up. Shown at the
+               top of its own tab because the failure it reports — no xdotool or
+               ydotool — makes speech recognise perfectly and type nothing,
+               which looks like a broken microphone rather than a missing
+               package. -->
+          {#if dictationProblems?.length}
+            <div class="dictation-problem">
+              <strong>{$t('settings.dictationProblem')}</strong>
+              {#each dictationProblems as problem}
+                <pre>{problem}</pre>
+              {/each}
+            </div>
+          {/if}
           {#if loading}
             <div class="loading">{$t('settings.loading')}</div>
           {:else if dictationSettings}
@@ -1428,37 +1418,10 @@
                 <span class="setting-label">{$t('settings.logSection')}</span>
                 <span class="setting-desc">{$t('settings.logDesc')}</span>
               </span>
-              <div class="log-actions">
-                <button class="action-btn" on:click={toggleLog}>
-                  {showLog ? $t('settings.logHide') : $t('settings.logView')}
-                </button>
-                <button class="action-btn" on:click={openLogFolder}>
-                  {$t('settings.logOpenFolder')}
-                </button>
-              </div>
+              <button class="action-btn" on:click={() => dispatch('openLogs')}>
+                {$t('settings.logView')}
+              </button>
             </div>
-
-            {#if showLog}
-              <div class="log-panel">
-                <div class="log-toolbar">
-                  <span class="log-path" title={appLog?.path}>{appLog?.path ?? ''}</span>
-                  <span class="log-toolbar-actions">
-                    <button class="action-btn small" on:click={loadLog}>{$t('settings.logRefresh')}</button>
-                    <button class="action-btn small" on:click={copyLog} disabled={!appLog?.lines?.length}>
-                      {$t('settings.logCopy')}
-                    </button>
-                  </span>
-                </div>
-                {#if appLog?.truncated}
-                  <p class="log-note">{$t('settings.logTruncated', { count: appLog.lines.length })}</p>
-                {/if}
-                <!-- Scrolled to the end on open: the last thing logged is what
-                     explains whatever just went wrong. -->
-                <pre class="log-body" bind:this={logBody}>{appLog?.lines?.length
-                  ? appLog.lines.join('\n')
-                  : $t('settings.logEmpty')}</pre>
-              </div>
-            {/if}
           </div>
 
           <div class="settings-section">
@@ -1917,47 +1880,24 @@
   /* Full width, like the bare input it replaced: .setting-input is width:100%,
      so it sizes to its parent — and an inline-flex wrapper shrinks to its
      contents, which took the field down with it. */
-  .log-actions { display: flex; gap: 8px; flex-shrink: 0; }
-  .log-panel {
-    margin-top: 10px;
-    border: 1px solid rgba(255, 255, 255, 0.08);
+  /* Prominent rather than a note: this is why nothing gets typed, and the
+     settings around it all look fine. */
+  .dictation-problem {
+    margin: 0 0 16px;
+    padding: 12px 14px;
     border-radius: 8px;
-    overflow: hidden;
+    background: rgba(239, 68, 68, 0.12);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    color: #fca5a5;
+    font-size: 13px;
   }
-  .log-toolbar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-    padding: 6px 10px;
-    background: rgba(255, 255, 255, 0.04);
+  .dictation-problem pre {
+    margin: 8px 0 0;
+    white-space: pre-wrap;
+    font-family: inherit;
+    font-size: 12px;
+    opacity: 0.9;
   }
-  .log-toolbar-actions { display: flex; gap: 6px; flex-shrink: 0; }
-  .log-path {
-    font-size: 11px;
-    color: #9ca3af;
-    /* The path is long and the panel is not: truncate rather than wrap, and
-       the full path is in the tooltip. */
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .log-note { margin: 6px 10px 0; font-size: 11px; color: #9ca3af; }
-  .log-body {
-    margin: 0;
-    padding: 10px;
-    max-height: 320px;
-    overflow: auto;
-    font-family: 'JetBrains Mono', 'Fira Code', monospace;
-    font-size: 11px;
-    line-height: 1.5;
-    color: #c9d1d9;
-    /* Lines are long and meaningful to the end; wrapping them would make the
-       timestamps hard to scan. */
-    white-space: pre;
-    user-select: text;
-  }
-  .action-btn.small { padding: 3px 8px; font-size: 11px; }
 
   .key-field {
     position: relative;

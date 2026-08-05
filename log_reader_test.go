@@ -79,3 +79,73 @@ func TestAnEmptyFileYieldsNoLines(t *testing.T) {
 		t.Errorf("an empty file produced %d lines: %q", len(lines), lines)
 	}
 }
+
+// Clearing the application log has to go through the writer that holds it open.
+//
+// setupLogging opens the file without O_APPEND, so the process keeps its own
+// offset. Truncating the path from underneath would leave the next write
+// landing where it left off — padding the start with NUL bytes and making the
+// log look corrupt while appearing to have worked.
+func TestClearingTheAppLogRewindsTheWriter(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "test.log")
+
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+	if err != nil {
+		t.Fatalf("creating the log: %v", err)
+	}
+	defer f.Close()
+
+	w := &filteredLogWriter{file: f}
+	if _, err := w.Write([]byte("first line\n")); err != nil {
+		t.Fatalf("writing: %v", err)
+	}
+
+	if err := w.truncate(); err != nil {
+		t.Fatalf("truncating: %v", err)
+	}
+	if _, err := w.Write([]byte("after clearing\n")); err != nil {
+		t.Fatalf("writing after truncate: %v", err)
+	}
+
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("reading back: %v", err)
+	}
+	if string(got) != "after clearing\n" {
+		t.Errorf("log = %q, want only the line written after clearing — a NUL-padded "+
+			"result means the offset was not rewound", string(got))
+	}
+}
+
+// Truncating without the rewind is the failure the seek exists to prevent.
+func TestTruncateWithoutRewindCorruptsTheLog(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "test.log")
+
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+	if err != nil {
+		t.Fatalf("creating the log: %v", err)
+	}
+	defer f.Close()
+
+	if _, err := f.Write([]byte("a long first line\n")); err != nil {
+		t.Fatalf("writing: %v", err)
+	}
+	// Truncate alone, as clearing the path from outside would do.
+	if err := f.Truncate(0); err != nil {
+		t.Fatalf("truncating: %v", err)
+	}
+	if _, err := f.Write([]byte("next\n")); err != nil {
+		t.Fatalf("writing: %v", err)
+	}
+
+	got, _ := os.ReadFile(path)
+	if !strings.HasPrefix(string(got), "\x00") {
+		t.Skip("this platform does not pad the gap; the rewind is still required")
+	}
+	if string(got) == "next\n" {
+		t.Error("expected the un-rewound write to leave a padded file, which is " +
+			"what filteredLogWriter.truncate avoids")
+	}
+}

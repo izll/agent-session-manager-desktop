@@ -1047,5 +1047,22 @@
   "settings.logCopy": "Copiar",
   "settings.logOpenFolder": "Abrir a pasta",
   "settings.logEmpty": "Nada registrado ainda.",
-  "settings.logTruncated": "Mostrando as últimas {count} linhas."
+  "settings.logTruncated": "Mostrando as últimas {count} linhas.",
+  "settings.logFilter": "Filtrar…",
+  "settings.logMatches": "{shown} de {total} linhas",
+  "settings.logHideNoise": "Ocultar o ruído do polling",
+  "logs.title": "Logs",
+  "logs.app": "Aplicativo",
+  "logs.dictation": "Ditado",
+  "logs.close": "Fechar",
+  "logs.clear": "Limpar",
+  "logs.clearConfirm": "Limpar este log? O conteúdo atual será perdido; novas entradas continuarão chegando.",
+  "settings.dictationProblem": "O ditado não consegue digitar",
+  "dictation.api_key_missing_title": "Chave de API necessária",
+  "dictation.api_key_missing_message": "Este modo de ditado precisa de uma chave de API do Google Cloud. Adicione uma em Configurações → Ditado.",
+  "dictation.api_key_invalid_title": "Chave de API recusada",
+  "dictation.api_key_invalid_message": "A chave de API do Google Cloud é inválida, expirou ou não tem acesso à API Speech-to-Text. Verifique em Configurações → Ditado.",
+  "dictation.quota_title": "Cota esgotada",
+  "dictation.quota_message": "O projeto do Google Cloud não tem mais cota de Speech-to-Text, ou a cobrança não está ativada.",
+  "dictation.stream_failed_title": "Falha no ditado"
 }

@@ -1047,5 +1047,22 @@
   "settings.logCopy": "Copy",
   "settings.logOpenFolder": "Open folder",
   "settings.logEmpty": "Nothing logged yet.",
-  "settings.logTruncated": "Showing the most recent {count} lines."
+  "settings.logTruncated": "Showing the most recent {count} lines.",
+  "settings.logFilter": "Filter…",
+  "settings.logMatches": "{shown} of {total} lines",
+  "settings.logHideNoise": "Hide poll chatter",
+  "logs.title": "Logs",
+  "logs.app": "Application",
+  "logs.dictation": "Dictation",
+  "logs.close": "Close",
+  "logs.clear": "Clear",
+  "logs.clearConfirm": "Clear this log? What is in it now will be gone; new entries keep arriving.",
+  "settings.dictationProblem": "Dictation cannot type",
+  "dictation.api_key_missing_title": "API key needed",
+  "dictation.api_key_missing_message": "This dictation mode needs a Google Cloud API key. Add one in Settings → Dictation.",
+  "dictation.api_key_invalid_title": "API key rejected",
+  "dictation.api_key_invalid_message": "The Google Cloud API key is invalid, expired, or has no access to the Speech-to-Text API. Check it in Settings → Dictation.",
+  "dictation.quota_title": "Quota exhausted",
+  "dictation.quota_message": "The Google Cloud project has no Speech-to-Text quota left, or billing is not enabled for it.",
+  "dictation.stream_failed_title": "Dictation failed"
 }

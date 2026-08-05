@@ -1047,5 +1047,22 @@
   "settings.logCopy": "Sao chép",
   "settings.logOpenFolder": "Mở thư mục",
   "settings.logEmpty": "Chưa có nhật ký nào.",
-  "settings.logTruncated": "Đang hiện {count} dòng gần nhất."
+  "settings.logTruncated": "Đang hiện {count} dòng gần nhất.",
+  "settings.logFilter": "Lọc…",
+  "settings.logMatches": "{shown}/{total} dòng",
+  "settings.logHideNoise": "Ẩn nhiễu từ polling",
+  "logs.title": "Nhật ký",
+  "logs.app": "Ứng dụng",
+  "logs.dictation": "Đọc chính tả",
+  "logs.close": "Đóng",
+  "logs.clear": "Xóa",
+  "logs.clearConfirm": "Xóa nhật ký này? Nội dung hiện tại sẽ mất; các mục mới vẫn tiếp tục được ghi.",
+  "settings.dictationProblem": "Đọc chính tả không gõ được",
+  "dictation.api_key_missing_title": "Cần khóa API",
+  "dictation.api_key_missing_message": "Chế độ đọc chính tả này cần khóa API Google Cloud. Thêm trong Cài đặt → Đọc chính tả.",
+  "dictation.api_key_invalid_title": "Khóa API bị từ chối",
+  "dictation.api_key_invalid_message": "Khóa API Google Cloud không hợp lệ, đã hết hạn, hoặc không có quyền dùng Speech-to-Text API. Kiểm tra trong Cài đặt → Đọc chính tả.",
+  "dictation.quota_title": "Đã hết hạn mức",
+  "dictation.quota_message": "Dự án Google Cloud đã hết hạn mức Speech-to-Text, hoặc chưa bật thanh toán.",
+  "dictation.stream_failed_title": "Đọc chính tả thất bại"
 }

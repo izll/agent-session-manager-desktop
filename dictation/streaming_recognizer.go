@@ -2,6 +2,7 @@ package dictation
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -11,6 +12,8 @@ import (
 	speech "cloud.google.com/go/speech/apiv1"
 	"cloud.google.com/go/speech/apiv1/speechpb"
 	"google.golang.org/api/option"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // StreamingRecognizer handles real-time streaming speech recognition using Google Cloud Speech API
@@ -32,6 +35,35 @@ type StreamingRecognizer struct {
 }
 
 // NewStreamingRecognizer creates a new streaming recognizer
+// reportStreamFailure surfaces a streaming error to the user.
+//
+// Cancellation is not a failure: stopping a recording ends the stream with a
+// cancelled context every single time, and reporting that would put an error
+// box on screen after every normal use.
+func (sr *StreamingRecognizer) reportStreamFailure(err error) {
+	if err == nil || errors.Is(err, context.Canceled) {
+		return
+	}
+	if status.Code(err) == codes.Canceled {
+		return
+	}
+	if sr.app == nil || sr.app.onError == nil {
+		return
+	}
+
+	// Translation keys, not sentences. The frontend looks each one up as
+	// dictation.<key>; handed a whole sentence it finds nothing and the toast
+	// ends up showing something other than what was meant.
+	title, message := "stream_failed_title", err.Error()
+	switch status.Code(err) {
+	case codes.Unauthenticated, codes.PermissionDenied, codes.InvalidArgument:
+		title, message = "api_key_invalid_title", "api_key_invalid_message"
+	case codes.ResourceExhausted:
+		title, message = "quota_title", "quota_message"
+	}
+	go sr.app.onError(title, message)
+}
+
 func NewStreamingRecognizer(app *AppService, apiKey string) (*StreamingRecognizer, error) {
 	ctx := context.Background()
 
@@ -227,12 +259,19 @@ func (sr *StreamingRecognizer) receiveResults(stream speechpb.Speech_StreamingRe
 		}
 		if err != nil {
 			logToFile("❌ Error receiving from stream: %v\n", err)
+			// Tell the user, as the non-streaming path does. Streaming failed
+			// silently: the recording ran, nothing appeared, and the reason —
+			// most often a rejected API key — was only ever written to a log
+			// file. The same key in API mode produced a clear message, which is
+			// what made the two modes look like different problems.
+			sr.reportStreamFailure(err)
 			return
 		}
 
 		// Process results
 		if resp.Error != nil {
 			logToFile("❌ Recognition error: %v\n", resp.Error)
+			sr.reportStreamFailure(fmt.Errorf("%v", resp.Error))
 			continue
 		}
 

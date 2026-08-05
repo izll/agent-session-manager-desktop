@@ -117,7 +117,7 @@ func InitUinputKeyboard() error {
 		keyboard: keyboard,
 	}
 	uinputInitialized = true
-	fmt.Println("✅ uinput keyboard initialized successfully")
+	logToFile("✅ uinput keyboard initialized successfully" + "\n")
 	return nil
 }
 

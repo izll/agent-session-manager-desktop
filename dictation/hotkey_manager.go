@@ -1,7 +1,6 @@
 package dictation
 
 import (
-	"fmt"
 	"os"
 	"runtime"
 	"strings"
@@ -41,7 +40,7 @@ func NewHotkeyManagerReal(config HotkeyConfig, callback func(), hotkeyID string)
 		globalToggleHotkeyManager.hotkeyConfigs[hotkeyID] = config
 		globalToggleHotkeyManager.callbacks[hotkeyID] = callback
 		globalToggleHotkeyManager.configMutex.Unlock()
-		fmt.Printf("♻️ Added hotkey '%s' to existing manager\n", hotkeyID)
+		logToFile("♻️ Added hotkey '%s' to existing manager\n", hotkeyID)
 		return globalToggleHotkeyManager
 	}
 
@@ -64,17 +63,17 @@ func NewHotkeyManagerReal(config HotkeyConfig, callback func(), hotkeyID string)
 // Enable enables the global hotkey
 func (hm *HotkeyManagerReal) Enable() error {
 	if hm.isRunning {
-		fmt.Println("⚠️ Hotkey listener already running")
+		logToFile("⚠️ Hotkey listener already running" + "\n")
 		return nil
 	}
 
 	// Check if we're on Wayland
 	sessionType := getSessionType()
 	if sessionType == "wayland" {
-		fmt.Println("⚠️ WARNING: Running on Wayland")
-		fmt.Println("   Global hotkeys may not work reliably on Wayland due to security restrictions.")
-		fmt.Println("   If hotkey doesn't work, please use the UI button or switch to X11/XWayland.")
-		fmt.Println("   Session type detected:", sessionType)
+		logToFile("⚠️ WARNING: Running on Wayland" + "\n")
+		logToFile("   Global hotkeys may not work reliably on Wayland due to security restrictions." + "\n")
+		logToFile("   If hotkey doesn't work, please use the UI button or switch to X11/XWayland." + "\n")
+		logToFile("   Session type detected: %s\n", sessionType)
 	} else {
 		debugLog("ℹ️  Session type: %s (hotkeys should work)\n", sessionType)
 	}
@@ -122,7 +121,7 @@ func (hm *HotkeyManagerReal) Disable() {
 		return
 	}
 
-	fmt.Println("Disabling global hotkey...")
+	logToFile("Disabling global hotkey..." + "\n")
 	hm.isEnabled = false
 	hm.isRunning = false
 
@@ -135,7 +134,7 @@ func (hm *HotkeyManagerReal) Disable() {
 	// DON'T call hook.End() - it causes crashes when restarting
 	// The listener goroutine will exit cleanly via stopChan
 	// hook.End() is not necessary for cleanup
-	fmt.Println("✅ Hotkey disabled")
+	logToFile("✅ Hotkey disabled" + "\n")
 }
 
 // UpdateConfig updates the hotkey configuration for a specific hotkey ID
@@ -150,7 +149,7 @@ func (hm *HotkeyManagerReal) UpdateConfig(config HotkeyConfig, hotkeyID string) 
 	// The listener automatically uses the new config
 	// since it reads from hm.hotkeyConfigs with mutex protection
 	if hm.isRunning {
-		fmt.Printf("✅ Hotkey '%s' configuration updated immediately\n", hotkeyID)
+		logToFile("✅ Hotkey '%s' configuration updated immediately\n", hotkeyID)
 	}
 
 	return nil

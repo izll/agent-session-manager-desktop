@@ -1047,5 +1047,22 @@
   "settings.logCopy": "نسخ",
   "settings.logOpenFolder": "فتح المجلد",
   "settings.logEmpty": "لا يوجد شيء في السجل بعد.",
-  "settings.logTruncated": "يتم عرض آخر {count} سطر."
+  "settings.logTruncated": "يتم عرض آخر {count} سطر.",
+  "settings.logFilter": "تصفية…",
+  "settings.logMatches": "{shown} من {total} سطر",
+  "settings.logHideNoise": "إخفاء ضجيج الاستطلاع",
+  "logs.title": "السجلات",
+  "logs.app": "التطبيق",
+  "logs.dictation": "الإملاء",
+  "logs.close": "إغلاق",
+  "logs.clear": "تفريغ",
+  "logs.clearConfirm": "تفريغ هذا السجل؟ سيُفقد محتواه الحالي، وستستمر الإدخالات الجديدة بالوصول.",
+  "settings.dictationProblem": "الإملاء لا يستطيع الكتابة",
+  "dictation.api_key_missing_title": "مطلوب مفتاح API",
+  "dictation.api_key_missing_message": "يتطلب وضع الإملاء هذا مفتاح Google Cloud API. أضِفه من الإعدادات ← الإملاء.",
+  "dictation.api_key_invalid_title": "تم رفض مفتاح API",
+  "dictation.api_key_invalid_message": "مفتاح Google Cloud API غير صالح أو منتهي الصلاحية أو لا يملك وصولًا إلى واجهة Speech-to-Text. تحقق منه في الإعدادات ← الإملاء.",
+  "dictation.quota_title": "استُنفدت الحصة",
+  "dictation.quota_message": "لم يعد لدى مشروع Google Cloud حصة لـ Speech-to-Text، أو أن الفوترة غير مفعّلة.",
+  "dictation.stream_failed_title": "فشل الإملاء"
 }

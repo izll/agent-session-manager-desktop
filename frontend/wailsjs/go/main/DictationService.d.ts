@@ -10,6 +10,8 @@ export function GetAvailableLanguages():Promise<Array<Record<string, string>>>;
 
 export function GetBufferText():Promise<string>;
 
+export function GetDictationProblems():Promise<Array<string>>;
+
 export function GetDictationSettings():Promise<main.DictationSettings>;
 
 export function GetInputDevices():Promise<Array<main.InputDevice>>;

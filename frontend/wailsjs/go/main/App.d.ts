@@ -17,6 +17,8 @@ export function BrowseDirectory(arg1:string):Promise<string>;
 
 export function CheckForUpdate():Promise<main.UpdateInfo>;
 
+export function ClearLog(arg1:string):Promise<void>;
+
 export function CloseTab(arg1:string,arg2:number):Promise<void>;
 
 export function CreateBackup():Promise<void>;
@@ -109,6 +111,8 @@ export function GetLastLine(arg1:string):Promise<string>;
 
 export function GetLockStatus():Promise<main.LockStatusInfo>;
 
+export function GetLog(arg1:string):Promise<main.AppLog>;
+
 export function GetMultiplexerStatus():Promise<main.MultiplexerStatus>;
 
 export function GetNextTask(arg1:string):Promise<main.TaskInfo>;
@@ -200,6 +204,8 @@ export function MoveTask(arg1:string,arg2:string,arg3:string):Promise<void>;
 export function OpenAppLogFolder():Promise<void>;
 
 export function OpenFolder(arg1:string):Promise<void>;
+
+export function OpenLogFolder(arg1:string):Promise<void>;
 
 export function OpenSessionFileForEdit(arg1:string,arg2:string):Promise<session.EditableFile>;
 

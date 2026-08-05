@@ -1047,5 +1047,22 @@
   "settings.logCopy": "Kopiuj",
   "settings.logOpenFolder": "Otwórz folder",
   "settings.logEmpty": "Nic jeszcze nie zapisano.",
-  "settings.logTruncated": "Pokazano ostatnie {count} wierszy."
+  "settings.logTruncated": "Pokazano ostatnie {count} wierszy.",
+  "settings.logFilter": "Filtruj…",
+  "settings.logMatches": "{shown} z {total} wierszy",
+  "settings.logHideNoise": "Ukryj szum odpytywania",
+  "logs.title": "Dzienniki",
+  "logs.app": "Aplikacja",
+  "logs.dictation": "Dyktowanie",
+  "logs.close": "Zamknij",
+  "logs.clear": "Wyczyść",
+  "logs.clearConfirm": "Wyczyścić ten dziennik? Obecna zawartość zniknie; nowe wpisy nadal będą dopisywane.",
+  "settings.dictationProblem": "Dyktowanie nie może pisać",
+  "dictation.api_key_missing_title": "Wymagany klucz API",
+  "dictation.api_key_missing_message": "Ten tryb dyktowania wymaga klucza API Google Cloud. Dodaj go w Ustawienia → Dyktowanie.",
+  "dictation.api_key_invalid_title": "Klucz API odrzucony",
+  "dictation.api_key_invalid_message": "Klucz API Google Cloud jest nieprawidłowy, wygasł lub nie ma dostępu do API Speech-to-Text. Sprawdź go w Ustawienia → Dyktowanie.",
+  "dictation.quota_title": "Wyczerpany limit",
+  "dictation.quota_message": "Projekt Google Cloud nie ma już limitu Speech-to-Text lub nie ma włączonych płatności.",
+  "dictation.stream_failed_title": "Dyktowanie nie powiodło się"
 }

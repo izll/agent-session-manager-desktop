@@ -1,8 +1,6 @@
 package dictation
 
-import (
-	"fmt"
-)
+import ()
 
 // HotkeyConfig represents hotkey configuration
 type HotkeyConfig struct {
@@ -23,7 +21,7 @@ type HotkeyManagerSimple struct {
 
 // NewHotkeyManagerSimple creates a new HotkeyManagerSimple
 func NewHotkeyManagerSimple(config HotkeyConfig, callback func()) *HotkeyManagerSimple {
-	fmt.Println("Note: Global hotkeys not yet implemented. Use the UI button to toggle.")
+	logToFile("Note: Global hotkeys not yet implemented. Use the UI button to toggle." + "\n")
 	return &HotkeyManagerSimple{
 		isEnabled:    false,
 		callback:     callback,
@@ -33,8 +31,8 @@ func NewHotkeyManagerSimple(config HotkeyConfig, callback func()) *HotkeyManager
 
 // Enable enables the global hotkey (placeholder)
 func (hm *HotkeyManagerSimple) Enable() error {
-	fmt.Println("Global hotkey support will be added in a future update.")
-	fmt.Printf("Configured hotkey: Ctrl=%v Alt=%v Shift=%v %s\n",
+	logToFile("Global hotkey support will be added in a future update." + "\n")
+	logToFile("Configured hotkey: Ctrl=%v Alt=%v Shift=%v %s\n",
 		hm.hotkeyConfig.Ctrl, hm.hotkeyConfig.Alt, hm.hotkeyConfig.Shift, hm.hotkeyConfig.Key)
 	hm.isEnabled = true
 	return nil
@@ -48,7 +46,7 @@ func (hm *HotkeyManagerSimple) Disable() {
 // UpdateConfig updates the hotkey configuration (placeholder)
 func (hm *HotkeyManagerSimple) UpdateConfig(config HotkeyConfig) error {
 	hm.hotkeyConfig = config
-	fmt.Printf("Hotkey config updated: Ctrl=%v Alt=%v Shift=%v %s\n",
+	logToFile("Hotkey config updated: Ctrl=%v Alt=%v Shift=%v %s\n",
 		config.Ctrl, config.Alt, config.Shift, config.Key)
 	return nil
 }

@@ -1047,5 +1047,22 @@
   "settings.logCopy": "复制",
   "settings.logOpenFolder": "打开文件夹",
   "settings.logEmpty": "暂无日志内容。",
-  "settings.logTruncated": "显示最近 {count} 行。"
+  "settings.logTruncated": "显示最近 {count} 行。",
+  "settings.logFilter": "筛选…",
+  "settings.logMatches": "{total} 行中的 {shown} 行",
+  "settings.logHideNoise": "隐藏轮询噪音",
+  "logs.title": "日志",
+  "logs.app": "应用",
+  "logs.dictation": "听写",
+  "logs.close": "关闭",
+  "logs.clear": "清空",
+  "logs.clearConfirm": "清空此日志？现有内容将丢失，新条目仍会继续写入。",
+  "settings.dictationProblem": "听写无法输入文字",
+  "dictation.api_key_missing_title": "需要 API 密钥",
+  "dictation.api_key_missing_message": "此听写模式需要 Google Cloud API 密钥。请在“设置 → 听写”中添加。",
+  "dictation.api_key_invalid_title": "API 密钥被拒绝",
+  "dictation.api_key_invalid_message": "Google Cloud API 密钥无效、已过期，或无权访问 Speech-to-Text API。请在“设置 → 听写”中检查。",
+  "dictation.quota_title": "配额已用尽",
+  "dictation.quota_message": "该 Google Cloud 项目的 Speech-to-Text 配额已用完，或未启用结算。",
+  "dictation.stream_failed_title": "听写失败"
 }

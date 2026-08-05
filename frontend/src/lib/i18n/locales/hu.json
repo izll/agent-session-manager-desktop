@@ -1047,5 +1047,22 @@
   "settings.logCopy": "Másolás",
   "settings.logOpenFolder": "Mappa megnyitása",
   "settings.logEmpty": "Még nincs naplóbejegyzés.",
-  "settings.logTruncated": "A legutóbbi {count} sor látszik."
+  "settings.logTruncated": "A legutóbbi {count} sor látszik.",
+  "settings.logFilter": "Szűrés…",
+  "settings.logMatches": "{shown} / {total} sor",
+  "settings.logHideNoise": "Lekérdezési zaj elrejtése",
+  "logs.title": "Naplók",
+  "logs.app": "Alkalmazás",
+  "logs.dictation": "Diktálás",
+  "logs.close": "Bezárás",
+  "logs.clear": "Ürítés",
+  "logs.clearConfirm": "Kiüríted ezt a naplót? Ami most benne van, elveszik; az új bejegyzések ettől még jönnek.",
+  "settings.dictationProblem": "A diktálás nem tud gépelni",
+  "dictation.api_key_missing_title": "API-kulcs szükséges",
+  "dictation.api_key_missing_message": "Ehhez a diktálási módhoz Google Cloud API-kulcs kell. Add meg a Beállítások → Diktálás alatt.",
+  "dictation.api_key_invalid_title": "Az API-kulcsot elutasították",
+  "dictation.api_key_invalid_message": "A Google Cloud API-kulcs érvénytelen, lejárt, vagy nincs hozzáférése a Speech-to-Text API-hoz. Ellenőrizd a Beállítások → Diktálás alatt.",
+  "dictation.quota_title": "Elfogyott a kvóta",
+  "dictation.quota_message": "A Google Cloud projektnek elfogyott a Speech-to-Text kvótája, vagy nincs bekapcsolva rajta a számlázás.",
+  "dictation.stream_failed_title": "A diktálás nem sikerült"
 }

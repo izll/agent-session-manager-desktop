@@ -58,14 +58,14 @@ func NewAudioCapture() *AudioCapture {
 	// Initialize WebRTC VAD
 	vad, err := webrtcvad.New()
 	if err != nil {
-		fmt.Printf("⚠️  Failed to initialize WebRTC VAD: %v (falling back to RMS only)\n", err)
+		logToFile("⚠️  Failed to initialize WebRTC VAD: %v (falling back to RMS only)\n", err)
 		vad = nil
 	} else {
 		// Set mode 3 (most aggressive filtering, best for noisy environments)
 		// Mode 0-3: 0=most permissive, 3=most aggressive
 		err = vad.SetMode(3)
 		if err != nil {
-			fmt.Printf("⚠️  Failed to set VAD mode: %v\n", err)
+			logToFile("⚠️  Failed to set VAD mode: %v\n", err)
 		}
 	}
 
@@ -685,6 +685,35 @@ func (ac *AudioCapture) HasSoundInBuffer() bool {
 	return ac.HasSound(audioData)
 }
 
+// SoundLevel reports the measured RMS of a chunk and the threshold it is being
+// judged against, for diagnosing a recording that produced nothing.
+//
+// A level of exactly zero means no audio arrived at all — a muted input, or the
+// wrong device — while a small non-zero level means the microphone is working
+// and too quiet. Without the number the log said "silence" for both.
+func (ac *AudioCapture) SoundLevel(audioData []byte) (level float64, threshold float64) {
+	ac.silenceDetector.mu.Lock()
+	threshold = ac.silenceDetector.threshold
+	ac.silenceDetector.mu.Unlock()
+
+	if len(audioData) == 0 {
+		return 0, threshold
+	}
+	samples := make([]int16, len(audioData)/2)
+	if err := binary.Read(bytes.NewReader(audioData), binary.LittleEndian, &samples); err != nil {
+		return 0, threshold
+	}
+	var sum float64
+	for _, sample := range samples {
+		normalized := float64(sample) / 32768.0
+		sum += normalized * normalized
+	}
+	if len(samples) == 0 {
+		return 0, threshold
+	}
+	return math.Sqrt(sum / float64(len(samples))), threshold
+}
+
 // HasSound checks an immutable PCM chunk.
 func (ac *AudioCapture) HasSound(audioData []byte) bool {
 	if len(audioData) == 0 {
@@ -748,7 +777,7 @@ func (ac *AudioCapture) HasSound(audioData []byte) bool {
 
 // AudioTest records and plays back audio for testing
 func (ac *AudioCapture) AudioTest() error {
-	fmt.Println("Starting audio test: recording for 5 seconds...")
+	logToFile("Starting audio test: recording for 5 seconds..." + "\n")
 
 	// Record for 5 seconds
 	err := ac.StartRecording(5)
@@ -764,16 +793,16 @@ func (ac *AudioCapture) AudioTest() error {
 	}
 
 	audioData := ac.GetAudioData()
-	fmt.Printf("Recorded %d bytes of audio\n", len(audioData))
+	logToFile("Recorded %d bytes of audio\n", len(audioData))
 
 	// Play back
-	fmt.Println("Playing back recorded audio...")
+	logToFile("Playing back recorded audio..." + "\n")
 	err = ac.playbackAudio(audioData)
 	if err != nil {
 		return err
 	}
 
-	fmt.Println("Audio test completed!")
+	logToFile("Audio test completed!" + "\n")
 	return nil
 }
 

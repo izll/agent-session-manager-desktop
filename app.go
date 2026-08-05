@@ -2992,6 +2992,13 @@ func (a *App) GetAppLog() AppLog {
 	return ReadAppLog()
 }
 
+// GetLog returns the tail of one of the logs the viewer offers. The key names
+// a known log rather than a path, so the frontend cannot ask for an arbitrary
+// file.
+func (a *App) GetLog(key string) AppLog {
+	return ReadLogAt(key)
+}
+
 // OpenAppLogFolder shows the log file in the desktop's file manager, for when
 // the tail is not enough and the whole file is wanted.
 func (a *App) OpenAppLogFolder() error {
@@ -3000,6 +3007,21 @@ func (a *App) OpenAppLogFolder() error {
 		return fmt.Errorf("no log file for this run")
 	}
 	return a.OpenFolder(filepath.Dir(path))
+}
+
+// ClearLog empties one of the offered logs, for starting a fresh recording of
+// a problem that is about to be reproduced.
+func (a *App) ClearLog(key string) error {
+	return ClearLog(key)
+}
+
+// OpenLogFolder shows the folder holding one of the offered logs.
+func (a *App) OpenLogFolder(key string) error {
+	log := ReadLogAt(key)
+	if log.Path == "" {
+		return fmt.Errorf("no log file for %q", key)
+	}
+	return a.OpenFolder(filepath.Dir(log.Path))
 }
 
 // GetMultiplexerStatus reports whether the multiplexer this platform needs is

@@ -1047,5 +1047,22 @@
   "settings.logCopy": "Copia",
   "settings.logOpenFolder": "Apri la cartella",
   "settings.logEmpty": "Ancora nessun log.",
-  "settings.logTruncated": "Vengono mostrate le ultime {count} righe."
+  "settings.logTruncated": "Vengono mostrate le ultime {count} righe.",
+  "settings.logFilter": "Filtra…",
+  "settings.logMatches": "{shown} di {total} righe",
+  "settings.logHideNoise": "Nascondi il rumore del polling",
+  "logs.title": "Log",
+  "logs.app": "Applicazione",
+  "logs.dictation": "Dettatura",
+  "logs.close": "Chiudi",
+  "logs.clear": "Svuota",
+  "logs.clearConfirm": "Svuotare questo log? Il contenuto attuale andrà perso; le nuove voci continueranno ad arrivare.",
+  "settings.dictationProblem": "La dettatura non può digitare",
+  "dictation.api_key_missing_title": "Serve una chiave API",
+  "dictation.api_key_missing_message": "Questa modalità di dettatura richiede una chiave API Google Cloud. Inseriscila in Impostazioni → Dettatura.",
+  "dictation.api_key_invalid_title": "Chiave API rifiutata",
+  "dictation.api_key_invalid_message": "La chiave API Google Cloud non è valida, è scaduta o non ha accesso all'API Speech-to-Text. Controllala in Impostazioni → Dettatura.",
+  "dictation.quota_title": "Quota esaurita",
+  "dictation.quota_message": "Il progetto Google Cloud non ha più quota Speech-to-Text, oppure la fatturazione non è attiva.",
+  "dictation.stream_failed_title": "Dettatura non riuscita"
 }

@@ -150,3 +150,17 @@ func debugLog(format string, args ...interface{}) {
 func SetDebugMode(enabled bool) {
 	debugMode = enabled
 }
+
+// LogPath is where dictation writes its own diagnostics.
+//
+// Separate from the application log because dictation predates it and keeps its
+// own format; exposed so the log viewer can offer both. Its content is what
+// answers "the microphone recorded nothing" — the application log carries none
+// of it.
+func LogPath() (string, error) {
+	configDir, err := getConfigDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(configDir, "ai-dictate.log"), nil
+}

@@ -1047,5 +1047,22 @@
   "settings.logCopy": "コピー",
   "settings.logOpenFolder": "フォルダを開く",
   "settings.logEmpty": "まだ記録はありません。",
-  "settings.logTruncated": "直近の {count} 行を表示しています。"
+  "settings.logTruncated": "直近の {count} 行を表示しています。",
+  "settings.logFilter": "絞り込み…",
+  "settings.logMatches": "{total} 行中 {shown} 行",
+  "settings.logHideNoise": "ポーリングのノイズを隠す",
+  "logs.title": "ログ",
+  "logs.app": "アプリケーション",
+  "logs.dictation": "ディクテーション",
+  "logs.close": "閉じる",
+  "logs.clear": "消去",
+  "logs.clearConfirm": "このログを消去しますか？現在の内容は失われますが、新しい記録は引き続き追加されます。",
+  "settings.dictationProblem": "ディクテーションが入力できません",
+  "dictation.api_key_missing_title": "API キーが必要です",
+  "dictation.api_key_missing_message": "このディクテーションモードには Google Cloud の API キーが必要です。設定 → ディクテーションで追加してください。",
+  "dictation.api_key_invalid_title": "API キーが拒否されました",
+  "dictation.api_key_invalid_message": "Google Cloud の API キーが無効か期限切れ、または Speech-to-Text API へのアクセス権がありません。設定 → ディクテーションで確認してください。",
+  "dictation.quota_title": "割り当てを使い切りました",
+  "dictation.quota_message": "Google Cloud プロジェクトの Speech-to-Text の割り当てが残っていないか、課金が有効ではありません。",
+  "dictation.stream_failed_title": "ディクテーションに失敗しました"
 }
