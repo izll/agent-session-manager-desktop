@@ -95,7 +95,7 @@ export function GetFullDiffFileList(arg1:string):Promise<Array<session.DiffFileS
 
 export function GetFullDiffFiles(arg1:string):Promise<Array<session.DiffFile>>;
 
-export function GetFullDiffForFile(arg1:string,arg2:string):Promise<session.DiffFile>;
+export function GetFullDiffForFile(arg1:string,arg2:string,arg3:boolean):Promise<session.DiffFile>;
 
 export function GetGitBranch(arg1:string):Promise<main.GitBranchInfo>;
 
@@ -129,7 +129,7 @@ export function GetSessionDiffFileList(arg1:string):Promise<Array<session.DiffFi
 
 export function GetSessionDiffFiles(arg1:string):Promise<Array<session.DiffFile>>;
 
-export function GetSessionDiffForFile(arg1:string,arg2:string):Promise<session.DiffFile>;
+export function GetSessionDiffForFile(arg1:string,arg2:string,arg3:boolean):Promise<session.DiffFile>;
 
 export function GetSessionTemplates():Promise<Array<main.SessionTemplateInfo>>;
 

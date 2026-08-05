@@ -1011,5 +1011,15 @@
   "diff.above": "위에 차이",
   "diff.showAbove": "이 보기 위에 차이 표시",
   "diff.hideAbove": "위쪽 차이 숨기기",
-  "diff.dragToResize": "드래그하여 크기 조절 · 더블클릭으로 초기화"
+  "diff.dragToResize": "드래그하여 크기 조절 · 더블클릭으로 초기화",
+  "help.diffNextChange": "차이의 다음 변경",
+  "help.diffPrevChange": "차이의 이전 변경",
+  "diff.wholeFile": "전체 파일",
+  "diff.hunksOnly": "변경만",
+  "diff.showWholeFile": "전체 파일 안에서 변경 표시",
+  "diff.showHunksOnly": "변경된 부분만 표시",
+  "diff.nextChangeHint": "다음 변경 · 파일 끝에서 다음 파일로",
+  "diff.prevChangeHint": "이전 변경 · 파일 처음에서 이전 파일로",
+  "diff.nextGoesTo": "다음 변경 · {file}(으)로 이동",
+  "diff.prevGoesTo": "이전 변경 · {file}(으)로 돌아감"
 }

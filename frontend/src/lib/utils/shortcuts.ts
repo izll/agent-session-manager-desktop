@@ -170,6 +170,21 @@ export const SHORTCUTS: Shortcut[] = [
     defaults: [{ key: 'p', ctrl: true }],
   },
   {
+    id: 'diff.nextChange',
+    category: 'navigation',
+    descKey: 'help.diffNextChange',
+    // F7/Shift+F7 is what IntelliJ and Visual Studio use for stepping through
+    // a diff, so the keys are already in the fingers of anyone who reviews
+    // changes in one of those.
+    defaults: [{ key: 'f7', ctrl: true }],
+  },
+  {
+    id: 'diff.prevChange',
+    category: 'navigation',
+    descKey: 'help.diffPrevChange',
+    defaults: [{ key: 'f7', ctrl: true, shift: true }],
+  },
+  {
     id: 'session.filter',
     category: 'search',
     descKey: 'help.actionFilterSessions',

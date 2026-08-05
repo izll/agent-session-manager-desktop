@@ -1011,5 +1011,15 @@
   "diff.above": "Üstte diff",
   "diff.showAbove": "Diff'i bu görünümün üstünde göster",
   "diff.hideAbove": "Üstteki diff'i gizle",
-  "diff.dragToResize": "Boyutlandırmak için sürükleyin · sıfırlamak için çift tıklayın"
+  "diff.dragToResize": "Boyutlandırmak için sürükleyin · sıfırlamak için çift tıklayın",
+  "help.diffNextChange": "Diff'te sonraki değişiklik",
+  "help.diffPrevChange": "Diff'te önceki değişiklik",
+  "diff.wholeFile": "Tüm dosya",
+  "diff.hunksOnly": "Yalnızca değişiklikler",
+  "diff.showWholeFile": "Değişikliği tüm dosya içinde göster",
+  "diff.showHunksOnly": "Yalnızca değişen kısımları göster",
+  "diff.nextChangeHint": "Sonraki değişiklik · sonraki dosyaya geçer",
+  "diff.prevChangeHint": "Önceki değişiklik · önceki dosyaya döner",
+  "diff.nextGoesTo": "Sonraki değişiklik · {file} dosyasına geçer",
+  "diff.prevGoesTo": "Önceki değişiklik · {file} dosyasına döner"
 }

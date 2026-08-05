@@ -1011,5 +1011,15 @@
   "diff.above": "Diff above",
   "diff.showAbove": "Show the diff above this view",
   "diff.hideAbove": "Hide the diff above",
-  "diff.dragToResize": "Drag to resize · double-click to reset"
+  "diff.dragToResize": "Drag to resize · double-click to reset",
+  "help.diffNextChange": "Next change in the diff",
+  "help.diffPrevChange": "Previous change in the diff",
+  "diff.wholeFile": "Whole file",
+  "diff.hunksOnly": "Changes only",
+  "diff.showWholeFile": "Show the change inside the whole file",
+  "diff.showHunksOnly": "Show only the changed parts",
+  "diff.nextChangeHint": "Next change · runs on into the next file",
+  "diff.prevChangeHint": "Previous change · runs back into the previous file",
+  "diff.nextGoesTo": "Next change · moves on to {file}",
+  "diff.prevGoesTo": "Previous change · moves back to {file}"
 }

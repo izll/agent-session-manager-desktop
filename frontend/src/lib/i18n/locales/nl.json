@@ -1011,5 +1011,15 @@
   "diff.above": "Diff boven",
   "diff.showAbove": "Toon de diff boven deze weergave",
   "diff.hideAbove": "Verberg de diff hierboven",
-  "diff.dragToResize": "Sleep om te vergroten · dubbelklik om te herstellen"
+  "diff.dragToResize": "Sleep om te vergroten · dubbelklik om te herstellen",
+  "help.diffNextChange": "Volgende wijziging in de diff",
+  "help.diffPrevChange": "Vorige wijziging in de diff",
+  "diff.wholeFile": "Hele bestand",
+  "diff.hunksOnly": "Alleen wijzigingen",
+  "diff.showWholeFile": "Toon de wijziging in het hele bestand",
+  "diff.showHunksOnly": "Toon alleen de gewijzigde delen",
+  "diff.nextChangeHint": "Volgende wijziging · loopt door naar het volgende bestand",
+  "diff.prevChangeHint": "Vorige wijziging · gaat terug naar het vorige bestand",
+  "diff.nextGoesTo": "Volgende wijziging · gaat naar {file}",
+  "diff.prevGoesTo": "Vorige wijziging · gaat terug naar {file}"
 }

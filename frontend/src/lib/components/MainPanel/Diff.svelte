@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onDestroy } from 'svelte';
+  import { onDestroy, tick } from 'svelte';
   import { selectedSessionId } from '../../stores/sessions';
   import { get } from 'svelte/store';
   import * as App from '../../../../wailsjs/go/main/App';
@@ -7,6 +7,8 @@
   import type { session } from '../../../../wailsjs/go/models';
   import ConfirmDialog from '../Dialogs/ConfirmDialog.svelte';
   import { t } from '../../i18n';
+  import VirtualLines from './VirtualLines.svelte';
+  import { matchesShortcut } from '../../stores/shortcuts';
   import { highlightLine } from '../../utils/highlightLine';
   import { cachedLanguage, loadLanguage } from '../../utils/codemirror';
   import type { LanguageSupport } from '@codemirror/language';
@@ -299,6 +301,10 @@
 
   function selectFile(path: string) {
     selectedPath = path;
+    // Picking a file from the list is not stepping, so it carries no direction:
+    // a hint left over from the last press would point somewhere the user was
+    // no longer heading.
+    stepDirection = null;
   }
 
   // Split a path into directory + basename so the list can dim the directory and
@@ -494,28 +500,36 @@
     .filter(g => g.files.length > 0);
 
   $: selectedSummary = files.find(f => f.path === selectedPath) || null;
-  $: selectedFile = selectedPath ? fileCache[selectedPath] ?? null : null;
+  // The cache key carries the view, because the two need different content
+  // from git: whole-file asks for every line around the changes, hunks-only for
+  // three lines of context. Keyed together, switching views would show the
+  // previous answer.
+  $: cacheKey = selectedPath ? `${wholeFileView ? 'whole' : 'hunks'}:${selectedPath}` : '';
+  $: selectedFile = cacheKey ? fileCache[cacheKey] ?? null : null;
   // Fetch the hunks the first time a file is opened.
-  $: if (selectedPath && !(selectedPath in fileCache)) void loadSelectedFile(selectedPath);
+  $: if (selectedPath && cacheKey && !(cacheKey in fileCache)) void loadSelectedFile(selectedPath);
 
   async function loadSelectedFile(path: string) {
     const sessionId = get(selectedSessionId);
     const mode = diffMode;
+    const whole = wholeFileView;
+    const key = `${whole ? 'whole' : 'hunks'}:${path}`;
     if (!sessionId) return;
     loadingFile = true;
     try {
       const loaded = mode === 'session'
-        ? await App.GetSessionDiffForFile(sessionId, path)
-        : await App.GetFullDiffForFile(sessionId, path);
+        ? await App.GetSessionDiffForFile(sessionId, path, whole)
+        : await App.GetFullDiffForFile(sessionId, path, whole);
       // Ignore a result that arrived after the user moved on, so a slow file
       // cannot overwrite the one now on screen.
-      if (path !== selectedPath || mode !== diffMode || sessionId !== get(selectedSessionId)) return;
-      fileCache = { ...fileCache, [path]: loaded };
+      if (path !== selectedPath || mode !== diffMode || whole !== wholeFileView ||
+          sessionId !== get(selectedSessionId)) return;
+      fileCache = { ...fileCache, [key]: loaded };
     } catch (e) {
       if (path !== selectedPath) return;
       // Cached as null: a file that fails to load should not be retried on
       // every reactive pass.
-      fileCache = { ...fileCache, [path]: null };
+      fileCache = { ...fileCache, [key]: null };
       error = String(e);
     } finally {
       if (path === selectedPath) loadingFile = false;
@@ -554,6 +568,227 @@
   // Only parse when the tab is active AND (the file is small OR the user opted
   // in). Parsing a huge diff string is itself expensive, so we skip it entirely
   // while showing the warning.
+  // Show the change inside the file it lives in, rather than only the few lines
+  // of context a diff carries. The default, because a change is usually easier
+  // to judge with the code around it — and the hunks-only view is a click away
+  // for when the file is large and the change is all that matters.
+  //
+  // Stored, so the choice survives reopening the diff.
+  $: wholeFileView = $settings.diffWholeFile !== false;
+
+  function setWholeFileView(on: boolean) {
+    void saveSettings({ diffWholeFile: on });
+  }
+
+  // Which change the next/previous buttons will move to. -1 before the first
+  // jump, so the first press lands on the first change rather than the second.
+  let currentHunk = -1;
+
+  /**
+   * Which way the review is moving, so only the hint ahead of you is shown.
+   *
+   * Both at once is noise: at the end of a small file each arrow would leave it,
+   * and two labels appear announcing opposite destinations. Going down, only
+   * the next file matters; going up, only the previous.
+   *
+   * Null until the first press — a file just opened has no direction yet, and
+   * guessing one would put a label on screen nobody asked about.
+   */
+  let stepDirection: 1 | -1 | null = null;
+  // Typed loosely: the component's instance type is only used for two exported
+  // methods, and importing it as a type as well as a value is more ceremony
+  // than the two calls are worth.
+  let virtualLines: { scrollToLine(i: number): Promise<void> } | null = null;
+
+  /**
+   * Move to the next or previous change, running past the end of the file into
+   * the next one, and past the last file back to the first — the point of
+   * stepping through a review is not stopping at every boundary.
+   */
+  async function stepChange(delta: number) {
+    stepDirection = delta > 0 ? 1 : -1;
+    if (!hunkStarts.length) {
+      await stepFile(delta);
+      return;
+    }
+
+    // A file opened by clicking it sits at -1, meaning "before the first
+    // change" — which is only "before" when moving forward. Read literally,
+    // stepping up from there is -2, outside the file, so the up arrow left the
+    // file immediately instead of moving to its last change. Going backwards,
+    // an untouched file starts after its end.
+    const from = currentHunk === -1 && delta < 0 ? hunkStarts.length : currentHunk;
+
+    const next = from + delta;
+    if (next < 0 || next >= hunkStarts.length) {
+      await stepFile(delta);
+      return;
+    }
+    currentHunk = next;
+    await virtualLines?.scrollToLine(hunkStarts[currentHunk]);
+  }
+
+  /**
+   * Move to the next or previous file that has changes, and land on the change
+   * at the end we arrived from.
+   *
+   * The file's content is fetched, so this waits for it: a tick() is not
+   * enough, and stepping without waiting looked like "the button stops working
+   * at the end of a file" — it had moved on, to a file whose changes it did not
+   * yet know about.
+   */
+  async function stepFile(delta: number) {
+    // Walks the list the user can SEE, in the order they see it.
+    //
+    // Two things made this wrong. Stepping through `files` moved to entries the
+    // status filter hides — and "modified" is the default, so most reviews have
+    // one on. And the tree view groups files by directory, which reorders them:
+    // walking the flat list then jumped between directories rather than working
+    // down the tree, which reads as skipping the subfolders entirely.
+    const walkable = stepOrder;
+    if (!walkable.length) return;
+    const index = walkable.findIndex(f => f.path === selectedPath);
+    // Wraps around: past the last file the walk returns to the first, and back
+    // past the first it returns to the last. A review is a loop — you go round
+    // until nothing needs another look — and stopping dead at the end just
+    // means finding the top of the list by hand.
+    const count = walkable.length;
+    const next = ((index + delta) % count + count) % count;
+
+    const wanted = walkable[next].path;
+    selectedPath = wanted;
+    void revealInFileList(wanted);
+    // Suppresses the reactive reset below, which would otherwise put us back
+    // before the first change while we are waiting — losing the direction we
+    // arrived in.
+    pendingEntry = delta > 0 ? 'first' : 'last';
+
+    await waitForFileLoad(wanted);
+    // The user moved on while it loaded; whatever they did wins.
+    if (selectedPath !== wanted || !pendingEntry) return;
+
+    const entry = pendingEntry;
+    pendingEntry = null;
+    if (!hunkStarts.length) return;
+    // Land on the change at the end we came in from — first when moving
+    // forward, last when moving back — so entering a file backwards does not
+    // start at its top with the change just left behind off-screen above.
+    //
+    // Scroll to the change at the end we came in from, but set the position
+    // one step BEFORE it, in our own direction of travel. Two effects, both
+    // wanted:
+    //
+    //  - Leaving takes the same number of presses whichever way you are going.
+    //    Landing on the change itself would let a single press leave a file
+    //    entered backwards, so working back through a review would pass over
+    //    files without ever stopping in them.
+    //  - The first press then lands on the change already on screen, which is
+    //    what makes the file feel entered rather than skipped through.
+    const landing = entry === 'first' ? 0 : hunkStarts.length - 1;
+    currentHunk = entry === 'first' ? landing - 1 : landing + 1;
+    await virtualLines?.scrollToLine(hunkStarts[landing]);
+  }
+
+  /** Which end of an incoming file to land on, while its content is loading. */
+  let pendingEntry: 'first' | 'last' | null = null;
+
+  /**
+   * The file the next press would leave for, or null while it stays here.
+   *
+   * Appears only when a press really would cross into another file, which is
+   * why it shares stepChange's condition rather than approximating it. A file
+   * with a single change shows it as soon as you reach that change — correct,
+   * because from there the next press does leave.
+   */
+  function fileAfterStep(
+    delta: number,
+    hunk: number,
+    starts: number[],
+    order: session.DiffFileSummary[],
+    path: string,
+  ): string | null {
+    // Exactly what stepChange does, including its reading of -1 as "before the
+    // first change going forward, after the last going back" — otherwise the
+    // hint would promise a file change the arrow does not make, or stay silent
+    // about one it does.
+    const from = hunk === -1 && delta < 0 ? starts.length : hunk;
+    const after = from + delta;
+    const stillHere = starts.length && after >= 0 && after < starts.length;
+    if (stillHere) return null;
+    if (!order.length) return null;
+    const index = order.findIndex(f => f.path === path);
+    const count = order.length;
+    const next = ((index + delta) % count + count) % count;
+    if (next === index) return null;   // a lone file has nowhere to go
+    return splitPath(order[next].path).name;
+  }
+
+  // Everything it depends on is passed in, so Svelte can see the dependencies:
+  // it tracks what a reactive statement reads directly, not what a function it
+  // calls reads inside. Otherwise the label would keep whatever it said when
+  // the file was opened.
+  $: nextFileName = fileAfterStep(1, currentHunk, hunkStarts, stepOrder, selectedPath);
+  $: prevFileName = fileAfterStep(-1, currentHunk, hunkStarts, stepOrder, selectedPath);
+
+  $: hintBelow = stepDirection === 1 ? nextFileName : null;
+  $: hintAbove = stepDirection === -1 ? prevFileName : null;
+
+
+  /**
+   * Bring the selected file into view in the list beside the diff.
+   *
+   * Stepping moves the selection without the mouse, so nothing else scrolls the
+   * list — and after a few steps the highlighted row is off-screen, leaving no
+   * sense of where in the review you are.
+   *
+   * `nearest` rather than `center`: a row already visible should not move, or
+   * every step would shuffle the whole list under the eye.
+   */
+  async function revealInFileList(path: string) {
+    await tick();
+    const row = document.querySelector(`.file-row[data-path="${CSS.escape(path)}"]`);
+    row?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }
+
+  /**
+   * Resolve once the file's lines are ready.
+   *
+   * Polls rather than hooking the fetch, because the content arrives through
+   * the reactive chain (cache → selectedFile → flatLines) rather than from a
+   * promise this can await. Bounded, so a file that never loads — an error, a
+   * binary — does not leave the walk hanging.
+   */
+  async function waitForFileLoad(path: string): Promise<void> {
+    const key = `${wholeFileView ? 'whole' : 'hunks'}:${path}`;
+    // ~1.5s at 25ms. Long enough for a git call on a large repository, short
+    // enough that a file which never loads does not appear to hang the button.
+    for (let attempt = 0; attempt < 60; attempt++) {
+      await tick();
+      if (selectedPath !== path) return;   // the user moved on
+      if (key in fileCache) return;        // present, even if it failed (null)
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+  }
+
+  // A new file starts before its first change — unless we are stepping into it,
+  // where the direction of travel decides.
+  $: if (selectedPath && !pendingEntry) currentHunk = -1;
+
+  // Keyboard stepping, matched against the configured bindings so it follows a
+  // rebind. Only while this diff is the one on screen: two diffs can be mounted
+  // at once — the full view and the one above a terminal — and both would
+  // otherwise answer the same key.
+  function onKeydown(event: KeyboardEvent) {
+    if (!active) return;
+    if (matchesShortcut(event, 'diff.nextChange')) {
+      event.preventDefault();
+      void stepChange(1);
+    } else if (matchesShortcut(event, 'diff.prevChange')) {
+      event.preventDefault();
+      void stepChange(-1);
+    }
+  }
+
   // The grammar for the file being viewed, loaded on demand and only for a file
   // we are actually going to render. Null until it arrives (and for file types
   // we have no grammar for), which highlightLine takes as "plain text" — so the
@@ -590,6 +825,40 @@
     });
   }
 
+  // The whole file, as one flat list of lines for the virtual renderer, plus
+  // where each hunk starts so the next/previous buttons can jump to it.
+  //
+  // Built once per file rather than per render: highlighting every line of a
+  // 3000-line file is the expensive part, and it does not change while the
+  // file is open.
+  $: flatLines = wholeFileView && selectedFile && shouldRender
+    ? buildFlatLines(selectedFile, lineLanguage)
+    : [];
+  $: hunkStarts = flatLines.reduce((acc, line, index) => {
+    if (line.isHunkStart) acc.push(index);
+    return acc;
+  }, [] as number[]);
+
+  function buildFlatLines(file: session.DiffFile, lang: LanguageSupport | null) {
+    const out: Array<{ type: string; html: string; hunkIndex: number; isHunkStart: boolean }> = [];
+    file.hunks.forEach((hunk, hunkIndex) => {
+      let firstChange = true;
+      for (const line of parseDiff(hunk.body)) {
+        // A hunk's first changed line is where "next change" lands. The header
+        // and the context above it are not what the user is looking for.
+        const isChange = line.type === 'add' || line.type === 'remove';
+        out.push({
+          type: line.type,
+          html: highlightLine(line.text, lang),
+          hunkIndex,
+          isHunkStart: isChange && firstChange,
+        });
+        if (isChange) firstChange = false;
+      }
+    });
+    return out;
+  }
+
   $: hiddenLineCount = renderedHunks.reduce((n, h) => n + h.hidden, 0);
   $: fileCount = files.length;
 
@@ -604,6 +873,17 @@
   // Rebuilt whenever the file list or the fold state changes; the builder is
   // cheap (one pass per file) and the list is at most a few hundred rows.
   $: treeRows = treeView ? buildTreeRows<session.DiffFileSummary>(visibleFiles, collapsedDirs) : [];
+
+  /**
+   * The files in the order the list presents them, which is what next/previous
+   * follows. In tree view that is the tree's own order, with directory rows
+   * dropped and anything inside a folded directory already absent.
+   */
+  $: stepOrder = treeView
+    // flatMap rather than filter+map: TypeScript does not carry the kind check
+    // through a filter, so row.file would not be visible to it afterwards.
+    ? treeRows.flatMap((row) => (row.kind === 'file' ? [row.file] : []))
+    : visibleFiles;
 
   function toggleTreeView() {
     void saveSettings({ diffFlatFileList: treeView });
@@ -637,6 +917,8 @@
     return (row as { kind: 'file'; file: session.DiffFileSummary }).file;
   }
 </script>
+
+<svelte:window on:keydown={onKeydown} />
 
 <div class="diff-container">
   <div class="diff-header">
@@ -781,6 +1063,7 @@
                 <div
                   class="file-row tree-file"
                   class:selected={file.path === selectedPath}
+                  data-path={file.path}
                   style="padding-left: {10 + row.depth * TREE_INDENT}px"
                   role="button"
                   tabindex="0"
@@ -830,6 +1113,7 @@
             <div
               class="file-row"
               class:selected={file.path === selectedPath}
+              data-path={file.path}
               role="button"
               tabindex="0"
               on:click={() => selectFile(file.path)}
@@ -896,9 +1180,49 @@
               <span class="stat added">+{selectedFile.added}</span>
               <span class="stat removed">-{selectedFile.removed}</span>
             </span>
+            <span class="selected-nav">
+              <button
+                class="nav-btn"
+                title={prevFileName
+                  ? $t('diff.prevGoesTo', { file: prevFileName })
+                  : $t('diff.prevChangeHint')}
+                on:click={() => stepChange(-1)}
+              >↑</button>
+              <button
+                class="nav-btn"
+                title={nextFileName
+                  ? $t('diff.nextGoesTo', { file: nextFileName })
+                  : $t('diff.nextChangeHint')}
+                on:click={() => stepChange(1)}
+              >↓</button>
+              <button
+                class="nav-btn wide"
+                class:active={wholeFileView}
+                title={wholeFileView ? $t('diff.showHunksOnly') : $t('diff.showWholeFile')}
+                on:click={() => setWholeFileView(!wholeFileView)}
+              >{wholeFileView ? $t('diff.wholeFile') : $t('diff.hunksOnly')}</button>
+            </span>
           </div>
         {/if}
 
+        <!-- Wrapper so the file hints can float over the diff: diff-content is
+             the scroller, and anything positioned inside it would scroll away
+             with the code. -->
+        <div class="diff-viewport">
+          {#if hintAbove}
+            <button
+              class="file-hint top"
+              title={$t('diff.prevGoesTo', { file: hintAbove })}
+              on:click={() => stepChange(-1)}
+            >↑ {hintAbove}</button>
+          {/if}
+          {#if hintBelow}
+            <button
+              class="file-hint bottom"
+              title={$t('diff.nextGoesTo', { file: hintBelow })}
+              on:click={() => stepChange(1)}
+            >↓ {hintBelow}</button>
+          {/if}
         <div class="diff-content">
           {#if !selectedFile}
             <div class="diff-state no-diff">
@@ -926,6 +1250,13 @@
               <button class="large-diff-show" on:click={showSelectedAnyway}>
                 {$t('diff.showAnyway', { count: MAX_DIFF_LINES })}
               </button>
+            </div>
+          {:else if wholeFileView}
+            <!-- The whole file, virtualised: every line is in the list but only
+                 the visible ones are in the DOM, which is what makes showing a
+                 3000-line file affordable. -->
+            <div class="diff-lines whole-file">
+              <VirtualLines bind:this={virtualLines} lines={flatLines} />
             </div>
           {:else}
             <div class="diff-lines">
@@ -963,6 +1294,7 @@
               {/if}
             </div>
           {/if}
+        </div>
         </div>
       </div>
     </div>
@@ -1532,6 +1864,35 @@
   }
   .selected-arrow { color: #6b7280; flex-shrink: 0; }
   .selected-stats { display: flex; gap: 6px; flex-shrink: 0; }
+  .selected-nav {
+    display: flex;
+    gap: 4px;
+    flex-shrink: 0;
+    margin-left: 8px;
+  }
+  .nav-btn {
+    padding: 2px 7px;
+    font-size: 11px;
+    line-height: 1.4;
+    cursor: pointer;
+    border-radius: 4px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    background: rgba(255, 255, 255, 0.06);
+    color: inherit;
+  }
+  .nav-btn.wide { padding: 2px 10px; }
+
+  .nav-btn:hover { background: rgba(255, 255, 255, 0.14); }
+  .nav-btn.active {
+    border-color: rgba(var(--accent-rgb), 0.5);
+    background: rgba(var(--accent-rgb), 0.16);
+  }
+  /* The virtual viewport owns the scrolling in this mode; the wrapper must not
+     also scroll, or the two fight and the jump-to-change lands short. */
+  .diff-lines.whole-file {
+    height: 100%;
+    overflow: hidden;
+  }
   .selected-status {
     flex-shrink: 0;
     width: 16px;
@@ -1545,6 +1906,47 @@
   .selected-status.added { background: rgba(34, 197, 94, 0.15); color: #22c55e; }
   .selected-status.deleted { background: rgba(239, 68, 68, 0.15); color: #ef4444; }
   .selected-status.renamed { background: rgba(var(--accent-rgb), 0.15); color: var(--accent-light); }
+
+  /* Holds the scroller and the two hints, which are positioned against it. */
+  .diff-viewport {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Where the walk is about to take you, at the edge it will take you towards:
+     the next file at the bottom, the previous at the top. Floating over the
+     code rather than beside the buttons, because that is where the eye is when
+     it reaches the end of a file. */
+  .file-hint {
+    position: absolute;
+    right: 18px;
+    z-index: 5;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    max-width: 60%;
+    padding: 3px 10px;
+    font-size: 11px;
+    font-family: inherit;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: pointer;
+    border-radius: 5px;
+    border: 1px solid rgba(var(--accent-rgb), 0.35);
+    /* Opaque, not tinted: it sits over code, and a translucent label with text
+       behind it is unreadable. */
+    background: #1f2430;
+    color: #c9d1d9;
+    opacity: 0.9;
+  }
+  .file-hint:hover { opacity: 1; border-color: rgba(var(--accent-rgb), 0.6); }
+  .file-hint.top { top: 8px; }
+  .file-hint.bottom { bottom: 8px; }
 
   .diff-content {
     flex: 1;

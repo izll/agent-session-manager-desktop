@@ -1011,5 +1011,15 @@
   "diff.above": "Diff зверху",
   "diff.showAbove": "Показати diff над цим виглядом",
   "diff.hideAbove": "Сховати diff зверху",
-  "diff.dragToResize": "Потягніть, щоб змінити розмір · подвійний клік скидає"
+  "diff.dragToResize": "Потягніть, щоб змінити розмір · подвійний клік скидає",
+  "help.diffNextChange": "Наступна зміна в diff",
+  "help.diffPrevChange": "Попередня зміна в diff",
+  "diff.wholeFile": "Весь файл",
+  "diff.hunksOnly": "Лише зміни",
+  "diff.showWholeFile": "Показати зміну в усьому файлі",
+  "diff.showHunksOnly": "Показати лише змінені частини",
+  "diff.nextChangeHint": "Наступна зміна · переходить до наступного файлу",
+  "diff.prevChangeHint": "Попередня зміна · повертається до попереднього файлу",
+  "diff.nextGoesTo": "Наступна зміна · перейде до {file}",
+  "diff.prevGoesTo": "Попередня зміна · повернеться до {file}"
 }

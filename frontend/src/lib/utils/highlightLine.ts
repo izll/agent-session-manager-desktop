@@ -103,6 +103,18 @@ function inlineStyle(classes: string): string {
   return out.join(';');
 }
 
+/**
+ * The diff marker in a column of its own, followed by a space.
+ *
+ * Dimmed because it is notation rather than content: it says what happened to
+ * the line, and at full strength it competes with the code for attention on
+ * every single row.
+ */
+function markerColumn(marker: string): string {
+  if (!marker) return '';
+  return `<span style="opacity:0.45">${escapeHtml(marker)}</span> `;
+}
+
 /** HTML-escape, because the result is inserted with {@html}. */
 function escapeHtml(text: string): string {
   return text
@@ -128,7 +140,10 @@ const MAX_LINE_LENGTH = 2000;
  */
 export function highlightLine(text: string, language: LanguageSupport | null): string {
   if (!language || !text.trim() || text.length > MAX_LINE_LENGTH) {
-    return escapeHtml(text);
+    // Same column treatment on the unhighlighted path, or plain lines would sit
+    // one character off from the coloured ones around them.
+    const lead = text[0] === '+' || text[0] === '-' || text[0] === ' ' ? text[0] : '';
+    return lead ? markerColumn(lead) + escapeHtml(text.slice(1)) : escapeHtml(text);
   }
 
   // The +/- a diff puts in column one is not part of the code, and handing it
@@ -153,7 +168,10 @@ export function highlightLine(text: string, language: LanguageSupport | null): s
     });
 
     if (pos < code.length) html += escapeHtml(code.slice(pos));
-    return escapeHtml(marker) + html;
+    // The marker gets its own column, so the code starts at the same place on
+    // every line and a change does not appear indented by one character
+    // relative to the context around it.
+    return markerColumn(marker) + html;
   } catch {
     return escapeHtml(text);
   }

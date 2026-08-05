@@ -20,6 +20,9 @@ export interface Settings {
   /** Height in px of the diff shown above a view. Pixels, not a fraction: the
    *  pane below is a terminal measured in whole rows. */
   diffAboveHeight?: number;
+  /** Show a change inside the whole file rather than only its hunks. Absent
+   *  means on: the default is the fuller view. */
+  diffWholeFile?: boolean;
   compactList: boolean;
   hideStatusLines: boolean;
   showAgentIcons: boolean;

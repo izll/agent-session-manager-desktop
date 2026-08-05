@@ -1011,5 +1011,15 @@
   "diff.above": "الفروق بالأعلى",
   "diff.showAbove": "عرض الفروق أعلى هذا العرض",
   "diff.hideAbove": "إخفاء الفروق بالأعلى",
-  "diff.dragToResize": "اسحب لتغيير الحجم · انقر نقرًا مزدوجًا لإعادة التعيين"
+  "diff.dragToResize": "اسحب لتغيير الحجم · انقر نقرًا مزدوجًا لإعادة التعيين",
+  "help.diffNextChange": "التغيير التالي في الفروق",
+  "help.diffPrevChange": "التغيير السابق في الفروق",
+  "diff.wholeFile": "الملف كامل",
+  "diff.hunksOnly": "التغييرات فقط",
+  "diff.showWholeFile": "عرض التغيير داخل الملف كاملًا",
+  "diff.showHunksOnly": "عرض الأجزاء المتغيّرة فقط",
+  "diff.nextChangeHint": "التغيير التالي · يتابع إلى الملف التالي",
+  "diff.prevChangeHint": "التغيير السابق · يعود إلى الملف السابق",
+  "diff.nextGoesTo": "التغيير التالي · ينتقل إلى {file}",
+  "diff.prevGoesTo": "التغيير السابق · يعود إلى {file}"
 }

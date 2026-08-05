@@ -92,3 +92,28 @@ test('a line holding only a marker is left alone', () => {
   assert.equal(marker, '+');
   assert.equal(code.trim(), '', 'there is no code to colour, so the line renders plain');
 });
+
+// The marker gets a column of its own — the character plus a space — so the
+// code starts at the same place on every line. Without it a changed line sits
+// one character to the left of the context around it, and a diff is read by
+// scanning down a column.
+function markerColumn(marker) {
+  return marker ? `<span style="opacity:0.45">${escapeHtml(marker)}</span> ` : '';
+}
+
+test('the marker is separated from the code by a space', () => {
+  const out = markerColumn('+');
+  assert.ok(out.endsWith(' '), 'the code would butt against the marker');
+});
+
+test('a line with no marker gets no column', () => {
+  // Hunk headers have no marker: giving them one would indent them out of line
+  // with everything else.
+  assert.equal(markerColumn(''), '');
+});
+
+test('the marker is escaped like everything else', () => {
+  // It comes from the diff, and only +, - and space are expected — but the
+  // escaping is not conditional on that being true.
+  assert.ok(!markerColumn('<').includes('><'));
+});

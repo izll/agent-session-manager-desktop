@@ -446,7 +446,17 @@ func parseNumstatZ(out string) []DiffFileSummary {
 //
 // Scoped to one path so opening a file costs what that file costs, rather than
 // what the whole tree costs.
-func (i *Instance) diffForFile(baseRef, path string) (*DiffFile, error) {
+// wholeFileContext is the -U value that makes git emit the entire file around
+// the changes.
+//
+// git has no "all of it" switch, so this is a number chosen to exceed any file
+// worth reading in a diff view. Larger than the biggest source file anyone
+// reviews line by line, and small enough that a pathological input — a
+// generated bundle, a vendored blob — is still bounded rather than unrolled in
+// full.
+const wholeFileContext = 100000
+
+func (i *Instance) diffForFile(baseRef, path string, contextLines int) (*DiffFile, error) {
 	if path == "" {
 		return nil, fmt.Errorf("no file given")
 	}
@@ -457,6 +467,13 @@ func (i *Instance) diffForFile(baseRef, path string) (*DiffFile, error) {
 	defer cleanup()
 
 	args := []string{"-C", i.Path, "--no-pager", "diff", "--find-renames"}
+	if contextLines > 0 {
+		// Whole-file view: the unchanged lines around each change come from git
+		// rather than from reading the file separately, so both sides stay
+		// consistent with what the diff describes — a file edited between the
+		// two reads would otherwise show changes against content it never had.
+		args = append(args, fmt.Sprintf("-U%d", contextLines))
+	}
 	if baseRef != "" {
 		args = append(args, baseRef)
 	}
@@ -494,14 +511,26 @@ func (i *Instance) GetFullDiffFileList() ([]DiffFileSummary, error) {
 }
 
 // GetSessionDiffForFile returns one file's diff since the session started.
-func (i *Instance) GetSessionDiffForFile(path string) (*DiffFile, error) {
+//
+// wholeFile asks for the entire file around the changes, rather than the few
+// lines of context a diff normally carries.
+func (i *Instance) GetSessionDiffForFile(path string, wholeFile bool) (*DiffFile, error) {
 	if i.BaseCommitSHA == "" {
 		return nil, fmt.Errorf("no base commit (not a git repo or session started before tracking)")
 	}
-	return i.diffForFile(i.BaseCommitSHA, path)
+	return i.diffForFile(i.BaseCommitSHA, path, contextFor(wholeFile))
 }
 
 // GetFullDiffForFile returns one file's uncommitted diff.
-func (i *Instance) GetFullDiffForFile(path string) (*DiffFile, error) {
-	return i.diffForFile("", path)
+func (i *Instance) GetFullDiffForFile(path string, wholeFile bool) (*DiffFile, error) {
+	return i.diffForFile("", path, contextFor(wholeFile))
+}
+
+// contextFor turns the caller's intent into a -U value; zero leaves git on its
+// own default of three lines.
+func contextFor(wholeFile bool) int {
+	if wholeFile {
+		return wholeFileContext
+	}
+	return 0
 }

@@ -1011,5 +1011,15 @@
   "diff.above": "上方差异",
   "diff.showAbove": "在此视图上方显示差异",
   "diff.hideAbove": "隐藏上方差异",
-  "diff.dragToResize": "拖动调整大小 · 双击重置"
+  "diff.dragToResize": "拖动调整大小 · 双击重置",
+  "help.diffNextChange": "差异中的下一处更改",
+  "help.diffPrevChange": "差异中的上一处更改",
+  "diff.wholeFile": "整个文件",
+  "diff.hunksOnly": "仅更改",
+  "diff.showWholeFile": "在整个文件中显示更改",
+  "diff.showHunksOnly": "仅显示更改部分",
+  "diff.nextChangeHint": "下一处更改 · 到文件末尾后进入下一个文件",
+  "diff.prevChangeHint": "上一处更改 · 到文件开头后进入上一个文件",
+  "diff.nextGoesTo": "下一处更改 · 转到 {file}",
+  "diff.prevGoesTo": "上一处更改 · 返回 {file}"
 }

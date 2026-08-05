@@ -1011,5 +1011,15 @@
   "diff.above": "上に差分",
   "diff.showAbove": "このビューの上に差分を表示",
   "diff.hideAbove": "上の差分を隠す",
-  "diff.dragToResize": "ドラッグでサイズ変更・ダブルクリックでリセット"
+  "diff.dragToResize": "ドラッグでサイズ変更・ダブルクリックでリセット",
+  "help.diffNextChange": "差分内の次の変更",
+  "help.diffPrevChange": "差分内の前の変更",
+  "diff.wholeFile": "ファイル全体",
+  "diff.hunksOnly": "変更のみ",
+  "diff.showWholeFile": "ファイル全体の中で変更を表示",
+  "diff.showHunksOnly": "変更部分のみ表示",
+  "diff.nextChangeHint": "次の変更・末尾で次のファイルへ",
+  "diff.prevChangeHint": "前の変更・先頭で前のファイルへ",
+  "diff.nextGoesTo": "次の変更・{file} へ移動",
+  "diff.prevGoesTo": "前の変更・{file} へ戻る"
 }

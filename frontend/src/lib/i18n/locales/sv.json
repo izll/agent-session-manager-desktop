@@ -1011,5 +1011,15 @@
   "diff.above": "Diff ovanför",
   "diff.showAbove": "Visa diffen ovanför denna vy",
   "diff.hideAbove": "Dölj diffen ovanför",
-  "diff.dragToResize": "Dra för att ändra storlek · dubbelklick återställer"
+  "diff.dragToResize": "Dra för att ändra storlek · dubbelklick återställer",
+  "help.diffNextChange": "Nästa ändring i diffen",
+  "help.diffPrevChange": "Föregående ändring i diffen",
+  "diff.wholeFile": "Hela filen",
+  "diff.hunksOnly": "Endast ändringar",
+  "diff.showWholeFile": "Visa ändringen i hela filen",
+  "diff.showHunksOnly": "Visa bara de ändrade delarna",
+  "diff.nextChangeHint": "Nästa ändring · fortsätter till nästa fil",
+  "diff.prevChangeHint": "Föregående ändring · går tillbaka till förra filen",
+  "diff.nextGoesTo": "Nästa ändring · går vidare till {file}",
+  "diff.prevGoesTo": "Föregående ändring · tillbaka till {file}"
 }

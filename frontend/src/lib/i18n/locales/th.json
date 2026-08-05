@@ -1011,5 +1011,15 @@
   "diff.above": "diff ด้านบน",
   "diff.showAbove": "แสดง diff เหนือมุมมองนี้",
   "diff.hideAbove": "ซ่อน diff ด้านบน",
-  "diff.dragToResize": "ลากเพื่อปรับขนาด · ดับเบิลคลิกเพื่อรีเซ็ต"
+  "diff.dragToResize": "ลากเพื่อปรับขนาด · ดับเบิลคลิกเพื่อรีเซ็ต",
+  "help.diffNextChange": "การเปลี่ยนแปลงถัดไปใน diff",
+  "help.diffPrevChange": "การเปลี่ยนแปลงก่อนหน้าใน diff",
+  "diff.wholeFile": "ทั้งไฟล์",
+  "diff.hunksOnly": "เฉพาะที่เปลี่ยน",
+  "diff.showWholeFile": "แสดงการเปลี่ยนแปลงในทั้งไฟล์",
+  "diff.showHunksOnly": "แสดงเฉพาะส่วนที่เปลี่ยน",
+  "diff.nextChangeHint": "การเปลี่ยนแปลงถัดไป · ไปต่อยังไฟล์ถัดไป",
+  "diff.prevChangeHint": "การเปลี่ยนแปลงก่อนหน้า · ย้อนไปไฟล์ก่อนหน้า",
+  "diff.nextGoesTo": "การเปลี่ยนแปลงถัดไป · ไปยัง {file}",
+  "diff.prevGoesTo": "การเปลี่ยนแปลงก่อนหน้า · ย้อนไปยัง {file}"
 }

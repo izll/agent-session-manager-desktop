@@ -2407,21 +2407,24 @@ func (a *App) GetFullDiffFileList(id string) ([]session.DiffFileSummary, error) 
 }
 
 // GetSessionDiffForFile returns one file's diff since the session started.
-func (a *App) GetSessionDiffForFile(id, path string) (*session.DiffFile, error) {
+//
+// wholeFile asks for the whole file around the changes, for the view that shows
+// a change in the context of the file it lives in.
+func (a *App) GetSessionDiffForFile(id, path string, wholeFile bool) (*session.DiffFile, error) {
 	inst, err := a.storage.GetInstance(id)
 	if err != nil {
 		return nil, err
 	}
-	return inst.GetSessionDiffForFile(path)
+	return inst.GetSessionDiffForFile(path, wholeFile)
 }
 
 // GetFullDiffForFile returns one file's uncommitted diff.
-func (a *App) GetFullDiffForFile(id, path string) (*session.DiffFile, error) {
+func (a *App) GetFullDiffForFile(id, path string, wholeFile bool) (*session.DiffFile, error) {
 	inst, err := a.storage.GetInstance(id)
 	if err != nil {
 		return nil, err
 	}
-	return inst.GetFullDiffForFile(path)
+	return inst.GetFullDiffForFile(path, wholeFile)
 }
 
 // RevertDiffFile discards every pending change to one file.

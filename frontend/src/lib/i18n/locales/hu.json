@@ -1011,5 +1011,15 @@
   "diff.above": "Diff felül",
   "diff.showAbove": "Diff megjelenítése a nézet fölött",
   "diff.hideAbove": "Felső diff elrejtése",
-  "diff.dragToResize": "Húzd az átméretezéshez · dupla kattintás: alaphelyzet"
+  "diff.dragToResize": "Húzd az átméretezéshez · dupla kattintás: alaphelyzet",
+  "help.diffNextChange": "Következő eltérés a diffben",
+  "help.diffPrevChange": "Előző eltérés a diffben",
+  "diff.wholeFile": "Teljes fájl",
+  "diff.hunksOnly": "Csak az eltérések",
+  "diff.showWholeFile": "Az eltérés megjelenítése a teljes fájlban",
+  "diff.showHunksOnly": "Csak a megváltozott részek",
+  "diff.nextChangeHint": "Következő eltérés · a fájl végén a következőre lép",
+  "diff.prevChangeHint": "Előző eltérés · a fájl elején az előzőre lép",
+  "diff.nextGoesTo": "Következő eltérés · átlép ide: {file}",
+  "diff.prevGoesTo": "Előző eltérés · visszalép ide: {file}"
 }

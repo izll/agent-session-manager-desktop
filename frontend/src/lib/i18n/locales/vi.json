@@ -1011,5 +1011,15 @@
   "diff.above": "Diff ở trên",
   "diff.showAbove": "Hiện diff phía trên khung này",
   "diff.hideAbove": "Ẩn diff phía trên",
-  "diff.dragToResize": "Kéo để đổi kích thước · nhấp đúp để đặt lại"
+  "diff.dragToResize": "Kéo để đổi kích thước · nhấp đúp để đặt lại",
+  "help.diffNextChange": "Thay đổi tiếp theo trong diff",
+  "help.diffPrevChange": "Thay đổi trước trong diff",
+  "diff.wholeFile": "Toàn bộ tệp",
+  "diff.hunksOnly": "Chỉ thay đổi",
+  "diff.showWholeFile": "Hiện thay đổi trong toàn bộ tệp",
+  "diff.showHunksOnly": "Chỉ hiện phần đã thay đổi",
+  "diff.nextChangeHint": "Thay đổi tiếp theo · sang tệp kế tiếp",
+  "diff.prevChangeHint": "Thay đổi trước · quay lại tệp trước",
+  "diff.nextGoesTo": "Thay đổi tiếp theo · sang {file}",
+  "diff.prevGoesTo": "Thay đổi trước · quay lại {file}"
 }

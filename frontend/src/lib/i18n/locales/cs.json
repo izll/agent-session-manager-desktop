@@ -1011,5 +1011,15 @@
   "diff.above": "Diff nahoře",
   "diff.showAbove": "Zobrazit diff nad tímto pohledem",
   "diff.hideAbove": "Skrýt diff nahoře",
-  "diff.dragToResize": "Tažením změníte velikost · dvojklik obnoví"
+  "diff.dragToResize": "Tažením změníte velikost · dvojklik obnoví",
+  "help.diffNextChange": "Další změna v diffu",
+  "help.diffPrevChange": "Předchozí změna v diffu",
+  "diff.wholeFile": "Celý soubor",
+  "diff.hunksOnly": "Jen změny",
+  "diff.showWholeFile": "Zobrazit změnu v celém souboru",
+  "diff.showHunksOnly": "Zobrazit jen změněné části",
+  "diff.nextChangeHint": "Další změna · pokračuje do dalšího souboru",
+  "diff.prevChangeHint": "Předchozí změna · vrací se k předchozímu souboru",
+  "diff.nextGoesTo": "Další změna · přejde na {file}",
+  "diff.prevGoesTo": "Předchozí změna · vrátí se na {file}"
 }
