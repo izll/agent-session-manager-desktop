@@ -7,6 +7,7 @@
   import ConfirmDialog from '../Dialogs/ConfirmDialog.svelte';
   import Toast from '../common/Toast.svelte';
   import { sessions, selectedSessionId, selectedWindowIdx, selectWindow, selectedSession, startSession, stopSession, stopTab, restartTab, deleteSession, deleteTab, toggleFavorite, renameTab, reorderTab, loadSessions } from '../../stores/sessions';
+  import type { Session } from '../../stores/sessions';
   import { agents } from '../../stores/agents';
   import { get } from 'svelte/store';
   import { t } from '../../i18n';
@@ -1238,10 +1239,13 @@
     return m;
   })();
 
-  function hasExtraArgs(winIndex: number): boolean {
-    if (!$selectedSession) return false;
-    if (winIndex === 0) return !!$selectedSession.extraArgs;
-    const fw = $selectedSession.followedWindows?.find(w => w.index === winIndex);
+  // Takes the session rather than reading the store, so the badge follows a
+  // session whose arguments changed — from the markup Svelte only sees this
+  // function's arguments, never what it reads inside.
+  function hasExtraArgs(winIndex: number, sess: Session | null): boolean {
+    if (!sess) return false;
+    if (winIndex === 0) return !!sess.extraArgs;
+    const fw = sess.followedWindows?.find(w => w.index === winIndex);
     return !!(fw?.extra_args);
   }
 
@@ -1326,7 +1330,7 @@
                 </svg>
               </span>
             {/if}
-            {#if hasExtraArgs(win.Index)}
+            {#if hasExtraArgs(win.Index, $selectedSession)}
               <span class="tab-extra-args-badge" title={$t('tabBar.editExtraArgs')}>
                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                   <polyline points="4 17 10 11 4 5"/>

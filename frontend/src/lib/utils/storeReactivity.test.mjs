@@ -32,25 +32,14 @@ function parts(source) {
 }
 
 /**
- * Cases that already existed when this test was written.
+ * Exemptions. Empty, and meant to stay that way.
  *
- * They are real — each renders a value the markup cannot see change — but they
- * predate this check and fixing them is separate work with its own testing.
- * Listed so the check can guard against NEW ones today rather than waiting for
- * a sweep. Removing an entry after fixing it is the intended direction; adding
- * one is not.
+ * The nine cases this check first reported have all been fixed rather than
+ * listed here — one of them was a false positive (a handler, where reading the
+ * store when the event fires is exactly right), which is why the detection
+ * below subtracts event-directive calls.
  */
-const KNOWN = new Set([
-  'src/lib/components/Dashboard/ProjectDashboard.svelte: sessionActivity',
-  'src/lib/components/Dashboard/ProjectDashboard.svelte: statusLabel',
-  'src/lib/components/Dashboard/ProjectDashboard.svelte: tabsFor',
-  'src/lib/components/Dialogs/SettingsDialog.svelte: formatDeleteAction',
-  'src/lib/components/MainPanel/Diff.svelte: statusLabel',
-  'src/lib/components/MainPanel/Diff.svelte: askRevertFile',
-  'src/lib/components/MainPanel/TabBar.svelte: hasExtraArgs',
-  'src/lib/components/MainPanel/TaskPanel.svelte: getTaskById',
-  'src/lib/components/MainPanel/TaskPanel.svelte: formatRelativeDate',
-]);
+const KNOWN = new Set([]);
 
 test('helpers called from markup do not read stores internally', () => {
   const offenders = [];
@@ -79,10 +68,17 @@ test('helpers called from markup do not read stores internally', () => {
       const takesStore = /\$/.test(params) || /Map<|bindings|store/i.test(params);
       if (!readsStore || takesStore) continue;
 
-      // Is it called from the markup as a value (rather than an event handler,
-      // where a stale read cannot be displayed)?
-      const calledInMarkup = new RegExp(`[{\\s]${name}\\s*\\(`).test(markup) &&
-        !new RegExp(`on:\\w+={\\s*\\(?[^}]*${name}\\s*\\(`).test(markup);
+      // Only calls that RENDER something matter. A handler reads the store when
+      // the event fires, which is exactly when its value is wanted, so those
+      // are not stale — an earlier version of this test reported askRevertFile,
+      // which is only ever an on:click, as a fault.
+      //
+      // So: count the call sites, subtract the ones inside an event directive,
+      // and report only if something is left.
+      const allCalls = [...markup.matchAll(new RegExp(`\\b${name}\\s*\\(`, 'g'))].length;
+      const handlerCalls =
+        [...markup.matchAll(new RegExp(`on:\\w+(\\|\\w+)*=\\{[^}]*?\\b${name}\\s*\\(`, 'g'))].length;
+      const calledInMarkup = allCalls > handlerCalls;
       if (calledInMarkup && !KNOWN.has(`${file}: ${name}`)) {
         offenders.push(`${file}: ${name}() reads a store but is called from markup`);
       }

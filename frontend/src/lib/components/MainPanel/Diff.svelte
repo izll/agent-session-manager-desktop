@@ -306,8 +306,11 @@
     return { dir: path.slice(0, idx + 1), name: path.slice(idx + 1) };
   }
 
-  function statusLabel(status: string): string {
-    return $t(`diff.status.${status}`);
+  // Takes the translate function rather than reading $t inside: called from
+  // the markup, Svelte re-runs this only when its arguments change, so a
+  // language switch would leave the old wording on screen.
+  function statusLabel(status: string, tr: typeof $t): string {
+    return tr(`diff.status.${status}`);
   }
 
   // Git's own letters, so the badge reads the same in every language and
@@ -763,7 +766,7 @@
                   on:keydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectFile(file.path); } }}
                 >
                   <div class="file-main">
-                    <span class="file-status {file.status}" title={statusLabel(file.status)}>{statusLetter(file.status)}</span>
+                    <span class="file-status {file.status}" title={statusLabel(file.status, $t)}>{statusLetter(file.status)}</span>
                     <span
                       class="file-type-dot"
                       style="background: {type.colour}"
@@ -811,7 +814,7 @@
               on:keydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectFile(file.path); } }}
             >
               <div class="file-main">
-                <span class="file-status {file.status}" title={statusLabel(file.status)}>{statusLetter(file.status)}</span>
+                <span class="file-status {file.status}" title={statusLabel(file.status, $t)}>{statusLetter(file.status)}</span>
                 <span
                   class="file-type-dot"
                   style="background: {type.colour}"
@@ -859,7 +862,7 @@
              indistinguishable once selected. -->
         {#if selectedFile}
           <div class="selected-path" title={selectedFile.path}>
-            <span class="selected-status {selectedFile.status}" title={statusLabel(selectedFile.status)}>
+            <span class="selected-status {selectedFile.status}" title={statusLabel(selectedFile.status, $t)}>
               {statusLetter(selectedFile.status)}
             </span>
             {#if selectedFile.status === 'renamed' && selectedFile.oldPath && selectedFile.oldPath !== selectedFile.path}

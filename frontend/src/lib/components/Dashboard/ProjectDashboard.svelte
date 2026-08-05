@@ -276,16 +276,20 @@
     return 2;
   }
 
-  function sessionActivity(session: Session): Activity {
-    return session.status === 'running' ? ($activities[session.id] || 'idle') : 'idle';
+  // These take the store's value as an argument rather than reading it inside.
+  // Called from the markup, Svelte re-runs a function only when its ARGUMENTS
+  // change — a store read within the body is invisible to it, so the card kept
+  // showing the activity it first rendered with while the sidebar updated.
+  function sessionActivity(session: Session, byId: Record<string, Activity>): Activity {
+    return session.status === 'running' ? (byId[session.id] || 'idle') : 'idle';
   }
 
-  function statusLabel(session: Session): string {
-    if (session.status !== 'running') return $t('dashboard.stopped');
-    const activity = sessionActivity(session);
-    if (activity === 'waiting') return $t('dashboard.waiting');
-    if (activity === 'busy') return $t('dashboard.busy');
-    return $t('dashboard.running');
+  function statusLabel(session: Session, byId: Record<string, Activity>, tr: typeof $t): string {
+    if (session.status !== 'running') return tr('dashboard.stopped');
+    const activity = sessionActivity(session, byId);
+    if (activity === 'waiting') return tr('dashboard.waiting');
+    if (activity === 'busy') return tr('dashboard.busy');
+    return tr('dashboard.running');
   }
 
   function openSession(sessionId: string, windowIdx?: number) {
@@ -294,8 +298,8 @@
     requestAnimationFrame(() => requestAnimationFrame(focusTerminal));
   }
 
-  function tabsFor(session: Session): TabStatusInfo[] {
-    return $tabStatuses[session.id] || [];
+  function tabsFor(session: Session, byId: Record<string, TabStatusInfo[]>): TabStatusInfo[] {
+    return byId[session.id] || [];
   }
 
   function formatCommitDate(value: string): string {
@@ -477,8 +481,8 @@
       <section class="session-grid">
         {#each section.sessions as session (session.id)}
           {@const git = gitBySession.get(session.id)}
-          {@const activity = sessionActivity(session)}
-          {@const sessionTabs = tabsFor(session)}
+          {@const activity = sessionActivity(session, $activities)}
+          {@const sessionTabs = tabsFor(session, $tabStatuses)}
           <article class="session-card" class:needs-attention={activity === 'waiting'} style={session.bgColor ? `--session-accent-bg:${session.bgColor}` : ''}>
             <div class="session-accent" style={session.color ? `background:${session.color}` : ''}></div>
             <div class="card-header">
@@ -491,7 +495,7 @@
               </div>
               <div class="live-status {activity}">
                 <StatusIndicator status={session.status} {activity} size="sm" />
-                <span>{statusLabel(session)}</span>
+                <span>{statusLabel(session, $activities, $t)}</span>
               </div>
             </div>
 

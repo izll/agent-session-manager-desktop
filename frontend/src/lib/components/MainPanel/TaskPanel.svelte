@@ -597,11 +597,22 @@
   }
 
   // Get task by ID for dependency dropdown
-  function getTaskById(id: string): Task | undefined {
-    return $tasks.find(t => t.id === id);
+  // Takes the list rather than reading the store: called from the markup,
+  // Svelte re-runs this only when its arguments change, so a store read inside
+  // would leave the dependency rows showing whatever they first rendered with.
+  function getTaskById(id: string, all: Task[]): Task | undefined {
+    return all.find(t => t.id === id);
   }
 
-  function formatRelativeDate(dateStr: string): string {
+  // Takes the translate function rather than reading $t inside: called from the
+  // markup, Svelte re-runs this only when its arguments change, so a language
+  // switch would leave the old wording on screen.
+  //
+  // The elapsed time it reports still only advances when something else
+  // re-renders the row. That is deliberate — a ticking clock per task would
+  // mean a timer redrawing the panel — and "3 minutes ago" being a little stale
+  // reads fine, where "Perccel ezelőtt" in the wrong language does not.
+  function formatRelativeDate(dateStr: string, tr: typeof $t): string {
     const date = new Date(dateStr);
     const now = new Date();
     const diffMs = now.getTime() - date.getTime();
@@ -609,10 +620,10 @@
     const diffHr = Math.floor(diffMs / 3600000);
     const diffDays = Math.floor(diffMs / 86400000);
 
-    if (diffMin < 1) return $t('tasks.timeJustNow');
-    if (diffMin < 60) return $t('tasks.timeMinAgo', { n: diffMin });
-    if (diffHr < 24) return $t('tasks.timeHourAgo', { n: diffHr });
-    if (diffDays < 7) return $t('tasks.timeDayAgo', { n: diffDays });
+    if (diffMin < 1) return tr('tasks.timeJustNow');
+    if (diffMin < 60) return tr('tasks.timeMinAgo', { n: diffMin });
+    if (diffHr < 24) return tr('tasks.timeHourAgo', { n: diffHr });
+    if (diffDays < 7) return tr('tasks.timeDayAgo', { n: diffDays });
     return date.toLocaleDateString();
   }
 
@@ -768,7 +779,7 @@
                 </span>
                 {#if task.createdAt}
                   <span class="created-at" title={new Date(task.createdAt).toLocaleString()}>
-                    {formatRelativeDate(task.createdAt)}
+                    {formatRelativeDate(task.createdAt, $t)}
                   </span>
                 {/if}
               </div>
@@ -1212,11 +1223,11 @@
         </p>
 
         <!-- Current dependencies -->
-        {#if getTaskById(dependencyTaskId)?.dependencies?.length}
+        {#if getTaskById(dependencyTaskId, $tasks)?.dependencies?.length}
           <div class="current-deps">
             <span class="dep-section-label">Current dependencies:</span>
             <div class="deps-list">
-              {#each getTaskById(dependencyTaskId)?.dependencies || [] as dep}
+              {#each getTaskById(dependencyTaskId, $tasks)?.dependencies || [] as dep}
                 <span class="dep-item">
                   #{dep}
                   <button

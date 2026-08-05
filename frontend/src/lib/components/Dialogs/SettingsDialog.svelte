@@ -383,11 +383,14 @@
     return value;
   }
 
-  function formatDeleteAction(action: string): string {
+  // Takes the translate function rather than reading $t inside: called from
+  // the markup, Svelte re-runs this only when its arguments change, so a
+  // language switch would leave the old wording on screen.
+  function formatDeleteAction(action: string, tr: typeof $t): string {
     switch (action) {
-      case 'buffer': return $t('settings.deleteAction.buffer');
-      case 'ctrl_backspace': return $t('settings.deleteAction.ctrlBackspace');
-      case 'ctrl_alt_backspace': return $t('settings.deleteAction.ctrlAltBackspace');
+      case 'buffer': return tr('settings.deleteAction.buffer');
+      case 'ctrl_backspace': return tr('settings.deleteAction.ctrlBackspace');
+      case 'ctrl_alt_backspace': return tr('settings.deleteAction.ctrlAltBackspace');
       default: return action;
     }
   }
@@ -1317,7 +1320,7 @@
                     <div class="command-item">
                       <span class="command-word">"{command}"</span>
                       <span class="command-arrow">&rarr;</span>
-                      <span class="command-value">{formatDeleteAction(action)}</span>
+                      <span class="command-value">{formatDeleteAction(action, $t)}</span>
                     </div>
                   {/each}
                 </div>
