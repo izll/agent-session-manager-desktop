@@ -6,6 +6,28 @@ Entries describe what changed for someone using the app. Internal refactoring,
 test and CI work is left out unless it changed behaviour. Dates are release
 dates; the format follows [Keep a Changelog](https://keepachangelog.com).
 
+## 0.9.17 — 2026-08-05
+
+### Fixed
+
+- **Forking a conversation branched the wrong one from any tab but the first.**
+  Fork read the session's main window every time, so working in a second Claude
+  tab and pressing Fork produced a branch of a different conversation — under
+  the name you had chosen for the work in front of you, and without any sign
+  that anything was wrong. The tab you are on is now the one that gets branched.
+- **The Fork button appeared on tabs that have no conversation** — a terminal
+  tab inside a Claude session — and was missing from Claude tabs inside a
+  session of another agent.
+- **A fork that could not start left a session behind that could never run.**
+  The dialog closed as though it had worked. It now checks what it needs before
+  creating anything, and reports the failure instead of logging it.
+- **A forked tab started without the session's arguments**, so the branch ran
+  differently configured from the tab it came from. It also failed to launch
+  when the conversation was held by a background agent.
+- **The new tab was created but not opened** — you had to go and find it.
+- **The API key in Settings can be revealed** with an eye button, for checking
+  a paste.
+
 ## 0.9.16 — 2026-08-05
 
 ### Added
