@@ -188,11 +188,6 @@
     if (lastViewKey) tabViewMemory.set(lastViewKey, view);
   }
 
-  // Deliberately leaves activeView alone. The tab bar dispatches this on EVERY
-  // tab click, not only when the diff is open, so forcing the terminal here
-  // overwrote the view tabViewMemory had just restored — the reason a
-  // remembered view never survived a tab switch. Hiding the diff simply
-  // reveals whichever view the tab was already on.
   // Height in pixels rather than a fraction. The pane below is a terminal
   // measured in whole rows, and a fraction of a resized window lands between
   // two of them — the diff creeps a pixel at a time and the terminal reflows
@@ -248,6 +243,11 @@
     void saveSettings({ diffAboveHeight });
   }
 
+  // Leaves activeView alone: hiding the diff reveals whichever view the tab was
+  // already on. Forcing the terminal here would overwrite what tabViewMemory
+  // had just restored, which is how a remembered view once failed to survive a
+  // tab switch. Clicking the tab you are on asks for the terminal separately,
+  // through showTerminal.
   function closeFullDiff() {
     fullDiffActive = false;
     if (lastViewKey) tabDiffMemory.delete(lastViewKey);
@@ -509,6 +509,7 @@
         if (lastViewKey) tabDiffMemory.add(lastViewKey);
       }}
       on:closeFullDiff={closeFullDiff}
+      on:showTerminal={() => selectView('terminal')}
       on:openColorDialog={() => dispatch('openColorDialog')}
       on:requestStop={() => dispatch('requestStop')}
       on:requestStart={() => dispatch('requestStart')}

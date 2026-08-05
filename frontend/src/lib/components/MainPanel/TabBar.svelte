@@ -723,10 +723,17 @@
   // the click did nothing at all — the tab looked unclickable while the diff
   // was open. Here the click can only mean "show me this tab".
   function handleTabClick(index: number) {
-    if (index === $selectedWindowIdx && fullDiffActive) {
-      dispatch('closeFullDiff');
+    // Clicking the tab you are already on means "show me this tab" — and what
+    // that means is the terminal. Whichever view is over it (the diff, notes,
+    // the file browser, tasks) is what the click is asking to get out of; there
+    // is nothing else it could mean, since the tab is already selected.
+    if (index === $selectedWindowIdx) {
+      if (fullDiffActive) dispatch('closeFullDiff');
+      dispatch('showTerminal');
       return;
     }
+    // Moving to ANOTHER tab leaves the view to that tab's own memory, so a tab
+    // left on its notes comes back to them.
     selectWindow(index);
   }
 
