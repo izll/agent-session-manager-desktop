@@ -70,7 +70,28 @@
     if (!value) return '';
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return '';
-    return date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+    return formatResetDate(date);
+  }
+
+  /**
+   * A reset time, with the date when it is not today.
+   *
+   * The time alone was ambiguous for anything but the shortest window: Codex's
+   * weekly limit resets days away, and "14:30" says nothing about which day.
+   * The date is left off for a reset later today, where it would be noise —
+   * which is the common case for the five-hour window.
+   */
+  function formatResetDate(date: Date): string {
+    const time = date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+    const now = new Date();
+    const sameDay = date.getFullYear() === now.getFullYear() &&
+      date.getMonth() === now.getMonth() &&
+      date.getDate() === now.getDate();
+    if (sameDay) return time;
+    // Weekday and day-of-month rather than a full date: a reset is always
+    // within days, so the year and the month name carry nothing.
+    const day = date.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+    return `${day} ${time}`;
   }
 
   // "300 → 5h", "10080 → 7d" — plan-dependent Codex window labels.
@@ -82,7 +103,7 @@
 
   function formatResetUnix(ts: number): string {
     if (!ts) return '';
-    return new Date(ts * 1000).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+    return formatResetDate(new Date(ts * 1000));
   }
 
   let filter = '';
@@ -385,6 +406,12 @@
                   style="width:{Math.min(100, claudeUsage.sevenDay.utilization)}%"></div>
               </div>
               <span class="usage-pct">{Math.round(claudeUsage.sevenDay.utilization)}%</span>
+              <!-- The weekly window carries a reset time like the five-hour one
+                   does; it simply was not shown, which left the limit people
+                   actually plan around as the one with no date on it. -->
+              {#if claudeUsage.sevenDay.resetsAt}
+                <span class="usage-reset">{$t('dashboard.usageResets', { time: formatReset(claudeUsage.sevenDay.resetsAt) })}</span>
+              {/if}
             </div>
             <span class="usage-models" title="Sonnet / Opus (7d)">
               S {Math.round(claudeUsage.sevenDaySonnet.utilization)}% · O {Math.round(claudeUsage.sevenDayOpus.utilization)}%
@@ -415,6 +442,9 @@
                     style="width:{Math.min(100, codexUsage.secondary.usedPercent)}%"></div>
                 </div>
                 <span class="usage-pct">{Math.round(codexUsage.secondary.usedPercent)}%</span>
+                {#if codexUsage.secondary.resetsAt}
+                  <span class="usage-reset">{$t('dashboard.usageResets', { time: formatResetUnix(codexUsage.secondary.resetsAt) })}</span>
+                {/if}
               </div>
             {/if}
             {#if codexUsage.planType}
