@@ -134,6 +134,13 @@ type Settings struct {
 	// an older config still loads (migrated into the list on first save).
 	CustomTerminalThemes []CustomTerminalTheme `json:"custom_terminal_themes,omitempty"`
 	CustomTerminalTheme  map[string]string     `json:"custom_terminal_theme,omitempty"`
+	// Rebound keyboard shortcuts, by shortcut id. Only the ones the user has
+	// changed are stored, so a shortcut whose default later moves follows the
+	// new default rather than being pinned to the old one by an entry nobody
+	// asked for. The value is the binding in the frontend's own shape; the
+	// backend stores and returns it without interpreting it, since what counts
+	// as a valid binding is decided where the key events are.
+	ShortcutOverrides map[string]any `json:"shortcut_overrides,omitempty"`
 }
 
 type StorageData struct {

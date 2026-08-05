@@ -14,6 +14,9 @@ export type GitBranchDisplay = 'header' | 'statusbar' | 'off';
 export type TerminalCopyMode = 'shift' | 'select';
 
 export interface Settings {
+  /** Rebound keyboard shortcuts, keyed by shortcut id. Only what the user has
+   *  changed — see stores/shortcuts.ts. */
+  shortcutOverrides?: Record<string, unknown>;
   compactList: boolean;
   hideStatusLines: boolean;
   showAgentIcons: boolean;

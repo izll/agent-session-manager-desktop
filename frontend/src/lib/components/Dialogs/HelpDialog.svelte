@@ -4,6 +4,11 @@
   import * as App from '../../../../wailsjs/go/main/App';
   import { BrowserOpenURL } from '../../../../wailsjs/runtime/runtime';
   import { t } from '../../i18n';
+  import { SHORTCUTS, FAVOURITE_SHORTCUT, type Shortcut, type Binding } from '../../utils/shortcuts';
+  import { effectiveBindings, formatBinding } from '../../stores/shortcuts';
+
+  // Modifier names differ on Apple keyboards; the bindings themselves do not.
+  const isMac = navigator.platform.toLowerCase().includes('mac');
 
   export let show = false;
 
@@ -33,37 +38,45 @@
     }
   }
 
-  $: shortcuts = [
-    { category: $t('help.navigation'), items: [
-      { key: 'Ctrl+Shift+↑ / ↓', desc: $t('help.navGlobalSession') },
-      { key: 'Alt+↑ / ↓', desc: $t('help.navGlobalSession') },
-      { key: 'Ctrl+Shift+K / J', desc: $t('help.navReorderSession') },
-      { key: 'Ctrl+Shift+1…7', desc: $t('help.navFavorite') },
-      { key: 'Ctrl+PgUp / PgDn', desc: $t('help.navSwitchTab') },
-      { key: 'Enter', desc: $t('help.navAttach') },
-    ]},
-    { category: $t('help.sessionActions'), items: [
-      { key: 'Ctrl+Shift+N', desc: $t('help.actionNewSession') },
-      { key: 'Ctrl+Shift+G', desc: $t('help.actionNewGroup') },
-      { key: 'Ctrl+Shift+S', desc: $t('help.actionStartSession') },
-      { key: 'Ctrl+Shift+X', desc: $t('help.actionStopSession') },
-      { key: 'Ctrl+Shift+D', desc: $t('help.actionDeleteSession') },
-      { key: 'Ctrl+Shift+8', desc: $t('help.actionToggleFavorite') },
-    ]},
-    { category: $t('help.searchCategory'), items: [
-      { key: 'Ctrl+K / Ctrl+Shift+P', desc: $t('help.actionCommandPalette') },
-      { key: 'Ctrl+Shift+F', desc: $t('help.actionGlobalSearch') },
-      { key: '/', desc: $t('help.actionFilterSessions') },
-    ]},
-    { category: $t('help.other'), items: [
-      { key: 'Ctrl+Shift+H', desc: $t('help.actionShowHelp') },
-      { key: 'Ctrl+Shift+U', desc: $t('help.actionCheckUpdates') },
-      { key: 'Ctrl+Shift+I', desc: $t('help.actionImportSessions') },
-      { key: 'Ctrl+' + $t('help.wheel'), desc: $t('help.actionZoomTerminal') },
-      { key: 'Ctrl+0', desc: $t('help.actionResetFontSize') },
-      { key: 'Esc', desc: $t('help.actionCloseDialogs') },
-    ]},
-  ];
+  // Rendered from the same list the key handlers match against, so a rebound
+  // shortcut shows its new keys here without anyone remembering to update a
+  // second copy. Before this, the keys lived in the handlers and the
+  // descriptions lived here, and nothing kept the two in step.
+  const CATEGORY_LABELS: Record<string, string> = {
+    navigation: 'help.navigation',
+    session: 'help.sessionActions',
+    search: 'help.searchCategory',
+    other: 'help.other',
+  };
+
+  $: shortcuts = (['navigation', 'session', 'search', 'other'] as const).map((category) => ({
+    category: $t(CATEGORY_LABELS[category]),
+    items: [
+      ...(category === 'navigation' ? [FAVOURITE_SHORTCUT] : []),
+      ...SHORTCUTS.filter((s) => s.category === category),
+    ].map((shortcut) => ({
+      key: displayKeys(shortcut, $effectiveBindings),
+      desc: $t(shortcut.descKey),
+    })).filter((row) => row.key !== ''),
+  // A category whose shortcuts were all switched off would otherwise leave a
+  // heading with nothing under it.
+  })).filter((section) => section.items.length > 0);
+
+  /** What to print for one shortcut: its bindings, or the fixed label for the
+   *  entries that are not key presses (the mouse wheel, the favourite range). */
+  function displayKeys(shortcut: Shortcut, bindings: Map<string, Binding[]>): string {
+    if (shortcut.displayKey) {
+      return shortcut.displayKey === 'wheel'
+        ? 'Ctrl+' + $t('help.wheel')
+        : shortcut.displayKey;
+    }
+    const current = bindings.get(shortcut.id) || shortcut.defaults;
+    // A shortcut the user switched off is dropped from the help entirely (the
+    // caller filters empty strings): listing it with no keys would read as a
+    // shortcut that exists but cannot be pressed.
+    if (!current.length) return '';
+    return current.map((b) => formatBinding(b, isMac)).join(' / ');
+  }
 </script>
 
 {#if show}

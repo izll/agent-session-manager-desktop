@@ -14,6 +14,7 @@
   import { UI_THEMES, DEFAULT_UI_THEME, CUSTOM_UI_THEME,
            accentContrastOnBackground, MIN_ACCENT_CONTRAST } from '../../utils/uiThemes';
   import { agents } from '../../stores/agents';
+  import ShortcutEditor from '../Settings/ShortcutEditor.svelte';
   import { t, loadTranslations } from '../../i18n';
 
   export let show = false;
@@ -167,7 +168,7 @@
   const dispatch = createEventDispatcher();
 
   // Tab state
-  let activeTab: 'general' | 'terminal' | 'agents' | 'dictation' | 'maintenance' = 'general';
+  let activeTab: 'general' | 'terminal' | 'shortcuts' | 'agents' | 'dictation' | 'maintenance' = 'general';
 
   // Activity-detection patterns: which version is in force, and the result of a
   // manual check. Shown because "already up to date" and a check that quietly
@@ -433,6 +434,13 @@
           on:click={() => activeTab = 'agents'}
         >
           {$t('settings.agents')}
+        </button>
+        <button
+          class="tab"
+          class:active={activeTab === 'shortcuts'}
+          on:click={() => activeTab = 'shortcuts'}
+        >
+          {$t('settings.shortcuts')}
         </button>
         <button
           class="tab"
@@ -863,6 +871,13 @@
 
           </div>
 
+        {/if}
+
+        <!-- Shortcuts Tab -->
+        {#if activeTab === 'shortcuts'}
+          <div class="settings-section">
+            <ShortcutEditor />
+          </div>
         {/if}
 
         <!-- Agents Tab -->

@@ -2710,6 +2710,10 @@ type SettingsInfo struct {
 	NtfyURL            string `json:"ntfyUrl"`
 	TerminalTheme      string `json:"terminalTheme"`
 	AgentDefaultTheme  string `json:"agentDefaultTheme"`
+	// ShortcutOverrides holds only the shortcuts the user has rebound, keyed by
+	// shortcut id. Passed through untouched: the frontend owns what a binding
+	// looks like, because that is where key events are matched.
+	ShortcutOverrides map[string]any `json:"shortcutOverrides"`
 	// Per-agent-type palette overrides ("claude" → "dracula", …) and the
 	// user-defined palette used when a theme id is "custom".
 	AgentTerminalThemes  map[string]string             `json:"agentTerminalThemes"`
@@ -2806,6 +2810,7 @@ func (a *App) GetSettings() (*SettingsInfo, error) {
 		NotifyDesktop:        settings.NotifyDesktop,
 		NotifyNtfy:           settings.NotifyNtfy,
 		NtfyURL:              settings.NtfyURL,
+		ShortcutOverrides:    settings.ShortcutOverrides,
 		TerminalTheme:        theme,
 		AgentDefaultTheme:    agentTheme,
 		AgentTerminalThemes:  settings.AgentTerminalThemes,
@@ -2857,6 +2862,7 @@ func (a *App) SaveSettings(settings SettingsInfo) error {
 		current.NotifyDesktop = settings.NotifyDesktop
 		current.NotifyNtfy = settings.NotifyNtfy
 		current.NtfyURL = settings.NtfyURL
+		current.ShortcutOverrides = settings.ShortcutOverrides
 	})
 	if err != nil {
 		return err

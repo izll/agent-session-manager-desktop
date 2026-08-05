@@ -1125,6 +1125,7 @@ export namespace main {
 	    ntfyUrl: string;
 	    terminalTheme: string;
 	    agentDefaultTheme: string;
+	    shortcutOverrides: Record<string, any>;
 	    agentTerminalThemes: Record<string, string>;
 	    customTerminalThemes: session.CustomTerminalTheme[];
 	
@@ -1166,6 +1167,7 @@ export namespace main {
 	        this.ntfyUrl = source["ntfyUrl"];
 	        this.terminalTheme = source["terminalTheme"];
 	        this.agentDefaultTheme = source["agentDefaultTheme"];
+	        this.shortcutOverrides = source["shortcutOverrides"];
 	        this.agentTerminalThemes = source["agentTerminalThemes"];
 	        this.customTerminalThemes = this.convertValues(source["customTerminalThemes"], session.CustomTerminalTheme);
 	    }

@@ -8,6 +8,7 @@
   import { TerminalPool } from '../../utils/terminalPool';
   import { setTerminalRenderer, setTerminalCopyMode, setTerminalFontFamily, setTerminalThemeContext, defaultTerminalRenderer } from '../../utils/terminal';
   import { t } from '../../i18n';
+  import { matchesShortcut } from '../../stores/shortcuts';
   import '@xterm/xterm/css/xterm.css';
 
   let poolContainerEl: HTMLElement;
@@ -312,9 +313,15 @@
 
     // Capture-phase handler for Shift+PageUp/Down → send to tmux via WebSocket
     function handleTerminalKeydown(e: KeyboardEvent) {
-      // Ctrl+0 resets the zoom, as in a browser. Caught here rather than sent
-      // to the shell: Ctrl+0 has no terminal meaning, so nothing is lost.
-      if (e.ctrlKey && !e.shiftKey && !e.altKey && (e.key === '0' || e.code === 'Digit0')) {
+      // Resets the zoom, as in a browser. Caught here rather than sent to the
+      // shell: the default (Ctrl+0) has no terminal meaning, so nothing is lost.
+      //
+      // e.code is checked as well as the binding because on layouts where the
+      // digit row needs Shift, e.key is the symbol rather than the digit — and
+      // Ctrl+0 is the one shortcut users reach for by its position.
+      const isFontReset = matchesShortcut(e, 'terminal.fontReset') ||
+        (e.ctrlKey && !e.shiftKey && !e.altKey && e.code === 'Digit0');
+      if (isFontReset) {
         e.preventDefault();
         e.stopPropagation();
         void resetFontSizeForCurrentTab();

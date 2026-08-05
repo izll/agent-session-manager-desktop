@@ -10,6 +10,7 @@
   import { agents } from '../../stores/agents';
   import { get } from 'svelte/store';
   import { t } from '../../i18n';
+  import { matchesShortcut } from '../../stores/shortcuts';
   import { focusTerminal } from '../../utils/focus';
   import { tabStatuses } from '../../stores/statusLines';
   import StatusIndicator from '../common/StatusIndicator.svelte';
@@ -240,8 +241,11 @@
   // Ctrl+PageUp/PageDown to switch window tabs
   function handleWindowTabKeydown(e: KeyboardEvent) {
     if (!visible) return;
-    if (!e.ctrlKey || e.shiftKey || e.altKey || e.metaKey) return;
-    if (e.key !== 'PageUp' && e.key !== 'PageDown') return;
+    // Matched against the configured bindings rather than hard-coded keys, so
+    // rebinding tab navigation in settings reaches this too.
+    const wantsNext = matchesShortcut(e, 'tab.next');
+    const wantsPrev = matchesShortcut(e, 'tab.prev');
+    if (!wantsNext && !wantsPrev) return;
     if (windows.length <= 1) return;
     if (document.querySelector('.dialog-overlay')) return;
 
@@ -252,7 +256,7 @@
     if (currentIdx === -1) return;
 
     let newIdx: number;
-    if (e.key === 'PageDown') {
+    if (wantsNext) {
       newIdx = (currentIdx + 1) % windows.length;
     } else {
       newIdx = (currentIdx - 1 + windows.length) % windows.length;

@@ -43,6 +43,7 @@
   import { applyUITheme, DEFAULT_UI_THEME } from './lib/utils/uiThemes';
   import { t, isRTL, loadTranslations } from './lib/i18n';
   import { focusTerminal } from './lib/utils/focus';
+  import { shortcutForEvent, capturingShortcut } from './lib/stores/shortcuts';
   import Toast from './lib/components/common/Toast.svelte';
 
   // The accent lives in CSS variables, so applying a theme is one write to
@@ -337,46 +338,48 @@
     }
 
     // FAST PATH: this handler runs in the capture phase on EVERY keystroke,
-    // including ordinary typing into the terminal. All our shortcuts need a
-    // modifier (Ctrl/Cmd+Shift) or Alt+Arrow. Bail out immediately for plain
-    // keys BEFORE doing any DOM work — the two querySelector() calls below
-    // walk a document that contains thousands of xterm cell spans and were
-    // running on every character, which dominated the per-keystroke JS cost
-    // (profiling: ~48 keydown/s while typing pegged the main thread).
-    const mod = (e.ctrlKey || e.metaKey) && e.shiftKey;
-    const paletteShortcut = (e.ctrlKey || e.metaKey) && !e.altKey && (
-      (!e.shiftKey && e.key.toLowerCase() === 'k') ||
-      (e.shiftKey && e.key.toLowerCase() === 'p')
-    );
-    const altArrow = e.altKey && !e.ctrlKey && !e.shiftKey &&
-      (e.key === 'ArrowUp' || e.key === 'ArrowDown');
-    // Ctrl+P (no Shift) opens the saved-command picker. Ctrl+Shift+P and
-    // Ctrl+K stay with the command palette above.
-    const commandPickerShortcut = (e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey &&
-      e.key.toLowerCase() === 'p';
-    // Ctrl+Shift+1..9 jumps to a favourite. Shift is deliberate: plain
-    // Ctrl+digit is something terminal programs use.
-    const favouriteShortcut = mod && !e.altKey && favouriteSlot(e) > 0;
-    if (!mod && !altArrow && !paletteShortcut && !commandPickerShortcut) return;
+    // including ordinary typing into the terminal.
+    //
+    // A shortcut needs a modifier, so a plain key can leave immediately.
+    //
+    // This test comes BEFORE any DOM work on purpose. The two querySelector()
+    // calls below walk a document holding thousands of xterm cell spans, and
+    // running them on every character dominated the per-keystroke cost —
+    // profiling showed ~48 keydown/s while typing pegging the main thread.
+    // Rebinding cannot introduce a modifier-less shortcut: the editor refuses
+    // one, for exactly this reason.
+    if (!e.ctrlKey && !e.metaKey && !e.altKey) return;
+
+    // While the editor is recording a combination, the keys pressed must not
+    // also run the actions they are bound to.
+    if ($capturingShortcut) return;
+
+    const shortcutId = shortcutForEvent(e);
+    const favouriteSlotNo = (e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey
+      ? favouriteSlot(e) : 0;
+    if (!shortcutId && favouriteSlotNo <= 0) return;
 
     // Don't handle shortcuts when any dialog is open
     const dialogOpen = showCommandPalette || document.querySelector('.dialog-overlay') !== null;
-    if (paletteShortcut) {
+
+    // The palette and the command picker answer even from inside a dialog, so
+    // they are handled before the dialog check swallows everything else.
+    if (shortcutId === 'palette.open') {
       e.preventDefault();
       e.stopPropagation();
       if (!dialogOpen) showCommandPalette = true;
       return;
     }
-    if (commandPickerShortcut) {
+    if (shortcutId === 'commands.picker') {
       e.preventDefault();
       e.stopPropagation();
       if (!dialogOpen) showCommandPicker = true;
       return;
     }
-    if (favouriteShortcut) {
+    if (favouriteSlotNo > 0) {
       e.preventDefault();
       e.stopPropagation();
-      if (!dialogOpen) jumpToFavourite(favouriteSlot(e));
+      if (!dialogOpen) jumpToFavourite(favouriteSlotNo);
       return;
     }
     if (dialogOpen) return;
@@ -384,91 +387,66 @@
     // Don't handle shortcuts when dictation buffer panel is visible
     if (document.querySelector('.dictation-buffer')) return;
 
-    // --- Navigation (work even inside input fields) ---
-
-    // Ctrl+Shift+↑/↓ — session navigation
-    if (mod && e.key === 'ArrowUp') {
-      e.preventDefault();
-      selectPrevSession();
-      return;
-    }
-    if (mod && e.key === 'ArrowDown') {
-      e.preventDefault();
-      selectNextSession();
-      return;
-    }
-
-    // Alt+↑/↓ kept as an additional way to navigate (no modifier conflict
-    // with Ctrl+Shift+arrows some users map to word-wise selection).
-    if (e.altKey && !e.ctrlKey && !e.shiftKey && e.key === 'ArrowUp') {
-      e.preventDefault();
-      selectPrevSession();
-      return;
-    }
-    if (e.altKey && !e.ctrlKey && !e.shiftKey && e.key === 'ArrowDown') {
-      e.preventDefault();
-      selectNextSession();
-      return;
-    }
-
-    if (!mod) return;
-
-    // Normalise the letter — Ctrl+Shift+N gives e.key === 'N' (uppercase).
-    // e.code is layout-dependent; use the lowercased key instead.
-    const key = e.key.toLowerCase();
-
-    switch (key) {
-      case 'f': // global search
+    switch (shortcutId) {
+      case 'session.prev':
+        e.preventDefault();
+        selectPrevSession();
+        return;
+      case 'session.next':
+        e.preventDefault();
+        selectNextSession();
+        return;
+      case 'search.global':
         e.preventDefault();
         showGlobalSearch = true;
         return;
-      case 'l': // Locate in terminal scrollback (search overlay)
+      case 'terminal.search':
         e.preventDefault();
         window.dispatchEvent(new CustomEvent('terminal:search-toggle'));
         return;
-      case 'n': // new session
+      case 'session.new':
         e.preventDefault();
         showNewSessionDialog = true;
         return;
-      case 'g': // new group
+      case 'group.new':
         e.preventDefault();
         showNewGroupDialog = true;
         return;
-      case 's': // start / resume selected
+      case 'session.start':
         e.preventDefault();
         handleStart();
         return;
-      case 'x': // stop selected
+      case 'session.stop':
         e.preventDefault();
         if ($selectedSession && $selectedSession.status === 'running') {
           handleStop();
         }
         return;
-      case 'd': // delete selected
+      case 'session.delete':
         e.preventDefault();
         handleDelete();
         return;
-      case '8': // '*' on many layouts — toggle favorite
+      case 'session.favorite':
         e.preventDefault();
         if ($selectedSessionId) toggleFavorite($selectedSessionId);
         return;
-      case 'h': // help
+      case 'help.show':
         e.preventDefault();
         showHelpDialog = true;
         return;
-      case 'u': // update check
+      case 'update.check':
         e.preventDefault();
         showUpdateDialog = true;
         return;
-      case 'i': // import sessions
+      case 'sessions.import':
         e.preventDefault();
         showImportDialog = true;
         return;
-      case 'k': // reorder selected up
+      case 'session.moveUp':
         e.preventDefault();
         if ($selectedSessionId) reorderSession($selectedSessionId, -1);
         return;
-      case 'j': // reorder selected down
+      case 'session.moveDown':
         e.preventDefault();
         if ($selectedSessionId) reorderSession($selectedSessionId, 1);
         return;
