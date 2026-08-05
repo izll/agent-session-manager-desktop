@@ -21,14 +21,39 @@
     positionDropdown();
   }
 
+  /** Kept clear of the window edge, so the list never sits flush against it. */
+  const VIEWPORT_MARGIN = 8;
+  /** Below this there is no point opening downwards at all. */
+  const MIN_USABLE_HEIGHT = 120;
+
   function positionDropdown() {
     if (!triggerRef || !dropdownRef) return;
     const rect = triggerRef.getBoundingClientRect();
     dropdownRef.style.position = 'fixed';
-    dropdownRef.style.top = `${rect.bottom}px`;
     dropdownRef.style.left = `${rect.left}px`;
     dropdownRef.style.width = `${rect.width}px`;
     dropdownRef.style.zIndex = '10000';
+
+    // Open upwards when there is not enough room below.
+    //
+    // It always opened downwards with no height limit, so a list with more
+    // options than fit simply ran off the bottom of the window — and the panel
+    // clips its contents, so what was off-screen could not be scrolled to
+    // either. A select near the bottom of the window showed its first few
+    // options and nothing else.
+    const below = window.innerHeight - rect.bottom - VIEWPORT_MARGIN;
+    const above = rect.top - VIEWPORT_MARGIN;
+    const openUp = below < MIN_USABLE_HEIGHT && above > below;
+
+    if (openUp) {
+      dropdownRef.style.top = '';
+      dropdownRef.style.bottom = `${window.innerHeight - rect.top}px`;
+      dropdownRef.style.maxHeight = `${above}px`;
+    } else {
+      dropdownRef.style.bottom = '';
+      dropdownRef.style.top = `${rect.bottom}px`;
+      dropdownRef.style.maxHeight = `${below}px`;
+    }
   }
 
   async function toggle() {
@@ -173,7 +198,9 @@
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 8px;
     box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
-    overflow: hidden;
+    /* Scrolls rather than clips: a max-height is set when the dropdown is
+       positioned, and with `hidden` anything past it was simply unreachable. */
+    overflow-y: auto;
     animation: dropdownIn 0.15s ease-out;
   }
 
