@@ -13,6 +13,7 @@
     gradientOptions,
     gradients,
     getContrastColor,
+    getGradientCSS,
     isGradient,
   } from '../../utils/rowColors';
 
@@ -109,11 +110,48 @@
     return style;
   }
 
-  // Create gradient CSS for preview
-  function getGradientStyle(gradientName: string): string {
-    const colors = gradients[gradientName];
-    if (!colors) return '';
-    return `background: linear-gradient(90deg, ${colors.join(', ')});`;
+  /**
+   * The preview's gradient, from the same helper the sidebar renders with — so
+   * what is previewed is what the list will show.
+   *
+   * It had its own copy, which differed in the case that matters: for a name it
+   * did not recognise it returned an empty string, leaving the text with
+   * `-webkit-text-fill-color: transparent` and no background to clip against.
+   * The result was an invisible name rather than a wrong colour.
+   */
+  /**
+   * A gradient as a plain background, for the swatches in the grid.
+   *
+   * Separate from the text version below: a swatch is an empty span, and
+   * clipping a gradient to text it does not have paints nothing at all.
+   */
+  function getGradientSwatchStyle(gradientName: string): string {
+    const css = getGradientCSS(gradientName);
+    if (css === gradientName) return '';
+    return `background-image: ${css};`;
+  }
+
+  function getGradientTextStyle(gradientName: string): string {
+    const css = getGradientCSS(gradientName);
+    // getGradientCSS hands back the input unchanged when it knows no such
+    // gradient. Painting that as a background would be a plain colour behind
+    // transparent text — no better than the empty string. Fall back to normal
+    // rendering instead.
+    if (css === gradientName) return '';
+    // background-image, not the `background` shorthand.
+    //
+    // The shorthand resets every background-* longhand it does not mention, and
+    // that includes background-clip — so an inline `background: ...` put the
+    // clip back to border-box and beat the stylesheet's `background-clip: text`
+    // by being inline. The gradient then filled the whole box, with the name
+    // invisible inside it. Measured: clip came out as "border-box" with the
+    // rule for `text` present and more specific.
+    //
+    // The clip and the fill colour are set here too, for the same reason: an
+    // inline declaration is what this element's own rule is competing with, so
+    // everything that has to survive belongs on the same side of that contest.
+    return `background-image: ${css}; -webkit-background-clip: text; ` +
+      `background-clip: text; -webkit-text-fill-color: transparent; display: inline-block;`;
   }
 </script>
 
@@ -146,10 +184,14 @@
             style={selectedBgColor && fullRowColor && !isGradient(selectedBgColor) ? `background: ${selectedBgColor}20` : ''}
           >
             <span class="preview-dot"></span>
-            {#if isGradient(selectedColor)}
-              <span class="preview-name gradient-text" style={getGradientStyle(selectedColor)}>
-                {target.name}
-              </span>
+            <!-- Both conditions, not just isGradient: a gradient we cannot
+                 resolve has to fall through to the plain branch, or the name is
+                 clipped against nothing and disappears. -->
+            {#if isGradient(selectedColor) && getGradientTextStyle(selectedColor)}
+              <!-- No whitespace around the name: on an inline-block the
+                   surrounding newlines become spaces inside the clipped box,
+                   and the gradient shows through them as bars either side. -->
+              <span class="preview-name gradient-text" style={getGradientTextStyle(selectedColor)}>{target.name}</span>
             {:else}
               <span class="preview-name" style={getPreviewStyle()}>
                 {target.name}
@@ -211,7 +253,7 @@
                     </svg>
                   </span>
                 {:else if isGrad}
-                  <span class="color-swatch gradient-swatch" style={getGradientStyle(option.color)}></span>
+                  <span class="color-swatch gradient-swatch" style={getGradientSwatchStyle(option.color)}></span>
                 {:else}
                   <span class="color-swatch" style="background: {option.color}; box-shadow: 0 0 8px {option.color}40;"></span>
                 {/if}
@@ -286,6 +328,13 @@
   }
 
   .preview-name.gradient-text {
+    /* inline-block, because background-clip:text clips to the TEXT only on an
+       inline box. As a flex item this span is blockified, and the clip then
+       takes the whole box — which painted the gradient as a solid bar the width
+       of the element, with the name invisible inside it.
+       The sidebar never hit this: there the gradient span sits inside another
+       span, so it stays inline. */
+    display: inline-block;
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
