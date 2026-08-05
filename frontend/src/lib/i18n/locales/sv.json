@@ -1031,5 +1031,6 @@
   "tasks.priorityLow": "Låg",
   "tasks.priorityMedium": "Medel",
   "tasks.priorityHigh": "Hög",
-  "tasks.priorityCritical": "Kritisk"
+  "tasks.priorityCritical": "Kritisk",
+  "tasks.currentDependencies": "Nuvarande beroenden"
 }

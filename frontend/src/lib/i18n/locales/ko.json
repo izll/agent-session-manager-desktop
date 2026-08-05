@@ -1031,5 +1031,6 @@
   "tasks.priorityLow": "낮음",
   "tasks.priorityMedium": "보통",
   "tasks.priorityHigh": "높음",
-  "tasks.priorityCritical": "긴급"
+  "tasks.priorityCritical": "긴급",
+  "tasks.currentDependencies": "현재 의존성"
 }

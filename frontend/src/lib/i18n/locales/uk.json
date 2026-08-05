@@ -1031,5 +1031,6 @@
   "tasks.priorityLow": "Низький",
   "tasks.priorityMedium": "Середній",
   "tasks.priorityHigh": "Високий",
-  "tasks.priorityCritical": "Критичний"
+  "tasks.priorityCritical": "Критичний",
+  "tasks.currentDependencies": "Поточні залежності"
 }

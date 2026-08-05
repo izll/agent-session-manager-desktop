@@ -1031,5 +1031,6 @@
   "tasks.priorityLow": "低",
   "tasks.priorityMedium": "中",
   "tasks.priorityHigh": "高",
-  "tasks.priorityCritical": "最優先"
+  "tasks.priorityCritical": "最優先",
+  "tasks.currentDependencies": "現在の依存関係"
 }

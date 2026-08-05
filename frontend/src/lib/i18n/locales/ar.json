@@ -1031,5 +1031,6 @@
   "tasks.priorityLow": "منخفضة",
   "tasks.priorityMedium": "متوسطة",
   "tasks.priorityHigh": "عالية",
-  "tasks.priorityCritical": "حرجة"
+  "tasks.priorityCritical": "حرجة",
+  "tasks.currentDependencies": "التبعيات الحالية"
 }

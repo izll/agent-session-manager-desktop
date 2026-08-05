@@ -1031,5 +1031,6 @@
   "tasks.priorityLow": "Bassa",
   "tasks.priorityMedium": "Media",
   "tasks.priorityHigh": "Alta",
-  "tasks.priorityCritical": "Critica"
+  "tasks.priorityCritical": "Critica",
+  "tasks.currentDependencies": "Dipendenze attuali"
 }

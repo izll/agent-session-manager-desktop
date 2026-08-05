@@ -1031,5 +1031,6 @@
   "tasks.priorityLow": "Düşük",
   "tasks.priorityMedium": "Orta",
   "tasks.priorityHigh": "Yüksek",
-  "tasks.priorityCritical": "Kritik"
+  "tasks.priorityCritical": "Kritik",
+  "tasks.currentDependencies": "Mevcut bağımlılıklar"
 }

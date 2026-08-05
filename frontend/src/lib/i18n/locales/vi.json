@@ -1031,5 +1031,6 @@
   "tasks.priorityLow": "Thấp",
   "tasks.priorityMedium": "Trung bình",
   "tasks.priorityHigh": "Cao",
-  "tasks.priorityCritical": "Khẩn cấp"
+  "tasks.priorityCritical": "Khẩn cấp",
+  "tasks.currentDependencies": "Phụ thuộc hiện tại"
 }

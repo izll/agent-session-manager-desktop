@@ -1031,5 +1031,6 @@
   "tasks.priorityLow": "Alacsony",
   "tasks.priorityMedium": "Közepes",
   "tasks.priorityHigh": "Magas",
-  "tasks.priorityCritical": "Kritikus"
+  "tasks.priorityCritical": "Kritikus",
+  "tasks.currentDependencies": "Jelenlegi függőségek"
 }

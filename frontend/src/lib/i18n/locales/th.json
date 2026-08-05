@@ -1031,5 +1031,6 @@
   "tasks.priorityLow": "ต่ำ",
   "tasks.priorityMedium": "ปานกลาง",
   "tasks.priorityHigh": "สูง",
-  "tasks.priorityCritical": "วิกฤต"
+  "tasks.priorityCritical": "วิกฤต",
+  "tasks.currentDependencies": "การพึ่งพาปัจจุบัน"
 }

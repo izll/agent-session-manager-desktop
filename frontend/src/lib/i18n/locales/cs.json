@@ -1031,5 +1031,6 @@
   "tasks.priorityLow": "Nízká",
   "tasks.priorityMedium": "Střední",
   "tasks.priorityHigh": "Vysoká",
-  "tasks.priorityCritical": "Kritická"
+  "tasks.priorityCritical": "Kritická",
+  "tasks.currentDependencies": "Současné závislosti"
 }

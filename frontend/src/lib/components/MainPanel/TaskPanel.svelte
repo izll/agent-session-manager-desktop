@@ -644,6 +644,16 @@
   // Takes the list rather than reading the store: called from the markup,
   // Svelte re-runs this only when its arguments change, so a store read inside
   // would leave the dependency rows showing whatever they first rendered with.
+  /**
+   * A dependency as the reader knows it: the other task's title.
+   *
+   * Falls back to the id when the task is gone — a dependency on something
+   * deleted still has to be visible, or it cannot be removed.
+   */
+  function dependencyName(depId: string, all: Task[]): string {
+    return getTaskById(String(depId), all)?.title || `#${depId}`;
+  }
+
   function getTaskById(id: string, all: Task[]): Task | undefined {
     return all.find(t => t.id === id);
   }
@@ -810,7 +820,7 @@
                 </svg>
               {/if}
             </button>
-            <div class="task-id">{task.id}</div>
+
             <div class="task-content">
               <div class="task-title-row">
                 <span class="task-name" class:completed={task.status === 'done'}>{task.title}</span>
@@ -876,7 +886,6 @@
                         on:click|stopPropagation={() => handleToggleSubtaskStatus(`${task.id}.${subtask.id}`, subtask.status)}
                         class="subtask-checkbox"
                       />
-                      <span class="subtask-id">{subtask.id}</span>
                       <span class="subtask-title" class:done={subtask.status === 'done'}>{subtask.title}</span>
                       <button
                         class="subtask-remove-btn"
@@ -906,8 +915,11 @@
                 {#if task.dependencies && task.dependencies.length > 0}
                   <div class="dependencies-list">
                     {#each task.dependencies as dep}
-                      <span class="dep-badge">
-                        {dep}
+                      <!-- Named, not numbered. The id is an internal handle
+                           and means nothing to the reader; a dependency is
+                           only useful if you can tell which task it is. -->
+                      <span class="dep-badge" title={dependencyName(dep, $tasks)}>
+                        {dependencyName(dep, $tasks)}
                         <button
                           class="dep-remove-btn"
                           on:click|stopPropagation={() => handleRemoveDependency(task.id, dep)}
@@ -1283,11 +1295,11 @@
         <!-- Current dependencies -->
         {#if getTaskById(dependencyTaskId, $tasks)?.dependencies?.length}
           <div class="current-deps">
-            <span class="dep-section-label">Current dependencies:</span>
+            <span class="dep-section-label">{$t('tasks.currentDependencies')}</span>
             <div class="deps-list">
               {#each getTaskById(dependencyTaskId, $tasks)?.dependencies || [] as dep}
-                <span class="dep-item">
-                  #{dep}
+                <span class="dep-item" title={dependencyName(dep, $tasks)}>
+                  {dependencyName(dep, $tasks)}
                   <button
                     class="dep-remove-inline"
                     on:click={() => handleRemoveDependency(dependencyTaskId, dep)}
@@ -1567,16 +1579,6 @@
     border-color: rgba(var(--accent-rgb), 0.7);
   }
 
-  .task-id {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 12px;
-    color: #6b7280;
-    background: rgba(255, 255, 255, 0.05);
-    padding: 2px 6px;
-    border-radius: 4px;
-    flex-shrink: 0;
-  }
-
   .task-content {
     flex: 1;
     min-width: 0;
@@ -1671,12 +1673,6 @@
     padding: 6px 0;
     font-size: 13px;
     color: #d1d5db;
-  }
-
-  .subtask-id {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 11px;
-    color: #6b7280;
   }
 
   .subtask-item span.done {
@@ -1964,13 +1960,6 @@
     height: 16px;
     cursor: pointer;
     accent-color: var(--accent);
-  }
-
-  .subtask-id {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 11px;
-    color: #6b7280;
-    flex-shrink: 0;
   }
 
   .subtask-title {

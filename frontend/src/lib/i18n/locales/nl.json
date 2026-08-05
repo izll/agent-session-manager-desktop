@@ -1031,5 +1031,6 @@
   "tasks.priorityLow": "Laag",
   "tasks.priorityMedium": "Gemiddeld",
   "tasks.priorityHigh": "Hoog",
-  "tasks.priorityCritical": "Kritiek"
+  "tasks.priorityCritical": "Kritiek",
+  "tasks.currentDependencies": "Huidige afhankelijkheden"
 }
