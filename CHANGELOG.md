@@ -6,6 +6,60 @@ Entries describe what changed for someone using the app. Internal refactoring,
 test and CI work is left out unless it changed behaviour. Dates are release
 dates; the format follows [Keep a Changelog](https://keepachangelog.com).
 
+## 0.9.16 — 2026-08-05
+
+### Added
+
+- **Review a change inside the file it lives in.** The diff showed a few lines
+  either side of each change, which is enough to see what changed and rarely
+  enough to judge it. It now opens on the whole file with the changes marked,
+  as an IDE does, with a button back to the previous view. Long files stay
+  affordable because only the visible lines are rendered — which also removes
+  the 2000-line cap that used to truncate large diffs.
+- **Step through a review.** `↑`/`↓` in the file header, or `Ctrl+F7` and
+  `Ctrl+Shift+F7`, move between changes — running past the end of a file into
+  the next one, and past the last back to the first. The file a step will move
+  to is named at the edge it moves towards.
+- **The diff can sit above what you are working on** instead of replacing it,
+  on a divider you can drag. It is available above the terminal, the notes, the
+  file browser and the task list.
+- **Syntax colouring in the diff**, reusing the grammars the file browser
+  already loads. Kotlin, Java, C#, C, C++, Scala, Dart, PHP, Ruby, Lua and
+  Swift are new — and Go, which was barely coloured at all.
+- **Every keyboard shortcut is editable**, in Settings → Shortcuts. The help
+  dialog is generated from the same list, so it always shows what the keys
+  actually do. Shortcuts can be switched off; the few whose meaning comes from
+  context (`Esc`, `Enter`, `/`) are shown but fixed.
+- **The task list works without Task Master.** Tasks are stored by the app
+  itself, so adding, editing, completing and ordering them never needed the
+  integration — but the whole view was hidden with it. Only the AI-backed
+  actions are gated now. Finished tasks can be ordered by when they were ticked
+  off.
+- **The app says when it is closing down.** Shutdown saves each session's
+  place, detaches cleanly and reaps what it started, which takes long enough to
+  look like a hang.
+
+### Fixed
+
+- **Dropdowns ran off the bottom of the window**, and what was past the edge
+  could neither be seen nor scrolled to. They open upwards when there is no room
+  below.
+- **Sending a task to an agent pressed Escape first**, to dismiss an
+  autocomplete popup. Claude Code reads that as "clear the composer", so the
+  text just pasted was discarded and the Enter that followed submitted nothing.
+- **The weekly usage limits showed no reset time**, and the ones that did showed
+  a time with no date — which says nothing for a limit that resets days away.
+- **Gradient session colours previewed as a solid bar** with the name invisible
+  inside it.
+- **Live values on the dashboard did not update.** The busy/waiting indicators
+  and tab rows on each card kept whatever they were first drawn with while the
+  sidebar beside them changed.
+- **Editing a task reported that Task Master was turned off** when saving.
+- **Clicking the tab you are already on** did nothing unless the diff was open;
+  it returns to the terminal from any view.
+- **Task dialogs opened with focus on a header button** rather than the field
+  being filled in.
+
 ## 0.9.15 — 2026-08-04
 
 ### Added
