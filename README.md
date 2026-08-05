@@ -22,15 +22,16 @@ side by side, all persistent.
 You've probably got three terminal windows open, each with a different agent
 grinding away, and you keep alt-tabbing to check which one is stuck waiting on
 you. **Agent Session Manager Desktop** puts them all in one place: every agent
-gets its own tab, keeps running in the background on `tmux`, and tells you the
-moment it needs your attention — even on your phone.
+gets its own tab, keeps running in the background, and tells you the moment it
+needs your attention — even on your phone.
 
 It's the graphical counterpart of the
 [**ASMGR TUI**](https://github.com/izll/agent-session-manager), built with
 [Wails](https://wails.io) (Go) + Svelte + [xterm.js](https://xtermjs.org).
-Because every session lives in its own `tmux` session, your agents survive
-closing the window, restarting the app, even a machine hop — reattach and pick
-up exactly where you left off.
+Because every session lives in its own multiplexer session — `tmux` on Linux
+and macOS, `psmux` on Windows — your agents survive closing the window,
+restarting the app, even a machine hop: reattach and pick up exactly where you
+left off.
 
 > Prefer the terminal? The original TUI version lives at
 > [izll/agent-session-manager](https://github.com/izll/agent-session-manager).
@@ -43,8 +44,8 @@ up exactly where you left off.
   tabs. Turn on desktop notifications and **ntfy mobile push** to get pinged
   wherever you are.
 - **Everything keeps running.** Close the window, reboot the app, come back
-  tomorrow — the `tmux` sessions are still there and still working. Reattach in
-  one click.
+  tomorrow — the sessions are still there and still working, because they live
+  in the multiplexer rather than in the app. Reattach in one click.
 - **See the whole picture.** The project dashboard lays out every session
   grouped like your sidebar, with live activity, per-repo Git status (branch,
   dirty state, ahead/behind, last commit) and your **Claude and Codex/GPT
@@ -64,8 +65,8 @@ up exactly where you left off.
 - **Many agents, your choice** — Claude, Gemini, Aider, Codex, Amazon Q,
   OpenCode, a custom command, or a plain shell.
 - **Multi-tab sessions** — several agents or terminals per session, each its own
-  `tmux` window, with a per-tab working directory if you want one somewhere
-  else.
+  multiplexer window, with a per-tab working directory if you want one
+  somewhere else.
 - **Resume & fork** — continue a previous conversation, or fork a Claude thread
   into a new tab or a brand-new session to explore a different path.
 - **Background agents** — a dedicated panel lists Claude's `--bg` / Ctrl+B
@@ -122,6 +123,11 @@ up exactly where you left off.
   and per-tab terminal palettes, including ones you define; adjustable terminal
   font size globally, per tab, or with `Ctrl` + scroll; colour a session or a
   group, and hide the view or status bar on tabs that don't need them.
+- **Rebindable shortcuts** — every keyboard shortcut is editable in Settings,
+  and the help dialog is generated from the same list, so it always shows what
+  the keys actually do. Shortcuts you don't use can be switched off; the few
+  whose meaning comes from context (`Esc`, `Enter`, `/`) are shown but fixed.
+  Keys named throughout this README are the defaults.
 - **Selectable terminal renderer** — canvas (default), WebGL, or DOM,
   switchable live from Settings.
 - **Undo a deletion** — deleted sessions and tabs go to a recycle bin you can
@@ -131,8 +137,10 @@ up exactly where you left off.
 - **20 languages** — the whole UI is translated.
 - **Safe alongside itself** — open a second window and it won't stomp on the
   first one's terminals; it warns you and stays read-only for that project.
-- **Self-updating** — checks for new releases and updates in place (Linux),
-  including `.deb` and `.rpm` installs.
+- **Self-updating** — checks for new releases in the background and updates in
+  place on all three platforms, including `.deb` / `.rpm` installs and the
+  macOS `.app` bundle. The Windows installer is per-user, so updating never
+  needs administrator rights.
 - **Take it with you** — export sessions to a file and import them on another
   machine.
 
@@ -164,13 +172,19 @@ tar -xzf asmgr-desktop_*_darwin_arm64.tar.gz   # → asmgr-desktop.app
 # move it to /Applications, then: brew install tmux
 ```
 
-**Windows** (x64) — extract `asmgr-desktop_*_windows_amd64.tar.gz` and run
-`asmgr-desktop.exe`.
+**Windows** (x64) — run `asmgr-desktop_*_windows_amd64_setup.exe`. It installs
+per-user, so it never asks for administrator rights and in-place updates work.
+There is also a `.tar.gz` if you would rather not install anything.
 
-> ⚠️ **`tmux` is required at runtime on every platform.** It ships in the Linux
-> packages. On macOS install it with `brew install tmux`. On **Windows** native
-> tmux isn't available — run it via WSL / MSYS2 / Git Bash and make sure `tmux`
-> is on `PATH`.
+> ⚠️ **A terminal multiplexer is required at runtime.** Sessions run inside it,
+> so the app cannot create one without it — it says so on startup and offers the
+> install command.
+>
+> - **Linux** — `tmux`, pulled in automatically by the `.deb` / `.rpm`.
+> - **macOS** — `brew install tmux`.
+> - **Windows** — [psmux](https://github.com/psmux/psmux), a native Windows
+>   multiplexer that speaks tmux's command language; no WSL or MSYS2 needed.
+>   The app can install it for you with `winget`, or `winget install psmux`.
 
 To build from source instead, see [Build](#build) below.
 
@@ -178,7 +192,7 @@ To build from source instead, see [Build](#build) below.
 
 - Go 1.24+
 - Node.js + npm
-- `tmux`
+- `tmux` (Linux, macOS) or [psmux](https://github.com/psmux/psmux) (Windows)
 - Linux: WebKitGTK. On Ubuntu 24.04+ / Fedora 40+ only `webkit2gtk-4.1` is
   available — build with the `webkit2_41` tag (see below).
 - [Wails CLI](https://wails.io/docs/gettingstarted/installation)
@@ -206,10 +220,15 @@ it in a regular browser (with Go methods bridged) for fast iteration.
 
 ## How it works
 
-- Each session is a `tmux` session, so agents keep working when the window is
-  closed and reattach instantly.
+- Each session is a multiplexer session — `tmux` on Linux and macOS, `psmux` on
+  Windows — so agents keep working when the window is closed and reattach
+  instantly.
 - The terminal talks to the agents over a local, token-authenticated WebSocket
-  (xterm.js ⇄ Go ⇄ `tmux`), which keeps typing latency low.
+  (xterm.js ⇄ Go ⇄ multiplexer), which keeps typing latency low.
+- Output from a tab you are not looking at is held in the backend and replayed
+  when you return to it, rather than being dropped and repainted. One WebKit
+  main thread serves every tab, so a busy background agent must not be able to
+  starve the one you are typing in.
 - Session storage lives under `~/.config/agent-session-manager-desktop/`.
 
 ## License
