@@ -2270,12 +2270,16 @@ func (i *Instance) SendPromptToWindow(text string, windowIdx int) error {
 	// Wait for the text to be fully processed by the terminal/agent
 	time.Sleep(100 * time.Millisecond)
 
-	// Dismiss any autocomplete/suggestion popup (e.g. Claude Code)
-	// Escape closes suggestions without affecting the pasted text
-	TmuxCommand("send-keys", "-t", sessionName, "Escape").Run()
-	time.Sleep(50 * time.Millisecond)
-
-	// Then send Enter separately to submit the prompt
+	// No Escape here. It was sent to dismiss an autocomplete popup before
+	// submitting, on the assumption that it "closes suggestions without
+	// affecting the pasted text" — but Escape is input, and what it does is
+	// decided by whatever is reading the pane, not by us. Claude Code takes it
+	// as "clear the composer", so the text just pasted was discarded and Enter
+	// submitted nothing. The same mistake as the redraw keystroke that used to
+	// put a stray "/clear" into that composer.
+	//
+	// A suggestion popup left open is harmless: Enter submits the line either
+	// way, and a wrong guess about what a keystroke means is not.
 	cmd := TmuxCommand("send-keys", "-t", sessionName, "Enter")
 	return cmd.Run()
 }
