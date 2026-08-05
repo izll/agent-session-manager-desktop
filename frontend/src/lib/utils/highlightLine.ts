@@ -1,4 +1,5 @@
-import { highlightTree, tags, type Highlighter } from '@lezer/highlight';
+import { highlightTree, tags } from '@lezer/highlight';
+import { HighlightStyle } from '@codemirror/language';
 import type { LanguageSupport } from '@codemirror/language';
 
 /**
@@ -17,43 +18,90 @@ import type { LanguageSupport } from '@codemirror/language';
  */
 
 /**
- * The palette, as inline styles rather than class names.
+ * The palette.
  *
- * A Highlighter maps syntax tags to whatever string the caller wants; CodeMirror
- * uses class names because it ships a stylesheet. Here the output goes straight
- * into a style attribute, so the declaration is the "class". That avoids
- * shipping a second stylesheet whose names could drift from these tags.
+ * Built with HighlightStyle rather than by matching tags by hand, because tags
+ * form a hierarchy that hand-matching gets wrong: a grammar emits
+ * `definitionKeyword` or `controlKeyword`, not the plain `keyword` those
+ * inherit from, so a list checked with includes() colours almost nothing. Go
+ * was the clearest case — `func`, `:=` and every identifier came out plain.
+ *
+ * HighlightStyle resolves that inheritance, so a rule for `keyword` catches all
+ * of its specialisations, and a more specific rule still wins where one exists.
  *
  * The hues match the file browser's theme, so the same code does not change
  * colour depending on where it is being read.
  */
-const PALETTE: Array<{ tag: any; style: string }> = [
-  { tag: tags.keyword, style: 'color:#c678dd' },
-  { tag: [tags.name, tags.deleted, tags.character, tags.macroName], style: 'color:#e06c75' },
-  { tag: tags.propertyName, style: 'color:#61afef' },
-  { tag: [tags.processingInstruction, tags.string, tags.inserted, tags.special(tags.string)], style: 'color:#98c379' },
-  { tag: [tags.function(tags.variableName), tags.labelName], style: 'color:#61afef' },
-  { tag: [tags.color, tags.constant(tags.name), tags.standard(tags.name)], style: 'color:#d19a66' },
-  { tag: tags.className, style: 'color:#e5c07b' },
-  { tag: [tags.number, tags.changed, tags.annotation, tags.modifier, tags.self, tags.namespace], style: 'color:#d19a66' },
-  { tag: tags.typeName, style: 'color:#e5c07b' },
-  { tag: [tags.operator, tags.operatorKeyword], style: 'color:#56b6c2' },
-  { tag: [tags.url, tags.escape, tags.regexp, tags.link], style: 'color:#56b6c2' },
-  { tag: [tags.meta, tags.comment], style: 'color:#7f848e;font-style:italic' },
-  { tag: [tags.atom, tags.bool, tags.special(tags.variableName)], style: 'color:#d19a66' },
-  { tag: tags.invalid, style: 'color:#ff5370' },
-];
+const style = HighlightStyle.define([
+  { tag: tags.keyword, color: '#c678dd' },
+  { tag: tags.controlKeyword, color: '#c678dd' },
+  { tag: tags.moduleKeyword, color: '#c678dd' },
+  { tag: tags.definitionKeyword, color: '#c678dd' },
+  { tag: tags.operatorKeyword, color: '#c678dd' },
+  { tag: tags.comment, color: '#7f848e', fontStyle: 'italic' },
+  { tag: tags.string, color: '#98c379' },
+  { tag: tags.special(tags.string), color: '#98c379' },
+  { tag: tags.number, color: '#d19a66' },
+  { tag: tags.bool, color: '#d19a66' },
+  { tag: tags.atom, color: '#d19a66' },
+  { tag: tags.null, color: '#d19a66' },
+  { tag: tags.typeName, color: '#e5c07b' },
+  { tag: tags.className, color: '#e5c07b' },
+  { tag: tags.namespace, color: '#e5c07b' },
+  { tag: tags.function(tags.variableName), color: '#61afef' },
+  { tag: tags.function(tags.propertyName), color: '#61afef' },
+  { tag: tags.propertyName, color: '#e06c75' },
+  { tag: tags.variableName, color: '#e06c75' },
+  { tag: tags.attributeName, color: '#d19a66' },
+  { tag: tags.tagName, color: '#e06c75' },
+  { tag: tags.constant(tags.variableName), color: '#d19a66' },
+  { tag: tags.labelName, color: '#61afef' },
+  { tag: tags.operator, color: '#56b6c2' },
+  { tag: tags.derefOperator, color: '#56b6c2' },
+  { tag: tags.definitionOperator, color: '#56b6c2' },
+  { tag: tags.regexp, color: '#56b6c2' },
+  { tag: tags.escape, color: '#56b6c2' },
+  { tag: tags.url, color: '#56b6c2' },
+  { tag: tags.link, color: '#56b6c2' },
+  { tag: tags.meta, color: '#7f848e' },
+  { tag: tags.annotation, color: '#d19a66' },
+  { tag: tags.modifier, color: '#c678dd' },
+  { tag: tags.self, color: '#d19a66' },
+  { tag: tags.heading, color: '#e06c75', fontWeight: 'bold' },
+  { tag: tags.strong, fontWeight: 'bold' },
+  { tag: tags.emphasis, fontStyle: 'italic' },
+  { tag: tags.strikethrough, textDecoration: 'line-through' },
+  { tag: tags.invalid, color: '#ff5370' },
+]);
 
-/** Builds the tag → style lookup once. */
-const highlighter: Highlighter = {
-  style: (tagList) => {
-    for (const entry of PALETTE) {
-      const wanted = Array.isArray(entry.tag) ? entry.tag : [entry.tag];
-      if (tagList.some((t) => wanted.includes(t))) return entry.style;
-    }
-    return '';
-  },
+/**
+ * HighlightStyle emits class names and a stylesheet to go with them. The diff
+ * has no stylesheet, so the declarations are read out of that module once and
+ * turned into inline style — the mapping is fixed, so it is built eagerly and
+ * never recomputed.
+ */
+const styleByClass = (() => {
+  const map = new Map<string, string>();
+  const rules = style.module?.getRules() ?? '';
+  for (const match of rules.matchAll(/\.(\S+?)\s*\{([^}]*)\}/g)) {
+    map.set(match[1], match[2].trim().replace(/;\s*$/, ''));
+  }
+  return map;
+})();
+
+const highlighter = {
+  style: (tagList: readonly any[]) => style.style(tagList),
 };
+
+/** Resolve the class names HighlightStyle hands back to inline declarations. */
+function inlineStyle(classes: string): string {
+  const out: string[] = [];
+  for (const cls of classes.split(' ')) {
+    const rule = styleByClass.get(cls);
+    if (rule) out.push(rule);
+  }
+  return out.join(';');
+}
 
 /** HTML-escape, because the result is inserted with {@html}. */
 function escapeHtml(text: string): string {
@@ -99,7 +147,8 @@ export function highlightLine(text: string, language: LanguageSupport | null): s
     highlightTree(tree, highlighter, (from, to, style) => {
       if (from > pos) html += escapeHtml(code.slice(pos, from));
       const body = escapeHtml(code.slice(from, to));
-      html += style ? `<span style="${style}">${body}</span>` : body;
+      const css = style ? inlineStyle(style) : '';
+      html += css ? `<span style="${css}">${body}</span>` : body;
       pos = to;
     });
 

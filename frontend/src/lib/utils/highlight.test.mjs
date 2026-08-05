@@ -340,3 +340,41 @@ test('highlights a real source file of this repo without altering it', () => {
   assert.equal(out.length, source.length);
   out.forEach((tokens, i) => assert.equal(join1(tokens), source[i], `line ${i + 1}`));
 });
+
+// The C-family and scripting languages, added because a Kotlin file showed as
+// plain text in the diff. They all resolve through the same table as the rest,
+// so the file browser and the diff gain them together.
+test('C-family extensions are recognised', () => {
+  assert.equal(detectLanguage('Main.kt'), 'kotlin');
+  assert.equal(detectLanguage('build.gradle.kts'), 'kotlin');
+  assert.equal(detectLanguage('App.java'), 'java');
+  assert.equal(detectLanguage('Program.cs'), 'csharp');
+  assert.equal(detectLanguage('main.cpp'), 'cpp');
+  assert.equal(detectLanguage('vector.hpp'), 'cpp');
+  assert.equal(detectLanguage('main.c'), 'c');
+  assert.equal(detectLanguage('stdio.h'), 'c');
+  assert.equal(detectLanguage('Build.scala'), 'scala');
+  assert.equal(detectLanguage('main.dart'), 'dart');
+});
+
+test('scripting languages are recognised', () => {
+  assert.equal(detectLanguage('index.php'), 'php');
+  assert.equal(detectLanguage('app.rb'), 'ruby');
+  assert.equal(detectLanguage('init.lua'), 'lua');
+  assert.equal(detectLanguage('View.swift'), 'swift');
+});
+
+test('a header is C, not C++', () => {
+  // .h is ambiguous in practice, but the C mode reads C++ headers acceptably
+  // while the reverse is worse: C++ keywords highlighted in C code are wrong
+  // in a way a reader notices.
+  assert.equal(detectLanguage('foo.h'), 'c');
+  assert.equal(detectLanguage('foo.hpp'), 'cpp');
+});
+
+test('an unknown extension still has no language', () => {
+  // The signal for "render this as plain text" — adding languages must not
+  // turn that into a wrong guess.
+  assert.equal(detectLanguage('notes.xyz'), null);
+  assert.equal(detectLanguage('LICENSE'), null);
+});

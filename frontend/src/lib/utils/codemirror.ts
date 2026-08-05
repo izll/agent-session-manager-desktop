@@ -191,7 +191,24 @@ export const insertTabKeymap = keymap.of([
  * so the filename→language detection is shared rather than duplicated — with
  * two exceptions handled by `grammarFor` below.
  */
-type GrammarKey = 'go' | 'js' | 'python' | 'rust' | 'json' | 'yaml' | 'markdown' | 'shell' | 'sql' | 'html' | 'css';
+type GrammarKey = 'go' | 'js' | 'python' | 'rust' | 'json' | 'yaml' | 'markdown' | 'shell' | 'sql' | 'html' | 'css'
+  | 'kotlin' | 'java' | 'csharp' | 'cpp' | 'c' | 'scala' | 'dart' | 'php' | 'ruby' | 'lua' | 'swift';
+
+/**
+ * Wraps one of the legacy StreamLanguage modes.
+ *
+ * Used for languages with no Lezer grammar. A stream mode colours by scanning
+ * text rather than by parsing it, so it has no structure to offer — but for
+ * colouring that costs nothing, and it is a fraction of the size of a Lezer
+ * grammar. The C-family modes all come from `clike`, which is parameterised by
+ * keyword set rather than duplicated per language.
+ */
+function legacyMode(load: () => Promise<any>, pick: (m: any) => any) {
+  return () =>
+    Promise.all([import('@codemirror/language'), load()]).then(
+      ([lang, mod]) => new lang.LanguageSupport(lang.StreamLanguage.define(pick(mod)))
+    );
+}
 
 /**
  * Loaders, one dynamic import each. Rollup turns every one into its own chunk,
@@ -211,10 +228,24 @@ const LOADERS: Record<GrammarKey, () => Promise<LanguageSupport>> = {
   css: () => import('@codemirror/lang-css').then((m) => m.css()),
   // Shell has no lang-* package; the legacy StreamLanguage mode is the
   // supported route and is a fraction of the size of a Lezer grammar.
-  shell: () =>
-    Promise.all([import('@codemirror/language'), import('@codemirror/legacy-modes/mode/shell')]).then(
-      ([lang, mode]) => new lang.LanguageSupport(lang.StreamLanguage.define(mode.shell))
-    ),
+  shell: legacyMode(() => import('@codemirror/legacy-modes/mode/shell'), (m) => m.shell),
+
+  // Lezer grammars where one exists — they parse, so they tag more precisely
+  // than a stream mode can.
+  java: () => import('@codemirror/lang-java').then((m) => m.java()),
+  php: () => import('@codemirror/lang-php').then((m) => m.php()),
+
+  // The rest come from clike, which covers the whole C family from one scanner.
+  kotlin: legacyMode(() => import('@codemirror/legacy-modes/mode/clike'), (m) => m.kotlin),
+  csharp: legacyMode(() => import('@codemirror/legacy-modes/mode/clike'), (m) => m.csharp),
+  cpp: legacyMode(() => import('@codemirror/legacy-modes/mode/clike'), (m) => m.cpp),
+  c: legacyMode(() => import('@codemirror/legacy-modes/mode/clike'), (m) => m.c),
+  scala: legacyMode(() => import('@codemirror/legacy-modes/mode/clike'), (m) => m.scala),
+  dart: legacyMode(() => import('@codemirror/legacy-modes/mode/clike'), (m) => m.dart),
+
+  ruby: legacyMode(() => import('@codemirror/legacy-modes/mode/ruby'), (m) => m.ruby),
+  lua: legacyMode(() => import('@codemirror/legacy-modes/mode/lua'), (m) => m.lua),
+  swift: legacyMode(() => import('@codemirror/legacy-modes/mode/swift'), (m) => m.swift),
 };
 
 /**

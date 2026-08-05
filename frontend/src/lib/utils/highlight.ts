@@ -54,7 +54,21 @@ export type Language =
   | 'shell'
   | 'sql'
   | 'html'
-  | 'css';
+  | 'css'
+  // The C-family languages share one scanner (see LOADERS): the differences
+  // between them are in their keyword sets, which the mode is parameterised
+  // by, not in how they are tokenised.
+  | 'kotlin'
+  | 'java'
+  | 'csharp'
+  | 'cpp'
+  | 'c'
+  | 'scala'
+  | 'dart'
+  | 'php'
+  | 'ruby'
+  | 'lua'
+  | 'swift';
 
 // --- Language detection ---------------------------------------------------
 
@@ -107,6 +121,26 @@ const EXTENSIONS: Record<string, Language> = {
   fish: 'shell',
   ksh: 'shell',
   sql: 'sql',
+  kt: 'kotlin',
+  kts: 'kotlin',
+  java: 'java',
+  cs: 'csharp',
+  cpp: 'cpp',
+  cxx: 'cpp',
+  cc: 'cpp',
+  hpp: 'cpp',
+  hxx: 'cpp',
+  c: 'c',
+  h: 'c',
+  scala: 'scala',
+  sc: 'scala',
+  dart: 'dart',
+  php: 'php',
+  rb: 'ruby',
+  rake: 'ruby',
+  gemfile: 'ruby',
+  lua: 'lua',
+  swift: 'swift',
 };
 
 /** Files whose whole name decides the language, extension or not. */
