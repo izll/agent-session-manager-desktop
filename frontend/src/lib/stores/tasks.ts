@@ -564,7 +564,14 @@ export async function updateTaskDirect(sessionId: string, taskId: string, title:
   if (!sessionId || !taskId) return;
 
   try {
-    await App.TaskMasterUpdateTaskDirect(sessionId, taskId, title, description, details, priority);
+    if (get(useMCPMode)) {
+      await App.TaskMasterUpdateTaskDirect(sessionId, taskId, title, description, details, priority);
+    } else {
+      // Editing a task is the app's own operation — it has storage for these
+      // fields and no reason to ask Task Master. Calling it regardless is what
+      // made saving an edit fail with "Task Master is turned off".
+      await App.UpdateTask(sessionId, taskId, { title, description, details, priority });
+    }
     await loadTasks(sessionId);
   } catch (e) {
     taskError.set(String(e));
@@ -572,12 +579,48 @@ export async function updateTaskDirect(sessionId: string, taskId: string, title:
   }
 }
 
+
+/**
+ * Rewrite one task's subtasks or dependencies through the app's own storage.
+ *
+ * Task Master exposes an endpoint per operation — add a subtask, remove one,
+ * set its status. The local store has no such endpoints, and adding six would
+ * be six ways to write the same file. It has UpdateTask, which takes whole
+ * fields, so the change is made here on the list already in memory and written
+ * back in one call.
+ */
+async function editTaskLocally(
+  sessionId: string,
+  taskId: string,
+  change: (task: Task) => Partial<Task>,
+): Promise<void> {
+  const task = get(tasks).find((t) => String(t.id) === String(taskId));
+  if (!task) throw new Error(`no such task: ${taskId}`);
+  await App.UpdateTask(sessionId, String(taskId), change(task) as Record<string, any>);
+}
+
+/** The task a subtask id belongs to: Task Master addresses them as "3.1". */
+function parentTaskId(subtaskId: string): string {
+  return String(subtaskId).split('.')[0];
+}
+
 // Add subtask to a task
 export async function addSubtask(sessionId: string, taskId: string, title: string, description: string = '') {
   if (!sessionId || !taskId || !title.trim()) return;
 
   try {
-    await App.TaskMasterAddSubtask(sessionId, taskId, title, description);
+    if (get(useMCPMode)) {
+      await App.TaskMasterAddSubtask(sessionId, taskId, title, description);
+    } else {
+      await editTaskLocally(sessionId, taskId, (task) => ({
+        subtasks: [
+          ...(task.subtasks || []),
+          // Numbered within the task, as Task Master does, so the two stores
+          // produce ids of the same shape.
+          { id: String((task.subtasks?.length || 0) + 1), title, status: 'pending' },
+        ],
+      }));
+    }
     await loadTasks(sessionId);
   } catch (e) {
     taskError.set(String(e));
@@ -590,7 +633,15 @@ export async function removeSubtask(sessionId: string, subtaskId: string) {
   if (!sessionId || !subtaskId) return;
 
   try {
-    await App.TaskMasterRemoveSubtask(sessionId, subtaskId);
+    if (get(useMCPMode)) {
+      await App.TaskMasterRemoveSubtask(sessionId, subtaskId);
+    } else {
+      const parent = parentTaskId(subtaskId);
+      const child = String(subtaskId).slice(parent.length + 1);
+      await editTaskLocally(sessionId, parent, (task) => ({
+        subtasks: (task.subtasks || []).filter((sub: any) => String(sub.id) !== child),
+      }));
+    }
     await loadTasks(sessionId);
   } catch (e) {
     taskError.set(String(e));
@@ -603,7 +654,11 @@ export async function clearSubtasks(sessionId: string, taskId: string) {
   if (!sessionId || !taskId) return;
 
   try {
-    await App.TaskMasterClearSubtasks(sessionId, taskId);
+    if (get(useMCPMode)) {
+      await App.TaskMasterClearSubtasks(sessionId, taskId);
+    } else {
+      await editTaskLocally(sessionId, taskId, () => ({ subtasks: [] }));
+    }
     await loadTasks(sessionId);
   } catch (e) {
     taskError.set(String(e));
@@ -616,7 +671,16 @@ export async function setSubtaskStatus(sessionId: string, subtaskId: string, sta
   if (!sessionId || !subtaskId) return;
 
   try {
-    await App.TaskMasterSetSubtaskStatus(sessionId, subtaskId, status);
+    if (get(useMCPMode)) {
+      await App.TaskMasterSetSubtaskStatus(sessionId, subtaskId, status);
+    } else {
+      const parent = parentTaskId(subtaskId);
+      const child = String(subtaskId).slice(parent.length + 1);
+      await editTaskLocally(sessionId, parent, (task) => ({
+        subtasks: (task.subtasks || []).map((sub: any) =>
+          String(sub.id) === child ? { ...sub, status } : sub),
+      }));
+    }
     await loadTasks(sessionId);
   } catch (e) {
     taskError.set(String(e));
@@ -629,7 +693,15 @@ export async function addDependency(sessionId: string, taskId: string, dependsOn
   if (!sessionId || !taskId || !dependsOnId) return;
 
   try {
-    await App.TaskMasterAddDependency(sessionId, taskId, dependsOnId);
+    if (get(useMCPMode)) {
+      await App.TaskMasterAddDependency(sessionId, taskId, dependsOnId);
+    } else {
+      await editTaskLocally(sessionId, taskId, (task) => ({
+        // Deduplicated: adding the same dependency twice is a no-op, not an
+        // error worth interrupting the user for.
+        dependencies: Array.from(new Set([...(task.dependencies || []), String(dependsOnId)])),
+      }));
+    }
     await loadTasks(sessionId);
   } catch (e) {
     taskError.set(String(e));
@@ -642,7 +714,14 @@ export async function removeDependency(sessionId: string, taskId: string, depend
   if (!sessionId || !taskId || !dependsOnId) return;
 
   try {
-    await App.TaskMasterRemoveDependency(sessionId, taskId, dependsOnId);
+    if (get(useMCPMode)) {
+      await App.TaskMasterRemoveDependency(sessionId, taskId, dependsOnId);
+    } else {
+      await editTaskLocally(sessionId, taskId, (task) => ({
+        dependencies: (task.dependencies || []).filter(
+          (dep: any) => String(dep) !== String(dependsOnId)),
+      }));
+    }
     await loadTasks(sessionId);
   } catch (e) {
     taskError.set(String(e));

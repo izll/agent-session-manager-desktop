@@ -31,9 +31,14 @@ const (
 
 // Task represents a single task
 type Task struct {
-	ID           string       `json:"id"`
-	Title        string       `json:"title"`
-	Description  string       `json:"description"`
+	ID          string `json:"id"`
+	Title       string `json:"title"`
+	Description string `json:"description"`
+	// Details is the long-form body the edit dialog offers alongside the short
+	// description. Task Master has a field for it, so the local store needs one
+	// too — without it, editing a task through the app's own storage silently
+	// dropped whatever was typed there.
+	Details      string       `json:"details,omitempty"`
 	Status       TaskStatus   `json:"status"`
 	Priority     TaskPriority `json:"priority"`
 	Tags         []string     `json:"tags"`
@@ -233,6 +238,9 @@ func (tm *TaskManager) UpdateTask(id string, updates map[string]interface{}) err
 			if title, ok := updates["title"].(string); ok {
 				task.Title = title
 			}
+			if details, ok := updates["details"].(string); ok {
+				task.Details = details
+			}
 			if desc, ok := updates["description"].(string); ok {
 				task.Description = desc
 			}
@@ -248,6 +256,17 @@ func (tm *TaskManager) UpdateTask(id string, updates map[string]interface{}) err
 			if priority, ok := updates["priority"].(string); ok {
 				task.Priority = TaskPriority(priority)
 			}
+			// Subtasks and dependencies arrive as whole lists rather than as
+			// add/remove operations: the caller already holds the task it is
+			// editing, and replacing the list is one write instead of a pair of
+			// endpoints per collection. They come over the Wails bridge as
+			// []interface{}, so each element is converted rather than asserted.
+			if subtasks, ok := updates["subtasks"].([]interface{}); ok {
+				task.Subtasks = toSubtasks(subtasks)
+			}
+			if deps, ok := updates["dependencies"].([]interface{}); ok {
+				task.Dependencies = toStringList(deps)
+			}
 			if tags, ok := updates["tags"].([]string); ok {
 				task.Tags = tags
 			}
@@ -258,6 +277,53 @@ func (tm *TaskManager) UpdateTask(id string, updates map[string]interface{}) err
 	}
 
 	return fmt.Errorf("task not found: %s", id)
+}
+
+// toSubtasks converts what the frontend sends into the stored shape. Anything
+// that is not a well-formed subtask is skipped rather than stored half-built.
+func toSubtasks(raw []interface{}) []Subtask {
+	out := make([]Subtask, 0, len(raw))
+	for _, item := range raw {
+		fields, ok := item.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		id, _ := fields["id"].(string)
+		title, _ := fields["title"].(string)
+		if id == "" || title == "" {
+			continue
+		}
+		sub := Subtask{ID: id, Title: title}
+		// The frontend speaks in statuses because Task Master does; the local
+		// store only records whether a subtask is finished, which is all its
+		// UI offers — a checkbox.
+		if status, ok := fields["status"].(string); ok {
+			sub.Done = status == string(TaskStatusDone)
+		} else if done, ok := fields["done"].(bool); ok {
+			sub.Done = done
+		}
+		if created, ok := fields["createdAt"].(string); ok {
+			if parsed, err := time.Parse(time.RFC3339, created); err == nil {
+				sub.CreatedAt = parsed
+			}
+		}
+		if sub.CreatedAt.IsZero() {
+			sub.CreatedAt = time.Now()
+		}
+		out = append(out, sub)
+	}
+	return out
+}
+
+// toStringList converts a JSON array of strings, dropping anything else.
+func toStringList(raw []interface{}) []string {
+	out := make([]string, 0, len(raw))
+	for _, item := range raw {
+		if s, ok := item.(string); ok && s != "" {
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 // DeleteTask deletes a task by ID

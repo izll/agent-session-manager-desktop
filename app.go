@@ -3240,6 +3240,7 @@ type TaskInfo struct {
 	ID           string        `json:"id"`
 	Title        string        `json:"title"`
 	Description  string        `json:"description"`
+	Details      string        `json:"details,omitempty"`
 	Status       string        `json:"status"`
 	Priority     string        `json:"priority"`
 	Tags         []string      `json:"tags"`
@@ -3324,6 +3325,7 @@ func convertTask(t session.Task) TaskInfo {
 		ID:           t.ID,
 		Title:        t.Title,
 		Description:  t.Description,
+		Details:      t.Details,
 		Status:       string(t.Status),
 		Priority:     string(t.Priority),
 		Tags:         tags,
@@ -3618,13 +3620,13 @@ func convertMCPTask(t mcp.Task) MCPTaskInfo {
 		ID:           t.ID,
 		Title:        t.Title,
 		Description:  t.Description,
+		Details:      t.Details,
 		Status:       t.Status,
 		Priority:     t.Priority,
 		Tags:         tags,
 		Subtasks:     subtasks,
 		Dependencies: deps,
 		Complexity:   t.Complexity,
-		Details:      t.Details,
 		CreatedAt:    t.CreatedAt,
 	}
 }

@@ -1276,6 +1276,7 @@ export namespace main {
 	    id: string;
 	    title: string;
 	    description: string;
+	    details?: string;
 	    status: string;
 	    priority: string;
 	    tags: string[];
@@ -1294,6 +1295,7 @@ export namespace main {
 	        this.id = source["id"];
 	        this.title = source["title"];
 	        this.description = source["description"];
+	        this.details = source["details"];
 	        this.status = source["status"];
 	        this.priority = source["priority"];
 	        this.tags = source["tags"];
