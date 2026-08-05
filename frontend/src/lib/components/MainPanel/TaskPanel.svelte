@@ -238,9 +238,18 @@
     cleanupModalFieldTarget();
   }
 
+  // Declared above onDestroy, which clears the interval: the reactive block
+  // that starts it is further down, and reading a `let` before its declaration
+  // is a runtime error rather than an undefined.
+  let nowTick = Date.now();
+  let clock: ReturnType<typeof setInterval> | null = null;
+
   onDestroy(() => {
     dictation.destroy();
     cleanupModalFieldTarget();
+    // The panel can be destroyed while still active — switching session, or
+    // closing the window — and an interval outlives its component.
+    if (clock) clearInterval(clock);
   });
 
   onMount(() => {
@@ -271,6 +280,26 @@
     loadTasksIfNeeded(true);
   } else if (!active) {
     wasActive = false;
+  }
+
+  // Keeps "3 minutes ago" advancing while the panel is on screen.
+  //
+  // The elapsed time comes from the clock, and a clock is not something Svelte
+  // can watch: new Date() does not "change", it just answers differently each
+  // call. So the value has to be re-read on a timer — but only while the panel
+  // is visible. A timer redrawing a list nobody is looking at is exactly the
+  // background work that costs this app its one WebKit main thread.
+  //
+  // A minute is the resolution the text itself has: below an hour it counts
+  // whole minutes, so ticking faster would redraw without changing anything.
+  $: if (active && !clock) {
+    // Re-read at once, so a panel reopened after a while is not showing the
+    // time it was closed at until the first tick lands.
+    nowTick = Date.now();
+    clock = setInterval(() => { nowTick = Date.now(); }, 60_000);
+  } else if (!active && clock) {
+    clearInterval(clock);
+    clock = null;
   }
 
   // Watch for session changes
@@ -608,14 +637,12 @@
   // markup, Svelte re-runs this only when its arguments change, so a language
   // switch would leave the old wording on screen.
   //
-  // The elapsed time it reports still only advances when something else
-  // re-renders the row. That is deliberate — a ticking clock per task would
-  // mean a timer redrawing the panel — and "3 minutes ago" being a little stale
-  // reads fine, where "Perccel ezelőtt" in the wrong language does not.
-  function formatRelativeDate(dateStr: string, tr: typeof $t): string {
+  // `now` is passed in for the same reason as `tr`: read inside, neither the
+  // clock nor the translation would be a dependency Svelte can see, and the
+  // row would keep whatever it first rendered.
+  function formatRelativeDate(dateStr: string, tr: typeof $t, now: number): string {
     const date = new Date(dateStr);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
+    const diffMs = now - date.getTime();
     const diffMin = Math.floor(diffMs / 60000);
     const diffHr = Math.floor(diffMs / 3600000);
     const diffDays = Math.floor(diffMs / 86400000);
@@ -779,7 +806,7 @@
                 </span>
                 {#if task.createdAt}
                   <span class="created-at" title={new Date(task.createdAt).toLocaleString()}>
-                    {formatRelativeDate(task.createdAt, $t)}
+                    {formatRelativeDate(task.createdAt, $t, nowTick)}
                   </span>
                 {/if}
               </div>
