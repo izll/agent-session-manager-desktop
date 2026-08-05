@@ -6,6 +6,47 @@ Entries describe what changed for someone using the app. Internal refactoring,
 test and CI work is left out unless it changed behaviour. Dates are release
 dates; the format follows [Keep a Changelog](https://keepachangelog.com).
 
+## 0.9.19 — 2026-08-05
+
+### Added
+
+- **The log has its own dialog**, opened from Settings → Maintenance, wide
+  enough to read a stack trace without wrapping. It shows either the
+  application log or the dictation log, filters by text, and hides the noisiest
+  polling lines by default so what is left is worth reading. Each log can be
+  cleared when it has served its purpose.
+- **Dictation writes to a log of its own.** Its diagnostics used to go to the
+  terminal, which is nowhere at all when the app is started from the desktop —
+  the one place a dictation problem could be explained was the one place nobody
+  was looking.
+
+### Fixed
+
+- **Dictation could fail silently in streaming mode.** A rejected API key, an
+  exhausted quota, or a dropped connection ended the stream without a word: the
+  microphone level kept moving, so it looked like it was working while nothing
+  was being transcribed. Every one of those now says what happened and what to
+  do about it. API mode already reported a bad key; the two modes now agree.
+- **Some error messages came out wrong or blank.** The backend was sending
+  finished sentences where the interface expected translation keys, and two of
+  the keys it did send were not defined in any language. Both sides now use the
+  same keys, and all seven exist in all 20 languages.
+- **Error messages could be hidden behind the dialog that caused them.** A
+  dictation failure reported while the settings dialog was open — which is
+  exactly where dictation is set up and tested — was drawn underneath it.
+- **The settings dialog could freeze on the Dictation tab.** An empty list of
+  problems arrived as nothing at all rather than as an empty list, which stopped
+  the interface redrawing: the window stayed up, hover still worked, and
+  nothing else responded.
+- **Dictation could hang the app for good when the sound server was wedged.**
+  Eight calls out to `pactl` had no time limit, so any one of them that never
+  returned took the app with it. They now give up after three seconds.
+- **The log could grow without bound.** One measured run had reached 68,266
+  lines; it is now capped, and truncating it no longer leaves the file padded
+  with empty space.
+- **The API key could not be checked for typos.** It is now revealable with an
+  eye button, like a password field.
+
 ## 0.9.18 — 2026-08-05
 
 ### Added
