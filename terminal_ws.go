@@ -169,12 +169,20 @@ type termConn struct {
 
 // maxHeldWhileHidden bounds what one hidden tab may accumulate.
 //
-// A terminal screen is on the order of ten kilobytes, so this is several
-// hundred screens' worth — comfortably more than a tab produces while the user
-// looks at another one. Past it the held bytes are dropped and the tab falls
-// back to asking tmux for a repaint, because an agent in a loop must not be
-// able to grow this without limit.
-const maxHeldWhileHidden = 4 * 1024 * 1024
+// Sized against what an agent actually emits, which is not plain text: a
+// working Claude or Codex redraws its whole screen many times a second, and
+// every redraw carries the ANSI control sequences to reposition and repaint
+// it. At 4 MiB — the first estimate, reasoned from "a screen is about ten
+// kilobytes" — a tab left running for a few minutes overflowed, and the user
+// came back to a repainted screen with no scrollback and had to scroll up to
+// find what had happened. Measured in the wild, not predicted.
+//
+// 64 MiB is the working figure: roughly a quarter of a gigabyte if four busy
+// tabs were hidden at once, which is affordable, while still being a bound —
+// an agent stuck in a loop must not grow this without limit. Past it the held
+// bytes are dropped and the tab falls back to a repaint, which restores the
+// visible screen but not the history behind it.
+const maxHeldWhileHidden = 64 * 1024 * 1024
 
 // holdWhileHidden stores output for a hidden tab.
 func (tc *termConn) holdWhileHidden(data []byte) {
@@ -183,18 +191,26 @@ func (tc *termConn) holdWhileHidden(data []byte) {
 	}
 	tc.heldMu.Lock()
 	defer tc.heldMu.Unlock()
-	if tc.heldOver {
-		return
-	}
-	if len(tc.held)+len(data) > maxHeldWhileHidden {
-		// Over the limit: drop what was held rather than keep a partial
-		// prefix. A prefix would replay the start of what happened and then
-		// jump, which reads as corruption; an honest repaint is better.
-		tc.held = nil
-		tc.heldOver = true
-		return
-	}
 	tc.held = append(tc.held, data...)
+	if len(tc.held) <= maxHeldWhileHidden {
+		return
+	}
+
+	// Over the limit: keep the most recent bytes and drop the oldest.
+	//
+	// The earlier behaviour dropped everything and repainted, on the reasoning
+	// that replaying a prefix would show the start of what happened and then
+	// jump — which reads as corruption. That reasoning holds for a prefix. It
+	// does not hold for a suffix: a terminal stream is written in order, so
+	// starting partway through is exactly what scrolling back through any
+	// terminal shows. What was lost is off the top, which is where lost
+	// history belongs.
+	//
+	// The flag is still set, so the repaint still happens: the tail may begin
+	// mid-escape-sequence, and the repaint puts the visible screen right
+	// regardless of where the replay started.
+	tc.held = tc.held[len(tc.held)-maxHeldWhileHidden:]
+	tc.heldOver = true
 }
 
 // takeHeldWhileHidden returns and clears what was held, and whether the limit
@@ -898,13 +914,25 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 								// stream. Ask tmux to repaint instead: that is
 								// incomplete on its own, but it is the honest
 								// fallback and it sends no input.
-								if attachedToOwnMirror {
-									session.RefreshSessionClients(attachTarget)
-								}
-								if session.DebugLogging {
-									log.Printf("[ws] held output overflowed, repainting session=%s win=%d",
-										sessionID, winIdx)
-								}
+								// Repaint whatever this connection is attached
+								// to. Gated on the mirror alone, a tab that fell
+								// back to a direct attach got no repaint at all
+								// after an overflow — the screen simply stayed
+								// half-drawn until something else happened to
+								// redraw it. RefreshSessionClients only asks the
+								// server to resend what it already has, so there
+								// is nothing here to protect a shared session
+								// from, unlike the resize above.
+								session.RefreshSessionClients(attachTarget)
+								// Logged unconditionally, unlike the ordinary
+								// replay above: this is the path where a tab
+								// comes back to a screen rebuilt by repaint
+								// rather than restored byte for byte, so it is
+								// the first thing to look for when someone
+								// reports a stale-looking tab. Once per
+								// overflow, not per frame.
+								log.Printf("[ws] held output overflowed while hidden, repainting session=%s win=%d",
+									sessionID, winIdx)
 							}
 						}
 					}
