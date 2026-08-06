@@ -75,3 +75,46 @@ func TestTakingHeldOutputClearsIt(t *testing.T) {
 		t.Errorf("second take returned %q (overflowed=%v), want nothing", held, overflowed)
 	}
 }
+
+// Reslicing to keep the tail leaves the original array alive: the window moves,
+// the memory does not, and append grows by doubling — so an overflowed tab
+// could sit on twice the limit while reporting the limit in length. Per tab
+// that is invisible; across the 55 tabs a real workspace here runs, it is
+// gigabytes.
+func TestOverflowDoesNotStrandTheOldBuffer(t *testing.T) {
+	tc := &termConn{}
+
+	for written := 0; written < maxHeldWhileHidden*2; written += 1 << 20 {
+		tc.holdWhileHidden(bytes.Repeat([]byte("x"), 1<<20))
+	}
+
+	tc.heldMu.Lock()
+	length, capacity := len(tc.held), cap(tc.held)
+	tc.heldMu.Unlock()
+
+	if capacity > length {
+		t.Errorf("cap=%d for len=%d: the discarded prefix is still allocated",
+			capacity, length)
+	}
+}
+
+// Held output is only worth keeping for a tab that will come back. Once the
+// connection is closing nobody will ever ask for those bytes, and holding them
+// until the conn is collected keeps up to the full limit alive per dead tab.
+func TestDiscardFreesTheBuffer(t *testing.T) {
+	tc := &termConn{}
+	tc.holdWhileHidden(bytes.Repeat([]byte("x"), 1<<20))
+
+	tc.discardHeldWhileHidden()
+
+	tc.heldMu.Lock()
+	held, over := tc.held, tc.heldOver
+	tc.heldMu.Unlock()
+
+	if held != nil {
+		t.Errorf("%d bytes still held after discard", len(held))
+	}
+	if over {
+		t.Error("the overflow flag survived a discard")
+	}
+}

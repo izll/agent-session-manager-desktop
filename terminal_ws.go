@@ -177,12 +177,15 @@ type termConn struct {
 // came back to a repainted screen with no scrollback and had to scroll up to
 // find what had happened. Measured in the wild, not predicted.
 //
-// 64 MiB is the working figure: roughly a quarter of a gigabyte if four busy
-// tabs were hidden at once, which is affordable, while still being a bound —
-// an agent stuck in a loop must not grow this without limit. Past it the held
-// bytes are dropped and the tab falls back to a repaint, which restores the
-// visible screen but not the history behind it.
-const maxHeldWhileHidden = 64 * 1024 * 1024
+// The figure has to survive being multiplied. This is a per-tab budget, and a
+// real workspace here runs 55 tabs across 17 sessions — at 64 MiB each that is
+// 3.4 GiB in the worst case, which is not a budget, it is a leak with a
+// ceiling. 16 MiB keeps the same worst case under a gigabyte while still being
+// four times what overflowed in about an hour of a working agent.
+//
+// Past the limit the oldest bytes fall off the top and the newest are kept, so
+// exceeding it costs the far end of the scrollback rather than all of it.
+const maxHeldWhileHidden = 16 * 1024 * 1024
 
 // holdWhileHidden stores output for a hidden tab.
 func (tc *termConn) holdWhileHidden(data []byte) {
@@ -209,8 +212,28 @@ func (tc *termConn) holdWhileHidden(data []byte) {
 	// The flag is still set, so the repaint still happens: the tail may begin
 	// mid-escape-sequence, and the repaint puts the visible screen right
 	// regardless of where the replay started.
-	tc.held = tc.held[len(tc.held)-maxHeldWhileHidden:]
+	// Copied into a right-sized buffer rather than resliced. Reslicing keeps
+	// the original array alive — the window moves, the memory does not — and
+	// append grows by doubling, so a tab that overflowed could sit on twice
+	// the limit in memory while reporting the limit in length. With many tabs
+	// hidden at once that difference is measured in gigabytes.
+	tail := make([]byte, maxHeldWhileHidden)
+	copy(tail, tc.held[len(tc.held)-maxHeldWhileHidden:])
+	tc.held = tail
 	tc.heldOver = true
+}
+
+// discardHeldWhileHidden frees the buffer without replaying it.
+//
+// Held output is only worth keeping for a tab that will come back to this
+// connection. Once the connection is closing — the tab was detached, the
+// session stopped, the window went away — nobody will ever ask for those
+// bytes, and holding them until the connection is garbage collected keeps up
+// to the full limit alive per dead tab.
+func (tc *termConn) discardHeldWhileHidden() {
+	tc.heldMu.Lock()
+	defer tc.heldMu.Unlock()
+	tc.held, tc.heldOver = nil, false
 }
 
 // takeHeldWhileHidden returns and clears what was held, and whether the limit
@@ -760,6 +783,10 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 			tc.closeOnce.Do(func() {
 				close(tc.done)
 			})
+			// Nobody will come back to this connection, so whatever it was
+			// holding for a hidden tab is dead weight until the conn is
+			// collected — up to the full limit, per closed tab.
+			tc.discardHeldWhileHidden()
 			ptmx.Close()
 			ws.Close()
 			_ = cmd.Process.Kill()
