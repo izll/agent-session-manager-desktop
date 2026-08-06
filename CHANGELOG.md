@@ -6,6 +6,30 @@ Entries describe what changed for someone using the app. Internal refactoring,
 test and CI work is left out unless it changed behaviour. Dates are release
 dates; the format follows [Keep a Changelog](https://keepachangelog.com).
 
+## 0.9.22 — 2026-08-07
+
+### Added
+
+- **A quick-jump window on `Ctrl+J`** — a hand-ordered list of the tabs and
+  sessions you keep returning to. The first nine answer to the number keys, so
+  the order is the point: arrange it and "3" is always the build tab. The
+  arrows walk the rest, including everything past nine. `Alt+J` adds what is
+  on screen, and both the tab and session context menus offer the same.
+  Entries can be reordered by dragging or with `Alt+↑↓`, given a note of your
+  own with `F2`, and each row shows whether it is busy, waiting or idle. An
+  entry whose session has stopped keeps its place rather than renumbering
+  everything below it.
+- **Terminal tabs remember where you left them** (from 0.9.21), now also
+  restored when a single tab is restarted rather than the whole session.
+
+### Fixed
+
+- **A tab you were not looking at could come back missing its scrollback.**
+  Output held for a hidden tab was discarded entirely once it passed a limit,
+  and the limit was sized for plain text rather than for an agent redrawing
+  its screen many times a second. The newest output is now kept and only the
+  oldest falls away, and closing a tab releases what it was holding.
+
 ## 0.9.21 — 2026-08-06
 
 ### Added
