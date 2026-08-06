@@ -14,7 +14,9 @@
   import ImportDialog from './lib/components/Dialogs/ImportDialog.svelte';
   import SessionFileDialog from './lib/components/Dialogs/SessionFileDialog.svelte';
   import SettingsDialog from './lib/components/Dialogs/SettingsDialog.svelte';
+  import { autoFocusDialog } from './lib/utils/dialogActions';
   import LogDialog from './lib/components/Dialogs/LogDialog.svelte';
+  import QuickJumpDialog from './lib/components/Dialogs/QuickJumpDialog.svelte';
   import RecoveryCenterDialog from './lib/components/Dialogs/RecoveryCenterDialog.svelte';
   import CommandPalette from './lib/components/Dialogs/CommandPalette.svelte';
   import CommandPickerDialog from './lib/components/Dialogs/CommandPickerDialog.svelte';
@@ -30,7 +32,7 @@
   import { sessions, loadSessions, selectSession, selectWindow, selectedSession, selectedSessionId, selectedWindowIdx, startSession, stopSession, stopTab, restartTab, restartTabWithResume, deleteSession, toggleFavorite, reorderSession, selectPrevSession, selectNextSession } from './lib/stores/sessions';
   import { activities } from './lib/stores/activities';
   import { statusLines, tabStatuses } from './lib/stores/statusLines';
-  import { QuickReplyTab, ExportSessions, PendingUpdate } from '../wailsjs/go/main/App';
+  import { QuickReplyTab, ExportSessions, PendingUpdate, AddQuickJump } from '../wailsjs/go/main/App';
   import { loadProjects, otherInstancePID, refreshLockStatus } from './lib/stores/projects';
   import { appView } from './lib/stores/navigation';
   import { loadSettings, settings } from './lib/stores/settings';
@@ -122,6 +124,7 @@
   let exportError = '';
   let showSettingsDialog = false;
   let showLogDialog = false;
+  let showQuickJump = false;
   let showRecoveryCenter = false;
   let showCommandPalette = false;
   /** Saved-command library: Ctrl+P picker and its editor. */
@@ -160,7 +163,7 @@
     showNewSessionDialog || showNewGroupDialog || showGlobalSearch || showBgAgents ||
     showHelpDialog || showUpdateDialog || showImportDialog || showFileImportDialog ||
     showSettingsDialog || showRecoveryCenter || showCommandPalette || showColorDialog || showDeleteConfirm ||
-    showLogDialog ||
+    showLogDialog || showQuickJump || quickJumpPrompt ||
     showCommandPicker || showCommandManager || showTemplateDialog ||
     showQuitConfirm || showStopDialog || showStartDialog ||
     showResumeChoice || showResumeSessionPicker;
@@ -329,6 +332,58 @@
    */
   $: favouriteTargets = $sessions.filter(s => s.favorite);
 
+  /**
+   * Add what is on screen to the quick-jump list, asking which "it" is meant.
+   *
+   * The tab and the session are both reasonable answers and the app cannot
+   * tell them apart from the keystroke: adding the tab pins one place, adding
+   * the session lands on whichever tab was last open there. Guessing would be
+   * wrong half the time, and this list is meant to be built deliberately —
+   * its order assigns the number keys.
+   */
+  let quickJumpPrompt = false;
+
+  /** 0 = this tab, 1 = the whole session. The tab leads, being the common
+   *  case and the one the keystroke was pressed from. */
+  let quickJumpChoice = 0;
+
+  function addCurrentToQuickJump() {
+    if (!$selectedSessionId) return;
+    quickJumpChoice = 0;
+    quickJumpPrompt = true;
+  }
+
+  function quickJumpPromptKeys(e: KeyboardEvent) {
+    switch (e.key) {
+      case 'ArrowDown':
+      case 'ArrowRight':
+        e.preventDefault();
+        quickJumpChoice = 1;
+        break;
+      case 'ArrowUp':
+      case 'ArrowLeft':
+        e.preventDefault();
+        quickJumpChoice = 0;
+        break;
+      case 'Enter':
+        e.preventDefault();
+        confirmQuickJumpAdd(quickJumpChoice === 0 ? ($selectedWindowIdx ?? 0) : -1);
+        break;
+    }
+  }
+
+  /** Appended at the end, so adding something never renumbers what is there. */
+  async function confirmQuickJumpAdd(windowIdx: number) {
+    quickJumpPrompt = false;
+    if (!$selectedSessionId) return;
+    try {
+      await AddQuickJump($selectedSessionId, windowIdx);
+      showQuickJump = true;
+    } catch (err) {
+      console.error('Adding to the quick-jump list failed:', err);
+    }
+  }
+
   function jumpToFavourite(slot: number) {
     const target = favouriteTargets[slot - 1];
     if (!target) return;
@@ -336,6 +391,12 @@
   }
 
   function handleKeydown(e: KeyboardEvent) {
+    if (e.key === 'Escape' && quickJumpPrompt) {
+      e.preventDefault();
+      quickJumpPrompt = false;
+      return;
+    }
+
     // Close sidebar overlay on Escape
     if (e.key === 'Escape' && sidebarOverlayOpen) {
       sidebarOverlayOpen = false;
@@ -434,6 +495,20 @@
       case 'session.favorite':
         e.preventDefault();
         if ($selectedSessionId) toggleFavorite($selectedSessionId);
+        return;
+      case 'quickJump.open':
+        e.preventDefault();
+        // stopPropagation as well: preventDefault only cancels the browser's
+        // own action, and xterm listens for keys itself. Without it Ctrl+J
+        // still reached the terminal as LF — a newline in the agent's
+        // composer every time the window was opened.
+        e.stopPropagation();
+        showQuickJump = true;
+        return;
+      case 'quickJump.add':
+        e.preventDefault();
+        e.stopPropagation();
+        addCurrentToQuickJump();
         return;
       case 'help.show':
         e.preventDefault();
@@ -1132,6 +1207,69 @@
     on:confirm={confirmQuit}
   />
   <LogDialog bind:show={showLogDialog} />
+
+  {#if quickJumpPrompt}
+    <!-- svelte-ignore a11y-click-events-have-key-events -->
+    <div
+      class="dialog-overlay"
+      on:click|self={() => (quickJumpPrompt = false)}
+      on:keydown={quickJumpPromptKeys}
+    >
+      <div class="dialog-content quick-add">
+        <div class="dialog-header">
+          <h2>{$t('quickJump.addTitle')}</h2>
+          <button class="close-btn" on:click={() => (quickJumpPrompt = false)}
+            aria-label={$t('common.close')}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"/>
+              <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+
+        <div class="quick-add-body" use:autoFocusDialog>
+          <p class="quick-add-question">{$t('quickJump.addQuestion')}</p>
+          <button
+            class="quick-add-choice"
+            class:chosen={quickJumpChoice === 0}
+            on:click={() => confirmQuickJumpAdd($selectedWindowIdx ?? 0)}
+            on:mouseenter={() => (quickJumpChoice = 0)}
+            on:focus={() => (quickJumpChoice = 0)}
+          >
+            <strong>{$t('quickJump.addTab')}</strong>
+            <span>{$t('quickJump.addTabDesc')}</span>
+          </button>
+          <button
+            class="quick-add-choice"
+            class:chosen={quickJumpChoice === 1}
+            on:click={() => confirmQuickJumpAdd(-1)}
+            on:mouseenter={() => (quickJumpChoice = 1)}
+            on:focus={() => (quickJumpChoice = 1)}
+          >
+            <strong>{$t('quickJump.addSession')}</strong>
+            <span>{$t('quickJump.addSessionDesc')}</span>
+          </button>
+        </div>
+
+        <div class="dialog-footer">
+          <button class="btn-cancel" on:click={() => (quickJumpPrompt = false)}>
+            {$t('common.cancel')}
+          </button>
+        </div>
+      </div>
+    </div>
+  {/if}
+
+  <QuickJumpDialog
+    bind:show={showQuickJump}
+    on:jump={(e) => {
+      selectSession(e.detail.sessionId);
+      // A negative index means the entry is the session itself, so whichever
+      // tab was last open there is the right destination.
+      if (e.detail.windowIdx >= 0) selectWindow(e.detail.windowIdx);
+      focusTerminal();
+    }}
+  />
   <StopDialog
     bind:show={showStopDialog}
     sessionName={$selectedSession?.name || ''}
@@ -1727,4 +1865,69 @@
     transform: scaleX(-1);
   }
 
+
+
+  /* Matching the settings dialog rather than inheriting whatever the shared
+     overlay provides, which drew a circle here. */
+  .close-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    background: rgba(255, 255, 255, 0.05);
+    border: none;
+    border-radius: 8px;
+    color: #6b7280;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+  .close-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+  }
+
+  /* The quick-jump add prompt: two choices, stated plainly enough that neither
+     needs thinking about. */
+  .quick-add {
+    width: min(460px, 92vw);
+    max-width: min(460px, 92vw);
+  }
+  .quick-add-body {
+    padding: 4px 20px 12px;
+  }
+  .quick-add-question {
+    margin: 0 0 14px;
+    opacity: 0.75;
+    font-size: 0.9em;
+  }
+  .quick-add-choice {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    width: 100%;
+    padding: 11px 14px;
+    margin-bottom: 8px;
+    text-align: left;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.03);
+    color: inherit;
+    cursor: pointer;
+  }
+  /* Only `chosen` marks the selection. Focus is deliberately not styled here:
+     the arrows move the choice without moving focus, so a focus ring left on
+     the first button showed two options highlighted at once. Focus still
+     follows a click or Tab, and those set `chosen` too. */
+  .quick-add-choice.chosen {
+    border-color: var(--accent, #61afef);
+    background: rgba(255, 255, 255, 0.07);
+  }
+  .quick-add-choice:focus {
+    outline: none;
+  }
+  .quick-add-choice span {
+    font-size: 0.82em;
+    opacity: 0.65;
+  }
 </style>

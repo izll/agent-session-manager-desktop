@@ -3,6 +3,8 @@
 import {main} from '../models';
 import {session} from '../models';
 
+export function AddQuickJump(arg1:string,arg2:number):Promise<void>;
+
 export function AddSubtask(arg1:string,arg2:string,arg3:string):Promise<main.SubtaskInfo>;
 
 export function AssignToGroup(arg1:string,arg2:string):Promise<void>;
@@ -127,6 +129,8 @@ export function GetProjectSessions(arg1:string):Promise<Array<main.SessionInfo>>
 
 export function GetProjects():Promise<Array<main.ProjectInfo>>;
 
+export function GetQuickJump():Promise<Array<session.QuickJumpEntry>>;
+
 export function GetResumeSessions(arg1:string,arg2:string):Promise<Array<main.AgentSessionInfo>>;
 
 export function GetSessionDiff(arg1:string):Promise<main.DiffData>;
@@ -197,6 +201,8 @@ export function LogFrontend(arg1:string):Promise<void>;
 
 export function MoveGroup(arg1:string,arg2:number):Promise<void>;
 
+export function MoveQuickJump(arg1:number,arg2:number):Promise<void>;
+
 export function MoveSessionToIndex(arg1:string,arg2:number):Promise<void>;
 
 export function MoveTask(arg1:string,arg2:string,arg3:string):Promise<void>;
@@ -226,6 +232,8 @@ export function RedrawWindow(arg1:string,arg2:number):Promise<void>;
 export function RefreshDetectionPatterns():Promise<main.PatternRefreshResult>;
 
 export function RefreshWindow(arg1:string,arg2:number):Promise<void>;
+
+export function RemoveQuickJump(arg1:string,arg2:number):Promise<void>;
 
 export function RenameGroup(arg1:string,arg2:string):Promise<void>;
 
@@ -284,6 +292,10 @@ export function SetExtraArgs(arg1:string,arg2:number,arg3:string):Promise<void>;
 export function SetGroupColor(arg1:string,arg2:string,arg3:string,arg4:boolean):Promise<void>;
 
 export function SetLastWindowIndex(arg1:string,arg2:number):Promise<void>;
+
+export function SetQuickJump(arg1:Array<session.QuickJumpEntry>):Promise<void>;
+
+export function SetQuickJumpNote(arg1:string,arg2:number,arg3:string):Promise<void>;
 
 export function SetSessionColor(arg1:string,arg2:string,arg3:string,arg4:boolean):Promise<void>;
 

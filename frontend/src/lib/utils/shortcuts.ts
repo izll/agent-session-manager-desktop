@@ -140,6 +140,21 @@ export const SHORTCUTS: Shortcut[] = [
     descKey: 'help.actionToggleFavorite',
     defaults: [{ key: '8', ctrl: true, shift: true }],
   },
+  {
+    id: 'quickJump.open',
+    category: 'navigation',
+    descKey: 'help.actionQuickJump',
+    // Ctrl+J for "jump", and free: nothing else in the app claims it.
+    defaults: [{ key: 'j', ctrl: true }],
+  },
+  {
+    id: 'quickJump.add',
+    category: 'navigation',
+    descKey: 'help.actionQuickJumpAdd',
+    // Not Ctrl+Shift+J, which already moves a session down the sidebar.
+    // Alt+J keeps the same letter for the same idea without the collision.
+    defaults: [{ key: 'j', alt: true }],
+  },
 
   // ---- Search ----
   {

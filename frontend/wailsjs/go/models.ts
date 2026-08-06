@@ -1823,6 +1823,22 @@ export namespace session {
 	        this.default = source["default"];
 	    }
 	}
+	export class QuickJumpEntry {
+	    sessionId: string;
+	    windowIdx: number;
+	    note?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new QuickJumpEntry(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.sessionId = source["sessionId"];
+	        this.windowIdx = source["windowIdx"];
+	        this.note = source["note"];
+	    }
+	}
 	export class RestoreResult {
 	    sessionId: string;
 	    windowIdx: number;

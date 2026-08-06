@@ -73,6 +73,11 @@ type Settings struct {
 	// TerminalFontFamily overrides the terminal's font stack. Empty means the
 	// built-in default.
 	TerminalFontFamily string `json:"terminal_font_family,omitempty"`
+	// QuickJump is the hand-ordered list of places worth returning to, shown
+	// in the jump window. Separate from the Favorite mark on an instance: that
+	// says "this matters" and shows it in the sidebar, this says "I keep going
+	// here" and puts it behind a number key.
+	QuickJump []QuickJumpEntry `json:"quick_jump,omitempty"`
 	// TerminalShell is the command a plain terminal tab starts. Empty means the
 	// system default — $SHELL on Unix, COMSPEC on Windows — which is what a
 	// newly created tab gets from the multiplexer itself.

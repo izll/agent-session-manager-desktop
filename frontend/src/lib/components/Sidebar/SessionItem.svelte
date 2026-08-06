@@ -9,6 +9,7 @@
   import SaveAsTemplateDialog from '../Dialogs/SaveAsTemplateDialog.svelte';
   import type { Session } from '../../stores/sessions';
   import { selectSession, selectedSessionId, renameSession, deleteSession, toggleFavorite } from '../../stores/sessions';
+  import { AddQuickJump } from '../../../../wailsjs/go/main/App';
   import { settings } from '../../stores/settings';
   import { t } from '../../i18n';
   import { focusTerminal } from '../../utils/focus';
@@ -144,6 +145,23 @@
   async function handleToggleFavorite() {
     closeContextMenu();
     await toggleFavorite(session.id);
+  }
+
+  /**
+   * Put the whole session on the quick-jump list.
+   *
+   * A negative window index means the session rather than one of its tabs, so
+   * jumping to it lands on whichever tab was last open there — what "go to
+   * that session" means everywhere else in the app. Adding a specific tab is
+   * Alt+J, from the tab itself.
+   */
+  async function handleAddToQuickJump() {
+    closeContextMenu();
+    try {
+      await AddQuickJump(session.id, -1);
+    } catch (err) {
+      console.error('Adding the session to the quick-jump list failed:', err);
+    }
   }
 
   // Colour belongs to the session, so it is set from the session's own menu —
@@ -360,6 +378,12 @@
         <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
       </svg>
       {session.favorite ? $t('sessionMenu.unfavorite') : $t('sessionMenu.favorite')}
+    </button>
+    <button class="context-menu-item" on:click={handleAddToQuickJump}>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polyline points="13 17 18 12 13 7"/><polyline points="6 17 11 12 6 7"/>
+      </svg>
+      {$t('sessionMenu.addToQuickJump')}
     </button>
     <button class="context-menu-item" on:click={handleColor}>
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">

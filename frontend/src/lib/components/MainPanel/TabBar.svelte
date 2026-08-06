@@ -822,6 +822,24 @@
     }
   }
 
+  /**
+   * Put this tab on the quick-jump list.
+   *
+   * The tab menu as well as Alt+J, because the session's menu offers the same
+   * thing for a session: one of them having it and the other not is the kind
+   * of gap that makes a user hunt for a feature they have already seen.
+   */
+  async function tabContextAddToQuickJump() {
+    const windowIdx = tabContextMenuIndex;
+    closeTabContextMenu();
+    if (windowIdx === null || !$selectedSession) return;
+    try {
+      await App.AddQuickJump($selectedSession.id, windowIdx);
+    } catch (err) {
+      console.error('Adding the tab to the quick-jump list failed:', err);
+    }
+  }
+
   function tabContextRename() {
     if (tabContextMenuIndex !== null) {
       startTabRename(tabContextMenuIndex, tabContextMenuName);
@@ -1364,6 +1382,12 @@
             <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
           </svg>
           {$t('tabBar.rename')}
+        </button>
+        <button class="tab-context-menu-item" on:click={tabContextAddToQuickJump}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="13 17 18 12 13 7"/><polyline points="6 17 11 12 6 7"/>
+          </svg>
+          {$t('tabBar.addToQuickJump')}
         </button>
         <button class="tab-context-menu-item" on:click={tabContextSetColor}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
