@@ -583,6 +583,28 @@
   // Which change the next/previous buttons will move to. -1 before the first
   // jump, so the first press lands on the first change rather than the second.
   let currentHunk = -1;
+  /**
+   * The block the marker points at, which is not always where the cursor is.
+   *
+   * Entering a file puts the cursor one step BEFORE the block it scrolled to,
+   * so that leaving costs the same number of presses in either direction. The
+   * marker cannot follow that: it would leave the block on screen unmarked and
+   * then appear only on the press that seemed to do nothing.
+   */
+  let markedHunk = -1;
+
+  /**
+   * Whether the walk is paused at the end of a file, offered the next one.
+   *
+   * Running out of changes used to move on immediately, so the name of the
+   * file being entered flashed by with the file itself — there was no moment
+   * in which to read it and decide. Now the first press past the last change
+   * stops here and names what is next; the press after that goes.
+   *
+   * Cleared by anything that moves: a step in the other direction, a different
+   * file, a different commit.
+   */
+  let atFileEdge: 1 | -1 | null = null;
 
   /**
    * Which way the review is moving, so only the hint ahead of you is shown.
@@ -598,7 +620,55 @@
   // Typed loosely: the component's instance type is only used for two exported
   // methods, and importing it as a type as well as a value is more ceremony
   // than the two calls are worth.
-  let virtualLines: { scrollToLine(i: number): Promise<void> } | null = null;
+  let virtualLines: { scrollToLine(i: number, lines?: number): Promise<void> } | null = null;
+  /** The hunk-list scroller. The whole-file view has VirtualLines to scroll
+   *  for it; this one is an ordinary element and has to be told. */
+  let hunkListEl: HTMLDivElement | null = null;
+
+  /**
+   * Bring the stepped-to hunk into view in whichever renderer is showing.
+   *
+   * Only the whole-file view has VirtualLines. Left to it alone, stepping in
+   * the hunk list moved the marker to a hunk off-screen and appeared to do
+   * nothing at all.
+   */
+/**
+   * Scroll an element to a third of the way down its scroller.
+   *
+   * scrollIntoView only offers start/center/end. Centring wastes half the screen
+   * on context already read — a change is read downwards, so the room below it is
+   * worth more than the room above.
+   */
+  function scrollToThird(scroller: HTMLElement | null, target: Element | null) {
+    if (!scroller || !target) return;
+    const element = target as HTMLElement;
+    const view = scroller.clientHeight;
+    // A block taller than the room below a third would run off the bottom, so
+    // a long one starts near the top and uses the whole viewport instead.
+    const margin = element.offsetHeight > view - view / 3
+      ? Math.min(view / 8, 60)
+      : view / 3;
+    scroller.scrollTo({ top: Math.max(0, element.offsetTop - margin), behavior: 'smooth' });
+  }
+
+  async function revealHunk(hunkPos: number) {
+    if (virtualLines) {
+      // How many lines the change spans, so a tall one is not scrolled to a
+      // position that runs it off the bottom.
+      const start = hunkStarts[hunkPos];
+      let end = start;
+      while (end + 1 < flatLines.length &&
+             (flatLines[end + 1].type === 'add' || flatLines[end + 1].type === 'remove')) {
+        end++;
+      }
+      await virtualLines.scrollToLine(start, end - start + 1);
+      return;
+    }
+    await tick();
+    const index = flatLines[hunkStarts[hunkPos]]?.hunkIndex;
+    if (index === undefined) return;
+    scrollToThird(hunkListEl, hunkListEl?.querySelector(`[data-hunk="${index}"]`) ?? null);
+  }
 
   /**
    * Move to the next or previous change, running past the end of the file into
@@ -617,15 +687,27 @@
     // stepping up from there is -2, outside the file, so the up arrow left the
     // file immediately instead of moving to its last change. Going backwards,
     // an untouched file starts after its end.
+    // Already offered the next file, and asked again in the same direction:
+    // this is the press that accepts it.
+    if (atFileEdge === delta) {
+      atFileEdge = null;
+      await stepFile(delta);
+      return;
+    }
+    atFileEdge = null;
+
     const from = currentHunk === -1 && delta < 0 ? hunkStarts.length : currentHunk;
 
     const next = from + delta;
     if (next < 0 || next >= hunkStarts.length) {
-      await stepFile(delta);
+      // Out of changes here. Stop and name the file this would go to, rather
+      // than arriving there before the name has been read.
+      atFileEdge = delta > 0 ? 1 : -1;
       return;
     }
     currentHunk = next;
-    await virtualLines?.scrollToLine(hunkStarts[currentHunk]);
+    markedHunk = next;
+    await revealHunk(currentHunk);
   }
 
   /**
@@ -662,6 +744,11 @@
     // before the first change while we are waiting — losing the direction we
     // arrived in.
     pendingEntry = delta > 0 ? 'first' : 'last';
+    // Claim the new path for this step. Otherwise the reset below fires the
+    // moment pendingEntry is cleared and puts the cursor back to -1, undoing
+    // the landing — which is what made every file cost two presses and left
+    // the arrived-at change unmarked.
+    hunkCursorFor = wanted;
 
     await waitForFileLoad(wanted);
     // The user moved on while it loaded; whatever they did wins.
@@ -684,9 +771,17 @@
     //    files without ever stopping in them.
     //  - The first press then lands on the change already on screen, which is
     //    what makes the file feel entered rather than skipped through.
+    // Land on the change itself, in both senses. Setting the cursor one step
+    // before it made the next press move onto the change already on screen —
+    // which looks like a press that did nothing, and doubled every step
+    // through a review.
+    //
+    // Leaving still costs one press either way, because stepChange treats
+    // running past either end as "go to the next file".
     const landing = entry === 'first' ? 0 : hunkStarts.length - 1;
-    currentHunk = entry === 'first' ? landing - 1 : landing + 1;
-    await virtualLines?.scrollToLine(hunkStarts[landing]);
+    currentHunk = landing;
+    markedHunk = landing;
+    await revealHunk(landing);
   }
 
   /** Which end of an incoming file to land on, while its content is loading. */
@@ -730,8 +825,11 @@
   $: nextFileName = fileAfterStep(1, currentHunk, hunkStarts, stepOrder, selectedPath);
   $: prevFileName = fileAfterStep(-1, currentHunk, hunkStarts, stepOrder, selectedPath);
 
-  $: hintBelow = stepDirection === 1 ? nextFileName : null;
-  $: hintAbove = stepDirection === -1 ? prevFileName : null;
+  // Shown while the offer stands. Predicting it from the cursor instead meant
+  // the label and the jump landed on the same press, so the name was never
+  // read before the file it named replaced the one on screen.
+  $: hintBelow = atFileEdge === 1 ? nextFileName : null;
+  $: hintAbove = atFileEdge === -1 ? prevFileName : null;
 
 
   /**
@@ -765,14 +863,38 @@
     for (let attempt = 0; attempt < 60; attempt++) {
       await tick();
       if (selectedPath !== path) return;   // the user moved on
-      if (key in fileCache) return;        // present, even if it failed (null)
+      // Waiting for the cache alone returned too early: the content reaches
+      // hunkStarts through a chain of reactive statements — cache, selectedFile,
+      // flatLines, hunkStarts — and the caller reads hunkStarts immediately
+      // afterwards. Empty, it gave up on landing, so the position stayed put
+      // and the next press had to do the work again.
+      if (key in fileCache) {
+        if (fileCache[key] === null) return;   // failed; nothing more to wait for
+        if (hunkStarts.length) return;
+        // Present but not yet derived: give the chain another turn.
+        await tick();
+        if (hunkStarts.length) return;
+      }
       await new Promise((resolve) => setTimeout(resolve, 25));
     }
   }
 
-  // A new file starts before its first change — unless we are stepping into it,
-  // where the direction of travel decides.
-  $: if (selectedPath && !pendingEntry) currentHunk = -1;
+  /**
+   * A file arrived at any other way starts before its first change.
+   *
+   * Stepping into one claims the path itself, so this cannot fire for it. Both
+   * guards are needed: keyed on `selectedPath && !pendingEntry` alone, clearing
+   * pendingEntry at the end of a step re-ran the statement and wiped the
+   * landing; keyed on the path alone, it would still fire in the window
+   * between the step setting the path and setting the position.
+   */
+  let hunkCursorFor = '';
+  $: if (selectedPath && selectedPath !== hunkCursorFor && !pendingEntry) {
+    hunkCursorFor = selectedPath;
+    currentHunk = -1;
+    markedHunk = -1;
+    atFileEdge = null;
+  }
 
   // Keyboard stepping, matched against the configured bindings so it follows a
   // rebind. Only while this diff is the one on screen: two diffs can be mounted
@@ -831,18 +953,54 @@
   // Built once per file rather than per render: highlighting every line of a
   // 3000-line file is the expensive part, and it does not change while the
   // file is open.
-  $: flatLines = wholeFileView && selectedFile && shouldRender
+  // Built for both renderers. It is what the whole-file view renders, and what
+  // hunkStarts is derived from — and hunkStarts is how stepping knows where the
+  // changes are. Left to the whole-file view alone, the hunk list had no
+  // change positions at all, so every press fell through to "next file".
+  $: flatLines = selectedFile && shouldRender
     ? buildFlatLines(selectedFile, lineLanguage)
     : [];
   $: hunkStarts = flatLines.reduce((acc, line, index) => {
-    if (line.isHunkStart) acc.push(index);
+    const isChange = line.type === 'add' || line.type === 'remove';
+    if (!isChange) return acc;
+    // The start of a run: a changed line whose predecessor was not one. A
+    // removal followed by its replacement is one block, not two, which is how
+    // it reads on screen.
+    const previous = flatLines[index - 1];
+    if (!previous || (previous.type !== 'add' && previous.type !== 'remove')) {
+      acc.push(index);
+    }
     return acc;
   }, [] as number[]);
 
+  /** Which hunk the stepping is inside, for marking its lines. hunkStarts
+   *  holds line positions rather than hunk numbers — and a hunk with no
+   *  changes contributes none — so the answer comes from the line itself. */
+  $: currentHunkIndex = markedHunk >= 0 && markedHunk < hunkStarts.length
+    ? (flatLines[hunkStarts[markedHunk]]?.hunkIndex ?? -1)
+    : -1;
+
+  /**
+   * The run of lines making up the change stepped to.
+   *
+   * Marked by line range rather than by hunk: in whole-file view git is asked
+   * for the whole file as a single hunk, so every change in the file shares a
+   * hunk index and marking by it lit up all of them at once.
+   */
+  $: markedBlock = (() => {
+    if (markedHunk < 0 || markedHunk >= hunkStarts.length) return { from: -1, to: -1 };
+    const from = hunkStarts[markedHunk];
+    let to = from;
+    while (to + 1 < flatLines.length &&
+           (flatLines[to + 1].type === 'add' || flatLines[to + 1].type === 'remove')) {
+      to++;
+    }
+    return { from, to };
+  })();
+
   function buildFlatLines(file: session.DiffFile, lang: LanguageSupport | null) {
-    const out: Array<{ type: string; html: string; hunkIndex: number; isHunkStart: boolean }> = [];
+    const out: Array<{ type: string; html: string; hunkIndex: number }> = [];
     file.hunks.forEach((hunk, hunkIndex) => {
-      let firstChange = true;
       for (const line of parseDiff(hunk.body)) {
         // A hunk's first changed line is where "next change" lands. The header
         // and the context above it are not what the user is looking for.
@@ -851,9 +1009,7 @@
           type: line.type,
           html: highlightLine(line.text, lang),
           hunkIndex,
-          isHunkStart: isChange && firstChange,
         });
-        if (isChange) firstChange = false;
       }
     });
     return out;
@@ -1256,12 +1412,21 @@
                  the visible ones are in the DOM, which is what makes showing a
                  3000-line file affordable. -->
             <div class="diff-lines whole-file">
-              <VirtualLines bind:this={virtualLines} lines={flatLines} />
+              <VirtualLines
+                bind:this={virtualLines}
+                lines={flatLines}
+                blockFrom={markedBlock.from}
+                blockTo={markedBlock.to}
+              />
             </div>
           {:else}
-            <div class="diff-lines">
+            <div class="diff-lines" bind:this={hunkListEl}>
               {#each renderedHunks as view (view.hunk.index)}
-                <div class="hunk">
+                <div
+                  class="hunk"
+                  class:current-hunk={view.hunk.index === currentHunkIndex}
+                  data-hunk={view.hunk.index}
+                >
                   <div class="diff-line header hunk-header">
                     <code>{view.hunk.header}</code>
                     <button
@@ -2021,6 +2186,16 @@
 
   .diff-line.context {
     color: #9ca3af;
+  }
+
+  /* The change the arrows are on. Only the changed lines, not the context
+     around them: a hunk's context is most of what it contains, and marking all
+     of it says "this whole region" where the question is "these lines".
+     A bar down the left edge rather than a tint, since the add/remove tints
+     already carry meaning here. */
+  .hunk.current-hunk .diff-line.add,
+  .hunk.current-hunk .diff-line.remove {
+    box-shadow: inset 3px 0 0 var(--accent, #61afef);
   }
 
   .hunk-header {

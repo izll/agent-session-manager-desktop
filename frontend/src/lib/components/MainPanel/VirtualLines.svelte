@@ -27,6 +27,16 @@
    * the DOM stays short.
    */
   export let overscan = 20;
+  /**
+   * The run of lines the change-stepping is currently on, marked down the left
+   * edge. Both ends inclusive; -1 marks none.
+   *
+   * Line positions rather than a hunk number: in whole-file view git is asked
+   * for the entire file as one hunk, so every change in the file shares a hunk
+   * index — marking by it lit up all of them at once.
+   */
+  export let blockFrom = -1;
+  export let blockTo = -1;
 
   const dispatch = createEventDispatcher();
 
@@ -79,16 +89,27 @@
   });
 
   /**
-   * Scroll a line to the middle of the viewport.
+   * Scroll a change into view.
    *
-   * Middle rather than top: a change is read with what comes before it, and a
-   * hunk pinned to the top edge hides exactly that.
+   * A third of the way down, so the change is read with the code above it —
+   * pinned to the top edge that context is hidden, and centred half the screen
+   * goes on context already read.
+   *
+   * Unless the change is too tall for that: a block longer than the room below
+   * a third would run off the bottom, so a long one starts near the top and
+   * uses the whole viewport. `lines` is how many lines the change spans.
    */
-  export async function scrollToLine(index: number) {
+  export async function scrollToLine(index: number, lines = 1) {
     if (!viewport) return;
     await tick();
-    const target = index * lineHeight - viewport.clientHeight / 2;
-    viewport.scrollTo({ top: Math.max(0, target), behavior: 'smooth' });
+
+    const view = viewport.clientHeight;
+    const blockHeight = Math.max(1, lines) * lineHeight;
+    const margin = blockHeight > view - view / 3
+      ? Math.min(view / 8, lineHeight * 3)
+      : view / 3;
+
+    viewport.scrollTo({ top: Math.max(0, index * lineHeight - margin), behavior: 'smooth' });
   }
 
   /** The first line index currently on screen, for "which hunk am I on". */
@@ -100,7 +121,11 @@
 <div class="virtual-viewport" bind:this={viewport} on:scroll={onScroll}>
   <div style="height: {topPad}px"></div>
   {#each slice as line, i (first + i)}
-    <div class="diff-line {line.type}" style="height: {lineHeight}px">
+    <div
+      class="diff-line {line.type}"
+      class:in-block={blockFrom >= 0 && first + i >= blockFrom && first + i <= blockTo}
+      style="height: {lineHeight}px"
+    >
       <!-- Already escaped by the highlighter; see utils/highlightLine.ts. -->
       <code>{@html line.html}</code>
     </div>
@@ -149,5 +174,13 @@
   }
   .diff-line.meta {
     color: #6b7280;
+  }
+
+  /* The change the arrows are on. A bar down the left edge rather than a tint:
+     the add/remove tints already carry meaning on these lines, and a second
+     one over them would say two things at once about the same line. */
+  .diff-line.in-block.add,
+  .diff-line.in-block.remove {
+    box-shadow: inset 3px 0 0 var(--accent, #61afef);
   }
 </style>
