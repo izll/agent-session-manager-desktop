@@ -1113,5 +1113,8 @@
   "history.hideMessage": "Recolher a mensagem",
   "history.showMessage": "Expandir a mensagem",
   "history.prevChange": "Alteração anterior (Shift+F7)",
-  "history.nextChange": "Próxima alteração (F7)"
+  "history.nextChange": "Próxima alteração (F7)",
+  "diff.showSideBySide": "Mostrar em duas colunas",
+  "diff.showUnified": "Mostrar em uma coluna",
+  "diff.revertBlock": "Reverter este bloco"
 }

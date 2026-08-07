@@ -1113,5 +1113,8 @@
   "history.hideMessage": "Thu gọn thông điệp",
   "history.showMessage": "Mở rộng thông điệp",
   "history.prevChange": "Thay đổi trước (Shift+F7)",
-  "history.nextChange": "Thay đổi tiếp theo (F7)"
+  "history.nextChange": "Thay đổi tiếp theo (F7)",
+  "diff.showSideBySide": "Hiện dạng hai cột",
+  "diff.showUnified": "Hiện dạng một cột",
+  "diff.revertBlock": "Hoàn tác khối này"
 }

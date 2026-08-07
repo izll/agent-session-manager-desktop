@@ -1113,5 +1113,8 @@
   "history.hideMessage": "메시지 접기",
   "history.showMessage": "메시지 펼치기",
   "history.prevChange": "이전 변경 (Shift+F7)",
-  "history.nextChange": "다음 변경 (F7)"
+  "history.nextChange": "다음 변경 (F7)",
+  "diff.showSideBySide": "두 열로 보기",
+  "diff.showUnified": "한 열로 보기",
+  "diff.revertBlock": "이 블록 되돌리기"
 }

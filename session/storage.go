@@ -168,6 +168,13 @@ type Settings struct {
 	// What that costs — a saved position that no longer fits — is corrected on
 	// the way out, not on the way in.
 	DictationBuffer *PanelGeometry `json:"dictation_buffer,omitempty"`
+	// DiffSideBySide shows a file's diff as two aligned columns rather than one
+	// with markers. Stored as an opt-in flag so the zero value keeps the
+	// unified view a config written before this existed opened at.
+	DiffSideBySide bool `json:"diff_side_by_side,omitempty"`
+	// DiffLastFile is the file the diff had open, so leaving the tab and
+	// coming back resumes rather than restarts. Keyed by session id.
+	DiffLastFile map[string]string `json:"diff_last_file,omitempty"`
 }
 
 // PanelGeometry is a floating panel's remembered size and position.

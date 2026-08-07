@@ -23,6 +23,10 @@ export interface Settings {
   /** Show a change inside the whole file rather than only its hunks. Absent
    *  means on: the default is the fuller view. */
   diffWholeFile?: boolean;
+  /** Show a diff as two aligned columns rather than one with markers. */
+  diffSideBySide?: boolean;
+  /** The file the diff had open, per session, so a tab switch resumes. */
+  diffLastFile?: Record<string, string>;
   compactList: boolean;
   hideStatusLines: boolean;
   showAgentIcons: boolean;

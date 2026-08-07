@@ -2802,6 +2802,8 @@ type SettingsInfo struct {
 	ShortcutOverrides map[string]any         `json:"shortcutOverrides"`
 	DiffAboveHeight   int                    `json:"diffAboveHeight"`
 	DictationBuffer   *session.PanelGeometry `json:"dictationBuffer"`
+	DiffSideBySide    bool                   `json:"diffSideBySide"`
+	DiffLastFile      map[string]string      `json:"diffLastFile"`
 	// Per-agent-type palette overrides ("claude" → "dracula", …) and the
 	// user-defined palette used when a theme id is "custom".
 	AgentTerminalThemes  map[string]string             `json:"agentTerminalThemes"`
@@ -2903,6 +2905,8 @@ func (a *App) GetSettings() (*SettingsInfo, error) {
 		ShortcutOverrides:    settings.ShortcutOverrides,
 		DiffAboveHeight:      settings.DiffAboveHeight,
 		DictationBuffer:      settings.DictationBuffer,
+		DiffSideBySide:       settings.DiffSideBySide,
+		DiffLastFile:         settings.DiffLastFile,
 		TerminalTheme:        theme,
 		AgentDefaultTheme:    agentTheme,
 		AgentTerminalThemes:  settings.AgentTerminalThemes,
@@ -2961,6 +2965,8 @@ func (a *App) SaveSettings(settings SettingsInfo) error {
 		current.ShortcutOverrides = settings.ShortcutOverrides
 		current.DiffAboveHeight = settings.DiffAboveHeight
 		current.DictationBuffer = settings.DictationBuffer
+		current.DiffSideBySide = settings.DiffSideBySide
+		current.DiffLastFile = settings.DiffLastFile
 	})
 	if err != nil {
 		return err

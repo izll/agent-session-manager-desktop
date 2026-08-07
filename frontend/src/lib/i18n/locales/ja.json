@@ -1113,5 +1113,8 @@
   "history.hideMessage": "メッセージを折りたたむ",
   "history.showMessage": "メッセージを展開",
   "history.prevChange": "前の変更 (Shift+F7)",
-  "history.nextChange": "次の変更 (F7)"
+  "history.nextChange": "次の変更 (F7)",
+  "diff.showSideBySide": "2 列で表示",
+  "diff.showUnified": "1 列で表示",
+  "diff.revertBlock": "このブロックを元に戻す"
 }

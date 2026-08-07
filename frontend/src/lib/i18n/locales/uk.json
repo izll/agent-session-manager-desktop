@@ -1113,5 +1113,8 @@
   "history.hideMessage": "Згорнути повідомлення",
   "history.showMessage": "Розгорнути повідомлення",
   "history.prevChange": "Попередня зміна (Shift+F7)",
-  "history.nextChange": "Наступна зміна (F7)"
+  "history.nextChange": "Наступна зміна (F7)",
+  "diff.showSideBySide": "Показати у дві колонки",
+  "diff.showUnified": "Показати в одну колонку",
+  "diff.revertBlock": "Скасувати цей блок"
 }

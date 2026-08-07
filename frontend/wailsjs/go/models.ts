@@ -1216,6 +1216,8 @@ export namespace main {
 	    shortcutOverrides: Record<string, any>;
 	    diffAboveHeight: number;
 	    dictationBuffer?: session.PanelGeometry;
+	    diffSideBySide: boolean;
+	    diffLastFile: Record<string, string>;
 	    agentTerminalThemes: Record<string, string>;
 	    customTerminalThemes: session.CustomTerminalTheme[];
 	
@@ -1262,6 +1264,8 @@ export namespace main {
 	        this.shortcutOverrides = source["shortcutOverrides"];
 	        this.diffAboveHeight = source["diffAboveHeight"];
 	        this.dictationBuffer = this.convertValues(source["dictationBuffer"], session.PanelGeometry);
+	        this.diffSideBySide = source["diffSideBySide"];
+	        this.diffLastFile = source["diffLastFile"];
 	        this.agentTerminalThemes = source["agentTerminalThemes"];
 	        this.customTerminalThemes = this.convertValues(source["customTerminalThemes"], session.CustomTerminalTheme);
 	    }

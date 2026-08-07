@@ -1113,5 +1113,8 @@
   "history.hideMessage": "Üzenet összecsukása",
   "history.showMessage": "Üzenet kibontása",
   "history.prevChange": "Előző eltérés (Shift+F7)",
-  "history.nextChange": "Következő eltérés (F7)"
+  "history.nextChange": "Következő eltérés (F7)",
+  "diff.showSideBySide": "Megjelenítés két hasábban",
+  "diff.showUnified": "Megjelenítés egy hasábban",
+  "diff.revertBlock": "Blokk visszavonása"
 }

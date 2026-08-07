@@ -1113,5 +1113,8 @@
   "history.hideMessage": "Fäll ihop meddelandet",
   "history.showMessage": "Expandera meddelandet",
   "history.prevChange": "Föregående ändring (Skift+F7)",
-  "history.nextChange": "Nästa ändring (F7)"
+  "history.nextChange": "Nästa ändring (F7)",
+  "diff.showSideBySide": "Visa i två kolumner",
+  "diff.showUnified": "Visa i en kolumn",
+  "diff.revertBlock": "Återställ det här blocket"
 }

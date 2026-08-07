@@ -19,6 +19,8 @@
   import { buildFileTree, flattenTree, type TreeRow } from '../../utils/fileTree';
   import { highlightLine } from '../../utils/highlightLine';
   import { cachedLanguage, loadLanguage } from '../../utils/codemirror';
+  import SideBySideDiff from '../MainPanel/SideBySideDiff.svelte';
+  import { settings, saveSettings } from '../../stores/settings';
 
   export let show = false;
   /** The working directory whose history this is. */
@@ -62,6 +64,12 @@
   /** Whole file rather than a few lines either side of the change: seeing
    *  three lines of context says what changed, not what it changed within. */
   let wholeFile = false;
+
+  /**
+   * Two aligned columns rather than one with markers. Shares the setting with
+   * the diff view: it is one preference about how a diff is read, not two.
+   */
+  $: sideBySide = $settings.diffSideBySide === true;
 
   // Pane widths, dragged by the splitters between them.
   let branchWidth = 190;
@@ -338,6 +346,25 @@
     return to - from + 1;
   }
 
+  /**
+   * Bring a change into view in whichever renderer is showing.
+   *
+   * The columns pair lines up, so their rows do not line up with the unified
+   * positions changeStarts holds — the nth change is the nth run of changed
+   * rows there.
+   */
+  function revealChange(position: number) {
+    if (sideBySide) {
+      const runs = sideBySideView?.changeRows() ?? [];
+      const run = runs[position];
+      if (run) sideBySideView?.scrollToRow(run.from, run.to - run.from + 1);
+      return;
+    }
+    scrollToThird(diffEl,
+      diffEl?.querySelector(`[data-line="${changeStarts[position]}"]`) ?? null,
+      blockLength(position));
+  }
+
   function scrollToThird(scroller: HTMLElement | null, target: Element | null, lines = 1) {
     if (!scroller || !target) return;
     const element = target as HTMLElement;
@@ -386,9 +413,7 @@
     currentChange = next;
     markedChange = next;
     await tick();
-    scrollToThird(diffEl,
-      diffEl?.querySelector(`[data-line="${changeStarts[next]}"]`) ?? null,
-      blockLength(next));
+    revealChange(next);
   }
 
   /**
@@ -441,9 +466,7 @@
     currentChange = landing;
     markedChange = landing;
     await tick();
-    scrollToThird(diffEl,
-      diffEl?.querySelector(`[data-line="${changeStarts[landing]}"]`) ?? null,
-      blockLength(landing));
+    revealChange(landing);
   }
 
   /** The files in the order the tree shows them, which is the order stepping
@@ -506,10 +529,28 @@
   $: hintAbove = atFileEdge === -1 ? prevFileName : '';
 
   let diffEl: HTMLDivElement | null = null;
+  let sideBySideView: {
+    scrollToRow(row: number, count?: number): void;
+    changeRows(): Array<{ from: number; to: number }>;
+  } | null = null;
 
   function escapeHtml(text: string): string {
     return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   }
+
+  /** The hunks as two-column input: header, index, and highlighted lines with
+   *  the +/- dropped — which column a line is in says what happened to it. */
+  $: sideBySideHunks = (diff?.hunks ?? []).map((hunk: any, index: number) => ({
+    header: hunk.header ?? '',
+    index,
+    lines: String(hunk.body ?? '')
+      .split('\n')
+      .filter((line, at, all) => !(line === '' && at === all.length - 1))
+      .map((line) => ({
+        type: lineType(line),
+        html: highlightLine(line, cachedLanguage(selectedPath)),
+      })),
+  }));
 
   function lineType(line: string): string {
     if (line.startsWith('+') && !line.startsWith('+++')) return 'add';
@@ -818,6 +859,12 @@
                       title={wholeFile ? $t('diff.showHunksOnly') : $t('diff.showWholeFile')}
                       on:click={() => (wholeFile = !wholeFile)}
                     >{wholeFile ? $t('diff.wholeFile') : $t('diff.hunksOnly')}</button>
+                    <button
+                      class="nav-btn"
+                      class:active={sideBySide}
+                      title={sideBySide ? $t('diff.showUnified') : $t('diff.showSideBySide')}
+                      on:click={() => saveSettings({ diffSideBySide: !sideBySide })}
+                    >⫲</button>
                   </span>
                 </div>
               {/if}
@@ -841,6 +888,9 @@
                 >↓ {hintBelow}</button>
               {/if}
 
+            {#if sideBySide}
+              <SideBySideDiff bind:this={sideBySideView} hunks={sideBySideHunks} />
+            {:else}
             <div class="diff-pane" bind:this={diffEl}>
               {#if diffLoading}
                 <p class="pane-note">{$t('common.loading')}</p>
@@ -859,6 +909,7 @@
                 {/each}
               {/if}
             </div>
+            {/if}
             </div>
             </div>
           </div>

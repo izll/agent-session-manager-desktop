@@ -1113,5 +1113,8 @@
   "history.hideMessage": "Свернуть сообщение",
   "history.showMessage": "Развернуть сообщение",
   "history.prevChange": "Предыдущее изменение (Shift+F7)",
-  "history.nextChange": "Следующее изменение (F7)"
+  "history.nextChange": "Следующее изменение (F7)",
+  "diff.showSideBySide": "Показать в две колонки",
+  "diff.showUnified": "Показать в одну колонку",
+  "diff.revertBlock": "Отменить этот блок"
 }

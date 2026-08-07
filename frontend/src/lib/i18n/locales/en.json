@@ -1113,5 +1113,8 @@
   "history.hideMessage": "Collapse the message",
   "history.showMessage": "Expand the message",
   "history.prevChange": "Previous change (Shift+F7)",
-  "history.nextChange": "Next change (F7)"
+  "history.nextChange": "Next change (F7)",
+  "diff.showSideBySide": "Show as two columns",
+  "diff.showUnified": "Show as one column",
+  "diff.revertBlock": "Revert this block"
 }

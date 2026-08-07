@@ -8,6 +8,7 @@
   import ConfirmDialog from '../Dialogs/ConfirmDialog.svelte';
   import { t } from '../../i18n';
   import VirtualLines from './VirtualLines.svelte';
+  import SideBySideDiff from './SideBySideDiff.svelte';
   import { matchesShortcut } from '../../stores/shortcuts';
   import { highlightLine } from '../../utils/highlightLine';
   import { cachedLanguage, loadLanguage } from '../../utils/codemirror';
@@ -270,6 +271,23 @@
     }
   }
 
+  /**
+   * Which file this session had open, so leaving the diff tab and coming back
+   * resumes rather than restarts.
+   *
+   * Switching tabs destroys this component — the two mount points are in
+   * exclusive branches — so anything worth keeping has to live outside it.
+   * Written on selection rather than on destroy, since a component being torn
+   * down is a poor moment to start saving.
+   */
+  function rememberOpenFile(path: string) {
+    const sessionId = get(selectedSessionId);
+    if (!sessionId) return;
+    const current = get(settings).diffLastFile ?? {};
+    if (current[sessionId] === path) return;
+    void saveSettings({ diffLastFile: { ...current, [sessionId]: path } });
+  }
+
   // Keep the selection pointing at a file that still exists. After a revert the
   // file usually disappears from the diff entirely, so falling back to the first
   // remaining file avoids showing an empty right pane.
@@ -278,9 +296,14 @@
       selectedPath = null;
       return;
     }
-    if (!selectedPath || !files.some(f => f.path === selectedPath)) {
-      selectedPath = files[0].path;
-    }
+    if (selectedPath && files.some(f => f.path === selectedPath)) return;
+
+    // Back to what was open before the tab switch, if it is still in the diff.
+    const sessionId = get(selectedSessionId);
+    const remembered = sessionId ? get(settings).diffLastFile?.[sessionId] : null;
+    selectedPath = remembered && files.some(f => f.path === remembered)
+      ? remembered
+      : files[0].path;
   }
 
   // Reload when session changes — but ONLY while the Diff tab is actually
@@ -301,6 +324,7 @@
 
   function selectFile(path: string) {
     selectedPath = path;
+    rememberOpenFile(path);
     // Picking a file from the list is not stepping, so it carries no direction:
     // a hint left over from the last press would point somewhere the user was
     // no longer heading.
@@ -576,6 +600,21 @@
   // Stored, so the choice survives reopening the diff.
   $: wholeFileView = $settings.diffWholeFile !== false;
 
+  /**
+   * Two aligned columns rather than one with markers.
+   *
+   * Available in both views. It was restricted to hunks-only at first, on the
+   * grounds that pairing a whole file of identical context is work for
+   * nothing — but whole-file is the default, so the button was disabled from
+   * the moment the diff opened, and reading a change in the file it lives in
+   * is exactly when two columns help most.
+   */
+  $: sideBySide = $settings.diffSideBySide === true;
+
+  function setSideBySide(on: boolean) {
+    void saveSettings({ diffSideBySide: on });
+  }
+
   function setWholeFileView(on: boolean) {
     void saveSettings({ diffWholeFile: on });
   }
@@ -624,6 +663,10 @@
   /** The hunk-list scroller. The whole-file view has VirtualLines to scroll
    *  for it; this one is an ordinary element and has to be told. */
   let hunkListEl: HTMLDivElement | null = null;
+  let sideBySideView: {
+    scrollToRow(row: number, count?: number): void;
+    changeRows(): Array<{ from: number; to: number }>;
+  } | null = null;
 
   /**
    * Bring the stepped-to hunk into view in whichever renderer is showing.
@@ -652,6 +695,16 @@
   }
 
   async function revealHunk(hunkPos: number) {
+    if (sideBySide) {
+      await tick();
+      // The columns pair lines up, so their rows do not match the unified
+      // line positions hunkStarts holds — the nth change is the nth run of
+      // changed rows there.
+      const runs = sideBySideView?.changeRows() ?? [];
+      const run = runs[hunkPos];
+      if (run) sideBySideView?.scrollToRow(run.from, run.to - run.from + 1);
+      return;
+    }
     if (virtualLines) {
       // How many lines the change spans, so a tall one is not scrolled to a
       // position that runs it off the bottom.
@@ -933,6 +986,21 @@
   $: shouldRender = active && !!selectedFile && !selectedFile.binary && (!isLargeFile || forceShow);
   $: renderedHunks = shouldRender && selectedFile
     ? buildHunkViews(selectedFile)
+    : [];
+
+  /**
+   * The same lines the whole-file view renders, grouped as one hunk.
+   *
+   * The whole-file diff comes back from git as a single hunk covering the
+   * file, so pairing it into columns needs no extra request — only the lines
+   * in the shape the column builder takes.
+   */
+  $: wholeFileColumns = shouldRender && selectedFile && selectedFile.hunks.length > 0
+    ? [{
+        header: selectedFile.hunks[0].header,
+        index: selectedFile.hunks[0].index,
+        lines: flatLines.map((line) => ({ type: line.type, html: line.html })),
+      }]
     : [];
 
   // Build the per-hunk line lists, honouring MAX_DIFF_LINES across the whole
@@ -1357,6 +1425,12 @@
                 title={wholeFileView ? $t('diff.showHunksOnly') : $t('diff.showWholeFile')}
                 on:click={() => setWholeFileView(!wholeFileView)}
               >{wholeFileView ? $t('diff.wholeFile') : $t('diff.hunksOnly')}</button>
+              <button
+                class="nav-btn"
+                class:active={sideBySide}
+                title={sideBySide ? $t('diff.showUnified') : $t('diff.showSideBySide')}
+                on:click={() => setSideBySide(!sideBySide)}
+              >⫲</button>
             </span>
           </div>
         {/if}
@@ -1407,6 +1481,27 @@
                 {$t('diff.showAnyway', { count: MAX_DIFF_LINES })}
               </button>
             </div>
+          {:else if sideBySide}
+            <SideBySideDiff
+              bind:this={sideBySideView}
+              canRevert={!wholeFileView}
+              on:revert={(e) => {
+                const hunk = selectedFile?.hunks.find((h) => h.index === e.detail.hunkIndex);
+                if (selectedFile && hunk) askRevertHunk(selectedFile, hunk);
+              }}
+              hunks={wholeFileView
+                ? wholeFileColumns
+                : renderedHunks.map((view) => ({
+                    header: view.hunk.header,
+                    index: view.hunk.index,
+                    // Highlighted here, as the unified view does at render time.
+                    lines: view.lines.map((line) => ({
+                      type: line.type,
+                      html: highlightLine(line.text, lineLanguage),
+                    })),
+                  }))}
+              currentHunk={currentHunkIndex}
+            />
           {:else if wholeFileView}
             <!-- The whole file, virtualised: every line is in the list but only
                  the visible ones are in the DOM, which is what makes showing a

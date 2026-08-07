@@ -1113,5 +1113,8 @@
   "history.hideMessage": "折叠消息",
   "history.showMessage": "展开消息",
   "history.prevChange": "上一处更改 (Shift+F7)",
-  "history.nextChange": "下一处更改 (F7)"
+  "history.nextChange": "下一处更改 (F7)",
+  "diff.showSideBySide": "以两栏显示",
+  "diff.showUnified": "以单栏显示",
+  "diff.revertBlock": "撤销此块"
 }

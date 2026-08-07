@@ -1113,5 +1113,8 @@
   "history.hideMessage": "Mesajı daralt",
   "history.showMessage": "Mesajı genişlet",
   "history.prevChange": "Önceki değişiklik (Shift+F7)",
-  "history.nextChange": "Sonraki değişiklik (F7)"
+  "history.nextChange": "Sonraki değişiklik (F7)",
+  "diff.showSideBySide": "İki sütunda göster",
+  "diff.showUnified": "Tek sütunda göster",
+  "diff.revertBlock": "Bu bloğu geri al"
 }

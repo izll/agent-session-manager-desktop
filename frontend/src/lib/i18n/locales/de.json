@@ -1113,5 +1113,8 @@
   "history.hideMessage": "Nachricht einklappen",
   "history.showMessage": "Nachricht ausklappen",
   "history.prevChange": "Vorherige Änderung (Umschalt+F7)",
-  "history.nextChange": "Nächste Änderung (F7)"
+  "history.nextChange": "Nächste Änderung (F7)",
+  "diff.showSideBySide": "In zwei Spalten anzeigen",
+  "diff.showUnified": "In einer Spalte anzeigen",
+  "diff.revertBlock": "Diesen Block zurücknehmen"
 }

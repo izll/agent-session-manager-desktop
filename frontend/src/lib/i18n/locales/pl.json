@@ -1113,5 +1113,8 @@
   "history.hideMessage": "Zwiń wiadomość",
   "history.showMessage": "Rozwiń wiadomość",
   "history.prevChange": "Poprzednia zmiana (Shift+F7)",
-  "history.nextChange": "Następna zmiana (F7)"
+  "history.nextChange": "Następna zmiana (F7)",
+  "diff.showSideBySide": "Pokaż w dwóch kolumnach",
+  "diff.showUnified": "Pokaż w jednej kolumnie",
+  "diff.revertBlock": "Cofnij ten blok"
 }

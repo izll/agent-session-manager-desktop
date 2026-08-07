@@ -1113,5 +1113,8 @@
   "history.hideMessage": "Comprimi il messaggio",
   "history.showMessage": "Espandi il messaggio",
   "history.prevChange": "Modifica precedente (Maiusc+F7)",
-  "history.nextChange": "Modifica successiva (F7)"
+  "history.nextChange": "Modifica successiva (F7)",
+  "diff.showSideBySide": "Mostra su due colonne",
+  "diff.showUnified": "Mostra su una colonna",
+  "diff.revertBlock": "Annulla questo blocco"
 }

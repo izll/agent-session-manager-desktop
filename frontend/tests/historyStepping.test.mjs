@@ -53,8 +53,26 @@ assert.match(
 );
 assert.match(
   stepFile,
-  /scrollToThird/,
+  /revealChange/,
   'the change it lands on must be scrolled to, or the jump is invisible',
+);
+
+// Two renderers, two coordinate systems. The columns pair lines up, so their
+// rows do not line up with the unified positions changeStarts holds — asked
+// to scroll by a unified position the columns went to the wrong place, or in
+// whole-file view (one hunk covering everything) to the top of the file, which
+// looks exactly like a scroll that never happened.
+const reveal = source.match(/function revealChange\(([\s\S]*?)\n {2}\}/);
+assert.ok(reveal, 'revealChange is missing');
+assert.match(
+  reveal[0],
+  /sideBySideView\?\.changeRows\(\)/,
+  'the column view must be asked where its own changes are',
+);
+assert.match(
+  reveal[0],
+  /scrollToRow\(run\.from, run\.to - run\.from \+ 1\)/,
+  'the column scroll needs the run, so a tall change is not pushed off the bottom',
 );
 
 // A third of the way down, not centred: a change is read downwards, so the

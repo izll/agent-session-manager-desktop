@@ -1113,5 +1113,8 @@
   "history.hideMessage": "ยุบข้อความ",
   "history.showMessage": "ขยายข้อความ",
   "history.prevChange": "การเปลี่ยนแปลงก่อนหน้า (Shift+F7)",
-  "history.nextChange": "การเปลี่ยนแปลงถัดไป (F7)"
+  "history.nextChange": "การเปลี่ยนแปลงถัดไป (F7)",
+  "diff.showSideBySide": "แสดงเป็นสองคอลัมน์",
+  "diff.showUnified": "แสดงเป็นคอลัมน์เดียว",
+  "diff.revertBlock": "ย้อนกลับบล็อกนี้"
 }

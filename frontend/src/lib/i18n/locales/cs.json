@@ -1113,5 +1113,8 @@
   "history.hideMessage": "Sbalit zprávu",
   "history.showMessage": "Rozbalit zprávu",
   "history.prevChange": "Předchozí změna (Shift+F7)",
-  "history.nextChange": "Další změna (F7)"
+  "history.nextChange": "Další změna (F7)",
+  "diff.showSideBySide": "Zobrazit ve dvou sloupcích",
+  "diff.showUnified": "Zobrazit v jednom sloupci",
+  "diff.revertBlock": "Vrátit tento blok"
 }

@@ -1113,5 +1113,8 @@
   "history.hideMessage": "Bericht inklappen",
   "history.showMessage": "Bericht uitklappen",
   "history.prevChange": "Vorige wijziging (Shift+F7)",
-  "history.nextChange": "Volgende wijziging (F7)"
+  "history.nextChange": "Volgende wijziging (F7)",
+  "diff.showSideBySide": "In twee kolommen tonen",
+  "diff.showUnified": "In één kolom tonen",
+  "diff.revertBlock": "Dit blok terugdraaien"
 }
