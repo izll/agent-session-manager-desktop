@@ -1072,7 +1072,7 @@
   "settings.shellSection": "Shell",
   "quickJump.title": "Snel springen",
   "quickJump.empty": "Nog leeg. Voeg het huidige tabblad toe met Alt+J.",
-  "quickJump.hint": "1–9 springen · ↑↓ bewegen · Alt+↑↓ herordenen · F2 notitie · Enter ga · Del verwijderen",
+  "quickJump.hint": "1–9 springen · ↑↓ bewegen · Alt+↑↓ herordenen · F2 hernoemen · Enter ga · Del verwijderen",
   "quickJump.tab": "tab",
   "quickJump.session": "sessie",
   "quickJump.unavailable": "niet beschikbaar",
@@ -1086,6 +1086,10 @@
   "quickJump.addSessionDesc": "Komt uit op het tabblad dat je daar open had",
   "sessionMenu.addToQuickJump": "Toevoegen aan snel springen",
   "tabBar.addToQuickJump": "Toevoegen aan snel springen",
-  "quickJump.editNote": "Notitie (F2)",
-  "quickJump.notePlaceholder": "Waar is deze voor?"
+  "quickJump.nameTitle": "Dit item een naam geven",
+  "quickJump.nameQuestion": "Hoe moet het in de lijst heten?",
+  "quickJump.namePlaceholder": "Een naam die je herkent",
+  "quickJump.renameTitle": "Item hernoemen",
+  "quickJump.rename": "Hernoemen (F2)",
+  "quickJump.resetName": "Voorgestelde naam herstellen (Ctrl+R)"
 }

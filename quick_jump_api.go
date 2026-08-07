@@ -43,11 +43,11 @@ func (a *App) SetQuickJump(entries []session.QuickJumpEntry) error {
 // The end rather than the front: the numbers are what make this useful, and
 // inserting at the front would shift every one of them each time something new
 // is added.
-func (a *App) AddQuickJump(sessionID string, windowIdx int) error {
+func (a *App) AddQuickJump(sessionID string, windowIdx int, label string) error {
 	if sessionID == "" {
 		return fmt.Errorf("no session to add")
 	}
-	entry := session.QuickJumpEntry{SessionID: sessionID, WindowIdx: windowIdx}
+	entry := session.QuickJumpEntry{SessionID: sessionID, WindowIdx: windowIdx, Label: label}
 
 	return a.storeQuickJump(func(current []session.QuickJumpEntry) []session.QuickJumpEntry {
 		for _, existing := range current {
@@ -74,18 +74,18 @@ func (a *App) RemoveQuickJump(sessionID string, windowIdx int) error {
 	})
 }
 
-// SetQuickJumpNote records the user's own words about an entry.
+// SetQuickJumpLabel renames an entry.
 //
-// Kept separate from the entry itself: the note is edited in place, one entry
-// at a time, and rewriting the whole list to change a few characters would
-// race with anything else editing it at that moment.
-func (a *App) SetQuickJumpNote(sessionID string, windowIdx int, note string) error {
+// Kept separate from writing the whole list: a rename is one entry at a time,
+// and rewriting everything to change a few characters would race with anything
+// else editing the list at that moment.
+func (a *App) SetQuickJumpLabel(sessionID string, windowIdx int, label string) error {
 	target := session.QuickJumpEntry{SessionID: sessionID, WindowIdx: windowIdx}
 
 	return a.storeQuickJump(func(current []session.QuickJumpEntry) []session.QuickJumpEntry {
 		for i := range current {
 			if current[i].SameTarget(target) {
-				current[i].Note = note
+				current[i].Label = label
 				break
 			}
 		}

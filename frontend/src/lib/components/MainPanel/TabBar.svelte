@@ -829,15 +829,14 @@
    * thing for a session: one of them having it and the other not is the kind
    * of gap that makes a user hunt for a feature they have already seen.
    */
-  async function tabContextAddToQuickJump() {
+  function tabContextAddToQuickJump() {
     const windowIdx = tabContextMenuIndex;
     closeTabContextMenu();
     if (windowIdx === null || !$selectedSession) return;
-    try {
-      await App.AddQuickJump($selectedSession.id, windowIdx);
-    } catch (err) {
-      console.error('Adding the tab to the quick-jump list failed:', err);
-    }
+    // Named where the naming dialog lives, so every route into the list asks
+    // the same question the same way.
+    window.dispatchEvent(new CustomEvent('quickjump:add',
+      { detail: { sessionId: $selectedSession.id, windowIdx } }));
   }
 
   function tabContextRename() {

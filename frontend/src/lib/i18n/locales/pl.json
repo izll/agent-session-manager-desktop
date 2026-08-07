@@ -1072,7 +1072,7 @@
   "settings.shellSection": "Powłoka",
   "quickJump.title": "Szybki skok",
   "quickJump.empty": "Jeszcze pusto. Dodaj bieżącą kartę klawiszami Alt+J.",
-  "quickJump.hint": "1–9 skok · ↑↓ ruch · Alt+↑↓ kolejność · F2 notatka · Enter idź · Del usuń",
+  "quickJump.hint": "1–9 skok · ↑↓ ruch · Alt+↑↓ kolejność · F2 zmiana nazwy · Enter idź · Del usuń",
   "quickJump.tab": "karta",
   "quickJump.session": "sesja",
   "quickJump.unavailable": "niedostępne",
@@ -1086,6 +1086,10 @@
   "quickJump.addSessionDesc": "Prowadzi do karty, którą tam miałeś otwartą",
   "sessionMenu.addToQuickJump": "Dodaj do szybkiego skoku",
   "tabBar.addToQuickJump": "Dodaj do szybkiego skoku",
-  "quickJump.editNote": "Notatka (F2)",
-  "quickJump.notePlaceholder": "Do czego to służy?"
+  "quickJump.nameTitle": "Nazwij ten wpis",
+  "quickJump.nameQuestion": "Jak ma się nazywać na liście?",
+  "quickJump.namePlaceholder": "Nazwa, którą rozpoznasz",
+  "quickJump.renameTitle": "Zmień nazwę wpisu",
+  "quickJump.rename": "Zmień nazwę (F2)",
+  "quickJump.resetName": "Przywróć proponowaną nazwę (Ctrl+R)"
 }

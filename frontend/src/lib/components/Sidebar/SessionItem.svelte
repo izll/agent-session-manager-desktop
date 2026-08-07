@@ -9,7 +9,6 @@
   import SaveAsTemplateDialog from '../Dialogs/SaveAsTemplateDialog.svelte';
   import type { Session } from '../../stores/sessions';
   import { selectSession, selectedSessionId, renameSession, deleteSession, toggleFavorite } from '../../stores/sessions';
-  import { AddQuickJump } from '../../../../wailsjs/go/main/App';
   import { settings } from '../../stores/settings';
   import { t } from '../../i18n';
   import { focusTerminal } from '../../utils/focus';
@@ -155,13 +154,12 @@
    * that session" means everywhere else in the app. Adding a specific tab is
    * Alt+J, from the tab itself.
    */
-  async function handleAddToQuickJump() {
+  function handleAddToQuickJump() {
     closeContextMenu();
-    try {
-      await AddQuickJump(session.id, -1);
-    } catch (err) {
-      console.error('Adding the session to the quick-jump list failed:', err);
-    }
+    // Named where the naming dialog lives, so every route into the list asks
+    // the same question the same way.
+    window.dispatchEvent(new CustomEvent('quickjump:add',
+      { detail: { sessionId: session.id, windowIdx: -1 } }));
   }
 
   // Colour belongs to the session, so it is set from the session's own menu —

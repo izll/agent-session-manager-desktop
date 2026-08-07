@@ -3,7 +3,7 @@
 import {main} from '../models';
 import {session} from '../models';
 
-export function AddQuickJump(arg1:string,arg2:number):Promise<void>;
+export function AddQuickJump(arg1:string,arg2:number,arg3:string):Promise<void>;
 
 export function AddSubtask(arg1:string,arg2:string,arg3:string):Promise<main.SubtaskInfo>;
 
@@ -295,7 +295,7 @@ export function SetLastWindowIndex(arg1:string,arg2:number):Promise<void>;
 
 export function SetQuickJump(arg1:Array<session.QuickJumpEntry>):Promise<void>;
 
-export function SetQuickJumpNote(arg1:string,arg2:number,arg3:string):Promise<void>;
+export function SetQuickJumpLabel(arg1:string,arg2:number,arg3:string):Promise<void>;
 
 export function SetSessionColor(arg1:string,arg2:string,arg3:string,arg4:boolean):Promise<void>;
 

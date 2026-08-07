@@ -1072,7 +1072,7 @@
   "settings.shellSection": "Skal",
   "quickJump.title": "Snabbhopp",
   "quickJump.empty": "Tomt än så länge. Lägg till aktuell flik med Alt+J.",
-  "quickJump.hint": "1–9 hoppa · ↑↓ flytta · Alt+↑↓ ordna om · F2 anteckning · Enter gå · Del ta bort",
+  "quickJump.hint": "1–9 hoppa · ↑↓ flytta · Alt+↑↓ ordna om · F2 byt namn · Enter gå · Del ta bort",
   "quickJump.tab": "flik",
   "quickJump.session": "session",
   "quickJump.unavailable": "otillgänglig",
@@ -1086,6 +1086,10 @@
   "quickJump.addSessionDesc": "Landar på fliken du hade öppen där",
   "sessionMenu.addToQuickJump": "Lägg till i snabbhopp",
   "tabBar.addToQuickJump": "Lägg till i snabbhopp",
-  "quickJump.editNote": "Anteckning (F2)",
-  "quickJump.notePlaceholder": "Vad är den här till för?"
+  "quickJump.nameTitle": "Namnge posten",
+  "quickJump.nameQuestion": "Vad ska den heta i listan?",
+  "quickJump.namePlaceholder": "Ett namn du känner igen",
+  "quickJump.renameTitle": "Byt namn på posten",
+  "quickJump.rename": "Byt namn (F2)",
+  "quickJump.resetName": "Återställ föreslaget namn (Ctrl+R)"
 }

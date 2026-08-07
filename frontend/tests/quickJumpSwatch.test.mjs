@@ -86,4 +86,46 @@ assert.equal(
   'there should be exactly one .name rule',
 );
 
+// An entry is called what the user named it. The fallback matters as much as
+// the name: entries stored before naming existed have no label, and must still
+// read as the thing they point at rather than as a blank row.
+assert.match(
+  source,
+  /name: entry\.label \|\|/,
+  'the label should be used when set, with the target name as the fallback',
+);
+
+// Renaming starts from what the row shows — an edit, not a retype. An entry
+// with no name of its own still displays one, so an empty field would make the
+// user retype something already on screen.
+assert.match(
+  source,
+  /editingText = target\.label \|\| \(resolved\[index\]\?\.defaultName/,
+  'the rename field should open with the name shown on the row',
+);
+
+// A rename is easy to regret, and the suggestion is derived rather than
+// remembered, so there has to be a way back to it.
+assert.match(
+  source,
+  /function resetEditingName/,
+  'there should be a way to restore the suggested name while editing',
+);
+
+// Storing a name identical to the suggestion would pin what the session and
+// tab are called today, so the entry would keep the old name after a rename.
+assert.match(
+  source,
+  /chosen === resolved\[index\]\?\.defaultName \? '' : chosen/,
+  'a name matching the suggestion should be stored as no name at all',
+);
+
+// While a row is being renamed the field holds the name; showing the row's
+// name as well put the old one right beside what was being typed.
+assert.match(
+  source,
+  /\{#if editingIndex !== row\.index\}[\s\S]{0,200}class="name"/,
+  'the row name should be hidden while that row is being edited',
+);
+
 console.log('quickJumpSwatch: ok');

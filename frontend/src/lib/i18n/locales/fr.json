@@ -1072,7 +1072,7 @@
   "settings.shellSection": "Interpréteur",
   "quickJump.title": "Accès rapide",
   "quickJump.empty": "Encore vide. Ajoutez l'onglet courant avec Alt+J.",
-  "quickJump.hint": "1–9 aller · ↑↓ déplacer · Alt+↑↓ réordonner · F2 note · Entrée aller · Suppr retirer",
+  "quickJump.hint": "1–9 aller · ↑↓ déplacer · Alt+↑↓ réordonner · F2 renommer · Entrée aller · Suppr retirer",
   "quickJump.tab": "onglet",
   "quickJump.session": "session",
   "quickJump.unavailable": "indisponible",
@@ -1086,6 +1086,10 @@
   "quickJump.addSessionDesc": "Mène à l'onglet que vous y aviez ouvert",
   "sessionMenu.addToQuickJump": "Ajouter à l'accès rapide",
   "tabBar.addToQuickJump": "Ajouter à l'accès rapide",
-  "quickJump.editNote": "Note (F2)",
-  "quickJump.notePlaceholder": "À quoi sert celui-ci ?"
+  "quickJump.nameTitle": "Nommer cette entrée",
+  "quickJump.nameQuestion": "Comment l'appeler dans la liste ?",
+  "quickJump.namePlaceholder": "Un nom que vous reconnaîtrez",
+  "quickJump.renameTitle": "Renommer l'entrée",
+  "quickJump.rename": "Renommer (F2)",
+  "quickJump.resetName": "Rétablir le nom suggéré (Ctrl+R)"
 }

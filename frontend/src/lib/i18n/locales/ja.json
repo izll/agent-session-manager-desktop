@@ -1072,7 +1072,7 @@
   "settings.shellSection": "シェル",
   "quickJump.title": "クイックジャンプ",
   "quickJump.empty": "まだ空です。Alt+J で現在のタブを追加できます。",
-  "quickJump.hint": "1–9 移動 · ↑↓ カーソル · Alt+↑↓ 並べ替え · F2 メモ · Enter 移動 · Del 削除",
+  "quickJump.hint": "1–9 移動 · ↑↓ カーソル · Alt+↑↓ 並べ替え · F2 名前変更 · Enter 移動 · Del 削除",
   "quickJump.tab": "タブ",
   "quickJump.session": "セッション",
   "quickJump.unavailable": "利用不可",
@@ -1086,6 +1086,10 @@
   "quickJump.addSessionDesc": "そこで開いていたタブに移動します",
   "sessionMenu.addToQuickJump": "クイックジャンプに追加",
   "tabBar.addToQuickJump": "クイックジャンプに追加",
-  "quickJump.editNote": "メモ (F2)",
-  "quickJump.notePlaceholder": "これは何のため？"
+  "quickJump.nameTitle": "項目に名前を付ける",
+  "quickJump.nameQuestion": "リストでの名前は？",
+  "quickJump.namePlaceholder": "あとで分かる名前",
+  "quickJump.renameTitle": "項目の名前を変更",
+  "quickJump.rename": "名前を変更 (F2)",
+  "quickJump.resetName": "提案された名前に戻す (Ctrl+R)"
 }

@@ -1072,7 +1072,7 @@
   "settings.shellSection": "Shell",
   "quickJump.title": "Salto rápido",
   "quickJump.empty": "Aún vacío. Añade la pestaña actual con Alt+J.",
-  "quickJump.hint": "1–9 saltar · ↑↓ mover · Alt+↑↓ reordenar · F2 nota · Enter ir · Supr quitar",
+  "quickJump.hint": "1–9 saltar · ↑↓ mover · Alt+↑↓ reordenar · F2 renombrar · Enter ir · Supr quitar",
   "quickJump.tab": "pestaña",
   "quickJump.session": "sesión",
   "quickJump.unavailable": "no disponible",
@@ -1086,6 +1086,10 @@
   "quickJump.addSessionDesc": "Lleva a la pestaña que tenías abierta allí",
   "sessionMenu.addToQuickJump": "Añadir al salto rápido",
   "tabBar.addToQuickJump": "Añadir al salto rápido",
-  "quickJump.editNote": "Nota (F2)",
-  "quickJump.notePlaceholder": "¿Para qué es este?"
+  "quickJump.nameTitle": "Nombrar esta entrada",
+  "quickJump.nameQuestion": "¿Cómo se llamará en la lista?",
+  "quickJump.namePlaceholder": "Un nombre que reconozcas",
+  "quickJump.renameTitle": "Renombrar entrada",
+  "quickJump.rename": "Renombrar (F2)",
+  "quickJump.resetName": "Restaurar el nombre sugerido (Ctrl+R)"
 }

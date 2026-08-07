@@ -23,14 +23,16 @@ type QuickJumpEntry struct {
 	// itself — jumping to it selects whichever tab was last open there, which
 	// is what "go to that session" means everywhere else in the app.
 	WindowIdx int `json:"windowIdx"`
-	// Note is the user's own words about this entry, shown after its name:
-	// "claude — the migration one". A tab's own name is often "claude" or
-	// "shell" in a dozen places at once, and what distinguishes them is why
-	// they are on this list, which only the user knows.
+	// Label is what this entry is called in the jump window.
 	//
-	// Added to the name rather than replacing it, so an entry stays
-	// recognisable when a session is renamed.
-	Note string `json:"note,omitempty"`
+	// The user names it on the way in, starting from a suggestion — the tab's
+	// own name is "claude" or "shell" in a dozen places at once, so the list
+	// is only readable if its entries are named for what they are to the
+	// person jumping between them.
+	//
+	// Empty falls back to the target's own name, which keeps entries stored
+	// before naming existed readable.
+	Label string `json:"label,omitempty"`
 }
 
 // TargetsSession reports whether this entry means the session as a whole
@@ -60,7 +62,7 @@ func NormaliseQuickJump(entries []QuickJumpEntry) []QuickJumpEntry {
 
 	for _, entry := range entries {
 		entry.SessionID = strings.TrimSpace(entry.SessionID)
-		entry.Note = strings.TrimSpace(entry.Note)
+		entry.Label = strings.TrimSpace(entry.Label)
 		if entry.SessionID == "" {
 			continue
 		}

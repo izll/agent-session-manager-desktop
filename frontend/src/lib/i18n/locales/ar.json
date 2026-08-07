@@ -1072,7 +1072,7 @@
   "settings.shellSection": "الصدفة",
   "quickJump.title": "قفزة سريعة",
   "quickJump.empty": "فارغ حتى الآن. أضف التبويب الحالي بـ Alt+J.",
-  "quickJump.hint": "1–9 قفز · ↑↓ تحريك · Alt+↑↓ ترتيب · F2 ملاحظة · Enter اذهب · Del إزالة",
+  "quickJump.hint": "1–9 قفز · ↑↓ تحريك · Alt+↑↓ ترتيب · F2 إعادة تسمية · Enter اذهب · Del إزالة",
   "quickJump.tab": "تبويب",
   "quickJump.session": "جلسة",
   "quickJump.unavailable": "غير متاح",
@@ -1086,6 +1086,10 @@
   "quickJump.addSessionDesc": "ينتقل إلى التبويب الذي تركته مفتوحًا هناك",
   "sessionMenu.addToQuickJump": "إضافة إلى القفز السريع",
   "tabBar.addToQuickJump": "إضافة إلى القفز السريع",
-  "quickJump.editNote": "ملاحظة (F2)",
-  "quickJump.notePlaceholder": "لماذا هذا؟"
+  "quickJump.nameTitle": "تسمية هذا الإدخال",
+  "quickJump.nameQuestion": "بماذا يُسمّى في القائمة؟",
+  "quickJump.namePlaceholder": "اسم تتعرّف عليه",
+  "quickJump.renameTitle": "إعادة تسمية الإدخال",
+  "quickJump.rename": "إعادة تسمية (F2)",
+  "quickJump.resetName": "استعادة الاسم المقترح (Ctrl+R)"
 }

@@ -14,7 +14,7 @@
   import ImportDialog from './lib/components/Dialogs/ImportDialog.svelte';
   import SessionFileDialog from './lib/components/Dialogs/SessionFileDialog.svelte';
   import SettingsDialog from './lib/components/Dialogs/SettingsDialog.svelte';
-  import { autoFocusDialog } from './lib/utils/dialogActions';
+  import { autoFocusDialog, autoFocusField } from './lib/utils/dialogActions';
   import LogDialog from './lib/components/Dialogs/LogDialog.svelte';
   import QuickJumpDialog from './lib/components/Dialogs/QuickJumpDialog.svelte';
   import RecoveryCenterDialog from './lib/components/Dialogs/RecoveryCenterDialog.svelte';
@@ -163,7 +163,7 @@
     showNewSessionDialog || showNewGroupDialog || showGlobalSearch || showBgAgents ||
     showHelpDialog || showUpdateDialog || showImportDialog || showFileImportDialog ||
     showSettingsDialog || showRecoveryCenter || showCommandPalette || showColorDialog || showDeleteConfirm ||
-    showLogDialog || showQuickJump || quickJumpPrompt ||
+    showLogDialog || showQuickJump || quickJumpPrompt || quickJumpNaming ||
     showCommandPicker || showCommandManager || showTemplateDialog ||
     showQuitConfirm || showStopDialog || showStartDialog ||
     showResumeChoice || showResumeSessionPicker;
@@ -367,17 +367,77 @@
         break;
       case 'Enter':
         e.preventDefault();
-        confirmQuickJumpAdd(quickJumpChoice === 0 ? ($selectedWindowIdx ?? 0) : -1);
+        quickJumpAddChoice(quickJumpChoice === 0 ? ($selectedWindowIdx ?? 0) : -1);
         break;
     }
   }
 
-  /** Appended at the end, so adding something never renumbers what is there. */
-  async function confirmQuickJumpAdd(windowIdx: number) {
+  /**
+   * Having chosen what to add, name it.
+   *
+   * Asked for rather than derived, because the tab's own name is "claude" or
+   * "shell" in a dozen places at once and a list of those is unreadable. The
+   * suggestion is what the entry would otherwise have been called, so pressing
+   * Enter straight through costs nothing and still gives a sensible name.
+   */
+  let quickJumpNaming = false;
+  let quickJumpWindowIdx = -1;
+  let quickJumpName = '';
+
+  /**
+   * The context menus ask for the same naming dialog.
+   *
+   * They can name a session other than the selected one, so the target comes
+   * with the event rather than being read from the selection.
+   */
+  let quickJumpTargetSession = '';
+
+  function openQuickJumpNaming(sessionId: string, windowIdx: number) {
+    quickJumpTargetSession = sessionId;
+    quickJumpWindowIdx = windowIdx;
+    quickJumpName = suggestedQuickJumpName(windowIdx, sessionId);
+    quickJumpNaming = true;
+  }
+
+  function handleQuickJumpAdd(e: CustomEvent<{ sessionId: string; windowIdx: number }>) {
+    openQuickJumpNaming(e.detail.sessionId, e.detail.windowIdx);
+  }
+
+  function quickJumpAddChoice(windowIdx: number) {
     quickJumpPrompt = false;
-    if (!$selectedSessionId) return;
+    openQuickJumpNaming($selectedSessionId ?? '', windowIdx);
+  }
+
+  /**
+   * "{session} — {tab}" for a tab, the session's name for a session.
+   *
+   * A tab needs both halves: its own name says what it runs, and the session's
+   * says which project it runs in, and neither alone identifies it in a list.
+   */
+  function suggestedQuickJumpName(windowIdx: number, sessionId?: string): string {
+    const session = sessionId
+      ? $sessions.find((s) => s.id === sessionId)
+      : $selectedSession;
+    if (!session) return '';
+    if (windowIdx < 0) return session.name ?? '';
+
+    const tab = (session.followedWindows ?? []).find((w: any) => w.index === windowIdx);
+    const tabName = tab?.name || tab?.agent || (windowIdx === 0 ? (session.agent ?? '') : `#${windowIdx}`);
+    return tabName ? `${session.name} - ${tabName}` : (session.name ?? '');
+  }
+
+  /** Appended at the end, so adding something never renumbers what is there. */
+  async function confirmQuickJumpAdd() {
+    quickJumpNaming = false;
+    if (!quickJumpTargetSession) return;
     try {
-      await AddQuickJump($selectedSessionId, windowIdx);
+      // A name left as suggested is stored as no name, so the entry keeps
+      // following its session and tab rather than pinning what they are called
+      // today.
+      const chosen = quickJumpName.trim();
+      const suggested = suggestedQuickJumpName(quickJumpWindowIdx, quickJumpTargetSession);
+      await AddQuickJump(quickJumpTargetSession, quickJumpWindowIdx,
+        chosen === suggested ? '' : chosen);
       showQuickJump = true;
     } catch (err) {
       console.error('Adding to the quick-jump list failed:', err);
@@ -391,6 +451,12 @@
   }
 
   function handleKeydown(e: KeyboardEvent) {
+    if (e.key === 'Escape' && quickJumpNaming) {
+      e.preventDefault();
+      quickJumpNaming = false;
+      return;
+    }
+
     if (e.key === 'Escape' && quickJumpPrompt) {
       e.preventDefault();
       quickJumpPrompt = false;
@@ -580,6 +646,7 @@
     // Capture phase so the terminal (xterm) can't swallow Ctrl+Shift combos.
     window.addEventListener('keydown', handleKeydown, true);
     window.addEventListener('terminal-nav', handleTerminalNav as EventListener);
+    window.addEventListener('quickjump:add', handleQuickJumpAdd as EventListener);
     window.addEventListener('command:start-selected', handleCommandStart);
     window.addEventListener('command:stop-selected', handleCommandStop);
     window.addEventListener('command:templates', handleCommandTemplates as EventListener);
@@ -621,6 +688,7 @@
   onDestroy(() => {
     window.removeEventListener('keydown', handleKeydown, true);
     window.removeEventListener('terminal-nav', handleTerminalNav as EventListener);
+    window.removeEventListener('quickjump:add', handleQuickJumpAdd as EventListener);
     window.removeEventListener('command:start-selected', handleCommandStart);
     window.removeEventListener('command:stop-selected', handleCommandStop);
     window.removeEventListener('command:templates', handleCommandTemplates as EventListener);
@@ -1232,7 +1300,7 @@
           <button
             class="quick-add-choice"
             class:chosen={quickJumpChoice === 0}
-            on:click={() => confirmQuickJumpAdd($selectedWindowIdx ?? 0)}
+            on:click={() => quickJumpAddChoice($selectedWindowIdx ?? 0)}
             on:mouseenter={() => (quickJumpChoice = 0)}
             on:focus={() => (quickJumpChoice = 0)}
           >
@@ -1242,7 +1310,7 @@
           <button
             class="quick-add-choice"
             class:chosen={quickJumpChoice === 1}
-            on:click={() => confirmQuickJumpAdd(-1)}
+            on:click={() => quickJumpAddChoice(-1)}
             on:mouseenter={() => (quickJumpChoice = 1)}
             on:focus={() => (quickJumpChoice = 1)}
           >
@@ -1254,6 +1322,46 @@
         <div class="dialog-footer">
           <button class="btn-cancel" on:click={() => (quickJumpPrompt = false)}>
             {$t('common.cancel')}
+          </button>
+        </div>
+      </div>
+    </div>
+  {/if}
+
+  {#if quickJumpNaming}
+    <!-- svelte-ignore a11y-click-events-have-key-events -->
+    <div class="dialog-overlay" on:click|self={() => (quickJumpNaming = false)}>
+      <div class="dialog-content quick-add">
+        <div class="dialog-header">
+          <h2>{$t('quickJump.nameTitle')}</h2>
+          <button class="close-btn" on:click={() => (quickJumpNaming = false)}
+            aria-label={$t('common.close')}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"/>
+              <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+
+        <div class="quick-add-body" use:autoFocusField>
+          <p class="quick-add-question">{$t('quickJump.nameQuestion')}</p>
+          <input
+            class="quick-name-input"
+            bind:value={quickJumpName}
+            placeholder={$t('quickJump.namePlaceholder')}
+            on:keydown={(e) => {
+              if (e.key === 'Enter') { e.preventDefault(); confirmQuickJumpAdd(); }
+              else if (e.key === 'Escape') { e.preventDefault(); quickJumpNaming = false; }
+            }}
+          />
+        </div>
+
+        <div class="dialog-footer">
+          <button class="btn-cancel" on:click={() => (quickJumpNaming = false)}>
+            {$t('common.cancel')}
+          </button>
+          <button class="btn-primary" on:click={confirmQuickJumpAdd}>
+            {$t('common.save')}
           </button>
         </div>
       </div>
@@ -1929,5 +2037,20 @@
   .quick-add-choice span {
     font-size: 0.82em;
     opacity: 0.65;
+  }
+
+  /* The name field in the quick-jump add dialog. */
+  .quick-name-input {
+    width: 100%;
+    padding: 9px 12px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.28);
+    color: inherit;
+    font: inherit;
+    outline: none;
+  }
+  .quick-name-input:focus {
+    border-color: var(--accent, #61afef);
   }
 </style>

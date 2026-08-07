@@ -1072,7 +1072,7 @@
   "settings.shellSection": "Shell",
   "quickJump.title": "Schnellsprung",
   "quickJump.empty": "Noch leer. Füge den aktuellen Tab mit Alt+J hinzu.",
-  "quickJump.hint": "1–9 springen · ↑↓ bewegen · Alt+↑↓ umsortieren · F2 Notiz · Enter los · Entf entfernen",
+  "quickJump.hint": "1–9 springen · ↑↓ bewegen · Alt+↑↓ umsortieren · F2 umbenennen · Enter los · Entf entfernen",
   "quickJump.tab": "Tab",
   "quickJump.session": "Sitzung",
   "quickJump.unavailable": "nicht verfügbar",
@@ -1086,6 +1086,10 @@
   "quickJump.addSessionDesc": "Führt zu dem Tab, den du dort zuletzt offen hattest",
   "sessionMenu.addToQuickJump": "Zum Schnellsprung hinzufügen",
   "tabBar.addToQuickJump": "Zum Schnellsprung hinzufügen",
-  "quickJump.editNote": "Notiz (F2)",
-  "quickJump.notePlaceholder": "Wofür ist das?"
+  "quickJump.nameTitle": "Eintrag benennen",
+  "quickJump.nameQuestion": "Wie soll er in der Liste heißen?",
+  "quickJump.namePlaceholder": "Ein Name, den du wiedererkennst",
+  "quickJump.renameTitle": "Eintrag umbenennen",
+  "quickJump.rename": "Umbenennen (F2)",
+  "quickJump.resetName": "Vorgeschlagenen Namen wiederherstellen (Strg+R)"
 }

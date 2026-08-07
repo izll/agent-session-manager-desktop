@@ -1072,7 +1072,7 @@
   "settings.shellSection": "Оболочка",
   "quickJump.title": "Быстрый переход",
   "quickJump.empty": "Пока пусто. Добавьте текущую вкладку с помощью Alt+J.",
-  "quickJump.hint": "1–9 переход · ↑↓ движение · Alt+↑↓ порядок · F2 заметка · Enter перейти · Del убрать",
+  "quickJump.hint": "1–9 переход · ↑↓ движение · Alt+↑↓ порядок · F2 переименовать · Enter перейти · Del убрать",
   "quickJump.tab": "вкладка",
   "quickJump.session": "сессия",
   "quickJump.unavailable": "недоступно",
@@ -1086,6 +1086,10 @@
   "quickJump.addSessionDesc": "Открывает вкладку, на которой вы там были",
   "sessionMenu.addToQuickJump": "Добавить в быстрый переход",
   "tabBar.addToQuickJump": "Добавить в быстрый переход",
-  "quickJump.editNote": "Заметка (F2)",
-  "quickJump.notePlaceholder": "Для чего этот?"
+  "quickJump.nameTitle": "Название записи",
+  "quickJump.nameQuestion": "Как назвать её в списке?",
+  "quickJump.namePlaceholder": "Название, которое вы узнаете",
+  "quickJump.renameTitle": "Переименовать запись",
+  "quickJump.rename": "Переименовать (F2)",
+  "quickJump.resetName": "Вернуть предложенное имя (Ctrl+R)"
 }

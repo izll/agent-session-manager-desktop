@@ -1072,7 +1072,7 @@
   "settings.shellSection": "Shell",
   "quickJump.title": "Nhảy nhanh",
   "quickJump.empty": "Vẫn trống. Thêm tab hiện tại bằng Alt+J.",
-  "quickJump.hint": "1–9 nhảy · ↑↓ di chuyển · Alt+↑↓ sắp xếp · F2 ghi chú · Enter đi · Del xoá",
+  "quickJump.hint": "1–9 nhảy · ↑↓ di chuyển · Alt+↑↓ sắp xếp · F2 đổi tên · Enter đi · Del xoá",
   "quickJump.tab": "tab",
   "quickJump.session": "phiên",
   "quickJump.unavailable": "không khả dụng",
@@ -1086,6 +1086,10 @@
   "quickJump.addSessionDesc": "Tới tab bạn đang mở ở đó",
   "sessionMenu.addToQuickJump": "Thêm vào nhảy nhanh",
   "tabBar.addToQuickJump": "Thêm vào nhảy nhanh",
-  "quickJump.editNote": "Ghi chú (F2)",
-  "quickJump.notePlaceholder": "Cái này để làm gì?"
+  "quickJump.nameTitle": "Đặt tên cho mục này",
+  "quickJump.nameQuestion": "Gọi nó là gì trong danh sách?",
+  "quickJump.namePlaceholder": "Một cái tên bạn nhận ra",
+  "quickJump.renameTitle": "Đổi tên mục",
+  "quickJump.rename": "Đổi tên (F2)",
+  "quickJump.resetName": "Khôi phục tên gợi ý (Ctrl+R)"
 }

@@ -1072,7 +1072,7 @@
   "settings.shellSection": "Оболонка",
   "quickJump.title": "Швидкий перехід",
   "quickJump.empty": "Поки порожньо. Додайте поточну вкладку через Alt+J.",
-  "quickJump.hint": "1–9 перехід · ↑↓ рух · Alt+↑↓ порядок · F2 нотатка · Enter перейти · Del прибрати",
+  "quickJump.hint": "1–9 перехід · ↑↓ рух · Alt+↑↓ порядок · F2 перейменувати · Enter перейти · Del прибрати",
   "quickJump.tab": "вкладка",
   "quickJump.session": "сесія",
   "quickJump.unavailable": "недоступно",
@@ -1086,6 +1086,10 @@
   "quickJump.addSessionDesc": "Відкриває вкладку, на якій ви там були",
   "sessionMenu.addToQuickJump": "Додати до швидкого переходу",
   "tabBar.addToQuickJump": "Додати до швидкого переходу",
-  "quickJump.editNote": "Нотатка (F2)",
-  "quickJump.notePlaceholder": "Для чого цей?"
+  "quickJump.nameTitle": "Назва запису",
+  "quickJump.nameQuestion": "Як назвати його у списку?",
+  "quickJump.namePlaceholder": "Назва, яку ви впізнаєте",
+  "quickJump.renameTitle": "Перейменувати запис",
+  "quickJump.rename": "Перейменувати (F2)",
+  "quickJump.resetName": "Повернути запропоновану назву (Ctrl+R)"
 }

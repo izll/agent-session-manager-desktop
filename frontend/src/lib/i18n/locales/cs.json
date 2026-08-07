@@ -1072,7 +1072,7 @@
   "settings.shellSection": "Shell",
   "quickJump.title": "Rychlý skok",
   "quickJump.empty": "Zatím prázdné. Aktuální záložku přidáte pomocí Alt+J.",
-  "quickJump.hint": "1–9 skok · ↑↓ pohyb · Alt+↑↓ přeřadit · F2 poznámka · Enter jít · Del odebrat",
+  "quickJump.hint": "1–9 skok · ↑↓ pohyb · Alt+↑↓ přeřadit · F2 přejmenovat · Enter jít · Del odebrat",
   "quickJump.tab": "záložka",
   "quickJump.session": "relace",
   "quickJump.unavailable": "nedostupné",
@@ -1086,6 +1086,10 @@
   "quickJump.addSessionDesc": "Vede na záložku, kterou jste tam měli otevřenou",
   "sessionMenu.addToQuickJump": "Přidat do rychlého skoku",
   "tabBar.addToQuickJump": "Přidat do rychlého skoku",
-  "quickJump.editNote": "Poznámka (F2)",
-  "quickJump.notePlaceholder": "K čemu tohle je?"
+  "quickJump.nameTitle": "Pojmenujte položku",
+  "quickJump.nameQuestion": "Jak se má jmenovat v seznamu?",
+  "quickJump.namePlaceholder": "Název, který poznáte",
+  "quickJump.renameTitle": "Přejmenovat položku",
+  "quickJump.rename": "Přejmenovat (F2)",
+  "quickJump.resetName": "Obnovit navržený název (Ctrl+R)"
 }

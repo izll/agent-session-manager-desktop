@@ -70,7 +70,7 @@ func TestSameTargetDistinguishesTabsFromSessions(t *testing.T) {
 // way in rather than trusted.
 func TestNormaliseCleansTheList(t *testing.T) {
 	cleaned := NormaliseQuickJump([]QuickJumpEntry{
-		{SessionID: "  a  ", WindowIdx: -1, Note: "  Build  "},
+		{SessionID: "  a  ", WindowIdx: -1, Label: "  Build  "},
 		{SessionID: "", WindowIdx: 3},   // no session: nothing to jump to
 		{SessionID: "a", WindowIdx: -7}, // the same session again
 		{SessionID: "a", WindowIdx: 2},  // a tab of it: a different place
@@ -80,7 +80,7 @@ func TestNormaliseCleansTheList(t *testing.T) {
 	if len(cleaned) != 3 {
 		t.Fatalf("kept %d entries, want 3: %+v", len(cleaned), cleaned)
 	}
-	if cleaned[0].SessionID != "a" || cleaned[0].Note != "Build" {
+	if cleaned[0].SessionID != "a" || cleaned[0].Label != "Build" {
 		t.Errorf("surrounding whitespace survived: %+v", cleaned[0])
 	}
 	if cleaned[0].WindowIdx != -1 {
@@ -106,25 +106,23 @@ func TestNormaliseKeepsEntriesItCannotVerify(t *testing.T) {
 	}
 }
 
-// The note is the user's own words about an entry, shown after its name. It
-// adds to the name rather than replacing it: a tab is called "claude" or
-// "shell" in a dozen places at once, and what tells them apart is why they are
-// on this list — but a note that replaced the name would leave an entry
-// unrecognisable if the note were vague.
-func TestNoteIsKeptAlongsideTheTarget(t *testing.T) {
+// The label is what an entry is called in the jump window: a tab is named
+// "claude" or "shell" in a dozen places at once, so the list is only readable
+// if its entries carry the name the user gave them.
+func TestLabelIsKeptAlongsideTheTarget(t *testing.T) {
 	cleaned := NormaliseQuickJump([]QuickJumpEntry{
-		{SessionID: "a", WindowIdx: 2, Note: "the migration one"},
+		{SessionID: "a", WindowIdx: 2, Label: "the migration one"},
 	})
 
 	if len(cleaned) != 1 {
 		t.Fatalf("kept %d entries, want 1", len(cleaned))
 	}
-	if cleaned[0].Note != "the migration one" {
-		t.Errorf("Note = %q, want it preserved", cleaned[0].Note)
+	if cleaned[0].Label != "the migration one" {
+		t.Errorf("Label = %q, want it preserved", cleaned[0].Label)
 	}
-	// The note must not become part of what identifies the entry, or editing it
-	// would make the entry a different place and add a duplicate.
+	// The label must not become part of what identifies the entry, or renaming
+	// it would make the entry a different place and add a duplicate.
 	if !cleaned[0].SameTarget(QuickJumpEntry{SessionID: "a", WindowIdx: 2}) {
-		t.Error("the note changed which place the entry points at")
+		t.Error("the label changed which place the entry points at")
 	}
 }

@@ -30,7 +30,7 @@
   interface Entry {
     sessionId: string;
     windowIdx: number;
-    note?: string;
+    label?: string;
   }
 
   let entries: Entry[] = [];
@@ -90,16 +90,24 @@
       ? 'stopped'
       : (isTab ? (tabStatus?.activity ?? 'idle') : ($activities[session.id] ?? 'idle'));
 
+    // "{session} — {tab}" for a tab: its own name says what it runs, the
+    // session's says which project, and neither alone identifies it in a list.
+    const tabName = tab?.name || tab?.agent ||
+      (entry.windowIdx === 0 ? (session?.agent ?? '') : `#${entry.windowIdx}`);
+    const sessionName = session?.name ?? entry.sessionId;
+    const defaultName = isTab && tabName ? `${sessionName} - ${tabName}` : sessionName;
+
     return {
       ...entry,
       index,
       isTab,
       missing,
       activity,
-      note: entry.note ?? '',
-      name: (isTab
-        ? (tab?.name || tab?.agent || (entry.windowIdx === 0 ? (session?.agent ?? '') : `#${entry.windowIdx}`))
-        : (session?.name ?? entry.sessionId)),
+      name: entry.label || defaultName,
+      // What the entry would be called with no name of its own. Kept on the
+      // row so editing can start from something even when the entry has no
+      // label, and so "reset" has an original to go back to.
+      defaultName,
       // A tab entry still says which session it is in; the name alone is
       // "shell" or "claude" in a dozen places at once.
       context: isTab ? (session?.name ?? entry.sessionId) : '',
@@ -165,10 +173,10 @@
   }
 
   /**
-   * Editing an entry's note.
+   * Renaming an entry.
    *
-   * In place rather than in a dialog of its own: this is a few words about a
-   * row you are looking at, and a second window over the first would be more
+   * In place rather than in a dialog of its own: it is one field on a row you
+   * are already looking at, and a second window over the first would be more
    * ceremony than the edit deserves.
    */
   let editingIndex: number | null = null;
@@ -178,7 +186,10 @@
     const target = entries[index];
     if (!target) return;
     editingIndex = index;
-    editingText = target.note ?? '';
+    // Starts from what the row shows, which for an entry with no name of its
+    // own is the name it is displayed under — an empty field would make the
+    // user retype something already on screen.
+    editingText = target.label || (resolved[index]?.defaultName ?? '');
     await tick();
     listEl?.querySelector<HTMLInputElement>('.note-input')?.focus();
   }
@@ -190,10 +201,15 @@
     editingIndex = null;
     if (!target) return;
     try {
-      await App.SetQuickJumpNote(target.sessionId, target.windowIdx, editingText.trim());
+      // A name that matches the suggestion is stored as no name at all, so the
+      // entry keeps following its session and tab: pin it and renaming the
+      // session later would leave this row showing the old one.
+      const chosen = editingText.trim();
+      const label = chosen === resolved[index]?.defaultName ? '' : chosen;
+      await App.SetQuickJumpLabel(target.sessionId, target.windowIdx, label);
       await load({ keepCursor: index });
     } catch (e) {
-      console.error('Saving the note failed:', e);
+      console.error('Renaming the entry failed:', e);
     }
     focusList();
   }
@@ -215,6 +231,18 @@
     listEl?.focus();
   }
 
+  /**
+   * Put the suggested name back while editing.
+   *
+   * A rename is easy to regret — the original is derived from the session and
+   * tab, so without this the only way back is to remember what it was and type
+   * it again.
+   */
+  function resetEditingName() {
+    if (editingIndex === null) return;
+    editingText = resolved[editingIndex]?.defaultName ?? '';
+  }
+
   function onNoteKeydown(e: KeyboardEvent) {
     // Handled here and stopped, so the list's own keys — digits jumping,
     // arrows moving, Delete removing — do not fire while typing a note.
@@ -222,6 +250,9 @@
     if (e.key === 'Enter') {
       e.preventDefault();
       commitEditing();
+    } else if (e.key === 'r' && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      resetEditingName();
     } else if (e.key === 'Escape') {
       e.preventDefault();
       cancelEditing();
@@ -452,6 +483,10 @@
                   </svg>
                 {/if}
               </span>
+              <!-- Hidden while this row is being edited: the field holds the
+                   same name, and showing both put the old one right beside
+                   what was being typed. -->
+              {#if editingIndex !== row.index}
               <span class="name">
                 {#if row.gradient}
                   <!-- A bare span, exactly as the sidebar does it. The
@@ -463,20 +498,30 @@
                   <span style={row.style}>{row.name}</span>
                 {/if}
               </span>
+              {/if}
               {#if editingIndex === row.index}
                 <!-- svelte-ignore a11y-click-events-have-key-events -->
                 <input
                   class="note-input"
                   bind:value={editingText}
-                  placeholder={$t('quickJump.notePlaceholder')}
+                  placeholder={$t('quickJump.namePlaceholder')}
                   on:keydown={onNoteKeydown}
                   on:blur={commitEditing}
                   on:click|stopPropagation
                 />
+                <!-- Mousedown, not click: blur fires first on a click and
+                     would commit the edit before the reset ran. -->
+                <button
+                  class="reset-btn"
+                  tabindex="-1"
+                  title={$t('quickJump.resetName')}
+                  on:mousedown|preventDefault|stopPropagation={resetEditingName}
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M3 12a9 9 0 1 0 3-6.7"/><polyline points="3 4 3 9 8 9"/>
+                  </svg>
+                </button>
               {:else}
-                {#if row.note}
-                  <span class="note">— {row.note}</span>
-                {/if}
                 <!-- Before the context, not after: the button only appears on
                      the row under the cursor, and behind the session name it
                      moved that name sideways as the cursor passed. -->
@@ -484,7 +529,7 @@
                 <button
                   class="note-btn"
                   tabindex="-1"
-                  title={$t('quickJump.editNote')}
+                  title={$t('quickJump.rename')}
                   on:click|stopPropagation={() => startEditing(row.index)}
                 >
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -617,6 +662,23 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     opacity: 0.8;
+  }
+
+  .reset-btn {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    padding: 4px;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    color: inherit;
+    opacity: 0.6;
+    cursor: pointer;
+  }
+  .reset-btn:hover {
+    opacity: 1;
+    background: rgba(255, 255, 255, 0.1);
   }
 
   .note-input {

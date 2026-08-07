@@ -1072,7 +1072,7 @@
   "settings.shellSection": "Kabuk",
   "quickJump.title": "Hızlı atlama",
   "quickJump.empty": "Henüz boş. Geçerli sekmeyi Alt+J ile ekleyin.",
-  "quickJump.hint": "1–9 atla · ↑↓ hareket · Alt+↑↓ sırala · F2 not · Enter git · Del kaldır",
+  "quickJump.hint": "1–9 atla · ↑↓ hareket · Alt+↑↓ sırala · F2 yeniden adlandır · Enter git · Del kaldır",
   "quickJump.tab": "sekme",
   "quickJump.session": "oturum",
   "quickJump.unavailable": "kullanılamıyor",
@@ -1086,6 +1086,10 @@
   "quickJump.addSessionDesc": "Orada açık bıraktığınız sekmeye gider",
   "sessionMenu.addToQuickJump": "Hızlı atlamaya ekle",
   "tabBar.addToQuickJump": "Hızlı atlamaya ekle",
-  "quickJump.editNote": "Not (F2)",
-  "quickJump.notePlaceholder": "Bu ne için?"
+  "quickJump.nameTitle": "Bu girdiyi adlandır",
+  "quickJump.nameQuestion": "Listede ne olarak görünsün?",
+  "quickJump.namePlaceholder": "Tanıyacağın bir ad",
+  "quickJump.renameTitle": "Girdiyi yeniden adlandır",
+  "quickJump.rename": "Yeniden adlandır (F2)",
+  "quickJump.resetName": "Önerilen adı geri getir (Ctrl+R)"
 }

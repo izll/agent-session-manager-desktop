@@ -1072,7 +1072,7 @@
   "settings.shellSection": "Shell",
   "quickJump.title": "Quick jump",
   "quickJump.empty": "Nothing here yet. Add the tab you are on with Alt+J.",
-  "quickJump.hint": "1–9 jump · ↑↓ move · Alt+↑↓ reorder · F2 note · Enter go · Del remove",
+  "quickJump.hint": "1–9 jump · ↑↓ move · Alt+↑↓ reorder · F2 rename · Enter go · Del remove",
   "quickJump.tab": "tab",
   "quickJump.session": "session",
   "quickJump.unavailable": "unavailable",
@@ -1086,6 +1086,10 @@
   "quickJump.addSessionDesc": "Lands on whichever tab you had open there",
   "sessionMenu.addToQuickJump": "Add to quick jump",
   "tabBar.addToQuickJump": "Add to quick jump",
-  "quickJump.editNote": "Add a note (F2)",
-  "quickJump.notePlaceholder": "What is this one for?"
+  "quickJump.nameTitle": "Name this entry",
+  "quickJump.nameQuestion": "What should it be called in the list?",
+  "quickJump.namePlaceholder": "A name you will recognise",
+  "quickJump.renameTitle": "Rename entry",
+  "quickJump.rename": "Rename (F2)",
+  "quickJump.resetName": "Restore the suggested name (Ctrl+R)"
 }

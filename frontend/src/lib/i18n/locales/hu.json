@@ -1072,7 +1072,7 @@
   "settings.shellSection": "Parancsértelmező",
   "quickJump.title": "Gyors ugrás",
   "quickJump.empty": "Még üres. Az aktuális fület az Alt+J-vel veheted fel.",
-  "quickJump.hint": "1–9 ugrás · ↑↓ mozgás · Alt+↑↓ átrendezés · F2 megjegyzés · Enter ugrás · Del törlés",
+  "quickJump.hint": "1–9 ugrás · ↑↓ mozgás · Alt+↑↓ átrendezés · F2 átnevezés · Enter ugrás · Del törlés",
   "quickJump.tab": "fül",
   "quickJump.session": "munkamenet",
   "quickJump.unavailable": "nem elérhető",
@@ -1086,6 +1086,10 @@
   "quickJump.addSessionDesc": "Arra a fülre visz, ahol legutóbb jártál benne",
   "sessionMenu.addToQuickJump": "Felvétel a gyors ugrásba",
   "tabBar.addToQuickJump": "Felvétel a gyors ugrásba",
-  "quickJump.editNote": "Megjegyzés (F2)",
-  "quickJump.notePlaceholder": "Mire való ez?"
+  "quickJump.nameTitle": "Bejegyzés neve",
+  "quickJump.nameQuestion": "Hogy hívjuk a listában?",
+  "quickJump.namePlaceholder": "Egy név, amit felismersz",
+  "quickJump.renameTitle": "Bejegyzés átnevezése",
+  "quickJump.rename": "Átnevezés (F2)",
+  "quickJump.resetName": "Eredeti név visszaállítása (Ctrl+R)"
 }

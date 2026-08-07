@@ -1072,7 +1072,7 @@
   "settings.shellSection": "Shell",
   "quickJump.title": "快速跳转",
   "quickJump.empty": "还是空的。用 Alt+J 添加当前标签页。",
-  "quickJump.hint": "1–9 跳转 · ↑↓ 移动 · Alt+↑↓ 排序 · F2 备注 · Enter 前往 · Del 移除",
+  "quickJump.hint": "1–9 跳转 · ↑↓ 移动 · Alt+↑↓ 排序 · F2 重命名 · Enter 前往 · Del 移除",
   "quickJump.tab": "标签",
   "quickJump.session": "会话",
   "quickJump.unavailable": "不可用",
@@ -1086,6 +1086,10 @@
   "quickJump.addSessionDesc": "跳到你在那里打开过的标签页",
   "sessionMenu.addToQuickJump": "加入快速跳转",
   "tabBar.addToQuickJump": "加入快速跳转",
-  "quickJump.editNote": "备注 (F2)",
-  "quickJump.notePlaceholder": "这个是做什么的？"
+  "quickJump.nameTitle": "为此项命名",
+  "quickJump.nameQuestion": "在列表中叫什么？",
+  "quickJump.namePlaceholder": "一个你认得出的名字",
+  "quickJump.renameTitle": "重命名此项",
+  "quickJump.rename": "重命名 (F2)",
+  "quickJump.resetName": "恢复建议的名称 (Ctrl+R)"
 }

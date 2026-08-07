@@ -1072,7 +1072,7 @@
   "settings.shellSection": "셸",
   "quickJump.title": "빠른 이동",
   "quickJump.empty": "아직 비어 있습니다. Alt+J로 현재 탭을 추가하세요.",
-  "quickJump.hint": "1–9 이동 · ↑↓ 커서 · Alt+↑↓ 순서 · F2 메모 · Enter 이동 · Del 제거",
+  "quickJump.hint": "1–9 이동 · ↑↓ 커서 · Alt+↑↓ 순서 · F2 이름 바꾸기 · Enter 이동 · Del 제거",
   "quickJump.tab": "탭",
   "quickJump.session": "세션",
   "quickJump.unavailable": "사용 불가",
@@ -1086,6 +1086,10 @@
   "quickJump.addSessionDesc": "거기서 열어두었던 탭으로 이동합니다",
   "sessionMenu.addToQuickJump": "빠른 이동에 추가",
   "tabBar.addToQuickJump": "빠른 이동에 추가",
-  "quickJump.editNote": "메모 (F2)",
-  "quickJump.notePlaceholder": "이건 무엇을 위한 건가요?"
+  "quickJump.nameTitle": "항목 이름 지정",
+  "quickJump.nameQuestion": "목록에서 어떤 이름으로 표시할까요?",
+  "quickJump.namePlaceholder": "알아볼 수 있는 이름",
+  "quickJump.renameTitle": "항목 이름 바꾸기",
+  "quickJump.rename": "이름 바꾸기 (F2)",
+  "quickJump.resetName": "제안된 이름으로 되돌리기 (Ctrl+R)"
 }

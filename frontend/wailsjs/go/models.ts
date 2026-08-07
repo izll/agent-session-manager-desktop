@@ -1826,7 +1826,7 @@ export namespace session {
 	export class QuickJumpEntry {
 	    sessionId: string;
 	    windowIdx: number;
-	    note?: string;
+	    label?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new QuickJumpEntry(source);
@@ -1836,7 +1836,7 @@ export namespace session {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.sessionId = source["sessionId"];
 	        this.windowIdx = source["windowIdx"];
-	        this.note = source["note"];
+	        this.label = source["label"];
 	    }
 	}
 	export class RestoreResult {
