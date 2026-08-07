@@ -1147,6 +1147,7 @@ export namespace main {
 	    agentDefaultTheme: string;
 	    shortcutOverrides: Record<string, any>;
 	    diffAboveHeight: number;
+	    dictationBuffer?: session.PanelGeometry;
 	    agentTerminalThemes: Record<string, string>;
 	    customTerminalThemes: session.CustomTerminalTheme[];
 	
@@ -1192,6 +1193,7 @@ export namespace main {
 	        this.agentDefaultTheme = source["agentDefaultTheme"];
 	        this.shortcutOverrides = source["shortcutOverrides"];
 	        this.diffAboveHeight = source["diffAboveHeight"];
+	        this.dictationBuffer = this.convertValues(source["dictationBuffer"], session.PanelGeometry);
 	        this.agentTerminalThemes = source["agentTerminalThemes"];
 	        this.customTerminalThemes = this.convertValues(source["customTerminalThemes"], session.CustomTerminalTheme);
 	    }
@@ -1809,6 +1811,24 @@ export namespace session {
 	    }
 	}
 	
+	export class PanelGeometry {
+	    x: number;
+	    y: number;
+	    w: number;
+	    h: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new PanelGeometry(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.x = source["x"];
+	        this.y = source["y"];
+	        this.w = source["w"];
+	        this.h = source["h"];
+	    }
+	}
 	export class Placeholder {
 	    name: string;
 	    default?: string;

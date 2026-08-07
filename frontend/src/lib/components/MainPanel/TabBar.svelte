@@ -94,6 +94,11 @@
     }
   }
 
+  // The same floor the resize handles enforce, so a stored rectangle cannot be
+  // restored to a size the user could not have dragged it to.
+  const MIN_BUFFER_W = 300;
+  const MIN_BUFFER_H = 150;
+
   // Buffer panel position & size (persists across show/hide while component alive)
   let bufferPanelX: number | null = null;
   let bufferPanelY: number | null = null;
@@ -132,6 +137,7 @@
     isDragging = false;
     document.removeEventListener('mousemove', onDragMove);
     document.removeEventListener('mouseup', onDragEnd);
+    rememberBufferGeometry();
   }
 
   // Resize state
@@ -173,18 +179,18 @@
     const dy = e.clientY - resizeStartY;
 
     if (resizeDir.includes('e')) {
-      bufferPanelW = Math.max(300, resizeStartW + dx);
+      bufferPanelW = Math.max(MIN_BUFFER_W, resizeStartW + dx);
     }
     if (resizeDir.includes('s')) {
-      bufferPanelH = Math.max(150, resizeStartH + dy);
+      bufferPanelH = Math.max(MIN_BUFFER_H, resizeStartH + dy);
     }
     if (resizeDir.includes('w')) {
-      const newW = Math.max(300, resizeStartW - dx);
+      const newW = Math.max(MIN_BUFFER_W, resizeStartW - dx);
       bufferPanelX = resizeStartLeft + (resizeStartW - newW);
       bufferPanelW = newW;
     }
     if (resizeDir.includes('n')) {
-      const newH = Math.max(150, resizeStartH - dy);
+      const newH = Math.max(MIN_BUFFER_H, resizeStartH - dy);
       bufferPanelY = resizeStartTop + (resizeStartH - newH);
       bufferPanelH = newH;
     }
@@ -195,6 +201,82 @@
     resizeDir = '';
     document.removeEventListener('mousemove', onResizeMove);
     document.removeEventListener('mouseup', onResizeEnd);
+    rememberBufferGeometry();
+  }
+
+  /**
+   * Keeping the buffer window where it was put.
+   *
+   * Stored as pixels rather than as a fraction of the window: it is a panel
+   * the user drags to a spot that suits them — beside the terminal, out of the
+   * way of something — and a proportion of a different-sized screen is not
+   * that spot. The cost of pixels is a saved position that no longer fits,
+   * which is corrected when it is applied rather than when it is stored.
+   */
+
+  /** Bring a remembered rectangle back inside the window it is opening in.
+   *
+   *  The screen it was saved on may be gone: a laptop undocked from a second
+   *  monitor, a window that was full-screen and now is not. Without this the
+   *  panel opens off-screen, and since it is dragged by its own header there
+   *  is no way to bring it back. */
+  function fitToViewport(rect: { x: number; y: number; w: number; h: number }) {
+    const maxW = Math.max(MIN_BUFFER_W, window.innerWidth - 16);
+    const maxH = Math.max(MIN_BUFFER_H, window.innerHeight - 16);
+    const w = Math.min(Math.max(rect.w, MIN_BUFFER_W), maxW);
+    const h = Math.min(Math.max(rect.h, MIN_BUFFER_H), maxH);
+    return {
+      w,
+      h,
+      // Clamped so at least the header stays reachable; a panel pushed fully
+      // past the edge cannot be dragged back.
+      x: Math.min(Math.max(rect.x, 0), Math.max(0, window.innerWidth - w)),
+      y: Math.min(Math.max(rect.y, 0), Math.max(0, window.innerHeight - h)),
+    };
+  }
+
+  function applyStoredBufferGeometry() {
+    const stored = $settings?.dictationBuffer;
+    if (!stored || !stored.w || !stored.h) return;
+    const fitted = fitToViewport({ x: stored.x, y: stored.y, w: stored.w, h: stored.h });
+    bufferPanelX = fitted.x;
+    bufferPanelY = fitted.y;
+    bufferPanelW = fitted.w;
+    bufferPanelH = fitted.h;
+  }
+
+  /**
+   * Pull the panel back inside a window that has shrunk.
+   *
+   * Not saved: a temporarily small window should not overwrite the size the
+   * user chose in a large one, or maximising again would leave the panel at
+   * whatever fitted while it was small.
+   */
+  function keepBufferOnScreen() {
+    if (bufferPanelX === null || bufferPanelY === null) return;
+    if (!bufferPanelW || !bufferPanelH) return;
+    const fitted = fitToViewport({
+      x: bufferPanelX, y: bufferPanelY, w: bufferPanelW, h: bufferPanelH,
+    });
+    bufferPanelX = fitted.x;
+    bufferPanelY = fitted.y;
+    bufferPanelW = fitted.w;
+    bufferPanelH = fitted.h;
+  }
+
+  /** Saved after a drag or resize ends, not during: a save per mousemove would
+   *  write the settings file dozens of times a second. */
+  function rememberBufferGeometry() {
+    if (bufferPanelX === null || bufferPanelY === null) return;
+    if (!bufferPanelW || !bufferPanelH) return;
+    saveSettings({
+      dictationBuffer: {
+        x: Math.round(bufferPanelX),
+        y: Math.round(bufferPanelY),
+        w: Math.round(bufferPanelW),
+        h: Math.round(bufferPanelH),
+      },
+    });
   }
 
   $: bufferPanelStyle = bufferPanelX !== null
@@ -271,6 +353,12 @@
     window.addEventListener('keydown', handleWindowTabKeydown, true);
     window.addEventListener('click', handleTabContextWindowClick);
     window.addEventListener('command:new-tab', handleCommandNewTab);
+    // The window can shrink under a panel that was placed in a larger one —
+    // the app resized, a monitor unplugged — and the panel is dragged by its
+    // own header, so once it is off-screen there is no way to fetch it back.
+    window.addEventListener('resize', keepBufferOnScreen);
+
+    applyStoredBufferGeometry();
 
     // Get initial dictation state
     try {
@@ -416,6 +504,7 @@
     window.removeEventListener('keydown', handleWindowTabKeydown, true);
     window.removeEventListener('click', handleTabContextWindowClick);
     window.removeEventListener('command:new-tab', handleCommandNewTab);
+    window.removeEventListener('resize', keepBufferOnScreen);
     stopPolling();
     if (dictationCleanup) {
       dictationCleanup();

@@ -56,6 +56,9 @@ export interface Settings {
   terminalFontFamily: string;
   /** What a plain terminal tab runs. Empty means the system default. */
   terminalShell: string;
+  /** Where the dictation buffer window was left, in pixels. Absent until it
+   *  has been moved or resized once. */
+  dictationBuffer?: { x: number; y: number; w: number; h: number } | null;
   /** What this platform offers for terminalShell; supplied by the backend. */
   shellChoices?: Array<{ command: string; label: string }>;
   /**

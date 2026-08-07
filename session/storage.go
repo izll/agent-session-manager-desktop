@@ -158,6 +158,24 @@ type Settings struct {
 	// Height in pixels of the diff pane shown above a view. Zero means the
 	// built-in default, so a config written before this existed opens at it.
 	DiffAboveHeight int `json:"diff_above_height,omitempty"`
+	// Where the dictation buffer window was left, in pixels. Stored so it
+	// stays where it was put across restarts; zero means the built-in default
+	// placement, so a config written before this existed opens at it.
+	//
+	// Kept as the size and position it was given rather than as a fraction of
+	// the window: it is a floating panel the user drags to a spot that suits
+	// them, and a proportion of a different-sized screen is not that spot.
+	// What that costs — a saved position that no longer fits — is corrected on
+	// the way out, not on the way in.
+	DictationBuffer *PanelGeometry `json:"dictation_buffer,omitempty"`
+}
+
+// PanelGeometry is a floating panel's remembered size and position.
+type PanelGeometry struct {
+	X int `json:"x"`
+	Y int `json:"y"`
+	W int `json:"w"`
+	H int `json:"h"`
 }
 
 type StorageData struct {
