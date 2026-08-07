@@ -105,6 +105,12 @@ export function GetFullDiffForFile(arg1:string,arg2:string,arg3:boolean):Promise
 
 export function GetGitBranch(arg1:string):Promise<main.GitBranchInfo>;
 
+export function GetGitCommitDiff(arg1:string,arg2:string,arg3:string,arg4:boolean):Promise<session.DiffFile>;
+
+export function GetGitCommitFiles(arg1:string,arg2:string):Promise<Array<session.DiffFileSummary>>;
+
+export function GetGitHistory(arg1:string,arg2:string,arg3:number):Promise<main.GitHistoryPage>;
+
 export function GetGroups():Promise<Array<main.GroupInfo>>;
 
 export function GetHistoryPreview(arg1:main.HistoryEntryInfo):Promise<string>;

@@ -405,6 +405,10 @@ func applyNameStatus(files []DiffFileSummary, out string) {
 // is not distinguishable in the plain output — git quotes those, and the quoted
 // form then has to be unescaped. With -z the fields are NUL-separated and the
 // paths are literal.
+// ParseNumstatZ is parseNumstatZ for callers outside the package: reading a
+// commit's file list needs the same parsing as reading a working tree's.
+func ParseNumstatZ(out string) []DiffFileSummary { return parseNumstatZ(out) }
+
 func parseNumstatZ(out string) []DiffFileSummary {
 	fields := strings.Split(out, "\x00")
 	var files []DiffFileSummary

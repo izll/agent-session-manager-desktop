@@ -206,6 +206,18 @@ export function GetGitBranch(arg1) {
   return window['go']['main']['App']['GetGitBranch'](arg1);
 }
 
+export function GetGitCommitDiff(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['GetGitCommitDiff'](arg1, arg2, arg3, arg4);
+}
+
+export function GetGitCommitFiles(arg1, arg2) {
+  return window['go']['main']['App']['GetGitCommitFiles'](arg1, arg2);
+}
+
+export function GetGitHistory(arg1, arg2, arg3) {
+  return window['go']['main']['App']['GetGitHistory'](arg1, arg2, arg3);
+}
+
 export function GetGroups() {
   return window['go']['main']['App']['GetGroups']();
 }

@@ -544,6 +544,74 @@ export namespace main {
 		    return a;
 		}
 	}
+	export class GitCommit {
+	    hash: string;
+	    shortHash: string;
+	    subject: string;
+	    body: string;
+	    author: string;
+	    email: string;
+	    committed: string;
+	    refs?: string[];
+	    parents?: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new GitCommit(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.hash = source["hash"];
+	        this.shortHash = source["shortHash"];
+	        this.subject = source["subject"];
+	        this.body = source["body"];
+	        this.author = source["author"];
+	        this.email = source["email"];
+	        this.committed = source["committed"];
+	        this.refs = source["refs"];
+	        this.parents = source["parents"];
+	    }
+	}
+	export class GitHistoryPage {
+	    path: string;
+	    repository: boolean;
+	    branch: string;
+	    commits: GitCommit[];
+	    hasMore: boolean;
+	    skip: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new GitHistoryPage(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.path = source["path"];
+	        this.repository = source["repository"];
+	        this.branch = source["branch"];
+	        this.commits = this.convertValues(source["commits"], GitCommit);
+	        this.hasMore = source["hasMore"];
+	        this.skip = source["skip"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class GroupInfo {
 	    id: string;
 	    name: string;

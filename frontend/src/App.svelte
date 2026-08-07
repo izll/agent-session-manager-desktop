@@ -17,6 +17,7 @@
   import { autoFocusDialog, autoFocusField } from './lib/utils/dialogActions';
   import LogDialog from './lib/components/Dialogs/LogDialog.svelte';
   import QuickJumpDialog from './lib/components/Dialogs/QuickJumpDialog.svelte';
+  import GitHistoryDialog from './lib/components/Dialogs/GitHistoryDialog.svelte';
   import RecoveryCenterDialog from './lib/components/Dialogs/RecoveryCenterDialog.svelte';
   import CommandPalette from './lib/components/Dialogs/CommandPalette.svelte';
   import CommandPickerDialog from './lib/components/Dialogs/CommandPickerDialog.svelte';
@@ -125,6 +126,7 @@
   let showSettingsDialog = false;
   let showLogDialog = false;
   let showQuickJump = false;
+  let showGitHistory = false;
   let showRecoveryCenter = false;
   let showCommandPalette = false;
   /** Saved-command library: Ctrl+P picker and its editor. */
@@ -163,7 +165,7 @@
     showNewSessionDialog || showNewGroupDialog || showGlobalSearch || showBgAgents ||
     showHelpDialog || showUpdateDialog || showImportDialog || showFileImportDialog ||
     showSettingsDialog || showRecoveryCenter || showCommandPalette || showColorDialog || showDeleteConfirm ||
-    showLogDialog || showQuickJump || quickJumpPrompt || quickJumpNaming ||
+    showLogDialog || showQuickJump || showGitHistory || quickJumpPrompt || quickJumpNaming ||
     showCommandPicker || showCommandManager || showTemplateDialog ||
     showQuitConfirm || showStopDialog || showStartDialog ||
     showResumeChoice || showResumeSessionPicker;
@@ -399,6 +401,10 @@
     quickJumpNaming = true;
   }
 
+  function handleShowGitHistory() {
+    showGitHistory = true;
+  }
+
   function handleQuickJumpAdd(e: CustomEvent<{ sessionId: string; windowIdx: number }>) {
     openQuickJumpNaming(e.detail.sessionId, e.detail.windowIdx);
   }
@@ -562,6 +568,11 @@
         e.preventDefault();
         if ($selectedSessionId) toggleFavorite($selectedSessionId);
         return;
+      case 'history.show':
+        e.preventDefault();
+        e.stopPropagation();
+        showGitHistory = true;
+        return;
       case 'quickJump.open':
         e.preventDefault();
         // stopPropagation as well: preventDefault only cancels the browser's
@@ -647,6 +658,7 @@
     window.addEventListener('keydown', handleKeydown, true);
     window.addEventListener('terminal-nav', handleTerminalNav as EventListener);
     window.addEventListener('quickjump:add', handleQuickJumpAdd as EventListener);
+    window.addEventListener('git:show-history', handleShowGitHistory);
     window.addEventListener('command:start-selected', handleCommandStart);
     window.addEventListener('command:stop-selected', handleCommandStop);
     window.addEventListener('command:templates', handleCommandTemplates as EventListener);
@@ -689,6 +701,7 @@
     window.removeEventListener('keydown', handleKeydown, true);
     window.removeEventListener('terminal-nav', handleTerminalNav as EventListener);
     window.removeEventListener('quickjump:add', handleQuickJumpAdd as EventListener);
+    window.removeEventListener('git:show-history', handleShowGitHistory);
     window.removeEventListener('command:start-selected', handleCommandStart);
     window.removeEventListener('command:stop-selected', handleCommandStop);
     window.removeEventListener('command:templates', handleCommandTemplates as EventListener);
@@ -1367,6 +1380,8 @@
       </div>
     </div>
   {/if}
+
+  <GitHistoryDialog bind:show={showGitHistory} path={$selectedSession?.path ?? ''} />
 
   <QuickJumpDialog
     bind:show={showQuickJump}

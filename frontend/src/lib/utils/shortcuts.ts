@@ -141,6 +141,13 @@ export const SHORTCUTS: Shortcut[] = [
     defaults: [{ key: '8', ctrl: true, shift: true }],
   },
   {
+    id: 'history.show',
+    category: 'other',
+    descKey: 'help.actionGitHistory',
+    // Not Ctrl+Shift+H, which opens the help; Y for "history" is free.
+    defaults: [{ key: 'y', ctrl: true, shift: true }],
+  },
+  {
     id: 'quickJump.open',
     category: 'navigation',
     descKey: 'help.actionQuickJump',
