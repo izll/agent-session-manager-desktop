@@ -1025,6 +1025,7 @@
   "diff.prevGoesTo": "Föregående ändring · tillbaka till {file}",
   "tasks.statusAll": "Alla statusar",
   "tasks.statusPending": "Väntar",
+  "tasks.pendingCount": "{count} uppgifter har inte påbörjats",
   "tasks.statusInProgress": "Pågår",
   "tasks.statusDone": "Klar",
   "tasks.statusBlocked": "Blockerad",

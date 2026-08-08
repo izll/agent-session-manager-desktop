@@ -1025,6 +1025,7 @@
   "diff.prevGoesTo": "이전 변경 · {file}(으)로 돌아감",
   "tasks.statusAll": "모든 상태",
   "tasks.statusPending": "대기 중",
+  "tasks.pendingCount": "아직 시작하지 않은 작업 {count}개",
   "tasks.statusInProgress": "진행 중",
   "tasks.statusDone": "완료",
   "tasks.statusBlocked": "차단됨",

@@ -1025,6 +1025,7 @@
   "diff.prevGoesTo": "Modification précédente · revient à {file}",
   "tasks.statusAll": "Tous les statuts",
   "tasks.statusPending": "En attente",
+  "tasks.pendingCount": "{count} tâches pas encore commencées",
   "tasks.statusInProgress": "En cours",
   "tasks.statusDone": "Terminé",
   "tasks.statusBlocked": "Bloqué",

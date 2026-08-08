@@ -1025,6 +1025,7 @@
   "diff.prevGoesTo": "التغيير السابق · يعود إلى {file}",
   "tasks.statusAll": "كل الحالات",
   "tasks.statusPending": "قيد الانتظار",
+  "tasks.pendingCount": "{count} مهام لم تبدأ بعد",
   "tasks.statusInProgress": "قيد التنفيذ",
   "tasks.statusDone": "منجز",
   "tasks.statusBlocked": "محجوب",

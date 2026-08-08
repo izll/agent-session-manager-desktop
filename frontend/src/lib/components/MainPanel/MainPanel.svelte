@@ -10,6 +10,10 @@
   import { sessions, selectedSessionId, selectedWindowIdx, selectSession, selectWindow, toggleAutoYes, cycleYoloMode } from '../../stores/sessions';
   import { agents } from '../../stores/agents';
   import { tabStatuses } from '../../stores/statusLines';
+  // For the count on the tasks tab. TaskPanel is mounted whether or not its
+  // view is open and loads on mount, so the number is right without anyone
+  // having opened it.
+  import { taskStats } from '../../stores/tasks';
   import { settings, saveSettings } from '../../stores/settings';
   import { gitBranch, refreshGitBranch, revalidateGitBranch } from '../../stores/gitBranch';
   import GitBranchBadge from '../common/GitBranchBadge.svelte';
@@ -573,6 +577,17 @@
               <path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
             </svg>
             {$t('mainPanel.tasks')}
+            <!-- How many tasks are still waiting to be started, so the number
+                 is visible without opening the view — the same reason the notes
+                 tab carries a dot. A count rather than a dot because the size
+                 of the backlog is the thing worth knowing, and hidden at zero,
+                 where a badge would only say there is nothing to say. -->
+            {#if $taskStats.pending > 0}
+              <span
+                class="tab-badge"
+                title={$t('tasks.pendingCount', { count: $taskStats.pending })}
+              >{$taskStats.pending}</span>
+            {/if}
           </button>
           <!-- Always offered: unlike the diff, a browser only needs a
                directory, and every session has one. -->
@@ -1149,6 +1164,31 @@
     background: var(--accent-light);
     opacity: 0.6;
     flex-shrink: 0;
+  }
+
+  /* The pending count on the tasks tab. A pill rather than a bare number, so a
+     two-digit backlog does not read as part of the label, and small enough that
+     it does not change the height of the row of tabs. */
+  .tab-badge {
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    background: rgba(156, 163, 175, 0.18);
+    color: #d1d5db;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    flex-shrink: 0;
+  }
+  /* On the open tab it takes the accent, as the label does. */
+  .view-tab.active .tab-badge {
+    background: rgba(var(--accent-rgb), 0.22);
+    color: var(--accent-light);
   }
 
   .status-divider {

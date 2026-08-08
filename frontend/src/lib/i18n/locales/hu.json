@@ -1025,6 +1025,7 @@
   "diff.prevGoesTo": "Előző eltérés · visszalép ide: {file}",
   "tasks.statusAll": "Minden állapot",
   "tasks.statusPending": "Függőben",
+  "tasks.pendingCount": "{count} feladat még nincs elkezdve",
   "tasks.statusInProgress": "Folyamatban",
   "tasks.statusDone": "Kész",
   "tasks.statusBlocked": "Blokkolva",

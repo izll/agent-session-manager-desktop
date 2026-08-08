@@ -1025,6 +1025,7 @@
   "diff.prevGoesTo": "前の変更・{file} へ戻る",
   "tasks.statusAll": "すべての状態",
   "tasks.statusPending": "未着手",
+  "tasks.pendingCount": "{count} 件のタスクが未着手です",
   "tasks.statusInProgress": "進行中",
   "tasks.statusDone": "完了",
   "tasks.statusBlocked": "ブロック中",

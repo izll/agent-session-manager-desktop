@@ -1025,6 +1025,7 @@
   "diff.prevGoesTo": "Предыдущее изменение · вернётся к {file}",
   "tasks.statusAll": "Все статусы",
   "tasks.statusPending": "Ожидает",
+  "tasks.pendingCount": "{count} задач ещё не начато",
   "tasks.statusInProgress": "В работе",
   "tasks.statusDone": "Готово",
   "tasks.statusBlocked": "Заблокировано",

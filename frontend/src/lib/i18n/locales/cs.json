@@ -1025,6 +1025,7 @@
   "diff.prevGoesTo": "Předchozí změna · vrátí se na {file}",
   "tasks.statusAll": "Všechny stavy",
   "tasks.statusPending": "Čeká",
+  "tasks.pendingCount": "{count} úkolů zatím nezačato",
   "tasks.statusInProgress": "Probíhá",
   "tasks.statusDone": "Hotovo",
   "tasks.statusBlocked": "Blokováno",

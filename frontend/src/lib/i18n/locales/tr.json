@@ -1025,6 +1025,7 @@
   "diff.prevGoesTo": "Önceki değişiklik · {file} dosyasına döner",
   "tasks.statusAll": "Tüm durumlar",
   "tasks.statusPending": "Beklemede",
+  "tasks.pendingCount": "{count} görev henüz başlamadı",
   "tasks.statusInProgress": "Devam ediyor",
   "tasks.statusDone": "Tamamlandı",
   "tasks.statusBlocked": "Engellendi",

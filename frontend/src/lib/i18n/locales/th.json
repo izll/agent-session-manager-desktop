@@ -1025,6 +1025,7 @@
   "diff.prevGoesTo": "การเปลี่ยนแปลงก่อนหน้า · ย้อนไปยัง {file}",
   "tasks.statusAll": "ทุกสถานะ",
   "tasks.statusPending": "รอดำเนินการ",
+  "tasks.pendingCount": "{count} งานยังไม่ได้เริ่ม",
   "tasks.statusInProgress": "กำลังดำเนินการ",
   "tasks.statusDone": "เสร็จแล้ว",
   "tasks.statusBlocked": "ถูกบล็อก",

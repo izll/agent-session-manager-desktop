@@ -1025,6 +1025,7 @@
   "diff.prevGoesTo": "上一处更改 · 返回 {file}",
   "tasks.statusAll": "所有状态",
   "tasks.statusPending": "待处理",
+  "tasks.pendingCount": "{count} 个任务尚未开始",
   "tasks.statusInProgress": "进行中",
   "tasks.statusDone": "已完成",
   "tasks.statusBlocked": "已阻塞",

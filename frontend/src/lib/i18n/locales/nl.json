@@ -1025,6 +1025,7 @@
   "diff.prevGoesTo": "Vorige wijziging · gaat terug naar {file}",
   "tasks.statusAll": "Alle statussen",
   "tasks.statusPending": "Openstaand",
+  "tasks.pendingCount": "{count} taken nog niet begonnen",
   "tasks.statusInProgress": "Bezig",
   "tasks.statusDone": "Klaar",
   "tasks.statusBlocked": "Geblokkeerd",

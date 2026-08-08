@@ -1025,6 +1025,7 @@
   "diff.prevGoesTo": "Thay đổi trước · quay lại {file}",
   "tasks.statusAll": "Mọi trạng thái",
   "tasks.statusPending": "Chờ xử lý",
+  "tasks.pendingCount": "{count} nhiệm vụ chưa bắt đầu",
   "tasks.statusInProgress": "Đang làm",
   "tasks.statusDone": "Xong",
   "tasks.statusBlocked": "Bị chặn",
