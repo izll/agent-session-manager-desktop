@@ -6,6 +6,30 @@ Entries describe what changed for someone using the app. Internal refactoring,
 test and CI work is left out unless it changed behaviour. Dates are release
 dates; the format follows [Keep a Changelog](https://keepachangelog.com).
 
+## 0.9.23 — 2026-08-08
+
+### Added
+
+- **A side-by-side diff, with the two sides scrolled independently.** The
+  columns are kept in step by what pairs with what, not by a shared position:
+  where one side has nothing to show — a run of new lines, or lines only
+  removed — it waits while the other runs past, and picks up again at the far
+  end. A band between the panes joins each change to what it replaced, in the
+  colour of the change and coming to a point on the side it does not appear
+  on, so "three lines became one" is read across rather than counted.
+- **Revert a single block, not just a whole hunk.** The `»` arrows now work in
+  the whole-file view as well, where a file arrives from git as one hunk and
+  reverting used to mean discarding every change in it. After a revert the
+  view returns to where that block was instead of jumping to the top of the
+  file.
+- **Switching tabs and back resumes the diff where you left it** — the file,
+  the scroll position, and the change you were stepping through.
+
+### Fixed
+
+- **Reverting a change at the very end of a file failed** with "patch does not
+  apply", leaving the change in place.
+
 ## 0.9.22 — 2026-08-07
 
 ### Added
