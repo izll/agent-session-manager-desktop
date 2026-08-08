@@ -6,6 +6,13 @@ Entries describe what changed for someone using the app. Internal refactoring,
 test and CI work is left out unless it changed behaviour. Dates are release
 dates; the format follows [Keep a Changelog](https://keepachangelog.com).
 
+## 0.9.24 — 2026-08-08
+
+### Added
+
+- **The tasks tab shows how many tasks are still waiting.** The size of a
+  session's backlog was only visible by opening the view.
+
 ## 0.9.23 — 2026-08-08
 
 ### Added
