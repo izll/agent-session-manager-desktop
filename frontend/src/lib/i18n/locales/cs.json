@@ -750,6 +750,7 @@
   "diff.revertFileAddedMessage": "{file} je nový soubor, takže vrácení jej SMAŽE z disku. Nebude možné jej obnovit.",
   "diff.revertHunkTitle": "Vrátit blok?",
   "diff.revertHunkMessage": "Tento blok ({header}) v {file} bude zahozen. Tuto akci nelze vrátit zpět.",
+  "diff.revertBlockMessage": "Tento blok v {file} bude zahozen a tyto řádky se vrátí do předchozího stavu. Tuto akci nelze vrátit zpět.",
   "diff.largeFileTitle": "Velký soubor ({count} změn)",
   "diff.largeFileHint": "Diff tohoto souboru je příliš velký na automatické zobrazení (může zamrznout rozhraní). Zobrazte jej jen pokud to opravdu potřebujete.",
   "diff.showAnyway": "Přesto zobrazit (prvních {count} řádků)",

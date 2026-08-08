@@ -750,6 +750,7 @@
   "diff.revertFileAddedMessage": "{file} è un file nuovo, quindi il ripristino lo ELIMINA dal disco. Non potrà essere recuperato.",
   "diff.revertHunkTitle": "Ripristinare il blocco?",
   "diff.revertHunkMessage": "Questo blocco ({header}) in {file} verrà scartato. Questa azione non può essere annullata.",
+  "diff.revertBlockMessage": "Questo blocco in {file} verrà scartato e quelle righe torneranno allo stato precedente. Questa operazione non può essere annullata.",
   "diff.largeFileTitle": "File grande ({count} modifiche)",
   "diff.largeFileHint": "Il diff di questo file è troppo grande per essere mostrato automaticamente (può bloccare l'interfaccia). Mostralo solo se ti serve davvero.",
   "diff.showAnyway": "Mostra comunque (prime {count} righe)",

@@ -284,6 +284,7 @@
   "diff.revertFileAddedMessage": "{file} is a new file, so reverting DELETES it from disk. It cannot be restored.",
   "diff.revertHunkTitle": "Revert hunk?",
   "diff.revertHunkMessage": "This block ({header}) in {file} will be discarded. This cannot be undone.",
+  "diff.revertBlockMessage": "This block in {file} will be discarded and those lines restored to their previous state. This cannot be undone.",
   "diff.largeFileTitle": "Large file ({count} changes)",
   "diff.largeFileHint": "This file's diff is too large to display automatically (it can freeze the UI). Only show it if you really need to.",
   "diff.showAnyway": "Show anyway (first {count} lines)",

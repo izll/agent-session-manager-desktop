@@ -16,6 +16,9 @@
   import { settings, saveSettings } from '../../stores/settings';
   import { buildTreeRows, type TreeRow } from '../../utils/fileTree';
   import { fileTypeOf } from '../../utils/fileTypes';
+  import { rememberPlace, recallPlace, noteListKey } from '../../utils/diffViewState';
+  import { buildBlockPatch } from '../../utils/blockPatch';
+  import { parseHunkHeader } from '../../utils/sideBySide';
 
   export let active = false;
   export let initialMode: 'session' | 'full' = 'session';
@@ -33,9 +36,6 @@
   // list is unchanged — reopening a file already looked at should be instant.
   let fileCache: Record<string, session.DiffFile | null> = {};
   let loadingFile = false;
-  // Identifies the current set of changes, so the cache is dropped when the
-  // files or their line counts move.
-  let listKey = '';
   let loading = false;
   let error = '';
   let lastSessionId: string | null = null;
@@ -156,6 +156,8 @@
     if (copyResetTimeout) clearTimeout(copyResetTimeout);
     // Leaving the tab mid-drag would otherwise strand the document listeners.
     stopPaneResize();
+    // Where the review had got to, so coming back resumes rather than restarts.
+    savePlace();
   });
 
   function resetCopyState() {
@@ -244,9 +246,15 @@
         { added: 0, removed: 0 }
       );
       const nextKey = summaries.map(f => `${f.path}:${f.added}:${f.removed}`).join('|');
-      if (listKey !== nextKey) {
+      // Compared against a record kept outside the component. Held inside, it
+      // came back empty after a tab switch, so the first load always looked
+      // like a change — dropping the very places the switch was meant to
+      // preserve, and the view never resumed.
+      //
+      // The places are forgotten with it: the files changed underneath, so the
+      // cached contents are stale, and so is any offset into them.
+      if (noteListKey(sessionId, nextKey)) {
         resetCopyState();
-        listKey = nextKey;
         fileCache = {};
       }
       diff = { content: '', added: totals.added, removed: totals.removed };
@@ -323,6 +331,9 @@
   }
 
   function selectFile(path: string) {
+    // Where the file being left had got to, so returning to it resumes. On
+    // destroy alone this was lost the moment another file was picked.
+    savePlace();
     selectedPath = path;
     rememberOpenFile(path);
     // Picking a file from the list is not stepping, so it carries no direction:
@@ -379,12 +390,169 @@
     if (reverting) return;
     revertTitle = $t('diff.revertHunkTitle');
     revertMessage = $t('diff.revertHunkMessage', { file: file.path, header: hunk.header });
+    // Where to look once the file is rewritten: the line the hunk starts at, in
+    // the old file's numbering, which is what reverting restores.
+    returnToLine = Math.max(1, parseHunkHeader(hunk.header).oldStart);
     // Send the patch back VERBATIM. Rebuilding it here would let a stale view
     // apply cleanly against a file that has since moved on — the round-trip is
     // exactly what makes git refuse.
     const patch = hunk.patch;
     pendingRevert = () => App.RevertDiffHunk(sessionIdForRevert(), patch);
     showRevertConfirm = true;
+  }
+
+  /**
+   * Revert one block of changes from the side-by-side view.
+   *
+   * In hunks-only view a hunk IS one change, so its own patch is sent back
+   * verbatim — the round trip is what makes git refuse a patch that no longer
+   * fits, and rebuilding it would lose that.
+   *
+   * Whole-file view asks git for the file as a single hunk, so that patch
+   * covers every change in the file and reverting one block would discard all
+   * of them. The arrows used to be disabled there for that reason, which left
+   * a button on screen that did nothing. Instead the patch is cut down to the
+   * block: see utils/blockPatch.
+   */
+  function askRevertBlock(detail: { hunkIndex: number; fromRow: number; toRow: number }) {
+    if (reverting || !selectedFile) return;
+    const hunk = selectedFile.hunks.find((h) => h.index === detail.hunkIndex);
+    if (!hunk) return;
+
+    if (!wholeFileView) {
+      askRevertHunk(selectedFile, hunk);
+      return;
+    }
+
+    // The rows the columns report are paired ones; the patch is built from the
+    // hunk's own lines, which pairing reorders.
+    const range = sideBySideView?.hunkRange(detail.fromRow, detail.toRow);
+    if (!range) return;
+
+    const { oldStart, newStart } = parseHunkHeader(hunk.header);
+    const patch = buildBlockPatch(
+      selectedFile.path,
+      selectedFile.oldPath || null,
+      // parseDiff keeps each line's leading +/-/space; the patch builder adds
+      // its own marker, so the original has to come off or every line would
+      // carry two.
+      parseDiff(hunk.body).map((line) => ({
+        type: line.type,
+        text: line.type === 'add' || line.type === 'remove' || line.type === 'context'
+          ? line.text.slice(1)
+          : line.text,
+      })),
+      oldStart,
+      newStart,
+      range.from,
+      range.to,
+    );
+    if (!patch) return;
+
+    /**
+     * Where to look after the file is rewritten.
+     *
+     * In the OLD file's numbering, which is what reverting restores. Walking
+     * the hunk to the block counts the lines that exist in that file: removals
+     * and context, not additions.
+     *
+     * The count lands ON the block's first line in the old file — the line the
+     * change happened at, which is exactly where to look. It is not the line
+     * ABOVE: subtracting one as well as scrolling it a third of the way down
+     * put the view consistently higher than the place being worked on.
+     */
+    const lines = parseDiff(hunk.body);
+    let blockLine = oldStart;
+    for (let at = 0; at < range.from; at++) {
+      if (lines[at].type === 'remove' || lines[at].type === 'context') blockLine++;
+    }
+    returnToLine = Math.max(1, blockLine);
+
+    revertTitle = $t('diff.revertHunkTitle');
+    revertMessage = $t('diff.revertBlockMessage', { file: selectedFile.path });
+    pendingRevert = () => App.RevertDiffHunk(sessionIdForRevert(), patch);
+    showRevertConfirm = true;
+  }
+
+  /**
+   * The line to come back to after a revert, in the file's NEW numbering.
+   *
+   * Reverting rewrites the file, so the diff is reloaded and the remembered
+   * scroll position is dropped with it — an offset into a file that has just
+   * changed lands somewhere arbitrary. That is right for a change made outside
+   * the app, but here the change is one the user just made, at a place they
+   * were looking at, and being thrown back to the top of a long file loses it.
+   *
+   * A line number rather than an offset: the reverted lines are gone, so every
+   * pixel below them has moved.
+   */
+  let returnToLine: number | null = null;
+
+  /**
+   * Go back to the line the reverted block sat under.
+   *
+   * The file has to be loaded again first: it was rewritten, and the view is
+   * rebuilt from the new contents. Only then does a line number mean anything.
+   */
+  async function returnAfterRevert() {
+    const line = returnToLine;
+    returnToLine = null;
+    if (line === null || !selectedPath) return;
+
+    await waitForFileLoad(selectedPath);
+    if (destroyed || !selectedPath) return;
+
+    if (sideBySide) {
+      await sideBySideView?.scrollToOldLine(line);
+      return;
+    }
+
+    // The unified renderers count lines of the DIFF, not of the file, and
+    // flatLines carries no line numbers — so the file's numbering is walked
+    // alongside it to find where that line ended up.
+    const at = unifiedPositionOf(line);
+    if (at < 0) return;
+    if (wholeFileView) {
+      await virtualLines?.scrollToLine(at);
+      return;
+    }
+    // The hunk list renders per hunk rather than per line, so the nearest thing
+    // to scroll to is the hunk that line now falls in.
+    const hunk = flatLines[at]?.hunkIndex ?? -1;
+    if (hunk >= 0) {
+      scrollToThird(hunkListEl, hunkListEl?.querySelector(`[data-hunk="${hunk}"]`) ?? null);
+    }
+  }
+
+  /**
+   * Where a line of the file sits among the diff's lines.
+   *
+   * flatLines holds the diff, not the file, and carries no line numbers, so the
+   * file's numbering is walked alongside it.
+   *
+   * The OLD file's numbering, matching what the revert restores and what
+   * returnToLine records: added lines do not exist in it and so do not advance
+   * the count; removed and unchanged ones do. Walking the new numbering instead
+   * put the view off by however many lines the file had gained above the point
+   * being looked for.
+   */
+  function unifiedPositionOf(fileLine: number): number {
+    let number = 0;
+    for (let at = 0; at < flatLines.length; at++) {
+      const type = flatLines[at].type;
+      if (type === 'header' || type === 'meta') {
+        // A hunk header restarts the count wherever that hunk begins.
+        if (type === 'header') {
+          const parsed = parseHunkHeader(flatLines[at].html.replace(/<[^>]*>/g, ''));
+          number = parsed.oldStart - 1;
+        }
+        continue;
+      }
+      if (type === 'add') continue;
+      number++;
+      if (number >= fileLine) return at;
+    }
+    return -1;
   }
 
   function sessionIdForRevert(): string {
@@ -402,6 +570,12 @@
       error = '';
       // Refresh so the view reflects what's actually on disk now.
       await loadDiff();
+      if (destroyed) return;
+      // And come back to where the reverted block was. loadDiff drops the
+      // remembered position, rightly — the file has changed — but the change is
+      // one just made here, at a place being looked at, so returning to the top
+      // of a long file loses it.
+      await returnAfterRevert();
     } catch (e) {
       if (destroyed) return;
       // A failed revert must be visible — the Go message explains that the file
@@ -413,6 +587,9 @@
 
   function cancelRevert() {
     pendingRevert = null;
+    // Nothing was rewritten, so there is nowhere to return to — left set, it
+    // would move the view on whatever reloaded the diff next.
+    returnToLine = null;
   }
 
   // --- Rendering ----------------------------------------------------------
@@ -659,13 +836,21 @@
   // Typed loosely: the component's instance type is only used for two exported
   // methods, and importing it as a type as well as a value is more ceremony
   // than the two calls are worth.
-  let virtualLines: { scrollToLine(i: number, lines?: number): Promise<void> } | null = null;
+  let virtualLines: {
+    scrollToLine(i: number, lines?: number): Promise<void>;
+    scrollOffset(): number;
+    restoreOffset(top: number): Promise<void>;
+  } | null = null;
   /** The hunk-list scroller. The whole-file view has VirtualLines to scroll
    *  for it; this one is an ordinary element and has to be told. */
   let hunkListEl: HTMLDivElement | null = null;
   let sideBySideView: {
     scrollToRow(row: number, count?: number): void;
     changeRows(): Array<{ from: number; to: number }>;
+    hunkRange(from: number, to: number): { from: number; to: number } | null;
+    scrollToOldLine(number: number): Promise<void>;
+    scrollOffset(): number;
+    restoreOffset(top: number): Promise<void>;
   } | null = null;
 
   /**
@@ -933,6 +1118,101 @@
   }
 
   /**
+   * Where the review is, and putting it back after a tab switch.
+   *
+   * The component is destroyed when the tab changes — the mount points are in
+   * exclusive branches — so the scroll position and the change being stepped
+   * through go with it, and coming back landed at the top of the file. The
+   * state lives in a module for that reason; see utils/diffViewState.
+   *
+   * Which scroller answers depends on the renderer on screen, and the three do
+   * not share a coordinate system, so the mode is part of what is stored.
+   */
+  function currentScrollOffset(): number {
+    if (sideBySide) return sideBySideView?.scrollOffset() ?? 0;
+    if (wholeFileView) return virtualLines?.scrollOffset() ?? 0;
+    return hunkListEl?.scrollTop ?? 0;
+  }
+
+  /** The renderer showing, since an offset means nothing in a different one. */
+  $: viewMode = sideBySide ? 'sbs' : wholeFileView ? 'whole' : 'hunks';
+
+  /**
+   * The last offset seen while scrolling, and what it belongs to.
+   *
+   * Read as it changes rather than on the way out. By the time onDestroy runs
+   * Svelte has already unbound the child components, so asking them where they
+   * were scrolled to returns nothing — the position saved was always 0, and a 0
+   * is indistinguishable from "at the top", so nothing was ever restored.
+   */
+  let lastOffset = 0;
+  let lastOffsetFor = '';
+  /** What the tracked offset belongs to. The separator cannot occur in a path,
+   *  so no two file-and-renderer pairs spell the same string. */
+  const offsetOwner = (path: string, mode: string) => `${path}\x1f${mode}`;
+
+  function trackScroll() {
+    if (!selectedPath) return;
+    lastOffset = currentScrollOffset();
+    lastOffsetFor = offsetOwner(selectedPath, viewMode);
+  }
+
+  function savePlace() {
+    const sessionId = get(selectedSessionId);
+    if (!sessionId || !selectedPath) return;
+
+    /**
+     * Prefer a live reading, fall back to the tracked one.
+     *
+     * While the component is running the scrollers can be asked directly, and
+     * that is the most current answer. During teardown they answer 0, which is
+     * why the tracked value exists.
+     *
+     * Chosen on the ANSWER, not on whether the component reference still
+     * exists. At teardown that reference is still set while the DOM element
+     * inside it is already gone, so the scroller reports 0 and looks perfectly
+     * bound — and the tracked 2816 was thrown away in favour of it.
+     *
+     * A live 0 is genuinely "at the top", and the tracked value would be 0
+     * there too, so preferring the tracked one when the live reading is 0
+     * costs nothing. It is only usable if it belongs to the file and renderer
+     * on screen now; switching either leaves a reading from the previous one.
+     */
+    const fresh = lastOffsetFor === offsetOwner(selectedPath, viewMode);
+    const scrollTop = currentScrollOffset() || (fresh ? lastOffset : 0);
+
+    rememberPlace(sessionId, selectedPath, viewMode, { scrollTop, currentHunk, markedHunk });
+  }
+
+  /**
+   * Put the view back where it was left, if it has been here before.
+   *
+   * Runs after the reset above rather than instead of it, so a file opened for
+   * the first time still starts before its first change.
+   */
+  async function restorePlace(path: string, mode: string) {
+    const sessionId = get(selectedSessionId);
+    if (!sessionId) return;
+    const place = recallPlace(sessionId, path, mode);
+    if (!place) return;
+
+    currentHunk = place.currentHunk;
+    markedHunk = place.markedHunk;
+
+    if (place.scrollTop <= 0) return;
+    // The content has to be in place before an offset means anything: restoring
+    // into an empty list is clamped to nothing and lands at the top.
+    await waitForFileLoad(path);
+    // A step, another file, or a change of renderer taking over while that
+    // loaded owns the position now — the offset belongs to the mode it was
+    // taken in, and means nothing in a different one.
+    if (selectedPath !== path || viewMode !== mode) return;
+    if (sideBySide) await sideBySideView?.restoreOffset(place.scrollTop);
+    else if (wholeFileView) await virtualLines?.restoreOffset(place.scrollTop);
+    else if (hunkListEl) hunkListEl.scrollTop = place.scrollTop;
+  }
+
+  /**
    * A file arrived at any other way starts before its first change.
    *
    * Stepping into one claims the path itself, so this cannot fire for it. Both
@@ -942,11 +1222,20 @@
    * between the step setting the path and setting the position.
    */
   let hunkCursorFor = '';
-  $: if (selectedPath && selectedPath !== hunkCursorFor && !pendingEntry) {
+  // viewMode is read here so Svelte orders this after it. Svelte works out the
+  // order by READING the statement, and it cannot see through the call to
+  // restorePlace — which does read viewMode. Without the mention this can run
+  // first, and the lookup goes to a key that was never written.
+  $: if (selectedPath && selectedPath !== hunkCursorFor && !pendingEntry && viewMode) {
     hunkCursorFor = selectedPath;
+    // A file the review had already been through resumes where it was left; one
+    // arrived at for the first time starts before its first change. Assigned
+    // before the await so a step arriving in between is not overwritten by a
+    // reset for a file it has already moved on from.
     currentHunk = -1;
     markedHunk = -1;
     atFileEdge = null;
+    void restorePlace(selectedPath, viewMode);
   }
 
   // Keyboard stepping, matched against the configured bindings so it follows a
@@ -1453,7 +1742,14 @@
               on:click={() => stepChange(1)}
             >↓ {hintBelow}</button>
           {/if}
-        <div class="diff-content">
+        <!-- The side-by-side view scrolls its own two panes, so this must not
+             scroll as well. Left as a scroller it was the ONLY one that moved:
+             the panes are sized to it, and with no height to fill they grew to
+             their content instead of scrolling, so both columns rode this one
+             scrollbar together — exactly the shared position the two-scroller
+             layout exists to avoid, and the columns drifted apart at the first
+             insertion. -->
+        <div class="diff-content" class:columns={sideBySide}>
           {#if !selectedFile}
             <div class="diff-state no-diff">
               <span>{$t('diff.selectFile')}</span>
@@ -1484,11 +1780,8 @@
           {:else if sideBySide}
             <SideBySideDiff
               bind:this={sideBySideView}
-              canRevert={!wholeFileView}
-              on:revert={(e) => {
-                const hunk = selectedFile?.hunks.find((h) => h.index === e.detail.hunkIndex);
-                if (selectedFile && hunk) askRevertHunk(selectedFile, hunk);
-              }}
+              canRevert={true}
+              on:revert={(e) => askRevertBlock(e.detail)}
               hunks={wholeFileView
                 ? wholeFileColumns
                 : renderedHunks.map((view) => ({
@@ -1500,7 +1793,8 @@
                       html: highlightLine(line.text, lineLanguage),
                     })),
                   }))}
-              currentHunk={currentHunkIndex}
+              currentChange={markedHunk}
+              on:viewscroll={trackScroll}
             />
           {:else if wholeFileView}
             <!-- The whole file, virtualised: every line is in the list but only
@@ -1512,10 +1806,13 @@
                 lines={flatLines}
                 blockFrom={markedBlock.from}
                 blockTo={markedBlock.to}
+                on:viewscroll={trackScroll}
               />
             </div>
           {:else}
-            <div class="diff-lines" bind:this={hunkListEl}>
+            <!-- Tracked as it scrolls: by the time the tab switch tears this
+                 down there is nothing left to read the position from. -->
+            <div class="diff-lines" bind:this={hunkListEl} on:scroll={trackScroll}>
               {#each renderedHunks as view (view.hunk.index)}
                 <div
                   class="hunk"
@@ -2216,6 +2513,16 @@
     font-size: 13px;
     user-select: text;
     -webkit-user-select: text;
+  }
+  /* The columns scroll themselves, so this must not. Laid out as a flex column
+     as well, so the view inside is given a definite height to fill: sized to
+     its content instead, it has nothing to scroll within and both columns end
+     up riding the outer scrollbar together. */
+  .diff-content.columns {
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
   }
 
   .diff-state {

@@ -750,6 +750,7 @@
   "diff.revertFileAddedMessage": "{file} is een nieuw bestand, dus terugzetten VERWIJDERT het van de schijf. Het kan niet worden hersteld.",
   "diff.revertHunkTitle": "Blok terugzetten?",
   "diff.revertHunkMessage": "Dit blok ({header}) in {file} wordt weggegooid. Dit kan niet ongedaan worden gemaakt.",
+  "diff.revertBlockMessage": "Dit blok in {file} wordt verworpen en die regels worden hersteld naar hun vorige staat. Dit kan niet ongedaan worden gemaakt.",
   "diff.largeFileTitle": "Groot bestand ({count} wijzigingen)",
   "diff.largeFileHint": "De diff van dit bestand is te groot om automatisch te tonen (dit kan de interface laten vastlopen). Toon het alleen als je het echt nodig hebt.",
   "diff.showAnyway": "Toch tonen (eerste {count} regels)",

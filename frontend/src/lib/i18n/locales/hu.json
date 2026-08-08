@@ -280,6 +280,7 @@
   "diff.revertFileAddedMessage": "A(z) {file} új fájl, ezért a visszavonás TÖRLI a lemezről. Nem lesz visszaállítható.",
   "diff.revertHunkTitle": "Visszavonod a blokkot?",
   "diff.revertHunkMessage": "A(z) {file} fájl ezen blokkja ({header}) elveszik. Ezt nem lehet visszacsinálni.",
+  "diff.revertBlockMessage": "Ez a blokk a(z) {file} fájlban eldobásra kerül, és az érintett sorok visszaállnak a korábbi állapotukra. Ez nem vonható vissza.",
   "diff.largeFileTitle": "Nagy fájl ({count} változás)",
   "diff.largeFileHint": "Ennek a fájlnak a diffje túl nagy az automatikus megjelenítéshez (megfagyaszthatja a felületet). Csak akkor jelenítsd meg, ha tényleg szükséges.",
   "diff.showAnyway": "Mégis megjelenítés (első {count} sor)",

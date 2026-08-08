@@ -73,6 +73,9 @@
 
   function onScroll() {
     if (viewport) scrollTop = viewport.scrollTop;
+    // Announced so the position can be recorded while it is still readable: on
+    // the way out the binding is already gone.
+    dispatch('viewscroll');
   }
 
   function measure() {
@@ -115,6 +118,27 @@
   /** The first line index currently on screen, for "which hunk am I on". */
   export function firstVisibleLine(): number {
     return Math.floor(scrollTop / lineHeight);
+  }
+
+  /** The exact offset, for putting the view back where it was after a tab
+   *  switch destroyed and rebuilt it. Not firstVisibleLine(): that rounds to a
+   *  line, and restoring from it would nudge the file every time. */
+  export function scrollOffset(): number {
+    return scrollTop;
+  }
+
+  /**
+   * Put the view back at an offset it was at before.
+   *
+   * Without the tick the height is not yet in place — the list is rendered from
+   * `slice`, which the reset above has just emptied — and the assignment is
+   * clamped to a scrollHeight that does not exist yet, landing at the top.
+   */
+  export async function restoreOffset(top: number) {
+    if (!viewport || top <= 0) return;
+    await tick();
+    viewport.scrollTop = top;
+    scrollTop = viewport.scrollTop;
   }
 </script>
 

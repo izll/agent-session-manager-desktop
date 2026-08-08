@@ -750,6 +750,7 @@
   "diff.revertFileAddedMessage": "{file} là tệp mới, nên việc hoàn tác sẽ XÓA tệp khỏi ổ đĩa. Tệp không thể khôi phục lại.",
   "diff.revertHunkTitle": "Hoàn tác khối này?",
   "diff.revertHunkMessage": "Khối này ({header}) trong {file} sẽ bị loại bỏ. Hành động này không thể hoàn tác.",
+  "diff.revertBlockMessage": "Khối này trong {file} sẽ bị loại bỏ và các dòng đó sẽ trở về trạng thái trước. Không thể hoàn tác thao tác này.",
   "diff.largeFileTitle": "Tệp lớn ({count} thay đổi)",
   "diff.largeFileHint": "Nội dung so sánh của tệp này quá lớn để hiển thị tự động (có thể làm treo giao diện). Chỉ hiển thị nếu bạn thực sự cần.",
   "diff.showAnyway": "Vẫn hiển thị ({count} dòng đầu)",

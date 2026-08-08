@@ -750,6 +750,7 @@
   "diff.revertFileAddedMessage": "{file} to nowy plik, więc cofnięcie USUWA go z dysku. Nie będzie można go odzyskać.",
   "diff.revertHunkTitle": "Cofnąć blok?",
   "diff.revertHunkMessage": "Ten blok ({header}) w {file} zostanie odrzucony. Tej operacji nie można cofnąć.",
+  "diff.revertBlockMessage": "Ten blok w {file} zostanie odrzucony, a te wiersze wrócą do poprzedniego stanu. Tej operacji nie można cofnąć.",
   "diff.largeFileTitle": "Duży plik (zmiany: {count})",
   "diff.largeFileHint": "Różnice w tym pliku są zbyt duże, aby wyświetlić je automatycznie (może to zawiesić interfejs). Wyświetl je tylko wtedy, gdy naprawdę tego potrzebujesz.",
   "diff.showAnyway": "Pokaż mimo to (pierwsze wiersze: {count})",

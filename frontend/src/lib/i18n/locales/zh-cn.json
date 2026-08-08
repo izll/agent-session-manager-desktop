@@ -750,6 +750,7 @@
   "diff.revertFileAddedMessage": "{file} 是新文件，因此还原会将其从磁盘上删除，且无法恢复。",
   "diff.revertHunkTitle": "还原代码块？",
   "diff.revertHunkMessage": "{file} 中的此代码块（{header}）将被丢弃。此操作无法撤销。",
+  "diff.revertBlockMessage": "{file} 中的这个代码块将被放弃，相关行将恢复到之前的状态。此操作无法撤销。",
   "diff.largeFileTitle": "大文件（{count} 处更改）",
   "diff.largeFileHint": "此文件的差异过大，无法自动显示（可能导致界面卡死）。仅在确实需要时才显示。",
   "diff.showAnyway": "仍然显示（前 {count} 行）",

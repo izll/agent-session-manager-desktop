@@ -889,7 +889,11 @@
               {/if}
 
             {#if sideBySide}
-              <SideBySideDiff bind:this={sideBySideView} hunks={sideBySideHunks} />
+              <SideBySideDiff
+                bind:this={sideBySideView}
+                hunks={sideBySideHunks}
+                currentChange={markedChange}
+              />
             {:else}
             <div class="diff-pane" bind:this={diffEl}>
               {#if diffLoading}

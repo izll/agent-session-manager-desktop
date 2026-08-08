@@ -750,6 +750,7 @@
   "diff.revertFileAddedMessage": "{file} est un nouveau fichier, l'annulation le SUPPRIME donc du disque. Il ne pourra pas être restauré.",
   "diff.revertHunkTitle": "Annuler ce bloc ?",
   "diff.revertHunkMessage": "Ce bloc ({header}) dans {file} sera abandonné. Cette action est irréversible.",
+  "diff.revertBlockMessage": "Ce bloc dans {file} sera abandonné et ces lignes reviendront à leur état précédent. Cette action est irréversible.",
   "diff.largeFileTitle": "Fichier volumineux ({count} modifications)",
   "diff.largeFileHint": "Le diff de ce fichier est trop volumineux pour être affiché automatiquement (il peut figer l'interface). Ne l'affiche que si c'est vraiment nécessaire.",
   "diff.showAnyway": "Afficher quand même ({count} premières lignes)",

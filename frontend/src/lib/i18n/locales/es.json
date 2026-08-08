@@ -750,6 +750,7 @@
   "diff.revertFileAddedMessage": "{file} es un archivo nuevo, por lo que revertir lo ELIMINA del disco. No se podrá recuperar.",
   "diff.revertHunkTitle": "¿Revertir bloque?",
   "diff.revertHunkMessage": "Este bloque ({header}) en {file} se descartará. Esto no se puede deshacer.",
+  "diff.revertBlockMessage": "Este bloque en {file} se descartará y esas líneas volverán a su estado anterior. Esto no se puede deshacer.",
   "diff.largeFileTitle": "Archivo grande ({count} cambios)",
   "diff.largeFileHint": "El diff de este archivo es demasiado grande para mostrarse automáticamente (puede bloquear la interfaz). Muéstralo solo si realmente lo necesitas.",
   "diff.showAnyway": "Mostrar de todos modos (primeras {count} líneas)",

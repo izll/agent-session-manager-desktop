@@ -750,6 +750,7 @@
   "diff.revertFileAddedMessage": "{file} ist eine neue Datei, das Verwerfen LÖSCHT sie daher von der Festplatte. Sie kann nicht wiederhergestellt werden.",
   "diff.revertHunkTitle": "Block verwerfen?",
   "diff.revertHunkMessage": "Dieser Block ({header}) in {file} wird verworfen. Das kann nicht rückgängig gemacht werden.",
+  "diff.revertBlockMessage": "Dieser Block in {file} wird verworfen und die betroffenen Zeilen werden auf ihren vorherigen Stand zurückgesetzt. Dies kann nicht rückgängig gemacht werden.",
   "diff.largeFileTitle": "Große Datei ({count} Änderungen)",
   "diff.largeFileHint": "Der Diff dieser Datei ist zu groß, um automatisch angezeigt zu werden (das kann die Oberfläche einfrieren). Zeige ihn nur an, wenn du ihn wirklich brauchst.",
   "diff.showAnyway": "Trotzdem anzeigen (erste {count} Zeilen)",

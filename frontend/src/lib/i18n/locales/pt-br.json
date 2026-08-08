@@ -750,6 +750,7 @@
   "diff.revertFileAddedMessage": "{file} é um arquivo novo, então reverter o EXCLUI do disco. Ele não poderá ser recuperado.",
   "diff.revertHunkTitle": "Reverter bloco?",
   "diff.revertHunkMessage": "Este bloco ({header}) em {file} será descartado. Isso não pode ser desfeito.",
+  "diff.revertBlockMessage": "Este bloco em {file} será descartado e essas linhas voltarão ao estado anterior. Isso não pode ser desfeito.",
   "diff.largeFileTitle": "Arquivo grande ({count} alterações)",
   "diff.largeFileHint": "O diff deste arquivo é grande demais para ser exibido automaticamente (pode travar a interface). Exiba apenas se você realmente precisar.",
   "diff.showAnyway": "Exibir mesmo assim (primeiras {count} linhas)",

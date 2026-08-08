@@ -750,6 +750,7 @@
   "diff.revertFileAddedMessage": "{file}은(는) 새 파일이므로 되돌리면 디스크에서 삭제됩니다. 복구할 수 없습니다.",
   "diff.revertHunkTitle": "블록을 되돌릴까요?",
   "diff.revertHunkMessage": "{file}의 이 블록({header})이 삭제됩니다. 이 작업은 되돌릴 수 없습니다.",
+  "diff.revertBlockMessage": "{file}의 이 블록이 취소되고 해당 줄이 이전 상태로 복원됩니다. 이 작업은 되돌릴 수 없습니다.",
   "diff.largeFileTitle": "큰 파일(변경사항 {count}개)",
   "diff.largeFileHint": "이 파일의 변경사항이 너무 커서 자동으로 표시하지 않습니다(화면이 멈출 수 있음). 꼭 필요할 때만 표시하세요.",
   "diff.showAnyway": "그래도 표시(처음 {count}줄)",

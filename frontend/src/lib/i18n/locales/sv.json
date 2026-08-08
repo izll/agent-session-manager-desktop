@@ -750,6 +750,7 @@
   "diff.revertFileAddedMessage": "{file} är en ny fil, så att återställa RADERAR den från disken. Den kan inte återskapas.",
   "diff.revertHunkTitle": "Återställa blocket?",
   "diff.revertHunkMessage": "Det här blocket ({header}) i {file} kastas. Detta kan inte ångras.",
+  "diff.revertBlockMessage": "Det här blocket i {file} kasseras och raderna återställs till sitt tidigare tillstånd. Detta kan inte ångras.",
   "diff.largeFileTitle": "Stor fil ({count} ändringar)",
   "diff.largeFileHint": "Filens diff är för stor för att visas automatiskt (det kan låsa gränssnittet). Visa den bara om du verkligen behöver.",
   "diff.showAnyway": "Visa ändå (första {count} raderna)",

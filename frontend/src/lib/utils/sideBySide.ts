@@ -105,3 +105,67 @@ export function buildSideBySide(
 
   return rows;
 }
+
+/** One side's lines, with the row each belongs to. */
+export interface SideLine {
+  number: number | null;
+  html: string | null;
+  kind: 'context' | 'change' | 'header';
+  /** Which paired row this line belongs to, for keeping the sides in step. */
+  row: number;
+}
+
+/**
+ * Split paired rows into two independent columns.
+ *
+ * The paired form fills the shorter side with blanks so both columns have the
+ * same number of rows. That is what lets one grid hold them, and it is also
+ * why a pure insertion shows a screenful of nothing on the left.
+ *
+ * Read as two separate columns instead, each holds only its own lines, and
+ * they are kept in step by scrolling rather than by padding — so the side with
+ * nothing to show simply waits while the other runs through the insertion,
+ * which is what IntelliJ does and what makes a long insertion readable.
+ */
+export function splitSides(rows: SideBySideRow[]): { left: SideLine[]; right: SideLine[] } {
+  const left: SideLine[] = [];
+  const right: SideLine[] = [];
+
+  rows.forEach((row, index) => {
+    if (row.kind === 'header') {
+      left.push({ number: null, html: row.oldHtml, kind: 'header', row: index });
+      right.push({ number: null, html: row.oldHtml, kind: 'header', row: index });
+      return;
+    }
+    if (row.oldHtml !== null) {
+      left.push({ number: row.oldNumber, html: row.oldHtml, kind: row.kind, row: index });
+    }
+    if (row.newHtml !== null) {
+      right.push({ number: row.newNumber, html: row.newHtml, kind: row.kind, row: index });
+    }
+  });
+
+  return { left, right };
+}
+
+/**
+ * Where the other side should sit when one side is scrolled to a given line.
+ *
+ * Both sides walk the same paired rows, so a line on one side names a row, and
+ * that row names a position on the other. Where the other side has no line for
+ * that row — an insertion, read from the side that lacks it — the answer is
+ * the last line it does have: it stays put while the other runs on, and picks
+ * up again when the run ends. That waiting is the whole point of two scrollers
+ * rather than one grid.
+ */
+export function matchingLine(from: SideLine[], to: SideLine[], index: number): number {
+  const row = from[Math.min(Math.max(index, 0), from.length - 1)]?.row;
+  if (row === undefined) return 0;
+
+  let best = 0;
+  for (let at = 0; at < to.length; at++) {
+    if (to[at].row > row) break;
+    best = at;
+  }
+  return best;
+}

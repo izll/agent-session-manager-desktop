@@ -27,7 +27,7 @@ writeFileSync(js, execFileSync('npx', ['esbuild', '--loader=ts', '--format=esm']
   cwd: new URL('..', import.meta.url).pathname,
 }));
 
-const { buildSideBySide, parseHunkHeader } = await import(js);
+const { buildSideBySide, parseHunkHeader, splitSides, matchingLine } = await import(js);
 
 // The header is where both columns get their first line number.
 {
@@ -116,4 +116,138 @@ const line = (type, html) => ({ type, html });
   assert.deepEqual(rows.map((r) => r.newHtml), ['one', 'two', 'kept']);
 }
 
+
+
+// Two independent columns, kept in step by scrolling rather than by padding.
+//
+// Paired rows fill the shorter side with blanks so one grid can hold both —
+// which is also why a long insertion shows a screenful of nothing on the left.
+// Split into two columns, each holds only its own lines, and the side with
+// nothing to show waits while the other runs through the insertion.
+{
+  const rows = buildSideBySide('@@ -1,2 +1,5 @@', [
+    line('context', 'top'),
+    line('add', 'new1'),
+    line('add', 'new2'),
+    line('add', 'new3'),
+    line('context', 'bottom'),
+  ]);
+  const { left, right } = splitSides(rows);
+
+  assert.deepEqual(
+    left.map((l) => l.html),
+    ['top', 'bottom'],
+    'the left column holds only its own lines, with no blanks for the insertion',
+  );
+  assert.deepEqual(
+    right.map((l) => l.html),
+    ['top', 'new1', 'new2', 'new3', 'bottom'],
+  );
+
+  // Scrolling the right side down through the insertion: the left stays on
+  // 'top' until the insertion ends, then moves on. That is the waiting.
+  assert.equal(matchingLine(right, left, 0), 0, 'the shared first line matches');
+  assert.equal(matchingLine(right, left, 1), 0, 'the left waits at the line before the insertion');
+  assert.equal(matchingLine(right, left, 3), 0, 'it is still waiting at the end of the insertion');
+  assert.equal(matchingLine(right, left, 4), 1, 'and moves on once the insertion is past');
+
+  // And the other way: the left has fewer lines, so scrolling it maps to where
+  // each line sits on the right.
+  assert.equal(matchingLine(left, right, 0), 0);
+  assert.equal(matchingLine(left, right, 1), 4, 'the line after the insertion is four rows down');
+}
+
 console.log('sideBySide: ok');
+
+/**
+ * Where a changed block's outline goes, per column.
+ *
+ * The rule is the neighbour WITHIN the column: a block that is three lines on
+ * one side and one on the other has to be boxed as three there and one here,
+ * and the paired-row boundary falls in the middle of nothing on the shorter
+ * side. Row numbers separate blocks that are merely adjacent in this column
+ * because the lines between them live on the other side.
+ */
+{
+  const mark = (lines) => lines.map((line, at) => {
+    const changed = line.kind === 'change';
+    const previous = lines[at - 1];
+    const next = lines[at + 1];
+    return {
+      html: line.html,
+      first: changed && !(previous?.kind === 'change' && previous.row === line.row - 1),
+      last: changed && !(next?.kind === 'change' && next.row === line.row + 1),
+    };
+  });
+
+  // Three lines replaced by two: three boxed on the left, two on the right.
+  {
+    const { left, right } = splitSides(buildSideBySide('@@ -1,5 +1,4 @@', [
+      line('context', 'a'),
+      line('remove', 'o1'), line('remove', 'o2'), line('remove', 'o3'),
+      line('add', 'n1'), line('add', 'n2'),
+      line('context', 'b'),
+    ]));
+    assert.deepEqual(
+      mark(left).map((l) => [l.first, l.last]),
+      [[false, false], [true, false], [false, false], [false, true], [false, false]],
+      'the left box spans all three removed lines',
+    );
+    assert.deepEqual(
+      mark(right).map((l) => [l.first, l.last]),
+      [[false, false], [true, false], [false, true], [false, false]],
+      'the right box spans both added lines, not three',
+    );
+  }
+
+  // A pure insertion leaves the left with no block to outline at all.
+  {
+    const { left } = splitSides(buildSideBySide('@@ -1,2 +1,4 @@', [
+      line('context', 'a'), line('add', 'n1'), line('add', 'n2'), line('context', 'b'),
+    ]));
+    assert.deepEqual(
+      mark(left).map((l) => l.first || l.last),
+      [false, false],
+      'nothing to box on a side the block does not appear on',
+    );
+  }
+
+  // Two changes with one unchanged line between them are two boxes, not one.
+  {
+    const { left } = splitSides(buildSideBySide('@@ -1,5 +1,5 @@', [
+      line('context', 'a'),
+      line('remove', 'o1'), line('add', 'n1'),
+      line('context', 'mid'),
+      line('remove', 'o2'), line('add', 'n2'),
+      line('context', 'b'),
+    ]));
+    assert.deepEqual(
+      mark(left).map((l) => [l.first, l.last]),
+      [[false, false], [true, true], [false, false], [true, true], [false, false]],
+      'two separate one-line blocks',
+    );
+  }
+
+  // The hard one: a deletion and an insertion with nothing between them are
+  // adjacent in the right column but are two blocks.
+  {
+    const { right } = splitSides(buildSideBySide('@@ -1,5 +1,6 @@', [
+      line('context', 'a'),
+      line('remove', 'o1'), line('remove', 'o2'),
+      line('add', 'n1'), line('add', 'n2'),
+      line('context', 'b'),
+      line('add', 'n3'),
+      line('context', 'c'),
+    ]));
+    const marked = mark(right);
+    assert.deepEqual(
+      [marked[1].first, marked[2].last],
+      [true, true],
+      'the replacement is one box',
+    );
+    const lone = marked.find((l) => l.html === 'n3');
+    assert.deepEqual([lone.first, lone.last], [true, true], 'the later insertion is its own box');
+  }
+}
+
+console.log('sideBySide edges: ok');

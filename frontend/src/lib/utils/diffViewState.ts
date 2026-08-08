@@ -1,0 +1,104 @@
+/**
+ * Where the diff view was left, so switching tabs and back resumes it.
+ *
+ * The Diff component is destroyed on a tab switch — the mount points are in
+ * exclusive branches — so its scroll position and the change it was stepping
+ * through die with it. Coming back reset the file to the top, which in a long
+ * review means finding your place again on every glance at the terminal.
+ *
+ * Module state rather than a store or a setting: nothing renders from it, so a
+ * store would only add subscriptions, and it is worth exactly as long as the
+ * window is open. The file that was open IS persisted (settings.diffLastFile),
+ * because that survives a restart usefully; a scroll offset into a diff that
+ * may have changed underneath does not.
+ *
+ * Keyed by session and file, so two sessions reviewed in turn keep their own
+ * places.
+ */
+
+/** What a single file's review was in the middle of. */
+export interface FileState {
+  /** The scroller's offset in px. */
+  scrollTop: number;
+  /** Which change the stepping was on, and which one the marker named. -1 for
+   *  none, as in the component. */
+  currentHunk: number;
+  markedHunk: number;
+}
+
+const places = new Map<string, FileState>();
+
+/**
+ * The field separator: a unit separator, which cannot occur in a session id or
+ * a path, so no two different triples can spell the same key. Written as an
+ * escape because the character itself is invisible in an editor.
+ */
+const SEP = '\x1f';
+
+function key(sessionId: string, path: string, mode: string): string {
+  // The mode is part of the key: the whole-file and hunks-only views lay the
+  // same file out differently, so an offset from one means nothing in the other.
+  return `${sessionId}${SEP}${mode}${SEP}${path}`;
+}
+
+/** Remember where a file was left. */
+export function rememberPlace(
+  sessionId: string,
+  path: string,
+  mode: string,
+  state: FileState,
+): void {
+  if (!sessionId || !path) return;
+  places.set(key(sessionId, path, mode), state);
+}
+
+/** Where a file was left, or null if it has not been open. */
+export function recallPlace(
+  sessionId: string,
+  path: string,
+  mode: string,
+): FileState | null {
+  if (!sessionId || !path) return null;
+  return places.get(key(sessionId, path, mode)) ?? null;
+}
+
+/**
+ * Forget a session's places.
+ *
+ * Called when a diff is reloaded from disk: the file may have changed, and an
+ * offset into the version just replaced would land somewhere arbitrary — the
+ * point of remembering is to return to the same place, not the same number.
+ */
+export function forgetSession(sessionId: string): void {
+  if (!sessionId) return;
+  const prefix = `${sessionId}${SEP}`;
+  for (const at of [...places.keys()]) {
+    if (at.startsWith(prefix)) places.delete(at);
+  }
+}
+
+/**
+ * What the diff looked like when its places were recorded.
+ *
+ * Held here rather than in the component for the same reason the places are:
+ * the component is destroyed on a tab switch, so a copy inside it comes back
+ * empty. Empty, every list looks changed, and the first load after the switch
+ * forgot the places it was meant to restore — the position never came back.
+ *
+ * Keyed by session, since two sessions have different diffs.
+ */
+const listKeys = new Map<string, string>();
+
+/**
+ * Record the current shape of a session's diff, and say whether it changed.
+ *
+ * The caller drops its caches on a change; the places go with them, since an
+ * offset into a file that has been rewritten means nothing.
+ */
+export function noteListKey(sessionId: string, listKey: string): boolean {
+  if (!sessionId) return false;
+  const changed = listKeys.get(sessionId) !== listKey;
+  listKeys.set(sessionId, listKey);
+  if (changed) forgetSession(sessionId);
+  return changed;
+}

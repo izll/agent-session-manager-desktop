@@ -750,6 +750,7 @@
   "diff.revertFileAddedMessage": "{file} yeni bir dosya, bu yüzden geri alma onu diskten SİLER. Geri getirilemez.",
   "diff.revertHunkTitle": "Blok geri alınsın mı?",
   "diff.revertHunkMessage": "{file} dosyasındaki bu blok ({header}) atılacak. Bu işlem geri alınamaz.",
+  "diff.revertBlockMessage": "{file} dosyasındaki bu blok atılacak ve bu satırlar önceki durumuna dönecek. Bu işlem geri alınamaz.",
   "diff.largeFileTitle": "Büyük dosya ({count} değişiklik)",
   "diff.largeFileHint": "Bu dosyanın farkı otomatik gösterilemeyecek kadar büyük (arayüzü dondurabilir). Yalnızca gerçekten gerekiyorsa göster.",
   "diff.showAnyway": "Yine de göster (ilk {count} satır)",

@@ -18,3 +18,6 @@ dictation/api_usage_log.json
 # Test binary that `go test` leaves in the package root; the real build
 # output goes to build/bin.
 /asmgr-desktop
+
+# IDE settings — per-developer, not per-project.
+.idea/
