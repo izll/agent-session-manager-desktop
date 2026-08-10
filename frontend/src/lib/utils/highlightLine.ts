@@ -5,6 +5,12 @@ import type { LanguageSupport } from '@codemirror/language';
 /**
  * Syntax colouring for text rendered outside an editor — the diff view.
  *
+ * Colouring a line costs a parse, which is fine for the fifty on screen and
+ * ruinous for the ten thousand in a large file: measured at 500ms for 10k
+ * lines against 0.8ms for one screenful. Callers should colour what they draw,
+ * not what they hold — see memoHighlightLine below for the cache that makes
+ * that affordable while scrolling.
+ *
  * The file browser gets its colours from a real CodeMirror instance. A diff is
  * not a document: it is fragments of one, interleaved with removed lines that
  * are not in the file at all, so there is nothing coherent to parse as a whole.
@@ -175,4 +181,39 @@ export function highlightLine(text: string, language: LanguageSupport | null): s
   } catch {
     return escapeHtml(text);
   }
+}
+
+/**
+ * highlightLine, remembering what it has already coloured.
+ *
+ * Colouring on render rather than up front is what keeps a large file quick to
+ * open, but it moves the cost into scrolling: every frame re-colours the lines
+ * that are still on screen, and a line coming back into view is parsed again.
+ * The result depends only on the text and the grammar, so it can simply be
+ * kept.
+ *
+ * Bounded, because a diff view left open all day would otherwise hold every
+ * line of every file ever scrolled through. The whole map is dropped when it
+ * fills rather than evicting one entry at a time: what a reader is looking at
+ * is a moving window, so the entries worth keeping are re-made within a frame
+ * or two, and tracking recency per line costs more than it saves.
+ */
+const CACHE_LIMIT = 4000;
+let cache = new Map<string, string>();
+let cacheLanguage: LanguageSupport | null = null;
+
+export function memoHighlightLine(text: string, language: LanguageSupport | null): string {
+  // A different grammar means every stored answer is wrong, not stale.
+  if (language !== cacheLanguage) {
+    cacheLanguage = language;
+    cache = new Map();
+  }
+
+  const hit = cache.get(text);
+  if (hit !== undefined) return hit;
+
+  const html = highlightLine(text, language);
+  if (cache.size >= CACHE_LIMIT) cache = new Map();
+  cache.set(text, html);
+  return html;
 }

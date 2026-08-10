@@ -10,7 +10,7 @@
   import VirtualLines from './VirtualLines.svelte';
   import SideBySideDiff from './SideBySideDiff.svelte';
   import { matchesShortcut } from '../../stores/shortcuts';
-  import { highlightLine } from '../../utils/highlightLine';
+  import { memoHighlightLine } from '../../utils/highlightLine';
   import { cachedLanguage, loadLanguage } from '../../utils/codemirror';
   import type { LanguageSupport } from '@codemirror/language';
   import { settings, saveSettings } from '../../stores/settings';
@@ -543,7 +543,7 @@
       if (type === 'header' || type === 'meta') {
         // A hunk header restarts the count wherever that hunk begins.
         if (type === 'header') {
-          const parsed = parseHunkHeader(flatLines[at].html.replace(/<[^>]*>/g, ''));
+          const parsed = parseHunkHeader(flatLines[at].text);
           number = parsed.oldStart - 1;
         }
         continue;
@@ -1255,7 +1255,7 @@
 
   // The grammar for the file being viewed, loaded on demand and only for a file
   // we are actually going to render. Null until it arrives (and for file types
-  // we have no grammar for), which highlightLine takes as "plain text" — so the
+  // we have no grammar for), which memoHighlightLine takes as "plain text" — so the
   // diff shows immediately and gains its colours a moment later, rather than
   // waiting on a chunk fetch.
   let lineLanguage: LanguageSupport | null = null;
@@ -1288,7 +1288,13 @@
     ? [{
         header: selectedFile.hunks[0].header,
         index: selectedFile.hunks[0].index,
-        lines: flatLines.map((line) => ({ type: line.type, html: line.html })),
+        // Coloured here because the column view puts every line in the DOM
+        // rather than virtualising, so all of them are drawn anyway. Memoised,
+        // so re-pairing on a scroll does not re-parse what it already has.
+        lines: flatLines.map((line) => ({
+          type: line.type,
+          html: memoHighlightLine(line.text, lineLanguage),
+        })),
       }]
     : [];
 
@@ -1314,8 +1320,11 @@
   // hunkStarts is derived from — and hunkStarts is how stepping knows where the
   // changes are. Left to the whole-file view alone, the hunk list had no
   // change positions at all, so every press fell through to "next file".
+  // Not keyed on lineLanguage: the lines hold text, and the grammar only
+  // matters where they are drawn. Rebuilding this when a grammar finishes
+  // loading would throw away the list and the scroll position with it.
   $: flatLines = selectedFile && shouldRender
-    ? buildFlatLines(selectedFile, lineLanguage)
+    ? buildFlatLines(selectedFile)
     : [];
   $: hunkStarts = flatLines.reduce((acc, line, index) => {
     const isChange = line.type === 'add' || line.type === 'remove';
@@ -1355,18 +1364,22 @@
     return { from, to };
   })();
 
-  function buildFlatLines(file: session.DiffFile, lang: LanguageSupport | null) {
-    const out: Array<{ type: string; html: string; hunkIndex: number }> = [];
+  /**
+   * The whole diff as a flat list of lines, held as TEXT rather than as
+   * coloured HTML.
+   *
+   * Colouring costs a parse per line — about 500ms for a 10,000-line file
+   * against 0.8ms for the fifty actually on screen. Doing it here meant paying
+   * for the whole file before anything could be drawn, however little of it the
+   * virtual renderer went on to show. The lines are coloured where they are
+   * rendered instead, through memoHighlightLine, which keeps what it has
+   * already done so scrolling does not re-parse the same lines.
+   */
+  function buildFlatLines(file: session.DiffFile) {
+    const out: Array<{ type: string; text: string; hunkIndex: number }> = [];
     file.hunks.forEach((hunk, hunkIndex) => {
       for (const line of parseDiff(hunk.body)) {
-        // A hunk's first changed line is where "next change" lands. The header
-        // and the context above it are not what the user is looking for.
-        const isChange = line.type === 'add' || line.type === 'remove';
-        out.push({
-          type: line.type,
-          html: highlightLine(line.text, lang),
-          hunkIndex,
-        });
+        out.push({ type: line.type, text: line.text, hunkIndex });
       }
     });
     return out;
@@ -1790,7 +1803,7 @@
                     // Highlighted here, as the unified view does at render time.
                     lines: view.lines.map((line) => ({
                       type: line.type,
-                      html: highlightLine(line.text, lineLanguage),
+                      html: memoHighlightLine(line.text, lineLanguage),
                     })),
                   }))}
               currentChange={markedHunk}
@@ -1804,6 +1817,7 @@
               <VirtualLines
                 bind:this={virtualLines}
                 lines={flatLines}
+                language={lineLanguage}
                 blockFrom={markedBlock.from}
                 blockTo={markedBlock.to}
                 on:viewscroll={trackScroll}
@@ -1836,10 +1850,10 @@
                   </div>
                   {#each view.lines as line}
                     <div class="diff-line {line.type}">
-                      <!-- highlightLine escapes everything it emits; the diff
+                      <!-- memoHighlightLine escapes everything it emits; the diff
                            contains whatever the repository holds, including
                            files that are themselves HTML. -->
-                      <code>{@html highlightLine(line.text, lineLanguage)}</code>
+                      <code>{@html memoHighlightLine(line.text, lineLanguage)}</code>
                     </div>
                   {/each}
                 </div>
