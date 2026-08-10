@@ -345,22 +345,63 @@ assert.ok(arrow, 'the .revert-arrow rule is missing');
 assert.doesNotMatch(arrow[1], /--accent/, 'the arrow should not take the accent over a coloured band');
 
 /**
- * The left pane's scrollbar is hidden.
+ * The left pane has no vertical scrollbar, and its wheel is forwarded.
  *
- * It sits on that pane's right edge — between the code and the strip — and cuts
- * every band away from the block it joins. The panes move together, so one bar
- * says everything two would, and the right one is on the outer edge where it
- * interrupts nothing.
+ * A vertical bar takes its width out of the pane's usable area, and the rows
+ * end where that area ends — so scrolled fully right a bar-shaped stripe of
+ * background sat beyond them, uncoloured (measured: 460px visible against 444px
+ * usable). Painting the bar transparent does not help, the space is still
+ * taken; reserving it with a border is worse, since a border is outside the
+ * scrollable box and the tint stops before it too.
  *
- * Hidden, not disabled: the pane still scrolls by wheel and keyboard, and is
- * still what the right pane is synchronised against.
+ * overflow-y: hidden still allows scrollTop from the sync — it only stops the
+ * user scrolling directly — but it also lets the wheel pass through to whatever
+ * is behind, so that has to be handled.
  */
-assert.match(source, /<div class="pane left"/, 'the left pane needs to be identifiable');
-const leftPane = source.match(/\.pane\.left \{([\s\S]*?)\n {2}\}/);
+assert.match(source, /class="pane left"/, 'the left pane needs to be identifiable');
+const leftPane = source.match(/\n {2}\.pane\.left \{([\s\S]*?)\n {2}\}/);
 assert.ok(leftPane, 'the .pane.left rule is missing');
-assert.match(leftPane[1], /scrollbar-width: none/, 'hidden for standard scrollbars');
-assert.match(source, /\.pane\.left::-webkit-scrollbar \{/, 'and for WebKit, which is what ships here');
-// overflow stays auto — hiding the bar must not stop the pane scrolling, or the
+assert.match(leftPane[1], /overflow-y: hidden/, 'a vertical bar costs the width the rows need');
+assert.doesNotMatch(
+  source,
+  /border-right: var\(--scrollbar-width/,
+  'a border is outside the scrollable box, so the row tint stops before it',
+);
+assert.doesNotMatch(
+  source,
+  /scrollbar-width: none/,
+  'that takes the horizontal bar too, and that one is how a long line is scrolled',
+);
+
+// The wheel has to be forwarded, or it scrolls whatever is behind the pane.
+assert.match(source, /on:wheel=\{onLeftWheel\}/, 'the left pane needs its wheel handled');
+const wheel = source.match(/function onLeftWheel\(([\s\S]*?)\n {2}\}/);
+assert.ok(wheel, 'onLeftWheel is missing');
+assert.match(wheel[0], /rightEl\.scrollTop = wanted/, 'the movement goes to the pane that can scroll');
+assert.match(wheel[0], /syncFrom\('right'\)/, 'and the left is brought along by the sync');
+// At the end of the file the wheel should still reach the panel behind, as it
+// would in any other scroller.
+assert.match(
+  wheel[0],
+  /if \(wanted === before\) return;/,
+  'a wheel that would move nothing must not be swallowed',
+);
+
+// The pane still scrolls: the sync reads and writes scrollTop on it.
+const paneRule = source.match(/\n {2}\.pane \{([\s\S]*?)\n {2}\}/);
+assert.match(paneRule[1], /overflow: auto/, 'the pane must still scroll');
+
+// The line numbers carry their own line's tint. Opaque so other lines do not
+// show through while scrolling, but a changed line whose number sits on plain
+// grey reads as a ruler beside the diff rather than part of the row.
+assert.match(source, /\.sbs-line\.removed \.gutter \{/, 'a removed line tints its number too');
+assert.match(source, /\.sbs-line\.added \.gutter \{/, 'and an added one');
+assert.doesNotMatch(
+  source,
+  /scrollbar-width: none/,
+  'that hides both axes, taking the horizontal bar with it',
+);
+// overflow stays auto — hiding a bar must not stop the pane scrolling, or the
 // synchronisation has nothing to read.
 const pane = source.match(/\n {2}\.pane \{([\s\S]*?)\n {2}\}/);
 assert.match(pane[1], /overflow: auto/, 'the pane must still scroll');
@@ -401,9 +442,55 @@ assert.match(
  * right edge: the added/removed tint and the block outline stopped dead partway
  * along the line, with the code carrying on past them.
  */
-const row = source.match(/\n {2}\.sbs-line \{([\s\S]*?)\n {2}\}/);
-assert.ok(row, 'the .sbs-line rule is missing');
-assert.match(row[1], /min-width: max-content/, 'a row must reach the end of its own text');
+const lines = source.match(/\n {2}\.lines \{([\s\S]*?)\n {2}\}/);
+assert.ok(lines, 'the .lines container is missing');
+assert.match(lines[1], /width: max-content/, 'the container takes the width of the longest line');
+assert.match(lines[1], /min-width: 100%/, 'and fills the pane when the file is narrow');
+// On the rows themselves this sizes each to its OWN text, so a short changed
+// line's tint ends at the pane edge while longer lines carry on past it.
+assert.doesNotMatch(
+  source.match(/\n {2}\.sbs-line \{([\s\S]*?)\n {2}\}/)[1],
+  /min-width: max-content/,
+  'sized per row, a short row is narrower than the pane scrolls',
+);
+assert.match(source, /<div class="lines"/, 'both panes need the container');
+
+/**
+ * The container is stretched to what the pane actually scrolls.
+ *
+ * `width: max-content` gets close but not exact: the webview settled it at
+ * 874px while its own contents came to 881, so scrolled fully right seven
+ * pixels sat past the end of every row as a stripe the tint could not reach.
+ * Nothing in the box model accounts for it — no padding, border or scrollbar —
+ * and Chromium does not reproduce it, so it is measured rather than derived.
+ */
+assert.match(
+  source,
+  /min-width: \$\{leftWidth\}px/,
+  'the left container needs the measured width',
+);
+assert.match(source, /min-width: \$\{rightWidth\}px/, 'and the right one');
+const measure = source.match(/function measureWidths\(\)([\s\S]*?)\n {2}\}/);
+assert.ok(measure, 'measureWidths is missing');
+// Assigned unconditionally this runs away: the min-width widens the pane's
+// scrollWidth, which is then measured again as the new target.
+assert.match(
+  measure[0],
+  /leftEl\.scrollWidth > leftWidth/,
+  'the width may only grow towards what the pane already scrolls',
+);
+// And a new file is a new width, or the widest line of the previous one keeps
+// the panes scrolling past the end of this one.
+assert.match(
+  source,
+  /leftWidth = 0;\s*\n\s*rightWidth = 0;/,
+  'a new file must clear the measured widths',
+);
+assert.match(
+  source,
+  /tick\(\)\.then\(measureWidths\)/,
+  'and measure again once it has been laid out',
+);
 // min-width: 0 on the code would let it shrink below its text and undo that.
 const code = source.match(/\n {2}\.code \{([\s\S]*?)\n {2}\}/);
 assert.ok(code, 'the .code rule is missing');

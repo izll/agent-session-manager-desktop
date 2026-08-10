@@ -14,7 +14,7 @@
    * insertion, and moves on at the far end. That waiting is the behaviour, and
    * it is what IntelliJ does.
    */
-  import { createEventDispatcher, tick } from 'svelte';
+  import { createEventDispatcher, onMount, tick } from 'svelte';
   import { t } from '../../i18n';
   import {
     buildSideBySide,
@@ -46,8 +46,38 @@
    *  ribbons placed, by arithmetic on it. */
   const ROW_HEIGHT = 19;
 
+  // A file too narrow to scroll never fires one, so measure on mount too.
+  onMount(measureWidths);
+
+
   let leftEl: HTMLDivElement | null = null;
   let rightEl: HTMLDivElement | null = null;
+
+  /**
+   * How wide each pane's rows have to be, in px.
+   *
+   * `width: max-content` gets a container close but not exact: in the webview
+   * it settled at 874px while its own contents came to 881, so scrolled fully
+   * right seven pixels sat past the end of every row as a stripe the tint could
+   * not reach. Nothing in the box model accounts for it — no padding, border or
+   * scrollbar — and Chromium does not reproduce it, so it is measured rather
+   * than derived.
+   *
+   * scrollWidth is what the pane will actually scroll through, which is the
+   * width the rows must fill to reach its far edge.
+   */
+  let leftWidth = 0;
+  let rightWidth = 0;
+
+  function measureWidths() {
+    // Only ever grows to what the pane already scrolls, and only when it is
+    // short of it. Assigned unconditionally this runs away: the min-width
+    // widens the pane's scrollWidth, which is then measured again as the new
+    // target, a pixel or two larger every scroll.
+    if (leftEl && leftEl.scrollWidth > leftWidth) leftWidth = leftEl.scrollWidth;
+    if (rightEl && rightEl.scrollWidth > rightWidth) rightWidth = rightEl.scrollWidth;
+  }
+
 
   /**
    * How far each pane is scrolled, tracked separately.
@@ -77,6 +107,16 @@
   );
 
   $: sides = splitSides(paired);
+
+  // A new file is a new width. Without this the widest line of whatever was
+  // open before keeps the panes scrolling past the end of the current one.
+  $: if (paired) {
+    leftWidth = 0;
+    rightWidth = 0;
+    // Re-measured once the new file has been laid out: clearing alone leaves
+    // the panes at max-content, which is where the missing pixels come from.
+    void tick().then(measureWidths);
+  }
 
   /**
    * Each changed block as a shape to draw: where its run starts and ends on
@@ -223,7 +263,33 @@
    */
   let echoFrom: 'left' | 'right' | null = null;
 
+  /**
+   * The wheel over the left pane, applied to the right one.
+   *
+   * That pane has overflow-y: hidden — a vertical scrollbar would take its
+   * width out of the usable area and leave a stripe the rows cannot colour —
+   * and hidden means the wheel passes straight through it to whatever is
+   * behind. Handing the movement to the right pane keeps the wheel working
+   * where the pointer is, and the sync brings the left one along, which is the
+   * same path a wheel over the right pane already takes.
+   */
+  function onLeftWheel(event: WheelEvent) {
+    if (!rightEl || event.deltaY === 0) return;
+    // Only what this would have scrolled. A wheel at the end of the file should
+    // still reach the panel behind, as it would in any other scroller.
+    const before = rightEl.scrollTop;
+    const wanted = clampScroll(rightEl, before + event.deltaY);
+    if (wanted === before) return;
+
+    event.preventDefault();
+    echoFrom = null;
+    rightEl.scrollTop = wanted;
+    syncFrom('right');
+  }
+
   function syncFrom(source: 'left' | 'right') {
+    measureWidths();
+
     // Read on every scroll, including the follower's own, so both ends of a
     // ribbon are drawn against where their pane actually is.
     leftScroll = leftEl?.scrollTop ?? 0;
@@ -480,7 +546,18 @@
 
 <div class="sbs">
   <!-- svelte-ignore a11y-no-static-element-interactions -->
-  <div class="pane left" bind:this={leftEl} on:scroll={() => syncFrom('left')}>
+  <div
+    class="pane left"
+    bind:this={leftEl}
+    on:scroll={() => syncFrom('left')}
+    on:wheel={onLeftWheel}
+  >
+    <!-- Sized to the longest line, so every row is that wide. Left to
+         themselves the rows are each as wide as their own text, and a short
+         changed line's tint stopped where its text did — scrolled right, the
+         colour simply ran out. The measured width covers the last few pixels
+         `max-content` leaves behind; see measureWidths. -->
+    <div class="lines" style={leftWidth ? `min-width: ${leftWidth}px` : ''}>
     {#each left as line (line.at)}
       <div
         class="sbs-line"
@@ -500,6 +577,7 @@
         <span class="code"><code>{@html line.html ?? ''}</code></span>
       </div>
     {/each}
+    </div>
   </div>
 
   <!-- The strip between the panes: the ribbons joining each block's two halves,
@@ -567,6 +645,7 @@
 
   <!-- svelte-ignore a11y-no-static-element-interactions -->
   <div class="pane" bind:this={rightEl} on:scroll={() => syncFrom('right')}>
+    <div class="lines" style={rightWidth ? `min-width: ${rightWidth}px` : ''}>
     {#each right as line (line.at)}
       <div
         class="sbs-line"
@@ -585,6 +664,7 @@
         <span class="code"><code>{@html line.html ?? ''}</code></span>
       </div>
     {/each}
+    </div>
   </div>
 </div>
 
@@ -612,6 +692,27 @@
     min-width: 0;
   }
 
+  /* Sized to the longest line in the pane, so every row is that wide.
+     Rows sized individually (min-width: max-content on each) are each as wide
+     as their OWN text, so a short changed line's tint ended at the pane's edge
+     while longer lines carried on past it — scrolled right, the colour and the
+     block outline simply ran out partway across. min-width keeps a short file
+     filling the pane rather than shrinking to its text. */
+  .lines {
+    width: max-content;
+    min-width: 100%;
+  }
+
+  /**
+   * Every row as wide as the container, not merely as wide as its own text.
+   *
+   * Laid out independently a short row ends where its text does, leaving the
+   * rest of the line uncoloured once the pane is scrolled past it.
+   */
+  .lines > .sbs-line {
+    min-width: 100%;
+  }
+
   /**
    * The left pane's scrollbar is hidden.
    *
@@ -623,12 +724,27 @@
    * Hidden, not disabled. The pane still scrolls by wheel, keyboard and the
    * arrows, and it is still what the right pane is synchronised against.
    */
+  /**
+   * The left pane has no vertical scrollbar at all.
+   *
+   * Not merely hidden. A vertical bar takes its width out of the pane's usable
+   * area, and the rows end where that area ends — so scrolled fully right, a
+   * bar-shaped stripe of background sat beyond them, uncoloured. Measured: 460px
+   * visible against 444px usable, and the rows stopped at 444. Painting the bar
+   * transparent does not help; the space is still taken. Reserving it with a
+   * border is worse — a border is outside the scrollable box, so the tint stops
+   * before it too.
+   *
+   * The pane is still scrolled vertically, by scrollTop from the sync: `hidden`
+   * only stops the USER scrolling it directly. The wheel is forwarded
+   * explicitly (see onLeftWheel), since hidden would otherwise let it pass
+   * through to whatever is behind.
+   *
+   * Its horizontal bar stays: that one is along the bottom, takes nothing from
+   * the width, and is how a long line is scrolled.
+   */
   .pane.left {
-    scrollbar-width: none;
-  }
-  .pane.left::-webkit-scrollbar {
-    width: 0;
-    height: 0;
+    overflow-y: hidden;
   }
 
   /**
@@ -641,7 +757,6 @@
    * stopped dead partway along, with the code carrying on past them.
    */
   .sbs-line {
-    min-width: max-content;
     display: flex;
     height: 19px;
     line-height: 19px;
@@ -657,11 +772,17 @@
     text-align: right;
     color: #4b5263;
     user-select: none;
-    /* Opaque, not the translucent white it used to be: the code scrolls
-       underneath, and a see-through ruler would show the line's own red or
-       green tint sliding past behind the numbers. This is that translucent
-       value already mixed over the diff's background (#0a0a0f), so it looks
-       exactly as it did before. */
+    /**
+     * Opaque, not translucent: the code scrolls underneath, and a see-through
+     * ruler would show OTHER lines' red and green tints sliding past behind the
+     * numbers.
+     *
+     * Its own line's tint it must still carry, though — a changed line whose
+     * number sits on plain grey reads as if the ruler were a separate thing
+     * beside the diff rather than part of the row. So each state has its
+     * translucent colour pre-mixed over the diff's background (#0a0a0f) here:
+     * the same result, without letting anything through.
+     */
     background: #111116;
     border-right: 1px solid rgba(255, 255, 255, 0.06);
     font-variant-numeric: tabular-nums;
@@ -689,6 +810,12 @@
      filling both columns. */
   .sbs-line.removed {
     background: rgba(239, 68, 68, 0.14);
+  }
+  .sbs-line.removed .gutter {
+    background: #2a1216;
+  }
+  .sbs-line.added .gutter {
+    background: #0d241a;
   }
   .sbs-line.added {
     background: rgba(34, 197, 94, 0.14);
@@ -773,6 +900,9 @@
      right and leaves the left with nothing to say where it is waiting. */
   .sbs-line.current:not(.removed):not(.added) {
     background: rgba(97, 175, 239, 0.1);
+  }
+  .sbs-line.current:not(.removed):not(.added) .gutter {
+    background: #131a25;
   }
 
   /* Moved by whichever pane is scrolled rather than scrolling itself: it has
