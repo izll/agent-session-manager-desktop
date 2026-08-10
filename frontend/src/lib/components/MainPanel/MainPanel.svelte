@@ -434,7 +434,12 @@
   // Fork on tabs with no conversation at all, and withheld it from the tabs it
   // was made for. currentTabAgent above already resolves this for the status
   // bars; canFork simply never used it.
-  $: canFork = currentTabAgent === 'claude' && currentSession?.status === 'running';
+  // Asked of the agent list rather than named here: the backend derives it
+  // from the agent's own configuration, so an agent that gains the ability
+  // gets the button without this line having to hear about it. Hard-coded to
+  // Claude, Codex kept the button hidden after its fork subcommand worked.
+  $: canFork = ($agents.find(a => a.type === currentTabAgent)?.supportsFork ?? false)
+    && currentSession?.status === 'running';
   $: agentConfig = $agents.find(a => a.type === currentSession?.agent);
   $: canAutoYes = agentConfig?.supportsAutoYes && currentSession?.status === 'running';
 
@@ -455,7 +460,12 @@
     if (!currentSession) return '';
     if ($selectedWindowIdx === 0) return currentSession.resumeSessionId || '';
     const fw = currentSession.followedWindows?.find(w => w.index === $selectedWindowIdx);
-    return fw?.resumeSessionId || '';
+    // resume_session_id, not resumeSessionId: SessionInfo is built for the UI
+    // and renames its fields, but the tabs inside it are the STORED structure
+    // passed straight through, so they keep the names the file uses. Read as
+    // camelCase this was always undefined — a tab never showed its conversation
+    // id, which only became obvious on a forked tab, where the id is the point.
+    return fw?.resume_session_id || '';
   })();
 
   // Get current tab's notes (with local cache for immediate updates)

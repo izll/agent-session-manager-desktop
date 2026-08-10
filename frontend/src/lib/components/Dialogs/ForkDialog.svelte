@@ -1,7 +1,7 @@
 <script lang="ts">
   import { autoFocusDialog } from '../../utils/dialogActions';
   import { createEventDispatcher } from 'svelte';
-  import { selectedSessionId, selectedWindowIdx, selectWindow, loadSessions } from '../../stores/sessions';
+  import { sessions, groups, selectedSessionId, selectedWindowIdx, selectSession, selectWindow, loadSessions, assignToGroup } from '../../stores/sessions';
   import { get } from 'svelte/store';
   import * as App from '../../../../wailsjs/go/main/App';
   import { t } from '../../i18n';
@@ -15,6 +15,9 @@
   let error = '';
   let forkMode: 'tab' | 'session' = 'tab';
   let lastShow = false;
+  /** Which group a forked SESSION lands in. A forked tab has no say: it stays
+   *  inside the session it was branched from. */
+  let selectedGroupId = '';
 
   // Generate default name only when dialog transitions from hidden to shown
   // Assign lastShow inside the same block: a separate `$: lastShow = show`
@@ -22,6 +25,10 @@
   $: {
     if (show && !lastShow) {
       name = `Fork ${new Date().toLocaleTimeString()}`;
+      // Defaults to where the original lives, which is what a fork inherited
+      // silently before. Offered rather than assumed: a branch is often an
+      // experiment, and experiments belong somewhere else.
+      selectedGroupId = get(sessions).find(s => s.id === get(selectedSessionId))?.groupId || '';
     }
     lastShow = show;
   }
@@ -36,6 +43,7 @@
     name = '';
     error = '';
     forkMode = 'tab';
+    selectedGroupId = '';
   }
 
   async function handleSubmit() {
@@ -76,7 +84,23 @@
           // Closing silently here would look like it had worked.
           throw new Error('Fork failed - no session was created');
         }
+        // The backend gives the branch the original's group. Applied here only
+        // where the user chose otherwise, so the common case makes no extra
+        // call — and "no group" is a real choice, which is why this compares
+        // against the original rather than testing for a non-empty value.
+        const inheritedGroup = get(sessions).find(s => s.id === sessionId)?.groupId || '';
+        if (selectedGroupId !== inheritedGroup) {
+          await assignToGroup(newSession.id, selectedGroupId);
+        }
+
         await loadSessions();
+        // Switch to the branch, as the new-tab case does. Created and then left
+        // for the user to find, a fork to a new session looked like nothing had
+        // happened at all: the dialog closed, the view stayed where it was, and
+        // the new session was somewhere down the sidebar under a name only the
+        // clock knew.
+        selectSession(newSession.id);
+        selectWindow(0);
         close();
         // One event per fork, and its sessionId is always this app's session
         // id. It used to fire twice for a new session, the second time carrying
@@ -181,6 +205,37 @@
             class="form-input"
           />
         </div>
+
+        <!-- Group, for a forked SESSION only.
+             A forked tab stays inside the session it came from, so there is
+             nothing to choose. Shown only when groups exist, as the new-session
+             dialog does — an empty picker is a question with one answer. -->
+        {#if forkMode === 'session' && $groups.length > 0}
+          <div class="form-group">
+            <label class="form-label" for="fork-group">{$t('fork.group')}</label>
+            <select id="fork-group" bind:value={selectedGroupId} class="form-input form-select">
+              <option value="">{$t('fork.noGroup')}</option>
+              {#each $groups as group (group.id)}
+                <option value={group.id}>{group.name}</option>
+              {/each}
+            </select>
+          </div>
+        {/if}
+
+        <!-- What a fork is until it is written to.
+             The agent loads the conversation and waits: the branch has no
+             transcript of its own until the first message, so a fork left
+             untouched leaves nothing behind. Said here because there is no
+             way to tell by looking — the tab opens with the full history
+             visible, which is exactly what a finished fork looks like. -->
+        <p class="fork-note">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="16" x2="12" y2="12"/>
+            <line x1="12" y1="8" x2="12.01" y2="8"/>
+          </svg>
+          <span>{$t('fork.firstMessageNote')}</span>
+        </p>
 
         <!-- Actions -->
         <div class="dialog-actions">
@@ -329,6 +384,38 @@
     outline: none;
     border-color: rgba(var(--accent-rgb), 0.5);
     box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.1);
+  }
+
+  /* The same chevron the new-session dialog's group picker uses, so the two
+     read as the same control. */
+  .form-select {
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    padding-right: 36px;
+    cursor: pointer;
+  }
+
+  /* Amber, like the fork warning in the new-session dialog, but lighter: this
+     is telling you how forking works rather than warning you off it. */
+  .fork-note {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin: 0 0 20px;
+    padding: 10px 12px;
+    background: rgba(251, 191, 36, 0.07);
+    border: 1px solid rgba(251, 191, 36, 0.2);
+    border-radius: 8px;
+    font-size: 12px;
+    line-height: 1.5;
+    color: #d4b878;
+  }
+  .fork-note svg {
+    flex-shrink: 0;
+    margin-top: 1px;
+    opacity: 0.8;
   }
 
   .dialog-actions {

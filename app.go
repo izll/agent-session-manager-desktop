@@ -1413,7 +1413,10 @@ func (a *App) ForkToNewSession(id, name, sessionID string) (*SessionInfo, error)
 	}
 
 	// Create new session with same settings
-	newInst, err := session.NewInstance(name, origInst.Path, origInst.AutoYes, session.AgentClaude, origInst.ExtraArgs)
+	// The branch runs the agent the original ran. Hard-coded to Claude, a fork
+	// of a Codex session came back as a Claude one with a Codex conversation id
+	// it could not resume.
+	newInst, err := session.NewInstance(name, origInst.Path, origInst.AutoYes, origInst.Agent, origInst.ExtraArgs)
 	if err != nil {
 		return nil, err
 	}
@@ -1424,7 +1427,11 @@ func (a *App) ForkToNewSession(id, name, sessionID string) (*SessionInfo, error)
 	newInst.BgColor = origInst.BgColor
 	newInst.FullRowColor = origInst.FullRowColor
 	newInst.Notes = fmt.Sprintf("Forked from: %s", origInst.Name)
-	newInst.ResumeSessionID = sessionID
+	// Branched, not continued: ForkFrom makes the first start load this
+	// conversation and carry on in a new one. Set as ResumeSessionID instead,
+	// the session would simply BE the original — two tabs writing to one
+	// conversation.
+	newInst.ForkFrom = sessionID
 
 	// Refuse before storing anything, as CreateSession does. A fork that cannot
 	// start otherwise left a session in the sidebar that had never run and never
@@ -1448,7 +1455,7 @@ func (a *App) ForkToNewSession(id, name, sessionID string) (*SessionInfo, error)
 	// behind: it was created for this branch and has nothing else in it, so
 	// there is nothing to keep. The error goes to the caller, which is what puts
 	// it in front of the user instead of only in the log.
-	if err := newInst.StartWithResume(sessionID); err != nil {
+	if err := newInst.StartWithResume(""); err != nil {
 		runtime.LogWarning(a.ctx, fmt.Sprintf("Failed to auto-start forked session: %v", err))
 		if delErr := a.storage.RemoveInstance(newInst.ID); delErr != nil {
 			runtime.LogWarning(a.ctx, fmt.Sprintf("Failed to clean up the forked session: %v", delErr))
@@ -3357,16 +3364,31 @@ type AgentInfo struct {
 
 // GetAgents returns available agents
 func (a *App) GetAgents() []AgentInfo {
-	return []AgentInfo{
-		{Type: "claude", Name: "Claude", Icon: "🤖", SupportsResume: true, SupportsAutoYes: true, SupportsFork: true},
-		{Type: "gemini", Name: "Gemini", Icon: "💎", SupportsResume: true, SupportsAutoYes: false, SupportsFork: false},
-		{Type: "aider", Name: "Aider", Icon: "🔧", SupportsResume: false, SupportsAutoYes: true, SupportsFork: false},
-		{Type: "codex", Name: "Codex", Icon: "📦", SupportsResume: true, SupportsAutoYes: true, SupportsFork: false},
-		{Type: "amazonq", Name: "Amazon Q", Icon: "🦜", SupportsResume: true, SupportsAutoYes: true, SupportsFork: false},
-		{Type: "opencode", Name: "OpenCode", Icon: "💻", SupportsResume: true, SupportsAutoYes: false, SupportsFork: false},
-		{Type: "custom", Name: "Custom", Icon: "⚙️", SupportsResume: false, SupportsAutoYes: false, SupportsFork: false},
-		{Type: "terminal", Name: "Terminal", Icon: "🖥️", SupportsResume: false, SupportsAutoYes: false, SupportsFork: false},
+	agents := []AgentInfo{
+		{Type: "claude", Name: "Claude", Icon: "🤖"},
+		{Type: "gemini", Name: "Gemini", Icon: "💎"},
+		{Type: "aider", Name: "Aider", Icon: "🔧"},
+		{Type: "codex", Name: "Codex", Icon: "📦"},
+		{Type: "amazonq", Name: "Amazon Q", Icon: "🦜"},
+		{Type: "opencode", Name: "OpenCode", Icon: "💻"},
+		{Type: "custom", Name: "Custom", Icon: "⚙️"},
+		{Type: "terminal", Name: "Terminal", Icon: "🖥️"},
 	}
+
+	// The capabilities come from the agent configuration rather than being
+	// written out again here. Kept as a second list, the two drifted: Codex
+	// gained a fork subcommand and this still said it could not fork, so the
+	// button stayed hidden for it.
+	for at := range agents {
+		config, ok := session.AgentConfigs[session.AgentType(agents[at].Type)]
+		if !ok {
+			continue
+		}
+		agents[at].SupportsResume = config.SupportsResume
+		agents[at].SupportsAutoYes = config.SupportsAutoYes
+		agents[at].SupportsFork = config.ForkFlag != ""
+	}
+	return agents
 }
 
 // ============================================================================

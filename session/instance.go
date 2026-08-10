@@ -2,8 +2,6 @@ package session
 
 import (
 	"bytes"
-	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -63,6 +61,20 @@ type AgentConfig struct {
 	ResumeIsSubcommand bool   // If true, resume is a subcommand (e.g., "codex resume") not a flag
 	SupportsSessionID  bool   // Whether agent supports --session-id flag (pre-assigned session ID)
 	SessionIDFlag      string // The flag for session ID (e.g., "--session-id")
+
+	/**
+	 * How this agent branches a conversation.
+	 *
+	 * ForkFlag is added to a resume to make it start a new conversation from
+	 * the same history rather than continuing the old one. Where the agent
+	 * takes a fork SUBCOMMAND instead (codex fork <id>), ForkIsSubcommand says
+	 * so and ForkFlag is that subcommand's name.
+	 *
+	 * Empty ForkFlag means the agent cannot fork, and the UI says so rather
+	 * than offering something that will fail.
+	 */
+	ForkFlag         string
+	ForkIsSubcommand bool
 }
 
 // AgentConfigs maps agent types to their configurations
@@ -75,6 +87,8 @@ var AgentConfigs = map[AgentType]AgentConfig{
 		ResumeFlag:        "--resume",
 		SupportsSessionID: true,
 		SessionIDFlag:     "--session-id",
+		// --fork-session alongside --resume: same history, new conversation.
+		ForkFlag: "--fork-session",
 	},
 	AgentGemini: {
 		Command:         "gemini",
@@ -98,6 +112,11 @@ var AgentConfigs = map[AgentType]AgentConfig{
 		AutoYesFlag:        "--dangerously-bypass-approvals-and-sandbox",
 		ResumeFlag:         "resume",
 		ResumeIsSubcommand: true,
+		// `codex fork <id>` — a subcommand of its own rather than a flag on
+		// resume, and the prompt it takes is optional, so it starts
+		// interactively on the branch.
+		ForkFlag:         "fork",
+		ForkIsSubcommand: true,
 	},
 	AgentAmazonQ: {
 		Command:            "q",
@@ -126,15 +145,20 @@ var AgentConfigs = map[AgentType]AgentConfig{
 }
 
 type Instance struct {
-	ID                string           `json:"id"`
-	Name              string           `json:"name"`
-	Path              string           `json:"path"`
-	Status            Status           `json:"status"`
-	CreatedAt         time.Time        `json:"created_at"`
-	UpdatedAt         time.Time        `json:"updated_at"`
-	AutoYes           bool             `json:"auto_yes"`
-	HideStatusLine    bool             `json:"hide_status_line,omitempty"`    // Don't show the main window's status line in the session list
-	ResumeSessionID   string           `json:"resume_session_id,omitempty"`   // Claude session ID to resume
+	ID              string    `json:"id"`
+	Name            string    `json:"name"`
+	Path            string    `json:"path"`
+	Status          Status    `json:"status"`
+	CreatedAt       time.Time `json:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
+	AutoYes         bool      `json:"auto_yes"`
+	HideStatusLine  bool      `json:"hide_status_line,omitempty"`  // Don't show the main window's status line in the session list
+	ResumeSessionID string    `json:"resume_session_id,omitempty"` // Claude session ID to resume
+	// ForkFrom names a conversation this session should BRANCH from on its
+	// first start, rather than continue. Not stored: it is true of that one
+	// start and nothing after it — restarting a forked session resumes the
+	// branch, which is what ResumeSessionID holds by then.
+	ForkFrom          string           `json:"-"`
 	Color             string           `json:"color,omitempty"`               // Foreground color
 	BgColor           string           `json:"bg_color,omitempty"`            // Background color
 	FullRowColor      bool             `json:"full_row_color,omitempty"`      // Extend background to full row
@@ -507,8 +531,26 @@ func (i *Instance) StartWithResume(resumeID string) error {
 			cmdToCheck = config.Command
 			args := []string{}
 
-			// Handle resume subcommands (codex resume, q chat --resume) vs flags (claude --resume)
-			if config.SupportsResume && config.ResumeIsSubcommand {
+			// A fork branches on this one start: the agent loads the source
+			// conversation and carries on in a new one. Nothing runs
+			// beforehand, so it costs no turn and no waiting.
+			if i.ForkFrom != "" && config.ForkFlag != "" {
+				if i.AutoYes && config.SupportsAutoYes && config.AutoYesFlag != "" {
+					args = append(args, config.AutoYesFlag)
+				}
+				args = appendForkArgs(config, args, i.ForkFrom)
+				// Where the agent lets us name the branch, do — otherwise the
+				// session has nothing to resume from until a poll finds what the
+				// agent chose for itself.
+				if config.SupportsSessionID && config.SessionIDFlag != "" {
+					newID := uuid.New().String()
+					args = append(args, config.SessionIDFlag, newID)
+					i.ResumeSessionID = newID
+				} else {
+					i.ResumeSessionID = ""
+				}
+				i.ForkFrom = ""
+			} else if config.SupportsResume && config.ResumeIsSubcommand {
 				// Resume is a subcommand - put it first, then flags, then session ID
 				if resumeID != "" || i.ResumeSessionID != "" {
 					// Add resume subcommand
@@ -1780,77 +1822,57 @@ func (i *Instance) NewAgentWindow(name string, agent AgentType, customCmd string
 	return newIdx, nil
 }
 
-// ForkSession creates a fork of the current Claude session using --fork-session
-// Returns the new session ID
-// forkTimeout bounds the fork call. Generous, because it replays the whole
-// conversation before answering — but finite, so a stalled one ends in a
-// message rather than a spinner that never stops.
-const forkTimeout = 3 * time.Minute
-
-// ForkSession branches the conversation running in one window.
-//
-// windowIdx names the tab to branch. It used to take none and always read the
-// main window's conversation, so forking from a second Claude tab silently
-// produced a branch of something else entirely — under a name the user had
-// chosen for the tab they were looking at.
+/**
+ * ForkSession names the conversation a fork should branch from.
+ *
+ * It runs nothing. The branch is made by the agent when the forked tab or
+ * session starts, with the fork flag alongside the resume — see
+ * appendForkArgs.
+ *
+ * This used to run `claude --resume <id> --fork-session -p "."` and read the
+ * new id back out of its JSON. That replayed the entire conversation before
+ * answering, which on a long one is minutes of an apparently frozen dialog,
+ * and the `-p` spent a real turn to get there — a comment recorded that an
+ * absent or empty prompt was refused, so it looked unavoidable. It is not: the
+ * agent is going to be started with --resume anyway, and adding the fork flag
+ * to THAT start branches the conversation for free. The conversation was
+ * otherwise being loaded twice, once to fork and once to run.
+ *
+ * windowIdx names the tab to branch. Reading the main window's conversation
+ * instead, as this once did, silently branched something else entirely — under
+ * a name the user had chosen for the tab in front of them.
+ */
 func (i *Instance) ForkSession(windowIdx int) (string, error) {
 	agent, sessionID := i.conversationInWindow(windowIdx)
-	if agent != AgentClaude {
-		return "", fmt.Errorf("fork is only supported for Claude sessions")
+	config, ok := AgentConfigs[agent]
+	if !ok || config.ForkFlag == "" {
+		return "", fmt.Errorf("%s cannot fork a conversation", agent)
 	}
 	if sessionID == "" {
 		return "", fmt.Errorf("no session ID to fork - session may not have started yet")
 	}
+	log.Printf("[Fork] session=%s window=%d agent=%s branching from %s",
+		i.ID, windowIdx, agent, sessionID)
+	return sessionID, nil
+}
 
-	// Branch the conversation and read back the new id.
-	//
-	// The prompt is not optional, however much it looks like it should be:
-	// --fork-session needs one, and both an absent and an empty -p are refused
-	// ("Provide a prompt to continue the conversation" — measured against the
-	// installed CLI). So a fork does replay the conversation and costs a turn.
-	// A single "." is the smallest thing that satisfies it.
-	//
-	// Bounded, like every other external call here. This one replays a whole
-	// conversation, so it is slow even when healthy and can stall outright on a
-	// network hiccup or an auth prompt — and an unbounded call would leave the
-	// dialog's spinner turning with no way out, which is the reasoning the git
-	// and multiplexer timeouts already carry.
-	ctx, cancel := context.WithTimeout(context.Background(), forkTimeout)
-	defer cancel()
-
-	cmd := CommandContext(ctx, "claude", "--resume", sessionID, "--fork-session",
-		"--output-format", "json", "-p", ".")
-	cmd.Dir = i.Path
-
-	// Captured rather than discarded: without it a refusal from claude reaches
-	// the user as a bare "exit status 1".
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-
-	output, err := cmd.Output()
-	if ctx.Err() == context.DeadlineExceeded {
-		return "", fmt.Errorf("forking timed out after %s", forkTimeout)
+/**
+ * The arguments that turn a resume into a fork.
+ *
+ * Two shapes, because the agents differ: Claude takes a flag beside its resume
+ * (`--resume <id> --fork-session`), Codex a subcommand of its own
+ * (`codex fork <id>`). Both start interactively on the branch, and neither
+ * needs a prompt — which is what makes forking instant.
+ *
+ * The new conversation's id comes from the agent. Claude accepts one we choose
+ * (--session-id) and Codex assigns its own, so the caller stores what it can
+ * and the poll picks up the rest.
+ */
+func appendForkArgs(config AgentConfig, args []string, sourceID string) []string {
+	if config.ForkIsSubcommand {
+		return append(args, config.ForkFlag, sourceID)
 	}
-	if err != nil {
-		if detail := strings.TrimSpace(stderr.String()); detail != "" {
-			return "", fmt.Errorf("failed to fork session: %s", detail)
-		}
-		return "", fmt.Errorf("failed to fork session: %w", err)
-	}
-
-	// Parse JSON output to get new session ID
-	var result struct {
-		SessionID string `json:"session_id"`
-	}
-	if err := json.Unmarshal(output, &result); err != nil {
-		return "", fmt.Errorf("failed to parse fork output: %w", err)
-	}
-
-	if result.SessionID == "" {
-		return "", fmt.Errorf("fork returned empty session ID")
-	}
-
-	return result.SessionID, nil
+	return append(args, config.ResumeFlag, sourceID, config.ForkFlag)
 }
 
 // conversationInWindow reports which agent a window runs and which conversation
@@ -1895,8 +1917,10 @@ func (i *Instance) NewForkedTab(name string, sessionID string) (int, error) {
 
 	sessionName := i.TmuxSessionName()
 
-	// Build claude command with resume
-	config := AgentConfigs[AgentClaude]
+	config := AgentConfigs[i.Agent]
+	if config.ForkFlag == "" {
+		return 0, fmt.Errorf("%s cannot fork a conversation", i.Agent)
+	}
 	args := []string{}
 
 	// Add auto-yes flag if the main session has it enabled
@@ -1904,8 +1928,21 @@ func (i *Instance) NewForkedTab(name string, sessionID string) (int, error) {
 		args = append(args, config.AutoYesFlag)
 	}
 
-	// Add resume flag with forked session ID
-	args = append(args, config.ResumeFlag, sessionID)
+	// The branch is made HERE, by the agent, as it starts: the resume carries
+	// the fork flag rather than a separate run having produced a new id first.
+	// That earlier run replayed the whole conversation and spent a turn to do
+	// it, and this start would then have loaded the same conversation again.
+	args = appendForkArgs(config, args, sessionID)
+
+	// Claude lets us name the new conversation, which is worth doing: without
+	// it the branch's id is only discoverable by watching the agent afterwards,
+	// and until then the tab has nothing to resume from. Codex assigns its own,
+	// and CaptureCodexResumeIDs picks it up.
+	forkedID := ""
+	if config.SupportsSessionID && config.SessionIDFlag != "" {
+		forkedID = uuid.New().String()
+		args = append(args, config.SessionIDFlag, forkedID)
+	}
 
 	// Carry the session's extra arguments, as every other way of starting a
 	// Claude tab does. A fork is the same conversation with the same setup, so
@@ -1924,12 +1961,17 @@ func (i *Instance) NewForkedTab(name string, sessionID string) (int, error) {
 		return 0, fmt.Errorf("invalid forked window index: %w", err)
 	}
 
-	// Add to followed windows with fork info
+	// The tab remembers the BRANCH, not what it was branched from. Storing the
+	// source would send a restart back to the original conversation — the fork
+	// would exist only until the tab was next resumed.
+	//
+	// Empty where the agent names its own branch (Codex); CaptureCodexResumeIDs
+	// fills it in once the agent has settled.
 	i.FollowedWindows = append(i.FollowedWindows, FollowedWindow{
 		Index:           newIdx,
-		Agent:           AgentClaude,
+		Agent:           i.Agent,
 		Name:            name,
-		ResumeSessionID: sessionID,
+		ResumeSessionID: forkedID,
 		Notes:           "Forked session",
 	})
 
@@ -1940,6 +1982,11 @@ func (i *Instance) NewForkedTab(name string, sessionID string) (int, error) {
 	target := fmt.Sprintf("%s:%d", sessionName, newIdx)
 	TmuxCommand("set-option", "-t", target, "remain-on-exit", "on").Run()
 	TmuxCommand("set-option", "-t", target, "automatic-rename", "off").Run()
+
+	// Codex names its own branch, so the id has to be read back off the running
+	// process — as every other way of starting a Codex tab does. Without it the
+	// forked tab has nothing to resume from.
+	i.CaptureCodexResumeIDs()
 
 	return newIdx, nil
 }

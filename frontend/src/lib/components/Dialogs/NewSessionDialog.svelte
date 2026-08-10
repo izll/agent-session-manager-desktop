@@ -110,10 +110,16 @@
       if (sess.resumeSessionId === resumeId) {
         return sess.name;
       }
-      // Check followed windows (tabs)
+      // Check followed windows (tabs).
+      //
+      // resume_session_id, not resumeSessionId: the session is renamed for the
+      // UI, its tabs are the stored structure passed through unchanged. Read as
+      // camelCase this never matched, so the warning that a conversation is
+      // already open somewhere never fired for a tab — and opening it twice is
+      // exactly what the warning exists to prevent.
       if (sess.followedWindows) {
         for (const fw of sess.followedWindows) {
-          if (fw.resumeSessionId === resumeId) {
+          if (fw.resume_session_id === resumeId) {
             return `${sess.name} (tab)`;
           }
         }
