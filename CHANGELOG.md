@@ -6,6 +6,35 @@ Entries describe what changed for someone using the app. Internal refactoring,
 test and CI work is left out unless it changed behaviour. Dates are release
 dates; the format follows [Keep a Changelog](https://keepachangelog.com).
 
+## 0.9.25 — 2026-08-11
+
+### Added
+
+- **Forking is instant, and Codex sessions can fork too.** A fork used to spin
+  a spinner for minutes and spend a turn to do it: it replayed the whole
+  conversation just to find out what the branch would be called, and left a
+  stray "." and its reply at the head of it. The branch is now made as the
+  forked tab starts, which costs nothing. A fork to a new session also switches
+  to it rather than leaving it to be found in the sidebar, and asks which group
+  it belongs in.
+
+### Fixed
+
+- **A large diff was slow to open.** Only the visible lines were rendered, but
+  every line in the file was syntax-coloured first — a 5,000-line file cost
+  287ms before anything appeared, and now costs under a millisecond. Colouring
+  itself is unchanged.
+- **The two columns of a side-by-side diff scroll sideways together**, so a
+  long line can be compared at the same place on both sides. The colour of a
+  changed line now also reaches the end of the pane instead of stopping partway
+  along, and the line numbers stay in view while the code scrolls under them.
+- **A forked tab went back to the original conversation when restarted** — it
+  had stored the id it was branched from rather than the branch's own.
+- **A tab never showed its conversation id**, which was most obvious on a forked
+  tab. The same mistake had been quietly disabling the warning that a
+  conversation is already open somewhere else.
+- **A fork of a Codex session came back as a Claude one.**
+
 ## 0.9.24 — 2026-08-08
 
 ### Added
