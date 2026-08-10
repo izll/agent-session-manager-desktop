@@ -250,11 +250,33 @@
     const target = matchingLine(fromLines, toLines, topLine);
 
     const wanted = clampScroll(to, target * ROW_HEIGHT + offset);
-    // Only a real move echoes. Setting scrollTop to what it already holds sends
-    // no event, and arming the guard for one would eat the next genuine scroll.
-    if (Math.round(to.scrollTop) !== Math.round(wanted)) {
+
+    /**
+     * Sideways they move as one, without any pairing.
+     *
+     * Vertically the sides hold different lines and the pairing decides what
+     * belongs beside what. Along a line there is nothing to work out: column 80
+     * is column 80 on both sides, and letting them drift apart is what makes a
+     * long line impossible to compare — the halves of one change end up at
+     * different offsets with no way to tell how far.
+     *
+     * Clamped to what the follower can take: the two panes rarely have the same
+     * longest line, so the shorter one simply stops at its own end.
+     */
+    const wantedLeft = Math.max(
+      0,
+      Math.min(from.scrollLeft, to.scrollWidth - to.clientWidth),
+    );
+
+    // Only a real move echoes. Setting a position to what it already holds
+    // sends no event, and arming the guard for one would eat the next genuine
+    // scroll. Either axis moving is enough to produce that one event.
+    const movesDown = Math.round(to.scrollTop) !== Math.round(wanted);
+    const movesAcross = Math.round(to.scrollLeft) !== Math.round(wantedLeft);
+    if (movesDown || movesAcross) {
       echoFrom = source === 'left' ? 'right' : 'left';
-      to.scrollTop = wanted;
+      if (movesDown) to.scrollTop = wanted;
+      if (movesAcross) to.scrollLeft = wantedLeft;
     }
 
     // Re-read after moving the follower: its ribbon ends belong at the position
@@ -588,8 +610,6 @@
   .pane {
     overflow: auto;
     min-width: 0;
-    /* The two panes never scroll horizontally together, so each keeps its own
-       long lines to itself rather than dragging the other sideways. */
   }
 
   /**
@@ -611,9 +631,17 @@
     height: 0;
   }
 
-  /* Fixed height: the sides are kept in step by arithmetic on it, and a row
-     that grew would put everything below it out of register with its pair. */
+  /**
+   * Fixed height: the sides are kept in step by arithmetic on it, and a row
+   * that grew would put everything below it out of register with its pair.
+   *
+   * `min-width: max-content` so a row is as wide as its own text rather than as
+   * wide as the pane. Sized to the pane, a row scrolled sideways ran out at the
+   * pane's original right edge — the added/removed tint and the block outline
+   * stopped dead partway along, with the code carrying on past them.
+   */
   .sbs-line {
+    min-width: max-content;
     display: flex;
     height: 19px;
     line-height: 19px;
@@ -629,14 +657,26 @@
     text-align: right;
     color: #4b5263;
     user-select: none;
-    background: rgba(255, 255, 255, 0.03);
+    /* Opaque, not the translucent white it used to be: the code scrolls
+       underneath, and a see-through ruler would show the line's own red or
+       green tint sliding past behind the numbers. This is that translucent
+       value already mixed over the diff's background (#0a0a0f), so it looks
+       exactly as it did before. */
+    background: #111116;
     border-right: 1px solid rgba(255, 255, 255, 0.06);
     font-variant-numeric: tabular-nums;
+    /* Held against the pane's edge while the code scrolls under it: a ruler
+       that slides away leaves the lines on screen unnumbered, which is when the
+       numbers are most wanted — reading a long line and asking which one it is. */
+    position: sticky;
+    left: 0;
+    z-index: 1;
   }
 
+  /* No min-width: 0 — that lets the code shrink below its own text, which
+     undoes the max-content width the row needs to reach past the pane. */
   .code {
     padding: 0 8px;
-    min-width: 0;
   }
   .code code {
     font-family: inherit;

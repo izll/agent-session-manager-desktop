@@ -66,7 +66,7 @@ assert.doesNotMatch(
 // guard for it would eat the next genuine scroll instead.
 assert.match(
   sync[0],
-  /if \(Math\.round\(to\.scrollTop\) !== Math\.round\(wanted\)\)/,
+  /Math\.round\(to\.scrollTop\) !== Math\.round\(wanted\)/,
   'only a move that will actually happen should arm the guard',
 );
 
@@ -364,6 +364,64 @@ assert.match(source, /\.pane\.left::-webkit-scrollbar \{/, 'and for WebKit, whic
 // synchronisation has nothing to read.
 const pane = source.match(/\n {2}\.pane \{([\s\S]*?)\n {2}\}/);
 assert.match(pane[1], /overflow: auto/, 'the pane must still scroll');
+
+/**
+ * Sideways the panes move as one, with no pairing involved.
+ *
+ * Vertically the sides hold different lines and the pairing decides what
+ * belongs beside what. Along a line there is nothing to work out: column 80 is
+ * column 80 on both sides, and letting them drift apart is what makes a long
+ * line impossible to compare.
+ */
+assert.match(
+  sync[0],
+  /const wantedLeft = Math\.max\(/,
+  'the horizontal position has to be carried across too',
+);
+assert.match(
+  sync[0],
+  /to\.scrollWidth - to\.clientWidth/,
+  'clamped to what the follower can take: the two rarely have the same longest line',
+);
+// Either axis moving produces the one echo event, so the guard has to be armed
+// for both — armed only for a vertical move, a purely sideways scroll would
+// have its echo treated as a lead and the two would fight.
+assert.match(sync[0], /const movesDown =/, 'a vertical move has to be recognised');
+assert.match(sync[0], /const movesAcross =/, 'and a horizontal one');
+assert.match(
+  sync[0],
+  /if \(movesDown \|\| movesAcross\) \{/,
+  'either axis moving arms the echo guard',
+);
+
+/**
+ * A row is as wide as its text, not as wide as the pane.
+ *
+ * Sized to the pane, a row scrolled sideways ran out at the pane's original
+ * right edge: the added/removed tint and the block outline stopped dead partway
+ * along the line, with the code carrying on past them.
+ */
+const row = source.match(/\n {2}\.sbs-line \{([\s\S]*?)\n {2}\}/);
+assert.ok(row, 'the .sbs-line rule is missing');
+assert.match(row[1], /min-width: max-content/, 'a row must reach the end of its own text');
+// min-width: 0 on the code would let it shrink below its text and undo that.
+const code = source.match(/\n {2}\.code \{([\s\S]*?)\n {2}\}/);
+assert.ok(code, 'the .code rule is missing');
+assert.doesNotMatch(code[1], /min-width: 0/, 'that would undo the row width');
+
+// The ruler stays at the pane's edge while the code scrolls under it —
+// otherwise the lines on screen are unnumbered exactly when the number is most
+// wanted, reading a long line and asking which one it is.
+const gutter = source.match(/\n {2}\.gutter \{([\s\S]*?)\n {2}\}/);
+assert.ok(gutter, 'the .gutter rule is missing');
+assert.match(gutter[1], /position: sticky/, 'the ruler should hold its place');
+// And it has to be opaque, or the line's own tint slides past behind the
+// numbers.
+assert.match(
+  gutter[1],
+  /background: #[0-9a-f]{6}/,
+  'a translucent ruler shows the scrolling tint through it',
+);
 
 // Row height is arithmetic here, not just styling: the sides are placed by it.
 const rowHeight = source.match(/const ROW_HEIGHT = (\d+)/);
