@@ -6,12 +6,34 @@
   export let options: { value: string; label: string }[] = [];
   export let placeholder: string = '';
   export let small: boolean = false;
+  /**
+   * Show a filter box above the list.
+   *
+   * Off by default: for a handful of fixed choices a filter is one more thing
+   * to look at. Worth turning on where the options are user data and there can
+   * be many of them — a task list, for instance.
+   */
+  export let searchable: boolean = false;
 
   const dispatch = createEventDispatcher<{ change: string }>();
 
   let isOpen = false;
   let triggerRef: HTMLButtonElement;
   let dropdownRef: HTMLDivElement;
+  let searchRef: HTMLInputElement | null = null;
+  let query = '';
+  /** Which filtered option Enter would take. Reset whenever the list changes. */
+  let highlighted = 0;
+
+  // Matched case-insensitively on the label, which is what the user can see.
+  // Matching the value would search hidden ids and appear to ignore the typing.
+  $: filteredOptions = searchable && query.trim()
+    ? options.filter((o) => o.label.toLowerCase().includes(query.trim().toLowerCase()))
+    : options;
+
+  // Typing narrows the list, so a highlight left where it was could point past
+  // the end of it — or at something the user is no longer looking at.
+  $: if (query !== undefined) highlighted = 0;
 
   $: selectedOption = options.find(o => o.value === value);
   $: displayText = selectedOption?.label ?? (placeholder || $t('common.select'));
@@ -59,8 +81,12 @@
   async function toggle() {
     isOpen = !isOpen;
     if (isOpen) {
+      // A stale query would silently hide most of the list next time the
+      // dropdown is opened.
+      query = '';
       await tick();
       positionDropdown();
+      searchRef?.focus();
     }
   }
 
@@ -68,6 +94,38 @@
     value = optionValue;
     isOpen = false;
     dispatch('change', optionValue);
+  }
+
+  /**
+   * Keyboard handling in the filter box.
+   *
+   * Enter takes the highlighted option, so filtering to one result and pressing
+   * Enter is enough — without it the only way to choose was to leave the
+   * keyboard and click. Arrows move the highlight, which is what makes Enter
+   * useful for anything but the first match.
+   */
+  function handleSearchKeydown(event: KeyboardEvent) {
+    if (event.key === 'Escape') {
+      isOpen = false;
+      return;
+    }
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      highlighted = Math.min(highlighted + 1, filteredOptions.length - 1);
+      return;
+    }
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      highlighted = Math.max(highlighted - 1, 0);
+      return;
+    }
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      const option = filteredOptions[highlighted];
+      // Nothing to take when the filter matches nothing; Enter should not
+      // close the dropdown on an empty list as if a choice had been made.
+      if (option) select(option.value);
+    }
   }
 
   function handleClickOutside(event: MouseEvent) {
@@ -122,11 +180,25 @@
 
 {#if isOpen}
   <div class="select-dropdown" class:small bind:this={dropdownRef} use:portal>
-    {#each options as option}
+    {#if searchable}
+      <!-- svelte-ignore a11y-autofocus -->
+      <input
+        class="select-search"
+        type="text"
+        bind:this={searchRef}
+        bind:value={query}
+        placeholder={$t('common.filter')}
+        on:click|stopPropagation
+        on:keydown={handleSearchKeydown}
+      />
+    {/if}
+    {#each filteredOptions as option, index}
       <button
         type="button"
         class="select-option"
         class:selected={option.value === value}
+        class:highlighted={searchable && index === highlighted}
+        on:mouseenter={() => (highlighted = index)}
         on:click={() => select(option.value)}
       >
         {option.label}
@@ -215,6 +287,30 @@
     }
   }
 
+  /* Sticky, so it stays reachable while the list scrolls under it — a filter
+     you have to scroll back up to reach is a filter people stop using. */
+  :global(.select-dropdown .select-search) {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    display: block;
+    width: calc(100% - 16px);
+    margin: 8px;
+    padding: 6px 9px;
+    box-sizing: border-box;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 6px;
+    color: inherit;
+    font-size: 13px;
+    font-family: inherit;
+  }
+
+  :global(.select-dropdown .select-search:focus) {
+    outline: none;
+    border-color: rgba(var(--accent-rgb), 0.6);
+  }
+
   :global(.select-dropdown .select-option) {
     display: block;
     width: 100%;
@@ -236,6 +332,13 @@
   :global(.select-dropdown .select-option:hover) {
     background: rgba(var(--accent-rgb), 0.15);
     color: white;
+  }
+
+  /* Where Enter would land. Distinct from :hover so the keyboard and the mouse
+     do not fight over which one is showing — mouseenter moves the highlight,
+     so they always agree. */
+  :global(.select-dropdown .select-option.highlighted) {
+    background: rgba(255, 255, 255, 0.08);
   }
 
   :global(.select-dropdown .select-option.selected) {

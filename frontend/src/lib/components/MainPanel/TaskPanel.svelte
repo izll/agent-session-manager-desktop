@@ -11,6 +11,7 @@
   import * as DictationService from '../../../../wailsjs/go/main/DictationService';
   import { EventsOn } from '../../../../wailsjs/runtime/runtime';
   import { t } from '../../i18n';
+  import { toLocalInputValue, fromLocalInputValue, deadlineState } from '../../utils/taskDueDate';
   import {
     tasks,
     taskFilter,
@@ -90,6 +91,11 @@
 
   // Edit task modal
   let showEditTaskModal = false;
+  let editTaskDueAt = '';
+  // Whether the task belongs to this session or to the project as a whole.
+  // Only session-owned tasks trigger the warning when a session is closed, so
+  // this is what decides whether the work is guarded.
+  let editTaskSessionScoped = true;
   let editTaskId = '';
   let editTaskTitle = '';
   let editTaskDescription = '';
@@ -534,6 +540,12 @@
     editTaskDescription = task.description || '';
     editTaskDetails = task.details || '';
     editTaskPriority = task.priority;
+    // datetime-local wants "YYYY-MM-DDTHH:mm" in LOCAL time, while the task
+    // carries RFC 3339 with a zone. Feeding it the raw string leaves the field
+    // blank, and slicing the string instead of converting shows a deadline in
+    // the wrong hour for anyone not on UTC.
+    editTaskDueAt = task.dueAt ? toLocalInputValue(task.dueAt) : '';
+    editTaskSessionScoped = !!task.sessionId;
     editTaskError = '';
     showEditTaskModal = true;
     contextMenuTask = null;
@@ -549,7 +561,7 @@
     editTaskError = '';
     try {
       console.log('[TaskPanel] calling updateTaskDirect...', { editTaskTitle, editTaskDescription, editTaskDetails, editTaskPriority });
-      await updateTaskDirect(sessionId, editTaskId, editTaskTitle, editTaskDescription, editTaskDetails, editTaskPriority);
+      await updateTaskDirect(sessionId, editTaskId, editTaskTitle, editTaskDescription, editTaskDetails, editTaskPriority, fromLocalInputValue(editTaskDueAt), editTaskSessionScoped);
       console.log('[TaskPanel] updateTaskDirect success');
       showEditTaskModal = false;
     } catch (e) {
@@ -580,11 +592,19 @@
   }
 
   // Toggle subtask status
-  async function handleToggleSubtaskStatus(subtaskId: string, currentStatus: string) {
+  /**
+   * Flip a subtask between done and pending.
+   *
+   * Takes the current state as a boolean rather than a status string: the
+   * app's own storage has no status field on subtasks, so passing
+   * `subtask.status` handed this `undefined`, and every click computed "not
+   * done" and set it to done — a tick that could never be undone.
+   */
+  async function handleToggleSubtaskStatus(subtaskId: string, currentlyDone: boolean) {
     const sessionId = get(selectedSessionId);
     if (!sessionId) return;
 
-    const newStatus = currentStatus === 'done' ? 'pending' : 'done';
+    const newStatus = currentlyDone ? 'pending' : 'done';
     try {
       await setSubtaskStatus(sessionId, subtaskId, newStatus as TaskStatus);
     } catch (e) {
@@ -614,6 +634,38 @@
     dependencyTaskId = taskId;
     newDependencyId = '';
     showDependencyModal = true;
+  }
+
+  /**
+   * The tasks that can be depended on: everything in this tab except the task
+   * being edited and the ones already listed.
+   *
+   * A task cannot wait for itself, and offering a dependency that is already
+   * set invites a click that does nothing.
+   */
+  $: dependencyOptions = (() => {
+    const current = getTaskById(dependencyTaskId, $tasks);
+    const already = new Set(current?.dependencies || []);
+    const choices = $tasks
+      .filter((task) => task.id !== dependencyTaskId && !already.has(task.id))
+      .map((task) => ({ value: task.id, label: task.title }));
+
+    // A placeholder first, so the field does not arrive with an arbitrary task
+    // already chosen — that reads as a decision the user did not make.
+    return [{ value: '', label: $t('tasks.selectDependency') }, ...choices];
+  })();
+
+  /**
+   * Whether a subtask is finished.
+   *
+   * The two backends describe this differently: Task Master sends a status
+   * string, the app's own storage sends a `done` boolean. Reading only
+   * `status === 'done'` meant every checkbox stayed empty outside MCP mode —
+   * ticking one saved correctly and then rendered unticked, which read as the
+   * click having been lost.
+   */
+  function isSubtaskDone(subtask: { status?: string; done?: boolean }): boolean {
+    return subtask.done === true || subtask.status === 'done';
   }
 
   // Add dependency
@@ -839,6 +891,16 @@
                 >
                   {statusLabels[task.status] || task.status}
                 </span>
+                {#if task.dueAt}
+                  <span
+                    class="due-badge {deadlineState(task.dueAt, task.status)}"
+                    title={new Date(task.dueAt).toLocaleString()}
+                  >
+                    {new Date(task.dueAt).toLocaleString(undefined, {
+                      month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+                    })}
+                  </span>
+                {/if}
                 {#if task.createdAt}
                   <span class="created-at" title={new Date(task.createdAt).toLocaleString()}>
                     {formatRelativeDate(task.createdAt, $t, nowTick)}
@@ -857,7 +919,18 @@
               {/if}
 
               {#if task.details && $selectedTaskId === task.id}
-                <p class="task-details">{task.details}</p>
+                <!-- Labelled, because a box of monospace text under a task
+                     could be anything — output, a note, a command. The same
+                     wording the edit dialog uses for the field, so the two
+                     name the same thing.
+
+                     The notes are usually pasted output or a plan with its own
+                     indentation, hence the box and the monospace face; as body
+                     text the structure collapsed into an unreadable run. -->
+                <div class="details-block">
+                  <span class="details-label">{$t('tasks.implementationDetails')}</span>
+                  <pre class="task-details">{task.details}</pre>
+                </div>
               {/if}
 
               {#if task.tags && task.tags.length > 0}
@@ -875,7 +948,7 @@
               <!-- Subtasks Section -->
               <div class="subtasks-section">
                 <div class="subtasks-header">
-                  <span>{$t('tasks.subtasks')} ({task.subtasks ? task.subtasks.filter(s => s.status === 'done').length : 0}/{task.subtasks ? task.subtasks.length : 0})</span>
+                  <span>{$t('tasks.subtasks')} ({task.subtasks ? task.subtasks.filter(isSubtaskDone).length : 0}/{task.subtasks ? task.subtasks.length : 0})</span>
                   <button class="add-subtask-btn" on:click|stopPropagation={() => openAddSubtaskModal(task.id)}>
                     {$t('tasks.addSubtask')}
                   </button>
@@ -885,11 +958,11 @@
                     <div class="subtask-item">
                       <input
                         type="checkbox"
-                        checked={subtask.status === 'done'}
-                        on:click|stopPropagation={() => handleToggleSubtaskStatus(`${task.id}.${subtask.id}`, subtask.status)}
+                        checked={isSubtaskDone(subtask)}
+                        on:click|stopPropagation={() => handleToggleSubtaskStatus(`${task.id}.${subtask.id}`, isSubtaskDone(subtask))}
                         class="subtask-checkbox"
                       />
-                      <span class="subtask-title" class:done={subtask.status === 'done'}>{subtask.title}</span>
+                      <span class="subtask-title" class:done={isSubtaskDone(subtask)}>{subtask.title}</span>
                       <button
                         class="subtask-remove-btn"
                         on:click|stopPropagation={() => handleRemoveSubtask(`${task.id}.${subtask.id}`)}
@@ -912,7 +985,7 @@
                 <div class="dependencies-header">
                   <span>{$t('tasks.dependencies')}</span>
                   <button class="add-dep-btn" on:click|stopPropagation={() => openDependencyModal(task.id)}>
-                    {$t('tasks.addSubtask')}
+                    {$t('tasks.addDependency')}
                   </button>
                 </div>
                 {#if task.dependencies && task.dependencies.length > 0}
@@ -1215,6 +1288,18 @@
             on:change={handleEditPriorityChange}
           />
         </label>
+        <label>
+          {$t('tasks.dueAt')}
+          <input
+            type="datetime-local"
+            bind:value={editTaskDueAt}
+            class="due-input"
+          />
+        </label>
+        <label class="checkbox-label">
+          <input type="checkbox" bind:checked={editTaskSessionScoped} />
+          {$t('tasks.belongsToSession')}
+        </label>
       </div>
       {#if editTaskError}
         <div class="error-banner" style="margin: 0 16px;">{editTaskError}</div>
@@ -1236,9 +1321,11 @@
 <!-- Add Subtask Modal -->
 {#if showAddSubtaskModal}
   <div class="dialog-overlay" use:autoFocusField on:click={() => showAddSubtaskModal = false}>
-    <div class="dialog-content small" on:click|stopPropagation on:focusin={handleDialogFocusIn}>
+    <div class="dialog-content large" on:click|stopPropagation on:focusin={handleDialogFocusIn}>
       <div class="dialog-header">
-        <h2>{$t('tasks.addSubtaskMenu')} - #{addSubtaskTaskId}</h2>
+        <!-- Named, not numbered: the id is an internal handle, and the task's
+             own title says which one this subtask is being added to. -->
+        <h2>{getTaskById(addSubtaskTaskId, $tasks)?.title || $t('tasks.addSubtaskMenu')}</h2>
         <div class="header-actions">
           <button class="mic-btn" class:active={$dictationListening} on:click|preventDefault={toggleModalDictation} title={$t('tabBar.dictateToField')}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
@@ -1285,15 +1372,15 @@
 <!-- Dependency Modal -->
 {#if showDependencyModal}
   <div class="dialog-overlay" on:click={() => showDependencyModal = false}>
-    <div class="dialog-content small" on:click|stopPropagation>
+    <div class="dialog-content dependency-dialog" on:click|stopPropagation>
       <div class="dialog-header">
-        <h2>{$t('tasks.manageDependencies')} - #{dependencyTaskId}</h2>
+        <!-- Named, not numbered. The id is an internal handle and tells the
+             reader nothing; the task's own title says which one this is. -->
+        <h2>{getTaskById(dependencyTaskId, $tasks)?.title || $t('tasks.manageDependencies')}</h2>
         <button class="close-btn" on:click={() => showDependencyModal = false}>×</button>
       </div>
       <div class="dialog-body">
-        <p class="dialog-hint">
-          Add task IDs that this task depends on. The task won't be suggested until its dependencies are completed.
-        </p>
+        <p class="dialog-hint">{$t('tasks.dependencyHint')}</p>
 
         <!-- Current dependencies -->
         {#if getTaskById(dependencyTaskId, $tasks)?.dependencies?.length}
@@ -1315,37 +1402,30 @@
           </div>
         {/if}
 
-        <label>
-          Add Dependency (Task ID)
-          <div class="dep-input-row">
-            <input
-              type="text"
-              bind:value={newDependencyId}
-              placeholder="e.g., 1 or 2.1"
-            />
-            <button
-              class="add-dep-inline-btn"
-              on:click={handleAddDependency}
-              disabled={!newDependencyId.trim() || $isLoadingTasks}
-            >
-              Add
-            </button>
-          </div>
+        <!-- Picked from a list, not typed.
+             The field used to ask for a task ID with "e.g., 1 or 2.1" as the
+             hint. The id is an internal handle: it is not shown anywhere in
+             the list, so answering meant hunting for a number the interface
+             never told you. Every task in this tab is already known here, so
+             the choice is a dropdown. -->
+        <label class="dep-select-label">
+          {$t('tasks.addDependency')}
+          <Select
+            value={newDependencyId}
+            options={dependencyOptions}
+            on:change={(e) => (newDependencyId = e.detail)}
+            searchable
+          />
         </label>
 
-        <!-- Available tasks for reference -->
-        <div class="available-tasks">
-          <span class="dep-section-label">Available tasks:</span>
-          <div class="tasks-ref-list">
-            {#each $tasks.filter(t => t.id !== dependencyTaskId) as t}
-              <button
-                class="task-ref-btn"
-                on:click={() => { newDependencyId = t.id; }}
-              >
-                #{t.id} - {t.title.substring(0, 30)}{t.title.length > 30 ? '...' : ''}
-              </button>
-            {/each}
-          </div>
+        <div class="dep-add-row">
+          <button
+            class="btn-primary"
+            on:click={handleAddDependency}
+            disabled={!newDependencyId || $isLoadingTasks}
+          >
+            {$t('common.add')}
+          </button>
         </div>
       </div>
       <div class="dialog-footer">
@@ -1621,6 +1701,36 @@
     white-space: nowrap;
   }
 
+  /* A deadline reads as a badge like priority and status, not as body text —
+     it is the field people scan the list for. Colour carries the urgency, but
+     the date itself is always shown: colour alone excludes anyone who cannot
+     distinguish these two, and reads as decoration on a calm list. */
+  .due-badge {
+    font-size: 11px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    flex-shrink: 0;
+    white-space: nowrap;
+    background: rgba(107, 114, 128, 0.12);
+    color: #6b7280;
+  }
+
+  .due-badge.soon {
+    background: rgba(245, 158, 11, 0.15);
+    color: #b45309;
+  }
+
+  .due-badge.overdue {
+    background: rgba(239, 68, 68, 0.15);
+    color: #b91c1c;
+    font-weight: 600;
+  }
+
+  .due-input {
+    width: 100%;
+    box-sizing: border-box;
+  }
+
   .complexity-badge {
     font-size: 11px;
     color: var(--accent-light);
@@ -1630,12 +1740,38 @@
     margin-left: auto;
   }
 
-  .task-description, .task-details {
+  .task-description {
     margin: 8px 0;
     font-size: 13px;
     color: #9ca3af;
     line-height: 1.5;
     white-space: pre-wrap;
+  }
+
+  .details-block {
+    margin: 8px 0;
+  }
+
+  .details-label {
+    display: block;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #6b7280;
+    margin-bottom: 4px;
+  }
+
+  .task-details {
+    margin: 0;
+    font-family: monospace;
+    font-size: 12px;
+    color: #d1d5db;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    background: rgba(0, 0, 0, 0.25);
+    padding: 10px;
+    border-radius: 6px;
+    overflow-x: auto;
   }
 
   .task-tags {
@@ -1659,24 +1795,7 @@
     border-top: 1px solid rgba(255, 255, 255, 0.05);
   }
 
-  .subtasks-section {
-    margin-bottom: 16px;
-  }
 
-  .subtasks-header {
-    font-size: 13px;
-    color: #6b7280;
-    margin-bottom: 8px;
-  }
-
-  .subtask-item {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 6px 0;
-    font-size: 13px;
-    color: #d1d5db;
-  }
 
   .subtask-item span.done {
     text-decoration: line-through;
@@ -1718,13 +1837,6 @@
     color: #6b7280;
   }
 
-  .dep-badge {
-    font-size: 12px;
-    background: rgba(255, 255, 255, 0.05);
-    color: #9ca3af;
-    padding: 2px 8px;
-    border-radius: 4px;
-  }
 
   .task-actions {
     display: flex;
@@ -1802,6 +1914,16 @@
 
   .dialog-content.small {
     max-width: 400px;
+  }
+
+  /* Wider than the other small dialogs: the options are task titles, and at
+     400px most of them wrapped onto three or four lines each, which turned a
+     short list into a wall. */
+  .dialog-content.dependency-dialog {
+    /* Task titles are sentences, not labels. At 720px the longer ones still
+       wrapped; this fits most of them on one line while staying inside a
+       laptop screen. */
+    max-width: min(960px, 92vw);
   }
 
   /* Dialog body form styles */
@@ -1958,11 +2080,84 @@
     background: rgba(255, 255, 255, 0.05);
   }
 
+  /* Drawn rather than left to the platform.
+     accent-color only tints the tick; an unchecked box keeps the platform's
+     own rendering, which in this webview is a solid white square — bright
+     enough on a dark panel to read as the only lit thing in the row. */
   .subtask-checkbox {
-    width: 16px;
-    height: 16px;
+    appearance: none;
+    -webkit-appearance: none;
+    width: 15px;
+    height: 15px;
+    flex-shrink: 0;
+    margin: 0;
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.04);
     cursor: pointer;
-    accent-color: var(--accent);
+    position: relative;
+    transition: background 0.12s ease, border-color 0.12s ease;
+  }
+
+  .subtask-checkbox:hover {
+    border-color: rgba(var(--accent-rgb), 0.6);
+  }
+
+  .subtask-checkbox:checked {
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+
+  /* The tick is drawn with borders rather than a glyph, so it does not depend
+     on a font having the character and cannot be shifted by line-height. */
+  .subtask-checkbox:checked::after {
+    content: '';
+    position: absolute;
+    left: 4px;
+    top: 1px;
+    width: 4px;
+    height: 8px;
+    border: solid #fff;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+  }
+
+  .subtask-checkbox:focus-visible {
+    outline: 2px solid rgba(var(--accent-rgb), 0.6);
+    outline-offset: 2px;
+  }
+
+  /* The dialogs' own checkboxes get the same treatment, for the same reason —
+     they sit on the same dark panels. */
+  .checkbox-label input[type='checkbox'] {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 15px;
+    height: 15px;
+    flex-shrink: 0;
+    margin: 0;
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.04);
+    cursor: pointer;
+    position: relative;
+  }
+
+  .checkbox-label input[type='checkbox']:checked {
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+
+  .checkbox-label input[type='checkbox']:checked::after {
+    content: '';
+    position: absolute;
+    left: 4px;
+    top: 1px;
+    width: 4px;
+    height: 8px;
+    border: solid #fff;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
   }
 
   .subtask-title {
@@ -2114,62 +2309,37 @@
     color: #ef4444;
   }
 
-  .dep-input-row {
-    display: flex;
-    gap: 8px;
+  /* The label lays its children out in a row, so the select took only the
+     width its own text needed — in a 720px dialog the list still wrapped every
+     task title onto four lines. Made a block so the select fills the dialog. */
+  .dep-select-label {
+    display: block;
+  }
+
+  .dep-select-label :global(.custom-select) {
+    width: 100%;
     margin-top: 6px;
   }
 
-  .dep-input-row input {
-    flex: 1;
+  /* The trigger is a flex child of an inline-block; it has to be told to fill
+     its parent, or the parent's 100% buys nothing. */
+  .dep-select-label :global(.select-trigger) {
+    width: 100%;
   }
 
-  .add-dep-inline-btn {
-    background: rgba(var(--accent-rgb), 0.2);
-    border: 1px solid rgba(var(--accent-rgb), 0.3);
-    color: var(--accent-light);
-    padding: 8px 16px;
-    border-radius: 8px;
-    cursor: pointer;
-    font-size: 13px;
-  }
-
-  .add-dep-inline-btn:hover:not(:disabled) {
-    background: rgba(var(--accent-rgb), 0.3);
-  }
-
-  .add-dep-inline-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  .available-tasks {
-    margin-top: 16px;
-  }
-
-  .tasks-ref-list {
-    max-height: 150px;
-    overflow-y: auto;
+  .dep-add-row {
     display: flex;
-    flex-direction: column;
-    gap: 4px;
+    justify-content: flex-end;
+    margin-top: 10px;
   }
 
-  .task-ref-btn {
-    background: rgba(255, 255, 255, 0.02);
-    border: 1px solid rgba(255, 255, 255, 0.05);
-    color: #9ca3af;
-    padding: 8px 12px;
-    border-radius: 6px;
-    text-align: left;
-    cursor: pointer;
-    font-size: 13px;
-  }
 
-  .task-ref-btn:hover {
-    background: rgba(255, 255, 255, 0.05);
-    color: white;
-  }
+
+
+
+
+
+
 
   .header-actions {
     display: flex;

@@ -1381,6 +1381,8 @@ export namespace main {
 	    createdAt: string;
 	    updatedAt: string;
 	    completedAt?: string;
+	    dueAt?: string;
+	    sessionId?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new TaskInfo(source);
@@ -1400,6 +1402,76 @@ export namespace main {
 	        this.createdAt = source["createdAt"];
 	        this.updatedAt = source["updatedAt"];
 	        this.completedAt = source["completedAt"];
+	        this.dueAt = source["dueAt"];
+	        this.sessionId = source["sessionId"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class TaskOverviewItem {
+	    id: string;
+	    title: string;
+	    description: string;
+	    details?: string;
+	    status: string;
+	    priority: string;
+	    tags: string[];
+	    subtasks: SubtaskInfo[];
+	    dependencies: string[];
+	    createdAt: string;
+	    updatedAt: string;
+	    completedAt?: string;
+	    dueAt?: string;
+	    sessionId?: string;
+	    projectId: string;
+	    projectName: string;
+	    projectPath: string;
+	    sessionName?: string;
+	    sessionColor?: string;
+	    overdue: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new TaskOverviewItem(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.title = source["title"];
+	        this.description = source["description"];
+	        this.details = source["details"];
+	        this.status = source["status"];
+	        this.priority = source["priority"];
+	        this.tags = source["tags"];
+	        this.subtasks = this.convertValues(source["subtasks"], SubtaskInfo);
+	        this.dependencies = source["dependencies"];
+	        this.createdAt = source["createdAt"];
+	        this.updatedAt = source["updatedAt"];
+	        this.completedAt = source["completedAt"];
+	        this.dueAt = source["dueAt"];
+	        this.sessionId = source["sessionId"];
+	        this.projectId = source["projectId"];
+	        this.projectName = source["projectName"];
+	        this.projectPath = source["projectPath"];
+	        this.sessionName = source["sessionName"];
+	        this.sessionColor = source["sessionColor"];
+	        this.overdue = source["overdue"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

@@ -47,6 +47,34 @@ type Task struct {
 	CreatedAt    time.Time    `json:"createdAt"`
 	UpdatedAt    time.Time    `json:"updatedAt"`
 	CompletedAt  *time.Time   `json:"completedAt,omitempty"`
+
+	// DueAt is when the task is due, date and time.
+	//
+	// A pointer, so "no deadline" is distinguishable from the zero time — most
+	// tasks never get one, and a zero time would sort as the year 1 and show as
+	// overdue by two millennia.
+	DueAt *time.Time `json:"dueAt,omitempty"`
+
+	// SessionID ties the task to the session it belongs to, so closing that
+	// session can say what is still outstanding. Empty means the task belongs
+	// to the project as a whole rather than to any one session.
+	SessionID string `json:"sessionId,omitempty"`
+}
+
+// Overdue reports whether the deadline has passed and the task is not finished.
+//
+// A completed task is never overdue however long it sat there: the deadline
+// stopped mattering when the work was done.
+func (t Task) Overdue(now time.Time) bool {
+	return t.DueAt != nil && t.Status != TaskStatusDone && now.After(*t.DueAt)
+}
+
+// Unfinished reports whether the task still needs work.
+//
+// Deferred counts as unfinished: it was put off, not dealt with, and closing a
+// session that still has deferred work is exactly the case worth a warning.
+func (t Task) Unfinished() bool {
+	return t.Status != TaskStatusDone
 }
 
 // Subtask represents a subtask within a task
@@ -176,6 +204,25 @@ func (tm *TaskManager) GetTasksByStatus(status TaskStatus) []Task {
 	return filtered
 }
 
+// UnfinishedForSession returns the tasks tied to a session that are not done.
+//
+// Used to warn before a session is closed or deleted. Only tasks explicitly
+// assigned to the session count: a project-wide task is not this session's
+// business, and warning about it on every close would train the warning away.
+func (tm *TaskManager) UnfinishedForSession(sessionID string) []Task {
+	if tm.store == nil || sessionID == "" {
+		return nil
+	}
+
+	var pending []Task
+	for _, task := range tm.store.Tasks {
+		if task.SessionID == sessionID && task.Unfinished() {
+			pending = append(pending, task)
+		}
+	}
+	return pending
+}
+
 // GetTask returns a task by ID
 func (tm *TaskManager) GetTask(id string) (*Task, error) {
 	if tm.store == nil {
@@ -255,6 +302,27 @@ func (tm *TaskManager) UpdateTask(id string, updates map[string]interface{}) err
 			}
 			if priority, ok := updates["priority"].(string); ok {
 				task.Priority = TaskPriority(priority)
+			}
+			// The deadline arrives as an RFC 3339 string, and an empty one
+			// clears it — the edit dialog has to be able to take a deadline
+			// back off a task, not only put one on.
+			//
+			// Checked with a comma-ok on the key rather than on the type: a
+			// caller that is not touching the deadline omits the key entirely,
+			// and a caller clearing it sends "". Without the distinction, every
+			// unrelated edit would wipe the deadline.
+			if raw, present := updates["dueAt"]; present {
+				task.DueAt = nil
+				if text, ok := raw.(string); ok && text != "" {
+					if parsed, err := time.Parse(time.RFC3339, text); err == nil {
+						task.DueAt = &parsed
+					}
+				}
+			}
+			if raw, present := updates["sessionId"]; present {
+				if text, ok := raw.(string); ok {
+					task.SessionID = text
+				}
 			}
 			// Subtasks and dependencies arrive as whole lists rather than as
 			// add/remove operations: the caller already holds the task it is

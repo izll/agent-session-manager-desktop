@@ -135,6 +135,11 @@
     color: #9ca3af;
     margin: 0 0 28px;
     line-height: 1.6;
+    /* Callers pass multi-line messages — the delete prompt lists the tasks
+       still open on the session. HTML collapses those newlines, which ran the
+       whole list together into one paragraph. pre-line keeps the breaks while
+       still wrapping long lines. */
+    white-space: pre-line;
   }
 
   .dialog-actions {

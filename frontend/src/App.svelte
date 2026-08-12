@@ -5,6 +5,7 @@
   import ProjectSelector from './lib/components/Sidebar/ProjectSelector.svelte';
   import MainPanel from './lib/components/MainPanel/MainPanel.svelte';
   import ProjectDashboard from './lib/components/Dashboard/ProjectDashboard.svelte';
+  import AllTasks from './lib/components/Dashboard/AllTasks.svelte';
   import NewSessionDialog from './lib/components/Dialogs/NewSessionDialog.svelte';
   import NewGroupDialog from './lib/components/Dialogs/NewGroupDialog.svelte';
   import GlobalSearchDialog from './lib/components/Dialogs/GlobalSearchDialog.svelte';
@@ -35,14 +36,15 @@
   import { statusLines, tabStatuses } from './lib/stores/statusLines';
   import { QuickReplyTab, ExportSessions, PendingUpdate, AddQuickJump } from '../wailsjs/go/main/App';
   import { loadProjects, otherInstancePID, refreshLockStatus } from './lib/stores/projects';
-  import { appView } from './lib/stores/navigation';
+  import { appView, goBack, showTasksView } from './lib/stores/navigation';
+  import { openTaskCount, watchOpenCount, refreshOpenCount } from './lib/stores/taskAlerts';
   import { loadSettings, settings } from './lib/stores/settings';
   import GitBranchBadge from './lib/components/common/GitBranchBadge.svelte';
   import { agents, loadAgents } from './lib/stores/agents';
   import { startSidebarPolling, stopSidebarPolling } from './lib/stores/sidebarPolling';
   import { WindowMinimise, WindowToggleMaximise, Quit, EventsOn, EventsOff, EventsEmit } from '../wailsjs/runtime/runtime';
   import * as DictationService from '../wailsjs/go/main/DictationService';
-  import { IsDevMode, GetMultiplexerStatus, InstallMultiplexer } from '../wailsjs/go/main/App';
+  import { IsDevMode, GetMultiplexerStatus, InstallMultiplexer, UnfinishedTasksForSession } from '../wailsjs/go/main/App';
   import asmgrIcon from './assets/icons/asmgr.svg';
   import { applyUITheme, DEFAULT_UI_THEME } from './lib/utils/uiThemes';
   import { t, isRTL, loadTranslations } from './lib/i18n';
@@ -631,7 +633,14 @@
     handleTemplates(e.detail?.templateId || '');
   }
 
+  // Open-task badge on the task button. Polled rather than pushed: the count
+  // comes from reading every project's task file, which the backend has no
+  // reason to watch continuously.
+  let stopOpenTaskWatch: (() => void) | null = null;
+
   onMount(async () => {
+    stopOpenTaskWatch = watchOpenCount();
+
     GetMultiplexerStatus().then((s) => {
       missingMultiplexer = s?.available === false
         ? { name: s.name, hint: s.hint, canInstall: !!s.canInstall }
@@ -698,6 +707,7 @@
   });
 
   onDestroy(() => {
+    stopOpenTaskWatch?.();
     window.removeEventListener('keydown', handleKeydown, true);
     window.removeEventListener('terminal-nav', handleTerminalNav as EventListener);
     window.removeEventListener('quickjump:add', handleQuickJumpAdd as EventListener);
@@ -785,8 +795,24 @@
     showTemplateDialog = true;
   }
 
-  function handleDelete() {
+  // Tasks still open on the session about to be deleted.
+  //
+  // Looked up before the dialog opens rather than shown after it: the point is
+  // to change the decision, and a warning that arrives once the work is gone is
+  // not a warning. Only unfinished tasks count — a session whose work is all
+  // done should close without an extra click, or the prompt becomes noise
+  // people learn to dismiss.
+  let pendingTasks: { title: string }[] = [];
+
+  async function handleDelete() {
     if (!$selectedSession) return;
+    try {
+      pendingTasks = await UnfinishedTasksForSession($selectedSession.id);
+    } catch {
+      // A session with no task store is the common case, not an error. Failing
+      // to check must not block deletion.
+      pendingTasks = [];
+    }
     showDeleteConfirm = true;
   }
 
@@ -1021,6 +1047,11 @@
       <div class="header-divider-vertical"></div>
       {#if $appView === 'dashboard'}
         <span class="header-session-name">{$t('dashboard.title')}</span>
+      {:else if $appView === 'tasks'}
+        <!-- The task view spans every project, so the project name and the
+             session's git branch would both be describing something the page
+             is not about. -->
+        <span class="header-session-name">{$t('allTasks.title')}</span>
       {:else if $selectedSession}
         <span class="header-session-name" style={$selectedSession.color ? `color: ${$selectedSession.color}` : ''}>{$selectedSession.name}</span>
         {#if ($settings.gitBranchDisplay || 'header') === 'header'}
@@ -1124,6 +1155,27 @@
             <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
             <circle cx="12" cy="17" r="1" fill="currentColor"/>
           </svg>
+        </button>
+        <button
+          class="btn btn-ghost btn-icon task-button"
+          class:active-view={$appView === 'tasks'}
+          on:click={() => { if ($appView === 'tasks') { goBack(); void refreshOpenCount(); } else { showTasksView(); } }}
+          title={$t('allTasks.title')}
+        >
+          <!-- A checklist, drawn to match the other header icons: same 16px
+               box, same stroke weight, currentColor so it follows the theme.
+               An emoji here rendered in the font's own colour and size and
+               stood out against every neighbour. -->
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 11l3 3L22 4"/>
+            <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+          </svg>
+          {#if $openTaskCount > 0}
+            <!-- The number, not just a dot: "three left" and "thirty" call for
+                 different reactions. Capped at 99 so a long backlog cannot
+                 stretch the header. -->
+            <span class="task-badge">{$openTaskCount > 99 ? '99+' : $openTaskCount}</span>
+          {/if}
         </button>
         <button class="btn btn-ghost btn-icon" on:click={() => showSettingsDialog = true} title={$t('header.settings')}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1229,6 +1281,10 @@
         <div class="main-view">
           <ProjectDashboard on:newSession={handleNewSession} />
         </div>
+      {:else if $appView === 'tasks'}
+        <div class="main-view">
+          <AllTasks />
+        </div>
       {/if}
     </div>
   </div>
@@ -1272,7 +1328,12 @@
   <ConfirmDialog
     bind:show={showDeleteConfirm}
     title={$t('confirm.deleteSession')}
-    message={$t('confirm.deleteSessionMessage', { name: $selectedSession?.name || '' })}
+    message={pendingTasks.length
+      ? $t('confirm.deleteSessionMessage', { name: $selectedSession?.name || '' }) + '\n\n' +
+        $t('confirm.deleteSessionTasks', { count: String(pendingTasks.length) }) + '\n' +
+        pendingTasks.slice(0, 5).map((task) => '• ' + task.title).join('\n') +
+        (pendingTasks.length > 5 ? '\n…' : '')
+      : $t('confirm.deleteSessionMessage', { name: $selectedSession?.name || '' })}
     confirmText={$t('confirm.deleteConfirm')}
     cancelText={$t('common.cancel')}
     variant="danger"
@@ -1648,6 +1709,39 @@
     height: 20px;
     align-self: auto;
     margin: 0 8px;
+  }
+
+  /* The count of open tasks, on the task button.
+     The button needs position:relative for the badge to anchor to it —
+     .btn-icon does not set it, and without it the badge positioned against the
+     page instead and sat outside the button entirely. */
+  .task-button {
+    position: relative;
+  }
+
+  .task-badge {
+    position: absolute;
+    /* Tucked into the corner rather than hung outside it: the header buttons
+       sit close together, and a badge overhanging by its own width overlapped
+       the neighbouring one. */
+    top: 1px;
+    right: 1px;
+    min-width: 13px;
+    height: 13px;
+    padding: 0 3px;
+    box-sizing: border-box;
+    border-radius: 999px;
+    /* Neutral, not red: this counts work outstanding, not something wrong. */
+    background: rgba(107, 114, 128, 0.95);
+    color: #fff;
+    font-size: 9px;
+    font-weight: 600;
+    line-height: 13px;
+    text-align: center;
+    /* The icon is drawn with a 2px stroke; a hairline of the button's own
+       background keeps the badge from touching it. */
+    box-shadow: 0 0 0 1.5px var(--bg-primary, #0f172a);
+    pointer-events: none;
   }
 
   .header-session-name {

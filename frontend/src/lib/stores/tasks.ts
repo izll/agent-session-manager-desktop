@@ -618,17 +618,40 @@ export async function sendTaskToAgent(sessionId: string, taskId: string) {
 }
 
 // Update task directly (no AI)
-export async function updateTaskDirect(sessionId: string, taskId: string, title: string, description: string, details: string, priority: string) {
+/**
+ * Save an edited task.
+ *
+ * dueAt is RFC 3339, or "" to clear the deadline. It is passed only when the
+ * caller actually means to change it — the backend keys on the field being
+ * present, so an unrelated edit that always sent it would wipe the deadline of
+ * every task it touched.
+ *
+ * Task Master has no deadline field of its own, so in MCP mode the deadline is
+ * written through the app's own storage alongside the Task Master update. That
+ * keeps the feature working in both modes rather than silently doing nothing in
+ * one of them.
+ */
+export async function updateTaskDirect(sessionId: string, taskId: string, title: string, description: string, details: string, priority: string, dueAt?: string, sessionScoped?: boolean) {
   if (!sessionId || !taskId) return;
 
   try {
     if (get(useMCPMode)) {
       await App.TaskMasterUpdateTaskDirect(sessionId, taskId, title, description, details, priority);
+      const extra: Record<string, unknown> = {};
+      if (dueAt !== undefined) extra.dueAt = dueAt;
+      if (sessionScoped !== undefined) extra.sessionId = sessionScoped ? sessionId : '';
+      if (Object.keys(extra).length) await App.UpdateTask(sessionId, taskId, extra);
     } else {
       // Editing a task is the app's own operation — it has storage for these
       // fields and no reason to ask Task Master. Calling it regardless is what
       // made saving an edit fail with "Task Master is turned off".
-      await App.UpdateTask(sessionId, taskId, { title, description, details, priority });
+      const updates: Record<string, unknown> = { title, description, details, priority };
+      if (dueAt !== undefined) updates.dueAt = dueAt;
+      // Empty string detaches the task from the session; the backend keys on
+      // the field being present, so an edit that never sends it leaves the
+      // assignment alone.
+      if (sessionScoped !== undefined) updates.sessionId = sessionScoped ? sessionId : '';
+      await App.UpdateTask(sessionId, taskId, updates);
     }
     await loadTasks(sessionId);
   } catch (e) {
@@ -732,12 +755,13 @@ export async function setSubtaskStatus(sessionId: string, subtaskId: string, sta
     if (get(useMCPMode)) {
       await App.TaskMasterSetSubtaskStatus(sessionId, subtaskId, status);
     } else {
+      // The app's own storage records a subtask as done/not-done, with no
+      // status field at all — writing `status` there produced a subtask
+      // carrying a field nothing reads, so the tick never took. ToggleSubtask
+      // is the operation that storage actually has.
       const parent = parentTaskId(subtaskId);
       const child = String(subtaskId).slice(parent.length + 1);
-      await editTaskLocally(sessionId, parent, (task) => ({
-        subtasks: (task.subtasks || []).map((sub: any) =>
-          String(sub.id) === child ? { ...sub, status } : sub),
-      }));
+      await App.ToggleSubtask(sessionId, parent, child);
     }
     await loadTasks(sessionId);
   } catch (e) {

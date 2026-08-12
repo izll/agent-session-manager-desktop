@@ -911,6 +911,29 @@ func (a *App) DeleteTab(id string, windowIdx int) error {
 }
 
 // DeleteSession deletes a session
+// UnfinishedTasksForSession returns the session's tasks that are not done.
+//
+// The frontend asks before closing or deleting a session, so work assigned to
+// it is not thrown away silently. Only tasks explicitly tied to this session
+// count — a project-wide task is not this session's business, and warning about
+// it every time would train the warning away.
+//
+// A missing task store is not an error: most sessions never get tasks, and
+// failing here would block deletion for all of them.
+func (a *App) UnfinishedTasksForSession(sessionID string) ([]TaskInfo, error) {
+	tm, err := a.getTaskManager(sessionID)
+	if err != nil {
+		return []TaskInfo{}, nil
+	}
+
+	pending := tm.UnfinishedForSession(sessionID)
+	result := make([]TaskInfo, len(pending))
+	for i, t := range pending {
+		result[i] = convertTask(t)
+	}
+	return result, nil
+}
+
 func (a *App) DeleteSession(id string) error {
 	a.projectMu.RLock()
 	defer a.projectMu.RUnlock()
@@ -3428,6 +3451,13 @@ type TaskInfo struct {
 	CreatedAt    string        `json:"createdAt"`
 	UpdatedAt    string        `json:"updatedAt"`
 	CompletedAt  *string       `json:"completedAt,omitempty"`
+	// DueAt is RFC 3339, or nil when the task has no deadline. Kept a pointer
+	// rather than an empty string so the frontend can tell "no deadline" from
+	// a value it failed to parse.
+	DueAt *string `json:"dueAt,omitempty"`
+	// SessionID ties the task to one session, so closing it can warn about
+	// what is still outstanding. Empty means the task belongs to the project.
+	SessionID string `json:"sessionId,omitempty"`
 }
 
 // SubtaskInfo represents a subtask for the frontend
@@ -3512,6 +3542,12 @@ func convertTask(t session.Task) TaskInfo {
 		Dependencies: deps,
 		CreatedAt:    t.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 		UpdatedAt:    t.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		SessionID:    t.SessionID,
+	}
+
+	if t.DueAt != nil {
+		dueStr := t.DueAt.Format("2006-01-02T15:04:05Z07:00")
+		info.DueAt = &dueStr
 	}
 
 	if t.CompletedAt != nil {
@@ -3568,6 +3604,14 @@ func (a *App) CreateTask(sessionID, title, description, priority string, tags []
 	task, err := tm.CreateTask(title, description, session.TaskPriority(priority), tags)
 	if err != nil {
 		return nil, err
+	}
+
+	// A task created from a session's own panel belongs to that session, so
+	// closing it can warn about work left behind. Assigned here rather than
+	// through a second call, which would leave the task unassigned if the
+	// caller crashed between the two.
+	if err := tm.UpdateTask(task.ID, map[string]interface{}{"sessionId": sessionID}); err == nil {
+		task.SessionID = sessionID
 	}
 
 	info := convertTask(*task)

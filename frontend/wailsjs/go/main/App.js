@@ -158,6 +158,10 @@ export function GetAgents() {
   return window['go']['main']['App']['GetAgents']();
 }
 
+export function GetAllTasks() {
+  return window['go']['main']['App']['GetAllTasks']();
+}
+
 export function GetAppLog() {
   return window['go']['main']['App']['GetAppLog']();
 }
@@ -772,6 +776,10 @@ export function ToggleGroupCollapse(arg1) {
 
 export function ToggleSubtask(arg1, arg2, arg3) {
   return window['go']['main']['App']['ToggleSubtask'](arg1, arg2, arg3);
+}
+
+export function UnfinishedTasksForSession(arg1) {
+  return window['go']['main']['App']['UnfinishedTasksForSession'](arg1);
 }
 
 export function UpdateTask(arg1, arg2, arg3) {
