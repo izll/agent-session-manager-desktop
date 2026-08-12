@@ -6,6 +6,24 @@ Entries describe what changed for someone using the app. Internal refactoring,
 test and CI work is left out unless it changed behaviour. Dates are release
 dates; the format follows [Keep a Changelog](https://keepachangelog.com).
 
+## 0.9.26 — 2026-08-12
+
+### Fixed
+
+- **The app could die a second after starting.** On some machines it never got
+  as far as a window, exiting with a signal-handler error instead. The cause
+  was a race inside WebKit rather than anything about the build — the same
+  binary would start from one directory and crash from another, which is why it
+  looked machine-specific. Fixed by a Wails update that closes the race.
+- **"Copy on select" now does what it says.** Dragging out a selection put
+  nothing on the clipboard, and the setting made no difference either way. Three
+  things were in the way at once, so fixing any one of them changed nothing
+  visible. The setting now decides for both a drag and a double or triple click,
+  and it no longer needs `xclip` installed — which is what made it appear to
+  work on a machine that happened to have it set up by hand, and nowhere else.
+  Agents that handle the mouse themselves still do: Claude Code in fullscreen
+  mode keeps its own selection behaviour, and the setting's description says so.
+
 ## 0.9.25 — 2026-08-11
 
 ### Added
