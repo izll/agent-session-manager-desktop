@@ -666,7 +666,7 @@
   "settings.fontDefault": "Par défaut",
   "settings.fontSystemMono": "Monospace du système",
   "settings.terminalCopyMode": "Copier à la sélection",
-  "settings.terminalCopyModeDesc": "Ce qui place une sélection du terminal dans le presse-papiers.",
+  "settings.terminalCopyModeDesc": "Ce qui place une sélection du terminal dans le presse-papiers. Les agents exécutés dans un volet peuvent gérer la souris eux-mêmes et l'emporter — dans Claude Code, c'est le réglage copyOnSelect qui décide.",
   "settings.copyModeShift": "Uniquement avec Maj",
   "settings.copyModeSelect": "Toute sélection",
   "settings.gitSection": "Git",

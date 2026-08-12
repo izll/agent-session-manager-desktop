@@ -666,7 +666,7 @@
   "settings.fontDefault": "Varsayılan",
   "settings.fontSystemMono": "Sistem monospace",
   "settings.terminalCopyMode": "Seçimde kopyala",
-  "settings.terminalCopyModeDesc": "Terminal seçimini panoya neyin koyduğu.",
+  "settings.terminalCopyModeDesc": "Terminal seçimini panoya neyin koyduğu. Bir bölmede çalışan aracılar fareyi kendileri işleyip bunu geçersiz kılabilir — Claude Code'da copyOnSelect ayarı belirler.",
   "settings.copyModeShift": "Yalnızca Shift ile",
   "settings.copyModeSelect": "Herhangi bir seçim",
   "settings.gitSection": "Git",

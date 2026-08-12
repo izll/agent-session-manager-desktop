@@ -666,7 +666,7 @@
   "settings.fontDefault": "既定",
   "settings.fontSystemMono": "システムの等幅フォント",
   "settings.terminalCopyMode": "選択時にコピー",
-  "settings.terminalCopyModeDesc": "ターミナルの選択をクリップボードに送る操作。",
+  "settings.terminalCopyModeDesc": "ターミナルの選択範囲をクリップボードに入れる方法。ペインで動作するエージェントがマウスを自ら処理し、この設定を上書きすることがあります — Claude Code では copyOnSelect 設定が決定します。",
   "settings.copyModeShift": "Shift を押しながらのみ",
   "settings.copyModeSelect": "すべての選択",
   "settings.gitSection": "Git",

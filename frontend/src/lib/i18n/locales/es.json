@@ -666,7 +666,7 @@
   "settings.fontDefault": "Predeterminada",
   "settings.fontSystemMono": "Monoespaciada del sistema",
   "settings.terminalCopyMode": "Copiar al seleccionar",
-  "settings.terminalCopyModeDesc": "Qué coloca una selección del terminal en el portapapeles.",
+  "settings.terminalCopyModeDesc": "Qué coloca una selección del terminal en el portapapeles. Los agentes que se ejecutan en un panel pueden gestionar el ratón por su cuenta y anular esto: en Claude Code decide el ajuste copyOnSelect.",
   "settings.copyModeShift": "Solo con Shift",
   "settings.copyModeSelect": "Cualquier selección",
   "settings.gitSection": "Git",

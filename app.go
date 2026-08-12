@@ -104,9 +104,23 @@ func (a *App) startup(ctx context.Context) {
 	// Apply the configured shell before anything can restart a pane. Left
 	// until the first settings save, a tab restarted early in the session
 	// would use the platform default instead of the chosen shell.
+	copyMode := "" // empty means the default, which is shift
 	if _, _, settings, err := storage.LoadAllWithSettings(); err == nil && settings != nil {
 		session.SetTerminalShell(settings.TerminalShell)
+		copyMode = settings.TerminalCopyMode
 	}
+
+	// Applied unconditionally, including when no settings could be loaded.
+	//
+	// tmux's own default for a drag and for a double click is to copy, and the
+	// key tables live in the server, not in this process — so skipping this
+	// leaves copying on for someone who never asked for it, and leaves a stale
+	// binding from a previous run in place. A fresh install has no settings
+	// file at all, which is exactly the case the guarded version missed.
+	session.SetMouseCopyEnabled(copyMode == "select")
+	// Server-wide, so it also covers the mirror sessions the terminal server
+	// creates for attaching — those never go through session start-up.
+	session.ConfigureClipboardForwarding()
 
 	// Single-instance-per-project guard. Two GUIs on the same project attach
 	// to the same tmux sessions and rip each other's ptys out
@@ -2945,6 +2959,11 @@ func (a *App) SaveSettings(settings SettingsInfo) error {
 		current.UIAccent = settings.UIAccent
 		current.TerminalRenderer = settings.TerminalRenderer
 		current.TerminalCopyMode = settings.TerminalCopyMode
+		// tmux is what sees a drag inside a pane, so the setting has to reach
+		// its key bindings — the web terminal never gets the chance to act on
+		// it. Existing sessions are re-bound too: the tables are global, so one
+		// call covers every open pane rather than only the next new one.
+		session.SetMouseCopyEnabled(settings.TerminalCopyMode == "select")
 		current.TerminalFontFamily = settings.TerminalFontFamily
 		current.TerminalShell = settings.TerminalShell
 		// Applied immediately: a tab restarted before the next launch should

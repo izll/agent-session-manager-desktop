@@ -666,7 +666,7 @@
   "settings.fontDefault": "Padrão",
   "settings.fontSystemMono": "Monoespaçada do sistema",
   "settings.terminalCopyMode": "Copiar ao selecionar",
-  "settings.terminalCopyModeDesc": "O que coloca uma seleção do terminal na área de transferência.",
+  "settings.terminalCopyModeDesc": "O que coloca uma seleção do terminal na área de transferência. Agentes em execução em um painel podem tratar o mouse por conta própria e sobrepor isto — no Claude Code, a configuração copyOnSelect decide.",
   "settings.copyModeShift": "Somente com Shift",
   "settings.copyModeSelect": "Qualquer seleção",
   "settings.gitSection": "Git",

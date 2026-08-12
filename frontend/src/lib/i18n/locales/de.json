@@ -666,7 +666,7 @@
   "settings.fontDefault": "Standard",
   "settings.fontSystemMono": "System-Monospace",
   "settings.terminalCopyMode": "Bei Auswahl kopieren",
-  "settings.terminalCopyModeDesc": "Was eine Terminalauswahl in die Zwischenablage legt.",
+  "settings.terminalCopyModeDesc": "Was eine Terminal-Auswahl in die Zwischenablage legt. Agenten in einem Bereich können die Maus selbst verarbeiten und dies überschreiben – in Claude Code entscheidet die Einstellung copyOnSelect.",
   "settings.copyModeShift": "Nur mit Shift",
   "settings.copyModeSelect": "Jede Auswahl",
   "settings.gitSection": "Git",

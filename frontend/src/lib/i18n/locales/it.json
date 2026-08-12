@@ -666,7 +666,7 @@
   "settings.fontDefault": "Predefinito",
   "settings.fontSystemMono": "Monospace di sistema",
   "settings.terminalCopyMode": "Copia alla selezione",
-  "settings.terminalCopyModeDesc": "Cosa mette una selezione del terminale negli appunti.",
+  "settings.terminalCopyModeDesc": "Cosa mette una selezione del terminale negli appunti. Gli agenti in esecuzione in un riquadro possono gestire il mouse da soli e prevalere su questo: in Claude Code decide l'impostazione copyOnSelect.",
   "settings.copyModeShift": "Solo con Maiusc",
   "settings.copyModeSelect": "Qualsiasi selezione",
   "settings.gitSection": "Git",

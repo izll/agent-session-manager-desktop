@@ -732,7 +732,7 @@
   "settings.fontDefault": "Default",
   "settings.fontSystemMono": "System monospace",
   "settings.terminalCopyMode": "Copy on selection",
-  "settings.terminalCopyModeDesc": "What puts a terminal selection on the clipboard.",
+  "settings.terminalCopyModeDesc": "What puts a terminal selection on the clipboard. Agents running in a pane may handle the mouse themselves and override this — in Claude Code the copyOnSelect setting decides.",
   "settings.copyModeShift": "Only with Shift held",
   "settings.copyModeSelect": "Any selection",
   "settings.gitSection": "Git",

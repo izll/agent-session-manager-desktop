@@ -666,7 +666,7 @@
   "settings.fontDefault": "По умолчанию",
   "settings.fontSystemMono": "Системный моноширинный",
   "settings.terminalCopyMode": "Копировать при выделении",
-  "settings.terminalCopyModeDesc": "Что помещает выделение терминала в буфер обмена.",
+  "settings.terminalCopyModeDesc": "Что помещает выделение терминала в буфер обмена. Агенты, работающие в панели, могут обрабатывать мышь сами и переопределить это — в Claude Code решает настройка copyOnSelect.",
   "settings.copyModeShift": "Только с Shift",
   "settings.copyModeSelect": "Любое выделение",
   "settings.gitSection": "Git",

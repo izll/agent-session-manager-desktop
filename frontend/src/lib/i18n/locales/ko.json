@@ -666,7 +666,7 @@
   "settings.fontDefault": "기본값",
   "settings.fontSystemMono": "시스템 고정폭",
   "settings.terminalCopyMode": "선택 시 복사",
-  "settings.terminalCopyModeDesc": "터미널 선택을 클립보드에 넣는 방법입니다.",
+  "settings.terminalCopyModeDesc": "터미널 선택 항목을 클립보드에 넣는 방법입니다. 창에서 실행 중인 에이전트가 마우스를 직접 처리하여 이 설정을 무시할 수 있습니다 — Claude Code에서는 copyOnSelect 설정이 결정합니다.",
   "settings.copyModeShift": "Shift를 누른 경우만",
   "settings.copyModeSelect": "모든 선택",
   "settings.gitSection": "Git",

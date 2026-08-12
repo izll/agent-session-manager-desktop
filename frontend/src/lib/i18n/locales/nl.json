@@ -666,7 +666,7 @@
   "settings.fontDefault": "Standaard",
   "settings.fontSystemMono": "Systeem-monospace",
   "settings.terminalCopyMode": "Kopiëren bij selectie",
-  "settings.terminalCopyModeDesc": "Wat een terminalselectie op het klembord zet.",
+  "settings.terminalCopyModeDesc": "Wat een terminalselectie op het klembord zet. Agents die in een deelvenster draaien, kunnen de muis zelf afhandelen en dit overschrijven — in Claude Code beslist de instelling copyOnSelect.",
   "settings.copyModeShift": "Alleen met Shift",
   "settings.copyModeSelect": "Elke selectie",
   "settings.gitSection": "Git",

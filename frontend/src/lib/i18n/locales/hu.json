@@ -732,7 +732,7 @@
   "settings.fontDefault": "Alapértelmezett",
   "settings.fontSystemMono": "Rendszer monospace",
   "settings.terminalCopyMode": "Másolás kijelöléskor",
-  "settings.terminalCopyModeDesc": "Mi teszi a vágólapra a terminál kijelölését.",
+  "settings.terminalCopyModeDesc": "Mi teszi a vágólapra a terminál kijelölését. A panelben futó ügynökök saját egérkezelése felülírhatja ezt — a Claude Code-ban a copyOnSelect beállítás dönt.",
   "settings.copyModeShift": "Csak Shift-tel",
   "settings.copyModeSelect": "Bármilyen kijelölés",
   "settings.gitSection": "Git",

@@ -666,7 +666,7 @@
   "settings.fontDefault": "ค่าเริ่มต้น",
   "settings.fontSystemMono": "โมโนสเปซของระบบ",
   "settings.terminalCopyMode": "คัดลอกเมื่อเลือก",
-  "settings.terminalCopyModeDesc": "สิ่งที่ทำให้ข้อความที่เลือกในเทอร์มินัลไปยังคลิปบอร์ด",
+  "settings.terminalCopyModeDesc": "สิ่งที่นำข้อความที่เลือกในเทอร์มินัลไปยังคลิปบอร์ด เอเจนต์ที่ทำงานในบานหน้าต่างอาจจัดการเมาส์เองและแทนที่การตั้งค่านี้ — ใน Claude Code การตั้งค่า copyOnSelect เป็นตัวกำหนด",
   "settings.copyModeShift": "เฉพาะเมื่อกด Shift",
   "settings.copyModeSelect": "การเลือกใดก็ได้",
   "settings.gitSection": "Git",

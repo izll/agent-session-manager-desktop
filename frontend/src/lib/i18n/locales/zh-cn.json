@@ -666,7 +666,7 @@
   "settings.fontDefault": "默认",
   "settings.fontSystemMono": "系统等宽字体",
   "settings.terminalCopyMode": "选择时复制",
-  "settings.terminalCopyModeDesc": "决定终端选区如何进入剪贴板。",
+  "settings.terminalCopyModeDesc": "何种操作会把终端选区放入剪贴板。在窗格中运行的智能体可能自行处理鼠标并覆盖此设置 — 在 Claude Code 中由 copyOnSelect 设置决定。",
   "settings.copyModeShift": "仅按住 Shift 时",
   "settings.copyModeSelect": "任意选择",
   "settings.gitSection": "Git",

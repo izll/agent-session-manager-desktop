@@ -666,7 +666,7 @@
   "settings.fontDefault": "Standard",
   "settings.fontSystemMono": "Systemets monospace",
   "settings.terminalCopyMode": "Kopiera vid markering",
-  "settings.terminalCopyModeDesc": "Vad som lägger en terminalmarkering i urklipp.",
+  "settings.terminalCopyModeDesc": "Vad som lägger en terminalmarkering i urklipp. Agenter som körs i en ruta kan hantera musen själva och åsidosätta detta — i Claude Code avgör inställningen copyOnSelect.",
   "settings.copyModeShift": "Endast med Shift",
   "settings.copyModeSelect": "Valfri markering",
   "settings.gitSection": "Git",

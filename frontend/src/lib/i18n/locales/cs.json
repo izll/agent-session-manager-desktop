@@ -666,7 +666,7 @@
   "settings.fontDefault": "Výchozí",
   "settings.fontSystemMono": "Systémové monospace",
   "settings.terminalCopyMode": "Kopírovat při výběru",
-  "settings.terminalCopyModeDesc": "Co vloží výběr z terminálu do schránky.",
+  "settings.terminalCopyModeDesc": "Co umístí výběr v terminálu do schránky. Agenti běžící v panelu mohou myš obsluhovat sami a toto nastavení přebít — v Claude Code rozhoduje nastavení copyOnSelect.",
   "settings.copyModeShift": "Pouze se Shift",
   "settings.copyModeSelect": "Jakýkoli výběr",
   "settings.gitSection": "Git",

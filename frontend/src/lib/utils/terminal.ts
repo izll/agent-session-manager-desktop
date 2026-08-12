@@ -3,6 +3,7 @@ import { FitAddon } from '@xterm/addon-fit';
 import { SearchAddon } from '@xterm/addon-search';
 import { CanvasAddon } from '@xterm/addon-canvas';
 import { LogFrontend, RedrawWindow } from '../../../wailsjs/go/main/App';
+import { ClipboardSetText } from '../../../wailsjs/runtime/runtime';
 import { WebglAddon } from '@xterm/addon-webgl';
 import { GetTerminalWSPort, GetTerminalWSToken } from '../../../wailsjs/go/main/App';
 import { getTerminalTheme, resolveTerminalTheme, DEFAULT_TERMINAL_THEME, resolveFontSize,
@@ -322,6 +323,68 @@ export function createTerminal(
   // 0/tiny size that leaks into the initial WebSocket resize, leading to
   // tmux rendering at ~5 cols wide until another resize happens.
 
+  /**
+   * Put a selection on the clipboard, through the app rather than the browser.
+   *
+   * navigator.clipboard is what this used, and it is the wrong tool here: in a
+   * WebKit webview it is refused in ways that depend on the machine, and the
+   * refusal arrives as a rejected promise that the old code discarded. The
+   * selection highlighted, nothing reached the clipboard, and nothing said so
+   * — which is exactly how it presented, on one machine and not another.
+   *
+   * ClipboardSetText is the runtime's own, talking to the platform directly,
+   * and is what the diff and log views already use. It reports whether it
+   * worked, so a failure can at least reach the log instead of vanishing.
+   */
+  const copySelection = (text: string) => {
+    if (!text) return;
+    ClipboardSetText(text)
+      .then((ok) => {
+        if (!ok) LogFrontend('[terminal] the clipboard refused the selection');
+      })
+      .catch((e) => LogFrontend(`[terminal] copying failed: ${String(e)}`));
+  };
+
+  // OSC 52 — the clipboard, arriving as an escape sequence.
+  //
+  // This is how a drag inside a pane reaches the system clipboard. tmux owns
+  // the mouse (sessions are started with `mouse on`), so a plain drag never
+  // produces an xterm.js selection: measured, mouseup reported a zero-length
+  // selection without Shift and the real text with it. tmux copies into its own
+  // paste buffer and, with set-clipboard on, base64-encodes it into OSC 52 and
+  // writes it down the pty. Nothing has to be installed for this — no xclip,
+  // no helper process — the text travels the connection that is already open.
+  //
+  // xterm.js ignores OSC 52 unless a handler is registered; there is no
+  // built-in one.
+  terminal.parser.registerOscHandler(52, (data) => {
+    // Payload is "<targets>;<base64>": the selection to set (c = clipboard,
+    // p = primary), then the content.
+    const sep = data.indexOf(';');
+    if (sep === -1) return false;
+    const encoded = data.slice(sep + 1);
+    // "?" is a read request. Answering it would let anything running in a pane
+    // exfiltrate the clipboard, so it is declined.
+    if (!encoded || encoded === '?') return false;
+
+    let text: string;
+    try {
+      // atob yields a binary string, one byte per char — decoding it as UTF-8
+      // is what keeps accented characters intact. Treating it as text directly
+      // mangles anything outside ASCII, which for Hungarian is most of it.
+      const binary = atob(encoded);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      text = new TextDecoder().decode(bytes);
+    } catch {
+      return false; // not valid base64; leave the clipboard alone
+    }
+    if (!text) return false;
+
+    copySelection(text);
+    return true;
+  });
+
   // Intercept keyboard shortcuts
   terminal.attachCustomKeyEventHandler((event) => {
     // Alt+Up/Down for session navigation
@@ -372,6 +435,7 @@ export function createTerminal(
   // on an explicit user gesture: a mouseup that ENDED a Shift-held drag. Output
   // can never trigger it, so no freeze. Normal (non-Shift) selection does not
   // auto-copy (use the OS/context menu), matching the requested behaviour.
+
   let shiftSelecting = false;
   const onMouseDown = (e: MouseEvent) => { shiftSelecting = e.shiftKey; };
   const onMouseUp = () => {
@@ -383,9 +447,8 @@ export function createTerminal(
     // clipboard and freezing the UI.
     if (__terminalCopyMode !== 'select' && !wasShift) return;
     const sel = terminal.getSelection();
-    if (sel && sel.length > 0 && navigator.clipboard) {
-      navigator.clipboard.writeText(sel).catch(() => { /* ignore */ });
-    }
+    if (!sel) return;
+    copySelection(sel);
   };
   container.addEventListener('mousedown', onMouseDown, true);
   container.addEventListener('mouseup', onMouseUp, true);

@@ -666,7 +666,7 @@
   "settings.fontDefault": "افتراضي",
   "settings.fontSystemMono": "خط أحادي المسافة للنظام",
   "settings.terminalCopyMode": "نسخ عند التحديد",
-  "settings.terminalCopyModeDesc": "ما الذي يضع تحديد الطرفية في الحافظة.",
+  "settings.terminalCopyModeDesc": "ما الذي يضع تحديد الطرفية في الحافظة. قد تتعامل الوكلاء العاملة داخل اللوحة مع الماوس بنفسها وتتجاوز هذا الإعداد — في Claude Code يحدد ذلك إعداد copyOnSelect.",
   "settings.copyModeShift": "مع Shift فقط",
   "settings.copyModeSelect": "أي تحديد",
   "settings.gitSection": "Git",

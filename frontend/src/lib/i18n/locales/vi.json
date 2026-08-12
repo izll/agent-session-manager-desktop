@@ -666,7 +666,7 @@
   "settings.fontDefault": "Mặc định",
   "settings.fontSystemMono": "Monospace hệ thống",
   "settings.terminalCopyMode": "Sao chép khi chọn",
-  "settings.terminalCopyModeDesc": "Điều gì đưa vùng chọn của terminal vào clipboard.",
+  "settings.terminalCopyModeDesc": "Điều gì đưa vùng chọn của terminal vào bảng nhớ tạm. Các tác nhân chạy trong một khung có thể tự xử lý chuột và ghi đè điều này — trong Claude Code, thiết lập copyOnSelect quyết định.",
   "settings.copyModeShift": "Chỉ khi giữ Shift",
   "settings.copyModeSelect": "Mọi vùng chọn",
   "settings.gitSection": "Git",

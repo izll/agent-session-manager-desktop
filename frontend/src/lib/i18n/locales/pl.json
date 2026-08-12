@@ -666,7 +666,7 @@
   "settings.fontDefault": "Domyślna",
   "settings.fontSystemMono": "Systemowa monospace",
   "settings.terminalCopyMode": "Kopiuj przy zaznaczeniu",
-  "settings.terminalCopyModeDesc": "Co umieszcza zaznaczenie terminala w schowku.",
+  "settings.terminalCopyModeDesc": "Co umieszcza zaznaczenie terminala w schowku. Agenty działające w panelu mogą samodzielnie obsługiwać mysz i nadpisać to ustawienie — w Claude Code decyduje ustawienie copyOnSelect.",
   "settings.copyModeShift": "Tylko z Shift",
   "settings.copyModeSelect": "Dowolne zaznaczenie",
   "settings.gitSection": "Git",
