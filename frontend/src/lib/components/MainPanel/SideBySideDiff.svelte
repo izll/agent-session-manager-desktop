@@ -803,12 +803,19 @@
      Set with an inset shadow rather than a background, because the row's
      background already carries whether the line was added or removed — and
      that is information the search must not paint over. */
+  /* A tint laid over the row's own colour, as a gradient rather than a
+     box-shadow.
+     box-shadow does not stack across rules — the most specific one wins
+     outright — and the block outline already uses it here, composed through
+     --edge-* variables. A shadow for the search would have erased that
+     outline. A background image layers instead: the row keeps its
+     added/removed background underneath and gains the highlight on top. */
   .sbs-line.hit {
-    box-shadow: inset 0 0 0 100vw rgba(250, 204, 21, 0.07);
+    background-image: linear-gradient(rgba(250, 204, 21, 0.07), rgba(250, 204, 21, 0.07));
   }
 
   .sbs-line.hit-current {
-    box-shadow: inset 0 0 0 100vw rgba(250, 204, 21, 0.18);
+    background-image: linear-gradient(rgba(250, 204, 21, 0.2), rgba(250, 204, 21, 0.2));
   }
 
   .sbs-line.hit-current .gutter {
