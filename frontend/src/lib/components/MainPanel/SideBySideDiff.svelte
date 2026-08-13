@@ -373,6 +373,81 @@
    * unless it is too tall for that — then near the top, using the whole
    * viewport rather than pushing its own end below the fold.
    */
+  /**
+   * Find text in either pane.
+   *
+   * Searches the rendered lines rather than the raw diff, because that is what
+   * the reader can see: a match in a line that is not displayed would scroll
+   * nowhere. The HTML carries syntax highlighting, so tags are stripped before
+   * matching — otherwise a search for "span" would hit every coloured token.
+   */
+  let searchQuery = '';
+  let searchHits: number[] = [];
+  let searchAt = 0;
+  /**
+   * The rows to mark: every match faintly, the current one strongly.
+   *
+   * Held as a Set for the every-row test in the markup — a linear scan per row
+   * would be O(rows × hits), which on a large diff is felt.
+   */
+  let hitRows = new Set<number>();
+  let currentHitRow = -1;
+
+  /** Tag-free text of a rendered line, for matching. */
+  function plainText(html: string | null): string {
+    if (!html) return '';
+    // Entities have to be decoded too: the renderer escapes < and &, so a
+    // search for "a < b" would never match the "a &lt; b" in the markup.
+    const el = document.createElement('div');
+    el.innerHTML = html;
+    return el.textContent || '';
+  }
+
+  /**
+   * Row indices containing the query, in display order.
+   *
+   * A row matches if either side does — the two columns are one document to
+   * the person reading them, and reporting a right-hand hit as "not found"
+   * because the left side lacks it would be a lie.
+   */
+  export function search(query: string): number {
+    searchQuery = query;
+    searchAt = 0;
+
+    if (!query.trim()) {
+      searchHits = [];
+      hitRows = new Set();
+      currentHitRow = -1;
+      return 0;
+    }
+
+    const needle = query.toLowerCase();
+    searchHits = [];
+    paired.forEach((row, index) => {
+      const text = (plainText(row.oldHtml) + '\n' + plainText(row.newHtml)).toLowerCase();
+      if (text.includes(needle)) searchHits.push(index);
+    });
+
+    hitRows = new Set(searchHits);
+    currentHitRow = searchHits.length ? searchHits[0] : -1;
+    if (searchHits.length) scrollToRow(searchHits[0]);
+    return searchHits.length;
+  }
+
+  /** Step to the next match, or the previous one. Wraps at both ends. */
+  export function stepSearch(direction: 1 | -1): number {
+    if (!searchHits.length) return 0;
+    searchAt = (searchAt + direction + searchHits.length) % searchHits.length;
+    currentHitRow = searchHits[searchAt];
+    scrollToRow(currentHitRow);
+    return searchAt + 1;
+  }
+
+  /** Which match is showing, 1-based; 0 when there are none. */
+  export function searchPosition(): number {
+    return searchHits.length ? searchAt + 1 : 0;
+  }
+
   export function scrollToRow(rowIndex: number, rowCount = 1) {
     const block = blocks.find((b) => b.fromRow <= rowIndex && rowIndex <= b.toRow)
       ?? blocks.find((b) => b.fromRow === rowIndex);
@@ -470,6 +545,29 @@
    */
   export function scrollOffset(): number {
     return rightEl?.scrollTop ?? 0;
+  }
+
+  /**
+   * The new-file line number showing at the top of the right pane.
+   *
+   * For opening the file somewhere useful: a diff scrolled to a change should
+   * open the editor at that change, not at line 1. The right pane is the one
+   * asked, because it holds the new file — which is the file the editor will
+   * show.
+   *
+   * Rows without a new-file number (a removed line has none) are skipped
+   * forward from, so a viewport whose first row is a deletion still yields the
+   * next real line rather than nothing.
+   */
+  export function topVisibleNewLine(): number | null {
+    if (!rightEl) return null;
+    const topRow = Math.floor(rightEl.scrollTop / ROW_HEIGHT);
+
+    for (let at = topRow; at < right.length; at++) {
+      const number = right[at]?.number;
+      if (typeof number === 'number') return number;
+    }
+    return null;
   }
 
   /**
@@ -571,6 +669,8 @@
         class:gap-removed={line.gap === 'removed'}
         class:gap-under-added={line.gapUnder === 'added'}
         class:gap-under-removed={line.gapUnder === 'removed'}
+        class:hit={hitRows.has(line.row)}
+        class:hit-current={line.row === currentHitRow}
       >
         <span class="gutter">{line.number ?? ''}</span>
         <!-- Already escaped; see utils/highlightLine.ts. -->
@@ -659,6 +759,8 @@
         class:gap-removed={line.gap === 'removed'}
         class:gap-under-added={line.gapUnder === 'added'}
         class:gap-under-removed={line.gapUnder === 'removed'}
+        class:hit={hitRows.has(line.row)}
+        class:hit-current={line.row === currentHitRow}
       >
         <span class="gutter">{line.number ?? ''}</span>
         <span class="code"><code>{@html line.html ?? ''}</code></span>
@@ -685,6 +787,33 @@
     overflow: hidden;
     font-family: 'JetBrains Mono', 'Fira Code', monospace;
     font-size: 12px;
+    /* Opaque, so this reads the same wherever it is placed. Left transparent it
+       picked up whatever sat behind it — in the commit-history dialog that is a
+       vertical gradient, which tinted the code a faint purple that shifted as
+       the page scrolled. The unified pane sets its own background and so never
+       showed the problem. */
+    background: #0a0a0f;
+  }
+
+  /* Search matches.
+     Every hit gets a quiet tint so the shape of the results is visible while
+     scrolling; the one being stepped to gets a stronger one and a marker in
+     the gutter, so "which of these am I on" needs no counting.
+
+     Set with an inset shadow rather than a background, because the row's
+     background already carries whether the line was added or removed — and
+     that is information the search must not paint over. */
+  .sbs-line.hit {
+    box-shadow: inset 0 0 0 100vw rgba(250, 204, 21, 0.07);
+  }
+
+  .sbs-line.hit-current {
+    box-shadow: inset 0 0 0 100vw rgba(250, 204, 21, 0.18);
+  }
+
+  .sbs-line.hit-current .gutter {
+    color: #facc15;
+    font-weight: 600;
   }
 
   .pane {

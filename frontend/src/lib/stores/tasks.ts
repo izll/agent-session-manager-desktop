@@ -131,10 +131,15 @@ export const filteredTasks = derived(
     // Filter by search text
     if ($filter.searchText) {
       const lower = $filter.searchText.toLowerCase();
+      // Implementation details are searched too: they are where the pasted
+      // plan or command usually lives, so leaving them out means a task you
+      // remember by a line from its notes cannot be found at all.
       filtered = filtered.filter(t =>
         t.title.toLowerCase().includes(lower) ||
         t.description.toLowerCase().includes(lower) ||
-        t.tags.some(tag => tag.toLowerCase().includes(lower))
+        (t.details || '').toLowerCase().includes(lower) ||
+        t.tags.some(tag => tag.toLowerCase().includes(lower)) ||
+        (t.subtasks || []).some(sub => sub.title.toLowerCase().includes(lower))
       );
     }
 
@@ -681,7 +686,7 @@ async function editTaskLocally(
 }
 
 /** The task a subtask id belongs to: Task Master addresses them as "3.1". */
-function parentTaskId(subtaskId: string): string {
+export function parentTaskId(subtaskId: string): string {
   return String(subtaskId).split('.')[0];
 }
 

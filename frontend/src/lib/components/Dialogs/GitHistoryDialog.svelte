@@ -1325,6 +1325,12 @@
     min-width: 0;
     display: flex;
     flex-direction: column;
+    /* Opaque, and the same black the unified pane below uses.
+       Without it the side-by-side view has no background of its own, so the
+       dialog's backdrop — a vertical gradient — shows through and tints the
+       code a faint purple that shifts down the page. The unified pane sets
+       this on itself and so never showed the problem. */
+    background: #0a0a0f;
   }
 
   /* Taken from the diff view, so the two behave the same way. */

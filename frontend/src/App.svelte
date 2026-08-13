@@ -6,6 +6,7 @@
   import MainPanel from './lib/components/MainPanel/MainPanel.svelte';
   import ProjectDashboard from './lib/components/Dashboard/ProjectDashboard.svelte';
   import AllTasks from './lib/components/Dashboard/AllTasks.svelte';
+  import UndoToast from './lib/components/common/UndoToast.svelte';
   import NewSessionDialog from './lib/components/Dialogs/NewSessionDialog.svelte';
   import NewGroupDialog from './lib/components/Dialogs/NewGroupDialog.svelte';
   import GlobalSearchDialog from './lib/components/Dialogs/GlobalSearchDialog.svelte';
@@ -1288,6 +1289,10 @@
       {/if}
     </div>
   </div>
+
+  <!-- Floats above everything, so an action taken in any view can be taken
+       back from where it happened. -->
+  <UndoToast />
 
   <!-- Dialogs -->
   <NewSessionDialog bind:show={showNewSessionDialog} />

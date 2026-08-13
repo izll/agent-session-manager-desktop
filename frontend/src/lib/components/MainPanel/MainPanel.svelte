@@ -1,5 +1,6 @@
 <script lang="ts">
   import { createEventDispatcher, onMount, onDestroy } from 'svelte';
+  import { browserViewRequested, clearBrowserViewRequest } from '../../stores/fileJump';
   import TabBar from './TabBar.svelte';
   import Terminal from './Terminal.svelte';
   import Notes from './Notes.svelte';
@@ -186,6 +187,18 @@
   // view: the button is gone when the feature is off, but the palette and any
   // future caller still route through this, and reaching Tasks is what starts
   // the npx install the opt-in exists to prevent.
+  // The diff asks for the browser when a file is opened from it. Handled here
+  // because this is the component that owns which view is showing.
+  $: if ($browserViewRequested) {
+    clearBrowserViewRequest();
+    // Leaving the full-screen diff as well as switching the view. The diff is
+    // not one of the selectable views — it covers the panel and hides the
+    // selector entirely — so selecting 'browser' underneath it changed which
+    // view would show once the diff closed, and nothing on screen moved.
+    fullDiffActive = false;
+    selectView('browser');
+  }
+
   function selectView(view: ViewName) {
     activeView = view;
     lastView = view;

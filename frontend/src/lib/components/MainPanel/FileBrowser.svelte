@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy, createEventDispatcher } from 'svelte';
+  import { pendingFileJump, clearFileJump } from '../../stores/fileJump';
   import { selectedSessionId, selectedWindowIdx } from '../../stores/sessions';
   import { get } from 'svelte/store';
   import * as App from '../../../../wailsjs/go/main/App';
@@ -9,6 +10,7 @@
   import { fileTypeOf } from '../../utils/fileTypes';
   import { EditorState, Compartment } from '@codemirror/state';
   import { EditorView, keymap } from '@codemirror/view';
+  import { search, searchKeymap, highlightSelectionMatches, openSearchPanel } from '@codemirror/search';
   import { history, historyKeymap, defaultKeymap } from '@codemirror/commands';
   import { baseExtensions, insertTabKeymap, loadLanguage, cachedLanguage } from '../../utils/codemirror';
   import ConfirmDialog from '../Dialogs/ConfirmDialog.svelte';
@@ -17,6 +19,61 @@
   export let active = false;
 
   const dispatch = createEventDispatcher();
+
+  /**
+   * Open a file another view asked for — the diff, jumping to a changed file.
+   *
+   * Reacted to only while this view is active: honouring it in the background
+   * would load a file into a browser nobody is looking at, and clear the
+   * request before the view that shows it ever sees it.
+   */
+  $: if (active && $pendingFileJump) {
+    const jump = $pendingFileJump;
+    clearFileJump();
+    void openRequestedFile(jump.path, jump.line);
+  }
+
+  async function openRequestedFile(path: string, line?: number) {
+    // Navigate the tree to the file's directory first, so the list beside the
+    // editor shows where the file actually lives rather than wherever the
+    // browser was last left.
+    const dir = path.replace(/\/[^/]*$/, '') || '/';
+    try {
+      await loadDir(dir);
+    } catch {
+      // A directory that cannot be listed should not stop the file opening.
+    }
+    await loadFile(path);
+    if (line && line > 1) scrollToLine(line);
+  }
+
+  /**
+   * Put a 1-based line at the top of the editor.
+   *
+   * Converted to a document offset because that is what CodeMirror positions
+   * by; a line beyond the end is clamped rather than throwing.
+   */
+  /**
+   * Open the find panel from outside the editor.
+   *
+   * The read view is not editable, and a non-editable CodeMirror does not take
+   * focus — so Ctrl+F pressed while looking at a file never reached the search
+   * keymap at all. Caught on the surrounding element instead and forwarded
+   * here, which works in both views.
+   */
+  function handleBrowserKeydown(event: KeyboardEvent) {
+    if (!(event.ctrlKey || event.metaKey) || event.key !== 'f') return;
+    if (!view) return;
+    event.preventDefault();
+    openSearchPanel(view);
+  }
+
+  function scrollToLine(line: number) {
+    if (!view) return;
+    const target = Math.min(Math.max(line, 1), view.state.doc.lines);
+    const at = view.state.doc.line(target).from;
+    view.dispatch({ effects: EditorView.scrollIntoView(at, { y: 'start' }) });
+  }
 
   // One loaded directory, keyed by its path relative to the session root ("" is
   // the root itself). Directories are fetched only when the user opens them —
@@ -488,7 +545,12 @@
     },
     {
       key: 'Escape',
-      run: () => {
+      run: (target) => {
+        // The find panel takes Escape first. appKeymap is pushed ahead of the
+        // search keymap so Ctrl+S wins, which means this binding would
+        // otherwise close the whole editor while the user was only trying to
+        // dismiss the search box.
+        if (target.dom.querySelector('.cm-search')) return false;
         guardUnsaved(leaveEditMode);
         return true;
       },
@@ -640,6 +702,15 @@
       }),
       EditorState.readOnly.of(readOnly),
       EditorView.editable.of(!readOnly),
+      // Find, in both the read and edit views: looking for something in a file
+      // is at least as common as changing it, and the read view is where most
+      // files are opened from the diff.
+      //
+      // highlightSelectionMatches shows the other occurrences of whatever is
+      // selected, which is what makes the panel's own count meaningful.
+      search({ top: true }),
+      highlightSelectionMatches(),
+      keymap.of(searchKeymap),
     ];
     if (!readOnly) {
       // Order matters: appKeymap first so Ctrl+S and Escape win, then the tab
@@ -1093,7 +1164,8 @@
   $: rootEmpty = !!rootListing && rootListing.entries.length === 0;
 </script>
 
-<div class="browser-container">
+<!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
+<div class="browser-container" role="region" tabindex="-1" on:keydown={handleBrowserKeydown}>
   <div class="browser-header">
     <div class="header-left">
       <span class="browser-title">{$t('browser.title')}</span>

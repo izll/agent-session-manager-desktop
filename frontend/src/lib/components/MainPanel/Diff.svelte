@@ -1,5 +1,44 @@
 <script lang="ts">
   import { onDestroy, tick } from 'svelte';
+  import { requestFileJump } from '../../stores/fileJump';
+
+  /**
+   * Leave the diff for the file browser, where the file can be edited.
+   *
+   * Jumps to the first changed line rather than the top: the reason for opening
+   * a file from a diff is the change, and a long file would otherwise arrive
+   * scrolled nowhere near it.
+   */
+  function openFileInBrowser(path: string) {
+    // Where the reader is looking, when that can be established: opening the
+    // file at the line showing at the top of the diff means the editor arrives
+    // at the change being read, rather than at the file's first change — which
+    // in a long file can be thousands of lines away.
+    //
+    // Only for the file currently displayed; the button on another file in the
+    // list has no viewport of its own to ask, and falls back to its first hunk.
+    let line: number | undefined;
+    if (path === selectedPath) {
+      if (sideBySide) {
+        line = sideBySideView?.topVisibleNewLine() ?? undefined;
+      } else if (wholeFileView) {
+        // The whole-file view lists the file itself, so its row index IS the
+        // line number — 0-based there, 1-based in an editor.
+        const at = virtualLines?.firstVisibleLine();
+        if (typeof at === 'number') line = at + 1;
+      }
+      // The unified hunks view is neither: its rows are hunk lines with gaps
+      // between them, so a row index means nothing to the file. It falls
+      // through to the first hunk below.
+    }
+    if (line === undefined) {
+      const file = files.find((candidate) => candidate.path === path);
+      const firstHunk = file?.hunks?.[0];
+      line = firstHunk ? parseHunkHeader(firstHunk.header).newStart : undefined;
+    }
+
+    requestFileJump(path, line);
+  }
   import { selectedSessionId } from '../../stores/sessions';
   import { get } from 'svelte/store';
   import * as App from '../../../../wailsjs/go/main/App';
@@ -840,7 +879,65 @@
     scrollToLine(i: number, lines?: number): Promise<void>;
     scrollOffset(): number;
     restoreOffset(top: number): Promise<void>;
+    firstVisibleLine(): number;
   } | null = null;
+
+  /**
+   * Find within the side-by-side view.
+   *
+   * Only there: the unified and whole-file views render through VirtualLines,
+   * which keeps off-screen rows out of the DOM, so a search would have to be
+   * built against the data rather than the markup — a separate piece of work,
+   * and not what was asked for.
+   */
+  let showDiffFind = false;
+  let diffQuery = '';
+  let diffHitCount = 0;
+  let diffHitAt = 0;
+  let diffFindInput: HTMLInputElement | undefined;
+
+  function runDiffSearch() {
+    diffHitCount = sideBySideView?.search(diffQuery) ?? 0;
+    diffHitAt = sideBySideView?.searchPosition() ?? 0;
+  }
+
+  function stepDiffSearch(direction: 1 | -1) {
+    diffHitAt = sideBySideView?.stepSearch(direction) ?? 0;
+  }
+
+  function openDiffFind() {
+    showDiffFind = true;
+    tick().then(() => { diffFindInput?.focus(); diffFindInput?.select(); });
+  }
+
+  function closeDiffFind() {
+    showDiffFind = false;
+    diffQuery = '';
+    diffHitCount = 0;
+    diffHitAt = 0;
+    sideBySideView?.search('');
+  }
+
+  /** Ctrl+F opens the bar, wherever the focus is inside the diff. */
+  function handleDiffKeydown(event: KeyboardEvent) {
+    if ((event.ctrlKey || event.metaKey) && event.key === 'f' && sideBySide) {
+      event.preventDefault();
+      openDiffFind();
+    }
+  }
+
+  function handleDiffFindKeydown(event: KeyboardEvent) {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      closeDiffFind();
+      return;
+    }
+    if (event.key === 'Enter' || event.key === 'F3' ||
+        ((event.ctrlKey || event.metaKey) && event.key === 'g')) {
+      event.preventDefault();
+      stepDiffSearch(event.shiftKey ? -1 : 1);
+    }
+  }
   /** The hunk-list scroller. The whole-file view has VirtualLines to scroll
    *  for it; this one is an ordinary element and has to be told. */
   let hunkListEl: HTMLDivElement | null = null;
@@ -1446,7 +1543,8 @@
 
 <svelte:window on:keydown={onKeydown} />
 
-<div class="diff-container">
+<!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
+<div class="diff-container" role="region" tabindex="-1" on:keydown={handleDiffKeydown}>
   <div class="diff-header">
     <div class="header-left">
       <span class="diff-title">{diffMode === 'session' ? $t('diff.session') : $t('diff.full')}</span>
@@ -1611,6 +1709,17 @@
                     <span class="stat added">+{file.added}</span>
                     <span class="stat removed">-{file.removed}</span>
                     <button
+                      class="revert-btn open-file"
+                      title={$t('diff.openInBrowser')}
+                      on:click|stopPropagation={() => openFileInBrowser(file.path)}
+                    >
+                      <!-- Pencil: this leaves the diff for somewhere the file
+                           can be edited. -->
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"/>
+                      </svg>
+                    </button>
+                    <button
                       class="revert-btn file-revert"
                       disabled={reverting}
                       title={$t('diff.revertFile')}
@@ -1659,6 +1768,17 @@
               <div class="file-meta">
                 <span class="stat added">+{file.added}</span>
                 <span class="stat removed">-{file.removed}</span>
+                <button
+                  class="revert-btn open-file"
+                  title={$t('diff.openInBrowser')}
+                  on:click|stopPropagation={() => openFileInBrowser(file.path)}
+                >
+                  <!-- Pencil: this leaves the diff for somewhere the file can
+                       be edited. -->
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"/>
+                  </svg>
+                </button>
                 <button
                   class="revert-btn file-revert"
                   disabled={reverting}
@@ -1733,6 +1853,24 @@
                 title={sideBySide ? $t('diff.showUnified') : $t('diff.showSideBySide')}
                 on:click={() => setSideBySide(!sideBySide)}
               >⫲</button>
+              {#if sideBySide}
+                <!-- Only offered where it works: the other renderers keep
+                     off-screen rows out of the DOM, so there is nothing there
+                     to search. -->
+                <button
+                  class="nav-btn"
+                  class:active={showDiffFind}
+                  title="{$t('diff.findPlaceholder')} (Ctrl+F)"
+                  on:click={() => (showDiffFind ? closeDiffFind() : openDiffFind())}
+                >⌕</button>
+              {/if}
+              <!-- Last in the row, next to the file it acts on: this is the one
+                   control here that leaves the diff. -->
+              <button
+                class="nav-btn"
+                title={$t('diff.openInBrowser')}
+                on:click={() => openFileInBrowser(selectedFile.path)}
+              >✎</button>
             </span>
           </div>
         {/if}
@@ -1791,6 +1929,35 @@
               </button>
             </div>
           {:else if sideBySide}
+            {#if showDiffFind}
+              <!-- Above the panes rather than floating over them: a bar over
+                   code hides the very lines being searched. -->
+              <div class="diff-find">
+                <input
+                  type="text"
+                  bind:this={diffFindInput}
+                  bind:value={diffQuery}
+                  on:input={runDiffSearch}
+                  on:keydown={handleDiffFindKeydown}
+                  placeholder={$t('diff.findPlaceholder')}
+                  title="{$t('notes.nextMatch')}: Enter · F3 · Ctrl+G — {$t('notes.previousMatch')}: Shift+Enter"
+                />
+                <span class="find-count">
+                  {diffHitCount ? `${diffHitAt}/${diffHitCount}` : (diffQuery ? $t('notes.noMatches') : '')}
+                </span>
+                <button
+                  on:click={() => stepDiffSearch(-1)}
+                  disabled={!diffHitCount}
+                  title="{$t('notes.previousMatch')} (Shift+Enter)"
+                >↑</button>
+                <button
+                  on:click={() => stepDiffSearch(1)}
+                  disabled={!diffHitCount}
+                  title="{$t('notes.nextMatch')} (Enter · F3 · Ctrl+G)"
+                >↓</button>
+                <button on:click={closeDiffFind} title="{$t('common.close')} (Esc)">×</button>
+              </div>
+            {/if}
             <SideBySideDiff
               bind:this={sideBySideView}
               canRevert={true}
@@ -2340,6 +2507,13 @@
     font-weight: 600;
   }
 
+  /* Sits beside revert and looks like it: same size, same quiet treatment
+     until hovered. Green rather than amber, because this one changes nothing. */
+  .open-file:hover:not(:disabled) {
+    color: #4ade80 !important;
+    border-color: rgba(74, 222, 128, 0.4) !important;
+  }
+
   .revert-btn {
     display: flex;
     align-items: center;
@@ -2387,6 +2561,64 @@
 
   /* Wraps the path header + the scrolling diff, so only the diff scrolls and
      the path stays put while reading a long file. */
+  /* Sits above the panes, full width, so it never covers the code being
+     searched. Styled like the note's find bar so the two read as one feature. */
+  .diff-find {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    background: #14141f;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    flex-shrink: 0;
+  }
+
+  .diff-find input {
+    flex: 1;
+    min-width: 0;
+    padding: 5px 9px;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 6px;
+    color: #e5e7eb;
+    font-size: 13px;
+    font-family: inherit;
+  }
+
+  .diff-find input:focus {
+    outline: none;
+    border-color: rgba(var(--accent-rgb), 0.6);
+  }
+
+  .diff-find .find-count {
+    font-size: 12px;
+    color: #6b7280;
+    font-variant-numeric: tabular-nums;
+    min-width: 52px;
+    text-align: center;
+  }
+
+  .diff-find button {
+    padding: 4px 9px;
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 5px;
+    color: #9ca3af;
+    font-size: 13px;
+    line-height: 1;
+    cursor: pointer;
+  }
+
+  .diff-find button:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.07);
+    color: #e5e7eb;
+  }
+
+  .diff-find button:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+
   .diff-pane {
     flex: 1;
     display: flex;

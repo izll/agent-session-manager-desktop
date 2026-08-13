@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, onDestroy, createEventDispatcher } from 'svelte';
+  import { onMount, onDestroy, createEventDispatcher, tick } from 'svelte';
   import { selectedSessionId, selectedWindowIdx } from '../../stores/sessions';
   import { get } from 'svelte/store';
   import * as App from '../../../../wailsjs/go/main/App';
@@ -18,6 +18,210 @@
   let saving = false;
   let lastSaved = '';
   let textareaEl: HTMLTextAreaElement;
+
+  /**
+   * Find within the note.
+   *
+   * A textarea cannot highlight a range of its own text — the browser gives no
+   * way to paint inside it — so a match is shown by selecting it and scrolling
+   * it into view. That is what every plain-text find does here, and it has the
+   * advantage that the match is then ready to be typed over.
+   */
+  let showFind = false;
+  let findQuery = '';
+  let findInputEl: HTMLInputElement | undefined;
+
+  // Positions of every match, recomputed as the query or the text changes so a
+  // count never describes a note that has since been edited.
+  $: matches = (() => {
+    if (!showFind || !findQuery) return [] as number[];
+    const haystack = notes.toLowerCase();
+    const needle = findQuery.toLowerCase();
+    const found: number[] = [];
+    let at = haystack.indexOf(needle);
+    while (at !== -1) {
+      found.push(at);
+      at = haystack.indexOf(needle, at + needle.length);
+    }
+    return found;
+  })();
+
+  let matchIndex = 0;
+  // A shorter list must not leave the cursor pointing past its end.
+  $: if (matchIndex >= matches.length) matchIndex = 0;
+
+  function goToMatch(index: number) {
+    if (!matches.length || !textareaEl) return;
+    matchIndex = (index + matches.length) % matches.length;
+    const start = matches[matchIndex];
+
+    textareaEl.focus();
+    textareaEl.setSelectionRange(start, start + findQuery.length);
+
+    // Scrolling is by line, because a textarea has no way to ask where a
+    // character sits. Close enough to put the match on screen, which is all
+    // that is needed.
+    const lineHeight = parseFloat(getComputedStyle(textareaEl).lineHeight) || 20;
+    const line = notes.slice(0, start).split('\n').length - 1;
+    textareaEl.scrollTop = Math.max(0, (line * lineHeight) - (textareaEl.clientHeight / 2));
+  }
+
+  function openFind() {
+    showFind = true;
+    // Pre-fill from the selection, as editors do: having just highlighted the
+    // word you want to find, retyping it is pure ceremony.
+    const selected = textareaEl?.value.slice(textareaEl.selectionStart, textareaEl.selectionEnd);
+    if (selected && !selected.includes('\n')) findQuery = selected;
+    tick().then(() => { findInputEl?.focus(); findInputEl?.select(); });
+  }
+
+  function closeFind() {
+    showFind = false;
+    findQuery = '';
+    textareaEl?.focus();
+  }
+
+  function handleFindKeydown(event: KeyboardEvent) {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      closeFind();
+      return;
+    }
+    // Enter, F3 and Ctrl+G all step, so whichever one the user reaches for
+    // works from the box as well as from the note.
+    if (event.key === 'Enter' || event.key === 'F3' ||
+        ((event.ctrlKey || event.metaKey) && event.key === 'g')) {
+      event.preventDefault();
+      goToMatch(event.shiftKey ? matchIndex - 1 : matchIndex + 1);
+    }
+  }
+
+  /**
+   * Undo history for the note.
+   *
+   * The textarea has its own, but it is emptied whenever the value is assigned
+   * from code — which happens on every tab switch, and happened on every
+   * dictated word until that was fixed. Keeping a history here means Ctrl+Z
+   * still reaches text typed before the last such assignment, and gives Ctrl+Y
+   * a redo, which a textarea only offers as Ctrl+Shift+Z.
+   *
+   * Entries are whole snapshots. A note is a few kilobytes at most, and diffing
+   * to save memory would cost more code than the memory is worth.
+   */
+  type Snapshot = { text: string; caret: number };
+  let history: Snapshot[] = [];
+  let historyAt = -1;
+  /** Set while undo/redo is writing, so the change is not recorded as an edit. */
+  let restoring = false;
+
+  const HISTORY_LIMIT = 200;
+  /** Typing is grouped into one entry until this much time passes. */
+  const COALESCE_MS = 600;
+  let lastRecordedAt = 0;
+
+  /**
+   * Start the history over for a freshly loaded note.
+   *
+   * Without this, undo would walk back into the previous tab's text and write
+   * it into this one — the worst possible outcome for a key people press
+   * without looking.
+   */
+  function resetHistory() {
+    history = [{ text: notes, caret: 0 }];
+    historyAt = 0;
+    lastRecordedAt = 0;
+  }
+
+  function recordHistory(force = false) {
+    if (restoring) return;
+
+    const snapshot: Snapshot = { text: notes, caret: textareaEl?.selectionStart ?? notes.length };
+    const current = history[historyAt];
+    if (current && current.text === snapshot.text) return;
+
+    const now = Date.now();
+    // Successive keystrokes replace the last entry rather than adding one, so
+    // Ctrl+Z steps back by a word or a pause, not by a character.
+    const coalesce = !force && historyAt >= 0 && now - lastRecordedAt < COALESCE_MS;
+    lastRecordedAt = now;
+
+    if (coalesce) {
+      history[historyAt] = snapshot;
+      return;
+    }
+
+    // A new edit after undoing discards what was undone, as every editor does.
+    history = history.slice(0, historyAt + 1);
+    history.push(snapshot);
+    if (history.length > HISTORY_LIMIT) history.shift();
+    historyAt = history.length - 1;
+  }
+
+  function applySnapshot(snapshot: Snapshot) {
+    restoring = true;
+    notes = snapshot.text;
+    tick().then(() => {
+      restoring = false;
+      if (!textareaEl) return;
+      textareaEl.focus();
+      const at = Math.min(snapshot.caret, snapshot.text.length);
+      textareaEl.setSelectionRange(at, at);
+    });
+    handleInput(); // the restored text still has to be saved
+  }
+
+  function undoNote() {
+    if (historyAt <= 0) return;
+    historyAt -= 1;
+    applySnapshot(history[historyAt]);
+  }
+
+  function redoNote() {
+    if (historyAt >= history.length - 1) return;
+    historyAt += 1;
+    applySnapshot(history[historyAt]);
+  }
+
+  /** Ctrl+F anywhere in the note opens the bar. */
+  function handleContainerKeydown(event: KeyboardEvent) {
+    // F3 takes no modifier, so it is checked before the others.
+    if (event.key === 'F3' && showFind) {
+      event.preventDefault();
+      goToMatch(event.shiftKey ? matchIndex - 1 : matchIndex + 1);
+      return;
+    }
+
+    const mod = event.ctrlKey || event.metaKey;
+    if (!mod) return;
+
+    if (event.key === 'f') {
+      event.preventDefault();
+      openFind();
+      return;
+    }
+    // Step through matches from the note itself, not only from the find box.
+    // goToMatch puts the focus back in the textarea so the match shows as a
+    // selection, which means Enter there types a newline rather than advancing
+    // — without these, stepping meant clicking back into the box every time.
+    if (event.key === 'g' && showFind) {
+      event.preventDefault();
+      goToMatch(event.shiftKey ? matchIndex - 1 : matchIndex + 1);
+      return;
+    }
+
+    // Handled here rather than left to the browser: its own history is empty
+    // after a tab switch, so Ctrl+Z would appear to do nothing at all.
+    if (event.key === 'z' && !event.shiftKey) {
+      event.preventDefault();
+      undoNote();
+      return;
+    }
+    // Both spellings of redo, since the note takes Ctrl+Y as well.
+    if (event.key === 'y' || (event.key === 'z' && event.shiftKey)) {
+      event.preventDefault();
+      redoNote();
+    }
+  }
 
   // Dictation support
   const dictation = createFieldDictation(
@@ -49,6 +253,7 @@
       lastSessionId = null;
       notes = '';
       lastSaved = '';
+      resetHistory();
       return;
     }
 
@@ -67,11 +272,13 @@
       if (generation !== loadGeneration || sessionId !== lastSessionId || windowIdx !== lastWindowIdx) return;
       notes = content || '';
       lastSaved = notes;
+      resetHistory();
     } catch (e) {
       if (generation !== loadGeneration || sessionId !== lastSessionId || windowIdx !== lastWindowIdx) return;
       console.error('Failed to load notes:', e);
       notes = '';
       lastSaved = '';
+      resetHistory();
     }
   }
 
@@ -96,6 +303,7 @@
 
   // Debounced save
   function handleInput() {
+    recordHistory();
     if (saveTimeout) {
       clearTimeout(saveTimeout);
     }
@@ -133,6 +341,20 @@
       {:else if notes !== lastSaved}
         <span class="save-indicator unsaved">{$t('notes.unsaved')}</span>
       {/if}
+      <!-- Ctrl+F opens the same bar; the button is here for the people who
+           never learn the shortcut, which is most of them. -->
+      <button
+        class="mic-btn find-toggle"
+        class:active={showFind}
+        on:click={() => (showFind ? closeFind() : openFind())}
+        title="{$t('notes.findPlaceholder')} (Ctrl+F)"
+        aria-label={$t('notes.findPlaceholder')}
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="7"/>
+          <path d="M21 21l-4.35-4.35"/>
+        </svg>
+      </button>
       <button
         class="mic-btn"
         class:active={$dictationListening}
@@ -148,6 +370,40 @@
       </button>
     </div>
   </div>
+  {#if showFind}
+    <div class="find-bar">
+      <input
+        type="text"
+        bind:this={findInputEl}
+        bind:value={findQuery}
+        on:keydown={handleFindKeydown}
+        placeholder={$t('notes.findPlaceholder')}
+        title="{$t('notes.nextMatch')}: Enter · F3 · Ctrl+G — {$t('notes.previousMatch')}: Shift+Enter"
+      />
+      <span class="find-count">
+        {matches.length ? `${matchIndex + 1}/${matches.length}` : (findQuery ? $t('notes.noMatches') : '')}
+      </span>
+      <!-- The shortcut is named in the tooltip, not only bound: a key nobody
+           is told about is a key nobody presses. -->
+      <button
+        on:click={() => goToMatch(matchIndex - 1)}
+        disabled={!matches.length}
+        title="{$t('notes.previousMatch')} (Shift+Enter · Shift+F3)"
+        aria-label={$t('notes.previousMatch')}
+      >↑</button>
+      <button
+        on:click={() => goToMatch(matchIndex + 1)}
+        disabled={!matches.length}
+        title="{$t('notes.nextMatch')} (Enter · F3 · Ctrl+G)"
+        aria-label={$t('notes.nextMatch')}
+      >↓</button>
+      <button
+        on:click={closeFind}
+        title="{$t('common.close')} (Esc)"
+        aria-label={$t('common.close')}
+      >×</button>
+    </div>
+  {/if}
   <div class="notes-content">
     <textarea
       class="notes-textarea"
@@ -156,11 +412,68 @@
       bind:value={notes}
       bind:this={textareaEl}
       on:input={handleInput}
+      on:keydown={handleContainerKeydown}
     ></textarea>
   </div>
 </div>
 
 <style>
+  .find-bar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    background: #14141f;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .find-bar input {
+    flex: 1;
+    min-width: 0;
+    padding: 5px 9px;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 6px;
+    color: #e5e7eb;
+    font-size: 13px;
+    font-family: inherit;
+  }
+
+  .find-bar input:focus {
+    outline: none;
+    border-color: rgba(var(--accent-rgb), 0.6);
+  }
+
+  .find-count {
+    font-size: 12px;
+    color: #6b7280;
+    font-variant-numeric: tabular-nums;
+    /* Fixed width so the buttons do not shift as the count changes. */
+    min-width: 52px;
+    text-align: center;
+  }
+
+  .find-bar button {
+    padding: 4px 9px;
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 5px;
+    color: #9ca3af;
+    font-size: 13px;
+    line-height: 1;
+    cursor: pointer;
+  }
+
+  .find-bar button:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.07);
+    color: #e5e7eb;
+  }
+
+  .find-bar button:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+
   .notes-container {
     height: 100%;
     display: flex;

@@ -11,6 +11,7 @@
   import * as DictationService from '../../../../wailsjs/go/main/DictationService';
   import { EventsOn } from '../../../../wailsjs/runtime/runtime';
   import { t } from '../../i18n';
+  import { offerUndo } from '../../stores/undo';
   import { toLocalInputValue, fromLocalInputValue, deadlineState } from '../../utils/taskDueDate';
   import {
     tasks,
@@ -44,6 +45,7 @@
     clearSubtasks,
     setSubtaskStatus,
     addDependency,
+    parentTaskId,
     removeDependency,
     taskSortBy,
     setTaskSortBy,
@@ -91,6 +93,7 @@
 
   // Edit task modal
   let showEditTaskModal = false;
+  let searchInputEl: HTMLInputElement | undefined;
   let editTaskDueAt = '';
   // Whether the task belongs to this session or to the project as a whole.
   // Only session-owned tasks trigger the warning when a session is closed, so
@@ -441,7 +444,26 @@
   async function confirmDeleteTask() {
     const sessionId = get(selectedSessionId);
     if (!sessionId || !deleteTaskId) return;
+
+    // Undo re-creates the task rather than restoring it, so it comes back with
+    // a new id. Its subtasks and dependencies do not survive that — anything
+    // pointing at the old id would point at nothing. The offer says only that
+    // the task can be brought back, which is what actually happens.
+    const removed = $tasks.find((task) => task.id === deleteTaskId);
+
     await removeTask(sessionId, deleteTaskId);
+    if (removed) {
+      offerUndo({
+        message: $t('undo.taskDeleted', { title: removed.title }),
+        undo: () => addManualTask(
+          sessionId,
+          removed.title,
+          removed.description || '',
+          removed.details || '',
+          removed.priority || 'medium',
+        ),
+      });
+    }
     deleteTaskId = '';
     deleteTaskTitle = '';
   }
@@ -451,8 +473,19 @@
     const sessionId = get(selectedSessionId);
     if (!sessionId) return;
 
+    // Captured before the change: after it, the store holds the new value and
+    // there is nothing left to go back to.
+    const previous = $tasks.find((task) => task.id === taskId)?.status;
+
     await setTaskStatus(sessionId, taskId, newStatus);
     contextMenuTask = null;
+
+    if (previous && previous !== newStatus) {
+      offerUndo({
+        message: $t('undo.taskStatus', { status: statusLabels[newStatus] || newStatus }),
+        undo: () => setTaskStatus(sessionId, taskId, previous as TaskStatus),
+      });
+    }
   }
 
   // Expand task
@@ -607,6 +640,10 @@
     const newStatus = currentlyDone ? 'pending' : 'done';
     try {
       await setSubtaskStatus(sessionId, subtaskId, newStatus as TaskStatus);
+      offerUndo({
+        message: currentlyDone ? $t('undo.subtaskUnchecked') : $t('undo.subtaskChecked'),
+        undo: () => setSubtaskStatus(sessionId, subtaskId, (currentlyDone ? 'done' : 'pending') as TaskStatus),
+      });
     } catch (e) {
       console.error('Failed to toggle subtask status:', e);
     }
@@ -621,8 +658,24 @@
   async function confirmRemoveSubtask() {
     const sessionId = get(selectedSessionId);
     if (!sessionId || !removeSubtaskId) return;
+
+    // Kept before the delete, so undo has something to put back. A restored
+    // subtask gets a fresh id — nothing references subtask ids, so that is
+    // invisible here, unlike with tasks.
+    const parentId = parentTaskId(removeSubtaskId);
+    const childId = String(removeSubtaskId).slice(parentId.length + 1);
+    const removed = $tasks
+      .find((task) => task.id === parentId)?.subtasks
+      ?.find((sub) => String(sub.id) === childId);
+
     try {
       await removeSubtask(sessionId, removeSubtaskId);
+      if (removed) {
+        offerUndo({
+          message: $t('undo.subtaskDeleted', { title: removed.title }),
+          undo: () => addSubtask(sessionId, parentId, removed.title),
+        });
+      }
     } catch (e) {
       console.error('Failed to remove subtask:', e);
     }
@@ -688,6 +741,10 @@
 
     try {
       await removeDependency(sessionId, taskId, depId);
+      offerUndo({
+        message: $t('undo.dependencyRemoved'),
+        undo: () => addDependency(sessionId, taskId, depId),
+      });
     } catch (e) {
       console.error('Failed to remove dependency:', e);
     }
@@ -806,6 +863,29 @@
        — parsing a PRD, expanding a task into subtasks, scoring complexity —
        along with the button that installs it. -->
   <div class="action-bar">
+    <!-- Filtering, not searching: the list narrows as you type rather than
+         jumping between matches, which is what a list of this length wants. -->
+    <div class="task-search">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="11" cy="11" r="8"/>
+        <path d="M21 21l-4.35-4.35"/>
+      </svg>
+      <input
+        type="text"
+        bind:this={searchInputEl}
+        value={$taskFilter.searchText}
+        on:input={(e) => taskFilter.update((f) => ({ ...f, searchText: e.currentTarget.value }))}
+        placeholder={$t('tasks.searchPlaceholder')}
+      />
+      {#if $taskFilter.searchText}
+        <button
+          class="clear-search"
+          on:click={() => taskFilter.update((f) => ({ ...f, searchText: '' }))}
+          aria-label={$t('common.clear')}
+        >×</button>
+      {/if}
+    </div>
+
     <button class="action-btn" on:click={() => showAddTaskModal = true} disabled={$isLoadingTasks}>
       {$t('tasks.addTask')}
     </button>
@@ -878,41 +958,70 @@
 
             <div class="task-content">
               <div class="task-title-row">
-                <span class="task-name" class:completed={task.status === 'done'}>{task.title}</span>
-                <span
-                  class="priority-badge"
-                  style="background: {priorityColors[task.priority] || '#9ca3af'}20; color: {priorityColors[task.priority] || '#9ca3af'}"
-                >
-                  {priorityLabels[task.priority] || task.priority}
-                </span>
-                <span
-                  class="status-badge"
-                  style="background: {statusColors[task.status] || '#9ca3af'}20; color: {statusColors[task.status] || '#9ca3af'}"
-                >
-                  {statusLabels[task.status] || task.status}
-                </span>
-                {#if task.dueAt}
-                  <span
-                    class="due-badge {deadlineState(task.dueAt, task.status)}"
-                    title={new Date(task.dueAt).toLocaleString()}
-                  >
-                    {new Date(task.dueAt).toLocaleString(undefined, {
-                      month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
-                    })}
-                  </span>
-                {/if}
-                {#if task.createdAt}
-                  <span class="created-at" title={new Date(task.createdAt).toLocaleString()}>
-                    {formatRelativeDate(task.createdAt, $t, nowTick)}
-                  </span>
-                {/if}
-              </div>
+                <span class="task-name" class:completed={task.status === 'done'} title={task.title}>{task.title}</span>
+                <div class="task-meta-row">
+                  {#if task.createdAt}
+                    <span class="created-at" title={new Date(task.createdAt).toLocaleString()}>
+                      {formatRelativeDate(task.createdAt, $t, nowTick)}
+                    </span>
+                  {/if}
 
-              {#if task.complexity}
-                <span class="complexity-badge" title={$t('tasks.complexityScore')}>
-                  C:{task.complexity}
-                </span>
-              {/if}
+                  {#if task.dueAt}
+                    <span
+                      class="due-badge {deadlineState(task.dueAt, task.status)}"
+                      title={new Date(task.dueAt).toLocaleString()}
+                    >
+                      {new Date(task.dueAt).toLocaleString(undefined, {
+                        month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+                      })}
+                    </span>
+                  {/if}
+
+                  {#if task.complexity}
+                    <span class="complexity-badge" title={$t('tasks.complexityScore')}>
+                      C:{task.complexity}
+                    </span>
+                  {/if}
+
+                  {#if task.subtasks && task.subtasks.length > 0}
+                    <!-- Subtask progress, so a checklist part-done is visible
+                         without expanding the task. Green when all of it is. -->
+                    <span
+                      class="subtask-badge"
+                      class:complete={task.subtasks.every(isSubtaskDone)}
+                      title={$t('tasks.subtasks')}
+                    >
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M9 11l3 3L20 5"/>
+                      </svg>
+                      {task.subtasks.filter(isSubtaskDone).length}/{task.subtasks.length}
+                    </span>
+                  {/if}
+
+                  {#if task.dependencies && task.dependencies.length > 0}
+                    <span class="dep-count-badge" title={$t('tasks.dependencies')}>
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+                        <path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/>
+                        <path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/>
+                      </svg>
+                      {task.dependencies.length}
+                    </span>
+                  {/if}
+
+                  <span
+                    class="status-badge meta-column"
+                    style="background: {statusColors[task.status] || '#9ca3af'}20; color: {statusColors[task.status] || '#9ca3af'}"
+                  >
+                    {statusLabels[task.status] || task.status}
+                  </span>
+                  <span
+                    class="priority-badge meta-column"
+                    style="background: {priorityColors[task.priority] || '#9ca3af'}20; color: {priorityColors[task.priority] || '#9ca3af'}"
+                  >
+                    {priorityLabels[task.priority] || task.priority}
+                  </span>
+                </div>
+              </div>
 
               {#if task.description && $selectedTaskId === task.id}
                 <p class="task-description">{task.description}</p>
@@ -1537,6 +1646,53 @@
     color: #4ade80;
   }
 
+  .task-search {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 8px;
+    background: rgba(0, 0, 0, 0.25);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+    color: #6b7280;
+    flex: 1;
+    min-width: 120px;
+    max-width: 280px;
+  }
+
+  .task-search:focus-within {
+    border-color: rgba(var(--accent-rgb), 0.5);
+  }
+
+  .task-search input {
+    flex: 1;
+    min-width: 0;
+    padding: 5px 0;
+    background: transparent;
+    border: none;
+    color: #e5e7eb;
+    font-size: 13px;
+    font-family: inherit;
+  }
+
+  .task-search input:focus {
+    outline: none;
+  }
+
+  .clear-search {
+    background: transparent;
+    border: none;
+    color: #6b7280;
+    font-size: 16px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0 2px;
+  }
+
+  .clear-search:hover {
+    color: #d1d5db;
+  }
+
   .action-bar {
     display: flex;
     gap: 8px;
@@ -1626,7 +1782,7 @@
 
   .task-main {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     gap: 12px;
   }
 
@@ -1670,14 +1826,66 @@
   .task-title-row {
     display: flex;
     align-items: center;
-    gap: 8px;
-    flex-wrap: wrap;
+    gap: 12px;
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  /* Metadata is anchored from the right: priority is the outside column,
+     status sits immediately inside it, and optional values grow further left.
+     Missing optional values therefore leave no holes and cannot move the two
+     columns that must line up. */
+  .task-meta-row {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: auto;
+  }
+
+  .meta-column {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+  }
+
+  /* Sized in ch — the width of a "0" — plus room for the pill's own padding
+     and for the longest translated label. Measured at 11px: "FÜGGŐBEN" needs
+     73px and "Folyamatban"/"Elhalasztva" more, so status gets the wider slot.
+     A label longer than its slot wraps rather than pushing the column, which
+     keeps the alignment even where a translation runs long. */
+  .meta-column.priority-badge { width: 11ch; }
+  .meta-column.status-badge { width: 15ch; }
+
+  .subtask-badge,
+  .dep-count-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 10px;
+    font-variant-numeric: tabular-nums;
+    padding: 2px 7px;
+    border-radius: 999px;
+    background: rgba(107, 114, 128, 0.18);
+    color: #9ca3af;
+  }
+
+  .subtask-badge.complete {
+    background: rgba(74, 222, 128, 0.15);
+    color: #4ade80;
   }
 
   .task-name {
+    flex: 1 1 auto;
+    min-width: 0;
     font-size: 14px;
     color: white;
     font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .task-name.completed {
@@ -1696,7 +1904,6 @@
   .created-at {
     font-size: 11px;
     color: #6b7280;
-    margin-left: auto;
     flex-shrink: 0;
     white-space: nowrap;
   }
