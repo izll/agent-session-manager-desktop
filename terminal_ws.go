@@ -481,6 +481,17 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 		if err := createCmd.Run(); err != nil {
 			log.Printf("Failed to create mirror session %s: %v, falling back to direct attach", linkedName, err)
 			attachTarget = tmuxSession
+		} else {
+			// The mirror is what the terminal actually attaches to, so the mouse
+			// has to be on here as well — session options are per session, and
+			// setting it on the base session does not reach this one.
+			//
+			// Without it the wheel does nothing at all in a pane: tmux's own
+			// WheelUpPane binding is present but never fires, and the pane keeps
+			// only the few thousand lines xterm holds. Seen on a machine whose
+			// global default is `mouse off`, where the base sessions were set
+			// explicitly and the mirrors inherited the default.
+			session.TmuxCommand("set-option", "-t", linkedName, "mouse", "on").Run()
 		}
 	}
 
@@ -497,6 +508,8 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 			log.Printf("link-window failed for %s win %d: %v, falling back to grouped", tmuxSession, winIdx, linkErr)
 			session.TmuxCommand("kill-session", "-t", linkedName).Run()
 			session.TmuxCommand("new-session", "-d", "-s", linkedName, "-t", tmuxSession).Run()
+			// Same reason as above: a session created here needs the mouse too.
+			session.TmuxCommand("set-option", "-t", linkedName, "mouse", "on").Run()
 		} else {
 			// Leave the mirror holding exactly the linked window.
 			//

@@ -236,8 +236,66 @@ export function themeFor(tabTheme?: string, agent?: string) {
 // synchronously when the renderer initialises; if the monospace font isn't
 // loaded yet those metrics are wrong and glyphs can blur/mis-align — so we wait
 // for document.fonts.ready first. Any failure falls back to the DOM renderer.
+/**
+ * Size the terminal to its container, without reserving a scrollbar.
+ *
+ * The fit addon subtracts a scrollbar width from the space it measures:
+ *
+ *   overviewRuler?.width || DEFAULT_SCROLL_BAR_WIDTH   // that constant is 14
+ *
+ * Setting that width to 0 does not help — `||` treats 0 as absent and falls
+ * back to 14 regardless. tmux owns scrolling in these panes (its WheelUpPane
+ * binding pages the full history), the bar is hidden in CSS, and nothing else
+ * wants the strip, so those 14px were simply lost. Measured on a real pane:
+ * a 1752px row area carrying 1730px of cells.
+ *
+ * This is the addon's own arithmetic with that subtraction removed. The
+ * remainder after Math.floor stays — a terminal shows whole characters, and
+ * part of one is not usable width.
+ *
+ * Returns false when the terminal has not been measured yet, so the caller can
+ * leave the size alone rather than resize to something meaningless.
+ */
+function fitWithoutScrollbar(terminal: Terminal): boolean {
+  const core = (terminal as any)._core;
+  const element = (terminal as any).element as HTMLElement | undefined;
+  const parent = element?.parentElement;
+  if (!core || !element || !parent) return false;
+
+  const cell = core._renderService?.dimensions?.css?.cell;
+  if (!cell || !cell.width || !cell.height) return false;
+
+  const parentStyle = window.getComputedStyle(parent);
+  const parentWidth = Math.max(0, parseInt(parentStyle.getPropertyValue('width')));
+  const parentHeight = parseInt(parentStyle.getPropertyValue('height'));
+  if (!parentWidth || !parentHeight) return false;
+
+  const style = window.getComputedStyle(element);
+  const padding = {
+    top: parseInt(style.getPropertyValue('padding-top')) || 0,
+    bottom: parseInt(style.getPropertyValue('padding-bottom')) || 0,
+    left: parseInt(style.getPropertyValue('padding-left')) || 0,
+    right: parseInt(style.getPropertyValue('padding-right')) || 0,
+  };
+
+  const availableWidth = parentWidth - padding.left - padding.right;
+  const availableHeight = parentHeight - padding.top - padding.bottom;
+
+  // The addon's own floors: two columns and one row, so a pane measured mid
+  // layout cannot collapse the pty to nothing.
+  const cols = Math.max(2, Math.floor(availableWidth / cell.width));
+  const rows = Math.max(1, Math.floor(availableHeight / cell.height));
+
+  if (terminal.cols !== cols || terminal.rows !== rows) {
+    core._renderService?.clear();
+    terminal.resize(cols, rows);
+  }
+  return true;
+}
+
 function loadRenderer(terminal: Terminal): void {
   const mode = __terminalRenderer;
+
   if (mode === 'dom') return; // no addon = xterm's built-in DOM renderer
 
   const attach = () => {
@@ -279,7 +337,21 @@ export function createTerminal(
     // renderer quiet when nothing is happening.
     cursorBlink: false,
     fontSize: fontSizeFor(themeCtx.fontSize, themeCtx.agent),
-    scrollback: 1000,
+    /**
+     * How far the wheel scrolls before tmux takes over.
+     *
+     * Not the whole history, deliberately. xterm keeps 12 bytes per cell, so a
+     * 221-column line costs 2.6 kB — measured against this machine's panes,
+     * where the same lines average 55 bytes as plain text. Matching tmux's
+     * 50,000 would be 253 MB per pane, and nothing caps how many panes are
+     * open: ten tabs would be 2.5 GB. tmux itself holds all 47 panes here in
+     * 224 MB, because it packs and pages what xterm keeps as live cells.
+     *
+     * 5,000 is several hours of agent output for the cost of 13 MB a pane. Past
+     * that the wheel hands over to tmux's copy mode, which has the rest — see
+     * the wheel handler below.
+     */
+    scrollback: 5000,
     // Low-risk render-cost trims for the DOM renderer on WebKitGTK (no renderer
     // change). Each one removes work from the per-update style/layout/paint
     // pipeline that profiling pinned as the real cost (WebKitWebProcess high
@@ -298,6 +370,21 @@ export function createTerminal(
     theme: themeFor(themeCtx.tabTheme, themeCtx.agent),
     ...options
   });
+
+  /**
+   * The viewport's background, which xterm hard-codes to #000.
+   *
+   * That is the element behind the rows, so wherever the rows do not cover it —
+   * the strip past the last column, the space below the last line — a black
+   * band shows through on any theme that is not black. Published as a custom
+   * property so the stylesheet can use it and a theme change updates it in
+   * place.
+   */
+  const applyViewportBackground = () => {
+    const background = themeFor(themeCtx.tabTheme, themeCtx.agent)?.background;
+    if (background) container.style.setProperty('--xterm-background', background);
+  };
+  applyViewportBackground();
 
   // No Unicode 11 width tables here, deliberately. Switching them on looked
   // like a fix for accented characters going missing, but the bytes were
@@ -467,7 +554,7 @@ export function createTerminal(
     terminal.options.fontSize = next;
     // A different size means a different row/column count; without refitting,
     // the pty keeps the old geometry and output wraps at the wrong column.
-    try { fitAddon.fit(); } catch { /* not attached yet */ }
+    try { if (!fitWithoutScrollbar(terminal)) fitAddon.fit(); } catch { /* not attached yet */ }
     container.dispatchEvent(new CustomEvent('terminal:fontsize', {
       detail: { size: next },
       bubbles: true,
@@ -1088,7 +1175,11 @@ export function fitTerminal(terminalInstance: TerminalInstance, origin = 'fit'):
     if (rect.width < 2 || rect.height < 2) return;
   }
 
-  terminalInstance.fitAddon.fit();
+  // Our own sizing, falling back to the addon if the terminal has not been
+  // measured yet — see fitWithoutScrollbar.
+  if (!fitWithoutScrollbar(terminalInstance.terminal)) {
+    terminalInstance.fitAddon.fit();
+  }
 
   // Send resize via WebSocket if connected
   if (terminalInstance.ws && terminalInstance.ws.readyState === WebSocket.OPEN) {

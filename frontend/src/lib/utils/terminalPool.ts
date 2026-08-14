@@ -478,8 +478,14 @@ export class TerminalPool {
   applyTheme(): void {
     for (const entry of this.entries.values()) {
       try {
-        entry.terminalInstance.terminal.options.theme =
-          themeFor(entry.themeCtx?.tabTheme, entry.themeCtx?.agent);
+        const theme = themeFor(entry.themeCtx?.tabTheme, entry.themeCtx?.agent);
+          entry.terminalInstance.terminal.options.theme = theme;
+          // The viewport behind the rows is hard-coded to #000 by xterm, so it
+          // has to be told the new colour too — otherwise a theme change leaves
+          // a black band wherever the rows do not reach.
+          if (theme?.background) {
+            entry.containerEl?.style.setProperty('--xterm-background', theme.background);
+          }
         // The canvas renderer caches rendered glyphs in a texture atlas keyed
         // by colour, and does not invalidate it when the theme changes
         // (xterm.js#3548). The stale entries show up as characters that are

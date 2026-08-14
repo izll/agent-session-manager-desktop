@@ -808,19 +808,73 @@
     overflow: hidden;
   }
 
+  /* Even padding on all four sides.
+     A wider right side was tried while chasing a line whose background stopped
+     short of the frame; that turned out to be the screen and row elements being
+     sized to the columns rather than to the space — fixed below — so the
+     padding can stay symmetrical. */
   .terminal-pool-container :global(.xterm) {
     padding: 8px;
     height: 100% !important;
     box-sizing: border-box;
   }
 
+  /* The screen is set to the columns' own width — the renderer writes
+     `_screenElement.style.width = canvas.width`, which is cols × cellWidth —
+     so stretching the rows inside it buys nothing while their parent is still
+     short. Both have to be widened for a line's background to reach the frame. */
   .terminal-pool-container :global(.xterm-screen) {
     height: calc(100% - 16px) !important;
+    width: 100% !important;
   }
 
+  /* Each row is sized to the columns it holds, not to the space available:
+     the DOM renderer sets `element.style.width = canvas.width`, which is
+     cols × cellWidth — 1730px of a 1744px area on this machine. A line with a
+     background colour therefore stopped 14px short of the frame, showing the
+     panel's black behind it, which reads as a rendering fault rather than as
+     the end of the text.
+
+     Stretching the rows lets that background run to the edge. The text is
+     unaffected: the cells are still laid out at their own width, and the extra
+     is empty space at the end of the line. */
+  .terminal-pool-container :global(.xterm-rows > div) {
+    width: 100% !important;
+  }
+
+  /* xterm hard-codes the viewport to #000 (xterm.css), and that element sits
+     behind the rows — so on any theme that is not black, a band of it shows
+     wherever the rows do not reach: past the last column, and below the last
+     line. The colour is published as --xterm-background when the terminal is
+     built and again on a theme change. */
   .terminal-pool-container :global(.xterm-viewport) {
+    background-color: var(--xterm-background, #000) !important;
     height: calc(100% - 16px) !important;
     overflow-y: auto !important;
+  }
+
+  /* No scrollbar on a terminal pane.
+     tmux owns the wheel here: its WheelUpPane binding enters copy mode and
+     pages the whole history, far more than the few thousand lines xterm keeps.
+     A bar sized against xterm's buffer therefore describes the wrong document
+     — it sat near the bottom of a track while most of the history was tmux's,
+     which says less than nothing.
+
+     The mouse is set on every session the app creates, including the mirrors
+     the terminal actually attaches to (terminal_ws.go), so this holds even
+     where tmux itself defaults to `mouse off`. Scrolling is untouched; only the
+     indicator goes. */
+  .terminal-pool-container :global(.xterm-viewport::-webkit-scrollbar) {
+    width: 0;
+    height: 0;
+  }
+
+  /* xterm draws its own scrollbar as an element rather than leaving it to the
+     browser — .xterm-scrollable-element > .scrollbar, taken from VS Code — so
+     ::-webkit-scrollbar above never touched it. That is the one actually on
+     screen. */
+  .terminal-pool-container :global(.xterm-scrollable-element > .scrollbar) {
+    display: none !important;
   }
 
 
