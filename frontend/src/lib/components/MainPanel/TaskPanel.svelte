@@ -2191,20 +2191,6 @@
     overflow-y: auto;
   }
 
-  /* Scrollbar */
-  .task-list::-webkit-scrollbar {
-    width: 6px;
-  }
-
-  .task-list::-webkit-scrollbar-track {
-    background: transparent;
-  }
-
-  .task-list::-webkit-scrollbar-thumb {
-    background: rgba(var(--accent-rgb), 0.3);
-    border-radius: 3px;
-  }
-
   /* Mode toggle */
   .mode-toggle {
     display: flex;

@@ -790,19 +790,6 @@
   }
 
   /* Scrollbar styles */
-  .results-panel::-webkit-scrollbar,
-  .preview-content::-webkit-scrollbar {
-    width: 6px;
-  }
 
-  .results-panel::-webkit-scrollbar-track,
-  .preview-content::-webkit-scrollbar-track {
-    background: transparent;
-  }
 
-  .results-panel::-webkit-scrollbar-thumb,
-  .preview-content::-webkit-scrollbar-thumb {
-    background: rgba(var(--accent-rgb), 0.3);
-    border-radius: 3px;
-  }
 </style>

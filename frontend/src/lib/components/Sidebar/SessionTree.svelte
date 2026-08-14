@@ -657,4 +657,12 @@
     padding: 7px 10px;
     font-size: 12px;
   }
+
+  /* Wider than the app default, like the other scrollers that sit against an
+     edge: the sidebar's bar is up against the panel divider, where the pointer
+     cannot overshoot onto it and has to stop exactly on it. The thumb is inset
+     by 3px as everywhere else, so it looks no heavier. */
+
+
+
 </style>

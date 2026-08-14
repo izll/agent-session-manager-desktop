@@ -397,9 +397,6 @@
     margin-bottom: 12px;
   }
 
-  /* Fills the width instead of a fixed 4 columns, and has no inner height
-     cap: a scrollbar inside the dialog's own scrollbar meant scrolling twice
-     to reach the last colours. The dialog body still scrolls if it must. */
   .color-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
@@ -407,18 +404,8 @@
     padding-right: 4px;
   }
 
-  .color-grid::-webkit-scrollbar {
-    width: 4px;
-  }
 
-  .color-grid::-webkit-scrollbar-track {
-    background: transparent;
-  }
 
-  .color-grid::-webkit-scrollbar-thumb {
-    background: rgba(var(--accent-rgb), 0.3);
-    border-radius: 2px;
-  }
 
   .color-btn {
     display: flex;

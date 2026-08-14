@@ -1591,23 +1591,9 @@
     box-sizing: border-box;
   }
 
-  :global(::-webkit-scrollbar) {
-    width: 6px;
-    height: 6px;
-  }
-
-  :global(::-webkit-scrollbar-track) {
-    background: transparent;
-  }
-
-  :global(::-webkit-scrollbar-thumb) {
-    background: rgba(var(--accent-rgb), 0.3);
-    border-radius: 3px;
-  }
-
-  :global(::-webkit-scrollbar-thumb:hover) {
-    background: rgba(var(--accent-rgb), 0.5);
-  }
+  /* Scrollbars are defined once, in style.css. A second global rule lived here
+     at 6px and, being loaded after that file, quietly won everywhere — which is
+     why widening the one in style.css appeared to do nothing at all. */
 
   .app-container {
     background: linear-gradient(135deg, #0a0a0f 0%, #0f0f1a 50%, #0a0a0f 100%);

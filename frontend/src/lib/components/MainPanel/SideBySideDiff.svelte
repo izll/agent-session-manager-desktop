@@ -828,6 +828,16 @@
     min-width: 0;
   }
 
+  /* A wider bar than the app's own, because this one sits at the very edge of
+     the window — measured: the pane's right edge and the window's are the same
+     pixel. There is nothing to overshoot into, so the pointer has to stop
+     exactly on it, and 12px that cannot be overshot is harder to hit than 12px
+     that can. The thumb is inset by the same 3px as elsewhere, so it looks no
+     heavier than the rest. */
+
+
+
+
   /* Sized to the longest line in the pane, so every row is that wide.
      Rows sized individually (min-width: max-content on each) are each as wide
      as their OWN text, so a short changed line's tint ended at the pane's edge
@@ -849,36 +859,7 @@
     min-width: 100%;
   }
 
-  /**
-   * The left pane's scrollbar is hidden.
-   *
-   * It sits on that pane's right edge — between the code and the strip — and
-   * cut every band away from the block it joins. The two panes move together,
-   * so one bar says everything two would: the right one is kept, on the outer
-   * edge where it interrupts nothing.
-   *
-   * Hidden, not disabled. The pane still scrolls by wheel, keyboard and the
-   * arrows, and it is still what the right pane is synchronised against.
-   */
-  /**
-   * The left pane has no vertical scrollbar at all.
-   *
-   * Not merely hidden. A vertical bar takes its width out of the pane's usable
-   * area, and the rows end where that area ends — so scrolled fully right, a
-   * bar-shaped stripe of background sat beyond them, uncoloured. Measured: 460px
-   * visible against 444px usable, and the rows stopped at 444. Painting the bar
-   * transparent does not help; the space is still taken. Reserving it with a
-   * border is worse — a border is outside the scrollable box, so the tint stops
-   * before it too.
-   *
-   * The pane is still scrolled vertically, by scrollTop from the sync: `hidden`
-   * only stops the USER scrolling it directly. The wheel is forwarded
-   * explicitly (see onLeftWheel), since hidden would otherwise let it pass
-   * through to whatever is behind.
-   *
-   * Its horizontal bar stays: that one is along the bottom, takes nothing from
-   * the width, and is how a long line is scrolled.
-   */
+
   .pane.left {
     overflow-y: hidden;
   }

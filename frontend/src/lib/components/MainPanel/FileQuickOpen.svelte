@@ -608,14 +608,4 @@
     color: var(--accent-pale);
   }
 
-  .qo-body::-webkit-scrollbar {
-    width: 6px;
-  }
-  .qo-body::-webkit-scrollbar-track {
-    background: transparent;
-  }
-  .qo-body::-webkit-scrollbar-thumb {
-    background: rgba(var(--accent-rgb), 0.3);
-    border-radius: 3px;
-  }
 </style>

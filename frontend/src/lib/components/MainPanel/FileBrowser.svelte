@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, onDestroy, createEventDispatcher } from 'svelte';
+  import { onMount, onDestroy, createEventDispatcher, tick } from 'svelte';
   import { pendingFileJump, clearFileJump } from '../../stores/fileJump';
   import { selectedSessionId, selectedWindowIdx } from '../../stores/sessions';
   import { get } from 'svelte/store';
@@ -27,24 +27,33 @@
    * would load a file into a browser nobody is looking at, and clear the
    * request before the view that shows it ever sees it.
    */
+  $: console.log('[jumpdiag] active=', active, 'pending=', $pendingFileJump);
   $: if (active && $pendingFileJump) {
     const jump = $pendingFileJump;
+    console.log('[jumpdiag] honouring', jump);
     clearFileJump();
     void openRequestedFile(jump.path, jump.line);
   }
 
   async function openRequestedFile(path: string, line?: number) {
-    // Navigate the tree to the file's directory first, so the list beside the
-    // editor shows where the file actually lives rather than wherever the
-    // browser was last left.
-    const dir = path.replace(/\/[^/]*$/, '') || '/';
-    try {
-      await loadDir(dir);
-    } catch {
-      // A directory that cannot be listed should not stop the file opening.
-    }
-    await loadFile(path);
-    if (line && line > 1) scrollToLine(line);
+    // Same route as opening from quick-open, guard included: selecting a file
+    // discards the edit buffer, and a jump from the diff must not throw away
+    // unsaved work any more than a click in the tree would.
+    guardUnsaved(async () => {
+      if (editing) leaveEditModeQuietly();
+      selectedPath = path;
+      console.log('[jumpdiag] loadFile', path);
+      await loadFile(path);
+      console.log('[jumpdiag] loaded, selectedFile=', selectedFile?.path, 'err=', fileError);
+      void revealInTree(path);
+
+      // After the document is in the editor, not before: CodeMirror has no
+      // document to position within until loadFile has built the view.
+      if (line && line > 1) {
+        await tick();
+        scrollToLine(line);
+      }
+    });
   }
 
   /**
@@ -2019,17 +2028,10 @@
     background: rgba(251, 191, 36, 0.25);
   }
 
-  .file-content::-webkit-scrollbar,
-  .file-list::-webkit-scrollbar {
-    width: 6px;
-  }
-  .file-content::-webkit-scrollbar-track,
-  .file-list::-webkit-scrollbar-track {
-    background: transparent;
-  }
-  .file-content::-webkit-scrollbar-thumb,
-  .file-list::-webkit-scrollbar-thumb {
-    background: rgba(var(--accent-rgb), 0.3);
-    border-radius: 3px;
-  }
+
+  /* CodeMirror's own scroller, which also reaches the window edge. :global
+     because the element is created by the editor, not by this template. */
+
+
+
 </style>

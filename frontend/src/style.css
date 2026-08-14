@@ -47,9 +47,18 @@ html, body {
 }
 
 /* Custom scrollbar */
+/* 16px, where this used to be 6-8px.
+   A thin bar looks tidy and is genuinely hard to grab — the pointer has to land
+   within a few pixels, and missing it scrolls the page instead. Desktop
+   toolkits sit between 13px (GNOME) and 17px (Windows); this is near the top
+   of that, and the thumb is inset so it still reads as slim.
+
+   Defined once, here. It used to be repeated in sixteen components, which is
+   how they drifted apart — one at 6px, another at 12, a third at 16 — and why
+   fixing it meant editing every one of them. */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 16px;
+  height: 16px;
 }
 
 ::-webkit-scrollbar-track {
@@ -63,13 +72,23 @@ html, body {
   background: transparent;
 }
 
+/* Inset with a transparent border rather than made narrower.
+   The border is part of the thumb's box, so the pointer still hits the full
+   12px while the visible bar stays slim — a wide target that does not look
+   heavy. background-clip keeps the colour off the border. */
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.2);
-  border-radius: 4px;
+  background: rgba(var(--accent-rgb), 0.35);
+  background-clip: padding-box;
+  /* 4px inset of the 16px track, leaving an 8px bar. The border is part of the
+     thumb's box, so the pointer still hits the full 16px — a wide target that
+     does not look heavy. */
+  border: 4px solid transparent;
+  border-radius: 8px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.3);
+  background: rgba(var(--accent-rgb), 0.55);
+  background-clip: padding-box;
 }
 
 /* Animations */

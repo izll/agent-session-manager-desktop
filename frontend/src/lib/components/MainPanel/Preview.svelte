@@ -227,16 +227,6 @@
     width: 100% !important;
   }
 
-  .terminal-container :global(.xterm-viewport::-webkit-scrollbar) {
-    width: 6px;
-  }
 
-  .terminal-container :global(.xterm-viewport::-webkit-scrollbar-track) {
-    background: transparent;
-  }
 
-  .terminal-container :global(.xterm-viewport::-webkit-scrollbar-thumb) {
-    background: rgba(var(--accent-rgb), 0.3);
-    border-radius: 3px;
-  }
 </style>

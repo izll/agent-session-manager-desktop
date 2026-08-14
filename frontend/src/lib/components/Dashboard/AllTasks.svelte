@@ -926,4 +926,11 @@
     border-color: #374151;
     color: inherit;
   }
+
+  /* Wider than the app default: this scroller reaches the window edge, where
+     the pointer cannot overshoot onto the bar and has to stop exactly on it.
+     The thumb is inset by 3px as everywhere else, so it looks no heavier. */
+
+
+
 </style>

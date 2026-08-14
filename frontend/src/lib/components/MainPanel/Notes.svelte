@@ -544,18 +544,8 @@
     color: #4b5563;
   }
 
-  .notes-textarea::-webkit-scrollbar {
-    width: 6px;
-  }
 
-  .notes-textarea::-webkit-scrollbar-track {
-    background: transparent;
-  }
 
-  .notes-textarea::-webkit-scrollbar-thumb {
-    background: rgba(var(--accent-rgb), 0.3);
-    border-radius: 3px;
-  }
 
   .notes-textarea.dictating {
     border-color: rgba(var(--accent-rgb), 0.5);

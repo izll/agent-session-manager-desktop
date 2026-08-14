@@ -823,16 +823,6 @@
     overflow-y: auto !important;
   }
 
-  .terminal-pool-container :global(.xterm-viewport::-webkit-scrollbar) {
-    width: 6px;
-  }
 
-  .terminal-pool-container :global(.xterm-viewport::-webkit-scrollbar-track) {
-    background: transparent;
-  }
 
-  .terminal-pool-container :global(.xterm-viewport::-webkit-scrollbar-thumb) {
-    background: rgba(var(--accent-rgb), 0.3);
-    border-radius: 3px;
-  }
 </style>
