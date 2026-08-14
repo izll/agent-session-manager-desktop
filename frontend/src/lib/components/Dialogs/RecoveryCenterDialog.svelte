@@ -24,9 +24,10 @@
     size: number;
   }
 
-  let activeTab: 'trash' | 'backups' = 'trash';
+  let activeTab: 'trash' | 'backups' | 'tasks' = 'trash';
   let trash: TrashItem[] = [];
   let backups: BackupItem[] = [];
+  let taskBackups: BackupItem[] = [];
   let loading = false;
   let error = '';
   let loadedForOpen = false;
@@ -54,12 +55,16 @@
     loading = true;
     error = '';
     try {
-      const [trashResult, backupResult] = await Promise.all([
+      const [trashResult, backupResult, taskResult] = await Promise.all([
         App.GetTrashItems(),
-        App.GetBackups()
+        App.GetBackups(),
+        // Tolerated separately: an older backend has no such call, and the
+        // rest of the dialog should still work against one.
+        App.GetTaskBackups().catch(() => [])
       ]);
       trash = (trashResult || []) as TrashItem[];
       backups = (backupResult || []) as BackupItem[];
+      taskBackups = (taskResult || []) as BackupItem[];
     } catch (e) {
       error = String(e);
     } finally {
@@ -116,6 +121,19 @@
     } catch (e) {
       error = String(e);
     }
+  }
+
+  function requestRestoreTaskBackup(item: BackupItem) {
+    confirmTitle = $t('recovery.restoreTaskBackupTitle');
+    confirmMessage = $t('recovery.restoreTaskBackupMessage', { time: formatDate(item.createdAt) });
+    pendingAction = async () => {
+      await App.RestoreTaskBackup(item.id);
+      // Only the task files changed, so the session list and settings are left
+      // alone — reloading them would be work for nothing.
+      await loadRecoveryData();
+      dispatch('restored');
+    };
+    showConfirm = true;
   }
 
   function requestRestoreBackup(item: BackupItem) {
@@ -177,6 +195,13 @@
         <button class:active={activeTab === 'backups'} on:click={() => activeTab = 'backups'}>
           {$t('recovery.backups')} <span>{backups.length}</span>
         </button>
+        <!-- Tasks are backed up separately because they live separately: in each
+             working directory, not in the store the other backups come from.
+             Restoring a deleted task should not also roll every session and
+             setting back to that moment. -->
+        <button class:active={activeTab === 'tasks'} on:click={() => activeTab = 'tasks'}>
+          {$t('recovery.taskBackups')} <span>{taskBackups.length}</span>
+        </button>
       </div>
 
       {#if error}<div class="error-line" role="alert">{error}</div>{/if}
@@ -207,6 +232,29 @@
                   <div class="item-actions">
                     <button class="primary" on:click={() => restoreTrash(item)}>{$t('recovery.restore')}</button>
                     <button class="danger" on:click={() => requestPermanentDelete(item)}>{$t('recovery.deleteForever')}</button>
+                  </div>
+                </div>
+              {/each}
+            </div>
+          {/if}
+        {:else if activeTab === 'tasks'}
+          <div class="toolbar">
+            <span>{$t('recovery.taskBackupHint')}</span>
+            <button class="primary" on:click={createBackup}>{$t('recovery.backupNow')}</button>
+          </div>
+          {#if taskBackups.length === 0}
+            <div class="empty">{$t('recovery.backupsEmpty')}</div>
+          {:else}
+            <div class="item-list">
+              {#each taskBackups as item (item.id)}
+                <div class="recovery-item">
+                  <div class="item-icon">☑</div>
+                  <div class="item-info">
+                    <strong>{formatDate(item.createdAt)}</strong>
+                    <small>{formatSize(item.size)}</small>
+                  </div>
+                  <div class="item-actions">
+                    <button class="primary" on:click={() => requestRestoreTaskBackup(item)}>{$t('recovery.restore')}</button>
                   </div>
                 </div>
               {/each}
@@ -252,29 +300,47 @@
 />
 
 <style>
-  .recovery-dialog { width: min(720px, calc(100vw - 36px)); max-height: min(680px, calc(100vh - 36px)); }
+  /* Wider than the other dialogs: the rows carry a name, a kind, a parent
+     session and a date, and at 720px the longer session names were clipped
+     while the dates wrapped under them. */
+  /* max-width as well as width: the shared .dialog-content caps at 400px, and
+     setting only the width left that cap in force — which is why widening this
+     dialog appeared to do nothing. */
+  .recovery-dialog {
+    width: min(1280px, calc(100vw - 48px));
+    max-width: min(1280px, calc(100vw - 48px));
+    max-height: min(840px, calc(100vh - 48px));
+  }
   .dialog-header { display:flex; align-items:flex-start; justify-content:space-between; padding:18px 20px 14px; border-bottom:1px solid rgba(255,255,255,.07); }
-  .dialog-header h2 { margin:0; font-size:17px; color:#f4f4f5; }
-  .dialog-header p { margin:4px 0 0; font-size:11px; color:#71717a; }
+  .dialog-header h2 { margin:0; font-size:19px; color:#f4f4f5; }
+  .dialog-header p { margin:4px 0 0; font-size:13px; color:#71717a; }
   .close-btn { border:0; background:transparent; color:#71717a; font-size:22px; cursor:pointer; }
   .recovery-tabs { display:flex; gap:4px; padding:10px 16px 0; }
   .recovery-tabs button { border:0; border-radius:6px; padding:7px 11px; background:transparent; color:#71717a; cursor:pointer; }
   .recovery-tabs button.active { background:rgba(var(--accent-rgb), .14); color:var(--accent-lighter); }
-  .recovery-tabs span { margin-left:4px; padding:1px 5px; border-radius:8px; background:rgba(255,255,255,.07); font-size:10px; }
-  .error-line { margin:10px 16px 0; padding:8px 10px; border:1px solid rgba(248,113,113,.25); border-radius:6px; color:#fca5a5; background:rgba(127,29,29,.2); font-size:11px; }
-  .recovery-body { min-height:300px; max-height:500px; overflow:auto; padding:12px 16px 18px; }
-  .toolbar { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:10px; color:#71717a; font-size:11px; }
+  .recovery-tabs span { margin-left:4px; padding:1px 5px; border-radius:8px; background:rgba(255,255,255,.07); font-size:14px; }
+  .error-line { margin:10px 16px 0; padding:8px 10px; border:1px solid rgba(248,113,113,.25); border-radius:6px; color:#fca5a5; background:rgba(127,29,29,.2); font-size:13px; }
+  /* A fixed height, not a range.
+     The body grew and shrank with whatever the open tab held, so switching from
+     the backups to the tasks — which usually has fewer entries — collapsed the
+     window under the pointer. A tab strip that moves when you use it is worse
+     than one that leaves some space unused. */
+  .recovery-body { height:min(560px, 60vh); overflow:auto; padding:12px 16px 18px; }
+  .toolbar { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:10px; color:#71717a; font-size:13px; }
   .item-list { display:flex; flex-direction:column; gap:7px; }
-  .recovery-item { display:flex; align-items:center; gap:11px; padding:10px; border:1px solid rgba(255,255,255,.07); border-radius:8px; background:rgba(255,255,255,.025); }
-  .item-icon { display:grid; place-items:center; width:30px; height:30px; border-radius:7px; color:var(--accent-light); background:rgba(var(--accent-rgb), .12); }
+  .recovery-item { display:flex; align-items:center; gap:14px; padding:13px 14px; border:1px solid rgba(255,255,255,.07); border-radius:8px; background:rgba(255,255,255,.025); }
+  .item-icon { display:grid; place-items:center; width:34px; height:34px; border-radius:7px; color:var(--accent-light); background:rgba(var(--accent-rgb), .12); }
   .item-info { min-width:0; flex:1; display:flex; flex-direction:column; gap:3px; }
-  .item-info strong { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#e4e4e7; font-size:12px; }
-  .item-info small { color:#71717a; font-size:10px; }
+  .item-info strong { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#e4e4e7; font-size:14px; }
+  .item-info small { color:#71717a; font-size:14px; }
   .item-actions { display:flex; gap:6px; }
-  .item-actions button, .toolbar button { border:1px solid rgba(255,255,255,.1); border-radius:6px; padding:5px 9px; background:rgba(255,255,255,.05); color:#a1a1aa; cursor:pointer; font-size:10px; }
+  .item-actions button, .toolbar button { border:1px solid rgba(255,255,255,.1); border-radius:6px; padding:5px 9px; background:rgba(255,255,255,.05); color:#a1a1aa; cursor:pointer; font-size:14px; }
   button.primary { color:var(--accent-lighter); border-color:rgba(var(--accent-rgb), .25); background:rgba(var(--accent-rgb), .1); }
   button.danger { color:#fca5a5; border-color:rgba(248,113,113,.2); }
   button.subtle { background:transparent; }
   button:disabled { opacity:.4; cursor:not-allowed; }
-  .empty { display:grid; place-items:center; min-height:230px; color:#52525b; font-size:12px; }
+  /* Fills the body rather than setting its own height: the body is fixed now,
+     and a min-height here would push it taller on an empty tab — the very jump
+     that fixing the body was meant to stop. */
+  .empty { display:grid; place-items:center; height:100%; color:#52525b; font-size:14px; }
 </style>

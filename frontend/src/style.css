@@ -182,7 +182,13 @@ select option {
   border-radius: 16px;
   box-shadow: 0 25px 50px rgba(0, 0, 0, 0.5), 0 0 100px rgba(var(--accent-rgb), 0.1);
   width: 100%;
-  max-width: 400px;
+  /* 560px, not the 400px this used to be.
+     Nothing was content with 400: of the 24 dialogs that set a max-width, every
+     one raised it — seventeen purely to undo this cap. A default that every
+     caller overrides is not a default but a step each has to remember, and the
+     ones that forgot came out too narrow to read. Dialogs needing more still
+     say so; none now need less. */
+  max-width: min(560px, calc(100vw - 32px));
   overflow: hidden;
   animation: slideIn 0.2s ease-out;
 }

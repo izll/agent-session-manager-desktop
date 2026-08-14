@@ -326,6 +326,10 @@ export function GetTabWorkingDirectory(arg1, arg2) {
   return window['go']['main']['App']['GetTabWorkingDirectory'](arg1, arg2);
 }
 
+export function GetTaskBackups() {
+  return window['go']['main']['App']['GetTaskBackups']();
+}
+
 export function GetTasks(arg1) {
   return window['go']['main']['App']['GetTasks'](arg1);
 }
@@ -516,6 +520,10 @@ export function RestartTabWithResume(arg1, arg2, arg3) {
 
 export function RestoreBackup(arg1) {
   return window['go']['main']['App']['RestoreBackup'](arg1);
+}
+
+export function RestoreTaskBackup(arg1) {
+  return window['go']['main']['App']['RestoreTaskBackup'](arg1);
 }
 
 export function RestoreTrashItem(arg1) {

@@ -165,6 +165,8 @@ export function GetTabOrder(arg1:string):Promise<Array<number>>;
 
 export function GetTabWorkingDirectory(arg1:string,arg2:number):Promise<string>;
 
+export function GetTaskBackups():Promise<Array<main.BackupInfo>>;
+
 export function GetTasks(arg1:string):Promise<Array<main.TaskInfo>>;
 
 export function GetTasksByStatus(arg1:string,arg2:string):Promise<Array<main.TaskInfo>>;
@@ -260,6 +262,8 @@ export function RestartTab(arg1:string,arg2:number):Promise<void>;
 export function RestartTabWithResume(arg1:string,arg2:number,arg3:string):Promise<void>;
 
 export function RestoreBackup(arg1:string):Promise<void>;
+
+export function RestoreTaskBackup(arg1:string):Promise<void>;
 
 export function RestoreTrashItem(arg1:string):Promise<session.RestoreResult>;
 

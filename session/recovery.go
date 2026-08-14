@@ -16,7 +16,14 @@ import (
 
 const (
 	recoverySchemaVersion = 1
-	backupRetentionCount  = 25
+	// A ceiling on the backup directory, not the retention rule.
+	//
+	// Retention is decided by backupsToKeep, which thins by age; this only
+	// stops the directory growing without bound if a clock jump puts many
+	// backups outside every band at once. Set well above what the bands can
+	// produce (roughly 24 hourly + 14 daily + 12 weekly, plus an hour's worth
+	// of unthinned ones).
+	backupHardCeiling = 200
 	// Days a deleted session or tab stays recoverable when the user hasn't
 	// chosen otherwise. Nothing expired at all before this, so the trash — and
 	// with it sessions.json, read on every load — grew unbounded.
@@ -131,6 +138,17 @@ func sanitizedStorageData(data *StorageData) (*StorageData, []byte, error) {
 }
 
 func (s *Storage) createAutomaticBackupLocked(data *StorageData) error {
+	return s.createBackupLocked(data, true)
+}
+
+// createBackupLocked writes a backup, optionally skipping one that would be
+// identical to the newest.
+//
+// Skipping is right for automatic backups: a save that changed nothing would
+// otherwise push real history out of the retention window. It is wrong for one
+// the user asked for — pressing "Back up now" and seeing the list unchanged
+// reads as the button being broken, whatever the reasoning behind it.
+func (s *Storage) createBackupLocked(data *StorageData, skipIfUnchanged bool) error {
 	_, raw, err := sanitizedStorageData(data)
 	if err != nil {
 		return err
@@ -147,7 +165,7 @@ func (s *Storage) createAutomaticBackupLocked(data *StorageData) error {
 	}
 	existing = backupJSONEntries(existing)
 	sort.Slice(existing, func(i, j int) bool { return existing[i].Name() < existing[j].Name() })
-	if len(existing) > 0 {
+	if skipIfUnchanged && len(existing) > 0 {
 		latest := existing[len(existing)-1]
 		if !latest.IsDir() {
 			if previous, readErr := os.ReadFile(filepath.Join(dir, latest.Name())); readErr == nil && string(previous) == string(raw) {
@@ -180,6 +198,18 @@ func backupJSONEntries(entries []os.DirEntry) []os.DirEntry {
 	return files
 }
 
+// pruneBackupDir thins the history rather than truncating it.
+//
+// Keeping the newest N is the obvious rule and the wrong one: on an active day
+// every save makes a backup, so N of them span hours rather than days —
+// measured on a real config, 25 backups covering nineteen hours, the last three
+// seconds apart. Anything noticed the following morning had already been
+// deleted.
+//
+// backupsToKeep decides what survives: everything from the last hour, one an
+// hour for today, one a day for a fortnight, one a week for a quarter. The
+// newest is always kept. A hard ceiling still applies underneath, so a clock
+// jumping backwards cannot fill the disk.
 func pruneBackupDir(dir string) error {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -187,13 +217,63 @@ func pruneBackupDir(dir string) error {
 	}
 	files := backupJSONEntries(entries)
 	sort.Slice(files, func(i, j int) bool { return files[i].Name() < files[j].Name() })
-	for len(files) > backupRetentionCount {
-		if err := os.Remove(filepath.Join(dir, files[0].Name())); err != nil {
+
+	times := make([]time.Time, len(files))
+	for i, file := range files {
+		times[i] = backupTime(file.Name())
+	}
+
+	keep := backupsToKeep(times, time.Now().UTC())
+	for i, file := range files {
+		if keep[i] {
+			continue
+		}
+		if err := os.Remove(filepath.Join(dir, file.Name())); err != nil {
 			return err
 		}
-		files = files[1:]
+	}
+
+	// A backstop, unchanged in spirit: whatever the thinning decides, the
+	// directory never grows past this. Only reachable if the clock misbehaves,
+	// since the bands cannot produce more entries than they have buckets.
+	remaining := backupJSONEntries(mustReadDir(dir))
+	sort.Slice(remaining, func(i, j int) bool { return remaining[i].Name() < remaining[j].Name() })
+	for len(remaining) > backupHardCeiling {
+		if err := os.Remove(filepath.Join(dir, remaining[0].Name())); err != nil {
+			return err
+		}
+		remaining = remaining[1:]
 	}
 	return nil
+}
+
+// mustReadDir returns nothing rather than an error: the caller is already past
+// the point where a missing directory matters, and the ceiling below it is a
+// backstop, not the primary rule.
+func mustReadDir(dir string) []os.DirEntry {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil
+	}
+	return entries
+}
+
+// backupTime reads the timestamp a backup's name begins with.
+//
+// Names are written as "20060102T150405.000000000Z-<hash>.json". A name that
+// does not parse gets the zero time, which puts it outside every band and so
+// makes it a candidate for deletion — correct for a stray file, and it cannot
+// take a real backup with it because those all parse.
+func backupTime(name string) time.Time {
+	const layout = "20060102T150405.000000000Z"
+	if len(name) < len(layout) {
+		return time.Time{}
+	}
+	parsed, err := time.Parse(layout, name[:len(layout)])
+	if err != nil {
+		return time.Time{}
+	}
+	return parsed.UTC()
 }
 
 func (s *Storage) createProjectsBackupLocked(data *ProjectsData) error {
@@ -233,6 +313,12 @@ func (s *Storage) createProjectsBackupLocked(data *ProjectsData) error {
 	return pruneBackupDir(dir)
 }
 
+// CreateBackup writes a backup because the user asked for one.
+//
+// Unlike the automatic path it does not skip an unchanged state: the button
+// exists to produce a restore point at a moment of the user's choosing — before
+// something risky, typically — and one that silently declines to appear is
+// worse than a duplicate file.
 func (s *Storage) CreateBackup() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -240,7 +326,7 @@ func (s *Storage) CreateBackup() error {
 	if err != nil {
 		return err
 	}
-	return s.createAutomaticBackupLocked(data)
+	return s.createBackupLocked(data, false)
 }
 
 func (s *Storage) ListBackups() ([]BackupInfo, error) {

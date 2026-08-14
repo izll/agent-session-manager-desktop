@@ -1030,7 +1030,64 @@ func (a *App) CreateBackup() error {
 	if !a.projectLocked {
 		return fmt.Errorf("project is read-only in this application instance")
 	}
-	return a.storage.CreateBackup()
+	if err := a.storage.CreateBackup(); err != nil {
+		return err
+	}
+	// Tasks live in each working directory rather than in the store, so they
+	// need their own snapshot — see session/task_backup.go. A failure here is
+	// reported but does not undo the backup that already succeeded.
+	if err := a.backupTaskFiles(); err != nil {
+		log.Printf("[backup] task files: %v", err)
+	}
+	return nil
+}
+
+// backupTaskFiles snapshots the task file of every session's working directory.
+func (a *App) backupTaskFiles() error {
+	instances, err := a.storage.Load()
+	if err != nil {
+		return err
+	}
+	dirs := make([]string, 0, len(instances))
+	for _, instance := range instances {
+		if instance != nil && instance.Path != "" {
+			dirs = append(dirs, instance.Path)
+		}
+	}
+	return a.storage.BackupTaskFiles(dirs)
+}
+
+// GetTaskBackups lists the task snapshots, newest first.
+func (a *App) GetTaskBackups() ([]BackupInfo, error) {
+	a.projectMu.RLock()
+	defer a.projectMu.RUnlock()
+	items, err := a.storage.ListTaskBackups()
+	if err != nil {
+		return nil, err
+	}
+	result := make([]BackupInfo, 0, len(items))
+	for _, item := range items {
+		result = append(result, BackupInfo{
+			ID:        item.ID,
+			CreatedAt: item.CreatedAt.Format(time.RFC3339),
+			Size:      item.Size,
+		})
+	}
+	return result, nil
+}
+
+// RestoreTaskBackup puts a task snapshot back.
+//
+// Separate from RestoreBackup because the two cover different things and are
+// wanted separately: recovering a deleted task should not also roll back every
+// session and setting to that moment.
+func (a *App) RestoreTaskBackup(id string) error {
+	a.projectMu.RLock()
+	defer a.projectMu.RUnlock()
+	if !a.projectLocked {
+		return fmt.Errorf("project is read-only in this application instance")
+	}
+	return a.storage.RestoreTaskBackup(id)
 }
 
 func (a *App) RestoreBackup(id string) error {
