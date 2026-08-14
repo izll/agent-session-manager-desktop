@@ -54,6 +54,62 @@
   let rightEl: HTMLDivElement | null = null;
 
   /**
+   * How the width is split between the two sides, as the left side's share.
+   *
+   * The two were locked at half each. That is the right default and the wrong
+   * only option: the sides rarely hold the same amount of text, and reading a
+   * long line on one of them meant scrolling it horizontally while the other
+   * sat half empty.
+   *
+   * Held as a fraction rather than in px so the split survives the pane being
+   * resized — a window change keeps the proportion the user chose instead of
+   * leaving one side at a width that no longer means anything.
+   */
+  let leftShare = 0.5;
+  /** Below this a side is too narrow to read, and dragging to it is a mistake
+   *  rather than an intent — the far side is still one drag away. */
+  const MIN_SHARE = 0.15;
+
+  let sbsEl: HTMLDivElement | null = null;
+  let resizing = false;
+
+  function startSplitDrag(e: MouseEvent) {
+    if (!sbsEl) return;
+    e.preventDefault();
+    resizing = true;
+
+    const box = sbsEl.getBoundingClientRect();
+    // The strip keeps its width throughout, so what the two sides divide is
+    // what is left after it — measured from the element rather than assumed
+    // from the em value, which depends on the font size in force.
+    const stripWidth = middleEl?.getBoundingClientRect().width ?? 0;
+    const usable = box.width - stripWidth;
+
+    const move = (ev: MouseEvent) => {
+      if (usable <= 0) return;
+      // The pointer marks the middle of the strip, so the left side reaches to
+      // half a strip short of it.
+      const share = (ev.clientX - box.left - stripWidth / 2) / usable;
+      leftShare = Math.min(1 - MIN_SHARE, Math.max(MIN_SHARE, share));
+    };
+    const end = () => {
+      resizing = false;
+      document.removeEventListener('mousemove', move);
+      document.removeEventListener('mouseup', end);
+    };
+    document.addEventListener('mousemove', move);
+    document.addEventListener('mouseup', end);
+  }
+
+  /** Double-click restores the even split, which is quicker than dragging back
+   *  by eye to something that only looks level. */
+  function resetSplit() {
+    leftShare = 0.5;
+  }
+
+  let middleEl: HTMLDivElement | null = null;
+
+  /**
    * How wide each pane's rows have to be, in px.
    *
    * `width: max-content` gets a container close but not exact: in the webview
@@ -642,7 +698,12 @@
     .filter((shape) => Math.max(shape.y1b, shape.y2b) > -40 && Math.min(shape.y1, shape.y2) < stripHeight + 40);
 </script>
 
-<div class="sbs">
+<div
+  class="sbs"
+  class:resizing
+  bind:this={sbsEl}
+  style="--left-share: {leftShare}fr; --right-share: {1 - leftShare}fr"
+>
   <!-- svelte-ignore a11y-no-static-element-interactions -->
   <div
     class="pane left"
@@ -683,7 +744,17 @@
   <!-- The strip between the panes: the ribbons joining each block's two halves,
        and the arrow that reverts it. It has no scrollbar of its own — it is
        moved by whichever pane is being scrolled. -->
-  <div class="middle" bind:clientHeight={stripHeight}>
+  <!-- svelte-ignore a11y-no-static-element-interactions -->
+  <div
+    class="middle"
+    bind:clientHeight={stripHeight}
+    bind:this={middleEl}
+    role="separator"
+    aria-orientation="vertical"
+    title={$t('diff.resizeHint')}
+    on:mousedown={startSplitDrag}
+    on:dblclick={resetSplit}
+  >
     <svg class="ribbons" aria-hidden="true" viewBox="0 0 100 {stripHeight}" preserveAspectRatio="none">
       {#each shapes as shape (shape.key)}
         <!--
@@ -776,7 +847,10 @@
     /* The two panes, with the ribbon strip between them: the strip is where the
        eye crosses from one side to the other, and it is kept narrow because it
        carries only the ribbons and the revert arrow. */
-    grid-template-columns: 1fr 3.4em 1fr;
+    /* The shares come from the strip being dragged; they default to an even
+       split. Fractions rather than px, so the proportion survives the pane
+       being resized. */
+    grid-template-columns: var(--left-share, 1fr) 3.4em var(--right-share, 1fr);
     /* Both: height:100% for a block parent, flex:1 for a flex one. The panes
        are 100% of this, and if it has no definite height of its own they size
        to their content and never scroll — which puts both columns on the outer
@@ -1030,6 +1104,50 @@
   .middle {
     position: relative;
     overflow: hidden;
+    /* The strip is the divider, so it is also the handle: it is already the
+       full height of the panes and sits exactly where the split is. */
+    cursor: col-resize;
+  }
+  /* Hovering the strip draws the line the drag would move.
+     A line rather than a tint across the whole strip: the ribbons are painted
+     here and carry the meaning, and washing them in accent colour to advertise
+     a handle would cost more than it explains. ::after rather than a background
+     so it sits above the ribbon SVG, and pointer-events stay with the strip. */
+  .middle::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    /* On the strip's right edge, against the right pane's line numbers, rather
+       than down its middle. The middle is where the ribbons cross, so a line
+       there cuts through them and reads as part of the diff; the edge is the
+       boundary the drag actually moves. */
+    right: 0;
+    width: 3px;
+    background: rgba(var(--accent-rgb), 0.45);
+    opacity: 0;
+    transition: opacity 0.12s ease;
+    pointer-events: none;
+  }
+  .middle:hover::after {
+    opacity: 1;
+  }
+  /* Held on through the drag: the pointer leaves the strip as it moves, and a
+     handle that vanishes mid-drag reads as having been let go. */
+  .sbs.resizing .middle::after {
+    opacity: 1;
+    background: rgba(var(--accent-rgb), 0.7);
+  }
+  /* The revert arrows sit on the strip and must stay clickable — without this
+     a press on one starts a drag instead of reverting the block. */
+  .middle :global(.revert-arrow) {
+    cursor: pointer;
+  }
+  /* While dragging, hold the cursor and kill selection across both panes:
+     the pointer crosses code on its way, and otherwise the drag selects it. */
+  .sbs.resizing {
+    cursor: col-resize;
+    user-select: none;
   }
   /* Exactly the strip: the shapes are computed in viewport coordinates, so
      there is nothing off-screen to hold. The viewBox is set to the same pixel
@@ -1096,6 +1214,10 @@
     display: flex;
     align-items: center;
     justify-content: center;
+    /* Above the hover line: both are positioned, and the line comes later in
+       the DOM, so without this it paints over the arrow it shares the strip
+       with — worst exactly when the pointer is there to click it. */
+    z-index: 1;
   }
   /* Larger and heavier than the code around it: the strip is narrow and the
      arrow has to be legible in it at a glance, without being hunted for. */
