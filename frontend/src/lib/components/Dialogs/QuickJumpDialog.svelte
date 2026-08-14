@@ -260,13 +260,18 @@
   }
 
   /** The sidebar's own wording, so the two do not describe the same state
-   *  with different words. */
-  function activityLabel(activity: string): string {
+   *  with different words.
+   *
+   *  The translator comes in as an argument rather than being read from the
+   *  store inside: called from markup, a store read in here is invisible to
+   *  Svelte, so the labels would keep the language they were first rendered in
+   *  after a switch. */
+  function activityLabel(translate: typeof $t, activity: string): string {
     switch (activity) {
-      case 'busy': return $t('sidebar.statusBusy');
-      case 'waiting': return $t('sidebar.statusWaiting');
-      case 'stopped': return $t('sidebar.statusStopped');
-      default: return $t('sidebar.statusIdle');
+      case 'busy': return translate('sidebar.statusBusy');
+      case 'waiting': return translate('sidebar.statusWaiting');
+      case 'stopped': return translate('sidebar.statusStopped');
+      default: return translate('sidebar.statusIdle');
     }
   }
 
@@ -466,7 +471,7 @@
                    working. -->
               <span
                 class="activity {row.activity}"
-                title={activityLabel(row.activity)}
+                title={activityLabel($t, row.activity)}
               ></span>
               <!-- An icon rather than the word: "munkamenet" and "fül" are
                    different lengths, so spelling it out pushed every name to a
