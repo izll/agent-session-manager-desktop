@@ -6,6 +6,56 @@ Entries describe what changed for someone using the app. Internal refactoring,
 test and CI work is left out unless it changed behaviour. Dates are release
 dates; the format follows [Keep a Changelog](https://keepachangelog.com).
 
+## 0.9.27 — 2026-08-14
+
+### Added
+
+- **Deadlines on tasks**, with a date and a time. The list marks one that has
+  passed in red and one due within a day in amber, and always spells the date
+  out rather than relying on colour alone.
+- **A view of every task from every project**, reached from the header and
+  grouped by session, ordered by deadline. Tasks with no deadline sort last
+  rather than first, where they would sit ahead of the one due this afternoon.
+  The button carries a badge with the number still open.
+- **Deleting a session says what work it still has.** Only tasks assigned to
+  that session count — warning about a project's whole backlog on every close
+  is how a prompt gets ignored.
+- **Find in notes** (Ctrl+F), with a match count, Enter/F3/Ctrl+G to step
+  through and Shift to go back.
+- **Find in the side-by-side diff**, matching what is displayed rather than the
+  markup, so a search for "span" does not hit every coloured token. A row
+  matches if either column does.
+- **Find in the file browser** — CodeMirror's own, so it brings case matching,
+  whole word, regular expressions and replace with it.
+- **Undo and redo in notes** (Ctrl+Z, Ctrl+Y).
+- **Ten seconds to undo a task change** from a bar at the bottom of the screen:
+  ticking a subtask, moving a task, removing a dependency, and deleting either.
+- **Open a file from the diff**, at the line showing at the top of the pane
+  rather than at the file's first change — in a long file that is nowhere near
+  what you were reading.
+- **Filtering tasks by text**, now also searching implementation notes and
+  subtask titles, where a half-remembered line usually lives.
+
+### Fixed
+
+- **Subtask checkboxes never ticked** outside Task Master mode, and could not be
+  unticked once they did. The two backends describe completion differently, and
+  the panel read one while writing the other — so a tick saved successfully and
+  came back empty.
+- **An unticked checkbox was a solid white square**, the brightest thing on a
+  dark row.
+- **Dependencies asked for a task id** — a number shown nowhere else in the
+  app. They are picked from a filterable list of task titles now.
+- **Scrollbars were 6px**, which is hard to hit: the pointer has to land within
+  a few pixels, and missing it scrolls the page instead. They are 16px now,
+  with the visible bar still slim.
+- **Leaving the diff tab and coming back restarted the review** — the file list
+  blinked away, the selection went, and the pane returned to the top.
+- **The side-by-side diff had no background of its own**, so in the
+  commit-history dialog the backdrop showed through and tinted the code.
+- Task badges line up in columns, so priority sits above priority however much
+  else a row carries.
+
 ## 0.9.26 — 2026-08-12
 
 ### Fixed
