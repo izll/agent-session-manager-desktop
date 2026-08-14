@@ -6,6 +6,25 @@ Entries describe what changed for someone using the app. Internal refactoring,
 test and CI work is left out unless it changed behaviour. Dates are release
 dates; the format follows [Keep a Changelog](https://keepachangelog.com).
 
+## 0.9.29 — 2026-08-14
+
+### Added
+
+- **The split in side-by-side diff can be dragged.** The two sides were locked
+  at half each, so reading a long line meant scrolling it sideways while the
+  other half sat empty. The ribbon strip between the panes is the handle: it
+  already runs their full height and sits exactly where the split is, so there
+  is no thin divider to aim for. Double-click restores the even split.
+
+### Fixed
+
+- **The pane splitters were hard to grab** — in the diff, the file browser, the
+  history dialog and beside the session list. All four were between five and
+  seven pixels wide, and three were narrower than they looked. They are wider
+  now, and take no space from the panes to get there.
+- **Activity tooltips in the quick-jump window** kept whichever language they
+  were first shown in, and stayed there after a language switch.
+
 ## 0.9.28 — 2026-08-14
 
 ### Added
