@@ -37,6 +37,7 @@
       line = firstHunk ? parseHunkHeader(firstHunk.header).newStart : undefined;
     }
 
+    console.log('[jumpdiag] requesting', path, 'line', line);
     requestFileJump(path, line);
   }
   import { selectedSessionId } from '../../stores/sessions';
@@ -55,7 +56,7 @@
   import { settings, saveSettings } from '../../stores/settings';
   import { buildTreeRows, type TreeRow } from '../../utils/fileTree';
   import { fileTypeOf } from '../../utils/fileTypes';
-  import { rememberPlace, recallPlace, noteListKey } from '../../utils/diffViewState';
+  import { rememberPlace, recallPlace, noteListKey, cacheDiff, cachedDiff, invalidateDiffCache } from '../../utils/diffViewState';
   import { buildBlockPatch } from '../../utils/blockPatch';
   import { parseHunkHeader } from '../../utils/sideBySide';
 
@@ -257,13 +258,24 @@
     }
 
     if (loadedDiffKey !== requestedKey) {
-      diff = null;
-      files = [];
-      selectedPath = null;
-      resetCopyState();
+      // A cached list from a moment ago is shown straight away, so returning to
+      // the tab resumes instead of blinking through an empty view. The fetch
+      // below still runs and replaces it — this only covers the gap.
+      const cached = cachedDiff(requestedKey) as { diff: DiffData | null; files: session.DiffFileSummary[] } | null;
+      if (cached) {
+        diff = cached.diff;
+        files = cached.files;
+        loadedDiffKey = requestedKey;
+      cacheDiff(requestedKey, { diff, files });
+      } else {
+        diff = null;
+        files = [];
+        selectedPath = null;
+        resetCopyState();
+      }
     }
     lastSessionId = sessionId;
-    loading = true;
+    loading = files.length === 0;
     error = '';
 
     try {
@@ -366,6 +378,10 @@
   // Reload when mode changes
   function handleModeChange(mode: 'session' | 'full') {
     diffMode = mode;
+    // The cache is keyed on the mode, but a revert or a mode change means the
+    // old list is wrong for the new one too — drop it rather than risk showing
+    // a file that is no longer in the diff.
+    invalidateDiffCache();
     loadDiff();
   }
 
@@ -607,6 +623,10 @@
       await action();
       if (destroyed) return;
       error = '';
+      // The cached list describes the tree before the revert, so it has to go
+      // — otherwise the refresh below would show the reverted file as still
+      // changed until the fetch landed.
+      invalidateDiffCache();
       // Refresh so the view reflects what's actually on disk now.
       await loadDiff();
       if (destroyed) return;
@@ -2760,10 +2780,7 @@
     user-select: text;
     -webkit-user-select: text;
   }
-  /* The columns scroll themselves, so this must not. Laid out as a flex column
-     as well, so the view inside is given a definite height to fill: sized to
-     its content instead, it has nothing to scroll within and both columns end
-     up riding the outer scrollbar together. */
+
   .diff-content.columns {
     overflow: hidden;
     display: flex;
@@ -2853,19 +2870,6 @@
     gap: 12px;
   }
 
-  .diff-content::-webkit-scrollbar,
-  .file-list::-webkit-scrollbar {
-    width: 6px;
-  }
 
-  .diff-content::-webkit-scrollbar-track,
-  .file-list::-webkit-scrollbar-track {
-    background: transparent;
-  }
 
-  .diff-content::-webkit-scrollbar-thumb,
-  .file-list::-webkit-scrollbar-thumb {
-    background: rgba(var(--accent-rgb), 0.3);
-    border-radius: 3px;
-  }
 </style>

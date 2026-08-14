@@ -102,3 +102,39 @@ export function noteListKey(sessionId: string, listKey: string): boolean {
   if (changed) forgetSession(sessionId);
   return changed;
 }
+
+
+/**
+ * The last loaded diff, so returning to the view does not refetch it.
+ *
+ * Switching tabs unmounts the diff — its two mount points are in exclusive
+ * branches — so every field inside it starts empty on the way back, including
+ * the key that records what is already loaded. The list was cleared and
+ * refetched on every return, which reads as the whole review restarting: the
+ * files blink away and the pane lands back at the top before the new data
+ * arrives.
+ *
+ * One entry, because only one diff is on screen at a time. Kept for half a
+ * minute rather than indefinitely — a diff older than that may no longer
+ * describe the working tree, and showing a stale one is worse than a brief
+ * load.
+ */
+const DIFF_CACHE_TTL_MS = 30_000;
+
+let diffCache: { key: string; at: number; payload: unknown } | null = null;
+
+export function cacheDiff(key: string, payload: unknown, now = Date.now()): void {
+  diffCache = { key, at: now, payload };
+}
+
+/** The cached diff for this key, or null when absent or too old. */
+export function cachedDiff(key: string, now = Date.now()): unknown | null {
+  if (!diffCache || diffCache.key !== key) return null;
+  if (now - diffCache.at > DIFF_CACHE_TTL_MS) return null;
+  return diffCache.payload;
+}
+
+/** Dropped after a revert or a mode change, where the old list is wrong. */
+export function invalidateDiffCache(): void {
+  diffCache = null;
+}
