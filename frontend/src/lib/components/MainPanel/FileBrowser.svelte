@@ -27,10 +27,8 @@
    * would load a file into a browser nobody is looking at, and clear the
    * request before the view that shows it ever sees it.
    */
-  $: console.log('[jumpdiag] active=', active, 'pending=', $pendingFileJump);
   $: if (active && $pendingFileJump) {
     const jump = $pendingFileJump;
-    console.log('[jumpdiag] honouring', jump);
     clearFileJump();
     void openRequestedFile(jump.path, jump.line);
   }
@@ -42,9 +40,7 @@
     guardUnsaved(async () => {
       if (editing) leaveEditModeQuietly();
       selectedPath = path;
-      console.log('[jumpdiag] loadFile', path);
       await loadFile(path);
-      console.log('[jumpdiag] loaded, selectedFile=', selectedFile?.path, 'err=', fileError);
       void revealInTree(path);
 
       // After the document is in the editor, not before: CodeMirror has no

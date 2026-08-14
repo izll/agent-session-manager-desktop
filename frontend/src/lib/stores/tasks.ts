@@ -27,6 +27,18 @@ export interface Task {
   createdAt?: string;
   /** When the task was ticked off. Absent while it is still open. */
   completedAt?: string;
+  /**
+   * When the task is due, RFC 3339. Absent when it has no deadline — which is
+   * most of them, so this stays optional rather than defaulting to a date.
+   */
+  dueAt?: string;
+  /**
+   * The session this task belongs to, if any.
+   *
+   * Only tasks tied to a session make closing it ask about unfinished work; one
+   * belonging to the project as a whole leaves this empty.
+   */
+  sessionId?: string;
 }
 
 export interface TaskFilter {

@@ -31,13 +31,14 @@
       // between them, so a row index means nothing to the file. It falls
       // through to the first hunk below.
     }
-    if (line === undefined) {
-      const file = files.find((candidate) => candidate.path === path);
-      const firstHunk = file?.hunks?.[0];
+    if (line === undefined && selectedFile?.path === path) {
+      // Only the loaded file carries its hunks; the list holds summaries, which
+      // have the counts but not the content. For any other file there is
+      // nothing to aim at, so the browser opens it at the top.
+      const firstHunk = selectedFile.hunks?.[0];
       line = firstHunk ? parseHunkHeader(firstHunk.header).newStart : undefined;
     }
 
-    console.log('[jumpdiag] requesting', path, 'line', line);
     requestFileJump(path, line);
   }
   import { selectedSessionId } from '../../stores/sessions';
@@ -968,6 +969,10 @@
     scrollToOldLine(number: number): Promise<void>;
     scrollOffset(): number;
     restoreOffset(top: number): Promise<void>;
+    search(query: string): number;
+    stepSearch(direction: 1 | -1): number;
+    searchPosition(): number;
+    topVisibleNewLine(): number | null;
   } | null = null;
 
   /**
