@@ -6,6 +6,44 @@ Entries describe what changed for someone using the app. Internal refactoring,
 test and CI work is left out unless it changed behaviour. Dates are release
 dates; the format follows [Keep a Changelog](https://keepachangelog.com).
 
+## 0.9.28 — 2026-08-14
+
+### Added
+
+- **Backups now go back months, not hours.** They were the newest 25, whatever
+  they happened to be — on a busy day that was under a day of history, and
+  anything noticed the next morning was already gone. They are kept by age now:
+  everything from the last hour, one an hour for today, one a day for a
+  fortnight, one a week for a quarter.
+- **Tasks are backed up too**, and restore on their own tab in the recovery
+  centre — recovering a deleted task should not roll every session and setting
+  back with it. They live in each working directory rather than in the store
+  everything else comes from, so nothing had been watching them.
+- **The commit message pane in the history view can be resized.** It was a
+  fixed height that held a subject line and little else, so a commit with a
+  real body had to be scrolled a few lines at a time.
+
+### Fixed
+
+- **The mouse wheel would not scroll far back** in a session, though
+  Ctrl+PageUp went much further. The pane kept a thousand lines while tmux kept
+  fifty thousand; it keeps five thousand now and tmux takes over past that.
+- **On some machines the wheel did nothing at all** in a terminal. Where tmux's
+  own default is `mouse off`, the sessions the terminal actually attaches to
+  never had it turned on.
+- **A line with a background colour stopped a few pixels short of the pane's
+  edge**, showing black behind it. The scrollbar is gone from terminal panes as
+  well, since tmux does the scrolling.
+- **The terminal ignored its theme's background** in the margins around the
+  text, which showed as black on any theme that is not.
+- **The task badge in the header only updated every five minutes**, so ticking
+  a task off left the old number in place.
+- **"Back up now" did nothing** when nothing had changed since the last
+  automatic backup — reasonable for an automatic one, but not for a button
+  pressed to make a restore point.
+- Dialogs were capped at a width that every one of them overrode; the recovery
+  centre is wider, and switching between its tabs no longer resizes the window.
+
 ## 0.9.27 — 2026-08-14
 
 ### Added
