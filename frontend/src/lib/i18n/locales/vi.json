@@ -1163,6 +1163,7 @@
   "history.showCommits": "Hiện danh sách commit",
   "history.hideMessage": "Thu gọn thông điệp",
   "history.showMessage": "Mở rộng thông điệp",
+  "history.resizeMessage": "Kéo để đổi kích thước · nhấp đúp để đặt lại",
   "history.prevChange": "Thay đổi trước (Shift+F7)",
   "history.nextChange": "Thay đổi tiếp theo (F7)",
   "diff.showSideBySide": "Hiện dạng hai cột",

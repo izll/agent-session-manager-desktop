@@ -1163,6 +1163,7 @@
   "history.showCommits": "Commitlijst tonen",
   "history.hideMessage": "Bericht inklappen",
   "history.showMessage": "Bericht uitklappen",
+  "history.resizeMessage": "Sleep om te vergroten · dubbelklik om te herstellen",
   "history.prevChange": "Vorige wijziging (Shift+F7)",
   "history.nextChange": "Volgende wijziging (F7)",
   "diff.showSideBySide": "In twee kolommen tonen",

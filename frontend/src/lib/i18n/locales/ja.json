@@ -1163,6 +1163,7 @@
   "history.showCommits": "コミット一覧を表示",
   "history.hideMessage": "メッセージを折りたたむ",
   "history.showMessage": "メッセージを展開",
+  "history.resizeMessage": "ドラッグでサイズ変更・ダブルクリックで戻す",
   "history.prevChange": "前の変更 (Shift+F7)",
   "history.nextChange": "次の変更 (F7)",
   "diff.showSideBySide": "2 列で表示",

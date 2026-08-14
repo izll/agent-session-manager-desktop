@@ -1163,6 +1163,7 @@
   "history.showCommits": "Zobrazit seznam commitů",
   "history.hideMessage": "Sbalit zprávu",
   "history.showMessage": "Rozbalit zprávu",
+  "history.resizeMessage": "Táhnutím změníte velikost · dvojklik obnoví",
   "history.prevChange": "Předchozí změna (Shift+F7)",
   "history.nextChange": "Další změna (F7)",
   "diff.showSideBySide": "Zobrazit ve dvou sloupcích",

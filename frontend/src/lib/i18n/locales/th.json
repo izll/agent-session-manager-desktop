@@ -1163,6 +1163,7 @@
   "history.showCommits": "แสดงรายการคอมมิต",
   "history.hideMessage": "ยุบข้อความ",
   "history.showMessage": "ขยายข้อความ",
+  "history.resizeMessage": "ลากเพื่อปรับขนาด · ดับเบิลคลิกเพื่อรีเซ็ต",
   "history.prevChange": "การเปลี่ยนแปลงก่อนหน้า (Shift+F7)",
   "history.nextChange": "การเปลี่ยนแปลงถัดไป (F7)",
   "diff.showSideBySide": "แสดงเป็นสองคอลัมน์",

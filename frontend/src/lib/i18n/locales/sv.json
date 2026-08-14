@@ -1163,6 +1163,7 @@
   "history.showCommits": "Visa commitlistan",
   "history.hideMessage": "Fäll ihop meddelandet",
   "history.showMessage": "Expandera meddelandet",
+  "history.resizeMessage": "Dra för att ändra storlek · dubbelklicka för att återställa",
   "history.prevChange": "Föregående ändring (Skift+F7)",
   "history.nextChange": "Nästa ändring (F7)",
   "diff.showSideBySide": "Visa i två kolumner",

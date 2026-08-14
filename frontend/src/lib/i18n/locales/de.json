@@ -1163,6 +1163,7 @@
   "history.showCommits": "Commit-Liste anzeigen",
   "history.hideMessage": "Nachricht einklappen",
   "history.showMessage": "Nachricht ausklappen",
+  "history.resizeMessage": "Ziehen zum Ändern · Doppelklick setzt zurück",
   "history.prevChange": "Vorherige Änderung (Umschalt+F7)",
   "history.nextChange": "Nächste Änderung (F7)",
   "diff.showSideBySide": "In zwei Spalten anzeigen",

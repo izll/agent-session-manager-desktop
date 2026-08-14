@@ -1163,6 +1163,7 @@
   "history.showCommits": "Показать список коммитов",
   "history.hideMessage": "Свернуть сообщение",
   "history.showMessage": "Развернуть сообщение",
+  "history.resizeMessage": "Потяните, чтобы изменить размер · двойной щелчок сбрасывает",
   "history.prevChange": "Предыдущее изменение (Shift+F7)",
   "history.nextChange": "Следующее изменение (F7)",
   "diff.showSideBySide": "Показать в две колонки",

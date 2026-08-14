@@ -1163,6 +1163,7 @@
   "history.showCommits": "Commit listesini göster",
   "history.hideMessage": "Mesajı daralt",
   "history.showMessage": "Mesajı genişlet",
+  "history.resizeMessage": "Boyutlandırmak için sürükleyin · sıfırlamak için çift tıklayın",
   "history.prevChange": "Önceki değişiklik (Shift+F7)",
   "history.nextChange": "Sonraki değişiklik (F7)",
   "diff.showSideBySide": "İki sütunda göster",

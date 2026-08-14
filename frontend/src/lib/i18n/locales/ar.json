@@ -1163,6 +1163,7 @@
   "history.showCommits": "إظهار قائمة الإيداعات",
   "history.hideMessage": "طيّ الرسالة",
   "history.showMessage": "توسيع الرسالة",
+  "history.resizeMessage": "اسحب لتغيير الحجم · انقر مزدوجًا لإعادة الضبط",
   "history.prevChange": "التغيير السابق (Shift+F7)",
   "history.nextChange": "التغيير التالي (F7)",
   "diff.showSideBySide": "عرض في عمودين",

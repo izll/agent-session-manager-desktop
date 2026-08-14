@@ -1163,6 +1163,7 @@
   "history.showCommits": "Show the commit list",
   "history.hideMessage": "Collapse the message",
   "history.showMessage": "Expand the message",
+  "history.resizeMessage": "Drag to resize · double-click to reset",
   "history.prevChange": "Previous change (Shift+F7)",
   "history.nextChange": "Next change (F7)",
   "diff.showSideBySide": "Show as two columns",

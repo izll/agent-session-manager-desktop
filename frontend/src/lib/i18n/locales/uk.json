@@ -1163,6 +1163,7 @@
   "history.showCommits": "Показати список комітів",
   "history.hideMessage": "Згорнути повідомлення",
   "history.showMessage": "Розгорнути повідомлення",
+  "history.resizeMessage": "Потягніть, щоб змінити розмір · подвійний клік скидає",
   "history.prevChange": "Попередня зміна (Shift+F7)",
   "history.nextChange": "Наступна зміна (F7)",
   "diff.showSideBySide": "Показати у дві колонки",

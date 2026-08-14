@@ -1163,6 +1163,7 @@
   "history.showCommits": "Commit lista megjelenítése",
   "history.hideMessage": "Üzenet összecsukása",
   "history.showMessage": "Üzenet kibontása",
+  "history.resizeMessage": "Húzd az átméretezéshez · dupla kattintás visszaállít",
   "history.prevChange": "Előző eltérés (Shift+F7)",
   "history.nextChange": "Következő eltérés (F7)",
   "diff.showSideBySide": "Megjelenítés két hasábban",

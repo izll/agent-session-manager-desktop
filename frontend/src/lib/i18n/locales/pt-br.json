@@ -1163,6 +1163,7 @@
   "history.showCommits": "Mostrar a lista de commits",
   "history.hideMessage": "Recolher a mensagem",
   "history.showMessage": "Expandir a mensagem",
+  "history.resizeMessage": "Arraste para redimensionar · clique duplo para redefinir",
   "history.prevChange": "Alteração anterior (Shift+F7)",
   "history.nextChange": "Próxima alteração (F7)",
   "diff.showSideBySide": "Mostrar em duas colunas",

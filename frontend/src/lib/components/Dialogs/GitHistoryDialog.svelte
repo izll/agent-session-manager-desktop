@@ -112,6 +112,44 @@
     document.addEventListener('mouseup', end);
   }
 
+  /**
+   * How tall the commit message pane is.
+   *
+   * A fixed 86px was enough for a subject line and little else, so a message
+   * with a real body — the ones worth reading — had to be scrolled a few lines
+   * at a time while most of the window sat empty below it.
+   *
+   * Remembered for the session rather than saved: it is a working adjustment
+   * made while reading one commit, not a preference.
+   */
+  let messageHeight = 86;
+  const MIN_MESSAGE_HEIGHT = 48;
+
+  function startMessageDrag(e: MouseEvent) {
+    e.preventDefault();
+    const startY = e.clientY;
+    const startH = messageHeight;
+
+    const move = (ev: MouseEvent) => {
+      // Capped against the window as well as the minimum: dragged past the
+      // bottom, the pane would push the file list and the diff off the dialog
+      // entirely, with no way back except closing it.
+      const most = Math.max(MIN_MESSAGE_HEIGHT, window.innerHeight - 320);
+      messageHeight = Math.min(most, Math.max(MIN_MESSAGE_HEIGHT, startH + ev.clientY - startY));
+    };
+    const end = () => {
+      document.removeEventListener('mousemove', move);
+      document.removeEventListener('mouseup', end);
+    };
+    document.addEventListener('mousemove', move);
+    document.addEventListener('mouseup', end);
+  }
+
+  /** Double-click resets it, which is quicker than dragging back by eye. */
+  function resetMessageHeight() {
+    messageHeight = 86;
+  }
+
   $: if (show && path) void open();
 
   async function open() {
@@ -752,7 +790,11 @@
         <!-- What the commit changed -->
         <div class="change-pane">
           {#if selectedCommit}
-            <div class="commit-detail" class:collapsed={messageCollapsed}>
+            <div
+              class="commit-detail"
+              class:collapsed={messageCollapsed}
+              style={messageCollapsed ? '' : `height: ${messageHeight}px`}
+            >
               <!-- svelte-ignore a11y-click-events-have-key-events -->
               <div
                 class="detail-subject"
@@ -774,6 +816,19 @@
               </div>
               {/if}
             </div>
+            <!-- Dragged to give a long commit message more room. Hidden while
+                 the message is folded away, where there is nothing to resize.
+                 svelte-ignore a11y-no-noninteractive-element-interactions -->
+            {#if !messageCollapsed}
+              <div
+                class="message-resizer"
+                role="separator"
+                aria-orientation="horizontal"
+                title={$t('history.resizeMessage')}
+                on:mousedown={startMessageDrag}
+                on:dblclick={resetMessageHeight}
+              ></div>
+            {/if}
           {/if}
 
           <div class="change-split">
@@ -1151,8 +1206,23 @@
      commit give the panes below it a different amount of room, so moving
      through the list resized the file tree and the diff on every selection.
      A long message scrolls within this instead. */
+  .message-resizer {
+    flex: 0 0 auto;
+    height: 6px;
+    cursor: row-resize;
+    background: transparent;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .message-resizer:hover {
+    background: rgba(var(--accent-rgb), 0.25);
+  }
+
   .commit-detail {
     flex: 0 0 auto;
+    /* The inline style sets this when the message is open; the value here is
+       the fallback for the folded state, where the subject line is all there
+       is to show. */
     height: 86px;
     padding: 10px 14px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
