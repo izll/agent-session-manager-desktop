@@ -1764,11 +1764,14 @@
     user-select: none;
   }
 
+  /* Widened to match the splitters in the diff, file browser and history
+     dialog. Absolutely positioned, so this takes no width from the sidebar —
+     it straddles the edge, half over the sidebar and half over the panel. */
   .resize-handle {
     position: absolute;
     top: 0;
-    right: -3px;
-    width: 6px;
+    right: -5px;
+    width: 11px;
     height: 100%;
     cursor: col-resize;
     z-index: 10;

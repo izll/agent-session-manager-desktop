@@ -1565,12 +1565,13 @@
   }
 
   /* Sits between the panes; the negative margins let a thin visual divider
-     have a comfortable grab area without shifting the layout. */
+     have a comfortable grab area without shifting the layout.
+     flex-basis rather than width, because on a flex item the basis is what
+     decides the size — the width here was being overridden, leaving a 1px box
+     that only min-width stretched. 11px matches the other splitters. */
   .pane-resizer {
-    flex: 0 0 1px;
-    margin: 0 -3px;
-    width: 7px;
-    min-width: 7px;
+    flex: 0 0 11px;
+    margin: 0 -5px;
     cursor: col-resize;
     background: transparent;
     z-index: 5;

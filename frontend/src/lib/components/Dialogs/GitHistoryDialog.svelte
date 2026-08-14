@@ -1004,12 +1004,19 @@
     min-height: 0;
   }
 
+  /* A wide grab area pulled back over its neighbours by negative margins, so
+     the strip is comfortable to hit without taking that width from the panes.
+     At the old 5px-minus-2px there were three pixels to aim at, and catching
+     them was a matter of luck. z-index keeps it above the pane contents: the
+     file rows next to it take the mouse too, and without this the row won on
+     the overlap — which is the half that made the splitter feel dead. */
   .pane-splitter {
     flex: 0 0 auto;
-    width: 5px;
-    margin-left: -2px;
+    width: 11px;
+    margin: 0 -5px;
     cursor: col-resize;
     background: transparent;
+    z-index: 5;
   }
   .pane-splitter:hover {
     background: rgba(97, 175, 239, 0.35);
