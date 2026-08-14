@@ -1,4 +1,5 @@
 import { writable } from 'svelte/store';
+import { tasks } from './tasks';
 import { GetAllTasks } from '../../../wailsjs/go/main/App';
 
 /**
@@ -34,13 +35,44 @@ const REFRESH_MS = 5 * 60 * 1000;
 /**
  * Keep the count current, and stop when the caller is done.
  *
- * Five minutes, not five seconds: this walks every project's task file to
- * answer, and the number does not change on its own between edits. It also
- * refreshes when the task view is left, which is when a task was most likely
- * just completed.
+ * Two things drive it. The poll is a backstop for tasks changed outside this
+ * window — by an agent writing the file, or another copy of the app — and is
+ * five minutes because answering means reading every project's task file.
+ *
+ * The immediate half is the subscription: any edit made here goes through the
+ * tasks store, so recounting when that changes means a tick is reflected at
+ * once. Polling alone left the badge showing the old number for up to five
+ * minutes after a task was ticked off, which reads as the badge being broken.
  */
 export function watchOpenCount(): () => void {
   void refreshOpenCount();
   const timer = setInterval(() => void refreshOpenCount(), REFRESH_MS);
-  return () => clearInterval(timer);
+
+  // Skips the first call: subscribing fires immediately with the current value,
+  // and the refresh above has already covered that.
+  //
+  // Coalesced, because the store is written more than once per change — a tick
+  // updates it and the reload that follows updates it again — and answering
+  // means reading every project's task file. A short delay turns a burst into
+  // one read while still being immediate to the eye.
+  let first = true;
+  let pending: ReturnType<typeof setTimeout> | null = null;
+
+  const unsubscribe = tasks.subscribe(() => {
+    if (first) {
+      first = false;
+      return;
+    }
+    if (pending) clearTimeout(pending);
+    pending = setTimeout(() => {
+      pending = null;
+      void refreshOpenCount();
+    }, 150);
+  });
+
+  return () => {
+    clearInterval(timer);
+    if (pending) clearTimeout(pending);
+    unsubscribe();
+  };
 }
