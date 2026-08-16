@@ -103,6 +103,32 @@ export interface TerminalInstance {
   awaitingRedraw?: boolean;
   /** Called when awaitingRedraw changes, so the view can show a spinner. */
   onAwaitingRedraw?: (waiting: boolean) => void;
+  /** Timer that gives up on the wait; see clearAwaitingRedraw. */
+  awaitingRedrawTimer?: ReturnType<typeof setTimeout>;
+}
+
+/**
+ * Take the "refreshing" spinner down.
+ *
+ * The wait used to end only on the next byte from the backend, which is not
+ * the same thing as the pane being up to date. A tab whose program has nothing
+ * to say — an agent that has finished, a shell sitting at its prompt — comes
+ * back to a correct screen and no traffic at all, and the spinner stayed up
+ * over a pane that had already redrawn. Clicking cleared it only because the
+ * click itself made the terminal send something.
+ *
+ * Callers: the first byte in (still the common case, and the earliest signal),
+ * the repaint in the pool's settle step, and a timeout for anything neither
+ * covers.
+ */
+export function clearAwaitingRedraw(terminalInstance: TerminalInstance): void {
+  if (terminalInstance.awaitingRedrawTimer) {
+    clearTimeout(terminalInstance.awaitingRedrawTimer);
+    terminalInstance.awaitingRedrawTimer = undefined;
+  }
+  if (!terminalInstance.awaitingRedraw) return;
+  terminalInstance.awaitingRedraw = false;
+  terminalInstance.onAwaitingRedraw?.(false);
 }
 
 export type TerminalRendererMode = 'canvas' | 'webgl' | 'dom';
@@ -923,10 +949,7 @@ export async function attachToSession(
         : new TextEncoder().encode(event.data as string);
 
       // Output means the pane has been redrawn, whatever prompted it.
-      if (terminalInstance.awaitingRedraw) {
-        terminalInstance.awaitingRedraw = false;
-        terminalInstance.onAwaitingRedraw?.(false);
-      }
+      clearAwaitingRedraw(terminalInstance);
 
       if (terminalInstance.visible) {
         visibleQueue.push(chunk);

@@ -5,6 +5,7 @@ import {
   fitTerminal,
   resendTerminalSize,
   sendVisibility,
+  clearAwaitingRedraw,
   type TerminalInstance
 } from './terminal';
 import type { Terminal } from '@xterm/xterm';
@@ -145,15 +146,25 @@ export class TerminalPool {
         // differences against the screen as it was — clearing it first would
         // leave the replay writing into a blank pane, so most of the content
         // would simply be missing.
+        // Reassigned on every switch, not only when starting a fresh wait: it
+        // closes over `key`, so one left over from an earlier tab measures
+        // activeKey against the wrong pane and could never fire again.
+        ti.onAwaitingRedraw = (waiting) => {
+          // Only the pane on screen; a background one finishing its wait
+          // must not clear a spinner belonging to the visible tab.
+          if (this.activeKey === key) this.onAwaitingRedraw?.(waiting);
+        };
         if (!ti.awaitingRedraw) {
           ti.awaitingRedraw = true;
-          ti.onAwaitingRedraw = (waiting) => {
-            // Only the pane on screen; a background one finishing its wait
-            // must not clear a spinner belonging to the visible tab.
-            if (this.activeKey === key) this.onAwaitingRedraw?.(waiting);
-          };
           this.onAwaitingRedraw?.(true);
         }
+        // Give up after a moment. The wait ends on the first byte back, which
+        // is the common case and the earliest signal — but a tab whose program
+        // has nothing to say sends none, and its pane is already correct, so
+        // the spinner sat over a screen that had finished. Long enough that a
+        // real replay still clears it first.
+        if (ti.awaitingRedrawTimer) clearTimeout(ti.awaitingRedrawTimer);
+        ti.awaitingRedrawTimer = setTimeout(() => clearAwaitingRedraw(ti), 1200);
         const flush = (ti as any)._flushHidden as (() => void) | undefined;
         if (flush) flush();
         // Re-announce this tab's size on every switch to it.
@@ -380,6 +391,9 @@ export class TerminalPool {
         // there. Hiding and showing a pane is exactly when that shows up.
         clearGlyphCache(term);
         term.refresh(0, term.rows - 1);
+        // The pane has just been repainted, so there is nothing left to wait
+        // for — whether or not the backend had anything to replay.
+        clearAwaitingRedraw(entry.terminalInstance);
         if (canFocus()) term.focus();
         return;
       }
@@ -397,6 +411,7 @@ export class TerminalPool {
         fitTerminal(entry.terminalInstance, 'pool-settle-timeout');
         clearGlyphCache(term);
         term.refresh(0, term.rows - 1);
+        clearAwaitingRedraw(entry.terminalInstance);
         if (canFocus()) term.focus();
       }
     };
@@ -435,6 +450,9 @@ export class TerminalPool {
   // visible, click-eating container in the DOM (terminal wouldn't focus),
   // and it rejected the caller's await so the automatic re-show never ran.
   private teardownEntry(entry: PoolEntry): void {
+    // Cancels the give-up timer too, so a torn-down tab cannot fire a spinner
+    // update at a pane that is no longer there.
+    clearAwaitingRedraw(entry.terminalInstance);
     detachFromSession(entry.terminalInstance).catch(e => logPoolError('pool teardown: detach failed', e));
     try { entry.terminalInstance.cleanup(); } catch (e) { logPoolError('pool teardown: cleanup failed (linkifier race?)', e); }
     try { entry.containerEl.remove(); } catch (e) { logPoolError('pool teardown: container remove failed', e); }
