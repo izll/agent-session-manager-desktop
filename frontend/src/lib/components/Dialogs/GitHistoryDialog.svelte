@@ -78,6 +78,88 @@
 
   const MIN_PANE = 120;
 
+  /**
+   * The dialog's own size, once it has been resized by its corner.
+   *
+   * Null until then, which leaves the CSS default in force rather than pinning
+   * the dialog to whatever px that default happened to compute to. Maximising
+   * ignores both and fills the window.
+   *
+   * Not remembered between openings: it is an adjustment made while reading one
+   * commit, like the pane widths beside it.
+   */
+  let dialogWidth: number | null = null;
+  let dialogHeight: number | null = null;
+
+  /** Small enough to be a mistake rather than an intent — below this the three
+   *  panes have nothing left to show. */
+  const MIN_DIALOG_WIDTH = 640;
+  const MIN_DIALOG_HEIGHT = 360;
+
+  let dialogEl: HTMLDivElement | null = null;
+  let resizingDialog = false;
+
+  /**
+   * Drag the bottom-right corner to size the dialog.
+   *
+   * Maximising was the only way to make it bigger, and that is all or nothing:
+   * a window-filling dialog is too much when the point is to read one commit
+   * beside the app, and the default was too little for a wide diff.
+   */
+  function startDialogResize(e: MouseEvent) {
+    if (!dialogEl) return;
+    e.preventDefault();
+    e.stopPropagation();
+    resizingDialog = true;
+
+    // Measured rather than read from the state: until the first drag the size
+    // comes from the CSS, and there is no number here to start from.
+    const box = dialogEl.getBoundingClientRect();
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const startW = box.width;
+    const startH = box.height;
+
+    // Dragged past the viewport the dialog would grow beyond the screen, with
+    // its own corner off it — and nothing left to grab to bring it back.
+    //
+    // The full viewport, not the 96vw/88vh the default is capped at: those caps
+    // are what makes the default a dialog rather than a window, and a drag is
+    // the user saying they want more than the default. Held back by 8px so the
+    // dialog still reads as sitting on the app rather than replacing it —
+    // maximising is what fills the screen outright.
+    const maxW = window.innerWidth - 8;
+    const maxH = window.innerHeight - 8;
+
+    const move = (ev: MouseEvent) => {
+      // Centred by the overlay's flexbox, so the far edge moves at twice the
+      // pointer: the width has to grow by two pixels for the corner to keep up
+      // with one pixel of travel.
+      dialogWidth = Math.min(maxW, Math.max(MIN_DIALOG_WIDTH, startW + (ev.clientX - startX) * 2));
+      dialogHeight = Math.min(maxH, Math.max(MIN_DIALOG_HEIGHT, startH + (ev.clientY - startY) * 2));
+    };
+    const end = () => {
+      resizingDialog = false;
+      document.removeEventListener('mousemove', move);
+      document.removeEventListener('mouseup', end);
+    };
+    document.addEventListener('mousemove', move);
+    document.addEventListener('mouseup', end);
+  }
+
+  /** Double-click the corner to get the default size back. */
+  function resetDialogSize() {
+    dialogWidth = null;
+    dialogHeight = null;
+  }
+
+  // A resized dialog keeps its size; maximising overrides it, and restoring
+  // brings it back rather than dropping to the default.
+  $: dialogSizeStyle =
+    !maximised && dialogWidth !== null && dialogHeight !== null
+      ? `width: ${dialogWidth}px; max-width: ${dialogWidth}px; height: ${dialogHeight}px`
+      : '';
+
   $: selectedCommit = commits.find((c) => c.hash === selectedHash) ?? null;
 
   /**
@@ -659,7 +741,13 @@
   <!-- svelte-ignore a11y-click-events-have-key-events -->
   <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
   <div class="dialog-overlay" on:click|self={close} on:keydown={onKeydown} role="dialog" tabindex="-1">
-    <div class="dialog-content history-dialog" class:maximised>
+    <div
+      class="dialog-content history-dialog"
+      class:maximised
+      class:resizing-dialog={resizingDialog}
+      bind:this={dialogEl}
+      style={dialogSizeStyle}
+    >
       <div class="dialog-header">
         <h2 class="history-title" title={headerTitle}>{headerTitle}</h2>
         <button
@@ -974,6 +1062,20 @@
           </div>
         </div>
       </div>
+
+      <!-- Drag the corner to size the dialog; double-click restores the
+           default. Hidden while maximised, where there is nothing to drag to.
+           Inside the dialog, not the overlay: it is positioned against the
+           dialog's own corner. -->
+      {#if !maximised}
+        <!-- svelte-ignore a11y-no-static-element-interactions -->
+        <div
+          class="dialog-resizer"
+          title={$t('diff.resizeHint')}
+          on:mousedown={startDialogResize}
+          on:dblclick={resetDialogSize}
+        ></div>
+      {/if}
     </div>
   </div>
 {/if}
@@ -986,6 +1088,59 @@
     height: min(88vh, 1000px);
     display: flex;
     flex-direction: column;
+    /* Anchors the corner resizer. */
+    position: relative;
+  }
+
+  /* The corner handle. Sits inside the dialog rather than overhanging it, so
+     it cannot be pushed off-screen by a drag to the edge.
+     The grab area is larger than the mark it draws: the corner is where the
+     pointer arrives from outside the dialog, and it should catch before the
+     mark is reached. */
+  .dialog-resizer {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    width: 26px;
+    height: 26px;
+    cursor: nwse-resize;
+    z-index: 10;
+  }
+  /* A filled corner wedge, in neutral grey.
+     The browser's own `resize: both` grip is two short strokes, but they leave
+     the rounded corner half empty and read as a scratch on it; a solid wedge
+     fills the curve, which is how macOS and most component libraries draw a
+     resizable corner. Either is conventional — this one suits a 16px radius.
+     `resize: both` itself is not an option here: it requires overflow other
+     than visible, and the dialog is a flex column whose panes do their own
+     scrolling.
+     An earlier pass drew three strokes in the accent colour over a tinted
+     wedge, which found the corner by shouting at it. A handle is furniture. */
+  .dialog-resizer::after {
+    content: '';
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    width: 15px;
+    height: 15px;
+    /* Clipped to the dialog's own corner radius, so the wedge follows the
+       curve instead of overhanging it. */
+    border-bottom-right-radius: 14px;
+    background: linear-gradient(135deg, transparent 50%, rgba(255, 255, 255, 0.3) 50%);
+    transition: background 0.12s ease;
+  }
+  /* Brighter on hover — the only cue it needs, since the cursor already says
+     what the corner does. */
+  .dialog-resizer:hover::after {
+    background: linear-gradient(135deg, transparent 50%, rgba(255, 255, 255, 0.5) 50%);
+  }
+  /* Held through the drag: the pointer leaves the corner as the dialog grows
+     under it, and a grip that dims mid-drag reads as having been let go. */
+  .history-dialog.resizing-dialog {
+    user-select: none;
+  }
+  .history-dialog.resizing-dialog .dialog-resizer::after {
+    background: linear-gradient(135deg, transparent 50%, rgba(255, 255, 255, 0.5) 50%);
   }
 
   .history-dialog.maximised {
