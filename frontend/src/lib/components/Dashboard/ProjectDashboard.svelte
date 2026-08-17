@@ -666,11 +666,26 @@
   .group-title { color:#d4d4d8; font-size:13px; font-weight:650; letter-spacing:.01em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .group-count { flex-shrink:0; color:#71717a; font-size:10px; padding:2px 7px; border-radius:999px; background:rgba(255,255,255,.05); }
   .group-rule { flex:1; height:1px; background:linear-gradient(90deg,rgba(var(--accent-rgb), .25),transparent); }
-  .session-card { position:relative; min-width:0; display:flex; flex-direction:column; padding:17px; border:1px solid rgba(255,255,255,.07); border-radius:12px; background:linear-gradient(145deg,var(--session-accent-bg,rgba(22,22,35,.92)),rgba(12,12,20,.96)); overflow:hidden; transition:border-color .15s ease,transform .15s ease,box-shadow .15s ease; }
+  /* The session's own colour is NOT the card's background.
+     It was, as a gradient across the whole card, and a saturated colour behind
+     a card's worth of small text is tiring to read — the colour is a label, not
+     a surface. It now tints the header band only, where the name it belongs to
+     actually is. */
+  .session-card { position:relative; min-width:0; display:flex; flex-direction:column; padding:17px; border:1px solid rgba(255,255,255,.07); border-radius:12px; background:linear-gradient(145deg,rgba(22,22,35,.92),rgba(12,12,20,.96)); overflow:hidden; transition:border-color .15s ease,transform .15s ease,box-shadow .15s ease; }
   .session-card:hover { border-color:rgba(var(--accent-rgb), .27); transform:translateY(-1px); box-shadow:0 10px 28px rgba(0,0,0,.2); }
   .session-card.needs-attention { border-color:rgba(0,206,209,.26); }
   .session-accent { position:absolute; top:0; left:0; right:0; height:2px; background:linear-gradient(90deg,var(--accent-dark),var(--accent-light)); opacity:.9; }
-  .card-header { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
+  /* The header carries the session's colour, faded well back: enough to tell
+     two cards apart at a glance, not enough to fight the text on it. Bled out
+     to the card's edges with negative margins so it reads as a band rather than
+     a box floating inside one. */
+  .card-header { position:relative; display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
+  .session-card[style*="--session-accent-bg"] .card-header::before {
+    content:''; position:absolute; inset:-17px -17px -10px; z-index:0;
+    background:var(--session-accent-bg); opacity:.22; pointer-events:none;
+  }
+  /* Above the band, or the header's own text would be painted over by it. */
+  .card-header > * { position:relative; z-index:1; }
   .session-identity { min-width:0; display:flex; align-items:center; gap:10px; }
   .session-title-wrap { min-width:0; }
   .session-title-wrap h2 { margin:0; color:#e4e4e7; font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
