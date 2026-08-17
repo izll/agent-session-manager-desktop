@@ -51,8 +51,10 @@ left off.
   dirty state, ahead/behind, last commit) and your **Claude and Codex/GPT
   usage** — how much of your rate-limit window is left — at a glance.
 - **Reach for the right agent instantly.** Search every session, group them
-  into projects, star your favorites, and search *inside* a terminal's
-  scrollback with `Ctrl+Shift+L`.
+  into projects, star your favorites, build a numbered jump list of the tabs
+  you keep returning to (`Ctrl+J`), and search *inside* a terminal's scrollback
+  with `Ctrl+Shift+L`. Forgotten which session that conversation happened in?
+  `Ctrl+Shift+F` searches every agent's history at once.
 - **Read what it wrote, without leaving.** Browse and edit the project's files
   with syntax highlighting, search them by name or content, and review the
   session's diff file by file — reverting a single hunk if you disagree with
@@ -80,6 +82,15 @@ left off.
 - **Saved commands** — a searchable library on `Ctrl+P`, organised into groups.
   Commands can take parameters — `{{name}}`, or `{{name:default}}` — and you
   are prompted for them before the command runs.
+- **Command palette** — `Ctrl+K` finds anything by typing: a session, a project,
+  a tab, or an action such as opening the diff, restarting a tab or jumping to
+  the next agent that is waiting on you.
+- **Quick jump list** — `Ctrl+J` opens your own numbered shortlist of the places
+  you keep going back to; `1`–`9` jumps straight there. Add the current tab with
+  `Alt+J`, rename entries, and point one at a whole session or at one exact tab.
+- **New tabs from the keyboard** — `Ctrl+T` for the full dialog, `Ctrl+Shift+T`
+  when you just want a terminal: it asks only what to call it, with the name
+  filled in and selected.
 
 **Staying in control**
 
@@ -93,16 +104,34 @@ left off.
 - **YOLO indicator** — shows when an agent is running unattended (Claude's
   *bypass permissions* / *auto mode*), read live so it tracks a Shift+Tab
   toggle.
+- **Fresher activity detection** — the patterns that decide when an agent is
+  working and when it is waiting can be updated on their own, without waiting
+  for a release of the app.
 
 **Seeing your work**
 
 - **Project dashboard** — the bird's-eye view: grouped session cards, Git
   status per repo, and Claude / Codex usage windows.
-- **Activity statistics** — locally-observed, per-project agent activity over
-  time.
+- **Activity statistics** — locally-observed agent activity over the last 7, 30
+  or 90 days: a daily timeline, a breakdown per agent, and which sessions took
+  the most work.
 - **Diff & notes** — review a session's Git changes file by file, grouped into
-  a directory tree, and revert a single file or a single hunk. Huge diffs are
-  guarded so they never freeze the UI. Keep per-tab notes.
+  a directory tree, and revert a single file or a single hunk. Read it inline or
+  side by side, with a draggable split, `Ctrl+F7`/`Ctrl+Shift+F7` to step through
+  the changes, and a jump from any line to that spot in the editor. Huge diffs are
+  guarded so they never freeze the UI. Keep per-tab notes, with search (`Ctrl+F`)
+  and full undo.
+- **Commit history** — `Ctrl+Shift+Y` browses the repository's commits and
+  branches: the files each one touched, its diff, and a search through the
+  messages. Read a change on its own or in the whole file, with `F7` stepping
+  from one to the next. The window resizes from its corner, and its panes fold
+  away when you want more room.
+- **Split view** — pin a tab beside the one you are on and watch two agents work
+  at once, or compare a session with itself. Swap the two sides or repoint the
+  pinned one without losing your place.
+- **Global history search** — `Ctrl+Shift+F` searches across every session's
+  conversation history — Claude, Aider, OpenCode and plain terminal scrollback —
+  ranked, with a preview of the exchange it found.
 - **File browser & editor** — read and edit the files your agent is working on
   without leaving the app. Syntax highlighting for a dozen languages while both
   reading and editing (CodeMirror 6, with grammars loaded on demand), file
@@ -112,8 +141,16 @@ left off.
 - **Current branch** — the working directory's Git branch beside the session
   name or in the status bar, following the pane as you `cd` around, with a
   read-only list of the repo's other branches.
-- **Task Master** — optional MCP-backed task list per session, right in the
-  panel.
+- **Tasks with deadlines** — a real task list per working directory: priorities,
+  due dates that mark themselves overdue, subtasks, dependencies ("what is this
+  waiting on"), and a filter across the lot. Send a task to the agent to work on,
+  or tie it to a session so deleting that session warns you about the unfinished
+  work first. A count of what is still open sits on the tab.
+- **Every project's tasks in one place** — one table of every task across every
+  project, sorted by deadline, filtered to just the overdue or the unfinished.
+- **Task Master (optional)** — the task list works on its own; turning this on
+  adds the AI-backed actions — parsing a PRD, expanding a task into subtasks,
+  scoring complexity — via the `task-master-ai` MCP package.
 
 **Comfort & polish**
 
@@ -122,18 +159,29 @@ left off.
 - **Make it yours** — eight interface accents or any colour you like; per-agent
   and per-tab terminal palettes, including ones you define; adjustable terminal
   font size globally, per tab, or with `Ctrl` + scroll; colour a session or a
-  group, and hide the view or status bar on tabs that don't need them.
+  group, and hide the view or status bar on tabs that don't need them. Choose
+  what a plain terminal tab runs, and whether selecting text copies it straight
+  away or only with Shift held.
+- **Bring your own colour scheme** — import the themes already installed for
+  Konsole, kitty, Alacritty, WezTerm or Ghostty, browse the several hundred in
+  the iTerm2-Color-Schemes collection, or open a scheme file from anywhere. Each
+  one previews before you keep it.
 - **Rebindable shortcuts** — every keyboard shortcut is editable in Settings,
   and the help dialog is generated from the same list, so it always shows what
-  the keys actually do. Shortcuts you don't use can be switched off; the few
-  whose meaning comes from context (`Esc`, `Enter`, `/`) are shown but fixed.
+  the keys actually do. Shortcuts you don't use can be switched off. A handful
+  stay fixed because their meaning comes from where you are — `Esc`, `Enter`,
+  `/`, `Ctrl` + scroll to zoom, and `Ctrl+Shift+1`…`7` for the favourite slots.
   Keys named throughout this README are the defaults.
 - **Selectable terminal renderer** — canvas (default), WebGL, or DOM,
   switchable live from Settings.
-- **Undo a deletion** — deleted sessions and tabs go to a recycle bin you can
-  restore from, kept for a period you choose.
-- **Picks up where you left off** — the tab you were on, the view you had open,
-  and your place in a file all come back when you return to a session.
+- **Recovery centre** — deleted sessions and tabs go to a recycle bin you can
+  restore from, kept for a period you choose. Beside it, your settings and
+  session list are snapshotted automatically as they change — everything from
+  the last hour, then thinning to one an hour, one a day and one a week going
+  back months — so a mistake noticed tomorrow is still undoable. Task files are
+  backed up separately, and you can take a snapshot by hand at any time.
+- **Picks up where you left off** — the tab you were on and your place in a file
+  come back when you return to a session.
 - **20 languages** — the whole UI is translated.
 - **Safe alongside itself** — open a second window and it won't stomp on the
   first one's terminals; it warns you and stays read-only for that project.
@@ -143,6 +191,10 @@ left off.
   needs administrator rights.
 - **Take it with you** — export sessions to a file and import them on another
   machine.
+- **Nothing to install first** — if `tmux` (or `psmux` on Windows) is missing,
+  the app offers to install it for you.
+- **See what it's doing** — the application log is readable from Settings,
+  filterable and copyable, for when something needs explaining.
 
 <img src="docs/screenshot-dashboard.png" alt="The project dashboard: grouped sessions with Git status and agent usage" width="900">
 
