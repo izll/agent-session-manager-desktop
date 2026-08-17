@@ -3,6 +3,7 @@
   import { claimMenu, releaseMenu } from '../../utils/openMenu';
   import AgentIcon from '../common/AgentIcon.svelte';
   import NewTabDialog from '../Dialogs/NewTabDialog.svelte';
+  import QuickTerminalDialog from '../Dialogs/QuickTerminalDialog.svelte';
   import TabColorDialog from '../Dialogs/TabColorDialog.svelte';
   import ConfirmDialog from '../Dialogs/ConfirmDialog.svelte';
   import Toast from '../common/Toast.svelte';
@@ -292,6 +293,7 @@
   let pollTimeout: ReturnType<typeof setTimeout> | null = null;
   let windowsLoadGeneration = 0;
   let showNewTabDialog = false;
+  let showQuickTerminalDialog = false;
   let showDeleteConfirm = false;
   let showDeleteTabConfirm = false;
   let deleteTabIndex: number | null = null;
@@ -311,7 +313,7 @@
   // Restore terminal focus when TabBar-local dialogs close
   let prevTabBarDialogOpen = false;
   $: {
-    const open = showNewTabDialog || showDeleteConfirm || showDeleteTabConfirm || showExtraArgsEditor || showTabColorDialog;
+    const open = showNewTabDialog || showQuickTerminalDialog || showDeleteConfirm || showDeleteTabConfirm || showExtraArgsEditor || showTabColorDialog;
     if (prevTabBarDialogOpen && !open) {
       focusTerminal();
     }
@@ -321,11 +323,28 @@
   // Dictation event listeners
   let dictationCleanup: (() => void) | null = null;
 
-  // Ctrl+PageUp/PageDown to switch window tabs
+  // Ctrl+PageUp/PageDown to switch window tabs, Ctrl+T to open one
   function handleWindowTabKeydown(e: KeyboardEvent) {
     if (!visible) return;
     // Matched against the configured bindings rather than hard-coded keys, so
     // rebinding tab navigation in settings reaches this too.
+    if (matchesShortcut(e, 'tab.newTerminal')) {
+      if (document.querySelector('.dialog-overlay')) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (get(selectedSession)?.status !== 'running') return;
+      showQuickTerminalDialog = true;
+      return;
+    }
+    if (matchesShortcut(e, 'tab.new')) {
+      if (document.querySelector('.dialog-overlay')) return;
+      e.preventDefault();
+      e.stopPropagation();
+      // Through the same guard the palette's action uses: a tab can only be
+      // opened on a session that is running.
+      handleCommandNewTab();
+      return;
+    }
     const wantsNext = matchesShortcut(e, 'tab.next');
     const wantsPrev = matchesShortcut(e, 'tab.prev');
     if (!wantsNext && !wantsPrev) return;
@@ -1795,6 +1814,7 @@
 {/if}
 
 <NewTabDialog bind:show={showNewTabDialog} />
+<QuickTerminalDialog bind:show={showQuickTerminalDialog} />
 
 <TabColorDialog
   bind:show={showTabColorDialog}

@@ -96,6 +96,22 @@ export const SHORTCUTS: Shortcut[] = [
     defaults: [{ key: 'pageup', ctrl: true }],
   },
   {
+    id: 'tab.new',
+    category: 'navigation',
+    // Ctrl+T, as in browsers and terminal emulators. Nothing else claimed it,
+    // and the + button was the only way to open a tab.
+    descKey: 'help.navTabNew',
+    defaults: [{ key: 't', ctrl: true }],
+  },
+  {
+    id: 'tab.newTerminal',
+    category: 'navigation',
+    // Ctrl+Shift+T, beside the full dialog on Ctrl+T: same idea, fewer
+    // questions. It asks only for a name, already filled in and selected.
+    descKey: 'help.navTabNewTerminal',
+    defaults: [{ key: 't', ctrl: true, shift: true }],
+  },
+  {
     id: 'session.attach',
     category: 'navigation',
     descKey: 'help.navAttach',
