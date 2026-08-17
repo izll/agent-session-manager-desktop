@@ -113,80 +113,50 @@
     if (view === 'diff') {
       if (currentSession?.isGitRepo) {
         fullDiffActive = true;
-        if (lastViewKey) tabDiffMemory.add(lastViewKey);
       }
       return;
     }
     fullDiffActive = false;
-    if (lastViewKey) tabDiffMemory.delete(lastViewKey);
     selectView(view);
   }
-
-  // Which view each tab was left on. Browsing files and switching to another
-  // agent used to drop you back on the terminal, losing your place; the tab
-  // itself is already remembered this way, so the view follows the same rule.
-  // In-memory only: it tracks where you are in this sitting, not a preference
-  // worth persisting.
-  const tabViewMemory = new Map<string, ViewName>();
 
   function tabViewKey(sessionId: string | null, windowIdx: number): string {
     return `${sessionId || ''}:${windowIdx}`;
   }
 
-  // Whether each tab was left on the diff. Tracked alongside tabViewMemory
-  // rather than as one flag for the whole panel: the diff lives in the tab bar
-  // instead of the view bar, so it was never part of the per-tab memory, and
-  // opening it on one session left every other session showing a diff too.
-  const tabDiffMemory = new Set<string>();
-
   // The diff shown ABOVE the current view, rather than instead of it, so a
   // change can be read beside the agent that made it.
-  //
-  // Per tab, like fullDiffActive: opening it on one session left every other
-  // session showing a diff too when this was a single flag for the panel.
-  const tabDiffAbove = new Set<string>();
   let diffAbove = false;
 
-  // Restore on tab/session change.
+  // Reset the view on tab/session change.
   //
   // This block deliberately does NOT read activeView. Doing so would make
   // activeView one of its dependencies, so every view change would re-enter it
-  // and race with the assignment that caused it — which is exactly why the
-  // first attempt at this failed to restore. The outgoing tab's view is taken
-  // from lastView, a plain variable the block writes but never subscribes to.
+  // and race with the assignment that caused it.
   let lastViewKey = '';
-  let lastView: ViewName = 'terminal';
   $: {
     const key = tabViewKey($selectedSessionId, $selectedWindowIdx ?? 0);
     if (key !== lastViewKey) {
-      if (lastViewKey) {
-        tabViewMemory.set(lastViewKey, lastView);
-        if (fullDiffActive) tabDiffMemory.add(lastViewKey);
-        else tabDiffMemory.delete(lastViewKey);
-        if (diffAbove) tabDiffAbove.add(lastViewKey);
-        else tabDiffAbove.delete(lastViewKey);
-      }
       lastViewKey = key;
-      // Restore the diff only for a tab that was left on it, and only where
-      // there is a diff to show — a session outside a repository would open an
-      // empty panel with no way to tell why.
-      fullDiffActive = tabDiffMemory.has(key) && !!currentSession?.isGitRepo;
-      diffAbove = tabDiffAbove.has(key) && !!currentSession?.isGitRepo;
-      let restored = tabViewMemory.get(key) || 'terminal';
-      // A tab remembered on Tasks from before the feature was switched off must
-      // not be restored onto a view that no longer has a way out. Corrected
-      // here rather than only in the bounce below so the dead panel never
-      // appears at all, not even for a frame.
-        lastView = restored;
-      activeView = restored;
+      // Coming back to a tab shows its terminal, whatever was on screen when
+      // you left it.
+      //
+      // The view used to be restored per tab, on the reasoning that the tab
+      // itself is remembered so its view should be too. In use that read as the
+      // app losing track: going agent tab → diff → another agent tab → back
+      // brought up the diff, when what you returned for was the agent. A diff
+      // or a notes panel is somewhere you go to look at something, not a place
+      // the tab lives, and the cost of guessing wrong is high — the diff covers
+      // the whole panel, so the agent you meant to check is not even behind it.
+      //
+      // The per-tab memories this used to keep went with it: nothing read them
+      // once arrival stopped depending on them.
+      fullDiffActive = false;
+      diffAbove = false;
+      activeView = 'terminal';
     }
   }
 
-  // Every deliberate view change goes through here, so the memory and lastView
-  // stay in step with what is on screen. It is also the last gate on the Tasks
-  // view: the button is gone when the feature is off, but the palette and any
-  // future caller still route through this, and reaching Tasks is what starts
-  // the npx install the opt-in exists to prevent.
   // The diff asks for the browser when a file is opened from it. Handled here
   // because this is the component that owns which view is showing.
   $: if ($browserViewRequested) {
@@ -201,8 +171,6 @@
 
   function selectView(view: ViewName) {
     activeView = view;
-    lastView = view;
-    if (lastViewKey) tabViewMemory.set(lastViewKey, view);
   }
 
   // Height in pixels rather than a fraction. The pane below is a terminal
@@ -228,8 +196,6 @@
     if (!currentSession?.isGitRepo) return;
     diffAbove = !diffAbove;
     if (!lastViewKey) return;
-    if (diffAbove) tabDiffAbove.add(lastViewKey);
-    else tabDiffAbove.delete(lastViewKey);
   }
 
   function startSplitterDrag(event: MouseEvent) {
@@ -261,13 +227,11 @@
   }
 
   // Leaves activeView alone: hiding the diff reveals whichever view the tab was
-  // already on. Forcing the terminal here would overwrite what tabViewMemory
-  // had just restored, which is how a remembered view once failed to survive a
-  // tab switch. Clicking the tab you are on asks for the terminal separately,
-  // through showTerminal.
+  // already on — you opened the diff over notes, so closing it puts notes back.
+  // Clicking the tab you are on asks for the terminal separately, through
+  // showTerminal.
   function closeFullDiff() {
     fullDiffActive = false;
-    if (lastViewKey) tabDiffMemory.delete(lastViewKey);
   }
 
   onMount(() => window.addEventListener('main-panel:set-view', handleSetView));
@@ -432,12 +396,11 @@
   // open would strand the user — bounce those back to the terminal.
   //
   // The browser is exempt: it has its own close button (added for exactly this
-  // reason), so a remembered browser view survives arriving at a tab whose bar
-  // is hidden. Without the exemption, hiding the bar for terminal tabs — a
-  // common setting — undid the view restored from tabViewMemory every time.
+  // reason), so opening it on a tab whose view bar is hidden still leaves a way
+  // back out. Without the exemption it would be bounced away the moment it
+  // opened.
   $: if (viewBarHidden && activeView !== 'terminal' && activeView !== 'browser') {
     activeView = 'terminal';
-    lastView = 'terminal';
   }
 
   $: currentSession = $sessions.find(s => s.id === $selectedSessionId);
@@ -538,7 +501,6 @@
       {visible}
       on:openFullDiff={() => {
         fullDiffActive = true;
-        if (lastViewKey) tabDiffMemory.add(lastViewKey);
       }}
       on:closeFullDiff={closeFullDiff}
       on:showTerminal={() => selectView('terminal')}
