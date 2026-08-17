@@ -6,6 +6,29 @@ Entries describe what changed for someone using the app. Internal refactoring,
 test and CI work is left out unless it changed behaviour. Dates are release
 dates; the format follows [Keep a Changelog](https://keepachangelog.com).
 
+## 0.9.30 — 2026-08-17
+
+### Added
+
+- **Ctrl+T opens a new tab, Ctrl+Shift+T a terminal straight away.** There was
+  no shortcut for a new tab at all before — only the + button. The quick one
+  asks a single question, what to call it, with the name already filled in and
+  selected: Enter takes it, typing replaces it. Both can be rebound in settings.
+- **The commit history window can be resized from its corner.** Maximising was
+  the only way to make it bigger, which is all or nothing — too much when the
+  point is to read one commit beside the app.
+
+### Fixed
+
+- **Returning to a tab shows its terminal again.** Each tab remembered the view
+  it was left on, so going from an agent to the diff and back to that agent
+  brought up the diff instead — over the whole panel, with the agent not even
+  behind it.
+- **The "refreshing" spinner no longer hangs about** after a tab has already
+  redrawn. It waited for the next byte from the session, which a finished agent
+  or an idle shell never sends; clicking cleared it only because the click
+  itself made the terminal say something.
+
 ## 0.9.29 — 2026-08-14
 
 ### Added
