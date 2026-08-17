@@ -198,6 +198,8 @@ left off.
 
 <img src="docs/screenshot-dashboard.png" alt="The project dashboard: grouped sessions with Git status and agent usage" width="900">
 
+<img src="docs/screenshot-diff.png" alt="A session's changes side by side, with the file tree beside them" width="900">
+
 ## Install
 
 Grab the latest build for your platform from the
@@ -239,6 +241,138 @@ There is also a `.tar.gz` if you would rather not install anything.
 >   The app can install it for you with `winget`, or `winget install psmux`.
 
 To build from source instead, see [Build](#build) below.
+
+## Getting started
+
+**Your first session.** Press `Ctrl+Shift+N`, pick the agent you want and the
+directory it should work in, and give it a name. The session starts in its own
+multiplexer window and appears in the sidebar; press `Enter` to attach and you
+are looking at a live terminal. Type in it exactly as you would anywhere else.
+
+Close the window whenever you like. The agent is not running *inside* the app —
+it lives in tmux (or psmux) — so it keeps working while the app is shut, and
+reattaches where it left off next time.
+
+**Tabs.** A session can hold several agents and terminals side by side, each its
+own tab. `Ctrl+T` opens the full dialog — which agent, what arguments, which
+directory — and `Ctrl+Shift+T` skips all of it and gives you a shell, asking
+only for a name. Move between tabs with `Ctrl+PageUp` / `Ctrl+PageDown`.
+
+**Keeping track of many.** Once you have more than a handful:
+
+- Group related sessions into projects with `Ctrl+Shift+G`, and star the ones
+  you return to most (`Ctrl+Shift+8`); starred sessions get their own group at
+  the top and answer to `Ctrl+Shift+1`…`7`.
+- Build a jump list with `Alt+J` for the tabs you keep coming back to, then
+  `Ctrl+J` and a digit to land on one.
+- Type `/` to filter the sidebar, or `Ctrl+K` to search everything at once —
+  sessions, projects, tabs and actions.
+
+**Getting told when something needs you.** The ⏳ count in the header is every
+agent currently waiting on an answer; click it to jump to one, or answer *yes /
+no / Enter / Esc* from the dropdown without leaving the tab you are in. In
+**Settings → Notifications** you can add a desktop notification, a sound, and an
+ntfy topic so your phone is pinged too — set the topic URL to something like
+`https://ntfy.sh/my-topic` and install the ntfy app on your phone. Everything
+here is off until you turn it on.
+
+**Reading what it did.** With a session attached, the view bar switches between
+the terminal, the session's Git diff, its files, notes and tasks. In the diff you
+can revert one file or one hunk, step through the changes with `Ctrl+F7`, or jump
+from a line straight into the editor. `Ctrl+Shift+Y` opens the repository's
+commit history when you want to look further back than the working tree.
+
+## Keyboard shortcuts
+
+Every one of these is editable in **Settings → Shortcuts**, and the ones you
+never use can be switched off. The in-app help (`Ctrl+Shift+H`) is generated from
+the same list, so it always shows what your keys actually do — this table is the
+defaults.
+
+| | |
+|---|---|
+| `Ctrl+Shift+↑` / `Alt+↑` | Previous session (works in the terminal) |
+| `Ctrl+Shift+↓` / `Alt+↓` | Next session (works in the terminal) |
+| `Ctrl+Shift+K` / `Ctrl+Shift+J` | Move the session up / down the sidebar |
+| `Enter` | Attach to the selected session |
+| `Ctrl+PageUp` / `Ctrl+PageDown` | Previous / next tab |
+| `Ctrl+T` | New tab |
+| `Ctrl+Shift+T` | New terminal tab, name only |
+| `Ctrl+Shift+N` | New session |
+| `Ctrl+Shift+G` | New group |
+| `Ctrl+Shift+S` / `Ctrl+Shift+X` | Start / stop the session |
+| `Ctrl+Shift+D` | Delete the session |
+| `Ctrl+Shift+8` | Star the session |
+| `Ctrl+Shift+1`…`7` | Jump to a starred session |
+| `Ctrl+J` / `Alt+J` | Quick jump list / add this tab to it |
+| `Ctrl+K` | Command palette |
+| `Ctrl+P` | Saved commands |
+| `Ctrl+Shift+F` | Search every session's history |
+| `Ctrl+Shift+L` | Search this terminal's scrollback |
+| `Ctrl+Shift+O` | Find a file by name or content (in the file browser) |
+| `/` | Filter the session list |
+| `Ctrl+F7` / `Ctrl+Shift+F7` | Next / previous change in the diff |
+| `Ctrl+Shift+Y` | Commit history |
+| `Ctrl` + scroll / `Ctrl+0` | Resize the terminal text / reset it |
+| `Ctrl+Shift+H` | Help |
+| `Ctrl+Shift+U` | Check for updates |
+| `Ctrl+Shift+I` | Import sessions |
+| `Esc` | Close a dialog |
+
+`Esc`, `Enter`, `/`, `Ctrl` + scroll and the starred-session slots stay fixed:
+their meaning comes from where you are rather than from a binding. `Ctrl+Shift+O`
+belongs to the file browser itself and is fixed for the same reason.
+
+## Where things live
+
+Everything the app keeps is under one directory — `~/.config/agent-session-manager-desktop`
+on Linux, the equivalent per-user config directory on macOS and Windows:
+
+| | |
+|---|---|
+| `sessions.json` | your sessions, groups, settings and recycle bin |
+| `commands.json` | the saved command library |
+| `backups/` | automatic snapshots of the above, and of task files |
+| `activity-stats.json` | locally-observed agent activity |
+| `asmgr-desktop.log` | the run log, also readable from Settings |
+
+Tasks are the exception: they live with the code, in `.taskmaster/tasks.json`
+inside each working directory, because that is where Task Master keeps them and
+the two have to agree.
+
+**What leaves your machine.** Nothing, unless you ask for it. The app talks to
+GitHub to check for its own updates, to an ntfy server if you configure mobile
+push, and to `npx` the first time you use a Task Master AI action. Your sessions,
+their output and your files stay local — there is no telemetry.
+
+## Questions
+
+**Can I close the app while an agent is working?** Yes — that is the point. The
+agents run in tmux/psmux, not in the app, so closing the window leaves them
+working. Reopen and reattach.
+
+**What happens if the app crashes?** The same thing: the sessions are untouched.
+Start it again and they are all there.
+
+**I deleted a session by accident.** Open the recovery centre (the recycle bin
+icon). Deleted sessions and tabs sit in it for as long as you choose,
+and your settings are snapshotted as they change — densely for the last hour,
+then thinning out over months — so a mistake noticed tomorrow is still undoable.
+
+**An agent is running but shows as idle.** Activity is read from what the pane
+prints, so an unusual prompt can fool it. Settings has an update button for the
+detection patterns, which is quicker than waiting for a release of the app.
+
+**The terminal feels sluggish.** Try a different renderer in **Settings →
+Terminal** — canvas is the default, but DOM and WebGL are there and switch live.
+
+**Can I use it over SSH or on a headless box?** Not this one — it is a desktop
+app. The [TUI version](https://github.com/izll/agent-session-manager) runs in a
+terminal and does the same job; it keeps its own session list, but both drive
+tmux, so the agents themselves are reachable either way.
+
+**Does it work with an agent that isn't in the list?** Yes. Choose *Custom* and
+give it the command to run; it gets a tab and a status line like the rest.
 
 ## Requirements
 
