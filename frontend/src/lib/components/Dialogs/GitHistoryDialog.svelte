@@ -232,11 +232,34 @@
     messageHeight = 86;
   }
 
-  $: if (show && path) void open();
+  // Reopen whenever the dialog is shown OR the path changes underneath it.
+  //
+  // The path follows the selected session, so switching to a tab in another
+  // repository has to reload the history rather than leave the previous one on
+  // screen. Tracked against the path last opened, because this block also runs
+  // for unrelated state and would otherwise reload on every keystroke.
+  let openedPath = '';
+  $: if (show && path && path !== openedPath) {
+    openedPath = path;
+    void open();
+  }
+  // Forget it on close, so reopening on the same session loads afresh rather
+  // than showing whatever was left from last time.
+  $: if (!show) openedPath = '';
 
   async function open() {
-    if (loading) return;
     error = '';
+    // Everything below belongs to the repository being left. The branch matters
+    // most: it is passed to GetGitHistory, and carrying a branch name from the
+    // previous repository asks the new one for history it does not have.
+    branch = '';
+    branches = [];
+    currentBranch = '';
+    commits = [];
+    selectedHash = '';
+    files = [];
+    selectedPath = '';
+    diff = null;
     await Promise.all([loadBranches(), loadHistory(true)]);
   }
 

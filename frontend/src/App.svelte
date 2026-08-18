@@ -45,7 +45,7 @@
   import { startSidebarPolling, stopSidebarPolling } from './lib/stores/sidebarPolling';
   import { WindowMinimise, WindowToggleMaximise, Quit, EventsOn, EventsOff, EventsEmit } from '../wailsjs/runtime/runtime';
   import * as DictationService from '../wailsjs/go/main/DictationService';
-  import { IsDevMode, GetMultiplexerStatus, InstallMultiplexer, UnfinishedTasksForSession } from '../wailsjs/go/main/App';
+  import { IsDevMode, GetMultiplexerStatus, InstallMultiplexer, UnfinishedTasksForSession, GetTabWorkingDirectory } from '../wailsjs/go/main/App';
   import asmgrIcon from './assets/icons/asmgr.svg';
   import { applyUITheme, DEFAULT_UI_THEME } from './lib/utils/uiThemes';
   import { t, isRTL, loadTranslations } from './lib/i18n';
@@ -404,7 +404,37 @@
     quickJumpNaming = true;
   }
 
-  function handleShowGitHistory() {
+  /**
+   * Which directory the commit history should open on.
+   *
+   * The session's own path is not it. A tab can be opened in a directory of its
+   * own, and the pane may have been `cd`-ed somewhere else since — so browsing
+   * history from a tab pointed at another repository showed the session's
+   * history instead of the one on screen.
+   *
+   * Resolved from tmux, the same way the panel resolves the path it displays.
+   * Falls back to the tab's configured directory, then to the session's.
+   */
+  let gitHistoryPath = '';
+
+  async function resolveGitHistoryPath(): Promise<string> {
+    const session = get(selectedSession);
+    if (!session) return '';
+    const windowIdx = get(selectedWindowIdx) ?? 0;
+    try {
+      const live = await GetTabWorkingDirectory(session.id, windowIdx);
+      if (live) return live;
+    } catch (e) {
+      console.error('Failed to resolve the tab working directory:', e);
+    }
+    const followed = (session.followedWindows || []).find((f: any) => f.index === windowIdx);
+    return followed?.work_dir || session.path || '';
+  }
+
+  async function handleShowGitHistory() {
+    // Resolved before showing, so the dialog never opens against the previous
+    // tab's repository and then swaps under the reader.
+    gitHistoryPath = await resolveGitHistoryPath();
     showGitHistory = true;
   }
 
@@ -574,7 +604,7 @@
       case 'history.show':
         e.preventDefault();
         e.stopPropagation();
-        showGitHistory = true;
+        void handleShowGitHistory();
         return;
       case 'quickJump.open':
         e.preventDefault();
@@ -1447,7 +1477,7 @@
     </div>
   {/if}
 
-  <GitHistoryDialog bind:show={showGitHistory} path={$selectedSession?.path ?? ''} />
+  <GitHistoryDialog bind:show={showGitHistory} path={gitHistoryPath} />
 
   <QuickJumpDialog
     bind:show={showQuickJump}
