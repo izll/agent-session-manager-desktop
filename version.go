@@ -2,4 +2,4 @@ package main
 
 // Version is the local-development fallback. Release builds inject the tag's
 // semantic version with: -ldflags "-X main.Version=<version>".
-var Version = "0.9.30"
+var Version = "0.9.31"

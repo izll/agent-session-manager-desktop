@@ -6,6 +6,18 @@ Entries describe what changed for someone using the app. Internal refactoring,
 test and CI work is left out unless it changed behaviour. Dates are release
 dates; the format follows [Keep a Changelog](https://keepachangelog.com).
 
+## 0.9.31 — 2026-08-18
+
+### Fixed
+
+- **The commit history now opens on the repository the tab is actually in.**
+  Browsing it from a tab pointed somewhere else showed the session's history
+  instead, and switching tabs while it was open changed nothing — a tab can be
+  opened in its own directory, or moved to another one since.
+- **A session's colour no longer floods its dashboard card.** It was painted
+  across the whole card, which is tiring to read a card's worth of small text
+  through; it tints the header band now, where the name it belongs to is.
+
 ## 0.9.30 — 2026-08-17
 
 ### Added
