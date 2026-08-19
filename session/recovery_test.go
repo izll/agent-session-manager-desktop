@@ -228,3 +228,48 @@ func TestLoadRejectsNewerStorageSchema(t *testing.T) {
 		t.Fatal("newer storage schema was accepted")
 	}
 }
+
+// A tab tmux has but the store does not must still close.
+//
+// The tab bar lists what tmux actually holds, so a window that outlives the
+// record of it appears as an ordinary tab — one that refuses to close, forever,
+// with no way to tell from the outside why. It was seen on a real session
+// carrying two such terminals.
+//
+// A stopped session is the honest exception: there is no tmux window to kill
+// and no record to remove, so "tab not found" is the truth.
+func TestTrashTabOnStoppedSessionStillReportsMissingTab(t *testing.T) {
+	storage := newRecoveryTestStorage(t)
+	instance := &Instance{
+		ID:        "session-untracked",
+		Name:      "API",
+		Path:      "/tmp/api",
+		Status:    StatusStopped,
+		Agent:     AgentClaude,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+		FollowedWindows: []FollowedWindow{{
+			Index: 1, Agent: AgentTerminal, Name: "Terminal",
+		}},
+	}
+	if err := storage.SaveAll([]*Instance{instance}, []*Group{}, DefaultSettings()); err != nil {
+		t.Fatal(err)
+	}
+
+	// Window 4 is in neither the store nor tmux — nothing to close.
+	if err := storage.TrashTab(instance.ID, 4); err == nil {
+		t.Fatal("closing a tab that exists nowhere should report it missing")
+	}
+
+	// And the tab that IS stored still trashes normally.
+	if err := storage.TrashTab(instance.ID, 1); err != nil {
+		t.Fatalf("trashing a stored tab failed: %v", err)
+	}
+	trash, err := storage.ListTrash()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(trash) != 1 {
+		t.Fatalf("trash entries = %d, want 1", len(trash))
+	}
+}

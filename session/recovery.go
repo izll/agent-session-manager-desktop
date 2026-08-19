@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"sort"
@@ -488,7 +489,22 @@ func (s *Storage) TrashTab(sessionID string, windowIdx int) error {
 		}
 	}
 	if position < 0 {
-		return fmt.Errorf("tab not found")
+		// The tab is not in the stored list, but the tab bar shows what tmux
+		// actually has — so a window that exists there and not here appears as
+		// a perfectly ordinary tab that simply refuses to close.
+		//
+		// This happens when the two fall out of step: a window outlives the
+		// record of it, and from then on nothing can remove it. Kill it and
+		// return, with nothing to put in the trash because there is nothing
+		// recorded to restore.
+		if parent.Status != StatusRunning {
+			return fmt.Errorf("tab not found")
+		}
+		if err := parent.DeleteWindow(windowIdx); err != nil {
+			return fmt.Errorf("tab not found in this session, and closing its window failed: %w", err)
+		}
+		log.Printf("[TrashTab] closed untracked window %d of session %s", windowIdx, parent.ID)
+		return nil
 	}
 	// Snapshot the Codex conversation ID while the tab process is still alive,
 	// otherwise restoring this trash item would start a different conversation.
