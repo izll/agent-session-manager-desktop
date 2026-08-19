@@ -637,8 +637,15 @@ func (i *Instance) StartWithResume(resumeID string) error {
 			time.Sleep(50 * time.Millisecond)
 		}
 
-		// Keep windows alive when their process exits (shows as dead pane)
-		TmuxCommand("set-option", "-t", sessionName, "remain-on-exit", "on").Run()
+		// Keep windows alive when their process exits, so a tab whose shell has
+		// been closed shows as dead rather than vanishing.
+		//
+		// -w, and repeated for every window that gets created later: this is a
+		// WINDOW option, so without -w tmux sets a session option of the same
+		// name that nothing reads, and even with -w a session-wide setting is
+		// not inherited by windows opened afterwards. Ctrl+D in a terminal tab
+		// used to take the whole tab with it because of this.
+		TmuxCommand("set-option", "-w", "-t", sessionName, "remain-on-exit", "on").Run()
 
 		// Configure tmux session for better scrolling
 		TmuxCommand("set-option", "-t", sessionName, "history-limit", "50000").Run()
@@ -855,9 +862,9 @@ func (i *Instance) restoreFollowedWindows() {
 
 		// Set remain-on-exit so window stays open when command exits (shows as stopped)
 		target := fmt.Sprintf("%s:%d", sessionName, newIdx)
-		TmuxCommand("set-option", "-t", target, "remain-on-exit", "on").Run()
+		TmuxCommand("set-option", "-w", "-t", target, "remain-on-exit", "on").Run()
 		// Disable automatic-rename so the window keeps the user-specified name
-		TmuxCommand("set-option", "-t", target, "automatic-rename", "off").Run()
+		TmuxCommand("set-option", "-w", "-t", target, "automatic-rename", "off").Run()
 		if fw.Stopped {
 			_ = TmuxCommand("respawn-pane", "-k", "-t", target, "exit 0").Run()
 		}
@@ -990,9 +997,9 @@ func (i *Instance) NewWindowWithName(name string, workDir string) (int, error) {
 
 	// Set remain-on-exit so window stays open when command exits (shows as stopped)
 	target := fmt.Sprintf("%s:%d", sessionName, newIdx)
-	TmuxCommand("set-option", "-t", target, "remain-on-exit", "on").Run()
+	TmuxCommand("set-option", "-w", "-t", target, "remain-on-exit", "on").Run()
 	// Disable automatic-rename so the window keeps the user-specified name
-	TmuxCommand("set-option", "-t", target, "automatic-rename", "off").Run()
+	TmuxCommand("set-option", "-w", "-t", target, "automatic-rename", "off").Run()
 
 	return newIdx, nil
 }
@@ -1040,7 +1047,7 @@ func (i *Instance) StopWindow(windowIdx int) error {
 		// Has active followed windows - stop just the main agent process
 		target := fmt.Sprintf("%s:%d", sessionName, mainWindowIdx)
 		// Keep the window alive as a dead pane
-		TmuxCommand("set-option", "-t", target, "remain-on-exit", "on").Run()
+		TmuxCommand("set-option", "-w", "-t", target, "remain-on-exit", "on").Run()
 		// Kill the agent and replace with an immediately-exiting command
 		if err := TmuxCommand("respawn-pane", "-k", "-t", target, "exit 0").Run(); err != nil {
 			return fmt.Errorf("failed to stop main window: %w", err)
@@ -1813,9 +1820,9 @@ func (i *Instance) NewAgentWindow(name string, agent AgentType, customCmd string
 
 	// Set remain-on-exit so window stays open when command exits (shows as stopped)
 	target := fmt.Sprintf("%s:%d", sessionName, newIdx)
-	TmuxCommand("set-option", "-t", target, "remain-on-exit", "on").Run()
+	TmuxCommand("set-option", "-w", "-t", target, "remain-on-exit", "on").Run()
 	// Disable automatic-rename so the window keeps the user-specified name
-	TmuxCommand("set-option", "-t", target, "automatic-rename", "off").Run()
+	TmuxCommand("set-option", "-w", "-t", target, "automatic-rename", "off").Run()
 
 	i.CaptureCodexResumeIDs()
 
@@ -1980,8 +1987,8 @@ func (i *Instance) NewForkedTab(name string, sessionID string) (int, error) {
 
 	// Set remain-on-exit so window stays open when command exits
 	target := fmt.Sprintf("%s:%d", sessionName, newIdx)
-	TmuxCommand("set-option", "-t", target, "remain-on-exit", "on").Run()
-	TmuxCommand("set-option", "-t", target, "automatic-rename", "off").Run()
+	TmuxCommand("set-option", "-w", "-t", target, "remain-on-exit", "on").Run()
+	TmuxCommand("set-option", "-w", "-t", target, "automatic-rename", "off").Run()
 
 	// Codex names its own branch, so the id has to be read back off the running
 	// process — as every other way of starting a Codex tab does. Without it the

@@ -1274,10 +1274,17 @@
     return colors[agent?.toLowerCase()] || '#9ca3af';
   }
 
-  // Check if the currently selected tab is stopped (dead pane)
+  // Whether the selected tab is stopped, and so shows play rather than stop.
+  //
+  // Read from tmux first, via the window list's Dead flag. The stored `stopped`
+  // field only records a stop the app performed; a shell exited with Ctrl+D
+  // leaves it untouched, so the button went on offering to stop a tab whose
+  // pane was already dead.
   $: currentTabStopped = (() => {
     if (!$selectedSession || $selectedSession.status !== 'running') return false;
     const winIdx = $selectedWindowIdx;
+    const live = windows.find(w => w.Index === winIdx);
+    if (live?.Dead) return true;
     if (winIdx === 0) return ($selectedSession as any).mainWindowStopped || false;
     const fw = $selectedSession.followedWindows?.find(w => w.index === winIdx);
     return fw?.stopped || false;
