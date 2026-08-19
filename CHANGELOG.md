@@ -6,6 +6,18 @@ Entries describe what changed for someone using the app. Internal refactoring,
 test and CI work is left out unless it changed behaviour. Dates are release
 dates; the format follows [Keep a Changelog](https://keepachangelog.com).
 
+## 0.9.32 — 2026-08-19
+
+### Fixed
+
+- **Closing a terminal tab's shell no longer takes the tab with it.** Pressing
+  Ctrl+D closed the whole tab instead of leaving it behind as stopped, and the
+  button in the tab bar went on offering to stop something that had already
+  exited. It shows play now, and restarts the tab where it left off.
+- **A tab that refused to close can be closed.** Where a tab's window outlived
+  the record of it — the tab bar lists what the multiplexer actually has — it
+  appeared as an ordinary tab that simply would not go away.
+
 ## 0.9.31 — 2026-08-18
 
 ### Fixed
