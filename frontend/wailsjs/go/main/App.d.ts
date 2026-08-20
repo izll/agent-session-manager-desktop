@@ -97,13 +97,13 @@ export function GetCommands():Promise<main.CommandLibraryInfo>;
 
 export function GetExtraArgs(arg1:string,arg2:number):Promise<string>;
 
-export function GetFullDiff(arg1:string):Promise<main.DiffData>;
+export function GetFullDiff(arg1:string,arg2:number):Promise<main.DiffData>;
 
-export function GetFullDiffFileList(arg1:string):Promise<Array<session.DiffFileSummary>>;
+export function GetFullDiffFileList(arg1:string,arg2:number):Promise<Array<session.DiffFileSummary>>;
 
-export function GetFullDiffFiles(arg1:string):Promise<Array<session.DiffFile>>;
+export function GetFullDiffFiles(arg1:string,arg2:number):Promise<Array<session.DiffFile>>;
 
-export function GetFullDiffForFile(arg1:string,arg2:string,arg3:boolean):Promise<session.DiffFile>;
+export function GetFullDiffForFile(arg1:string,arg2:string,arg3:boolean,arg4:number):Promise<session.DiffFile>;
 
 export function GetGitBranch(arg1:string):Promise<main.GitBranchInfo>;
 
@@ -141,13 +141,13 @@ export function GetQuickJump():Promise<Array<session.QuickJumpEntry>>;
 
 export function GetResumeSessions(arg1:string,arg2:string):Promise<Array<main.AgentSessionInfo>>;
 
-export function GetSessionDiff(arg1:string):Promise<main.DiffData>;
+export function GetSessionDiff(arg1:string,arg2:number):Promise<main.DiffData>;
 
-export function GetSessionDiffFileList(arg1:string):Promise<Array<session.DiffFileSummary>>;
+export function GetSessionDiffFileList(arg1:string,arg2:number):Promise<Array<session.DiffFileSummary>>;
 
-export function GetSessionDiffFiles(arg1:string):Promise<Array<session.DiffFile>>;
+export function GetSessionDiffFiles(arg1:string,arg2:number):Promise<Array<session.DiffFile>>;
 
-export function GetSessionDiffForFile(arg1:string,arg2:string,arg3:boolean):Promise<session.DiffFile>;
+export function GetSessionDiffForFile(arg1:string,arg2:string,arg3:boolean,arg4:number):Promise<session.DiffFile>;
 
 export function GetSessionTemplates():Promise<Array<main.SessionTemplateInfo>>;
 
@@ -267,9 +267,9 @@ export function RestoreTaskBackup(arg1:string):Promise<void>;
 
 export function RestoreTrashItem(arg1:string):Promise<session.RestoreResult>;
 
-export function RevertDiffFile(arg1:string,arg2:string,arg3:boolean):Promise<void>;
+export function RevertDiffFile(arg1:string,arg2:string,arg3:boolean,arg4:number):Promise<void>;
 
-export function RevertDiffHunk(arg1:string,arg2:string):Promise<void>;
+export function RevertDiffHunk(arg1:string,arg2:string,arg3:number):Promise<void>;
 
 export function RunCommand(arg1:string,arg2:string,arg3:number,arg4:Record<string, string>):Promise<void>;
 

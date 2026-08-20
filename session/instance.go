@@ -172,6 +172,16 @@ type Instance struct {
 	Favorite          bool             `json:"favorite,omitempty"`            // Whether session is marked as favorite
 	MainWindowStopped bool             `json:"main_window_stopped,omitempty"` // Main window (0) is stopped but session still running
 
+	// gitDir is where git commands for this instance run.
+	//
+	// Path unless BrowseRoot overrides it — a tab can be opened in a directory
+	// of its own, and the diff showed (and REVERTED into) the session's
+	// repository whichever tab you were on. Reverting is the dangerous half:
+	// it writes files.
+	//
+	// A method rather than a field so no git call can be added later that
+	// forgets to consult it.
+
 	// BrowseRoot redirects the file browser to a directory other than Path.
 	//
 	// Set per call by the caller that knows which TAB is being browsed — a tab
@@ -725,7 +735,7 @@ func (i *Instance) saveBaseCommit() {
 	}
 
 	// Check if path is a git repo and get HEAD commit
-	cmd := GitCommand("-C", i.Path, "rev-parse", "HEAD")
+	cmd := GitCommand("-C", i.gitDir(), "rev-parse", "HEAD")
 	output, err := cmd.Output()
 	if err != nil {
 		// Not a git repo or error - no diff available
@@ -2458,6 +2468,14 @@ func (i *Instance) UpdateStatus() {
 // Git diff functions
 
 // GetSessionDiff returns diff since session start (BaseCommitSHA)
+// gitDir returns the directory git commands should run in.
+func (i *Instance) gitDir() string {
+	if i.BrowseRoot != "" {
+		return i.BrowseRoot
+	}
+	return i.Path
+}
+
 func (i *Instance) GetSessionDiff() *DiffStats {
 	if i.BaseCommitSHA == "" {
 		return &DiffStats{Error: fmt.Errorf("no base commit (not a git repo or session started before tracking)")}
@@ -2492,12 +2510,12 @@ func (i *Instance) diffIndexEnv() ([]string, func(), error) {
 	cleanup := func() { os.Remove(tmpIndexPath) }
 
 	gitEnv := append(os.Environ(), "GIT_INDEX_FILE="+tmpIndexPath)
-	readTree, cancelReadTree := GitCommandTimed("-C", i.Path, "read-tree", "HEAD")
+	readTree, cancelReadTree := GitCommandTimed("-C", i.gitDir(), "read-tree", "HEAD")
 	defer cancelReadTree()
 	readTree.Env = gitEnv
 	if err := readTree.Run(); err != nil {
 		// An unborn repository has no HEAD yet; start from an empty index.
-		readEmpty, cancelReadEmpty := GitCommandTimed("-C", i.Path, "read-tree", "--empty")
+		readEmpty, cancelReadEmpty := GitCommandTimed("-C", i.gitDir(), "read-tree", "--empty")
 		defer cancelReadEmpty()
 		readEmpty.Env = gitEnv
 		if emptyErr := readEmpty.Run(); emptyErr != nil {
@@ -2506,7 +2524,7 @@ func (i *Instance) diffIndexEnv() ([]string, func(), error) {
 		}
 	}
 
-	intentToAdd, cancelIntent := GitCommandTimed("-C", i.Path, "add", "-N", ".")
+	intentToAdd, cancelIntent := GitCommandTimed("-C", i.gitDir(), "add", "-N", ".")
 	defer cancelIntent()
 	intentToAdd.Env = gitEnv
 	if err := intentToAdd.Run(); err != nil {
@@ -2526,7 +2544,7 @@ func (i *Instance) getDiff(baseRef string) *DiffStats {
 	}
 	defer cleanup()
 
-	args := []string{"-C", i.Path, "--no-pager", "diff"}
+	args := []string{"-C", i.gitDir(), "--no-pager", "diff"}
 	if baseRef != "" {
 		args = append(args, baseRef)
 	}
@@ -2548,7 +2566,7 @@ func (i *Instance) getDiff(baseRef string) *DiffStats {
 
 // isGitRepo checks if the instance path is a git repository
 func (i *Instance) isGitRepo() bool {
-	cmd, cancel := GitCommandTimed("-C", i.Path, "rev-parse", "--git-dir")
+	cmd, cancel := GitCommandTimed("-C", i.gitDir(), "rev-parse", "--git-dir")
 	defer cancel()
 	return cmd.Run() == nil
 }

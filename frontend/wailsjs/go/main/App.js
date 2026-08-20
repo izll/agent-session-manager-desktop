@@ -190,20 +190,20 @@ export function GetExtraArgs(arg1, arg2) {
   return window['go']['main']['App']['GetExtraArgs'](arg1, arg2);
 }
 
-export function GetFullDiff(arg1) {
-  return window['go']['main']['App']['GetFullDiff'](arg1);
+export function GetFullDiff(arg1, arg2) {
+  return window['go']['main']['App']['GetFullDiff'](arg1, arg2);
 }
 
-export function GetFullDiffFileList(arg1) {
-  return window['go']['main']['App']['GetFullDiffFileList'](arg1);
+export function GetFullDiffFileList(arg1, arg2) {
+  return window['go']['main']['App']['GetFullDiffFileList'](arg1, arg2);
 }
 
-export function GetFullDiffFiles(arg1) {
-  return window['go']['main']['App']['GetFullDiffFiles'](arg1);
+export function GetFullDiffFiles(arg1, arg2) {
+  return window['go']['main']['App']['GetFullDiffFiles'](arg1, arg2);
 }
 
-export function GetFullDiffForFile(arg1, arg2, arg3) {
-  return window['go']['main']['App']['GetFullDiffForFile'](arg1, arg2, arg3);
+export function GetFullDiffForFile(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['GetFullDiffForFile'](arg1, arg2, arg3, arg4);
 }
 
 export function GetGitBranch(arg1) {
@@ -278,20 +278,20 @@ export function GetResumeSessions(arg1, arg2) {
   return window['go']['main']['App']['GetResumeSessions'](arg1, arg2);
 }
 
-export function GetSessionDiff(arg1) {
-  return window['go']['main']['App']['GetSessionDiff'](arg1);
+export function GetSessionDiff(arg1, arg2) {
+  return window['go']['main']['App']['GetSessionDiff'](arg1, arg2);
 }
 
-export function GetSessionDiffFileList(arg1) {
-  return window['go']['main']['App']['GetSessionDiffFileList'](arg1);
+export function GetSessionDiffFileList(arg1, arg2) {
+  return window['go']['main']['App']['GetSessionDiffFileList'](arg1, arg2);
 }
 
-export function GetSessionDiffFiles(arg1) {
-  return window['go']['main']['App']['GetSessionDiffFiles'](arg1);
+export function GetSessionDiffFiles(arg1, arg2) {
+  return window['go']['main']['App']['GetSessionDiffFiles'](arg1, arg2);
 }
 
-export function GetSessionDiffForFile(arg1, arg2, arg3) {
-  return window['go']['main']['App']['GetSessionDiffForFile'](arg1, arg2, arg3);
+export function GetSessionDiffForFile(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['GetSessionDiffForFile'](arg1, arg2, arg3, arg4);
 }
 
 export function GetSessionTemplates() {
@@ -530,12 +530,12 @@ export function RestoreTrashItem(arg1) {
   return window['go']['main']['App']['RestoreTrashItem'](arg1);
 }
 
-export function RevertDiffFile(arg1, arg2, arg3) {
-  return window['go']['main']['App']['RevertDiffFile'](arg1, arg2, arg3);
+export function RevertDiffFile(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['RevertDiffFile'](arg1, arg2, arg3, arg4);
 }
 
-export function RevertDiffHunk(arg1, arg2) {
-  return window['go']['main']['App']['RevertDiffHunk'](arg1, arg2);
+export function RevertDiffHunk(arg1, arg2, arg3) {
+  return window['go']['main']['App']['RevertDiffHunk'](arg1, arg2, arg3);
 }
 
 export function RunCommand(arg1, arg2, arg3, arg4) {

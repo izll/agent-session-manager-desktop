@@ -2487,8 +2487,8 @@ type DiffData struct {
 }
 
 // GetSessionDiff returns git diff since session start
-func (a *App) GetSessionDiff(id string) (*DiffData, error) {
-	inst, err := a.storage.GetInstance(id)
+func (a *App) GetSessionDiff(id string, windowIdx int) (*DiffData, error) {
+	inst, err := a.browseInstance(id, windowIdx)
 	if err != nil {
 		return nil, err
 	}
@@ -2502,8 +2502,8 @@ func (a *App) GetSessionDiff(id string) (*DiffData, error) {
 }
 
 // GetFullDiff returns full uncommitted diff for path
-func (a *App) GetFullDiff(id string) (*DiffData, error) {
-	inst, err := a.storage.GetInstance(id)
+func (a *App) GetFullDiff(id string, windowIdx int) (*DiffData, error) {
+	inst, err := a.browseInstance(id, windowIdx)
 	if err != nil {
 		return nil, err
 	}
@@ -2517,8 +2517,8 @@ func (a *App) GetFullDiff(id string) (*DiffData, error) {
 }
 
 // GetSessionDiffFiles returns the per-file diff since the session started.
-func (a *App) GetSessionDiffFiles(id string) ([]session.DiffFile, error) {
-	inst, err := a.storage.GetInstance(id)
+func (a *App) GetSessionDiffFiles(id string, windowIdx int) ([]session.DiffFile, error) {
+	inst, err := a.browseInstance(id, windowIdx)
 	if err != nil {
 		return nil, err
 	}
@@ -2526,8 +2526,8 @@ func (a *App) GetSessionDiffFiles(id string) ([]session.DiffFile, error) {
 }
 
 // GetFullDiffFiles returns the per-file uncommitted diff.
-func (a *App) GetFullDiffFiles(id string) ([]session.DiffFile, error) {
-	inst, err := a.storage.GetInstance(id)
+func (a *App) GetFullDiffFiles(id string, windowIdx int) ([]session.DiffFile, error) {
+	inst, err := a.browseInstance(id, windowIdx)
 	if err != nil {
 		return nil, err
 	}
@@ -2568,8 +2568,8 @@ func (a *App) DetectionPatternsVersion() int {
 // writing a lot of files — a build dropping its output into the tree produced a
 // diff the webview never finished rendering. Listing costs the same whatever
 // the files contain.
-func (a *App) GetSessionDiffFileList(id string) ([]session.DiffFileSummary, error) {
-	inst, err := a.storage.GetInstance(id)
+func (a *App) GetSessionDiffFileList(id string, windowIdx int) ([]session.DiffFileSummary, error) {
+	inst, err := a.browseInstance(id, windowIdx)
 	if err != nil {
 		return nil, err
 	}
@@ -2577,8 +2577,8 @@ func (a *App) GetSessionDiffFileList(id string) ([]session.DiffFileSummary, erro
 }
 
 // GetFullDiffFileList lists files with uncommitted changes, without contents.
-func (a *App) GetFullDiffFileList(id string) ([]session.DiffFileSummary, error) {
-	inst, err := a.storage.GetInstance(id)
+func (a *App) GetFullDiffFileList(id string, windowIdx int) ([]session.DiffFileSummary, error) {
+	inst, err := a.browseInstance(id, windowIdx)
 	if err != nil {
 		return nil, err
 	}
@@ -2589,8 +2589,8 @@ func (a *App) GetFullDiffFileList(id string) ([]session.DiffFileSummary, error) 
 //
 // wholeFile asks for the whole file around the changes, for the view that shows
 // a change in the context of the file it lives in.
-func (a *App) GetSessionDiffForFile(id, path string, wholeFile bool) (*session.DiffFile, error) {
-	inst, err := a.storage.GetInstance(id)
+func (a *App) GetSessionDiffForFile(id, path string, wholeFile bool, windowIdx int) (*session.DiffFile, error) {
+	inst, err := a.browseInstance(id, windowIdx)
 	if err != nil {
 		return nil, err
 	}
@@ -2598,8 +2598,8 @@ func (a *App) GetSessionDiffForFile(id, path string, wholeFile bool) (*session.D
 }
 
 // GetFullDiffForFile returns one file's uncommitted diff.
-func (a *App) GetFullDiffForFile(id, path string, wholeFile bool) (*session.DiffFile, error) {
-	inst, err := a.storage.GetInstance(id)
+func (a *App) GetFullDiffForFile(id, path string, wholeFile bool, windowIdx int) (*session.DiffFile, error) {
+	inst, err := a.browseInstance(id, windowIdx)
 	if err != nil {
 		return nil, err
 	}
@@ -2607,13 +2607,13 @@ func (a *App) GetFullDiffForFile(id, path string, wholeFile bool) (*session.Diff
 }
 
 // RevertDiffFile discards every pending change to one file.
-func (a *App) RevertDiffFile(id, path string, sessionScope bool) error {
+func (a *App) RevertDiffFile(id, path string, sessionScope bool, windowIdx int) error {
 	a.projectMu.RLock()
 	defer a.projectMu.RUnlock()
 	if !a.projectLocked {
 		return fmt.Errorf("project is read-only in this application instance")
 	}
-	inst, err := a.storage.GetInstance(id)
+	inst, err := a.browseInstance(id, windowIdx)
 	if err != nil {
 		return err
 	}
@@ -2627,13 +2627,13 @@ func (a *App) RevertDiffFile(id, path string, sessionScope bool) error {
 // RevertDiffHunk undoes a single change block. The patch is the text the UI
 // displayed, so a file that moved on since makes git refuse instead of
 // reverting something the user never saw.
-func (a *App) RevertDiffHunk(id, patch string) error {
+func (a *App) RevertDiffHunk(id, patch string, windowIdx int) error {
 	a.projectMu.RLock()
 	defer a.projectMu.RUnlock()
 	if !a.projectLocked {
 		return fmt.Errorf("project is read-only in this application instance")
 	}
-	inst, err := a.storage.GetInstance(id)
+	inst, err := a.browseInstance(id, windowIdx)
 	if err != nil {
 		return err
 	}

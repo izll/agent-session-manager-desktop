@@ -189,7 +189,7 @@ func (i *Instance) RevertHunk(patch string) error {
 		patch += "\n"
 	}
 
-	cmd, cancel := GitCommandTimed("-C", i.Path, "apply", "--reverse", "-")
+	cmd, cancel := GitCommandTimed("-C", i.gitDir(), "apply", "--reverse", "-")
 	defer cancel()
 	cmd.Stdin = strings.NewReader(patch)
 	if out, err := cmd.CombinedOutput(); err != nil {
@@ -227,7 +227,7 @@ func (i *Instance) RevertFile(path string, baseRef string) error {
 	if ref == "" {
 		ref = "HEAD"
 	}
-	cmd, cancel := GitCommandTimed("-C", i.Path, "checkout", ref, "--", path)
+	cmd, cancel := GitCommandTimed("-C", i.gitDir(), "checkout", ref, "--", path)
 	defer cancel()
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("could not restore %s: %s", path, strings.TrimSpace(string(out)))
@@ -253,7 +253,7 @@ func (i *Instance) validateRepoPath(path string) error {
 
 // isUntracked reports whether git has no record of this path.
 func (i *Instance) isUntracked(path string) bool {
-	cmd, cancel := GitCommandTimed("-C", i.Path, "ls-files", "--error-unmatch", "--", path)
+	cmd, cancel := GitCommandTimed("-C", i.gitDir(), "ls-files", "--error-unmatch", "--", path)
 	defer cancel()
 	return cmd.Run() != nil
 }
@@ -312,7 +312,7 @@ func (i *Instance) diffFileSummaries(baseRef string) ([]DiffFileSummary, error) 
 	}
 	defer cleanup()
 
-	args := []string{"-C", i.Path, "--no-pager", "diff", "--numstat", "-z", "--find-renames"}
+	args := []string{"-C", i.gitDir(), "--no-pager", "diff", "--numstat", "-z", "--find-renames"}
 	if baseRef != "" {
 		args = append(args, baseRef)
 	}
@@ -329,7 +329,7 @@ func (i *Instance) diffFileSummaries(baseRef string) ([]DiffFileSummary, error) 
 	// to a file: a new file and an edited one are both just "<added> <removed>
 	// <path>", so everything came out labelled "modified". name-status is the
 	// side that knows — A, M, D, R — so the two are read together.
-	statusArgs := []string{"-C", i.Path, "--no-pager", "diff", "--name-status", "-z", "--find-renames"}
+	statusArgs := []string{"-C", i.gitDir(), "--no-pager", "diff", "--name-status", "-z", "--find-renames"}
 	if baseRef != "" {
 		statusArgs = append(statusArgs, baseRef)
 	}
@@ -470,7 +470,7 @@ func (i *Instance) diffForFile(baseRef, path string, contextLines int) (*DiffFil
 	}
 	defer cleanup()
 
-	args := []string{"-C", i.Path, "--no-pager", "diff", "--find-renames"}
+	args := []string{"-C", i.gitDir(), "--no-pager", "diff", "--find-renames"}
 	if contextLines > 0 {
 		// Whole-file view: the unchanged lines around each change come from git
 		// rather than from reading the file separately, so both sides stay

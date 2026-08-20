@@ -41,7 +41,7 @@
 
     requestFileJump(path, line);
   }
-  import { selectedSessionId } from '../../stores/sessions';
+  import { selectedSessionId, selectedWindowIdx } from '../../stores/sessions';
   import { get } from 'svelte/store';
   import * as App from '../../../../wailsjs/go/main/App';
   import { ClipboardSetText } from '../../../../wailsjs/runtime/runtime';
@@ -222,8 +222,8 @@
       // one thing that is genuinely expensive, and it is only needed when the
       // button is actually pressed.
       const whole = diffMode === 'session'
-        ? await App.GetSessionDiff(sessionId)
-        : await App.GetFullDiff(sessionId);
+        ? await App.GetSessionDiff(sessionId, tabIdx())
+        : await App.GetFullDiff(sessionId, tabIdx());
       if (destroyed || generation !== copyGeneration) return;
       const content = whole?.content || '';
       if (!content) { copying = false; return; }
@@ -275,7 +275,9 @@
         resetCopyState();
       }
     }
-    lastSessionId = sessionId;
+    // Keyed on session AND tab, matching the guard that calls this: a tab with
+    // its own directory is a different diff even within one session.
+    lastSessionId = `${sessionId}:${tabIdx()}`;
     loading = files.length === 0;
     error = '';
 
@@ -289,8 +291,8 @@
       // webview never finished rendering. A file's hunks are fetched when it is
       // opened, so the cost of listing does not depend on what the files hold.
       const fileResult = mode === 'session'
-        ? await App.GetSessionDiffFileList(sessionId)
-        : await App.GetFullDiffFileList(sessionId);
+        ? await App.GetSessionDiffFileList(sessionId, tabIdx())
+        : await App.GetFullDiffFileList(sessionId, tabIdx());
       if (generation !== loadGeneration || sessionId !== get(selectedSessionId) || mode !== diffMode || !active) return;
       const summaries = fileResult || [];
       const totals = summaries.reduce(
@@ -372,7 +374,8 @@
   // parsed its enormous diff in the background — freezing the UI on a plain tab
   // switch. Gating on `active` means the diff only ever runs when you're looking
   // at it.
-  $: if (active && $selectedSessionId !== lastSessionId) {
+  $: diffKey = `${$selectedSessionId ?? ''}:${$selectedWindowIdx ?? 0}`;
+  $: if (active && diffKey !== lastSessionId) {
     loadDiff();
   }
 
@@ -438,7 +441,7 @@
     revertMessage = isAdded
       ? $t('diff.revertFileAddedMessage', { file: file.path })
       : $t('diff.revertFileMessage', { file: file.path });
-    pendingRevert = () => App.RevertDiffFile(sessionIdForRevert(), file.path, diffMode === 'session');
+    pendingRevert = () => App.RevertDiffFile(sessionIdForRevert(), file.path, diffMode === 'session', tabIdx());
     showRevertConfirm = true;
   }
 
@@ -453,7 +456,7 @@
     // apply cleanly against a file that has since moved on — the round-trip is
     // exactly what makes git refuse.
     const patch = hunk.patch;
-    pendingRevert = () => App.RevertDiffHunk(sessionIdForRevert(), patch);
+    pendingRevert = () => App.RevertDiffHunk(sessionIdForRevert(), patch, tabIdx());
     showRevertConfirm = true;
   }
 
@@ -526,7 +529,7 @@
 
     revertTitle = $t('diff.revertHunkTitle');
     revertMessage = $t('diff.revertBlockMessage', { file: selectedFile.path });
-    pendingRevert = () => App.RevertDiffHunk(sessionIdForRevert(), patch);
+    pendingRevert = () => App.RevertDiffHunk(sessionIdForRevert(), patch, tabIdx());
     showRevertConfirm = true;
   }
 
@@ -613,6 +616,17 @@
 
   function sessionIdForRevert(): string {
     return get(selectedSessionId) || '';
+  }
+
+  /**
+   * Which tab the diff is for.
+   *
+   * A tab can be opened in a directory of its own, so the session's path is the
+   * wrong repository for it — and reverting from that diff wrote into the
+   * session's repository, a file the user never saw on screen.
+   */
+  function tabIdx(): number {
+    return get(selectedWindowIdx) ?? 0;
   }
 
   async function confirmRevert() {
@@ -779,8 +793,8 @@
     loadingFile = true;
     try {
       const loaded = mode === 'session'
-        ? await App.GetSessionDiffForFile(sessionId, path, whole)
-        : await App.GetFullDiffForFile(sessionId, path, whole);
+        ? await App.GetSessionDiffForFile(sessionId, path, whole, tabIdx())
+        : await App.GetFullDiffForFile(sessionId, path, whole, tabIdx());
       // Ignore a result that arrived after the user moved on, so a slow file
       // cannot overwrite the one now on screen.
       if (path !== selectedPath || mode !== diffMode || whole !== wholeFileView ||
