@@ -658,11 +658,17 @@ func (i *Instance) StartWithResume(resumeID string) error {
 		// Keep windows alive when their process exits, so a tab whose shell has
 		// been closed shows as dead rather than vanishing.
 		//
-		// -w, and repeated for every window that gets created later: this is a
-		// WINDOW option, so without -w tmux sets a session option of the same
-		// name that nothing reads, and even with -w a session-wide setting is
-		// not inherited by windows opened afterwards. Ctrl+D in a terminal tab
-		// used to take the whole tab with it because of this.
+		// Set here AND on every window as it is created, because a window
+		// opened later does not inherit this one.
+		//
+		// Measured on tmux 3.4: setting it session-wide and then opening a
+		// window leaves that window without it, and a shell exiting there takes
+		// the whole window with it — which is what made Ctrl+D close a terminal
+		// tab outright instead of leaving it dead.
+		//
+		// -w is explicit rather than necessary: tmux routes a window option to
+		// the window even without it. Kept because it says which scope is meant,
+		// and a reader should not have to know tmux's routing rules to tell.
 		TmuxCommand("set-option", "-w", "-t", sessionName, "remain-on-exit", "on").Run()
 
 		// Configure tmux session for better scrolling

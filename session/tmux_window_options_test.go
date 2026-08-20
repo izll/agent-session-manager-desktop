@@ -8,18 +8,19 @@ import (
 	"testing"
 )
 
-// remain-on-exit and automatic-rename are WINDOW options, and tmux needs -w to
-// know that.
+// remain-on-exit and automatic-rename are WINDOW options, and every call says so
+// with -w.
 //
-// Without it the option is set on the session instead, where neither exists.
-// tmux reports no error, so it looks like it worked — and the consequence only
-// shows up later: pressing Ctrl+D in a terminal tab closed the shell, and with
-// remain-on-exit never actually applied the whole window disappeared instead of
-// staying behind as a dead pane. The tab bar reads #{pane_dead} to mark a tab
-// stopped, so it had nothing left to read.
+// Not because tmux needs telling — measured on 3.4, it routes a window option
+// to the window either way. The reason is the reader: without -w the target
+// looks like a session and the scope has to be inferred from tmux's rules,
+// which is exactly the kind of thing that goes unnoticed.
 //
-// A session-wide setting does not help either: windows created afterwards do
-// not inherit it, which is why every window-creating path sets it for itself.
+// What actually broke was scope, not syntax: a window opened after a
+// session-wide setting does not inherit it, so a shell exiting in that window
+// took the whole window with it instead of leaving a dead pane behind. The tab
+// bar reads #{pane_dead} to mark a tab stopped, and had nothing to read. Hence
+// every window-creating path setting it for its own window.
 func TestWindowOptionsAreSetWithW(t *testing.T) {
 	src := readSource(t, "instance.go")
 
