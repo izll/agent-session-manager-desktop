@@ -42,6 +42,7 @@
     requestFileJump(path, line);
   }
   import { selectedSessionId, selectedWindowIdx } from '../../stores/sessions';
+  import { parseDiff, buildHunkViews } from '../../utils/diffParse';
   import { get } from 'svelte/store';
   import * as App from '../../../../wailsjs/go/main/App';
   import { ClipboardSetText } from '../../../../wailsjs/runtime/runtime';
@@ -678,23 +679,6 @@
   }
 
   // Parse diff content into lines with colors
-  function parseDiff(content: string) {
-    return content.split('\n').map(line => {
-      let type: 'add' | 'remove' | 'header' | 'context' | 'meta' = 'context';
-      if (line.startsWith('+') && !line.startsWith('+++')) {
-        type = 'add';
-      } else if (line.startsWith('-') && !line.startsWith('---')) {
-        type = 'remove';
-      } else if (line.startsWith('@@')) {
-        type = 'header';
-      } else if (line.startsWith('diff ') || line.startsWith('index ') ||
-                 line.startsWith('+++') || line.startsWith('---')) {
-        type = 'meta';
-      }
-      return { text: line, type };
-    });
-  }
-
   // Cap how many diff lines we render. The diff view renders one <div><code>
   // per line with NO virtualisation, so a huge repo's diff (e.g. WebErp, tens
   // of thousands of lines) would insert tens of thousands of DOM nodes
@@ -1410,7 +1394,7 @@
 
   $: shouldRender = active && !!selectedFile && !selectedFile.binary && (!isLargeFile || forceShow);
   $: renderedHunks = shouldRender && selectedFile
-    ? buildHunkViews(selectedFile)
+    ? buildHunkViews(selectedFile, MAX_DIFF_LINES)
     : [];
 
   /**
@@ -1436,15 +1420,6 @@
 
   // Build the per-hunk line lists, honouring MAX_DIFF_LINES across the whole
   // file so one pathological hunk can't blow the budget on its own.
-  function buildHunkViews(file: session.DiffFile) {
-    let budget = MAX_DIFF_LINES;
-    return file.hunks.map(hunk => {
-      const all = parseDiff(hunk.body);
-      const lines = budget > 0 ? all.slice(0, budget) : [];
-      budget -= lines.length;
-      return { hunk, lines, hidden: all.length - lines.length };
-    });
-  }
 
   // The whole file, as one flat list of lines for the virtual renderer, plus
   // where each hunk starts so the next/previous buttons can jump to it.
