@@ -12,13 +12,14 @@ import (
 )
 
 type Storage struct {
-	mu         sync.Mutex
-	projectsMu sync.Mutex
-	lockMu     sync.Mutex
-	configDir  string
-	configPath string
-	projectID  string // Active project ID ("" = default)
-	lockPath   string // Current lock file path
+	mu                 sync.Mutex
+	projectsMu         sync.Mutex
+	lockMu             sync.Mutex
+	configDir          string
+	configPath         string
+	projectID          string // Active project ID ("" = default)
+	lockPath           string // Current out-of-tree lock file path
+	legacyLockPathHeld string // Compatibility lock visible to pre-migration app versions
 }
 
 // Group represents a session group for organizing sessions
@@ -378,14 +379,14 @@ func (s *Storage) LockProject(projectID string) error {
 
 	s.lockMu.Lock()
 	defer s.lockMu.Unlock()
-	if locked, owner := projectLockOwner(s.legacyLockPath(projectID)); locked && owner != os.Getpid() {
-		return &ErrProjectLocked{PID: owner}
-	}
 
 	lockPath := s.getLockPath(projectID)
-	if s.lockPath == lockPath {
+	legacyPath := s.legacyLockPath(projectID)
+	if s.lockPath == lockPath && s.legacyLockPathHeld == legacyPath {
 		if locked, pid := projectLockOwner(lockPath); locked && pid == os.Getpid() {
-			return nil
+			if legacyLocked, legacyPID := projectLockOwner(legacyPath); legacyLocked && legacyPID == pid {
+				return nil
+			}
 		}
 	}
 
@@ -397,6 +398,9 @@ func (s *Storage) LockProject(projectID string) error {
 	dir := filepath.Dir(lockPath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return fmt.Errorf("failed to create lock directory: %w", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(legacyPath), 0755); err != nil {
+		return fmt.Errorf("failed to create legacy lock directory: %w", err)
 	}
 
 	pid := os.Getpid()
@@ -419,6 +423,19 @@ func (s *Storage) LockProject(projectID string) error {
 		return fmt.Errorf("failed to prepare project lock: %w", err)
 	}
 
+	if err := claimProjectLockPath(preparedPath, lockPath, pid); err != nil {
+		return err
+	}
+	if err := claimProjectLockPath(preparedPath, legacyPath, pid); err != nil {
+		removeProjectLockIfOwned(lockPath, pid)
+		return fmt.Errorf("failed to publish legacy project lock: %w", err)
+	}
+	s.lockPath = lockPath
+	s.legacyLockPathHeld = legacyPath
+	return nil
+}
+
+func claimProjectLockPath(preparedPath, lockPath string, pid int) error {
 	claimPath := lockPath + ".reclaim"
 	for attempts := 0; attempts < 100; attempts++ {
 		// Linking a fully-written private inode publishes the PID and claims the
@@ -426,7 +443,6 @@ func (s *Storage) LockProject(projectID string) error {
 		// expose an empty file that another contender could mistake for stale.
 		err := os.Link(preparedPath, lockPath)
 		if err == nil {
-			s.lockPath = lockPath
 			return nil
 		}
 		if !os.IsExist(err) {
@@ -436,7 +452,6 @@ func (s *Storage) LockProject(projectID string) error {
 		locked, owner := projectLockOwner(lockPath)
 		if locked {
 			if owner == pid {
-				s.lockPath = lockPath
 				return nil
 			}
 			return &ErrProjectLocked{PID: owner}
@@ -449,7 +464,6 @@ func (s *Storage) LockProject(projectID string) error {
 			if locked {
 				_ = os.Remove(claimPath)
 				if owner == pid {
-					s.lockPath = lockPath
 					return nil
 				}
 				return &ErrProjectLocked{PID: owner}
@@ -461,7 +475,6 @@ func (s *Storage) LockProject(projectID string) error {
 			err = os.Link(preparedPath, lockPath)
 			_ = os.Remove(claimPath)
 			if err == nil {
-				s.lockPath = lockPath
 				return nil
 			}
 			if !os.IsExist(err) {
@@ -480,6 +493,12 @@ func (s *Storage) LockProject(projectID string) error {
 	return fmt.Errorf("failed to acquire project lock after stale-lock contention")
 }
 
+func removeProjectLockIfOwned(path string, pid int) {
+	if locked, owner := projectLockOwner(path); locked && owner == pid {
+		_ = os.Remove(path)
+	}
+}
+
 // UnlockProject removes the lock file
 func (s *Storage) UnlockProject() {
 	s.lockMu.Lock()
@@ -488,15 +507,16 @@ func (s *Storage) UnlockProject() {
 }
 
 func (s *Storage) unlockProjectLocked() {
-	if s.lockPath == "" {
+	if s.lockPath == "" && s.legacyLockPathHeld == "" {
 		return
 	}
 	// Only remove a lock that still names this process. If another process
 	// replaced a stale/corrupt path, shutdown must never delete its ownership.
-	if locked, pid := projectLockOwner(s.lockPath); locked && pid == os.Getpid() {
-		_ = os.Remove(s.lockPath)
-	}
+	pid := os.Getpid()
+	removeProjectLockIfOwned(s.legacyLockPathHeld, pid)
+	removeProjectLockIfOwned(s.lockPath, pid)
 	s.lockPath = ""
+	s.legacyLockPathHeld = ""
 }
 
 // LoadProjects loads the list of projects
@@ -610,7 +630,13 @@ func (s *Storage) RemoveProject(id string) error {
 	if err := claim.LockProject(id); err != nil {
 		return err
 	}
-	defer claim.UnlockProject()
+	projectDir := filepath.Join(s.configDir, "projects", id)
+	defer func() {
+		claim.UnlockProject()
+		// LockProject creates the directory to publish the legacy sentinel. Once
+		// that sentinel is gone, remove the now-empty shell as well.
+		_ = os.Remove(projectDir)
+	}()
 
 	s.projectsMu.Lock()
 	defer s.projectsMu.Unlock()
@@ -639,34 +665,45 @@ func (s *Storage) RemoveProject(id string) error {
 		// Move the data aside before committing the catalog change. If the catalog
 		// write fails, rename it back so an I/O error cannot leave a listed project
 		// whose sessions have already been irreversibly deleted.
-		projectDir := filepath.Join(s.configDir, "projects", id)
 		trashRoot := filepath.Join(s.configDir, "project-trash")
 		trashDir := filepath.Join(trashRoot, fmt.Sprintf("%s-%d-%d", id, os.Getpid(), time.Now().UnixNano()))
-		moved := false
-		if _, err := os.Stat(projectDir); err == nil {
-			if err := os.MkdirAll(trashRoot, 0700); err != nil {
-				return fmt.Errorf("failed to create project trash: %w", err)
+		entries, err := os.ReadDir(projectDir)
+		if err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("failed to inspect project data: %w", err)
+		}
+		if err := os.MkdirAll(trashDir, 0700); err != nil {
+			return fmt.Errorf("failed to create project trash: %w", err)
+		}
+		var movedNames []string
+		rollbackMoved := func() error {
+			for i := len(movedNames) - 1; i >= 0; i-- {
+				name := movedNames[i]
+				if err := os.Rename(filepath.Join(trashDir, name), filepath.Join(projectDir, name)); err != nil {
+					return err
+				}
 			}
-			if err := os.Rename(projectDir, trashDir); err != nil {
+			return nil
+		}
+		legacyName := filepath.Base(claim.legacyLockPathHeld)
+		for _, entry := range entries {
+			if entry.Name() == legacyName {
+				continue
+			}
+			if err := os.Rename(filepath.Join(projectDir, entry.Name()), filepath.Join(trashDir, entry.Name())); err != nil {
+				_ = rollbackMoved()
 				return fmt.Errorf("failed to move project data to trash: %w", err)
 			}
-			moved = true
-		} else if !os.IsNotExist(err) {
-			return fmt.Errorf("failed to inspect project data: %w", err)
+			movedNames = append(movedNames, entry.Name())
 		}
 
 		if err := s.saveProjectsLocked(projectsData); err != nil {
-			if moved {
-				if rollbackErr := os.Rename(trashDir, projectDir); rollbackErr != nil {
-					return fmt.Errorf("failed to save projects: %v (also failed to restore project data: %w)", err, rollbackErr)
-				}
+			if rollbackErr := rollbackMoved(); rollbackErr != nil {
+				return fmt.Errorf("failed to save projects: %v (also failed to restore project data: %w)", err, rollbackErr)
 			}
 			return err
 		}
-		if moved {
-			if err := os.RemoveAll(trashDir); err != nil {
-				fmt.Fprintf(os.Stderr, "failed to clean deleted project data %s: %v\n", trashDir, err)
-			}
+		if err := os.RemoveAll(trashDir); err != nil {
+			fmt.Fprintf(os.Stderr, "failed to clean deleted project data %s: %v\n", trashDir, err)
 		}
 		return nil
 	})

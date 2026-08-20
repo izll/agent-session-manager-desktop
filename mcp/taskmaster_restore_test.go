@@ -140,14 +140,79 @@ func TestRestoreSubtaskPreservesSnapshotAndIdentity(t *testing.T) {
 	}
 }
 
+func TestRestoreSubtaskUsesSubtaskIDSchemaNotParentTaskSchema(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, ".taskmaster", "tasks", "tasks.json")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Current Task Master data uses string task IDs and numeric subtask IDs.
+	if err := os.WriteFile(path, []byte(`{"master":{"tasks":[{"id":"3","subtasks":[{"id":1,"title":"kept"}]}]}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := NewTaskMaster(root).RestoreSubtask("3", Subtask{ID: "2", Title: "restored"}); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.UseNumber()
+	var document map[string]interface{}
+	if err := decoder.Decode(&document); err != nil {
+		t.Fatal(err)
+	}
+	tasks := document["master"].(map[string]interface{})["tasks"].([]interface{})
+	restored := tasks[0].(map[string]interface{})["subtasks"].([]interface{})[1].(map[string]interface{})
+	if id, ok := restored["id"].(json.Number); !ok || id.String() != "2" {
+		t.Fatalf("mixed-schema subtask ID changed type: %#v (%T)", restored["id"], restored["id"])
+	}
+}
+
+func TestRestoreTaskRawSnapshotPreservesKnownAndUnknownProviderFields(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, ".taskmaster", "tasks", "tasks.json")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(`{"master":{"tasks":[{"id":"other","subtasks":[{"id":1}]}]}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	rawSnapshot := `{"id":"restored","title":"original","testStrategy":"keep task strategy","futureField":{"nested":true},"subtasks":[{"id":2,"title":"sub","dependencies":[1],"parentId":"restored","testStrategy":"keep sub strategy","futureSub":"keep"}]}`
+	task := Task{ID: "restored", Title: "original", RawJSON: rawSnapshot}
+	if err := NewTaskMaster(root).RestoreTask(task); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.UseNumber()
+	var document map[string]interface{}
+	if err := decoder.Decode(&document); err != nil {
+		t.Fatal(err)
+	}
+	tasks := document["master"].(map[string]interface{})["tasks"].([]interface{})
+	restored := tasks[1].(map[string]interface{})
+	if restored["testStrategy"] != "keep task strategy" || restored["futureField"].(map[string]interface{})["nested"] != true {
+		t.Fatalf("raw task fields were lost: %#v", restored)
+	}
+	subtask := restored["subtasks"].([]interface{})[0].(map[string]interface{})
+	if _, ok := subtask["id"].(json.Number); !ok || subtask["futureSub"] != "keep" || subtask["testStrategy"] != "keep sub strategy" || subtask["parentId"] != "restored" {
+		t.Fatalf("raw subtask fields or ID type were lost: %#v", subtask)
+	}
+}
+
 func TestTaskFromMapKeepsOptionalSnapshotFields(t *testing.T) {
 	task := taskFromMap(map[string]interface{}{
 		"id": 3.0, "title": "task", "updatedAt": "updated", "completedAt": "completed",
-		"dueAt": "due", "sessionId": "session", "subtasks": []interface{}{
-			map[string]interface{}{"id": 1.0, "title": "sub", "createdAt": "created"},
+		"dueAt": "due", "sessionId": "session", "testStrategy": "task tests", "unknown": "raw", "subtasks": []interface{}{
+			map[string]interface{}{"id": 1.0, "title": "sub", "createdAt": "created", "dependencies": []interface{}{2.0}, "parentId": "3", "testStrategy": "sub tests", "unknownSub": true},
 		},
 	})
-	if task.UpdatedAt != "updated" || task.CompletedAt != "completed" || task.DueAt != "due" || task.SessionID != "session" || len(task.Subtasks) != 1 || task.Subtasks[0].CreatedAt != "created" {
+	if task.UpdatedAt != "updated" || task.CompletedAt != "completed" || task.DueAt != "due" || task.SessionID != "session" || task.TestStrategy != "task tests" || task.RawJSON == "" || len(task.Subtasks) != 1 || task.Subtasks[0].CreatedAt != "created" || task.Subtasks[0].ParentID != "3" || task.Subtasks[0].TestStrategy != "sub tests" || len(task.Subtasks[0].Dependencies) != 1 || task.Subtasks[0].RawJSON == "" {
 		t.Fatalf("optional fields were dropped: %+v", task)
 	}
 }

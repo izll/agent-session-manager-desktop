@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -16,6 +17,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -36,13 +38,24 @@ const (
 	// Without it a launch that falls inside the daily throttle shows nothing,
 	// even though an update is still waiting.
 	AvailableUpdateFile = "available_update"
+	staleUpdateFile     = "stale_update_files.json"
+	failedUpdateFile    = "failed_update_backups.json"
+	installLockFile     = "update-install.lock"
 )
+
+var windowsRuntimeDLLs = []string{
+	"libportaudio.dll",
+	"libgcc_s_seh-1.dll",
+	"libstdc++-6.dll",
+	"libwinpthread-1.dll",
+}
 
 var (
 	apiBaseURL      = "https://api.github.com"
 	downloadBaseURL = "https://github.com"
 	checkClient     = &http.Client{Timeout: CheckTimeout}
 	downloadClient  = &http.Client{Timeout: 5 * time.Minute}
+	installMu       sync.Mutex
 )
 
 type GitHubRelease struct {
@@ -459,6 +472,10 @@ func IsPackageManaged() bool {
 }
 
 func extractExecutable(archivePath, expected string, out *os.File) error {
+	return extractExecutableWithLimits(archivePath, expected, out, archiveLimits{bytes: BundleLimit, entries: BundleEntries})
+}
+
+func extractExecutableWithLimits(archivePath, expected string, out *os.File, limits archiveLimits) error {
 	in, err := os.Open(archivePath)
 	if err != nil {
 		return err
@@ -471,6 +488,8 @@ func extractExecutable(archivePath, expected string, out *os.File) error {
 	defer gz.Close()
 
 	found := false
+	entryCount := 0
+	var total int64
 	tarReader := tar.NewReader(gz)
 	for {
 		header, nextErr := tarReader.Next()
@@ -479,6 +498,16 @@ func extractExecutable(archivePath, expected string, out *os.File) error {
 		}
 		if nextErr != nil {
 			return fmt.Errorf("failed to read archive: %w", nextErr)
+		}
+		entryCount++
+		if entryCount > limits.entries {
+			return fmt.Errorf("archive contains too many entries")
+		}
+		if header.FileInfo().Mode().IsRegular() {
+			if header.Size < 0 || header.Size > limits.bytes-total {
+				return fmt.Errorf("archive exceeds the cumulative uncompressed size limit")
+			}
+			total += header.Size
 		}
 		name := strings.TrimPrefix(filepath.ToSlash(header.Name), "./")
 		if name != expected {
@@ -608,18 +637,41 @@ func installBundleUpdate(version string) error {
 	// forever. Same directory, so this stays a rename within one filesystem.
 	target := filepath.Join(filepath.Dir(bundle), filepath.Base(staged))
 
-	old := bundle + ".old"
-	_ = os.RemoveAll(old)
-	if err := os.Rename(bundle, old); err != nil {
+	return swapBundle(bundle, staged, target)
+}
+
+func swapBundle(bundle, staged, target string) error {
+	return swapBundleWithOps(bundle, staged, target, os.Rename, os.RemoveAll)
+}
+
+func swapBundleWithOps(bundle, staged, target string, rename func(string, string) error, removeAll func(string) error) error {
+	parent := filepath.Dir(bundle)
+	backupDir, err := os.MkdirTemp(parent, "."+BinaryName+"-update-rollback-*")
+	if err != nil {
+		return fmt.Errorf("cannot create application rollback directory: %w", err)
+	}
+	old := filepath.Join(backupDir, filepath.Base(bundle))
+	if err := rename(bundle, old); err != nil {
+		_ = removeAll(backupDir)
 		return fmt.Errorf("cannot move the old application aside: %w", err)
 	}
-	if err := os.Rename(staged, target); err != nil {
-		_ = os.Rename(old, bundle) // put the working version back
-		return fmt.Errorf("cannot install the new application: %w", err)
+	if installErr := rename(staged, target); installErr != nil {
+		installErr = fmt.Errorf("cannot install the new application: %w", installErr)
+		if rollbackErr := rename(old, bundle); rollbackErr != nil {
+			recordFailedUpdatePath(backupDir)
+			return errors.Join(installErr,
+				fmt.Errorf("application rollback failed; backup preserved at %s: %w", backupDir, rollbackErr))
+		}
+		if err := removeAll(backupDir); err != nil {
+			recordStaleUpdatePath(backupDir)
+		}
+		return installErr
 	}
 	// The running process still has files open inside the old bundle, so this
 	// may fail; CleanStaleUpdateFiles clears it on the next start.
-	_ = os.RemoveAll(old)
+	if err := removeAll(backupDir); err != nil {
+		recordStaleUpdatePath(backupDir)
+	}
 	return nil
 }
 
@@ -744,7 +796,10 @@ func safeSymlinkTarget(destDir, linkPath, linkName string) (string, error) {
 	return target, nil
 }
 
-// CleanStaleUpdateFiles removes the .old copies an update leaves behind.
+// CleanStaleUpdateFiles removes only paths that this updater is known to have
+// created. A suffix scan is unsafe here: the executable often lives in ~/bin,
+// and a macOS bundle usually lives directly in /Applications, where unrelated
+// files and directories ending in ".old" are not ours to delete.
 //
 // Windows refuses to delete a file that is still mapped into a running process,
 // so the update has to leave the previous executable and libraries in place and
@@ -753,36 +808,131 @@ func safeSymlinkTarget(destDir, linkPath, linkName string) (string, error) {
 // Every failure is ignored on purpose: a leftover file is harmless clutter, and
 // there is no version of "could not tidy up" worth interrupting a launch for.
 func CleanStaleUpdateFiles() {
-	execPath, err := os.Executable()
-	if err != nil {
-		return
-	}
-	cleanStaleUpdateFilesIn(filepath.Dir(execPath))
+	_ = withInstallLock(func() error {
+		execPath, err := os.Executable()
+		if err != nil {
+			return nil
+		}
+		execPath, err = filepath.EvalSymlinks(execPath)
+		if err != nil {
+			return nil
+		}
+		cleanStaleUpdateFilesIn(filepath.Dir(execPath))
+		_ = os.Remove(execPath + ".old")
 
-	// Inside a bundle the leftovers are not next to the executable: the old
-	// .app sits beside the new one, three levels up from Contents/MacOS.
-	if bundle := bundleRootFor(execPath); bundle != "" {
-		cleanStaleUpdateFilesIn(filepath.Dir(bundle))
+		bundle := bundleRootFor(execPath)
+		if bundle != "" {
+			_ = os.RemoveAll(bundle + ".old")
+		}
+		cleanRecordedUpdateFiles(execPath, bundle)
+		return nil
+	})
+}
+
+// cleanStaleUpdateFilesIn removes the exact legacy names produced by older
+// updater versions. It deliberately does not enumerate the directory by suffix.
+func cleanStaleUpdateFilesIn(dir string) {
+	names := []string{BinaryName + ".old", BinaryName + ".exe.old", BinaryName + ".app.old"}
+	for _, dll := range windowsRuntimeDLLs {
+		names = append(names, dll+".old")
+	}
+	for _, name := range names {
+		_ = os.RemoveAll(filepath.Join(dir, name))
 	}
 }
 
-// cleanStaleUpdateFilesIn is the directory-scoped half, split out so it can be
-// tested without standing in for the running executable.
-func cleanStaleUpdateFilesIn(dir string) {
-	entries, err := os.ReadDir(dir)
+func withInstallLock(action func() error) error {
+	installMu.Lock()
+	defer installMu.Unlock()
+	dir := configDir()
+	if dir == "" {
+		return fmt.Errorf("cannot locate updater state directory")
+	}
+	return withCrossProcessFileLock(filepath.Join(dir, installLockFile), action)
+}
+
+func recordStaleUpdatePath(stalePath string) {
+	recordUpdatePath(staleUpdateFile, stalePath)
+}
+
+func recordFailedUpdatePath(backupPath string) {
+	recordUpdatePath(failedUpdateFile, backupPath)
+}
+
+func recordUpdatePath(manifestName, stalePath string) {
+	dir := configDir()
+	if dir == "" || stalePath == "" {
+		return
+	}
+	_ = os.MkdirAll(dir, 0o700)
+	manifest := filepath.Join(dir, manifestName)
+	var paths []string
+	if raw, err := os.ReadFile(manifest); err == nil {
+		_ = json.Unmarshal(raw, &paths)
+	}
+	for _, existing := range paths {
+		if existing == stalePath {
+			return
+		}
+	}
+	paths = append(paths, stalePath)
+	writeStaleUpdateManifest(manifest, paths)
+}
+
+func writeStaleUpdateManifest(manifest string, paths []string) {
+	raw, err := json.Marshal(paths)
 	if err != nil {
 		return
 	}
-	for _, e := range entries {
-		if !strings.HasSuffix(e.Name(), ".old") {
-			continue
-		}
-		// Directories are included: a macOS update leaves the previous .app
-		// bundle behind as one, for the same reason files are left behind
-		// elsewhere — it cannot be deleted while the process is running out
-		// of it. RemoveAll covers both cases.
-		_ = os.RemoveAll(filepath.Join(dir, e.Name()))
+	tmp, err := os.CreateTemp(filepath.Dir(manifest), ".stale-updates-*")
+	if err != nil {
+		return
 	}
+	tmpPath := tmp.Name()
+	defer os.Remove(tmpPath)
+	if _, err = tmp.Write(raw); err == nil {
+		err = tmp.Sync()
+	}
+	if closeErr := tmp.Close(); err == nil {
+		err = closeErr
+	}
+	if err == nil {
+		_ = os.Rename(tmpPath, manifest)
+	}
+}
+
+func cleanRecordedUpdateFiles(execPath, bundle string) {
+	dir := configDir()
+	if dir == "" {
+		return
+	}
+	manifest := filepath.Join(dir, staleUpdateFile)
+	raw, err := os.ReadFile(manifest)
+	if err != nil {
+		return
+	}
+	var paths []string
+	if json.Unmarshal(raw, &paths) != nil {
+		return
+	}
+	allowedParents := map[string]bool{filepath.Clean(filepath.Dir(execPath)): true}
+	if bundle != "" {
+		allowedParents[filepath.Clean(filepath.Dir(bundle))] = true
+	}
+	remaining := paths[:0]
+	for _, stalePath := range paths {
+		clean := filepath.Clean(stalePath)
+		base := filepath.Base(clean)
+		owned := allowedParents[filepath.Dir(clean)] && strings.HasPrefix(base, "."+BinaryName+"-update-rollback-")
+		if !owned || os.RemoveAll(clean) != nil {
+			remaining = append(remaining, stalePath)
+		}
+	}
+	if len(remaining) == 0 {
+		_ = os.Remove(manifest)
+		return
+	}
+	writeStaleUpdateManifest(manifest, remaining)
 }
 
 // updateSidecarDLLs refreshes the runtime libraries that ship beside the
@@ -797,91 +947,205 @@ func cleanStaleUpdateFilesIn(dir string) {
 // Failures here abort the update, deliberately. A new binary beside stale
 // libraries may simply refuse to start, and that failure would surface after a
 // restart with no obvious cause; refusing now leaves a working installation.
-func updateSidecarDLLs(archivePath, destDir string) error {
+type archiveLimits struct {
+	bytes   int64
+	entries int
+}
+
+type stagedInstall struct {
+	target string
+	staged string
+}
+
+func stageSidecarDLLs(archivePath, destDir string) ([]stagedInstall, func(), error) {
+	return stageSidecarDLLsWithLimits(archivePath, destDir, archiveLimits{bytes: BundleLimit, entries: BundleEntries})
+}
+
+func stageSidecarDLLsWithLimits(archivePath, destDir string, limits archiveLimits) ([]stagedInstall, func(), error) {
 	in, err := os.Open(archivePath)
 	if err != nil {
-		return err
+		return nil, nil, err
 	}
 	defer in.Close()
 	gz, err := gzip.NewReader(in)
 	if err != nil {
-		return fmt.Errorf("failed to decompress: %w", err)
+		return nil, nil, fmt.Errorf("failed to decompress: %w", err)
 	}
 	defer gz.Close()
+	stageDir, err := os.MkdirTemp(destDir, "."+BinaryName+"-dll-stage-*")
+	if err != nil {
+		return nil, nil, fmt.Errorf("cannot stage runtime libraries: %w", err)
+	}
+	cleanup := func() { _ = os.RemoveAll(stageDir) }
 
 	tr := tar.NewReader(gz)
+	seen := make(map[string]bool)
+	var total int64
+	entryCount := 0
+	var staged []stagedInstall
 	for {
 		header, nextErr := tr.Next()
 		if nextErr == io.EOF {
 			break
 		}
 		if nextErr != nil {
-			return fmt.Errorf("failed to read archive: %w", nextErr)
+			cleanup()
+			return nil, nil, fmt.Errorf("failed to read archive: %w", nextErr)
+		}
+		entryCount++
+		if entryCount > limits.entries {
+			cleanup()
+			return nil, nil, fmt.Errorf("archive contains too many entries")
+		}
+		if header.FileInfo().Mode().IsRegular() {
+			if header.Size < 0 || header.Size > limits.bytes-total {
+				cleanup()
+				return nil, nil, fmt.Errorf("archive exceeds the cumulative uncompressed size limit")
+			}
+			total += header.Size
 		}
 		name := path.Base(filepath.ToSlash(header.Name))
 		if !strings.EqualFold(filepath.Ext(name), ".dll") {
 			continue
 		}
-		// Same guards as the executable entry: a hostile archive must not be
-		// able to write outside destDir or exhaust the disk.
+		key := strings.ToLower(name)
+		if seen[key] {
+			cleanup()
+			return nil, nil, fmt.Errorf("archive contains duplicate runtime library %q", name)
+		}
+		seen[key] = true
 		if !header.FileInfo().Mode().IsRegular() || header.Size < 0 || header.Size > BinaryLimit {
-			return fmt.Errorf("invalid library entry %q in archive", name)
+			cleanup()
+			return nil, nil, fmt.Errorf("invalid library entry %q in archive", name)
 		}
-		if err := replaceSidecarFile(filepath.Join(destDir, name), tr, header.Size); err != nil {
-			return err
+		stagedPath := filepath.Join(stageDir, name)
+		file, err := os.OpenFile(stagedPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
+		if err != nil {
+			cleanup()
+			return nil, nil, fmt.Errorf("cannot stage %s: %w", name, err)
 		}
+		_, copyErr := io.CopyN(file, tr, header.Size)
+		if copyErr == nil {
+			copyErr = file.Sync()
+		}
+		if closeErr := file.Close(); copyErr == nil {
+			copyErr = closeErr
+		}
+		if copyErr != nil {
+			cleanup()
+			return nil, nil, fmt.Errorf("cannot stage %s: %w", name, copyErr)
+		}
+		staged = append(staged, stagedInstall{target: filepath.Join(destDir, name), staged: stagedPath})
 	}
-	return nil
+	return staged, cleanup, nil
 }
 
-// replaceSidecarFile writes one library next to the executable, moving any
-// currently-loaded copy aside first.
-func replaceSidecarFile(dest string, src io.Reader, size int64) error {
-	staged, err := os.CreateTemp(filepath.Dir(dest), "."+filepath.Base(dest)+"-update-*")
+func updateSidecarDLLs(archivePath, destDir string) error {
+	files, cleanup, err := stageSidecarDLLs(archivePath, destDir)
 	if err != nil {
-		return fmt.Errorf("cannot stage %s: %w", filepath.Base(dest), err)
+		return err
 	}
-	stagedPath := staged.Name()
-	if _, err := io.CopyN(staged, src, size); err != nil {
-		_ = staged.Close()
-		_ = os.Remove(stagedPath)
-		return fmt.Errorf("cannot extract %s: %w", filepath.Base(dest), err)
+	defer cleanup()
+	return installTransaction(files)
+}
+
+type installedStep struct {
+	file        stagedInstall
+	backup      string
+	hadOriginal bool
+	installed   bool
+}
+
+func installTransaction(files []stagedInstall) error {
+	return installTransactionWithRename(files, os.Rename)
+}
+
+func installTransactionWithRename(files []stagedInstall, rename func(string, string) error) error {
+	if len(files) == 0 {
+		return nil
 	}
-	if err := staged.Close(); err != nil {
-		_ = os.Remove(stagedPath)
-		return fmt.Errorf("cannot close %s: %w", filepath.Base(dest), err)
+	parent := filepath.Clean(filepath.Dir(files[0].target))
+	seen := make(map[string]bool, len(files))
+	for _, file := range files {
+		if filepath.Clean(filepath.Dir(file.target)) != parent {
+			return fmt.Errorf("update transaction spans multiple directories")
+		}
+		key := strings.ToLower(filepath.Base(file.target))
+		if seen[key] {
+			return fmt.Errorf("update transaction contains duplicate target %q", filepath.Base(file.target))
+		}
+		seen[key] = true
+		info, err := os.Stat(file.staged)
+		if err != nil || !info.Mode().IsRegular() {
+			return fmt.Errorf("staged update file %q is unavailable", filepath.Base(file.target))
+		}
+		if current, err := os.Stat(file.target); err == nil && !current.Mode().IsRegular() {
+			return fmt.Errorf("update target %q is not a regular file", filepath.Base(file.target))
+		} else if err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("cannot inspect update target %q: %w", filepath.Base(file.target), err)
+		}
 	}
 
-	// Move the loaded copy aside rather than overwriting it. Renaming succeeds
-	// even while the DLL is mapped into this process; the leftover is cleaned up
-	// on the next run, once nothing holds it open.
-	old := dest + ".old"
-	_ = os.Remove(old)
-	if err := os.Rename(dest, old); err != nil && !os.IsNotExist(err) {
-		_ = os.Remove(stagedPath)
-		return fmt.Errorf("cannot move %s aside: %w", filepath.Base(dest), err)
+	backupDir, err := os.MkdirTemp(parent, "."+BinaryName+"-update-rollback-*")
+	if err != nil {
+		return fmt.Errorf("cannot create update rollback directory: %w", err)
 	}
-	if err := os.Rename(stagedPath, dest); err != nil {
-		_ = os.Rename(old, dest) // put the working library back
-		_ = os.Remove(stagedPath)
-		return fmt.Errorf("cannot install %s: %w", filepath.Base(dest), err)
+	steps := make([]installedStep, 0, len(files))
+	rollback := func(cause error) error {
+		var rollbackErrs []error
+		for i := len(steps) - 1; i >= 0; i-- {
+			step := steps[i]
+			if step.installed {
+				if err := os.Remove(step.file.target); err != nil && !os.IsNotExist(err) {
+					rollbackErrs = append(rollbackErrs, err)
+				}
+			}
+			if step.hadOriginal {
+				if err := rename(step.backup, step.file.target); err != nil {
+					rollbackErrs = append(rollbackErrs, fmt.Errorf("restore %s from %s: %w", filepath.Base(step.file.target), step.backup, err))
+				}
+			}
+		}
+		if len(rollbackErrs) != 0 {
+			// At least one original could not be put back. Those backup files are
+			// now the only recoverable copy, so never run RemoveAll here and never
+			// put this directory on the automatic-cleanup manifest.
+			recordFailedUpdatePath(backupDir)
+			preserved := fmt.Errorf("update rollback failed; backups preserved at %s", backupDir)
+			return errors.Join(append([]error{cause, preserved}, rollbackErrs...)...)
+		}
+		if err := os.RemoveAll(backupDir); err != nil {
+			recordStaleUpdatePath(backupDir)
+		}
+		return cause
 	}
-	_ = os.Remove(old)
+
+	for i, file := range files {
+		step := installedStep{file: file, backup: filepath.Join(backupDir, fmt.Sprintf("%04d-%s", i, filepath.Base(file.target)))}
+		if _, err := os.Stat(file.target); err == nil {
+			if err := rename(file.target, step.backup); err != nil {
+				return rollback(fmt.Errorf("cannot move %s aside: %w", filepath.Base(file.target), err))
+			}
+			step.hadOriginal = true
+		}
+		steps = append(steps, step)
+		if err := rename(file.staged, file.target); err != nil {
+			return rollback(fmt.Errorf("cannot install %s: %w", filepath.Base(file.target), err))
+		}
+		steps[len(steps)-1].installed = true
+	}
+
+	if err := os.RemoveAll(backupDir); err != nil {
+		// Windows keeps the old executable and loaded DLLs mapped until this
+		// process exits. Record this exact updater-created directory for the next
+		// launch; never rediscover it with a broad suffix/prefix deletion scan.
+		recordStaleUpdatePath(backupDir)
+	}
 	return nil
 }
 
 func replaceExecutable(execPath, stagedPath string) error {
-	oldPath := execPath + ".old"
-	_ = os.Remove(oldPath)
-	if err := os.Rename(execPath, oldPath); err != nil {
-		return fmt.Errorf("failed to back up old executable: %w", err)
-	}
-	if err := os.Rename(stagedPath, execPath); err != nil {
-		_ = os.Rename(oldPath, execPath)
-		return fmt.Errorf("failed to install new executable: %w", err)
-	}
-	_ = os.Remove(oldPath)
-	return nil
+	return installTransaction([]stagedInstall{{target: execPath, staged: stagedPath}})
 }
 
 // installPackageUpdate upgrades a .deb/.rpm installation in place.
@@ -970,6 +1234,12 @@ func DownloadAndInstall(version string) error {
 	if err := validateReleaseVersion(version); err != nil {
 		return err
 	}
+	return withInstallLock(func() error {
+		return downloadAndInstallLocked(version)
+	})
+}
+
+func downloadAndInstallLocked(version string) error {
 	// macOS ships as an .app bundle: a directory tree, so swapping the single
 	// executable inside it would leave the bundle's resources, Info.plist and
 	// code signature describing the old version. It gets replaced whole.
@@ -1033,10 +1303,18 @@ func DownloadAndInstall(version string) error {
 	// binary against stale libraries is the kind of breakage that only shows up
 	// as a failure to start, so they are refreshed before the swap — while the
 	// old executable is still in place and the update can still be abandoned.
+	files := make([]stagedInstall, 0, 5)
+	cleanupSidecars := func() {}
 	if runtime.GOOS == "windows" {
-		if err := updateSidecarDLLs(archivePath, filepath.Dir(execPath)); err != nil {
+		files, cleanupSidecars, err = stageSidecarDLLs(archivePath, filepath.Dir(execPath))
+		if err != nil {
 			return err
 		}
 	}
-	return replaceExecutable(execPath, stagedPath)
+	defer cleanupSidecars()
+	// The executable is deliberately last. If any library swap fails, rollback
+	// restores every earlier DLL before the old executable is ever disturbed;
+	// if the executable swap fails, the same transaction restores all DLLs too.
+	files = append(files, stagedInstall{target: execPath, staged: stagedPath})
+	return installTransaction(files)
 }

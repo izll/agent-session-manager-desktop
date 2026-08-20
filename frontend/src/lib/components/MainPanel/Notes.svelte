@@ -19,9 +19,34 @@
   let lastSaved = '';
   let textareaEl: HTMLTextAreaElement;
   const saveQueues = new Map<string, Promise<void>>();
+  type NoteDraft = { text: string; saved: string; saveError: string; loadError: string };
+  const draftsByTarget = new Map<string, NoteDraft>();
   let savesInFlight = 0;
   let activationGeneration = 0;
   let loadingNotes = false;
+  let saveError = '';
+  let loadError = '';
+
+  function noteKey(sessionId: string, windowIdx: number): string {
+    return `${sessionId}:${windowIdx}`;
+  }
+
+  function rememberCurrentDraft() {
+    if (!lastSessionId) return;
+    draftsByTarget.set(noteKey(lastSessionId, lastWindowIdx), {
+      text: notes,
+      saved: lastSaved,
+      saveError,
+      loadError,
+    });
+  }
+
+  function showDraft(draft: NoteDraft) {
+    notes = draft.text;
+    lastSaved = draft.saved;
+    saveError = draft.saveError;
+    loadError = draft.loadError;
+  }
 
   /**
    * Find within the note.
@@ -239,6 +264,7 @@
   });
 
   onDestroy(() => {
+    rememberCurrentDraft();
     // Save any pending changes
     if (saveTimeout) {
       clearTimeout(saveTimeout);
@@ -258,6 +284,8 @@
       lastSessionId = null;
       notes = '';
       lastSaved = '';
+      saveError = '';
+      loadError = '';
       resetHistory();
       return;
     }
@@ -270,7 +298,11 @@
     lastSessionId = sessionId;
     lastWindowIdx = windowIdx;
     const generation = ++loadGeneration;
-    const targetKey = `${sessionId}:${windowIdx}`;
+    const targetKey = noteKey(sessionId, windowIdx);
+    const remembered = draftsByTarget.get(targetKey) ?? {
+      text: '', saved: '', saveError: '', loadError: '',
+    };
+    showDraft({ ...remembered, loadError: '' });
     loadingNotes = true;
 
     try {
@@ -281,16 +313,32 @@
       const pendingSave = saveQueues.get(targetKey);
       if (pendingSave) await pendingSave;
       if (generation !== loadGeneration || sessionId !== lastSessionId || windowIdx !== lastWindowIdx) return;
+      // A failed or not-yet-saved draft is the newest copy. Reading the backend
+      // here would turn a failed save into apparent success and discard the only
+      // copy of the user's text on a fast A -> B -> A switch.
+      const latestDraft = draftsByTarget.get(targetKey);
+      if (latestDraft && (latestDraft.saveError || latestDraft.text !== latestDraft.saved)) {
+        showDraft(latestDraft);
+        resetHistory();
+        return;
+      }
       const content = await App.GetTabNotes(sessionId, windowIdx);
       if (generation !== loadGeneration || sessionId !== lastSessionId || windowIdx !== lastWindowIdx) return;
       notes = content || '';
       lastSaved = notes;
+      saveError = '';
+      loadError = '';
+      draftsByTarget.set(targetKey, { text: notes, saved: notes, saveError: '', loadError: '' });
       resetHistory();
     } catch (e) {
       if (generation !== loadGeneration || sessionId !== lastSessionId || windowIdx !== lastWindowIdx) return;
       console.error('Failed to load notes:', e);
-      notes = '';
-      lastSaved = '';
+      // Keep the per-target draft (including a clean cached copy) and make the
+      // failed load explicit. An empty editable textarea is indistinguishable
+      // from a genuinely empty note and lets the next keystroke overwrite it.
+      const draft = draftsByTarget.get(targetKey) ?? remembered;
+      showDraft({ ...draft, loadError: String(e) });
+      draftsByTarget.set(targetKey, { ...draft, loadError: String(e) });
       resetHistory();
     } finally {
       // A stale request must not re-enable the textarea while the replacement
@@ -333,6 +381,7 @@
 
   // Watch for session/window changes
   $: if ($selectedSessionId !== lastSessionId || $selectedWindowIdx !== lastWindowIdx) {
+    rememberCurrentDraft();
     // Save current notes before loading new ones
     if (saveTimeout) {
       clearTimeout(saveTimeout);
@@ -344,7 +393,7 @@
 
   // Debounced save
   function handleInput() {
-    if (loadingNotes) return;
+    if (loadingNotes || loadError) return;
     recordHistory();
     if (saveTimeout) {
       clearTimeout(saveTimeout);
@@ -352,6 +401,15 @@
     const sessionId = lastSessionId;
     const windowIdx = lastWindowIdx;
     const snapshot = notes;
+    if (sessionId) {
+      draftsByTarget.set(noteKey(sessionId, windowIdx), {
+        text: snapshot,
+        saved: lastSaved,
+        saveError: '',
+        loadError: '',
+      });
+      saveError = '';
+    }
     const timeout = setTimeout(() => {
       if (saveTimeout === timeout) saveTimeout = null;
       void saveNow(sessionId, windowIdx, snapshot);
@@ -362,20 +420,28 @@
   async function saveNow(sessionId: string | null, windowIdx: number, snapshot: string) {
     if (!sessionId || (sessionId === lastSessionId && windowIdx === lastWindowIdx && snapshot === lastSaved)) return;
 
-    const key = `${sessionId}:${windowIdx}`;
+    const key = noteKey(sessionId, windowIdx);
     const previous = saveQueues.get(key) ?? Promise.resolve();
     const queued = previous.catch(() => undefined).then(async () => {
       savesInFlight++;
       saving = true;
       try {
         await App.SetTabNotes(sessionId, windowIdx, snapshot);
+        const draft = draftsByTarget.get(key) ?? { text: snapshot, saved: lastSaved, saveError: '', loadError: '' };
+        draftsByTarget.set(key, { ...draft, saved: snapshot, saveError: '', loadError: '' });
         if (sessionId === lastSessionId && windowIdx === lastWindowIdx && notes === snapshot) {
           lastSaved = snapshot;
+          saveError = '';
+          loadError = '';
         }
         // Notify parent to update status bar preview
         dispatch('notesChange', { sessionId, windowIdx, notes: snapshot });
       } catch (e) {
         console.error('Failed to save notes:', e);
+        const message = String(e);
+        const draft = draftsByTarget.get(key) ?? { text: snapshot, saved: '', saveError: '', loadError: '' };
+        draftsByTarget.set(key, { ...draft, saveError: message });
+        if (sessionId === lastSessionId && windowIdx === lastWindowIdx) saveError = message;
       } finally {
         savesInFlight--;
         saving = savesInFlight > 0;
@@ -384,6 +450,15 @@
     saveQueues.set(key, queued);
     await queued;
     if (saveQueues.get(key) === queued) saveQueues.delete(key);
+  }
+
+  async function retryNotes() {
+    if (!lastSessionId) return;
+    if (notes !== lastSaved || saveError) {
+      await saveNow(lastSessionId, lastWindowIdx, notes);
+      if (saveError) return;
+    }
+    await loadNotes(true);
   }
 </script>
 
@@ -460,6 +535,12 @@
       >×</button>
     </div>
   {/if}
+  {#if saveError || loadError}
+    <div class="notes-error" role="alert">
+      <span>{saveError || loadError}</span>
+      <button on:click={retryNotes} disabled={loadingNotes || saving}>{$t('common.refresh')}</button>
+    </div>
+  {/if}
   <div class="notes-content">
     <textarea
       class="notes-textarea"
@@ -469,7 +550,7 @@
       bind:this={textareaEl}
       on:input={handleInput}
       on:keydown={handleContainerKeydown}
-      disabled={loadingNotes}
+      disabled={loadingNotes || !!loadError}
     ></textarea>
   </div>
 </div>
@@ -536,6 +617,35 @@
     display: flex;
     flex-direction: column;
     background: #0a0a0f;
+  }
+
+  .notes-error {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 7px 12px;
+    border-bottom: 1px solid rgba(248, 113, 113, 0.25);
+    background: rgba(127, 29, 29, 0.25);
+    color: #fca5a5;
+    font-size: 12px;
+  }
+
+  .notes-error span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .notes-error button {
+    flex: 0 0 auto;
+    padding: 3px 8px;
+    border: 1px solid rgba(248, 113, 113, 0.35);
+    border-radius: 5px;
+    background: rgba(255, 255, 255, 0.05);
+    color: #fecaca;
+    cursor: pointer;
   }
 
   .notes-header {

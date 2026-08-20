@@ -214,6 +214,8 @@ jobs:
   # tag; this job only builds and uploads its assets to the same release.
   # NOTE: tmux is still required at runtime (install via Homebrew). Dictation
   # bits that are Linux-only (PulseAudio, uinput) fall back to no-op stubs.
+  # Required repository secrets: BUILD_CERTIFICATE_BASE64, P12_PASSWORD,
+  # KEYCHAIN_PASSWORD, APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD, APPLE_TEAM_ID.
   release-macos:
     name: Build & Release (macOS)
     needs: release
@@ -291,8 +293,6 @@ jobs:
             echo "App still references Homebrew PortAudio" >&2
             exit 1
           fi
-          codesign --force --deep --sign - "$APP"
-          codesign --verify --deep --strict "$APP"
 
       # Renamed before packaging, so the archive carries the new name and an
       # update applies it. macOS shows the bundle's DIRECTORY name in Finder and
@@ -300,6 +300,79 @@ jobs:
       # this is the only way the app appears under its own name.
       - name: Rename the bundle to the product name
         run: mv "build/bin/asmgr-desktop.app" "build/bin/Agent Session Manager.app"
+
+      # GitHub's documented CI pattern: keep the Developer ID .p12 as a
+      # base64-encoded secret and import it into an ephemeral keychain. A
+      # provisioning profile is not required for direct macOS distribution.
+      - name: Import Developer ID certificate
+        env:
+          BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+          P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          for NAME in BUILD_CERTIFICATE_BASE64 P12_PASSWORD KEYCHAIN_PASSWORD; do
+            if [ -z "${!NAME}" ]; then
+              echo "Required macOS signing secret $NAME is not configured" >&2
+              exit 1
+            fi
+          done
+
+          CERTIFICATE_PATH="$RUNNER_TEMP/build_certificate.p12"
+          KEYCHAIN_PATH="$RUNNER_TEMP/app-signing.keychain-db"
+          echo -n "$BUILD_CERTIFICATE_BASE64" | base64 --decode -o "$CERTIFICATE_PATH"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERTIFICATE_PATH" -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychain -d user -s "$KEYCHAIN_PATH"
+
+          SIGNING_IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" | awk '/Developer ID Application/ {print $2; exit}')
+          if [ -z "$SIGNING_IDENTITY" ]; then
+            echo "The imported certificate is not a valid Developer ID Application identity" >&2
+            security find-identity -v -p codesigning "$KEYCHAIN_PATH" >&2 || true
+            exit 1
+          fi
+          echo "MACOS_SIGNING_IDENTITY=$SIGNING_IDENTITY" >> "$GITHUB_ENV"
+
+      - name: Sign with hardened runtime
+        run: |
+          APP="build/bin/Agent Session Manager.app"
+          EXE="$APP/Contents/MacOS/asmgr-desktop"
+          DYLIB="$APP/Contents/Frameworks/libportaudio.2.dylib"
+
+          # Sign nested code from the inside out, then seal the app bundle.
+          # --timestamp and --options runtime are required for notarization.
+          codesign --force --timestamp --options runtime --sign "$MACOS_SIGNING_IDENTITY" "$DYLIB"
+          codesign --force --timestamp --options runtime --sign "$MACOS_SIGNING_IDENTITY" "$EXE"
+          codesign --force --timestamp --options runtime --sign "$MACOS_SIGNING_IDENTITY" "$APP"
+          codesign --verify --deep --strict --verbose=2 "$APP"
+
+      - name: Notarize and staple
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          for NAME in APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID; do
+            if [ -z "${!NAME}" ]; then
+              echo "Required macOS notarization secret $NAME is not configured" >&2
+              exit 1
+            fi
+          done
+
+          APP="build/bin/Agent Session Manager.app"
+          NOTARY_ZIP="$RUNNER_TEMP/asmgr-notarization.zip"
+          ditto -c -k --keepParent "$APP" "$NOTARY_ZIP"
+          xcrun notarytool submit "$NOTARY_ZIP" \
+            --apple-id "$APPLE_ID" \
+            --password "$APPLE_APP_SPECIFIC_PASSWORD" \
+            --team-id "$APPLE_TEAM_ID" \
+            --wait
+          xcrun stapler staple "$APP"
+          xcrun stapler validate "$APP"
+          codesign --verify --deep --strict --verbose=2 "$APP"
+          spctl --assess --type execute --verbose=4 "$APP"
 
       - name: Package .tar.gz (name matches the in-app updater)
         run: |
@@ -319,11 +392,16 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Clean up signing material
+        if: ${{ always() }}
+        run: |
+          security delete-keychain "$RUNNER_TEMP/app-signing.keychain-db" 2>/dev/null || true
+          rm -f "$RUNNER_TEMP/build_certificate.p12" "$RUNNER_TEMP/asmgr-notarization.zip"
+
   # Windows build. Wails uses the native WebView2 (no webkit2_41 tag). CGO is
   # required (portaudio); we get a gcc toolchain + portaudio via MSYS2.
-  # NOTE: the app shells out to `tmux` at runtime, which native Windows does not
-  # have — users need it on PATH (e.g. via WSL/MSYS2/Git Bash). This build makes
-  # the binary available; full functionality still depends on tmux.
+  # NOTE: the app uses native psmux at runtime; the UI can install it with
+  # winget, and also shows manual winget/Chocolatey/GitHub instructions.
   release-windows:
     name: Build & Release (Windows)
     needs: release

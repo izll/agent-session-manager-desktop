@@ -116,6 +116,10 @@
   // restored, would be silently normalised on open.
   let editing = false;
   let openedFile: session.EditableFile | null = null;
+  // Absolute root the editable snapshot came from. A running tab can `cd`
+  // without changing its session/window identity; saves must still target the
+  // directory whose bytes were opened, never whatever cwd the pane has later.
+  let openedRoot = '';
   let editText = '';
   // The text as it came from disk, for the modified check. Compared rather than
   // tracked with a dirty flag so undoing every change correctly clears it.
@@ -391,6 +395,9 @@
     const sessionId = get(selectedSessionId);
     if (!sessionId) return;
     const generation = fileGeneration;
+    const targetKey = browseKey;
+    const expectedRoot = rootAbsPath;
+    if (!expectedRoot) return;
     saveError = '';
     conflict = '';
     try {
@@ -399,8 +406,9 @@
       // was decoded from, and a version taken from a separate read could
       // already be stale.
       const file = await App.OpenSessionFileForEdit(sessionId, selectedPath, get(selectedWindowIdx) ?? 0);
-      if (destroyed || generation !== fileGeneration) return;
+      if (destroyed || generation !== fileGeneration || targetKey !== browseKey || expectedRoot !== rootAbsPath) return;
       openedFile = file;
+      openedRoot = expectedRoot;
       editText = file.text;
       savedText = file.text;
       editing = true;
@@ -417,6 +425,7 @@
   function leaveEditMode() {
     editing = false;
     openedFile = null;
+    openedRoot = '';
     editText = '';
     savedText = '';
     saveError = '';
@@ -451,7 +460,7 @@
   }
 
   async function save(overwrite = false) {
-    if (!openedFile || !selectedPath || saving) return;
+    if (!openedFile || !openedRoot || !selectedPath || saving) return;
     const sessionId = loadedSessionId;
     if (!sessionId) return;
     const windowIdx = loadedWindowIdx;
@@ -471,6 +480,7 @@
         openedFile.version,
         overwrite,
         windowIdx,
+        openedRoot,
       );
       if (destroyed || targetKey !== loadedBrowseKey || path !== selectedPath) return;
       if (result.conflict) {
@@ -859,6 +869,7 @@
     }
     editing = false;
     openedFile = null;
+    openedRoot = '';
     editText = '';
     savedText = '';
     saveError = '';
@@ -1112,6 +1123,7 @@
   function leaveEditModeQuietly() {
     editing = false;
     openedFile = null;
+    openedRoot = '';
     editText = '';
     savedText = '';
     saveError = '';

@@ -313,6 +313,9 @@ func TestUnrelatedEditsKeepTheDeadline(t *testing.T) {
 			{ID: "1", Title: "before", DueAt: &due, Status: TaskStatusBacklog},
 		}},
 	}
+	if err := manager.Save(); err != nil {
+		t.Fatal(err)
+	}
 
 	if err := manager.UpdateTask("1", map[string]interface{}{"title": "after"}); err != nil {
 		t.Fatalf("updating the title: %v", err)

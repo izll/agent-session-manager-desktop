@@ -225,15 +225,29 @@ func (s *Storage) RestoreTaskBackup(id string) error {
 			continue
 		}
 		target := taskFileFor(file.Path)
-		if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
-			return err
-		}
-		tmp := target + ".tmp"
-		if err := os.WriteFile(tmp, []byte(file.Content), 0644); err != nil {
-			return err
-		}
-		if err := os.Rename(tmp, target); err != nil {
-			_ = os.Remove(tmp)
+		if err := withCrossProcessFileLock(target+".lock", func() error {
+			if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
+				return err
+			}
+			tmp, err := os.CreateTemp(filepath.Dir(target), ".task-restore-*")
+			if err != nil {
+				return err
+			}
+			tmpPath := tmp.Name()
+			defer os.Remove(tmpPath)
+			if _, err := tmp.Write([]byte(file.Content)); err != nil {
+				_ = tmp.Close()
+				return err
+			}
+			if err := tmp.Sync(); err != nil {
+				_ = tmp.Close()
+				return err
+			}
+			if err := tmp.Close(); err != nil {
+				return err
+			}
+			return os.Rename(tmpPath, target)
+		}); err != nil {
 			return err
 		}
 	}

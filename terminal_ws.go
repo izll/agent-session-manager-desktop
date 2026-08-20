@@ -479,13 +479,6 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// Upgrade to WebSocket
-	ws, err := upgrader.Upgrade(w, r, nil)
-	if err != nil {
-		log.Printf("WebSocket upgrade error: %v", err)
-		return
-	}
-
 	// Parse window index
 	winIdx := 0
 	if windowIdx != "" {
@@ -518,6 +511,15 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 	if !running {
 		http.Error(w, "session not running", http.StatusNotFound)
 		log.Printf("[ws] refused attach: %s is not running", tmuxSession)
+		return
+	}
+
+	// Upgrade only after every check that can still return an HTTP error. Once
+	// hijacked, http.Error cannot reach the client and an early return would
+	// leave a successfully-opened WebSocket hanging without a close frame.
+	ws, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Printf("WebSocket upgrade error: %v", err)
 		return
 	}
 

@@ -694,14 +694,19 @@ func (i *Instance) StartWithResume(resumeID string) error {
 		// -ga appends rather than replaces, which is what keeps that tolerable.
 		TmuxCommand("set-option", "-ga", "terminal-overrides", ",xterm*:smcup@:rmcup@").Run()
 
-		// Bind Shift+PageUp/Down for scrolling in copy mode (conditional - only in asmgr-* sessions)
-		TmuxCommand("bind-key", "-T", "root", "S-PageUp", "if-shell", "tmux display -p '#{session_name}' | grep -q '^asm_'", "copy-mode -eu", "").Run()
-		TmuxCommand("bind-key", "-T", "root", "S-PageDown", "if-shell", "tmux display -p '#{session_name}' | grep -q '^asm_'", "send-keys PageDown", "").Run()
-		TmuxCommand("bind-key", "-T", "copy-mode-vi", "S-PageUp", "if-shell", "tmux display -p '#{session_name}' | grep -q '^asm_'", "send-keys -X page-up", "").Run()
-		TmuxCommand("bind-key", "-T", "copy-mode-vi", "S-PageDown", "if-shell", "tmux display -p '#{session_name}' | grep -q '^asm_'", "send-keys -X page-down", "").Run()
+		// Bind Shift+PageUp/Down for scrolling in copy mode (conditional - only in
+		// asmgr-* sessions). The condition is a native tmux format, not an
+		// `if-shell` pipeline: the Windows multiplexer is psmux and a native install
+		// has neither a `tmux` executable nor grep/POSIX shell syntax.
+		TmuxCommand(asmgrSessionBinding("root", "S-PageUp", "copy-mode -eu")...).Run()
+		TmuxCommand(asmgrSessionBinding("root", "S-PageDown", "send-keys PageDown")...).Run()
+		TmuxCommand(asmgrSessionBinding("copy-mode-vi", "S-PageUp", "send-keys -X page-up")...).Run()
+		TmuxCommand(asmgrSessionBinding("copy-mode-vi", "S-PageDown", "send-keys -X page-down")...).Run()
 
 		// Bind Ctrl+Y for yolo mode toggle (conditional - only in asmgr-* sessions)
-		TmuxCommand("bind-key", "-n", "C-y", "if-shell", "tmux display -p '#{session_name}' | grep -q '^asm_'", `run-shell 'asmgr yolo "$(tmux display-message -p "#{session_name}")" "$(tmux display-message -p "#{window_index}")" 2>/dev/null'`, "").Run()
+		// tmux/psmux expands the two formats before invoking the external CLI, so
+		// this command also needs no shell-specific command substitution.
+		TmuxCommand(asmgrSessionBinding("", "C-y", `run-shell "asmgr yolo \"#{session_name}\" \"#{window_index}\""`)...).Run()
 
 		// Ctrl+q will be set up with resize in UpdateDetachBinding
 
@@ -2048,10 +2053,26 @@ func (i *Instance) UpdateDetachBinding(previewWidth, previewHeight int) {
 	if !i.IsAlive() {
 		return
 	}
-	// Bind Ctrl+Q: conditional - only in asmgr-* sessions, with resize before detach
-	// Use if-shell for the condition check, then run-shell for the actual commands
-	resizeAndDetach := fmt.Sprintf("run-shell 'tmux resize-window -x %d -y %d 2>/dev/null; tmux detach-client'", previewWidth, previewHeight)
-	TmuxCommand("bind-key", "-n", "C-q", "if-shell", "tmux display -p '#{session_name}' | grep -q '^asm_'", resizeAndDetach, "").Run()
+	// Bind Ctrl+Q: conditional - only in asmgr-* sessions, with resize before
+	// detach. Both actions are native multiplexer commands; wrapping them in
+	// `run-shell 'tmux ...'` made the binding unusable with psmux on Windows.
+	resizeAndDetach := fmt.Sprintf("resize-window -x %d -y %d ; detach-client", previewWidth, previewHeight)
+	TmuxCommand(asmgrSessionBinding("", "C-q", resizeAndDetach)...).Run()
+}
+
+// asmgrSessionBinding builds one global key binding that activates only while
+// the current client is in an asmgr-owned session. if-shell's -F form evaluates
+// a tmux format directly; it does not launch an OS shell. That distinction is
+// required on native Windows, where psmux is the multiplexer and grep, /dev/null
+// and a second executable named `tmux` are not part of the runtime.
+func asmgrSessionBinding(table, key, command string) []string {
+	args := []string{"bind-key"}
+	if table == "" {
+		args = append(args, "-n")
+	} else {
+		args = append(args, "-T", table)
+	}
+	return append(args, key, "if-shell", "-F", "#{m/r:^asm_,#{session_name}}", command, "")
 }
 
 func (i *Instance) GetPreview(lines int) (string, error) {

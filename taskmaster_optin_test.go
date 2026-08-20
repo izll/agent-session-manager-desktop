@@ -69,7 +69,7 @@ func TestTaskMasterOptInBlocksNpx(t *testing.T) {
 			errOf(app.TaskMasterSetSubtaskStatus(inst.ID, "1.1", "done")),
 			errOf(app.TaskMasterAddDependency(inst.ID, "1", "2")),
 			errOf(app.TaskMasterRemoveDependency(inst.ID, "1", "2")),
-			errOf(app.TaskMasterUpdateTaskDirect(inst.ID, "1", "t", "d", "x", "high")),
+			errOf(app.TaskMasterUpdateTaskDirect(inst.ID, "1", "t", "d", "x", "high", "", "")),
 		}
 	}
 

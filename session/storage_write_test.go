@@ -186,6 +186,10 @@ func TestLockProjectRecordsThisProcess(t *testing.T) {
 	if pid != os.Getpid() {
 		t.Errorf("lock pid = %d, want this process (%d)", pid, os.Getpid())
 	}
+	legacyData, err := os.ReadFile(storage.legacyLockPath(""))
+	if err != nil || strings.TrimSpace(string(legacyData)) != strconv.Itoa(os.Getpid()) {
+		t.Fatalf("legacy-compatible lock was not published: data=%q err=%v", legacyData, err)
+	}
 }
 
 // Locking twice from the same process is not a conflict — it is the same owner
@@ -236,6 +240,7 @@ func TestUnlockRemovesTheLockFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	lockPath := storage.getLockPath("")
+	legacyPath := storage.legacyLockPath("")
 	if _, err := os.Stat(lockPath); err != nil {
 		t.Fatalf("the lock file should exist while held: %v", err)
 	}
@@ -244,6 +249,30 @@ func TestUnlockRemovesTheLockFile(t *testing.T) {
 
 	if _, err := os.Stat(lockPath); !os.IsNotExist(err) {
 		t.Error("the lock file outlived the unlock")
+	}
+	if _, err := os.Stat(legacyPath); !os.IsNotExist(err) {
+		t.Error("the legacy compatibility lock outlived the unlock")
+	}
+}
+
+func TestLegacyLockPublishFailureRollsBackPrimaryLock(t *testing.T) {
+	storage := newTestStorage(t)
+	project, err := storage.AddProject("legacy rollback")
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacyPath := storage.legacyLockPath(project.ID)
+	if err := os.MkdirAll(filepath.Join(legacyPath, "cannot-remove"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := storage.LockProject(project.ID); err == nil {
+		t.Fatal("unpublishable legacy lock unexpectedly succeeded")
+	}
+	if _, err := os.Stat(storage.getLockPath(project.ID)); !os.IsNotExist(err) {
+		t.Fatalf("primary lock survived legacy publish failure: %v", err)
+	}
+	if storage.lockPath != "" || storage.legacyLockPathHeld != "" {
+		t.Fatalf("failed acquisition was recorded as owned: primary=%q legacy=%q", storage.lockPath, storage.legacyLockPathHeld)
 	}
 }
 

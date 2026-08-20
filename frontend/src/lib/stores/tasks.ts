@@ -14,6 +14,10 @@ export interface Subtask {
   details?: string;
   done?: boolean;
   createdAt?: string;
+	dependencies?: string[];
+	parentId?: string;
+	testStrategy?: string;
+	rawJson?: string;
 }
 
 export interface Task {
@@ -43,6 +47,8 @@ export interface Task {
    * belonging to the project as a whole leaves this empty.
    */
   sessionId?: string;
+	testStrategy?: string;
+	rawJson?: string;
 }
 
 export interface TaskFilter {
@@ -707,11 +713,19 @@ export async function updateTaskDirect(sessionId: string, taskId: string, title:
 
   try {
     if (providerFor(sessionId) === 'mcp') {
-      await App.TaskMasterUpdateTaskDirect(sessionId, taskId, title, description, details, priority);
-      const extra: Record<string, unknown> = {};
-      if (dueAt !== undefined) extra.dueAt = dueAt;
-      if (sessionScoped !== undefined) extra.sessionId = sessionScoped ? sessionId : '';
-      if (Object.keys(extra).length) await App.UpdateTask(sessionId, taskId, extra);
+      // One provider, one atomic replacement. Writing the extra fields through
+      // the local update API targeted a separate tasks.json after the MCP file
+      // had already changed, leaving a partial edit and a permanent error.
+      await App.TaskMasterUpdateTaskDirect(
+        sessionId,
+        taskId,
+        title,
+        description,
+        details,
+        priority,
+        dueAt ?? '',
+        sessionScoped ? sessionId : '',
+      );
     } else {
       // Editing a task is the app's own operation — it has storage for these
       // fields and no reason to ask Task Master. Calling it regardless is what
@@ -762,6 +776,30 @@ export function parentTaskId(subtaskId: string): string {
   return String(subtaskId).split('.')[0];
 }
 
+/** Allocate a stable local subtask id without reusing a surviving sibling. */
+function nextLocalSubtaskId(subtasks: Subtask[]): string {
+  const occupied = new Set(subtasks.map((subtask) => String(subtask.id)));
+  const numeric = new Set<number>();
+  let max = 0;
+  for (const subtask of subtasks) {
+    const text = String(subtask.id);
+    if (!/^\d+$/.test(text)) continue;
+    const value = Number(text);
+    if (!Number.isSafeInteger(value) || value < 0) continue;
+    numeric.add(value);
+    if (value > max) max = value;
+  }
+
+  if (max < Number.MAX_SAFE_INTEGER) return String(max + 1);
+
+  // An outlier at MAX_SAFE_INTEGER cannot be incremented exactly. Fall back to
+  // the first free positive integer instead of emitting a rounded duplicate.
+  for (let candidate = 1; candidate < Number.MAX_SAFE_INTEGER; candidate++) {
+    if (!numeric.has(candidate) && !occupied.has(String(candidate))) return String(candidate);
+  }
+  throw new Error('no safe local subtask ID is available');
+}
+
 // Add subtask to a task
 export async function addSubtask(sessionId: string, taskId: string, title: string, description: string = '') {
   if (!sessionId || !taskId || !title.trim()) return;
@@ -774,8 +812,9 @@ export async function addSubtask(sessionId: string, taskId: string, title: strin
         subtasks: [
           ...(task.subtasks || []),
           // Numbered within the task, as Task Master does, so the two stores
-          // produce ids of the same shape.
-          { id: String((task.subtasks?.length || 0) + 1), title, description, status: 'pending' },
+          // produce ids of the same shape. Use max+1, not length+1: after a
+          // deletion the latter can reuse an ID that still belongs to a sibling.
+          { id: nextLocalSubtaskId(task.subtasks || []), title, description, status: 'pending' },
         ],
       }));
     }
@@ -837,13 +876,20 @@ export async function setSubtaskStatus(sessionId: string, subtaskId: string, sta
     if (provider === 'mcp') {
       await App.TaskMasterSetSubtaskStatus(sessionId, subtaskId, status);
     } else {
-      // The app's own storage records a subtask as done/not-done, with no
-      // status field at all — writing `status` there produced a subtask
-      // carrying a field nothing reads, so the tick never took. ToggleSubtask
-      // is the operation that storage actually has.
       const parent = parentTaskId(subtaskId);
       const child = String(subtaskId).slice(parent.length + 1);
-      await App.ToggleSubtask(sessionId, parent, child);
+      await editTaskLocally(sessionId, parent, (task) => {
+        let found = false;
+        const subtasks = (task.subtasks || []).map((subtask) => {
+          if (String(subtask.id) !== child) return subtask;
+          found = true;
+          // Both spellings are written deliberately. The local model persists
+          // Done, while its normalized frontend shape also exposes Status.
+          return { ...subtask, status, done: status === 'done' };
+        });
+        if (!found) throw new Error(`no such subtask: ${subtaskId}`);
+        return { subtasks };
+      });
     }
     await reloadTasksIfActive(sessionId);
     return provider;

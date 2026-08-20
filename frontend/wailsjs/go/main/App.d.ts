@@ -283,7 +283,7 @@ export function SaveCommandGroup(arg1:string,arg2:string):Promise<string>;
 
 export function SaveSessionAsTemplate(arg1:string,arg2:string,arg3:boolean):Promise<string>;
 
-export function SaveSessionFileEdit(arg1:string,arg2:string,arg3:string,arg4:session.FileShape,arg5:string,arg6:boolean,arg7:number):Promise<main.SaveFileEditResult>;
+export function SaveSessionFileEdit(arg1:string,arg2:string,arg3:string,arg4:session.FileShape,arg5:string,arg6:boolean,arg7:number,arg8:string):Promise<main.SaveFileEditResult>;
 
 export function SaveSessionTemplate(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string,arg6:string,arg7:boolean,arg8:string,arg9:Array<main.TemplateTabInfo>):Promise<string>;
 
@@ -389,7 +389,7 @@ export function TaskMasterUpdateSubtask(arg1:string,arg2:string,arg3:string):Pro
 
 export function TaskMasterUpdateTask(arg1:string,arg2:string,arg3:string,arg4:boolean):Promise<void>;
 
-export function TaskMasterUpdateTaskDirect(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string,arg6:string):Promise<void>;
+export function TaskMasterUpdateTaskDirect(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string,arg6:string,arg7:string,arg8:string):Promise<void>;
 
 export function ToggleAutoYes(arg1:string):Promise<void>;
 

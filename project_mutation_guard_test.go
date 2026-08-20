@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -108,6 +109,28 @@ func TestTerminalAttachPinsProjectUntilRelease(t *testing.T) {
 	}
 }
 
+func TestOrphanCleanupPinsActiveProjectBeforeOwnershipCheck(t *testing.T) {
+	app := &App{projectLocked: false}
+	app.projectMu.Lock()
+	done := make(chan struct{})
+	go func() {
+		app.cleanupOrphanedGUISessions()
+		close(done)
+	}()
+	select {
+	case <-done:
+		app.projectMu.Unlock()
+		t.Fatal("orphan cleanup read project ownership without pinning the active project")
+	case <-time.After(30 * time.Millisecond):
+	}
+	app.projectMu.Unlock()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("orphan cleanup remained blocked after the project switch lock was released")
+	}
+}
+
 func TestRestoreDeletedTaskUsesOriginalLocalIdentity(t *testing.T) {
 	storage := guardedTestStorage(t)
 	workDir := t.TempDir()
@@ -169,22 +192,104 @@ func TestValidateDiffRootRejectsChangedWorkingDirectory(t *testing.T) {
 	}
 }
 
+func TestValidateBrowseRootRejectsChangedWorkingDirectory(t *testing.T) {
+	root := t.TempDir()
+	other := t.TempDir()
+	alias := filepath.Join(t.TempDir(), "root-link")
+	if err := os.Symlink(root, alias); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	inst := &session.Instance{Path: root, BrowseRoot: alias}
+	resolved, err := validateBrowseRoot(inst, alias)
+	if err != nil {
+		t.Fatalf("matching browser root rejected: %v", err)
+	}
+	if filepath.Clean(resolved) != filepath.Clean(root) {
+		t.Fatalf("save root was not pinned to the resolved directory: got %q, want %q", resolved, root)
+	}
+	inst.BrowseRoot = other
+	if _, err := validateBrowseRoot(inst, alias); err == nil {
+		t.Fatal("changed tab working directory was accepted for save")
+	}
+	if _, err := validateBrowseRoot(inst, ""); err == nil {
+		t.Fatal("missing expected root was accepted for save")
+	}
+}
+
+func TestUpdateTaskMasterFileDirectWritesOneProviderSnapshot(t *testing.T) {
+	tasksFile := filepath.Join(t.TempDir(), "tasks.json")
+	original := map[string]interface{}{
+		"master": map[string]interface{}{
+			"tasks": []map[string]interface{}{{
+				"id": "7", "title": "old", "description": "old description",
+				"details": "old details", "priority": "low", "dueAt": "old due", "sessionId": "old session",
+			}},
+			"metadata": map[string]interface{}{"kept": true},
+		},
+	}
+	data, err := json.Marshal(original)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(tasksFile, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := updateTaskMasterFileDirect(tasksFile, "7", "new", "", "", "critical", "2026-08-21T12:00:00Z", "session-one"); err != nil {
+		t.Fatal(err)
+	}
+	readTask := func() map[string]interface{} {
+		out, err := os.ReadFile(tasksFile)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var root map[string]struct {
+			Tasks    []map[string]interface{} `json:"tasks"`
+			Metadata map[string]interface{}   `json:"metadata"`
+		}
+		if err := json.Unmarshal(out, &root); err != nil {
+			t.Fatal(err)
+		}
+		if root["master"].Metadata["kept"] != true || len(root["master"].Tasks) != 1 {
+			t.Fatalf("unrelated Task Master context data changed: %#v", root)
+		}
+		return root["master"].Tasks[0]
+	}
+	task := readTask()
+	if task["title"] != "new" || task["description"] != "" || task["details"] != "" || task["priority"] != "critical" || task["dueAt"] != "2026-08-21T12:00:00Z" || task["sessionId"] != "session-one" {
+		t.Fatalf("atomic MCP edit lost fields: %#v", task)
+	}
+
+	if err := updateTaskMasterFileDirect(tasksFile, "7", "new", "", "", "critical", "", ""); err != nil {
+		t.Fatal(err)
+	}
+	task = readTask()
+	if _, ok := task["dueAt"]; ok {
+		t.Fatalf("cleared deadline remained in MCP task: %#v", task)
+	}
+	if _, ok := task["sessionId"]; ok {
+		t.Fatalf("cleared session remained in MCP task: %#v", task)
+	}
+}
+
 func TestMCPDeletedTaskSnapshotRoundTripsAllOptionalFields(t *testing.T) {
 	snapshot := DeletedTaskSnapshot{
 		ID: "stable", Title: "title", Description: "description", Details: "details",
 		Status: "done", Priority: "critical", Tags: []string{"tag"}, Dependencies: []string{"dependency"},
 		CreatedAt: "2026-08-20T12:00:00Z", UpdatedAt: "2026-08-20T12:30:00Z",
 		CompletedAt: "2026-08-20T13:00:00Z", DueAt: "2026-08-21T12:00:00Z", SessionID: "session-one",
+		TestStrategy: "task tests", RawJSON: `{"id":"stable","future":true}`,
 		Subtasks: []DeletedSubtaskSnapshot{{
 			ID: "stable.1", Title: "sub", Description: "sub description", Details: "sub details",
-			Status: "done", CreatedAt: "2026-08-20T12:05:00Z",
+			Status: "done", CreatedAt: "2026-08-20T12:05:00Z", Dependencies: []string{"2"},
+			ParentID: "stable", TestStrategy: "sub tests", RawJSON: `{"id":"stable.1","futureSub":true}`,
 		}},
 	}
 	info := convertMCPTask(mcpTaskFromSnapshot(snapshot))
-	if info.UpdatedAt != snapshot.UpdatedAt || info.CompletedAt != snapshot.CompletedAt || info.DueAt != snapshot.DueAt || info.SessionID != snapshot.SessionID {
+	if info.UpdatedAt != snapshot.UpdatedAt || info.CompletedAt != snapshot.CompletedAt || info.DueAt != snapshot.DueAt || info.SessionID != snapshot.SessionID || info.TestStrategy != snapshot.TestStrategy || info.RawJSON != snapshot.RawJSON {
 		t.Fatalf("MCP task optional fields did not round-trip: %+v", info)
 	}
-	if len(info.Subtasks) != 1 || info.Subtasks[0].Description != snapshot.Subtasks[0].Description || info.Subtasks[0].Details != snapshot.Subtasks[0].Details || info.Subtasks[0].CreatedAt != snapshot.Subtasks[0].CreatedAt {
+	if len(info.Subtasks) != 1 || info.Subtasks[0].Description != snapshot.Subtasks[0].Description || info.Subtasks[0].Details != snapshot.Subtasks[0].Details || info.Subtasks[0].CreatedAt != snapshot.Subtasks[0].CreatedAt || info.Subtasks[0].ParentID != snapshot.Subtasks[0].ParentID || info.Subtasks[0].TestStrategy != snapshot.Subtasks[0].TestStrategy || info.Subtasks[0].RawJSON != snapshot.Subtasks[0].RawJSON || len(info.Subtasks[0].Dependencies) != 1 {
 		t.Fatalf("MCP subtask optional fields did not round-trip: %+v", info.Subtasks)
 	}
 }

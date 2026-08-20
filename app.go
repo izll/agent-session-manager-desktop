@@ -342,6 +342,11 @@ func stopAllTaskMasters() {
 // cleanupOrphanedGUISessions removes GUI linked tmux sessions that belong to
 // sessions that are no longer running (e.g. from a previous app crash).
 func (a *App) cleanupOrphanedGUISessions() {
+	// Startup launches this sweep in a goroutine. Pin the active project for
+	// the whole scan so a simultaneous project switch cannot turn an ownership
+	// check for project A into a tmux cleanup based on project B's sessions.
+	a.projectMu.RLock()
+	defer a.projectMu.RUnlock()
 	// Only the project owner may sweep mirrors. A second instance's "running"
 	// set is built from ITS view of storage and would classify the owner's
 	// live mirrors as orphaned, killing them and dropping the owner's
@@ -1203,7 +1208,10 @@ func (a *App) RestoreTaskBackup(id string) error {
 		return err
 	}
 	defer done()
-	return a.storage.RestoreTaskBackup(id)
+	if err := a.storage.RestoreTaskBackup(id); err != nil {
+		return err
+	}
+	return reloadTaskManagerCache()
 }
 
 func (a *App) RestoreBackup(id string) error {
@@ -2942,7 +2950,7 @@ type SaveFileEditResult struct {
 // Gated on the project lock for the same reason terminal attaches are: a second
 // application instance holding no lock must not write into a project another
 // instance owns.
-func (a *App) SaveSessionFileEdit(id, path, text string, shape session.FileShape, version string, overwrite bool, windowIdx int) (*SaveFileEditResult, error) {
+func (a *App) SaveSessionFileEdit(id, path, text string, shape session.FileShape, version string, overwrite bool, windowIdx int, expectedRoot string) (*SaveFileEditResult, error) {
 	done, err := a.beginProjectMutation()
 	if err != nil {
 		return nil, err
@@ -2952,6 +2960,13 @@ func (a *App) SaveSessionFileEdit(id, path, text string, shape session.FileShape
 	if err != nil {
 		return nil, err
 	}
+	resolvedRoot, err := validateBrowseRoot(inst, expectedRoot)
+	if err != nil {
+		return nil, err
+	}
+	// Save through the already-resolved snapshot, not through a configured
+	// symlink that could be retargeted after validation.
+	inst.BrowseRoot = resolvedRoot
 	saved, err := inst.SaveFileForEdit(path, text, shape, version, overwrite)
 	if err != nil {
 		var conflict *session.SaveConflictError
@@ -2961,6 +2976,22 @@ func (a *App) SaveSessionFileEdit(id, path, text string, shape session.FileShape
 		return nil, err
 	}
 	return &SaveFileEditResult{Saved: true, File: saved}, nil
+}
+
+// validateBrowseRoot makes a relative edit target stable across terminal cwd
+// changes. Version checking protects one file's bytes; it cannot distinguish
+// two different roots that both contain the same relative path, and overwrite
+// intentionally bypasses that check. Root identity therefore fails closed.
+func validateBrowseRoot(inst *session.Instance, expectedRoot string) (string, error) {
+	actualAbs, actualErr := filepath.Abs(inst.BrowseRoot)
+	expectedAbs, expectedErr := filepath.Abs(expectedRoot)
+	actualResolved, actualResolveErr := filepath.EvalSymlinks(actualAbs)
+	expectedResolved, expectedResolveErr := filepath.EvalSymlinks(expectedAbs)
+	if expectedRoot == "" || inst.BrowseRoot == "" || actualErr != nil || expectedErr != nil ||
+		actualResolveErr != nil || expectedResolveErr != nil || filepath.Clean(actualResolved) != filepath.Clean(expectedResolved) {
+		return "", fmt.Errorf("the tab working directory changed; reopen the file before saving")
+	}
+	return expectedResolved, nil
 }
 
 // ============================================================================
@@ -3807,16 +3838,22 @@ type DeletedTaskSnapshot struct {
 	CompletedAt  string                   `json:"completedAt,omitempty"`
 	DueAt        string                   `json:"dueAt,omitempty"`
 	SessionID    string                   `json:"sessionId,omitempty"`
+	TestStrategy string                   `json:"testStrategy,omitempty"`
+	RawJSON      string                   `json:"rawJson,omitempty"`
 }
 
 type DeletedSubtaskSnapshot struct {
-	ID          string `json:"id"`
-	Title       string `json:"title"`
-	Description string `json:"description,omitempty"`
-	Status      string `json:"status,omitempty"`
-	Details     string `json:"details,omitempty"`
-	Done        bool   `json:"done,omitempty"`
-	CreatedAt   string `json:"createdAt,omitempty"`
+	ID           string   `json:"id"`
+	Title        string   `json:"title"`
+	Description  string   `json:"description,omitempty"`
+	Status       string   `json:"status,omitempty"`
+	Details      string   `json:"details,omitempty"`
+	Done         bool     `json:"done,omitempty"`
+	CreatedAt    string   `json:"createdAt,omitempty"`
+	Dependencies []string `json:"dependencies,omitempty"`
+	ParentID     string   `json:"parentId,omitempty"`
+	TestStrategy string   `json:"testStrategy,omitempty"`
+	RawJSON      string   `json:"rawJson,omitempty"`
 }
 
 // taskManagerCache caches task managers per project path
@@ -3830,7 +3867,7 @@ func (a *App) getTaskManager(sessionID string) (*session.TaskManager, error) {
 		return nil, fmt.Errorf("session not found: %w", err)
 	}
 
-	projectPath := sess.Path
+	projectPath := session.CanonicalProjectPath(sess.Path)
 	if projectPath == "" {
 		return nil, fmt.Errorf("error.sessionNoPath")
 	}
@@ -3857,6 +3894,21 @@ func (a *App) getTaskManager(sessionID string) (*session.TaskManager, error) {
 
 	taskManagerCache[projectPath] = tm
 	return tm, nil
+}
+
+func reloadTaskManagerCache() error {
+	taskManagerMu.RLock()
+	managers := make([]*session.TaskManager, 0, len(taskManagerCache))
+	for _, manager := range taskManagerCache {
+		managers = append(managers, manager)
+	}
+	taskManagerMu.RUnlock()
+	for _, manager := range managers {
+		if err := manager.Load(); err != nil {
+			return fmt.Errorf("failed to reload restored task store: %w", err)
+		}
+	}
+	return nil
 }
 
 // convertTask converts session.Task to TaskInfo for frontend
@@ -4223,16 +4275,22 @@ func mcpTaskFromSnapshot(snapshot DeletedTaskSnapshot) mcp.Task {
 		CompletedAt:  snapshot.CompletedAt,
 		DueAt:        snapshot.DueAt,
 		SessionID:    snapshot.SessionID,
+		TestStrategy: snapshot.TestStrategy,
+		RawJSON:      snapshot.RawJSON,
 		Subtasks:     make([]mcp.Subtask, 0, len(snapshot.Subtasks)),
 	}
 	for _, subtask := range snapshot.Subtasks {
 		task.Subtasks = append(task.Subtasks, mcp.Subtask{
-			ID:          subtask.ID,
-			Title:       subtask.Title,
-			Description: subtask.Description,
-			Status:      subtask.Status,
-			Details:     subtask.Details,
-			CreatedAt:   subtask.CreatedAt,
+			ID:           subtask.ID,
+			Title:        subtask.Title,
+			Description:  subtask.Description,
+			Status:       subtask.Status,
+			Details:      subtask.Details,
+			CreatedAt:    subtask.CreatedAt,
+			Dependencies: append([]string(nil), subtask.Dependencies...),
+			ParentID:     subtask.ParentID,
+			TestStrategy: subtask.TestStrategy,
+			RawJSON:      subtask.RawJSON,
 		})
 	}
 	return task
@@ -4250,6 +4308,8 @@ func mcpSubtaskFromSnapshot(snapshot DeletedSubtaskSnapshot) mcp.Subtask {
 	return mcp.Subtask{
 		ID: snapshot.ID, Title: snapshot.Title, Description: snapshot.Description,
 		Details: snapshot.Details, Status: status, CreatedAt: snapshot.CreatedAt,
+		Dependencies: append([]string(nil), snapshot.Dependencies...), ParentID: snapshot.ParentID,
+		TestStrategy: snapshot.TestStrategy, RawJSON: snapshot.RawJSON,
 	}
 }
 
@@ -4286,7 +4346,7 @@ func (a *App) SendTaskToAgent(sessionID, taskID string) error {
 		return err
 	}
 
-	log.Printf("[TaskManager] SendToAgent taskID=%s prompt=%q", taskID, prompt)
+	log.Printf("[TaskManager] SendToAgent taskID=%s", taskID)
 	// Send the prompt to the active terminal
 	return a.sendPrompt(sessionID, prompt)
 }
@@ -4428,16 +4488,22 @@ type MCPTaskInfo struct {
 	CompletedAt  string           `json:"completedAt,omitempty"`
 	DueAt        string           `json:"dueAt,omitempty"`
 	SessionID    string           `json:"sessionId,omitempty"`
+	TestStrategy string           `json:"testStrategy,omitempty"`
+	RawJSON      string           `json:"rawJson,omitempty"`
 }
 
 // MCPSubtaskInfo represents a subtask for the frontend
 type MCPSubtaskInfo struct {
-	ID          string `json:"id"`
-	Title       string `json:"title"`
-	Description string `json:"description,omitempty"`
-	Status      string `json:"status"`
-	Details     string `json:"details,omitempty"`
-	CreatedAt   string `json:"createdAt,omitempty"`
+	ID           string   `json:"id"`
+	Title        string   `json:"title"`
+	Description  string   `json:"description,omitempty"`
+	Status       string   `json:"status"`
+	Details      string   `json:"details,omitempty"`
+	CreatedAt    string   `json:"createdAt,omitempty"`
+	Dependencies []string `json:"dependencies,omitempty"`
+	ParentID     string   `json:"parentId,omitempty"`
+	TestStrategy string   `json:"testStrategy,omitempty"`
+	RawJSON      string   `json:"rawJson,omitempty"`
 }
 
 // convertMCPTask converts mcp.Task to MCPTaskInfo
@@ -4445,12 +4511,16 @@ func convertMCPTask(t mcp.Task) MCPTaskInfo {
 	subtasks := make([]MCPSubtaskInfo, len(t.Subtasks))
 	for i, st := range t.Subtasks {
 		subtasks[i] = MCPSubtaskInfo{
-			ID:          st.ID,
-			Title:       st.Title,
-			Description: st.Description,
-			Status:      st.Status,
-			Details:     st.Details,
-			CreatedAt:   st.CreatedAt,
+			ID:           st.ID,
+			Title:        st.Title,
+			Description:  st.Description,
+			Status:       st.Status,
+			Details:      st.Details,
+			CreatedAt:    st.CreatedAt,
+			Dependencies: append([]string(nil), st.Dependencies...),
+			ParentID:     st.ParentID,
+			TestStrategy: st.TestStrategy,
+			RawJSON:      st.RawJSON,
 		}
 	}
 
@@ -4480,6 +4550,8 @@ func convertMCPTask(t mcp.Task) MCPTaskInfo {
 		CompletedAt:  t.CompletedAt,
 		DueAt:        t.DueAt,
 		SessionID:    t.SessionID,
+		TestStrategy: t.TestStrategy,
+		RawJSON:      t.RawJSON,
 	}
 }
 
@@ -4807,10 +4879,8 @@ func (a *App) TaskMasterSendToAgent(sessionID, taskID string) error {
 		return err
 	}
 
-	log.Printf("[TaskMaster] SendToAgent taskID=%s task=%+v", taskID, task)
-
 	prompt := mcp.FormatTaskForPrompt(task)
-	log.Printf("[TaskMaster] Prompt to send: %q", prompt)
+	log.Printf("[TaskMaster] SendToAgent taskID=%s", taskID)
 	return a.sendPrompt(sessionID, prompt)
 }
 
@@ -4911,7 +4981,7 @@ func (a *App) TaskMasterSetSubtaskStatus(sessionID, subtaskID, status string) er
 // copy of the opt-in check. It spawns nothing, but it does write into the
 // project's .taskmaster directory, which a disabled feature has no business
 // touching either.
-func (a *App) TaskMasterUpdateTaskDirect(sessionID, taskID, title, description, details, priority string) error {
+func (a *App) TaskMasterUpdateTaskDirect(sessionID, taskID, title, description, details, priority, dueAt, taskSessionID string) error {
 	done, err := a.beginProjectMutation()
 	if err != nil {
 		return err
@@ -4932,7 +5002,14 @@ func (a *App) TaskMasterUpdateTaskDirect(sessionID, taskID, title, description, 
 	}
 
 	tasksFile := filepath.Join(projectPath, ".taskmaster", "tasks", "tasks.json")
+	return updateTaskMasterFileDirect(tasksFile, taskID, title, description, details, priority, dueAt, taskSessionID)
+}
 
+// updateTaskMasterFileDirect applies every field from the edit dialog to one
+// Task Master snapshot and replaces the file once. Splitting deadline/session
+// fields into the local task store made an MCP edit partially succeed and then
+// report "task not found" from a different provider.
+func updateTaskMasterFileDirect(tasksFile, taskID, title, description, details, priority, dueAt, taskSessionID string) error {
 	data, err := os.ReadFile(tasksFile)
 	if err != nil {
 		return fmt.Errorf("failed to read tasks.json: %w", err)
@@ -4958,17 +5035,19 @@ func (a *App) TaskMasterUpdateTaskDirect(sessionID, taskID, title, description, 
 		for i, task := range ctx.Tasks {
 			tid := fmt.Sprintf("%v", task["id"])
 			if tid == taskID {
-				if title != "" {
-					ctx.Tasks[i]["title"] = title
+				ctx.Tasks[i]["title"] = title
+				ctx.Tasks[i]["description"] = description
+				ctx.Tasks[i]["details"] = details
+				ctx.Tasks[i]["priority"] = priority
+				if dueAt == "" {
+					delete(ctx.Tasks[i], "dueAt")
+				} else {
+					ctx.Tasks[i]["dueAt"] = dueAt
 				}
-				if description != "" {
-					ctx.Tasks[i]["description"] = description
-				}
-				if details != "" {
-					ctx.Tasks[i]["details"] = details
-				}
-				if priority != "" {
-					ctx.Tasks[i]["priority"] = priority
+				if taskSessionID == "" {
+					delete(ctx.Tasks[i], "sessionId")
+				} else {
+					ctx.Tasks[i]["sessionId"] = taskSessionID
 				}
 				updated = true
 				break

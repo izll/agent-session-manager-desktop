@@ -562,8 +562,8 @@ export function SaveSessionAsTemplate(arg1, arg2, arg3) {
   return window['go']['main']['App']['SaveSessionAsTemplate'](arg1, arg2, arg3);
 }
 
-export function SaveSessionFileEdit(arg1, arg2, arg3, arg4, arg5, arg6, arg7) {
-  return window['go']['main']['App']['SaveSessionFileEdit'](arg1, arg2, arg3, arg4, arg5, arg6, arg7);
+export function SaveSessionFileEdit(arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8) {
+  return window['go']['main']['App']['SaveSessionFileEdit'](arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8);
 }
 
 export function SaveSessionTemplate(arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9) {
@@ -774,8 +774,8 @@ export function TaskMasterUpdateTask(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['TaskMasterUpdateTask'](arg1, arg2, arg3, arg4);
 }
 
-export function TaskMasterUpdateTaskDirect(arg1, arg2, arg3, arg4, arg5, arg6) {
-  return window['go']['main']['App']['TaskMasterUpdateTaskDirect'](arg1, arg2, arg3, arg4, arg5, arg6);
+export function TaskMasterUpdateTaskDirect(arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8) {
+  return window['go']['main']['App']['TaskMasterUpdateTaskDirect'](arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8);
 }
 
 export function ToggleAutoYes(arg1) {

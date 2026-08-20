@@ -18,6 +18,15 @@ const tasks = [
     priority: 'medium', tags: [], dependencies: [], createdAt: '2026-08-15T12:00:00Z',
     updatedAt: '2026-08-15T12:00:00Z', subtasks: [], complexity: 8,
   },
+  {
+    id: '4', title: 'Minden metaadat egyszerre keskeny panelen', description: '', details: '', status: 'blocked',
+    priority: 'critical', tags: [], dependencies: ['1', '2'], createdAt: '2026-08-15T12:00:00Z',
+    updatedAt: '2026-08-15T12:00:00Z', dueAt: '2026-08-21T12:30:00Z', complexity: 9,
+    subtasks: [
+      { id: '1', title: 'kész', status: 'done', done: true },
+      { id: '2', title: 'hátra van', status: 'pending' },
+    ],
+  },
 ];
 
 const backend = new Proxy({ GetTasks: async () => tasks }, {

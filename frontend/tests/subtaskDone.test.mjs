@@ -45,11 +45,11 @@ assert.match(
 );
 
 /**
- * And the write path has to use the operation the storage actually has.
+ * And the write path has to set the requested value, not invert blindly.
  *
- * Writing `{...sub, status}` into the local store produced a subtask carrying
- * a field nothing reads. ToggleSubtask is what that storage exposes, and it
- * flips the boolean the reader looks at.
+ * Undo and repeated requests are setters: asking for done twice must stay done.
+ * The local snapshot therefore writes both the normalized status and the Done
+ * boolean consumed by storage.
  */
 const store = readFileSync(
   new URL('../src/lib/stores/tasks.ts', import.meta.url),
@@ -58,15 +58,15 @@ const store = readFileSync(
 
 const setStatus = store.match(/export async function setSubtaskStatus[\s\S]*?\n}/);
 assert.ok(setStatus, 'setSubtaskStatus is missing');
-assert.match(
-  setStatus[0],
-  /App\.ToggleSubtask\(/,
-  'the local branch must toggle through storage rather than write a status field',
-);
 assert.doesNotMatch(
   setStatus[0],
-  /\{ \.\.\.sub, status \}/,
-  'that is the write that produced a field nothing reads',
+  /App\.ToggleSubtask\(/,
+  'a setter must not blindly invert the current local state',
+);
+assert.match(
+  setStatus[0],
+  /return \{ \.\.\.subtask, status, done: status === 'done' \}/,
+  'the local snapshot must persist the exact requested status and done value',
 );
 
 console.log('subtaskDone: ok');

@@ -28,22 +28,16 @@ assert.match(
  * Every path that replaces the text must clear the history with it.
  *
  * This is the failure that would matter: undo walking back into the previous
- * tab's note and writing it into this one. Three places assign to `notes` —
- * the successful load, the no-session case, and the load failure — and all
- * three have to reset.
+ * tab's note and writing it into this one. A failed load no longer fabricates
+ * an empty note: it restores the target's cached draft through showDraft.
  */
-const assignments = notes.match(/^\s*notes = (?:content \|\| )?'';?$|^\s*notes = content \|\| '';$/gm) || [];
-assert.ok(
-  assignments.length >= 3,
-  `expected the three assignments that replace the note, found ${assignments.length}`,
-);
-
-const resets = notes.match(/resetHistory\(\)/g) || [];
-// One definition plus one call per assignment.
-assert.ok(
-  resets.length >= assignments.length + 1,
-  `every path that replaces the text must reset the history: ${assignments.length} assignments, ${resets.length - 1} resets`,
-);
+assert.match(notes, /function showDraft[\s\S]*?notes = draft\.text/);
+assert.match(notes, /notes = content \|\| '';[\s\S]*?resetHistory\(\)/,
+  'a successful backend load resets history');
+assert.match(notes, /showDraft\(\{ \.\.\.draft, loadError: String\(e\) \}\);[\s\S]*?resetHistory\(\)/,
+  'a failed load restores only the target draft and resets history');
+assert.doesNotMatch(notes, /Failed to load notes:[\s\S]{0,200}?notes = ''/,
+  'a failed load must not become an empty successful document');
 
 /**
  * Dictation must not wipe the field's undo history either.

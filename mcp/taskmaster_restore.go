@@ -45,15 +45,15 @@ func (tm *TaskMaster) RestoreTask(task Task) error {
 			return fmt.Errorf("task already exists: %s", task.ID)
 		}
 	}
-	taskRaw, err := json.Marshal(task)
+	restored, rawIdentity, err := taskMasterRestoreObject(task.RawJSON, task.ID, task)
 	if err != nil {
-		return fmt.Errorf("failed to serialize restored task: %w", err)
-	}
-	var restored map[string]interface{}
-	if err := json.Unmarshal(taskRaw, &restored); err != nil {
 		return fmt.Errorf("failed to prepare restored task: %w", err)
 	}
-	coerceTaskMasterIDs(restored, taskMasterUsesNumericIDs(tasks, task.ID))
+	if !rawIdentity {
+		coerceTaskMasterIDs(restored,
+			taskMasterUsesNumericIDs(tasks, task.ID),
+			taskMasterUsesNumericSubtaskIDs(tasks, firstSubtaskID(task.Subtasks)))
+	}
 	context["tasks"] = append(tasks, restored)
 
 	out, err := json.MarshalIndent(root, "", "  ")
@@ -94,7 +94,6 @@ func (tm *TaskMaster) RestoreSubtask(taskID string, subtask Subtask) error {
 	if !ok {
 		return fmt.Errorf("tasks.json context has no tasks array")
 	}
-	numericIDs := taskMasterUsesNumericIDs(tasks, taskID)
 	for _, value := range tasks {
 		stored, ok := value.(map[string]interface{})
 		if !ok || taskMasterID(stored["id"]) != taskID {
@@ -107,15 +106,11 @@ func (tm *TaskMaster) RestoreSubtask(taskID string, subtask Subtask) error {
 				return fmt.Errorf("subtask already exists: %s", subtask.ID)
 			}
 		}
-		encoded, err := json.Marshal(subtask)
+		restored, rawIdentity, err := taskMasterRestoreObject(subtask.RawJSON, subtask.ID, subtask)
 		if err != nil {
-			return fmt.Errorf("failed to serialize restored subtask: %w", err)
-		}
-		var restored map[string]interface{}
-		if err := json.Unmarshal(encoded, &restored); err != nil {
 			return fmt.Errorf("failed to prepare restored subtask: %w", err)
 		}
-		if numericIDs {
+		if !rawIdentity && taskMasterSubtasksUseNumericIDs(subtasks, subtask.ID) {
 			if id, ok := numericJSONID(subtask.ID); ok {
 				restored["id"] = id
 			}
@@ -154,23 +149,25 @@ func numericJSONID(id string) (json.Number, bool) {
 	return json.Number(id), true
 }
 
-func coerceTaskMasterIDs(task map[string]interface{}, numeric bool) {
-	if !numeric {
-		return
-	}
-	if id, ok := task["id"].(string); ok {
-		if number, valid := numericJSONID(id); valid {
-			task["id"] = number
+func coerceTaskMasterIDs(task map[string]interface{}, numericTasks, numericSubtasks bool) {
+	if numericTasks {
+		if id, ok := task["id"].(string); ok {
+			if number, valid := numericJSONID(id); valid {
+				task["id"] = number
+			}
 		}
-	}
-	if dependencies, ok := task["dependencies"].([]interface{}); ok {
-		for i, raw := range dependencies {
-			if id, ok := raw.(string); ok {
-				if number, valid := numericJSONID(id); valid {
-					dependencies[i] = number
+		if dependencies, ok := task["dependencies"].([]interface{}); ok {
+			for i, raw := range dependencies {
+				if id, ok := raw.(string); ok {
+					if number, valid := numericJSONID(id); valid {
+						dependencies[i] = number
+					}
 				}
 			}
 		}
+	}
+	if !numericSubtasks {
+		return
 	}
 	if subtasks, ok := task["subtasks"].([]interface{}); ok {
 		for _, raw := range subtasks {
@@ -185,6 +182,71 @@ func coerceTaskMasterIDs(task map[string]interface{}, numeric bool) {
 			}
 		}
 	}
+}
+
+func taskMasterUsesNumericSubtaskIDs(tasks []interface{}, fallbackID string) bool {
+	for _, value := range tasks {
+		stored, ok := value.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		subtasks, _ := stored["subtasks"].([]interface{})
+		if len(subtasks) != 0 {
+			return taskMasterSubtasksUseNumericIDs(subtasks, fallbackID)
+		}
+	}
+	_, ok := numericJSONID(fallbackID)
+	return ok
+}
+
+func taskMasterSubtasksUseNumericIDs(subtasks []interface{}, fallbackID string) bool {
+	for _, raw := range subtasks {
+		stored, ok := raw.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		switch stored["id"].(type) {
+		case json.Number, float64:
+			return true
+		case string:
+			return false
+		}
+	}
+	_, ok := numericJSONID(fallbackID)
+	return ok
+}
+
+func firstSubtaskID(subtasks []Subtask) string {
+	if len(subtasks) == 0 {
+		return ""
+	}
+	return subtasks[0].ID
+}
+
+func taskMasterRestoreObject(rawJSON, expectedID string, known interface{}) (map[string]interface{}, bool, error) {
+	if rawJSON != "" {
+		decoder := json.NewDecoder(bytes.NewBufferString(rawJSON))
+		decoder.UseNumber()
+		var restored map[string]interface{}
+		if err := decoder.Decode(&restored); err != nil {
+			return nil, false, fmt.Errorf("invalid raw provider snapshot: %w", err)
+		}
+		if taskMasterID(restored["id"]) != expectedID {
+			return nil, false, fmt.Errorf("raw provider snapshot ID does not match %s", expectedID)
+		}
+		return restored, true, nil
+	}
+	encoded, err := json.Marshal(known)
+	if err != nil {
+		return nil, false, err
+	}
+	decoder := json.NewDecoder(bytes.NewReader(encoded))
+	decoder.UseNumber()
+	var restored map[string]interface{}
+	if err := decoder.Decode(&restored); err != nil {
+		return nil, false, err
+	}
+	return restored, false, nil
 }
 
 func taskMasterRestoreContext(root map[string]interface{}) (map[string]interface{}, error) {

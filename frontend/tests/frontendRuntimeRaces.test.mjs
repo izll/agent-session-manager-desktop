@@ -19,6 +19,9 @@ assert.match(browser, /if \(modified\) \{[\s\S]*?applyBrowseTarget/, 'dirty targ
 // The browser owns one tree and one location per session+tab, not per session.
 assert.match(browser, /const lastFileByTab = new Map/);
 assert.match(browser, /return `\$\{loadedBrowseKey\}\|\$\{path \|\| ''\}`/);
+assert.match(browser, /let openedRoot = ''/);
+assert.match(browser, /App\.SaveSessionFileEdit\([\s\S]*?openedRoot/,
+  'file saves must carry the absolute root whose editable snapshot was opened');
 
 // A diff jump is consumed only after the target tree has initialized. Source
 // order matters for independent Svelte reactive blocks, so assert that too.
@@ -47,8 +50,11 @@ assert.match(
   'returning to a tab must wait for its previous queued save before reading',
 );
 assert.match(notes, /loadingNotes = true/);
-assert.match(notes, /<textarea[\s\S]*?disabled=\{loadingNotes\}/, 'the old note must not be editable under an incoming target');
-assert.match(notes, /if \(loadingNotes\) return;[\s\S]*?recordHistory\(\)/, 'a synthetic input during loading must not queue a cross-tab save');
+assert.match(notes, /<textarea[\s\S]*?disabled=\{loadingNotes \|\| !!loadError\}/, 'an incoming or failed load must not expose an editable unknown document');
+assert.match(notes, /if \(loadingNotes \|\| loadError\) return;[\s\S]*?recordHistory\(\)/, 'a synthetic input during loading must not queue a cross-tab save');
+assert.match(notes, /const draftsByTarget = new Map/);
+assert.match(notes, /latestDraft\.saveError \|\| latestDraft\.text !== latestDraft\.saved/,
+  'a failed or dirty per-target draft must win over a stale backend read');
 
 // Once MCP loading falls back, mutations use the provider that actually
 // produced the visible list. Late mutations cannot edit another session's
@@ -81,6 +87,14 @@ assert.match(tasks, /export async function restoreDeletedTask/);
 const restoreTask = tasks.match(/export async function restoreDeletedTask[\s\S]*?\n\}/)?.[0] ?? '';
 assert.match(restoreTask, /App\.RestoreDeletedTask\(sessionId, provider, new main\.DeletedTaskSnapshot\(snapshot\)\)/);
 assert.doesNotMatch(restoreTask, /CreateTask|TaskMasterAddManualTask|TaskMasterRemoveTask/, 'restore must be one atomic backend operation');
+
+const directEdit = tasks.match(/export async function updateTaskDirect[\s\S]*?\n\}/)?.[0] ?? '';
+const mcpDirectEdit = directEdit.match(/if \(providerFor\(sessionId\) === 'mcp'\) \{[\s\S]*?\} else/)?.[0] ?? '';
+assert.match(mcpDirectEdit, /TaskMasterUpdateTaskDirect\([\s\S]*?dueAt/);
+assert.doesNotMatch(mcpDirectEdit, /App\.UpdateTask/,
+  'an MCP edit must not partially update Task Master and then write the local provider');
+assert.match(taskPanel, /\$settings\.taskMasterEnabled !== loadedTaskMasterSetting[\s\S]*?loadTasksIfNeeded\(true\)/,
+  'changing the provider setting while the panel stays active must invalidate and reload the list');
 
 assert.match(diff, /type DiffTarget = \{[\s\S]*?root: string/);
 assert.match(diff, /App\.RevertDiffFile\([\s\S]*?target\.root/);

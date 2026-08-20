@@ -35,16 +35,35 @@ type Task struct {
 	CompletedAt  string    `json:"completedAt,omitempty"`
 	DueAt        string    `json:"dueAt,omitempty"`
 	SessionID    string    `json:"sessionId,omitempty"`
+	TestStrategy string    `json:"testStrategy,omitempty"`
+	// RawJSON carries provider fields this version does not know yet through a
+	// delete/Undo round trip. It is never serialized as an extra JSON property;
+	// restore_task merges the known fields back into this original object.
+	RawJSON string `json:"-"`
 }
 
 // Subtask represents a subtask within a task
 type Subtask struct {
-	ID          string `json:"id"`
-	Title       string `json:"title"`
-	Description string `json:"description,omitempty"`
-	Status      string `json:"status"`
-	Details     string `json:"details,omitempty"`
-	CreatedAt   string `json:"createdAt,omitempty"`
+	ID           string   `json:"id"`
+	Title        string   `json:"title"`
+	Description  string   `json:"description,omitempty"`
+	Status       string   `json:"status"`
+	Details      string   `json:"details,omitempty"`
+	CreatedAt    string   `json:"createdAt,omitempty"`
+	Dependencies []string `json:"dependencies,omitempty"`
+	ParentID     string   `json:"parentId,omitempty"`
+	TestStrategy string   `json:"testStrategy,omitempty"`
+	RawJSON      string   `json:"-"`
+}
+
+func (task *Task) UnmarshalJSON(data []byte) error {
+	var raw map[string]interface{}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	parsed := taskFromMap(raw)
+	*task = *parsed
+	return nil
 }
 
 // TasksResponse represents the response from get_tasks
@@ -232,12 +251,12 @@ func (tm *TaskMaster) GetTask(taskID string) (*Task, error) {
 	// Try to find the task in various response formats
 	taskMap := findTaskMap(raw)
 	if taskMap == nil {
-		log.Printf("[TaskMaster MCP] Could not find task data in response. Raw (first 1000): %.1000s", text)
+		log.Printf("[TaskMaster MCP] Could not find task data in response")
 		return nil, fmt.Errorf("could not find task data in MCP response")
 	}
 
 	task := taskFromMap(taskMap)
-	log.Printf("[TaskMaster MCP] Parsed task: ID=%s Title=%.50s Status=%s Priority=%s", task.ID, task.Title, task.Status, task.Priority)
+	log.Printf("[TaskMaster MCP] Parsed task: ID=%s Status=%s Priority=%s", task.ID, task.Status, task.Priority)
 	return task, nil
 }
 
@@ -287,6 +306,9 @@ func findTaskMap(raw map[string]interface{}) map[string]interface{} {
 // taskFromMap extracts a Task from a generic map, handling numeric IDs etc.
 func taskFromMap(m map[string]interface{}) *Task {
 	task := &Task{}
+	if raw, err := json.Marshal(m); err == nil {
+		task.RawJSON = string(raw)
+	}
 	task.ID = mapString(m, "id")
 	task.Title = mapString(m, "title")
 	task.Description = mapString(m, "description")
@@ -298,6 +320,7 @@ func taskFromMap(m map[string]interface{}) *Task {
 	task.CompletedAt = mapString(m, "completedAt")
 	task.DueAt = mapString(m, "dueAt")
 	task.SessionID = mapString(m, "sessionId")
+	task.TestStrategy = mapString(m, "testStrategy")
 
 	if tags, ok := m["tags"].([]interface{}); ok {
 		for _, t := range tags {
@@ -322,12 +345,22 @@ func taskFromMap(m map[string]interface{}) *Task {
 		for _, st := range subtasks {
 			if stMap, ok := st.(map[string]interface{}); ok {
 				sub := Subtask{
-					ID:          mapString(stMap, "id"),
-					Title:       mapString(stMap, "title"),
-					Description: mapString(stMap, "description"),
-					Status:      mapString(stMap, "status"),
-					Details:     mapString(stMap, "details"),
-					CreatedAt:   mapString(stMap, "createdAt"),
+					ID:           mapString(stMap, "id"),
+					Title:        mapString(stMap, "title"),
+					Description:  mapString(stMap, "description"),
+					Status:       mapString(stMap, "status"),
+					Details:      mapString(stMap, "details"),
+					CreatedAt:    mapString(stMap, "createdAt"),
+					ParentID:     mapString(stMap, "parentId"),
+					TestStrategy: mapString(stMap, "testStrategy"),
+				}
+				if raw, err := json.Marshal(stMap); err == nil {
+					sub.RawJSON = string(raw)
+				}
+				if deps, ok := stMap["dependencies"].([]interface{}); ok {
+					for _, dependency := range deps {
+						sub.Dependencies = append(sub.Dependencies, fmt.Sprintf("%v", dependency))
+					}
 				}
 				task.Subtasks = append(task.Subtasks, sub)
 			}

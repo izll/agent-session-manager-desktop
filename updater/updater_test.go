@@ -5,12 +5,15 @@ import (
 	"bytes"
 	"compress/gzip"
 	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 )
@@ -350,6 +353,7 @@ func TestCleanStaleUpdateFilesRemovesOnlyOldCopies(t *testing.T) {
 		"asmgr-desktop.exe.old": false,
 		"libportaudio.dll.old":  false,
 		"notes.old.txt":         true, // .old must be the suffix, not a substring
+		"unrelated-project.old": true, // suffix alone never establishes ownership
 	}
 	for name := range files {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte("x"), 0644); err != nil {
@@ -367,6 +371,295 @@ func TestCleanStaleUpdateFilesRemovesOnlyOldCopies(t *testing.T) {
 		if !shouldSurvive && err == nil {
 			t.Errorf("%s survived but should have been removed", name)
 		}
+	}
+}
+
+func TestCleanStaleUpdateFilesKeepsUnrelatedOldDirectory(t *testing.T) {
+	dir := t.TempDir()
+	victim := filepath.Join(dir, "customer-data.old")
+	if err := os.MkdirAll(victim, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(victim, "keep.txt"), []byte("important"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cleanStaleUpdateFilesIn(dir)
+	if got, err := os.ReadFile(filepath.Join(victim, "keep.txt")); err != nil || string(got) != "important" {
+		t.Fatalf("unrelated .old directory was modified: got %q err=%v", got, err)
+	}
+}
+
+func TestStageSidecarDLLsRejectsCaseInsensitiveDuplicateBasenames(t *testing.T) {
+	archive := buildArchive(t, map[string]string{
+		"one/Foo.dll": "first",
+		"two/foo.DLL": "second",
+	})
+	if _, cleanup, err := stageSidecarDLLs(archive, t.TempDir()); err == nil {
+		if cleanup != nil {
+			cleanup()
+		}
+		t.Fatal("case-insensitive duplicate DLL basenames must be rejected")
+	}
+}
+
+func TestStageSidecarDLLsEnforcesCumulativeLimits(t *testing.T) {
+	archive := buildArchive(t, map[string]string{
+		"one.dll": "1234",
+		"README":  "5678", // non-DLL regular entries count too
+	})
+	if _, cleanup, err := stageSidecarDLLsWithLimits(archive, t.TempDir(), archiveLimits{bytes: 7, entries: 10}); err == nil {
+		if cleanup != nil {
+			cleanup()
+		}
+		t.Fatal("cumulative DLL bytes above the limit must be rejected")
+	}
+	if _, cleanup, err := stageSidecarDLLsWithLimits(archive, t.TempDir(), archiveLimits{bytes: 100, entries: 1}); err == nil {
+		if cleanup != nil {
+			cleanup()
+		}
+		t.Fatal("archives above the entry limit must be rejected")
+	}
+}
+
+func TestExtractExecutableCapsWholeArchiveNotOnlyBinary(t *testing.T) {
+	archive := buildArchive(t, map[string]string{
+		BinaryName: "bin",
+		"payload":  "oversized ignored content",
+	})
+	out, err := os.CreateTemp(t.TempDir(), "executable-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer out.Close()
+	if err := extractExecutableWithLimits(archive, BinaryName, out, archiveLimits{bytes: 8, entries: 10}); err == nil {
+		t.Fatal("non-executable regular entries bypassed the aggregate extraction limit")
+	}
+	if err := extractExecutableWithLimits(archive, BinaryName, out, archiveLimits{bytes: 100, entries: 1}); err == nil {
+		t.Fatal("executable scan bypassed the archive entry limit")
+	}
+}
+
+func TestInstallTransactionRollsBackEveryEarlierFile(t *testing.T) {
+	dir := t.TempDir()
+	targetA := filepath.Join(dir, "a.dll")
+	targetB := filepath.Join(dir, "b.dll")
+	stagedA := filepath.Join(dir, ".new-a")
+	stagedB := filepath.Join(dir, ".new-b")
+	for path, content := range map[string]string{
+		targetA: "old-a", targetB: "old-b", stagedA: "new-a", stagedB: "new-b",
+	} {
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	failOnce := true
+	rename := func(old, new string) error {
+		if old == stagedB && failOnce {
+			failOnce = false
+			return fmt.Errorf("injected executable/DLL swap failure")
+		}
+		return os.Rename(old, new)
+	}
+	err := installTransactionWithRename([]stagedInstall{
+		{target: targetA, staged: stagedA},
+		{target: targetB, staged: stagedB},
+	}, rename)
+	if err == nil {
+		t.Fatal("injected transaction failure was ignored")
+	}
+	for path, want := range map[string]string{targetA: "old-a", targetB: "old-b"} {
+		got, readErr := os.ReadFile(path)
+		if readErr != nil || string(got) != want {
+			t.Fatalf("rollback did not restore %s: got %q err=%v", filepath.Base(path), got, readErr)
+		}
+	}
+}
+
+func TestInstallTransactionPreservesBackupWhenRollbackFails(t *testing.T) {
+	withTempHome(t)
+	dir := t.TempDir()
+	targetA := filepath.Join(dir, "a.dll")
+	targetB := filepath.Join(dir, "b.dll")
+	stagedA := filepath.Join(dir, ".new-a")
+	stagedB := filepath.Join(dir, ".new-b")
+	for path, content := range map[string]string{
+		targetA: "old-a", targetB: "old-b", stagedA: "new-a", stagedB: "new-b",
+	} {
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	rename := func(old, new string) error {
+		if old == stagedB {
+			return fmt.Errorf("injected install failure")
+		}
+		if strings.Contains(old, "."+BinaryName+"-update-rollback-") && new == targetB {
+			return fmt.Errorf("injected restore failure")
+		}
+		return os.Rename(old, new)
+	}
+	err := installTransactionWithRename([]stagedInstall{
+		{target: targetA, staged: stagedA},
+		{target: targetB, staged: stagedB},
+	}, rename)
+	if err == nil || !strings.Contains(err.Error(), "backups preserved") {
+		t.Fatalf("rollback failure did not report preserved backup: %v", err)
+	}
+	backups, err := filepath.Glob(filepath.Join(dir, "."+BinaryName+"-update-rollback-*", "*b.dll"))
+	if err != nil || len(backups) != 1 {
+		t.Fatalf("failed rollback backup was deleted: backups=%v err=%v", backups, err)
+	}
+	if got, err := os.ReadFile(backups[0]); err != nil || string(got) != "old-b" {
+		t.Fatalf("preserved rollback backup changed: got=%q err=%v", got, err)
+	}
+	if _, err := os.Stat(filepath.Join(configDir(), failedUpdateFile)); err != nil {
+		t.Fatalf("failed rollback path was not recorded: %v", err)
+	}
+}
+
+func TestBundleRollbackPreservesOnlyBackupOnRestoreFailure(t *testing.T) {
+	withTempHome(t)
+	dir := t.TempDir()
+	bundle := filepath.Join(dir, "Old.app")
+	staged := filepath.Join(dir, "New.app")
+	if err := os.MkdirAll(bundle, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(bundle, "original"), []byte("old"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(staged, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	rename := func(old, new string) error {
+		if old == staged {
+			return fmt.Errorf("injected bundle install failure")
+		}
+		if strings.Contains(old, "."+BinaryName+"-update-rollback-") && new == bundle {
+			return fmt.Errorf("injected bundle restore failure")
+		}
+		return os.Rename(old, new)
+	}
+	removeCalls := 0
+	err := swapBundleWithOps(bundle, staged, bundle, rename, func(path string) error {
+		removeCalls++
+		return os.RemoveAll(path)
+	})
+	if err == nil || !strings.Contains(err.Error(), "backup preserved") {
+		t.Fatalf("bundle rollback failure did not preserve/report backup: %v", err)
+	}
+	if removeCalls != 0 {
+		t.Fatalf("bundle rollback deleted its only backup (%d RemoveAll calls)", removeCalls)
+	}
+	backups, err := filepath.Glob(filepath.Join(dir, "."+BinaryName+"-update-rollback-*", "Old.app", "original"))
+	if err != nil || len(backups) != 1 {
+		t.Fatalf("bundle backup missing after failed restore: %v err=%v", backups, err)
+	}
+}
+
+func TestRecordedCleanupRefusesUnownedManifestPath(t *testing.T) {
+	withTempHome(t)
+	installDir := t.TempDir()
+	execPath := filepath.Join(installDir, BinaryName)
+	owned := filepath.Join(installDir, "."+BinaryName+"-update-rollback-owned")
+	victim := filepath.Join(t.TempDir(), "documents")
+	for _, dir := range []string{owned, victim} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	manifest := filepath.Join(configDir(), staleUpdateFile)
+	if err := os.MkdirAll(filepath.Dir(manifest), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := json.Marshal([]string{owned, victim})
+	if err := os.WriteFile(manifest, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	cleanRecordedUpdateFiles(execPath, "")
+	if _, err := os.Stat(owned); !os.IsNotExist(err) {
+		t.Fatalf("owned rollback directory survived cleanup: %v", err)
+	}
+	if _, err := os.Stat(victim); err != nil {
+		t.Fatalf("unowned manifest path was deleted: %v", err)
+	}
+}
+
+func TestInstallLockSerializesIndependentProcesses(t *testing.T) {
+	if role := os.Getenv("ASMGR_UPDATE_LOCK_HELPER"); role != "" {
+		err := withInstallLock(func() error {
+			if role == "holder" {
+				if err := os.WriteFile(os.Getenv("ASMGR_UPDATE_LOCK_READY"), []byte("ready"), 0o600); err != nil {
+					return err
+				}
+				deadline := time.Now().Add(5 * time.Second)
+				for {
+					if _, err := os.Stat(os.Getenv("ASMGR_UPDATE_LOCK_RELEASE")); err == nil {
+						return nil
+					}
+					if time.Now().After(deadline) {
+						return fmt.Errorf("timed out waiting for release")
+					}
+					time.Sleep(10 * time.Millisecond)
+				}
+			}
+			return os.WriteFile(os.Getenv("ASMGR_UPDATE_LOCK_ACQUIRED"), []byte("acquired"), 0o600)
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return
+	}
+	home := t.TempDir()
+	coord := t.TempDir()
+	ready := filepath.Join(coord, "ready")
+	release := filepath.Join(coord, "release")
+	acquired := filepath.Join(coord, "acquired")
+	baseEnv := append(os.Environ(), "HOME="+home)
+	holder := exec.Command(os.Args[0], "-test.run=^TestInstallLockSerializesIndependentProcesses$")
+	holder.Env = append(baseEnv,
+		"ASMGR_UPDATE_LOCK_HELPER=holder",
+		"ASMGR_UPDATE_LOCK_READY="+ready,
+		"ASMGR_UPDATE_LOCK_RELEASE="+release,
+	)
+	if err := holder.Start(); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		if _, err := os.Stat(ready); err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("install-lock holder did not become ready")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	contender := exec.Command(os.Args[0], "-test.run=^TestInstallLockSerializesIndependentProcesses$")
+	contender.Env = append(baseEnv,
+		"ASMGR_UPDATE_LOCK_HELPER=contender",
+		"ASMGR_UPDATE_LOCK_ACQUIRED="+acquired,
+	)
+	if err := contender.Start(); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(100 * time.Millisecond)
+	if _, err := os.Stat(acquired); !os.IsNotExist(err) {
+		t.Fatalf("contender entered while holder owned install lock: %v", err)
+	}
+	if err := os.WriteFile(release, []byte("release"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := holder.Wait(); err != nil {
+		t.Fatal(err)
+	}
+	if err := contender.Wait(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(acquired); err != nil {
+		t.Fatalf("contender never acquired install lock: %v", err)
 	}
 }
 

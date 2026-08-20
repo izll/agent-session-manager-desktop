@@ -85,6 +85,7 @@
   // while it was on, then reopened after switching it off, would otherwise
   // still be on a tab whose button is gone.
   $: if (!$settings.taskMasterEnabled) useManualMode = true;
+  let loadedTaskMasterSetting = get(settings).taskMasterEnabled;
   let newTaskTitle = '';
   let newTaskDescription = '';
   let newTaskDetails = '';
@@ -332,6 +333,15 @@
   // Watch for session changes
   $: if ($selectedSessionId !== lastSessionId) {
     loadTasksIfNeeded();
+  }
+
+  // Settings is a live overlay: closing it does not deactivate this panel.
+  // Invalidate the visible provider immediately so a list loaded from MCP
+  // cannot keep sending mutations there after Task Master was switched off.
+  $: if ($settings.taskMasterEnabled !== loadedTaskMasterSetting) {
+    loadedTaskMasterSetting = $settings.taskMasterEnabled;
+    useMCPMode.set(loadedTaskMasterSetting);
+    if (active) void loadTasksIfNeeded(true);
   }
 
   // Priority colors
@@ -955,66 +965,69 @@
               <div class="task-title-row">
                 <span class="task-name" class:completed={task.status === 'done'} title={task.title}>{task.title}</span>
                 <div class="task-meta-row">
-                  {#if task.createdAt}
-                    <span class="created-at" title={new Date(task.createdAt).toLocaleString()}>
-                      {formatRelativeDate(task.createdAt, $t, nowTick)}
-                    </span>
-                  {/if}
+                  <div class="optional-meta">
+                    {#if task.createdAt}
+                      <span class="created-at" title={new Date(task.createdAt).toLocaleString()}>
+                        {formatRelativeDate(task.createdAt, $t, nowTick)}
+                      </span>
+                    {/if}
 
-                  {#if task.dueAt}
+                    {#if task.dueAt}
+                      <span
+                        class="due-badge {deadlineState(task.dueAt, task.status)}"
+                        title={new Date(task.dueAt).toLocaleString()}
+                      >
+                        {new Date(task.dueAt).toLocaleString(undefined, {
+                          month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+                        })}
+                      </span>
+                    {/if}
+
+                    {#if task.complexity}
+                      <span class="complexity-badge" title={$t('tasks.complexityScore')}>
+                        C:{task.complexity}
+                      </span>
+                    {/if}
+
+                    {#if task.subtasks && task.subtasks.length > 0}
+                      <!-- Subtask progress, so a checklist part-done is visible
+                           without expanding the task. Green when all of it is. -->
+                      <span
+                        class="subtask-badge"
+                        class:complete={task.subtasks.every(isSubtaskDone)}
+                        title={$t('tasks.subtasks')}
+                      >
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                          <path d="M9 11l3 3L20 5"/>
+                        </svg>
+                        {task.subtasks.filter(isSubtaskDone).length}/{task.subtasks.length}
+                      </span>
+                    {/if}
+
+                    {#if task.dependencies && task.dependencies.length > 0}
+                      <span class="dep-count-badge" title={$t('tasks.dependencies')}>
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+                          <path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/>
+                          <path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/>
+                        </svg>
+                        {task.dependencies.length}
+                      </span>
+                    {/if}
+                  </div>
+                  <div class="trailing-meta">
                     <span
-                      class="due-badge {deadlineState(task.dueAt, task.status)}"
-                      title={new Date(task.dueAt).toLocaleString()}
+                      class="status-badge meta-column"
+                      style="background: {statusColors[task.status] || '#9ca3af'}20; color: {statusColors[task.status] || '#9ca3af'}"
                     >
-                      {new Date(task.dueAt).toLocaleString(undefined, {
-                        month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
-                      })}
+                      {statusLabels[task.status] || task.status}
                     </span>
-                  {/if}
-
-                  {#if task.complexity}
-                    <span class="complexity-badge" title={$t('tasks.complexityScore')}>
-                      C:{task.complexity}
-                    </span>
-                  {/if}
-
-                  {#if task.subtasks && task.subtasks.length > 0}
-                    <!-- Subtask progress, so a checklist part-done is visible
-                         without expanding the task. Green when all of it is. -->
                     <span
-                      class="subtask-badge"
-                      class:complete={task.subtasks.every(isSubtaskDone)}
-                      title={$t('tasks.subtasks')}
+                      class="priority-badge meta-column"
+                      style="background: {priorityColors[task.priority] || '#9ca3af'}20; color: {priorityColors[task.priority] || '#9ca3af'}"
                     >
-                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M9 11l3 3L20 5"/>
-                      </svg>
-                      {task.subtasks.filter(isSubtaskDone).length}/{task.subtasks.length}
+                      {priorityLabels[task.priority] || task.priority}
                     </span>
-                  {/if}
-
-                  {#if task.dependencies && task.dependencies.length > 0}
-                    <span class="dep-count-badge" title={$t('tasks.dependencies')}>
-                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
-                        <path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/>
-                        <path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/>
-                      </svg>
-                      {task.dependencies.length}
-                    </span>
-                  {/if}
-
-                  <span
-                    class="status-badge meta-column"
-                    style="background: {statusColors[task.status] || '#9ca3af'}20; color: {statusColors[task.status] || '#9ca3af'}"
-                  >
-                    {statusLabels[task.status] || task.status}
-                  </span>
-                  <span
-                    class="priority-badge meta-column"
-                    style="background: {priorityColors[task.priority] || '#9ca3af'}20; color: {priorityColors[task.priority] || '#9ca3af'}"
-                  >
-                    {priorityLabels[task.priority] || task.priority}
-                  </span>
+                  </div>
                 </div>
               </div>
 
@@ -1832,11 +1845,29 @@
      Missing optional values therefore leave no holes and cannot move the two
      columns that must line up. */
   .task-meta-row {
+    flex: 0 1 auto;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    margin-left: auto;
+  }
+
+  .optional-meta {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px;
+  }
+
+  .trailing-meta {
     flex: 0 0 auto;
     display: flex;
     align-items: center;
     gap: 6px;
-    margin-left: auto;
+    margin-left: 6px;
   }
 
   .meta-column {
@@ -1948,7 +1979,7 @@
     background: rgba(167, 139, 250, 0.15);
     padding: 2px 6px;
     border-radius: 4px;
-    margin-left: auto;
+    flex-shrink: 0;
   }
 
   .task-description {
