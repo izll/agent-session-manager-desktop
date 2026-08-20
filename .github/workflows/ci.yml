@@ -21,7 +21,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
@@ -50,6 +50,19 @@ jobs:
             xorg-dev libx11-dev libx11-xcb-dev libxtst-dev \
             libxcb1-dev libxkbcommon-dev libxkbcommon-x11-dev \
             libxcb-xkb-dev libxinerama-dev libxrandr-dev libxt-dev xvfb
+      # main.go embeds frontend/dist, which a fresh checkout does not have — the
+      # Go package will not even load without it. The release workflow already
+      # builds the frontend first for this reason; this job did not, so it could
+      # never have passed.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+        working-directory: frontend
+      - run: npm run build
+        working-directory: frontend
       - run: xvfb-run -a go test ./...
       - run: go vet ./...
 
