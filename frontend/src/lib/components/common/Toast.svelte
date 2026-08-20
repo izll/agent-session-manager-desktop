@@ -4,6 +4,14 @@
 
   export let message = '';
   export let variant: 'error' | 'success' | 'warning' | 'info' = 'error';
+  /**
+   * How long it stays up, in ms. 0 keeps it until dismissed.
+   *
+   * Errors get longer than the default: five seconds is enough to notice a
+   * confirmation and not enough to read a failure, decide what it means, and
+   * copy a path out of it. Every caller so far is an error, and none was
+   * passing anything — the parameter existed but no value ever reached it.
+   */
   export let duration = 5000;
   export let show = false;
 

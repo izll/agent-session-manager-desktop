@@ -1892,7 +1892,7 @@
   </div>
 {/if}
 
-<Toast bind:show={showErrorToast} message={errorMessage} variant="error" />
+<Toast bind:show={showErrorToast} message={errorMessage} variant="error" duration={9000} />
 
 <style>
   .tab-bar {

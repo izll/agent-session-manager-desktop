@@ -1547,13 +1547,13 @@
   />
 </main>
 
-<Toast bind:show={showDictationError} message={dictationErrorMessage} variant="error" />
+<Toast bind:show={showDictationError} message={dictationErrorMessage} variant="error" duration={9000} />
 
 <!-- Every failure the sessions store records.
      It had 26 writers and no reader, so anything failing outside a component
      with its own toast — deleting from the sidebar, renaming, reordering,
      switching project — failed in silence. -->
-<Toast bind:show={showSessionError} message={sessionErrorMessage} variant="error" />
+<Toast bind:show={showSessionError} message={sessionErrorMessage} variant="error" duration={9000} />
 
 <style>
 .lock-banner {

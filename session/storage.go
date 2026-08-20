@@ -56,8 +56,15 @@ type Settings struct {
 	// separately, per session (Instance.LastWindowIndex).
 	LastSessionID   string `json:"last_session_id,omitempty"`
 	MarkedWindowIdx int    `json:"marked_window_idx,omitempty"`
-	Cursor          int    `json:"cursor,omitempty"`
-	SplitFocus      int    `json:"split_focus,omitempty"`
+	// Cursor and SplitFocus are TUI-era fields that nothing here reads. Kept so
+	// a config shared with, or migrated from, the terminal version round-trips
+	// unchanged — dropping them would silently discard the TUI's state.
+	Cursor     int `json:"cursor,omitempty"`
+	SplitFocus int `json:"split_focus,omitempty"`
+	// AnthropicAPIKey is likewise not settable from this app, but it is handled
+	// deliberately in recovery.go: stripped before a backup is written and
+	// carried across a restore, so a key that arrives from elsewhere is never
+	// copied into the backup directory.
 	AnthropicAPIKey string `json:"anthropic_api_key,omitempty"`
 	Language        string `json:"language,omitempty"`
 	// UITheme is the interface accent colour (see uiThemes.ts); empty = default.

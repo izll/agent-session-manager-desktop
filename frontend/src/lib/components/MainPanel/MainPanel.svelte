@@ -831,7 +831,7 @@
   {/if}
 </div>
 
-<Toast bind:show={showFolderError} message={folderErrorMessage} variant="error" />
+<Toast bind:show={showFolderError} message={folderErrorMessage} variant="error" duration={9000} />
 
 <ForkDialog bind:show={showForkDialog} />
 
