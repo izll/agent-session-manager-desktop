@@ -33,7 +33,12 @@ assert.match(
 // The repaint in the settle step is proof the pane is current: it has just
 // been redrawn from a cleared glyph cache. Waiting for bytes after that is
 // waiting for something that may never come.
-const settleRepaints = pool.match(/term\.refresh\(0, term\.rows - 1\);\s*(?:\/\/[^\n]*\n\s*)*clearAwaitingRedraw\(/g) ?? [];
+// Counted per repaint rather than by matching a span: other calls sit between
+// the repaint and the clear now, and a lazy span just swallows the second pair.
+const repaints = pool.split('term.refresh(0, term.rows - 1);').slice(1);
+const settleRepaints = repaints.filter((tail) =>
+  tail.slice(0, 1200).includes('clearAwaitingRedraw('),
+);
 assert.equal(
   settleRepaints.length,
   2,

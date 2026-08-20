@@ -10,7 +10,7 @@ import {
 } from './terminal';
 import type { Terminal } from '@xterm/xterm';
 import { themeFor, fontSizeFor, terminalFontStack } from './terminal';
-import { LogFrontend } from '../../../wailsjs/go/main/App';
+import { LogFrontend, RedrawWindow } from '../../../wailsjs/go/main/App';
 
 // Surface pool errors in the backend log file too — the packaged build has
 // no devtools console, so console.error alone is invisible.
@@ -33,6 +33,34 @@ function clearGlyphCache(terminal: Terminal): void {
     // Never let a repaint hint break the settings change that triggered it.
     logPoolError('pool: clearing glyph cache failed', e);
   }
+}
+
+/**
+ * Ask the multiplexer to repaint a pane, without sending it any input.
+ *
+ * Debounced per pane: the settle step can run twice for one switch (once when
+ * the size lands, once from the timeout path), and a second redraw a few
+ * milliseconds later buys nothing.
+ */
+const lastRedrawAt = new Map<string, number>();
+
+function requestRedraw(entry: PoolEntry): void {
+  const ti = entry.terminalInstance;
+  const sessionId = ti.sessionId;
+  if (!sessionId) return;
+  const windowIdx = ti.windowIdx ?? 0;
+
+  const key = `${sessionId}:${windowIdx}`;
+  const now = Date.now();
+  const previous = lastRedrawAt.get(key) ?? 0;
+  if (now - previous < 500) return;
+  lastRedrawAt.set(key, now);
+
+  void RedrawWindow(sessionId, windowIdx).catch((e) => {
+    // Never let a repaint hint break the switch that triggered it: a session
+    // that stopped between the switch and this call fails here routinely.
+    logPoolError('pool: redraw request failed', e);
+  });
 }
 
 export interface PoolEntry {
@@ -391,6 +419,19 @@ export class TerminalPool {
         // there. Hiding and showing a pane is exactly when that shows up.
         clearGlyphCache(term);
         term.refresh(0, term.rows - 1);
+        // Ask the multiplexer to repaint as well.
+        //
+        // The refresh above only repaints what this client already holds, and
+        // the replay only carries what the pane produced while the tab was
+        // away. Neither helps when the buffer itself is what went wrong — a TUI
+        // that laid itself out for a size the tab no longer has, say — and the
+        // result is the tab that occasionally comes back looking stale.
+        //
+        // RedrawWindow, not RefreshWindow: it re-announces the size and asks
+        // for a repaint without sending the pane any input. RefreshWindow's
+        // Ctrl-L would land in an agent's prompt as text, which is why that one
+        // stays on the button where the user asks for it.
+        requestRedraw(entry);
         // The pane has just been repainted, so there is nothing left to wait
         // for — whether or not the backend had anything to replay.
         clearAwaitingRedraw(entry.terminalInstance);
@@ -411,6 +452,7 @@ export class TerminalPool {
         fitTerminal(entry.terminalInstance, 'pool-settle-timeout');
         clearGlyphCache(term);
         term.refresh(0, term.rows - 1);
+        requestRedraw(entry);
         clearAwaitingRedraw(entry.terminalInstance);
         if (canFocus()) term.focus();
       }
