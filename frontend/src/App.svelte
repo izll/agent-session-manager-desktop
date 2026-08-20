@@ -32,6 +32,7 @@
   import ResumeChoiceDialog from './lib/components/Dialogs/ResumeChoiceDialog.svelte';
   import ResumeSessionPickerDialog from './lib/components/Dialogs/ResumeSessionPickerDialog.svelte';
   import type { Session } from './lib/stores/sessions';
+  import { error as sessionError } from './lib/stores/sessions';
   import { sessions, loadSessions, selectSession, selectWindow, selectedSession, selectedSessionId, selectedWindowIdx, startSession, stopSession, stopTab, restartTab, restartTabWithResume, deleteSession, toggleFavorite, reorderSession, selectPrevSession, selectNextSession } from './lib/stores/sessions';
   import { activities } from './lib/stores/activities';
   import { statusLines, tabStatuses } from './lib/stores/statusLines';
@@ -129,6 +130,16 @@
   let showSettingsDialog = false;
   let showLogDialog = false;
   let showQuickJump = false;
+  let showSessionError = false;
+  let sessionErrorMessage = '';
+  // Cleared after showing, so the same failure can be reported again if it
+  // recurs — a store holding the last error forever would show it only once.
+  $: if ($sessionError) {
+    sessionErrorMessage = $sessionError;
+    showSessionError = true;
+    sessionError.set(null);
+  }
+
   let showGitHistory = false;
   let showRecoveryCenter = false;
   let showCommandPalette = false;
@@ -1522,6 +1533,12 @@
 </main>
 
 <Toast bind:show={showDictationError} message={dictationErrorMessage} variant="error" />
+
+<!-- Every failure the sessions store records.
+     It had 26 writers and no reader, so anything failing outside a component
+     with its own toast — deleting from the sidebar, renaming, reordering,
+     switching project — failed in silence. -->
+<Toast bind:show={showSessionError} message={sessionErrorMessage} variant="error" />
 
 <style>
 .lock-banner {
