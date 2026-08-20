@@ -23,6 +23,7 @@
     taskError,
     taskMasterStatus,
     useMCPMode,
+    effectiveTaskProvider,
     loadTasks,
     checkTaskMasterStatus,
     initializeTaskMaster,
@@ -58,7 +59,8 @@
     type TaskStatus,
     type TaskPriority,
     type TaskSortBy,
-    type Subtask
+    type Subtask,
+    type TaskProvider
   } from '../../stores/tasks';
 
   export let active = false;
@@ -84,7 +86,7 @@
   // Without Task Master there is no AI mode to fall into — a dialog opened
   // while it was on, then reopened after switching it off, would otherwise
   // still be on a tab whose button is gone.
-  $: if (!$settings.taskMasterEnabled) useManualMode = true;
+  $: if (!$settings.taskMasterEnabled || $effectiveTaskProvider !== 'mcp') useManualMode = true;
   let loadedTaskMasterSetting = get(settings).taskMasterEnabled;
   let newTaskTitle = '';
   let newTaskDescription = '';
@@ -135,6 +137,91 @@
   let showDependencyModal = false;
   let dependencyTaskId = '';
   let newDependencyId = '';
+
+  type TaskActionTarget = {
+    sessionId: string;
+    provider: TaskProvider;
+    generation: number;
+  };
+  let actionGeneration = 0;
+  let actionOperationRevision = 0;
+  let actionIdentity = '';
+  let contextMenuTarget: TaskActionTarget | null = null;
+  let modalTarget: TaskActionTarget | null = null;
+
+  type TargetOperation = {
+    target: TaskActionTarget;
+    revision: number;
+  };
+
+  function captureActionTarget(): TaskActionTarget | null {
+    const sessionId = get(selectedSessionId);
+    const provider = get(effectiveTaskProvider);
+    if (!sessionId || !provider) return null;
+    return { sessionId, provider, generation: actionGeneration };
+  }
+
+  function targetIsCurrent(target: TaskActionTarget | null): target is TaskActionTarget {
+    return !!target && target.generation === actionGeneration &&
+      target.sessionId === get(selectedSessionId) &&
+      target.provider === get(effectiveTaskProvider);
+  }
+
+  function claimActionUI() {
+    actionOperationRevision++;
+  }
+
+  function beginTargetOperation(target: TaskActionTarget | null): TargetOperation | null {
+    if (!targetIsCurrent(target)) return null;
+    return { target, revision: ++actionOperationRevision };
+  }
+
+  function operationIsCurrent(operation: TargetOperation | null): operation is TargetOperation {
+    return !!operation && operation.revision === actionOperationRevision &&
+      targetIsCurrent(operation.target);
+  }
+
+  function closeTargetActions() {
+    claimActionUI();
+    if (contextMenuTask) closeContextMenu();
+    contextMenuTarget = null;
+    modalTarget = null;
+    showEditTaskModal = false;
+    showAddSubtaskModal = false;
+    showDeleteConfirm = false;
+    showRemoveSubtaskConfirm = false;
+    showDependencyModal = false;
+    showAddTaskModal = false;
+    showPRDModal = false;
+  }
+
+  function openAddTaskModal() {
+    const target = captureActionTarget();
+    if (!targetIsCurrent(target)) return;
+    claimActionUI();
+    modalTarget = target;
+    showAddTaskModal = true;
+  }
+
+  function openPRDModal() {
+    const target = captureActionTarget();
+    if (!targetIsCurrent(target) || target.provider !== 'mcp') return;
+    claimActionUI();
+    modalTarget = target;
+    showPRDModal = true;
+  }
+
+  // A task id is only meaningful inside the provider/session snapshot that
+  // produced it. Provider probes deliberately pass through null, which also
+  // invalidates open actions while the replacement list is unknown.
+  $: {
+    const identity = `${$selectedSessionId || ''}:${$effectiveTaskProvider || 'loading'}`;
+    if (identity !== actionIdentity) {
+      actionIdentity = identity;
+      actionGeneration++;
+      closeTargetActions();
+    }
+  }
 
   function handleSortChange(event: CustomEvent<string>) {
     setTaskSortBy(event.detail as TaskSortBy);
@@ -391,11 +478,15 @@
 
   // Parse PRD
   async function handleParsePRD() {
-    const sessionId = get(selectedSessionId);
-    if (!sessionId || !prdContent.trim()) return;
+    const target = modalTarget;
+    const operation = beginTargetOperation(target);
+    if (!operation || target?.provider !== 'mcp' || !prdContent.trim()) return;
+    const content = prdContent;
+    const count = prdNumTasks;
 
     try {
-      await parsePRD(sessionId, prdContent, prdNumTasks);
+      await parsePRD(operation.target.sessionId, content, count);
+      if (!operationIsCurrent(operation) || modalTarget !== operation.target || !showPRDModal) return;
       showPRDModal = false;
       prdContent = '';
     } catch (e) {
@@ -406,7 +497,17 @@
   // Add task
   async function handleAddTask() {
     console.log('[TaskPanel] handleAddTask called');
-    const sessionId = get(selectedSessionId);
+    const target = modalTarget;
+    const operation = beginTargetOperation(target);
+    if (!operation) return;
+    const sessionId = operation.target.sessionId;
+    const manual = useManualMode;
+    const title = newTaskTitle;
+    const description = newTaskDescription;
+    const details = newTaskDetails;
+    const prompt = newTaskPrompt;
+    const priority = newTaskPriority;
+    const research = newTaskResearch;
     console.log('[TaskPanel] sessionId:', sessionId);
     if (!sessionId) {
       console.log('[TaskPanel] No sessionId, returning early');
@@ -414,15 +515,16 @@
     }
 
     try {
-      if (useManualMode) {
+      if (manual) {
         // Manual mode - no AI required
         console.log('[TaskPanel] Manual mode, title:', newTaskTitle);
-        if (!newTaskTitle.trim()) {
+        if (!title.trim()) {
           console.log('[TaskPanel] Empty title, returning early');
           return;
         }
         console.log('[TaskPanel] Calling addManualTask...');
-        await addManualTask(sessionId, newTaskTitle, newTaskDescription, newTaskDetails, newTaskPriority);
+        await addManualTask(sessionId, title, description, details, priority, operation.target.provider);
+        if (!operationIsCurrent(operation) || modalTarget !== operation.target || !showAddTaskModal) return;
         console.log('[TaskPanel] addManualTask completed');
         newTaskTitle = '';
         newTaskDescription = '';
@@ -430,12 +532,14 @@
       } else {
         // AI mode - requires API key
         console.log('[TaskPanel] AI mode, prompt:', newTaskPrompt);
-        if (!newTaskPrompt.trim()) {
+        if (!prompt.trim()) {
           console.log('[TaskPanel] Empty prompt, returning early');
           return;
         }
         console.log('[TaskPanel] Calling addTask...');
-        await addTask(sessionId, newTaskPrompt, newTaskResearch, newTaskPriority);
+        if (operation.target.provider !== 'mcp') return;
+        await addTask(sessionId, prompt, research, priority, operation.target.provider);
+        if (!operationIsCurrent(operation) || modalTarget !== operation.target || !showAddTaskModal) return;
         console.log('[TaskPanel] addTask completed');
         newTaskPrompt = '';
       }
@@ -448,22 +552,33 @@
 
   // Delete task
   function handleDeleteTask(taskId: string) {
+    const target = contextMenuTarget ?? captureActionTarget();
+    if (!targetIsCurrent(target)) return;
+    claimActionUI();
     const task = $tasks.find(t => t.id === taskId);
+    modalTarget = target;
     deleteTaskId = taskId;
     deleteTaskTitle = task?.title || taskId;
     showDeleteConfirm = true;
-    contextMenuTask = null;
+    if (contextMenuTask) closeContextMenu();
   }
 
   async function confirmDeleteTask() {
-    const sessionId = get(selectedSessionId);
-    if (!sessionId || !deleteTaskId) return;
+    const target = modalTarget;
+    const operation = beginTargetOperation(target);
+    if (!operation || !deleteTaskId) {
+      showDeleteConfirm = false;
+      return;
+    }
+    const sessionId = operation.target.sessionId;
+    const taskId = deleteTaskId;
 
     // Capture the complete snapshot and the provider used for deletion. Undo
     // restores the original ID and must not follow a later provider toggle.
-    const removed = $tasks.find((task) => task.id === deleteTaskId);
+    const removed = $tasks.find((task) => task.id === taskId);
 
-    const provider = await removeTask(sessionId, deleteTaskId);
+    const provider = await removeTask(sessionId, taskId, operation.target.provider);
+    if (!operationIsCurrent(operation) || modalTarget !== operation.target) return;
     if (removed) {
       offerUndo({
         message: $t('undo.taskDeleted', { title: removed.title }),
@@ -472,19 +587,23 @@
     }
     deleteTaskId = '';
     deleteTaskTitle = '';
+    modalTarget = null;
   }
 
   // Move task status
-  async function handleMoveTask(taskId: string, newStatus: TaskStatus) {
-    const sessionId = get(selectedSessionId);
-    if (!sessionId) return;
+  async function handleMoveTask(taskId: string, newStatus: TaskStatus, requestedTarget?: TaskActionTarget | null) {
+    const target = requestedTarget ?? captureActionTarget();
+    const operation = beginTargetOperation(target);
+    if (!operation) return;
+    const sessionId = operation.target.sessionId;
 
     // Captured before the change: after it, the store holds the new value and
     // there is nothing left to go back to.
     const previous = $tasks.find((task) => task.id === taskId)?.status;
 
-    const provider = await setTaskStatus(sessionId, taskId, newStatus);
-    contextMenuTask = null;
+    const provider = await setTaskStatus(sessionId, taskId, newStatus, operation.target.provider);
+    if (!operationIsCurrent(operation)) return;
+    if (contextMenuTarget === operation.target) closeContextMenu();
 
     if (previous && previous !== newStatus) {
       offerUndo({
@@ -495,22 +614,27 @@
   }
 
   // Expand task
-  async function handleExpandTask(taskId: string) {
-    const sessionId = get(selectedSessionId);
-    if (!sessionId) return;
+  async function handleExpandTask(taskId: string, requestedTarget?: TaskActionTarget | null) {
+    const target = requestedTarget ?? captureActionTarget();
+    const operation = beginTargetOperation(target);
+    if (!operation || target?.provider !== 'mcp') return;
+    const sessionId = operation.target.sessionId;
 
     try {
       await expandTask(sessionId, taskId, true, false);
+      if (!operationIsCurrent(operation)) return;
     } catch (e) {
       console.error('Failed to expand task:', e);
     }
-    contextMenuTask = null;
+    if (contextMenuTarget === operation.target) closeContextMenu();
   }
 
   // Expand all
   async function handleExpandAll() {
-    const sessionId = get(selectedSessionId);
-    if (!sessionId) return;
+    const target = captureActionTarget();
+    const operation = beginTargetOperation(target);
+    if (!operation || target?.provider !== 'mcp') return;
+    const sessionId = operation.target.sessionId;
 
     try {
       await expandAllTasks(sessionId, true);
@@ -521,11 +645,15 @@
 
   // Analyze complexity
   async function handleAnalyzeComplexity() {
-    const sessionId = get(selectedSessionId);
-    if (!sessionId) return;
+    const target = captureActionTarget();
+    const operation = beginTargetOperation(target);
+    if (!operation || target?.provider !== 'mcp') return;
+    const sessionId = operation.target.sessionId;
 
     try {
-      complexityReport = await analyzeComplexity(sessionId, true);
+      const report = await analyzeComplexity(sessionId, true);
+      if (!operationIsCurrent(operation)) return;
+      complexityReport = report;
       showComplexityModal = true;
     } catch (e) {
       console.error('Failed to analyze complexity:', e);
@@ -534,33 +662,42 @@
 
   // Get next task
   async function handleGetNextTask() {
-    const sessionId = get(selectedSessionId);
-    if (!sessionId) return;
+    const target = captureActionTarget();
+    const operation = beginTargetOperation(target);
+    if (!operation) return;
 
-    const task = await getNextTask(sessionId);
+    const task = await getNextTask(operation.target.sessionId, operation.target.provider);
+    if (!operationIsCurrent(operation)) return;
     if (task) {
       selectTask(task.id);
     }
   }
 
   // Send to agent
-  async function handleSendToAgent(taskId: string) {
-    const sessionId = get(selectedSessionId);
-    if (!sessionId) return;
+  async function handleSendToAgent(taskId: string, requestedTarget?: TaskActionTarget | null) {
+    const target = requestedTarget ?? captureActionTarget();
+    const operation = beginTargetOperation(target);
+    if (!operation) return;
+    const sessionId = operation.target.sessionId;
 
     try {
-      await sendTaskToAgent(sessionId, taskId);
+      await sendTaskToAgent(sessionId, taskId, operation.target.provider);
+      if (!operationIsCurrent(operation)) return;
       dispatch('taskSent', { taskId });
     } catch (e) {
       console.error('Failed to send task to agent:', e);
     }
-    contextMenuTask = null;
+    if (contextMenuTarget === operation.target) closeContextMenu();
   }
 
   // Context menu
   function showContextMenu(event: MouseEvent, task: Task) {
     event.preventDefault();
+    const target = captureActionTarget();
+    if (!target) return;
+    claimActionUI();
     contextMenuTask = task;
+    contextMenuTarget = target;
     contextMenuX = event.clientX;
     contextMenuY = event.clientY;
     // See SessionItem: contextmenu doesn't fire the click that closes menus.
@@ -569,11 +706,16 @@
 
   function closeContextMenu() {
     contextMenuTask = null;
+    contextMenuTarget = null;
     releaseMenu(closeContextMenu);
   }
 
   // Open edit task modal
-  function openEditTaskModal(task: Task) {
+  function openEditTaskModal(task: Task, requestedTarget?: TaskActionTarget | null) {
+    const target = requestedTarget ?? captureActionTarget();
+    if (!targetIsCurrent(target)) return;
+    claimActionUI();
+    modalTarget = target;
     editTaskId = task.id;
     editTaskTitle = task.title;
     editTaskDescription = task.description || '';
@@ -587,30 +729,48 @@
     editTaskSessionScoped = !!task.sessionId;
     editTaskError = '';
     showEditTaskModal = true;
-    contextMenuTask = null;
+    if (contextMenuTask) closeContextMenu();
   }
 
   // Save edited task
   async function handleSaveEditTask() {
     console.log('[TaskPanel] handleSaveEditTask called');
-    const sessionId = get(selectedSessionId);
+    const target = modalTarget;
+    const operation = beginTargetOperation(target);
+    const sessionId = operation?.target.sessionId;
     console.log('[TaskPanel] sessionId:', sessionId, 'editTaskId:', editTaskId);
-    if (!sessionId || !editTaskId) return;
+    if (!operation || !sessionId || !editTaskId) {
+      showEditTaskModal = false;
+      return;
+    }
 
     editTaskError = '';
+    const taskId = editTaskId;
+    const title = editTaskTitle;
+    const description = editTaskDescription;
+    const details = editTaskDetails;
+    const priority = editTaskPriority;
+    const dueAt = fromLocalInputValue(editTaskDueAt);
+    const sessionScoped = editTaskSessionScoped;
     try {
       console.log('[TaskPanel] calling updateTaskDirect...', { editTaskTitle, editTaskDescription, editTaskDetails, editTaskPriority });
-      await updateTaskDirect(sessionId, editTaskId, editTaskTitle, editTaskDescription, editTaskDetails, editTaskPriority, fromLocalInputValue(editTaskDueAt), editTaskSessionScoped);
+      await updateTaskDirect(sessionId, taskId, title, description, details, priority, dueAt, sessionScoped, operation.target.provider);
+      if (!operationIsCurrent(operation) || modalTarget !== operation.target || !showEditTaskModal) return;
       console.log('[TaskPanel] updateTaskDirect success');
       showEditTaskModal = false;
     } catch (e) {
+      if (!operationIsCurrent(operation) || modalTarget !== operation.target || !showEditTaskModal) return;
       console.error('[TaskPanel] Failed to update task:', e);
       editTaskError = String(e);
     }
   }
 
   // Open add subtask modal
-  function openAddSubtaskModal(taskId: string) {
+  function openAddSubtaskModal(taskId: string, requestedTarget?: TaskActionTarget | null) {
+    const target = requestedTarget ?? captureActionTarget();
+    if (!targetIsCurrent(target)) return;
+    claimActionUI();
+    modalTarget = target;
     addSubtaskTaskId = taskId;
     newSubtaskTitle = '';
     newSubtaskDescription = '';
@@ -619,11 +779,20 @@
 
   // Add subtask
   async function handleAddSubtask() {
-    const sessionId = get(selectedSessionId);
-    if (!sessionId || !addSubtaskTaskId || !newSubtaskTitle.trim()) return;
+    const target = modalTarget;
+    const operation = beginTargetOperation(target);
+    if (!operation || !addSubtaskTaskId || !newSubtaskTitle.trim()) {
+      showAddSubtaskModal = false;
+      return;
+    }
+    const sessionId = operation.target.sessionId;
+    const taskId = addSubtaskTaskId;
+    const title = newSubtaskTitle;
+    const description = newSubtaskDescription;
 
     try {
-      await addSubtask(sessionId, addSubtaskTaskId, newSubtaskTitle, newSubtaskDescription);
+      await addSubtask(sessionId, taskId, title, description, operation.target.provider);
+      if (!operationIsCurrent(operation) || modalTarget !== operation.target || !showAddSubtaskModal) return;
       showAddSubtaskModal = false;
     } catch (e) {
       console.error('Failed to add subtask:', e);
@@ -640,12 +809,15 @@
    * done" and set it to done — a tick that could never be undone.
    */
   async function handleToggleSubtaskStatus(subtaskId: string, currentlyDone: boolean) {
-    const sessionId = get(selectedSessionId);
-    if (!sessionId) return;
+    const target = captureActionTarget();
+    const operation = beginTargetOperation(target);
+    if (!operation) return;
+    const sessionId = operation.target.sessionId;
 
     const newStatus = currentlyDone ? 'pending' : 'done';
     try {
-      const provider = await setSubtaskStatus(sessionId, subtaskId, newStatus as TaskStatus);
+      const provider = await setSubtaskStatus(sessionId, subtaskId, newStatus as TaskStatus, operation.target.provider);
+      if (!operationIsCurrent(operation)) return;
       offerUndo({
         message: currentlyDone ? $t('undo.subtaskUnchecked') : $t('undo.subtaskChecked'),
         undo: () => setSubtaskStatus(sessionId, subtaskId, (currentlyDone ? 'done' : 'pending') as TaskStatus, provider).then(() => undefined),
@@ -657,24 +829,35 @@
 
   // Remove subtask
   function handleRemoveSubtask(subtaskId: string) {
+    const target = captureActionTarget();
+    if (!targetIsCurrent(target)) return;
+    claimActionUI();
+    modalTarget = target;
     removeSubtaskId = subtaskId;
     showRemoveSubtaskConfirm = true;
   }
 
   async function confirmRemoveSubtask() {
-    const sessionId = get(selectedSessionId);
-    if (!sessionId || !removeSubtaskId) return;
+    const target = modalTarget;
+    const operation = beginTargetOperation(target);
+    if (!operation || !removeSubtaskId) {
+      showRemoveSubtaskConfirm = false;
+      return;
+    }
+    const sessionId = operation.target.sessionId;
+    const subtaskId = removeSubtaskId;
 
     // Kept before the delete so Undo can restore the exact provider snapshot,
     // including identity, completion state and implementation details.
-    const parentId = parentTaskId(removeSubtaskId);
-    const childId = String(removeSubtaskId).slice(parentId.length + 1);
+    const parentId = parentTaskId(subtaskId);
+    const childId = String(subtaskId).slice(parentId.length + 1);
     const removed = $tasks
       .find((task) => task.id === parentId)?.subtasks
       ?.find((sub) => String(sub.id) === childId);
 
     try {
-      const provider = await removeSubtask(sessionId, removeSubtaskId);
+      const provider = await removeSubtask(sessionId, subtaskId, operation.target.provider);
+      if (!operationIsCurrent(operation) || modalTarget !== operation.target) return;
       if (removed) {
         offerUndo({
           message: $t('undo.subtaskDeleted', { title: removed.title }),
@@ -684,11 +867,17 @@
     } catch (e) {
       console.error('Failed to remove subtask:', e);
     }
+    if (!operationIsCurrent(operation) || modalTarget !== operation.target) return;
     removeSubtaskId = '';
+    modalTarget = null;
   }
 
   // Open dependency modal
-  function openDependencyModal(taskId: string) {
+  function openDependencyModal(taskId: string, requestedTarget?: TaskActionTarget | null) {
+    const target = requestedTarget ?? captureActionTarget();
+    if (!targetIsCurrent(target)) return;
+    claimActionUI();
+    modalTarget = target;
     dependencyTaskId = taskId;
     newDependencyId = '';
     showDependencyModal = true;
@@ -728,11 +917,16 @@
 
   // Add dependency
   async function handleAddDependency() {
-    const sessionId = get(selectedSessionId);
-    if (!sessionId || !dependencyTaskId || !newDependencyId.trim()) return;
+    const target = modalTarget;
+    const operation = beginTargetOperation(target);
+    if (!operation || !dependencyTaskId || !newDependencyId.trim()) return;
+    const sessionId = operation.target.sessionId;
+    const taskId = dependencyTaskId;
+    const dependencyId = newDependencyId;
 
     try {
-      await addDependency(sessionId, dependencyTaskId, newDependencyId);
+      await addDependency(sessionId, taskId, dependencyId, operation.target.provider);
+      if (!operationIsCurrent(operation) || modalTarget !== operation.target || !showDependencyModal) return;
       newDependencyId = '';
     } catch (e) {
       console.error('Failed to add dependency:', e);
@@ -741,11 +935,14 @@
 
   // Remove dependency
   async function handleRemoveDependency(taskId: string, depId: string) {
-    const sessionId = get(selectedSessionId);
-    if (!sessionId) return;
+    const target = modalTarget ?? captureActionTarget();
+    const operation = beginTargetOperation(target);
+    if (!operation) return;
+    const sessionId = operation.target.sessionId;
 
     try {
-      const provider = await removeDependency(sessionId, taskId, depId);
+      const provider = await removeDependency(sessionId, taskId, depId, operation.target.provider);
+      if (!operationIsCurrent(operation)) return;
       offerUndo({
         message: $t('undo.dependencyRemoved'),
         undo: () => addDependency(sessionId, taskId, depId, provider).then(() => undefined),
@@ -891,7 +1088,7 @@
       {/if}
     </div>
 
-    <button class="action-btn" on:click={() => showAddTaskModal = true} disabled={$isLoadingTasks}>
+    <button class="action-btn" on:click={openAddTaskModal} disabled={$isLoadingTasks || !$effectiveTaskProvider}>
       {$t('tasks.addTask')}
     </button>
     <button class="action-btn next" on:click={handleGetNextTask} disabled={$isLoadingTasks}>
@@ -902,8 +1099,8 @@
         <button class="action-btn init" on:click={handleInit} disabled={$isLoadingTasks}>
           {$t('tasks.initialize')}
         </button>
-      {:else}
-        <button class="action-btn" on:click={() => showPRDModal = true} disabled={$isLoadingTasks}>
+      {:else if $effectiveTaskProvider === 'mcp'}
+        <button class="action-btn" on:click={openPRDModal} disabled={$isLoadingTasks}>
           {$t('tasks.parsePRD')}
         </button>
         <button class="action-btn" on:click={handleExpandAll} disabled={$isLoadingTasks}>
@@ -1089,7 +1286,7 @@
                       </button>
                     </div>
                   {/each}
-                {:else if $settings.taskMasterEnabled}
+                {:else if $effectiveTaskProvider === 'mcp'}
                   <!-- Breaking a task into subtasks is Task Master's, not ours. -->
                   <button class="expand-btn" on:click|stopPropagation={() => handleExpandTask(task.id)}>
                     {$t('tasks.expandSubtasks')}
@@ -1135,7 +1332,7 @@
                 <button class="action-btn edit" on:click|stopPropagation={() => openEditTaskModal(task)}>
                   {$t('tasks.edit')}
                 </button>
-                {#if $settings.taskMasterEnabled}
+                {#if $effectiveTaskProvider === 'mcp'}
                   <button class="action-btn" on:click|stopPropagation={() => handleExpandTask(task.id)}>
                     {$t('tasks.expand')}
                   </button>
@@ -1160,18 +1357,18 @@
     style="left: {contextMenuX}px; top: {contextMenuY}px"
     on:click|stopPropagation
   >
-    <button on:click={() => handleSendToAgent(menuTask.id)}>{$t('tasks.sendToAgent')}</button>
-    <button on:click={() => openEditTaskModal(menuTask)}>{$t('tasks.editTaskMenu')}</button>
-    {#if $settings.taskMasterEnabled}
-      <button on:click={() => handleExpandTask(menuTask.id)}>{$t('tasks.expandTask')}</button>
+    <button on:click={() => handleSendToAgent(menuTask.id, contextMenuTarget)}>{$t('tasks.sendToAgent')}</button>
+    <button on:click={() => openEditTaskModal(menuTask, contextMenuTarget)}>{$t('tasks.editTaskMenu')}</button>
+    {#if contextMenuTarget?.provider === 'mcp'}
+      <button on:click={() => handleExpandTask(menuTask.id, contextMenuTarget)}>{$t('tasks.expandTask')}</button>
     {/if}
-    <button on:click={() => openAddSubtaskModal(menuTask.id)}>{$t('tasks.addSubtaskMenu')}</button>
-    <button on:click={() => openDependencyModal(menuTask.id)}>{$t('tasks.manageDependencies')}</button>
+    <button on:click={() => openAddSubtaskModal(menuTask.id, contextMenuTarget)}>{$t('tasks.addSubtaskMenu')}</button>
+    <button on:click={() => openDependencyModal(menuTask.id, contextMenuTarget)}>{$t('tasks.manageDependencies')}</button>
     <div class="menu-divider"></div>
-    <button on:click={() => handleMoveTask(menuTask.id, 'pending')}>{$t('tasks.setPending')}</button>
-    <button on:click={() => handleMoveTask(menuTask.id, 'in-progress')}>{$t('tasks.setInProgress')}</button>
-    <button on:click={() => handleMoveTask(menuTask.id, 'done')}>{$t('tasks.setDone')}</button>
-    <button on:click={() => handleMoveTask(menuTask.id, 'blocked')}>{$t('tasks.setBlocked')}</button>
+    <button on:click={() => handleMoveTask(menuTask.id, 'pending', contextMenuTarget)}>{$t('tasks.setPending')}</button>
+    <button on:click={() => handleMoveTask(menuTask.id, 'in-progress', contextMenuTarget)}>{$t('tasks.setInProgress')}</button>
+    <button on:click={() => handleMoveTask(menuTask.id, 'done', contextMenuTarget)}>{$t('tasks.setDone')}</button>
+    <button on:click={() => handleMoveTask(menuTask.id, 'blocked', contextMenuTarget)}>{$t('tasks.setBlocked')}</button>
     <div class="menu-divider"></div>
     <button class="danger" on:click={() => handleDeleteTask(menuTask.id)}>{$t('tasks.deleteTask')}</button>
   </div>
@@ -1229,7 +1426,7 @@
         <!-- Mode toggle. The AI half asks Task Master to write the task from a
              description, so with the integration off there is only one way to
              add a task and no choice to present. -->
-        {#if $settings.taskMasterEnabled}
+        {#if $effectiveTaskProvider === 'mcp'}
           <div class="mode-toggle">
             <button
               class="mode-btn"
@@ -1581,6 +1778,7 @@
     display: flex;
     flex-direction: column;
     background: #0a0a0f;
+    container-type: inline-size;
   }
 
   .task-header {
@@ -1892,6 +2090,18 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+
+  /* The window can be at its 800px minimum with a 500px sidebar, leaving the
+     main panel close to 300px. Optional metadata gives way first; the two task
+     state columns remain inside the row and keep a small title sliver. */
+  @container (max-width: 420px) {
+    .task-title-row { gap: 6px; }
+    .optional-meta { display: none; }
+    .task-meta-row { flex: 0 0 auto; }
+    .trailing-meta { gap: 4px; margin-left: 0; }
+    .meta-column.status-badge { width: 14ch; }
+    .meta-column.priority-badge { width: 12ch; }
   }
 
   .subtask-badge,

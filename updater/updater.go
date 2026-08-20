@@ -637,7 +637,17 @@ func installBundleUpdate(version string) error {
 	// forever. Same directory, so this stays a rename within one filesystem.
 	target := filepath.Join(filepath.Dir(bundle), filepath.Base(staged))
 
-	return swapBundle(bundle, staged, target)
+	return withInstallLock(func() error {
+		// Revalidate under the install lock. Downloading and extraction are safe to
+		// overlap across processes; only this filesystem mutation must serialize.
+		if info, err := os.Stat(bundle); err != nil || !info.IsDir() {
+			return fmt.Errorf("installed application bundle is no longer available")
+		}
+		if info, err := os.Stat(staged); err != nil || !info.IsDir() {
+			return fmt.Errorf("staged application bundle is no longer available")
+		}
+		return swapBundle(bundle, staged, target)
+	})
 }
 
 func swapBundle(bundle, staged, target string) error {
@@ -808,7 +818,11 @@ func safeSymlinkTarget(destDir, linkPath, linkName string) (string, error) {
 // Every failure is ignored on purpose: a leftover file is harmless clutter, and
 // there is no version of "could not tidy up" worth interrupting a launch for.
 func CleanStaleUpdateFiles() {
-	_ = withInstallLock(func() error {
+	// Cleanup is startup housekeeping, never a reason to hold the application
+	// launch behind another process's update download or privilege prompt. If a
+	// final install currently owns the lock, that install records anything it
+	// leaves behind and the next launch will retry cleanup.
+	_, _ = withInstallTryLock(func() error {
 		execPath, err := os.Executable()
 		if err != nil {
 			return nil
@@ -849,6 +863,18 @@ func withInstallLock(action func() error) error {
 		return fmt.Errorf("cannot locate updater state directory")
 	}
 	return withCrossProcessFileLock(filepath.Join(dir, installLockFile), action)
+}
+
+func withInstallTryLock(action func() error) (bool, error) {
+	if !installMu.TryLock() {
+		return false, nil
+	}
+	defer installMu.Unlock()
+	dir := configDir()
+	if dir == "" {
+		return false, fmt.Errorf("cannot locate updater state directory")
+	}
+	return withCrossProcessFileTryLock(filepath.Join(dir, installLockFile), action)
 }
 
 func recordStaleUpdatePath(stalePath string) {
@@ -1168,20 +1194,28 @@ func installPackageUpdate(version string) error {
 	defer os.Remove(pkgPath)
 
 	args := append(install, pkgPath)
-	cmd := exec.Command(pkexec, args...)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		msg := strings.TrimSpace(string(out))
-		// 126/127 are pkexec's own codes for "dismissed" and "not authorised".
-		if code := cmd.ProcessState.ExitCode(); code == 126 || code == 127 {
-			return fmt.Errorf("the update was not authorised")
+	return withInstallLock(func() error {
+		// The package type was selected before the download. Confirm under the
+		// mutation lock that this executable is still package-owned before asking
+		// for elevation and changing system files.
+		if !IsPackageManaged() {
+			return fmt.Errorf("installation type changed while the update was downloading; retry the update")
 		}
-		if msg == "" {
-			msg = err.Error()
+		cmd := exec.Command(pkexec, args...)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			msg := strings.TrimSpace(string(out))
+			// 126/127 are pkexec's own codes for "dismissed" and "not authorised".
+			if code := cmd.ProcessState.ExitCode(); code == 126 || code == 127 {
+				return fmt.Errorf("the update was not authorised")
+			}
+			if msg == "" {
+				msg = err.Error()
+			}
+			return fmt.Errorf("package installation failed: %s", msg)
 		}
-		return fmt.Errorf("package installation failed: %s", msg)
-	}
-	return nil
+		return nil
+	})
 }
 
 // downloadPackageFor fetches the package matching this installation and
@@ -1234,12 +1268,10 @@ func DownloadAndInstall(version string) error {
 	if err := validateReleaseVersion(version); err != nil {
 		return err
 	}
-	return withInstallLock(func() error {
-		return downloadAndInstallLocked(version)
-	})
+	return downloadAndInstall(version)
 }
 
-func downloadAndInstallLocked(version string) error {
+func downloadAndInstall(version string) error {
 	// macOS ships as an .app bundle: a directory tree, so swapping the single
 	// executable inside it would leave the bundle's resources, Info.plist and
 	// code signature describing the old version. It gets replaced whole.
@@ -1316,5 +1348,10 @@ func downloadAndInstallLocked(version string) error {
 	// restores every earlier DLL before the old executable is ever disturbed;
 	// if the executable swap fails, the same transaction restores all DLLs too.
 	files = append(files, stagedInstall{target: execPath, staged: stagedPath})
-	return installTransaction(files)
+	return withInstallLock(func() error {
+		// installTransaction performs its complete target/staging prevalidation
+		// before the first rename. Keeping that check inside this lock closes the
+		// gap between validation and the executable/DLL swap.
+		return installTransaction(files)
+	})
 }

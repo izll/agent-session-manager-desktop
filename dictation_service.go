@@ -117,20 +117,27 @@ func (h *BufferTextHandler) SetText(text string) {
 // FieldTextHandler implements dictation.PopupTextHandler
 // It emits Wails events so the frontend can insert text into focused form fields.
 type FieldTextHandler struct {
+	mu            sync.RWMutex
 	onAppendText  func(string)
 	onDeleteChars func(int)
 }
 
 func (h *FieldTextHandler) AppendText(text string) {
-	fmt.Printf("[Dictation] FieldTextHandler.AppendText: %d chars (callback=%v)\n", len([]rune(text)), h.onAppendText != nil)
-	if h.onAppendText != nil {
-		h.onAppendText(text)
+	h.mu.RLock()
+	callback := h.onAppendText
+	h.mu.RUnlock()
+	fmt.Printf("[Dictation] FieldTextHandler.AppendText: %d chars (callback=%v)\n", len([]rune(text)), callback != nil)
+	if callback != nil {
+		callback(text)
 	}
 }
 
 func (h *FieldTextHandler) DeleteChars(count int) {
-	if h.onDeleteChars != nil && count > 0 {
-		h.onDeleteChars(count)
+	h.mu.RLock()
+	callback := h.onDeleteChars
+	h.mu.RUnlock()
+	if callback != nil && count > 0 {
+		callback(count)
 	}
 }
 
@@ -146,6 +153,8 @@ func (h *FieldTextHandler) SetText(text string) {
 type DictationService struct {
 	app               *dictation.AppService
 	mu                sync.Mutex
+	callbacksMu       sync.RWMutex
+	voiceMu           sync.Mutex
 	onStateChange     func(bool)
 	onText            func(string)
 	onError           func(string, string)
@@ -219,36 +228,36 @@ func (d *DictationService) Initialize() error {
 
 	// Set callbacks
 	d.app.SetStateChangeCallback(func(listening bool) {
-		if d.onStateChange != nil {
-			d.onStateChange(listening)
+		if callback := d.stateChangeCallback(); callback != nil {
+			callback(listening)
 		}
 	})
 
 	d.app.SetErrorCallback(func(title, message string) {
-		if d.onError != nil {
-			d.onError(title, message)
+		if callback := d.errorCallback(); callback != nil {
+			callback(title, message)
 		}
 	})
 
 	d.app.SetVoiceLevelCallback(func(level float64) {
-		d.mu.Lock()
+		d.voiceMu.Lock()
 		d.currentVoiceLevel = level
-		d.mu.Unlock()
-		if d.onVoiceLevel != nil {
-			d.onVoiceLevel(level)
+		d.voiceMu.Unlock()
+		if callback := d.voiceLevelCallback(); callback != nil {
+			callback(level)
 		}
 	})
 
 	d.app.SetInterimTextCallback(func(text string) {
-		if d.onInterimText != nil {
-			d.onInterimText(text)
+		if callback := d.interimTextCallback(); callback != nil {
+			callback(text)
 		}
 	})
 
 	// Set buffer handler callback
 	d.bufferHandler.onTextChange = func(text string) {
-		if d.onBufferText != nil {
-			d.onBufferText(text)
+		if callback := d.bufferTextCallback(); callback != nil {
+			callback(text)
 		}
 	}
 
@@ -272,33 +281,33 @@ func (d *DictationService) ToggleDictation() (bool, error) {
 
 		// Set callbacks
 		d.app.SetStateChangeCallback(func(listening bool) {
-			if d.onStateChange != nil {
-				d.onStateChange(listening)
+			if callback := d.stateChangeCallback(); callback != nil {
+				callback(listening)
 			}
 		})
 
 		d.app.SetErrorCallback(func(title, message string) {
-			if d.onError != nil {
-				d.onError(title, message)
+			if callback := d.errorCallback(); callback != nil {
+				callback(title, message)
 			}
 		})
 
 		d.app.SetVoiceLevelCallback(func(level float64) {
-			if d.onVoiceLevel != nil {
-				d.onVoiceLevel(level)
+			if callback := d.voiceLevelCallback(); callback != nil {
+				callback(level)
 			}
 		})
 
 		d.app.SetInterimTextCallback(func(text string) {
-			if d.onInterimText != nil {
-				d.onInterimText(text)
+			if callback := d.interimTextCallback(); callback != nil {
+				callback(text)
 			}
 		})
 
 		// Set buffer handler callback
 		d.bufferHandler.onTextChange = func(text string) {
-			if d.onBufferText != nil {
-				d.onBufferText(text)
+			if callback := d.bufferTextCallback(); callback != nil {
+				callback(text)
 			}
 		}
 
@@ -510,15 +519,15 @@ func (d *DictationService) Shutdown() {
 
 // SetStateChangeCallback sets the callback for state changes
 func (d *DictationService) SetStateChangeCallback(callback func(bool)) {
-	d.mu.Lock()
-	defer d.mu.Unlock()
+	d.callbacksMu.Lock()
+	defer d.callbacksMu.Unlock()
 	d.onStateChange = callback
 }
 
 // SetErrorCallback sets the callback for errors
 func (d *DictationService) SetErrorCallback(callback func(string, string)) {
-	d.mu.Lock()
-	defer d.mu.Unlock()
+	d.callbacksMu.Lock()
+	defer d.callbacksMu.Unlock()
 	d.onError = callback
 }
 
@@ -586,29 +595,29 @@ func (d *DictationService) AudioTest() error {
 
 // SetVoiceLevelCallback sets the callback for voice level updates
 func (d *DictationService) SetVoiceLevelCallback(callback func(float64)) {
-	d.mu.Lock()
-	defer d.mu.Unlock()
+	d.callbacksMu.Lock()
+	defer d.callbacksMu.Unlock()
 	d.onVoiceLevel = callback
 }
 
 // GetVoiceLevel returns the current voice level (0.0-1.0) for frontend polling
 func (d *DictationService) GetVoiceLevel() float64 {
-	d.mu.Lock()
-	defer d.mu.Unlock()
+	d.voiceMu.Lock()
+	defer d.voiceMu.Unlock()
 	return d.currentVoiceLevel
 }
 
 // SetInterimTextCallback sets the callback for interim text display (streaming overlay)
 func (d *DictationService) SetInterimTextCallback(callback func(string)) {
-	d.mu.Lock()
-	defer d.mu.Unlock()
+	d.callbacksMu.Lock()
+	defer d.callbacksMu.Unlock()
 	d.onInterimText = callback
 }
 
 // SetBufferTextCallback sets the callback for buffer text updates
 func (d *DictationService) SetBufferTextCallback(callback func(string)) {
-	d.mu.Lock()
-	defer d.mu.Unlock()
+	d.callbacksMu.Lock()
+	defer d.callbacksMu.Unlock()
 	d.onBufferText = callback
 }
 
@@ -688,10 +697,44 @@ func (d *DictationService) SetDictationTarget(target string) {
 
 // SetFieldTextCallback sets the callback for field text append events
 func (d *DictationService) SetFieldTextCallback(callback func(string)) {
+	d.fieldHandler.mu.Lock()
+	defer d.fieldHandler.mu.Unlock()
 	d.fieldHandler.onAppendText = callback
 }
 
 // SetFieldDeleteCallback sets the callback for field text delete events
 func (d *DictationService) SetFieldDeleteCallback(callback func(int)) {
+	d.fieldHandler.mu.Lock()
+	defer d.fieldHandler.mu.Unlock()
 	d.fieldHandler.onDeleteChars = callback
+}
+
+func (d *DictationService) stateChangeCallback() func(bool) {
+	d.callbacksMu.RLock()
+	defer d.callbacksMu.RUnlock()
+	return d.onStateChange
+}
+
+func (d *DictationService) errorCallback() func(string, string) {
+	d.callbacksMu.RLock()
+	defer d.callbacksMu.RUnlock()
+	return d.onError
+}
+
+func (d *DictationService) voiceLevelCallback() func(float64) {
+	d.callbacksMu.RLock()
+	defer d.callbacksMu.RUnlock()
+	return d.onVoiceLevel
+}
+
+func (d *DictationService) interimTextCallback() func(string) {
+	d.callbacksMu.RLock()
+	defer d.callbacksMu.RUnlock()
+	return d.onInterimText
+}
+
+func (d *DictationService) bufferTextCallback() func(string) {
+	d.callbacksMu.RLock()
+	defer d.callbacksMu.RUnlock()
+	return d.onBufferText
 }

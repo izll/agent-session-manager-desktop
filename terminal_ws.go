@@ -171,6 +171,45 @@ type termConn struct {
 	heldOver bool
 }
 
+// A webview is local, so ten seconds is deliberately generous. It is still a
+// real deadline: without one a client that stopped consuming frames could pin
+// the output pump (and its visibility/write locks) forever.
+const terminalWSWriteTimeout = 10 * time.Second
+
+// closeTransport is the common, idempotent failure signal for both websocket
+// pumps. Closing the socket wakes ReadMessage, whose defer owns map removal,
+// process reaping and mirror cleanup; closing the stream wakes the PTY reader.
+func (tc *termConn) closeTransport() {
+	tc.closeOnce.Do(func() {
+		close(tc.done)
+		if tc.ptmx != nil {
+			_ = tc.ptmx.Close()
+		}
+		if tc.ws != nil {
+			_ = tc.ws.Close()
+		}
+	})
+}
+
+func (tc *termConn) writeBinary(data []byte) error {
+	tc.writeMu.Lock()
+	defer tc.writeMu.Unlock()
+	if err := tc.ws.SetWriteDeadline(time.Now().Add(terminalWSWriteTimeout)); err != nil {
+		return err
+	}
+	err := tc.ws.WriteMessage(websocket.BinaryMessage, data)
+	_ = tc.ws.SetWriteDeadline(time.Time{})
+	return err
+}
+
+func (tc *termConn) handleOutputWriteError(err error) bool {
+	if err == nil {
+		return false
+	}
+	tc.closeTransport()
+	return true
+}
+
 // maxHeldWhileHidden bounds what one hidden tab may accumulate.
 //
 // Sized against what an agent actually emits, which is not plain text: a
@@ -722,20 +761,12 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 	ts.mu.Lock()
 	// Close existing connection if any
 	if old, exists := ts.conns[connID]; exists {
-		old.closeOnce.Do(func() {
-			close(old.done)
-		})
-		old.ptmx.Close()
-		old.ws.Close()
+		old.closeTransport()
 	}
 	ts.conns[connID] = tc
 	ts.mu.Unlock()
 	log.Printf("[ws] attach session=%s win=%d target=%s", sessionID, winIdx, attachTarget)
-	writeTerminalOutput := func(data []byte) error {
-		tc.writeMu.Lock()
-		defer tc.writeMu.Unlock()
-		return ws.WriteMessage(websocket.BinaryMessage, data)
-	}
+	writeTerminalOutput := tc.writeBinary
 
 	// Read from PTY, write to WebSocket with output throttling.
 	// Without throttling, rapid terminal output (Claude Code spinners, etc.)
@@ -816,7 +847,7 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 					websocket.FormatCloseMessage(websocket.CloseNormalClosure, "terminal stream ended"),
 					time.Now().Add(time.Second))
 				tc.writeMu.Unlock()
-				_ = ws.Close()
+				tc.closeTransport()
 				return
 			case chunk := <-dataCh:
 				// Hidden (background) tab: hold the bytes here instead of
@@ -851,7 +882,7 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 				if len(pendingData) >= 65536 {
 					_, err := tc.deliverOrHold(pendingData, writeTerminalOutput)
 					pendingData = pendingData[:0]
-					if err != nil {
+					if tc.handleOutputWriteError(err) {
 						log.Printf("WebSocket write error: %v", err)
 						return
 					}
@@ -860,7 +891,7 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 				if len(pendingData) > 0 {
 					_, err := tc.deliverOrHold(pendingData, writeTerminalOutput)
 					pendingData = pendingData[:0]
-					if err != nil {
+					if tc.handleOutputWriteError(err) {
 						log.Printf("WebSocket write error: %v", err)
 						return
 					}
@@ -883,15 +914,11 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 			}
 			ts.mu.Unlock()
 
-			tc.closeOnce.Do(func() {
-				close(tc.done)
-			})
+			tc.closeTransport()
 			// Nobody will come back to this connection, so whatever it was
 			// holding for a hidden tab is dead weight until the conn is
 			// collected — up to the full limit, per closed tab.
 			tc.discardHeldWhileHidden()
-			ptmx.Close()
-			ws.Close()
 			_ = cmd.Process.Kill()
 			_ = cmd.Wait()
 

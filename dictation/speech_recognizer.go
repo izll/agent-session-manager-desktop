@@ -523,8 +523,8 @@ func (sr *SpeechRecognizer) recognizeWithGoogleCloud(audioData []byte, language 
 			// Check for billing error
 			if strings.Contains(bodyStr, "billing") || strings.Contains(bodyStr, "BILLING_NOT_ENABLED") {
 				// Notify user about billing requirement
-				if sr.app.onError != nil {
-					go sr.app.onError("API Billing Required",
+				if callback := sr.app.errorCallback(); callback != nil {
+					go callback("API Billing Required",
 						"Speech-to-Text API requires billing to be enabled. Please enable billing at Google Cloud Console, or switch to FREE mode in settings.")
 				}
 				// Stop recording
@@ -546,8 +546,8 @@ func (sr *SpeechRecognizer) recognizeWithGoogleCloud(audioData []byte, language 
 				strings.Contains(bodyStr, "PERMISSION_DENIED")
 
 			if isAPIKeyError {
-				if sr.app.onError != nil {
-					go sr.app.onError("api_key_invalid_title", "api_key_invalid_message")
+				if callback := sr.app.errorCallback(); callback != nil {
+					go callback("api_key_invalid_title", "api_key_invalid_message")
 				}
 				logError("API rejected the key: %s\n", bodyStr)
 				go sr.Stop()
@@ -557,8 +557,8 @@ func (sr *SpeechRecognizer) recognizeWithGoogleCloud(audioData []byte, language 
 			// Anything else that failed: say what Google said, rather than
 			// guessing. The message is what makes the difference between
 			// "your key is dead" and "the audio never arrived".
-			if sr.app.onError != nil {
-				go sr.app.onError("request_rejected_title", bodyStr)
+			if callback := sr.app.errorCallback(); callback != nil {
+				go callback("request_rejected_title", bodyStr)
 			}
 			logError("API rejected the request (%d): %s\n", resp.StatusCode, bodyStr)
 			go sr.Stop()

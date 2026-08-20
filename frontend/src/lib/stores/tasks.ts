@@ -90,6 +90,10 @@ export const taskMasterStatus = writable<TaskMasterStatus>({
   error: null
 });
 export const useMCPMode = writable<boolean>(true); // Default to MCP mode
+/** Provider that produced the list currently shown in TaskPanel. Null while a
+ * target/provider probe is still in flight, so provider-specific UI cannot act
+ * on the previous list during the hand-off. */
+export const effectiveTaskProvider = writable<TaskProvider | null>(null);
 
 let activeTasksSessionId = '';
 let activeStatusSessionId = '';
@@ -107,6 +111,7 @@ function providerFor(sessionId: string): TaskProvider {
 
 function rememberProvider(sessionId: string, requestedMCP: boolean, provider: TaskProvider) {
   effectiveProviderBySession.set(sessionId, { requestedMCP, provider });
+  if (isActiveTasksSession(sessionId)) effectiveTaskProvider.set(provider);
 }
 
 function isActiveTasksSession(sessionId: string): boolean {
@@ -121,6 +126,7 @@ export function prepareTasksSession(sessionId: string): void {
   selectedTaskId.set(null);
   taskError.set(null);
   isLoadingTasks.set(!!sessionId);
+  effectiveTaskProvider.set(null);
 }
 
 async function reloadTasksIfActive(sessionId: string): Promise<void> {
@@ -340,7 +346,9 @@ export async function initializeTaskMaster(sessionId: string) {
 
   try {
     await App.TaskMasterInit(sessionId);
-    await checkTaskMasterStatus(sessionId);
+    // An initialization started in a previous session must not reclaim the
+    // global status store after the user has switched away.
+    if (isActiveTasksSession(sessionId)) await checkTaskMasterStatus(sessionId);
     await reloadTasksIfActive(sessionId);
   } catch (e) {
     if (isActiveTasksSession(sessionId)) taskError.set(String(e));
@@ -396,6 +404,7 @@ export async function loadTasks(sessionId: string) {
     tasks.set([]);
     taskError.set(null);
     isLoadingTasks.set(false);
+    effectiveTaskProvider.set(null);
     return;
   }
 
@@ -430,6 +439,7 @@ export async function loadTasks(sessionId: string) {
     console.error('Failed to load tasks:', e);
     if (isActiveTasksSession(sessionId)) taskError.set(String(e));
     tasks.set([]);
+    effectiveTaskProvider.set(null);
   } finally {
     if (generation === tasksLoadGeneration && sessionId === activeTasksSessionId) {
       isLoadingTasks.set(false);
@@ -438,11 +448,11 @@ export async function loadTasks(sessionId: string) {
 }
 
 // Get next task to work on
-export async function getNextTask(sessionId: string): Promise<Task | null> {
+export async function getNextTask(sessionId: string, requestedProvider?: TaskProvider): Promise<Task | null> {
   if (!sessionId) return null;
 
   try {
-    if (providerFor(sessionId) === 'mcp') {
+    if ((requestedProvider ?? providerFor(sessionId)) === 'mcp') {
       const task = await App.TaskMasterNextTask(sessionId);
       return task ? normalizeTask(task) : null;
     } else {
@@ -481,7 +491,13 @@ export async function setTaskStatus(sessionId: string, taskId: string, status: T
 }
 
 // Add a new task (MCP mode with AI)
-export async function addTask(sessionId: string, prompt: string, research: boolean = false, priority: string = 'medium') {
+export async function addTask(
+  sessionId: string,
+  prompt: string,
+  research: boolean = false,
+  priority: string = 'medium',
+  requestedProvider?: TaskProvider,
+) {
   if (!sessionId || !prompt.trim()) return;
 
   isLoadingTasks.set(true);
@@ -489,7 +505,8 @@ export async function addTask(sessionId: string, prompt: string, research: boole
 
   try {
     let newTask: any;
-    if (providerFor(sessionId) === 'mcp') {
+    const provider = requestedProvider ?? providerFor(sessionId);
+    if (provider === 'mcp') {
       newTask = await App.TaskMasterAddTask(sessionId, prompt, research, priority);
     } else {
       newTask = await App.CreateTask(sessionId, prompt, '', priority, []);
@@ -509,7 +526,14 @@ export async function addTask(sessionId: string, prompt: string, research: boole
 }
 
 // Add a new task manually (no AI required)
-export async function addManualTask(sessionId: string, title: string, description: string = '', details: string = '', priority: string = 'medium'): Promise<Task | undefined> {
+export async function addManualTask(
+  sessionId: string,
+  title: string,
+  description: string = '',
+  details: string = '',
+  priority: string = 'medium',
+  requestedProvider?: TaskProvider,
+): Promise<Task | undefined> {
   if (!sessionId || !title.trim()) return;
 
   isLoadingTasks.set(true);
@@ -517,7 +541,8 @@ export async function addManualTask(sessionId: string, title: string, descriptio
 
   try {
     let newTask: any;
-    if (providerFor(sessionId) === 'mcp') {
+    const provider = requestedProvider ?? providerFor(sessionId);
+    if (provider === 'mcp') {
       newTask = await App.TaskMasterAddManualTask(sessionId, title, description, details, priority);
     } else {
       newTask = await App.CreateTask(sessionId, title, description, priority, []);
@@ -656,10 +681,10 @@ export async function analyzeComplexity(sessionId: string, research: boolean = t
 }
 
 // Remove a task
-export async function removeTask(sessionId: string, taskId: string): Promise<TaskProvider> {
+export async function removeTask(sessionId: string, taskId: string, requestedProvider?: TaskProvider): Promise<TaskProvider> {
   if (!sessionId || !taskId) throw new Error('session and task are required');
 
-  const provider = providerFor(sessionId);
+  const provider = requestedProvider ?? providerFor(sessionId);
 
   try {
     if (provider === 'mcp') {
@@ -679,11 +704,11 @@ export async function removeTask(sessionId: string, taskId: string): Promise<Tas
 }
 
 // Send task to agent
-export async function sendTaskToAgent(sessionId: string, taskId: string) {
+export async function sendTaskToAgent(sessionId: string, taskId: string, requestedProvider?: TaskProvider) {
   if (!sessionId || !taskId) return;
 
   try {
-    if (providerFor(sessionId) === 'mcp') {
+    if ((requestedProvider ?? providerFor(sessionId)) === 'mcp') {
       await App.TaskMasterSendToAgent(sessionId, taskId);
     } else {
       await App.SendTaskToAgent(sessionId, taskId);
@@ -708,11 +733,11 @@ export async function sendTaskToAgent(sessionId: string, taskId: string) {
  * keeps the feature working in both modes rather than silently doing nothing in
  * one of them.
  */
-export async function updateTaskDirect(sessionId: string, taskId: string, title: string, description: string, details: string, priority: string, dueAt?: string, sessionScoped?: boolean) {
+export async function updateTaskDirect(sessionId: string, taskId: string, title: string, description: string, details: string, priority: string, dueAt?: string, sessionScoped?: boolean, requestedProvider?: TaskProvider) {
   if (!sessionId || !taskId) return;
 
   try {
-    if (providerFor(sessionId) === 'mcp') {
+    if ((requestedProvider ?? providerFor(sessionId)) === 'mcp') {
       // One provider, one atomic replacement. Writing the extra fields through
       // the local update API targeted a separate tasks.json after the MCP file
       // had already changed, leaving a partial edit and a permanent error.
@@ -755,20 +780,30 @@ export async function updateTaskDirect(sessionId: string, taskId: string, title:
  * fields, so the change is made here on the list already in memory and written
  * back in one call.
  */
+const localMutationQueues = new Map<string, Promise<void>>();
+
 async function editTaskLocally(
   sessionId: string,
   taskId: string,
   change: (task: Task) => Partial<Task>,
 ): Promise<void> {
-  // Undo can run after the user has moved to another session. In that case the
-  // global store belongs to the new session, so read the requested target
-  // instead of accidentally editing a same-id task from the visible list.
-  const source = isActiveTasksSession(sessionId)
-    ? get(tasks)
-    : ((await App.GetTasks(sessionId)) || []).map(normalizeTask);
-  const task = source.find((t) => String(t.id) === String(taskId));
-  if (!task) throw new Error(`no such task: ${taskId}`);
-  await App.UpdateTask(sessionId, String(taskId), change(task) as Record<string, any>);
+  // These are read/modify/write operations over a whole array field. Serialise
+  // them per session and read inside the queue: two rapid checkbox/add clicks
+  // must see the result of the operation immediately before them, not the same
+  // stale Svelte-store snapshot and then overwrite one another.
+  const previous = localMutationQueues.get(sessionId) ?? Promise.resolve();
+  const queued = previous.catch(() => undefined).then(async () => {
+    const source = ((await App.GetTasks(sessionId)) || []).map(normalizeTask);
+    const task = source.find((t) => String(t.id) === String(taskId));
+    if (!task) throw new Error(`no such task: ${taskId}`);
+    await App.UpdateTask(sessionId, String(taskId), change(task) as Record<string, any>);
+  });
+  localMutationQueues.set(sessionId, queued);
+  try {
+    await queued;
+  } finally {
+    if (localMutationQueues.get(sessionId) === queued) localMutationQueues.delete(sessionId);
+  }
 }
 
 /** The task a subtask id belongs to: Task Master addresses them as "3.1". */
@@ -801,11 +836,11 @@ function nextLocalSubtaskId(subtasks: Subtask[]): string {
 }
 
 // Add subtask to a task
-export async function addSubtask(sessionId: string, taskId: string, title: string, description: string = '') {
+export async function addSubtask(sessionId: string, taskId: string, title: string, description: string = '', requestedProvider?: TaskProvider) {
   if (!sessionId || !taskId || !title.trim()) return;
 
   try {
-    if (providerFor(sessionId) === 'mcp') {
+    if ((requestedProvider ?? providerFor(sessionId)) === 'mcp') {
       await App.TaskMasterAddSubtask(sessionId, taskId, title, description);
     } else {
       await editTaskLocally(sessionId, taskId, (task) => ({
@@ -826,10 +861,10 @@ export async function addSubtask(sessionId: string, taskId: string, title: strin
 }
 
 // Remove a subtask
-export async function removeSubtask(sessionId: string, subtaskId: string): Promise<TaskProvider> {
+export async function removeSubtask(sessionId: string, subtaskId: string, requestedProvider?: TaskProvider): Promise<TaskProvider> {
   if (!sessionId || !subtaskId) throw new Error('session and subtask are required');
 
-  const provider = providerFor(sessionId);
+  const provider = requestedProvider ?? providerFor(sessionId);
 
   try {
     if (provider === 'mcp') {
@@ -924,10 +959,10 @@ export async function addDependency(sessionId: string, taskId: string, dependsOn
 }
 
 // Remove dependency from a task
-export async function removeDependency(sessionId: string, taskId: string, dependsOnId: string): Promise<TaskProvider> {
+export async function removeDependency(sessionId: string, taskId: string, dependsOnId: string, requestedProvider?: TaskProvider): Promise<TaskProvider> {
   if (!sessionId || !taskId || !dependsOnId) throw new Error('session, task and dependency are required');
 
-  const provider = providerFor(sessionId);
+  const provider = requestedProvider ?? providerFor(sessionId);
 
   try {
     if (provider === 'mcp') {

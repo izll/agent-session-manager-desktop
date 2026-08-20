@@ -174,4 +174,21 @@ const place = (scrollTop, currentHunk = 2, markedHunk = 2) => ({ scrollTop, curr
   assert.equal(recallPlace('tabs', 'same.ts', 'whole', 2), null, 'the changed tab is forgotten');
 }
 
+// A terminal can change its working directory without changing session, tab or
+// diff mode. Canonical repository roots therefore separate both list identity
+// and the saved reading position.
+{
+  noteListKey('roots', 'same.ts:1:0', 0, 'full', '/repo/one');
+  noteListKey('roots', 'same.ts:1:0', 0, 'full', '/repo/two');
+  rememberPlace('roots', 'same.ts', 'whole', place(333), 0, '/repo/one');
+  rememberPlace('roots', 'same.ts', 'whole', place(777), 0, '/repo/two');
+
+  assert.equal(recallPlace('roots', 'same.ts', 'whole', 0, '/repo/one')?.scrollTop, 333);
+  assert.equal(recallPlace('roots', 'same.ts', 'whole', 0, '/repo/two')?.scrollTop, 777);
+
+  noteListKey('roots', 'same.ts:9:9', 0, 'full', '/repo/two');
+  assert.equal(recallPlace('roots', 'same.ts', 'whole', 0, '/repo/one')?.scrollTop, 333);
+  assert.equal(recallPlace('roots', 'same.ts', 'whole', 0, '/repo/two'), null);
+}
+
 console.log('diffViewState: ok');

@@ -46,6 +46,7 @@
   import { agents, loadAgents } from './lib/stores/agents';
   import { startSidebarPolling, stopSidebarPolling } from './lib/stores/sidebarPolling';
   import { WindowMinimise, WindowToggleMaximise, Quit, EventsOn, EventsOff, EventsEmit } from '../wailsjs/runtime/runtime';
+  import { afterUnsavedChanges } from './lib/stores/unsavedChanges';
   import * as DictationService from '../wailsjs/go/main/DictationService';
   import { IsDevMode, GetMultiplexerStatus, InstallMultiplexer, UnfinishedTasksForSession, GetTabWorkingDirectory } from '../wailsjs/go/main/App';
   import asmgrIcon from './assets/icons/asmgr.svg';
@@ -885,7 +886,11 @@
    * message is painted before the main thread is busy tearing things down —
    * requesting both in the same frame would show nothing at all.
    */
-  async function confirmQuit() {
+  function confirmQuit() {
+    afterUnsavedChanges(() => { void finishQuit(); });
+  }
+
+  async function finishQuit() {
     quitting = true;
     // tick() first: setting the flag only queues the DOM update, and a frame
     // callback can run before Svelte has applied it — so the frame we waited

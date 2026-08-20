@@ -1,6 +1,7 @@
 import { mount } from 'svelte';
 import TaskPanel from '../../src/lib/components/MainPanel/TaskPanel.svelte';
 import { selectedSessionId } from '../../src/lib/stores/sessions';
+import { settings } from '../../src/lib/stores/settings';
 
 const tasks = [
   {
@@ -29,7 +30,23 @@ const tasks = [
   },
 ];
 
-const backend = new Proxy({ GetTasks: async () => tasks }, {
+const tasksBySession = new Map<string, any[]>();
+const updates: unknown[][] = [];
+const params = new URLSearchParams(location.search);
+const fallback = params.has('fallback');
+const delayUpdate = params.has('delayUpdate');
+const pendingUpdateResolvers: Array<() => void> = [];
+if (fallback) settings.update((value) => ({ ...value, taskMasterEnabled: true }));
+
+const backend = new Proxy({
+  GetTasks: async (sessionId: string) => tasksBySession.get(sessionId) ?? tasks,
+  TaskMasterGetTasks: async () => { throw new Error('fixture MCP unavailable'); },
+  TaskMasterStatus: async () => ({ initialized: true, running: true, error: null }),
+  UpdateTask: async (...args: unknown[]) => {
+    updates.push(args);
+    if (delayUpdate) await new Promise<void>((resolve) => pendingUpdateResolvers.push(resolve));
+  },
+}, {
   get(target, key) {
     if (key in target) return target[key as keyof typeof target];
     return async () => undefined;
@@ -41,6 +58,16 @@ const backend = new Proxy({ GetTasks: async () => tasks }, {
 });
 
 selectedSessionId.set('layout-session');
+(window as any).taskPanelFixture = {
+  select(sessionId: string, replacement: any[] = tasks) {
+    tasksBySession.set(sessionId, replacement);
+    selectedSessionId.set(sessionId);
+  },
+  updates: () => updates,
+  resolveUpdates() {
+    for (const resolve of pendingUpdateResolvers.splice(0)) resolve();
+  },
+};
 const target = document.getElementById('fixture');
 if (!target) throw new Error('fixture target is missing');
 mount(TaskPanel, { target, props: { active: true } });

@@ -190,20 +190,20 @@ export function GetExtraArgs(arg1, arg2) {
   return window['go']['main']['App']['GetExtraArgs'](arg1, arg2);
 }
 
-export function GetFullDiff(arg1, arg2) {
-  return window['go']['main']['App']['GetFullDiff'](arg1, arg2);
+export function GetFullDiff(arg1, arg2, arg3) {
+  return window['go']['main']['App']['GetFullDiff'](arg1, arg2, arg3);
 }
 
-export function GetFullDiffFileList(arg1, arg2) {
-  return window['go']['main']['App']['GetFullDiffFileList'](arg1, arg2);
+export function GetFullDiffFileList(arg1, arg2, arg3) {
+  return window['go']['main']['App']['GetFullDiffFileList'](arg1, arg2, arg3);
 }
 
-export function GetFullDiffFiles(arg1, arg2) {
-  return window['go']['main']['App']['GetFullDiffFiles'](arg1, arg2);
+export function GetFullDiffFiles(arg1, arg2, arg3) {
+  return window['go']['main']['App']['GetFullDiffFiles'](arg1, arg2, arg3);
 }
 
-export function GetFullDiffForFile(arg1, arg2, arg3, arg4) {
-  return window['go']['main']['App']['GetFullDiffForFile'](arg1, arg2, arg3, arg4);
+export function GetFullDiffForFile(arg1, arg2, arg3, arg4, arg5) {
+  return window['go']['main']['App']['GetFullDiffForFile'](arg1, arg2, arg3, arg4, arg5);
 }
 
 export function GetGitBranch(arg1) {
@@ -278,20 +278,20 @@ export function GetResumeSessions(arg1, arg2) {
   return window['go']['main']['App']['GetResumeSessions'](arg1, arg2);
 }
 
-export function GetSessionDiff(arg1, arg2) {
-  return window['go']['main']['App']['GetSessionDiff'](arg1, arg2);
+export function GetSessionDiff(arg1, arg2, arg3) {
+  return window['go']['main']['App']['GetSessionDiff'](arg1, arg2, arg3);
 }
 
-export function GetSessionDiffFileList(arg1, arg2) {
-  return window['go']['main']['App']['GetSessionDiffFileList'](arg1, arg2);
+export function GetSessionDiffFileList(arg1, arg2, arg3) {
+  return window['go']['main']['App']['GetSessionDiffFileList'](arg1, arg2, arg3);
 }
 
-export function GetSessionDiffFiles(arg1, arg2) {
-  return window['go']['main']['App']['GetSessionDiffFiles'](arg1, arg2);
+export function GetSessionDiffFiles(arg1, arg2, arg3) {
+  return window['go']['main']['App']['GetSessionDiffFiles'](arg1, arg2, arg3);
 }
 
-export function GetSessionDiffForFile(arg1, arg2, arg3, arg4) {
-  return window['go']['main']['App']['GetSessionDiffForFile'](arg1, arg2, arg3, arg4);
+export function GetSessionDiffForFile(arg1, arg2, arg3, arg4, arg5) {
+  return window['go']['main']['App']['GetSessionDiffForFile'](arg1, arg2, arg3, arg4, arg5);
 }
 
 export function GetSessionTemplates() {
@@ -406,8 +406,8 @@ export function ListOnlineSchemes() {
   return window['go']['main']['App']['ListOnlineSchemes']();
 }
 
-export function ListSessionDirectory(arg1, arg2, arg3) {
-  return window['go']['main']['App']['ListSessionDirectory'](arg1, arg2, arg3);
+export function ListSessionDirectory(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['ListSessionDirectory'](arg1, arg2, arg3, arg4);
 }
 
 export function LogFrontend(arg1) {
@@ -442,8 +442,8 @@ export function OpenLogFolder(arg1) {
   return window['go']['main']['App']['OpenLogFolder'](arg1);
 }
 
-export function OpenSessionFileForEdit(arg1, arg2, arg3) {
-  return window['go']['main']['App']['OpenSessionFileForEdit'](arg1, arg2, arg3);
+export function OpenSessionFileForEdit(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['OpenSessionFileForEdit'](arg1, arg2, arg3, arg4);
 }
 
 export function PendingUpdate() {
@@ -462,8 +462,8 @@ export function QuickReplyTab(arg1, arg2, arg3) {
   return window['go']['main']['App']['QuickReplyTab'](arg1, arg2, arg3);
 }
 
-export function ReadSessionDirectoryFile(arg1, arg2, arg3) {
-  return window['go']['main']['App']['ReadSessionDirectoryFile'](arg1, arg2, arg3);
+export function ReadSessionDirectoryFile(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['ReadSessionDirectoryFile'](arg1, arg2, arg3, arg4);
 }
 
 export function ReadSessionFile() {
@@ -574,12 +574,12 @@ export function SaveSettings(arg1) {
   return window['go']['main']['App']['SaveSettings'](arg1);
 }
 
-export function SearchSessionFileContents(arg1, arg2, arg3, arg4, arg5) {
-  return window['go']['main']['App']['SearchSessionFileContents'](arg1, arg2, arg3, arg4, arg5);
+export function SearchSessionFileContents(arg1, arg2, arg3, arg4, arg5, arg6) {
+  return window['go']['main']['App']['SearchSessionFileContents'](arg1, arg2, arg3, arg4, arg5, arg6);
 }
 
-export function SearchSessionFileIndex(arg1, arg2, arg3) {
-  return window['go']['main']['App']['SearchSessionFileIndex'](arg1, arg2, arg3);
+export function SearchSessionFileIndex(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['SearchSessionFileIndex'](arg1, arg2, arg3, arg4);
 }
 
 export function SelectProject(arg1) {

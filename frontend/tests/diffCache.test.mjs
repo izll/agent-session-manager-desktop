@@ -54,6 +54,8 @@ assert.match(
 );
 
 // The load has to write the cache too, or nothing is ever there to return to.
-assert.match(diff, /cacheDiff\(requestedKey/, 'a completed load should populate the cache');
+assert.match(diff, /cacheDiff\(rootCacheKey/, 'a completed load should populate the root-bound cache');
+assert.match(diff, /rootCacheKey = `\$\{requestedKey\}\\x1f\$\{root\}`/,
+  'two repositories reached from the same tab must never share cached diff data');
 
 console.log('diffCache: ok');

@@ -340,13 +340,23 @@ jobs:
           APP="build/bin/Agent Session Manager.app"
           EXE="$APP/Contents/MacOS/asmgr-desktop"
           DYLIB="$APP/Contents/Frameworks/libportaudio.2.dylib"
+          ENTITLEMENTS="build/darwin/entitlements.plist"
 
           # Sign nested code from the inside out, then seal the app bundle.
           # --timestamp and --options runtime are required for notarization.
           codesign --force --timestamp --options runtime --sign "$MACOS_SIGNING_IDENTITY" "$DYLIB"
-          codesign --force --timestamp --options runtime --sign "$MACOS_SIGNING_IDENTITY" "$EXE"
-          codesign --force --timestamp --options runtime --sign "$MACOS_SIGNING_IDENTITY" "$APP"
+          codesign --force --timestamp --options runtime --entitlements "$ENTITLEMENTS" \
+            --sign "$MACOS_SIGNING_IDENTITY" "$EXE"
+          codesign --force --timestamp --options runtime --entitlements "$ENTITLEMENTS" \
+            --sign "$MACOS_SIGNING_IDENTITY" "$APP"
           codesign --verify --deep --strict --verbose=2 "$APP"
+
+          # Inspect the final signed product, not merely the source files: a
+          # missing codesign flag or Wails template regression must fail here.
+          SIGNED_ENTITLEMENTS="$RUNNER_TEMP/asmgr-signed-entitlements.plist"
+          codesign -d --entitlements :- "$APP" > "$SIGNED_ENTITLEMENTS"
+          [ "$(plutil -extract com.apple.security.device.audio-input raw -o - "$SIGNED_ENTITLEMENTS")" = "true" ]
+          test -n "$(plutil -extract NSMicrophoneUsageDescription raw -o - "$APP/Contents/Info.plist")"
 
       - name: Notarize and staple
         env:
@@ -535,10 +545,10 @@ jobs:
           V="${{ steps.ver.outputs.num }}"
           SETUP="asmgr-desktop_${V}_windows_amd64_setup.exe"
           # 7-Zip reads NSIS archives and ships with the runner image.
-          LISTING=$("/c/Program Files/7-Zip/7z.exe" l "$SETUP" 2>/dev/null || true)
+          LISTING=$("/c/Program Files/7-Zip/7z.exe" l "$SETUP")
           if [ -z "$LISTING" ]; then
-            echo "Could not inspect the installer; skipping the payload check" >&2
-            exit 0
+            echo "Could not inspect the installer; refusing to publish an unchecked payload" >&2
+            exit 1
           fi
           MISSING=0
           for DLL in build/dlls/*.dll; do

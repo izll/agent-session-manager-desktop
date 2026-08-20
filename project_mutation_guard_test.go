@@ -183,11 +183,11 @@ func TestValidateDiffRootRejectsChangedWorkingDirectory(t *testing.T) {
 	root := t.TempDir()
 	other := t.TempDir()
 	inst := &session.Instance{Path: root, BrowseRoot: root}
-	if err := validateDiffRoot(inst, root); err != nil {
+	if _, err := validateDiffRoot(inst, root); err != nil {
 		t.Fatalf("matching root rejected: %v", err)
 	}
 	inst.BrowseRoot = other
-	if err := validateDiffRoot(inst, root); err == nil {
+	if _, err := validateDiffRoot(inst, root); err == nil {
 		t.Fatal("changed tab working directory was accepted for revert")
 	}
 }
@@ -216,6 +216,79 @@ func TestValidateBrowseRootRejectsChangedWorkingDirectory(t *testing.T) {
 	}
 }
 
+func TestListSessionDirectoryCreatesAndEnforcesRootSnapshot(t *testing.T) {
+	storage := guardedTestStorage(t)
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "visible.txt"), []byte("visible"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	inst := &session.Instance{ID: "browse-root", Name: "browse", Path: root, Status: session.StatusStopped}
+	if err := storage.AddInstance(inst); err != nil {
+		t.Fatal(err)
+	}
+	app := &App{storage: storage}
+	listing, err := app.ListSessionDirectory(inst.ID, "", -1, "")
+	if err != nil {
+		t.Fatalf("create root snapshot: %v", err)
+	}
+	resolvedRoot, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if listing.AbsPath != resolvedRoot {
+		t.Fatalf("root snapshot = %q, want canonical %q", listing.AbsPath, resolvedRoot)
+	}
+	if _, err := app.ReadSessionDirectoryFile(inst.ID, "visible.txt", -1, listing.AbsPath); err != nil {
+		t.Fatalf("read through matching root snapshot: %v", err)
+	}
+	if _, err := app.ListSessionDirectory(inst.ID, "subdirectory", -1, ""); err == nil {
+		t.Fatal("nested listing accepted a missing root snapshot")
+	}
+}
+
+func TestReloadTaskManagerCacheContinuesAfterOneStoreFails(t *testing.T) {
+	badRoot := t.TempDir()
+	goodRoot := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(badRoot, ".taskmaster"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(goodRoot, ".taskmaster"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(badRoot, ".taskmaster", "tasks.json"), []byte(`{broken`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	goodPath := filepath.Join(goodRoot, ".taskmaster", "tasks.json")
+	if err := os.WriteFile(goodPath, []byte(`{"meta":{},"tasks":[]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	badManager := session.NewTaskManager(badRoot)
+	goodManager := session.NewTaskManager(goodRoot)
+	if err := goodManager.Load(); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(goodPath, []byte(`{"meta":{},"tasks":[{"id":"reloaded","title":"new","status":"backlog","priority":"medium"}]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	taskManagerMu.Lock()
+	previous := taskManagerCache
+	taskManagerCache = map[string]*session.TaskManager{"bad": badManager, "good": goodManager}
+	taskManagerMu.Unlock()
+	t.Cleanup(func() {
+		taskManagerMu.Lock()
+		taskManagerCache = previous
+		taskManagerMu.Unlock()
+	})
+
+	if err := reloadTaskManagerCache(); err == nil {
+		t.Fatal("invalid task store did not report a reload error")
+	}
+	if tasks := goodManager.GetTasks(); len(tasks) != 1 || tasks[0].ID != "reloaded" {
+		t.Fatalf("valid cache was not reloaded after another store failed: %+v", tasks)
+	}
+}
+
 func TestUpdateTaskMasterFileDirectWritesOneProviderSnapshot(t *testing.T) {
 	tasksFile := filepath.Join(t.TempDir(), "tasks.json")
 	original := map[string]interface{}{
@@ -225,6 +298,7 @@ func TestUpdateTaskMasterFileDirectWritesOneProviderSnapshot(t *testing.T) {
 				"details": "old details", "priority": "low", "dueAt": "old due", "sessionId": "old session",
 			}},
 			"metadata": map[string]interface{}{"kept": true},
+			"custom":   map[string]interface{}{"future": "kept"},
 		},
 	}
 	data, err := json.Marshal(original)
@@ -246,11 +320,12 @@ func TestUpdateTaskMasterFileDirectWritesOneProviderSnapshot(t *testing.T) {
 		var root map[string]struct {
 			Tasks    []map[string]interface{} `json:"tasks"`
 			Metadata map[string]interface{}   `json:"metadata"`
+			Custom   map[string]interface{}   `json:"custom"`
 		}
 		if err := json.Unmarshal(out, &root); err != nil {
 			t.Fatal(err)
 		}
-		if root["master"].Metadata["kept"] != true || len(root["master"].Tasks) != 1 {
+		if root["master"].Metadata["kept"] != true || root["master"].Custom["future"] != "kept" || len(root["master"].Tasks) != 1 {
 			t.Fatalf("unrelated Task Master context data changed: %#v", root)
 		}
 		return root["master"].Tasks[0]
@@ -269,6 +344,42 @@ func TestUpdateTaskMasterFileDirectWritesOneProviderSnapshot(t *testing.T) {
 	}
 	if _, ok := task["sessionId"]; ok {
 		t.Fatalf("cleared session remained in MCP task: %#v", task)
+	}
+}
+
+func TestUpdateTaskMasterFileDirectPrefersMasterContext(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "tasks.json")
+	data := `{"feature":{"tasks":[{"id":"7","title":"feature"}]},"master":{"tasks":[{"id":"7","title":"master"}]}}`
+	if err := os.WriteFile(path, []byte(data), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := updateTaskMasterFileDirect(path, "7", "updated", "", "", "high", "", ""); err != nil {
+		t.Fatal(err)
+	}
+	var root map[string]struct {
+		Tasks []map[string]interface{} `json:"tasks"`
+	}
+	raw, _ := os.ReadFile(path)
+	if err := json.Unmarshal(raw, &root); err != nil {
+		t.Fatal(err)
+	}
+	if root["master"].Tasks[0]["title"] != "updated" || root["feature"].Tasks[0]["title"] != "feature" {
+		t.Fatalf("direct edit chose wrong context: %#v", root)
+	}
+}
+
+func TestUpdateTaskMasterFileDirectRejectsAmbiguousNonMasterContext(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "tasks.json")
+	data := `{"feature-a":{"tasks":[{"id":"7","title":"a"}]},"feature-b":{"tasks":[{"id":"7","title":"b"}]},"master":{"tasks":[]}}`
+	if err := os.WriteFile(path, []byte(data), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := updateTaskMasterFileDirect(path, "7", "updated", "", "", "high", "", ""); err == nil || !strings.Contains(err.Error(), "ambiguous") {
+		t.Fatalf("ambiguous direct edit error = %v", err)
+	}
+	raw, _ := os.ReadFile(path)
+	if string(raw) != data {
+		t.Fatalf("ambiguous edit changed file: %s", raw)
 	}
 }
 

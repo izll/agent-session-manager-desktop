@@ -613,11 +613,15 @@ func TestInstallLockSerializesIndependentProcesses(t *testing.T) {
 		return
 	}
 	home := t.TempDir()
+	t.Setenv("HOME", home)
+	if runtime.GOOS == "windows" {
+		t.Setenv("USERPROFILE", home)
+	}
 	coord := t.TempDir()
 	ready := filepath.Join(coord, "ready")
 	release := filepath.Join(coord, "release")
 	acquired := filepath.Join(coord, "acquired")
-	baseEnv := append(os.Environ(), "HOME="+home)
+	baseEnv := os.Environ()
 	holder := exec.Command(os.Args[0], "-test.run=^TestInstallLockSerializesIndependentProcesses$")
 	holder.Env = append(baseEnv,
 		"ASMGR_UPDATE_LOCK_HELPER=holder",
@@ -648,6 +652,26 @@ func TestInstallLockSerializesIndependentProcesses(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 	if _, err := os.Stat(acquired); !os.IsNotExist(err) {
 		t.Fatalf("contender entered while holder owned install lock: %v", err)
+	}
+	tryStarted := time.Now()
+	tryActionRan := false
+	locked, err := withInstallTryLock(func() error {
+		tryActionRan = true
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("nonblocking install lock returned an error under contention: %v", err)
+	}
+	if locked || tryActionRan {
+		t.Fatal("nonblocking install lock entered while another process held it")
+	}
+	if elapsed := time.Since(tryStarted); elapsed > time.Second {
+		t.Fatalf("nonblocking install lock took %v under contention", elapsed)
+	}
+	cleanupStarted := time.Now()
+	CleanStaleUpdateFiles()
+	if elapsed := time.Since(cleanupStarted); elapsed > time.Second {
+		t.Fatalf("startup cleanup blocked for %v behind another process's install", elapsed)
 	}
 	if err := os.WriteFile(release, []byte("release"), 0o600); err != nil {
 		t.Fatal(err)

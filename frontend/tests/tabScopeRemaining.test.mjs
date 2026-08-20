@@ -19,15 +19,22 @@ const app = read('../src/App.svelte');
 assert.match(quickOpen, /export let windowIdx = 0;/, 'quick-open must know which tab it is for');
 assert.match(
   quickOpen,
-  /App\.SearchSessionFileIndex\(sessionId, includeAll, windowIdx\)/,
+  /App\.SearchSessionFileIndex\(targetSessionId, includeAll, targetWindowIdx, targetRoot\)/,
   'the index search must be scoped to the tab',
 );
 assert.match(
   quickOpen,
-  /App\.SearchSessionFileContents\(sessionId, q, false, includeAll, windowIdx\)/,
+  /App\.SearchSessionFileContents\([\s\S]*?targetSessionId,[\s\S]*?targetWindowIdx,[\s\S]*?targetRoot/,
   'the content search must be scoped to the tab',
 );
 assert.match(browser, /windowIdx=\{\$selectedWindowIdx \?\? 0\}/, 'and the browser must pass it');
+assert.match(browser, /root=\{rootAbsPath\}/, 'quick-open must share the tree canonical root snapshot');
+assert.match(quickOpen, /`\$\{show\}\|\$\{includeAll\}\|\$\{sessionId\}\|\$\{windowIdx\}\|\$\{root\}`/,
+  'the live tab and root must invalidate a visible quick-open index');
+assert.match(quickOpen, /targetWindowIdx !== windowIdx \|\| targetRoot !== root/,
+  'late search responses must be rejected after a tab/root switch');
+assert.match(quickOpen, /loadGeneration\+\+;[\s\S]*?index = null;[\s\S]*?contentResult = null;/,
+  'a tab/root transition must remove old results even while the new root is temporarily empty');
 
 // The Resume button offered the action based on the session's agent, while the
 // handler behind it correctly used the tab's — they could disagree.

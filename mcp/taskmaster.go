@@ -1,9 +1,12 @@
 package mcp
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"log"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -58,7 +61,9 @@ type Subtask struct {
 
 func (task *Task) UnmarshalJSON(data []byte) error {
 	var raw map[string]interface{}
-	if err := json.Unmarshal(data, &raw); err != nil {
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.UseNumber()
+	if err := decoder.Decode(&raw); err != nil {
 		return err
 	}
 	parsed := taskFromMap(raw)
@@ -237,7 +242,9 @@ func (tm *TaskMaster) GetTask(taskID string) (*Task, error) {
 
 	// Parse into generic map first to handle numeric IDs and various formats
 	var raw map[string]interface{}
-	if err := json.Unmarshal([]byte(text), &raw); err != nil {
+	decoder := json.NewDecoder(strings.NewReader(text))
+	decoder.UseNumber()
+	if err := decoder.Decode(&raw); err != nil {
 		return nil, fmt.Errorf("failed to parse task response: %w", err)
 	}
 
@@ -336,9 +343,14 @@ func taskFromMap(m map[string]interface{}) *Task {
 		}
 	}
 
-	if complexity, ok := m["complexity"].(float64); ok {
-		c := int(complexity)
-		task.Complexity = &c
+	switch complexity := m["complexity"].(type) {
+	case json.Number:
+		if value, err := strconv.Atoi(complexity.String()); err == nil {
+			task.Complexity = &value
+		}
+	case float64:
+		value := int(complexity)
+		task.Complexity = &value
 	}
 
 	if subtasks, ok := m["subtasks"].([]interface{}); ok {

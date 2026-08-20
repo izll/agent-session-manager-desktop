@@ -24,11 +24,22 @@ func readSaveUnchanged(t *testing.T, root, name string) []byte {
 	if err != nil {
 		t.Fatalf("ReadFileForEdit(%s): %v", name, err)
 	}
+	resolvedRoot, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		t.Fatalf("resolve edit root: %v", err)
+	}
+	if opened.Root != resolvedRoot {
+		t.Fatalf("ReadFileForEdit(%s) root = %q, want canonical %q", name, opened.Root, resolvedRoot)
+	}
 	if !opened.Editable {
 		t.Fatalf("%s should be editable, got reason %q", name, opened.NotEditableReason)
 	}
-	if _, err := inst.SaveFileForEdit(name, opened.Text, opened.Shape, opened.Version, false); err != nil {
+	saved, err := inst.SaveFileForEdit(name, opened.Text, opened.Shape, opened.Version, false)
+	if err != nil {
 		t.Fatalf("SaveFileForEdit(%s): %v", name, err)
+	}
+	if saved.Root != resolvedRoot {
+		t.Fatalf("SaveFileForEdit(%s) root = %q, want canonical %q", name, saved.Root, resolvedRoot)
 	}
 	got, err := os.ReadFile(filepath.Join(root, name))
 	if err != nil {

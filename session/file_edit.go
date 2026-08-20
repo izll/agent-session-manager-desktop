@@ -78,6 +78,9 @@ type FileShape struct {
 type EditableFile struct {
 	Path    string `json:"path"`
 	AbsPath string `json:"absPath"`
+	// Root is the canonical resolved tree this relative path was read from. The
+	// caller returns it on save so a tab cwd change cannot retarget the edit.
+	Root string `json:"root"`
 	// Text is what the textarea shows: no BOM, LF-only endings (unless the file
 	// is mixed), and no synthetic trailing newline.
 	Text  string    `json:"text"`
@@ -227,7 +230,7 @@ func (i *Instance) ReadFileForEdit(rel string) (*EditableFile, error) {
 	if strings.TrimSpace(rel) == "" {
 		return nil, fmt.Errorf("no file given")
 	}
-	abs, _, err := i.resolveBrowsePath(rel)
+	abs, root, err := i.resolveBrowsePath(rel)
 	if err != nil {
 		return nil, err
 	}
@@ -242,6 +245,7 @@ func (i *Instance) ReadFileForEdit(rel string) (*EditableFile, error) {
 	result := &EditableFile{
 		Path:    filepath.ToSlash(filepath.Clean(rel)),
 		AbsPath: abs,
+		Root:    root,
 		Size:    info.Size(),
 		Mode:    uint32(info.Mode().Perm()),
 	}
@@ -294,7 +298,7 @@ func (i *Instance) SaveFileForEdit(rel, text string, shape FileShape, version st
 	// The containment guard matters more here than on the read path: this call
 	// creates and renames files. resolveBrowsePath resolves symlinks before
 	// checking, so a link planted inside the tree cannot redirect the write.
-	abs, _, err := i.resolveBrowsePath(rel)
+	abs, root, err := i.resolveBrowsePath(rel)
 	if err != nil {
 		// resolveBrowsePath cannot resolve a path whose leaf no longer exists,
 		// so a file deleted since it was opened arrives here as a generic
@@ -345,6 +349,7 @@ func (i *Instance) SaveFileForEdit(rel, text string, shape FileShape, version st
 	saved := &EditableFile{
 		Path:     filepath.ToSlash(filepath.Clean(rel)),
 		AbsPath:  abs,
+		Root:     root,
 		Text:     text,
 		Shape:    shape,
 		Version:  fileVersion(data),

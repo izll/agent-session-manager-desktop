@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy, createEventDispatcher, tick } from 'svelte';
   import { pendingFileJump, clearFileJump } from '../../stores/fileJump';
+  import { registerUnsavedGuard } from '../../stores/unsavedChanges';
   import { selectedSessionId, selectedWindowIdx, selectSession, selectWindow } from '../../stores/sessions';
   import { get } from 'svelte/store';
   import * as App from '../../../../wailsjs/go/main/App';
@@ -100,6 +101,7 @@
   let treeGeneration = 0;
   let fileGeneration = 0;
   let destroyed = false;
+  let unregisterUnsavedGuard: (() => void) | null = null;
 
   // --- Editing --------------------------------------------------------------
 
@@ -303,6 +305,15 @@
     // Capture phase, matching App.svelte: xterm would otherwise swallow the
     // combo before it reaches us.
     window.addEventListener('keydown', handleWindowKeydown, true);
+    unregisterUnsavedGuard = registerUnsavedGuard({
+      isDirty: () => modified,
+      requestDiscard: (continueAfterDiscard) => {
+        guardUnsaved(() => {
+          if (editing) leaveEditMode();
+          continueAfterDiscard();
+        });
+      },
+    });
   });
 
   onDestroy(() => {
@@ -314,6 +325,8 @@
     // behind when the tab unmounts is a real leak.
     destroyView();
     window.removeEventListener('keydown', handleWindowKeydown, true);
+    unregisterUnsavedGuard?.();
+    unregisterUnsavedGuard = null;
     // Leaving the tab mid-drag would otherwise strand the document listeners.
     stopPaneResize();
   });
@@ -331,11 +344,13 @@
     const sessionId = get(selectedSessionId);
     if (!sessionId) return;
     const generation = treeGeneration;
+    const expectedRoot = path === '' ? '' : rootAbsPath;
+    if (path !== '' && !expectedRoot) return;
 
     loadingDirs = new Set(loadingDirs).add(path);
     if (path === '') rootLoading = true;
     try {
-      const listing = await App.ListSessionDirectory(sessionId, path, get(selectedWindowIdx) ?? 0);
+      const listing = await App.ListSessionDirectory(sessionId, path, get(selectedWindowIdx) ?? 0, expectedRoot);
       if (destroyed || generation !== treeGeneration) return;
       dirs = {
         ...dirs,
@@ -371,12 +386,14 @@
     const windowIdx = get(selectedWindowIdx) ?? 0;
     const targetKey = `${sessionId}:${windowIdx}`;
     const generation = ++fileGeneration;
+    const expectedRoot = rootAbsPath;
+    if (!expectedRoot) return false;
     fileLoading = true;
     fileError = '';
     selectedFile = null;
     try {
-      const file = await App.ReadSessionDirectoryFile(sessionId, path, windowIdx);
-      if (destroyed || generation !== fileGeneration || targetKey !== browseKey) return false;
+      const file = await App.ReadSessionDirectoryFile(sessionId, path, windowIdx, expectedRoot);
+      if (destroyed || generation !== fileGeneration || targetKey !== browseKey || expectedRoot !== rootAbsPath) return false;
       selectedFile = file;
     } catch (e) {
       if (destroyed || generation !== fileGeneration || targetKey !== browseKey) return false;
@@ -405,10 +422,11 @@
       // version that guards the save has to describe the exact bytes the text
       // was decoded from, and a version taken from a separate read could
       // already be stale.
-      const file = await App.OpenSessionFileForEdit(sessionId, selectedPath, get(selectedWindowIdx) ?? 0);
+      const file = await App.OpenSessionFileForEdit(sessionId, selectedPath, get(selectedWindowIdx) ?? 0, expectedRoot) as session.EditableFile & { root?: string };
       if (destroyed || generation !== fileGeneration || targetKey !== browseKey || expectedRoot !== rootAbsPath) return;
+      if (!file.root) throw new Error('editable file response did not include its canonical root');
       openedFile = file;
-      openedRoot = expectedRoot;
+      openedRoot = file.root;
       editText = file.text;
       savedText = file.text;
       editing = true;
@@ -1481,6 +1499,7 @@
   bind:show={showQuickOpen}
   sessionId={$selectedSessionId || ''}
   windowIdx={$selectedWindowIdx ?? 0}
+  root={rootAbsPath}
   on:pick={(e) => openFromQuickOpen(e.detail.path)}
 />
 

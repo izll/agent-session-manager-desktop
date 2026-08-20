@@ -26,6 +26,7 @@ type AppService struct {
 	hotkeyManager    *HotkeyManagerReal
 	audioMuteManager *AudioMuteManager
 	mu               sync.Mutex
+	callbackMu       sync.RWMutex
 	usageMu          sync.Mutex
 	onStateChange    func(bool)                  // Callback for UI updates
 	onError          func(title, message string) // Callback for error dialogs
@@ -167,8 +168,8 @@ func NewAppService() *AppService {
 		lastVoiceLevel = level
 		voiceLevelMutex.Unlock()
 		// Notify UI if callback is set
-		if app.onVoiceLevel != nil {
-			app.onVoiceLevel(level)
+		if callback := app.voiceLevelCallback(); callback != nil {
+			callback(level)
 		}
 	})
 
@@ -227,9 +228,10 @@ func NewAppService() *AppService {
 	app.hotkeyManager = NewHotkeyManagerReal(hotkeyConfig, func() {
 		go func() {
 			// Check recording mode
-			if app.settings.RecordingMode == "popup" && app.onPopupDictate != nil {
+			popupCallback := app.popupDictateCallback()
+			if app.settings.RecordingMode == "popup" && popupCallback != nil {
 				// Popup mode: delegate to popup handler
-				app.onPopupDictate()
+				popupCallback()
 			} else {
 				// Direct mode: toggle listening directly
 				err := app.ToggleListening()
@@ -278,11 +280,15 @@ func NewAppService() *AppService {
 
 // SetStateChangeCallback sets the callback for state changes
 func (a *AppService) SetStateChangeCallback(callback func(bool)) {
+	a.callbackMu.Lock()
+	defer a.callbackMu.Unlock()
 	a.onStateChange = callback
 }
 
 // SetErrorCallback sets the callback for error dialogs
 func (a *AppService) SetErrorCallback(callback func(title, message string)) {
+	a.callbackMu.Lock()
+	defer a.callbackMu.Unlock()
 	a.onError = callback
 }
 
@@ -300,7 +306,7 @@ func (a *AppService) AbortListening() {
 		return
 	}
 	a.isListening = false
-	callback := a.onStateChange
+	callback := a.stateChangeCallback()
 	muted := a.settings.MuteOutputDuringRecording
 	muteManager := a.audioMuteManager
 	a.mu.Unlock()
@@ -327,35 +333,43 @@ func (a *AppService) AbortListening() {
 // quiet, giving no hint that anything was wrong. Both arguments are translation
 // keys, matching how the API-key error is reported.
 func (a *AppService) ReportError(titleKey, messageKey string) {
-	if a.onError != nil {
-		a.onError(titleKey, messageKey)
+	if callback := a.errorCallback(); callback != nil {
+		callback(titleKey, messageKey)
 	}
 }
 
 // SetUploadingCallback sets the callback for uploading state changes
 func (a *AppService) SetUploadingCallback(callback func(bool)) {
+	a.callbackMu.Lock()
+	defer a.callbackMu.Unlock()
 	a.onUploading = callback
 }
 
 // SetPopupDictateCallback sets the callback for popup dictation hotkey
 func (a *AppService) SetPopupDictateCallback(callback func()) {
+	a.callbackMu.Lock()
+	defer a.callbackMu.Unlock()
 	a.onPopupDictate = callback
 }
 
 // SetVoiceLevelCallback sets the callback for voice level updates
 func (a *AppService) SetVoiceLevelCallback(callback func(float64)) {
+	a.callbackMu.Lock()
+	defer a.callbackMu.Unlock()
 	a.onVoiceLevel = callback
 }
 
 // SetInterimTextCallback sets the callback for interim text display (streaming mode overlay)
 func (a *AppService) SetInterimTextCallback(callback func(string)) {
+	a.callbackMu.Lock()
+	defer a.callbackMu.Unlock()
 	a.onInterimText = callback
 }
 
 // NotifyInterimText notifies UI about interim recognized text
 func (a *AppService) NotifyInterimText(text string) {
-	if a.onInterimText != nil {
-		a.onInterimText(text)
+	if callback := a.interimTextCallback(); callback != nil {
+		callback(text)
 	}
 }
 
@@ -376,8 +390,8 @@ func (a *AppService) SetKeyboardPopupDirect(direct bool) {
 
 // NotifyUploading notifies UI about uploading state
 func (a *AppService) NotifyUploading(isUploading bool) {
-	if a.onUploading != nil {
-		a.onUploading(isUploading)
+	if callback := a.uploadingCallback(); callback != nil {
+		callback(isUploading)
 	}
 }
 
@@ -885,8 +899,8 @@ func (a *AppService) ToggleListening() error {
 				// API key is missing
 				logToFile("❌ ERROR: API key is missing\n")
 				a.mu.Unlock()
-				if a.onError != nil {
-					a.onError("api_key_missing_title", "api_key_missing_message")
+				if callback := a.errorCallback(); callback != nil {
+					callback("api_key_missing_title", "api_key_missing_message")
 				}
 				return fmt.Errorf("API key is missing")
 			}
@@ -934,7 +948,7 @@ func (a *AppService) ToggleListening() error {
 		logToFile("Started listening" + "\n")
 	}
 
-	callback := a.onStateChange
+	callback := a.stateChangeCallback()
 	a.mu.Unlock()
 
 	// Notify UI of state change
@@ -945,6 +959,42 @@ func (a *AppService) ToggleListening() error {
 	}
 
 	return nil
+}
+
+func (a *AppService) stateChangeCallback() func(bool) {
+	a.callbackMu.RLock()
+	defer a.callbackMu.RUnlock()
+	return a.onStateChange
+}
+
+func (a *AppService) errorCallback() func(string, string) {
+	a.callbackMu.RLock()
+	defer a.callbackMu.RUnlock()
+	return a.onError
+}
+
+func (a *AppService) uploadingCallback() func(bool) {
+	a.callbackMu.RLock()
+	defer a.callbackMu.RUnlock()
+	return a.onUploading
+}
+
+func (a *AppService) popupDictateCallback() func() {
+	a.callbackMu.RLock()
+	defer a.callbackMu.RUnlock()
+	return a.onPopupDictate
+}
+
+func (a *AppService) voiceLevelCallback() func(float64) {
+	a.callbackMu.RLock()
+	defer a.callbackMu.RUnlock()
+	return a.onVoiceLevel
+}
+
+func (a *AppService) interimTextCallback() func(string) {
+	a.callbackMu.RLock()
+	defer a.callbackMu.RUnlock()
+	return a.onInterimText
 }
 
 // IsListening returns whether the app is currently listening

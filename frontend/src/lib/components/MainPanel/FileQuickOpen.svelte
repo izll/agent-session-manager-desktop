@@ -23,6 +23,8 @@
    * tab's — the same screen answering one question two ways.
    */
   export let windowIdx = 0;
+  /** Canonical root currently owned by the surrounding FileBrowser tree. */
+  export let root = '';
 
   const dispatch = createEventDispatcher<{ pick: { path: string }; close: void }>();
 
@@ -70,8 +72,8 @@
     searchGeneration++;
   });
 
-  // The index is fetched when the overlay opens, and again whenever the session
-  // or the include-everything setting changes underneath it.
+  // The index is fetched when the overlay opens, and again whenever its full
+  // session/tab/root target or the include-everything setting changes.
   //
   // Collapsed to ONE tracking string rather than three separate guards. Svelte 3
   // orders reactive statements by dependency, not by source position, so the
@@ -81,10 +83,21 @@
   // sees an equal key and does nothing.
   let lastKey = '';
   $: {
-    const key = `${show}|${includeAll}|${sessionId}`;
+    const key = `${show}|${includeAll}|${sessionId}|${windowIdx}|${root}`;
     if (key !== lastKey) {
       const wasOpen = lastKey.startsWith('true|');
       lastKey = key;
+      // A response for the previous tab/root must not populate the new picker.
+      loadGeneration++;
+      searchGeneration++;
+      index = null;
+      contentResult = null;
+      selectedIdx = 0;
+      loading = false;
+      contentLoading = false;
+      error = '';
+      contentError = '';
+      searchedQuery = '';
       if (show) void load();
       else if (wasOpen) reset();
     }
@@ -102,22 +115,28 @@
   }
 
   async function load() {
-    if (!sessionId) return;
+    const targetSessionId = sessionId;
+    const targetWindowIdx = windowIdx;
+    const targetRoot = root;
+    if (!targetSessionId || !targetRoot) return;
     const generation = ++loadGeneration;
     loading = true;
     error = '';
     try {
-      const result = await App.SearchSessionFileIndex(sessionId, includeAll, windowIdx);
-      if (destroyed || generation !== loadGeneration) return;
+      const result = await App.SearchSessionFileIndex(targetSessionId, includeAll, targetWindowIdx, targetRoot);
+      if (destroyed || generation !== loadGeneration || targetSessionId !== sessionId ||
+          targetWindowIdx !== windowIdx || targetRoot !== root) return;
       index = result;
     } catch (e) {
-      if (destroyed || generation !== loadGeneration) return;
+      if (destroyed || generation !== loadGeneration || targetSessionId !== sessionId ||
+          targetWindowIdx !== windowIdx || targetRoot !== root) return;
       // The Go side names the directory it could not read; showing that beats
       // a generic failure the user cannot act on.
       error = String(e);
       index = null;
     }
-    if (!destroyed && generation === loadGeneration) loading = false;
+    if (!destroyed && generation === loadGeneration && targetSessionId === sessionId &&
+        targetWindowIdx === windowIdx && targetRoot === root) loading = false;
   }
 
   /** Re-walk the tree, for a user who just created the file they are looking for. */
@@ -150,22 +169,35 @@
 
   async function runContentSearch() {
     const q = query.trim();
-    if (!q || !sessionId) return;
+    const targetSessionId = sessionId;
+    const targetWindowIdx = windowIdx;
+    const targetRoot = root;
+    if (!q || !targetSessionId || !targetRoot) return;
     const generation = ++searchGeneration;
     contentLoading = true;
     contentError = '';
     searchedQuery = q;
     try {
-      const result = await App.SearchSessionFileContents(sessionId, q, false, includeAll, windowIdx);
-      if (destroyed || generation !== searchGeneration) return;
+      const result = await App.SearchSessionFileContents(
+        targetSessionId,
+        q,
+        false,
+        includeAll,
+        targetWindowIdx,
+        targetRoot,
+      );
+      if (destroyed || generation !== searchGeneration || targetSessionId !== sessionId ||
+          targetWindowIdx !== windowIdx || targetRoot !== root) return;
       contentResult = result;
       selectedIdx = 0;
     } catch (e) {
-      if (destroyed || generation !== searchGeneration) return;
+      if (destroyed || generation !== searchGeneration || targetSessionId !== sessionId ||
+          targetWindowIdx !== windowIdx || targetRoot !== root) return;
       contentError = String(e);
       contentResult = null;
     }
-    if (!destroyed && generation === searchGeneration) contentLoading = false;
+    if (!destroyed && generation === searchGeneration && targetSessionId === sessionId &&
+        targetWindowIdx === windowIdx && targetRoot === root) contentLoading = false;
   }
 
   function switchMode(next: 'files' | 'content') {

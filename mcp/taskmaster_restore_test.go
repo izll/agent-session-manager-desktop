@@ -216,3 +216,23 @@ func TestTaskFromMapKeepsOptionalSnapshotFields(t *testing.T) {
 		t.Fatalf("optional fields were dropped: %+v", task)
 	}
 }
+
+func TestTaskRawJSONPreservesLargeProviderNumbers(t *testing.T) {
+	const source = `{"id":"large","title":"task","futureNumber":9007199254740993,"dependencies":[9007199254740993]}`
+	var task Task
+	if err := json.Unmarshal([]byte(source), &task); err != nil {
+		t.Fatal(err)
+	}
+	var raw map[string]interface{}
+	decoder := json.NewDecoder(bytes.NewBufferString(task.RawJSON))
+	decoder.UseNumber()
+	if err := decoder.Decode(&raw); err != nil {
+		t.Fatal(err)
+	}
+	if got := raw["futureNumber"].(json.Number).String(); got != "9007199254740993" {
+		t.Fatalf("large unknown number = %s", got)
+	}
+	if len(task.Dependencies) != 1 || task.Dependencies[0] != "9007199254740993" {
+		t.Fatalf("large dependency changed: %#v", task.Dependencies)
+	}
+}

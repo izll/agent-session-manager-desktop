@@ -16,54 +16,34 @@ func (tm *TaskMaster) RestoreTask(task Task) error {
 	if task.ID == "" {
 		return fmt.Errorf("restored task has no ID")
 	}
-	tm.mu.Lock()
-	defer tm.mu.Unlock()
-
 	path := filepath.Join(tm.projectRoot, ".taskmaster", "tasks", "tasks.json")
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		return fmt.Errorf("failed to read tasks.json: %w", err)
-	}
-	decoder := json.NewDecoder(bytes.NewReader(raw))
-	decoder.UseNumber()
-	var root map[string]interface{}
-	if err := decoder.Decode(&root); err != nil {
-		return fmt.Errorf("failed to parse tasks.json: %w", err)
-	}
-
-	context, err := taskMasterRestoreContext(root)
-	if err != nil {
-		return err
-	}
-	tasks, ok := context["tasks"].([]interface{})
-	if !ok {
-		return fmt.Errorf("tasks.json context has no tasks array")
-	}
-	for _, value := range tasks {
-		stored, ok := value.(map[string]interface{})
-		if ok && taskMasterID(stored["id"]) == task.ID {
-			return fmt.Errorf("task already exists: %s", task.ID)
+	return MutateTaskMasterFile(path, func(root map[string]interface{}) error {
+		context, err := taskMasterRestoreContext(root)
+		if err != nil {
+			return err
 		}
-	}
-	restored, rawIdentity, err := taskMasterRestoreObject(task.RawJSON, task.ID, task)
-	if err != nil {
-		return fmt.Errorf("failed to prepare restored task: %w", err)
-	}
-	if !rawIdentity {
-		coerceTaskMasterIDs(restored,
-			taskMasterUsesNumericIDs(tasks, task.ID),
-			taskMasterUsesNumericSubtaskIDs(tasks, firstSubtaskID(task.Subtasks)))
-	}
-	context["tasks"] = append(tasks, restored)
-
-	out, err := json.MarshalIndent(root, "", "  ")
-	if err != nil {
-		return fmt.Errorf("failed to serialize tasks.json: %w", err)
-	}
-	if err := AtomicReplaceTaskMasterFile(path, out); err != nil {
-		return fmt.Errorf("failed to restore task: %w", err)
-	}
-	return nil
+		tasks, ok := context["tasks"].([]interface{})
+		if !ok {
+			return fmt.Errorf("tasks.json context has no tasks array")
+		}
+		for _, value := range tasks {
+			stored, ok := value.(map[string]interface{})
+			if ok && taskMasterID(stored["id"]) == task.ID {
+				return fmt.Errorf("task already exists: %s", task.ID)
+			}
+		}
+		restored, rawIdentity, err := taskMasterRestoreObject(task.RawJSON, task.ID, task)
+		if err != nil {
+			return fmt.Errorf("failed to prepare restored task: %w", err)
+		}
+		if !rawIdentity {
+			coerceTaskMasterIDs(restored,
+				taskMasterUsesNumericIDs(tasks, task.ID),
+				taskMasterUsesNumericSubtaskIDs(tasks, firstSubtaskID(task.Subtasks)))
+		}
+		context["tasks"] = append(tasks, restored)
+		return nil
+	})
 }
 
 // RestoreSubtask appends a deleted subtask to its original parent without
@@ -72,57 +52,42 @@ func (tm *TaskMaster) RestoreSubtask(taskID string, subtask Subtask) error {
 	if taskID == "" || subtask.ID == "" {
 		return fmt.Errorf("restored subtask has no parent or ID")
 	}
-	tm.mu.Lock()
-	defer tm.mu.Unlock()
-
 	path := filepath.Join(tm.projectRoot, ".taskmaster", "tasks", "tasks.json")
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		return fmt.Errorf("failed to read tasks.json: %w", err)
-	}
-	decoder := json.NewDecoder(bytes.NewReader(raw))
-	decoder.UseNumber()
-	var root map[string]interface{}
-	if err := decoder.Decode(&root); err != nil {
-		return fmt.Errorf("failed to parse tasks.json: %w", err)
-	}
-	context, err := taskMasterRestoreContext(root)
-	if err != nil {
-		return err
-	}
-	tasks, ok := context["tasks"].([]interface{})
-	if !ok {
-		return fmt.Errorf("tasks.json context has no tasks array")
-	}
-	for _, value := range tasks {
-		stored, ok := value.(map[string]interface{})
-		if !ok || taskMasterID(stored["id"]) != taskID {
-			continue
-		}
-		subtasks, _ := stored["subtasks"].([]interface{})
-		for _, rawSubtask := range subtasks {
-			candidate, ok := rawSubtask.(map[string]interface{})
-			if ok && taskMasterID(candidate["id"]) == subtask.ID {
-				return fmt.Errorf("subtask already exists: %s", subtask.ID)
-			}
-		}
-		restored, rawIdentity, err := taskMasterRestoreObject(subtask.RawJSON, subtask.ID, subtask)
+	return MutateTaskMasterFile(path, func(root map[string]interface{}) error {
+		context, err := taskMasterRestoreContext(root)
 		if err != nil {
-			return fmt.Errorf("failed to prepare restored subtask: %w", err)
+			return err
 		}
-		if !rawIdentity && taskMasterSubtasksUseNumericIDs(subtasks, subtask.ID) {
-			if id, ok := numericJSONID(subtask.ID); ok {
-				restored["id"] = id
+		tasks, ok := context["tasks"].([]interface{})
+		if !ok {
+			return fmt.Errorf("tasks.json context has no tasks array")
+		}
+		for _, value := range tasks {
+			stored, ok := value.(map[string]interface{})
+			if !ok || taskMasterID(stored["id"]) != taskID {
+				continue
 			}
+			subtasks, _ := stored["subtasks"].([]interface{})
+			for _, rawSubtask := range subtasks {
+				candidate, ok := rawSubtask.(map[string]interface{})
+				if ok && taskMasterID(candidate["id"]) == subtask.ID {
+					return fmt.Errorf("subtask already exists: %s", subtask.ID)
+				}
+			}
+			restored, rawIdentity, err := taskMasterRestoreObject(subtask.RawJSON, subtask.ID, subtask)
+			if err != nil {
+				return fmt.Errorf("failed to prepare restored subtask: %w", err)
+			}
+			if !rawIdentity && taskMasterSubtasksUseNumericIDs(subtasks, subtask.ID) {
+				if id, ok := numericJSONID(subtask.ID); ok {
+					restored["id"] = id
+				}
+			}
+			stored["subtasks"] = append(subtasks, restored)
+			return nil
 		}
-		stored["subtasks"] = append(subtasks, restored)
-		out, err := json.MarshalIndent(root, "", "  ")
-		if err != nil {
-			return fmt.Errorf("failed to serialize tasks.json: %w", err)
-		}
-		return AtomicReplaceTaskMasterFile(path, out)
-	}
-	return fmt.Errorf("task not found: %s", taskID)
+		return fmt.Errorf("task not found: %s", taskID)
+	})
 }
 
 func taskMasterUsesNumericIDs(tasks []interface{}, fallbackID string) bool {

@@ -51,7 +51,11 @@ func (sr *StreamingRecognizer) reportStreamFailure(err error) {
 	// question that follows a failed dictation is asked later, over a log.
 	logError("streaming recognition failed: %v\n", err)
 
-	if sr.app == nil || sr.app.onError == nil {
+	if sr.app == nil {
+		return
+	}
+	callback := sr.app.errorCallback()
+	if callback == nil {
 		return
 	}
 
@@ -76,7 +80,7 @@ func (sr *StreamingRecognizer) reportStreamFailure(err error) {
 			title, message = "api_key_invalid_title", "api_key_invalid_message"
 		}
 	}
-	go sr.app.onError(title, message)
+	go callback(title, message)
 }
 
 // mentionsAPIKey reports whether a failure is about the credentials rather

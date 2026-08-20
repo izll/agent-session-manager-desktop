@@ -97,13 +97,13 @@ export function GetCommands():Promise<main.CommandLibraryInfo>;
 
 export function GetExtraArgs(arg1:string,arg2:number):Promise<string>;
 
-export function GetFullDiff(arg1:string,arg2:number):Promise<main.DiffData>;
+export function GetFullDiff(arg1:string,arg2:number,arg3:string):Promise<main.DiffData>;
 
-export function GetFullDiffFileList(arg1:string,arg2:number):Promise<Array<session.DiffFileSummary>>;
+export function GetFullDiffFileList(arg1:string,arg2:number,arg3:string):Promise<Array<session.DiffFileSummary>>;
 
-export function GetFullDiffFiles(arg1:string,arg2:number):Promise<Array<session.DiffFile>>;
+export function GetFullDiffFiles(arg1:string,arg2:number,arg3:string):Promise<Array<session.DiffFile>>;
 
-export function GetFullDiffForFile(arg1:string,arg2:string,arg3:boolean,arg4:number):Promise<session.DiffFile>;
+export function GetFullDiffForFile(arg1:string,arg2:string,arg3:boolean,arg4:number,arg5:string):Promise<session.DiffFile>;
 
 export function GetGitBranch(arg1:string):Promise<main.GitBranchInfo>;
 
@@ -141,13 +141,13 @@ export function GetQuickJump():Promise<Array<session.QuickJumpEntry>>;
 
 export function GetResumeSessions(arg1:string,arg2:string):Promise<Array<main.AgentSessionInfo>>;
 
-export function GetSessionDiff(arg1:string,arg2:number):Promise<main.DiffData>;
+export function GetSessionDiff(arg1:string,arg2:number,arg3:string):Promise<main.DiffData>;
 
-export function GetSessionDiffFileList(arg1:string,arg2:number):Promise<Array<session.DiffFileSummary>>;
+export function GetSessionDiffFileList(arg1:string,arg2:number,arg3:string):Promise<Array<session.DiffFileSummary>>;
 
-export function GetSessionDiffFiles(arg1:string,arg2:number):Promise<Array<session.DiffFile>>;
+export function GetSessionDiffFiles(arg1:string,arg2:number,arg3:string):Promise<Array<session.DiffFile>>;
 
-export function GetSessionDiffForFile(arg1:string,arg2:string,arg3:boolean,arg4:number):Promise<session.DiffFile>;
+export function GetSessionDiffForFile(arg1:string,arg2:string,arg3:boolean,arg4:number,arg5:string):Promise<session.DiffFile>;
 
 export function GetSessionTemplates():Promise<Array<main.SessionTemplateInfo>>;
 
@@ -205,7 +205,7 @@ export function ListGitBranches(arg1:string):Promise<main.GitBranchList>;
 
 export function ListOnlineSchemes():Promise<Array<main.OnlineSchemeInfo>>;
 
-export function ListSessionDirectory(arg1:string,arg2:string,arg3:number):Promise<session.BrowseListing>;
+export function ListSessionDirectory(arg1:string,arg2:string,arg3:number,arg4:string):Promise<session.BrowseListing>;
 
 export function LogFrontend(arg1:string):Promise<void>;
 
@@ -223,7 +223,7 @@ export function OpenFolder(arg1:string):Promise<void>;
 
 export function OpenLogFolder(arg1:string):Promise<void>;
 
-export function OpenSessionFileForEdit(arg1:string,arg2:string,arg3:number):Promise<session.EditableFile>;
+export function OpenSessionFileForEdit(arg1:string,arg2:string,arg3:number,arg4:string):Promise<session.EditableFile>;
 
 export function PendingUpdate():Promise<string>;
 
@@ -233,7 +233,7 @@ export function PermanentlyDeleteTrashItem(arg1:string):Promise<void>;
 
 export function QuickReplyTab(arg1:string,arg2:number,arg3:string):Promise<void>;
 
-export function ReadSessionDirectoryFile(arg1:string,arg2:string,arg3:number):Promise<session.BrowseFile>;
+export function ReadSessionDirectoryFile(arg1:string,arg2:string,arg3:number,arg4:string):Promise<session.BrowseFile>;
 
 export function ReadSessionFile():Promise<main.PortableFileInfo>;
 
@@ -289,9 +289,9 @@ export function SaveSessionTemplate(arg1:string,arg2:string,arg3:string,arg4:str
 
 export function SaveSettings(arg1:main.SettingsInfo):Promise<void>;
 
-export function SearchSessionFileContents(arg1:string,arg2:string,arg3:boolean,arg4:boolean,arg5:number):Promise<session.ContentSearchResult>;
+export function SearchSessionFileContents(arg1:string,arg2:string,arg3:boolean,arg4:boolean,arg5:number,arg6:string):Promise<session.ContentSearchResult>;
 
-export function SearchSessionFileIndex(arg1:string,arg2:boolean,arg3:number):Promise<session.FileIndex>;
+export function SearchSessionFileIndex(arg1:string,arg2:boolean,arg3:number,arg4:string):Promise<session.FileIndex>;
 
 export function SelectProject(arg1:string):Promise<void>;
 

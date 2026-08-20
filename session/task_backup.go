@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -220,36 +221,169 @@ func (s *Storage) RestoreTaskBackup(id string) error {
 		fmt.Fprintf(os.Stderr, "task backup before restore failed: %v\n", err)
 	}
 
+	targetByPath := make(map[string]*taskRestoreTarget)
 	for _, file := range set.Files {
-		if stat, err := os.Stat(file.Path); err != nil || !stat.IsDir() {
+		projectPath := CanonicalProjectPath(file.Path)
+		if stat, err := os.Stat(projectPath); err != nil || !stat.IsDir() {
 			continue
 		}
-		target := taskFileFor(file.Path)
-		if err := withCrossProcessFileLock(target+".lock", func() error {
-			if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
+		target := taskFileFor(projectPath)
+		if existing := targetByPath[target]; existing != nil {
+			if existing.content != file.Content {
+				return fmt.Errorf("backup contains conflicting snapshots for %s", target)
+			}
+			continue
+		}
+		targetByPath[target] = &taskRestoreTarget{path: target, content: file.Content}
+	}
+	targets := make([]*taskRestoreTarget, 0, len(targetByPath))
+	for _, target := range targetByPath {
+		targets = append(targets, target)
+	}
+	sort.Slice(targets, func(i, j int) bool { return targets[i].path < targets[j].path })
+	return restoreTaskTargets(targets, os.Rename)
+}
+
+type taskRestoreTarget struct {
+	path         string
+	content      string
+	stagedPath   string
+	original     []byte
+	originalMode os.FileMode
+	existed      bool
+}
+
+func restoreTaskTargets(targets []*taskRestoreTarget, replace func(string, string) error) error {
+	lockPaths := make([]string, len(targets))
+	for i, target := range targets {
+		lockPaths[i] = target.path + ".lock"
+	}
+	return withTaskRestoreLocks(lockPaths, func() error {
+		for _, target := range targets {
+			if err := stageTaskRestoreTarget(target); err != nil {
+				cleanupTaskRestoreStages(targets)
 				return err
 			}
-			tmp, err := os.CreateTemp(filepath.Dir(target), ".task-restore-*")
-			if err != nil {
+		}
+		defer cleanupTaskRestoreStages(targets)
+
+		for _, target := range targets {
+			info, err := os.Stat(target.path)
+			switch {
+			case err == nil && !info.Mode().IsRegular():
+				return fmt.Errorf("task restore target is not a regular file: %s", target.path)
+			case err == nil:
+				target.original, err = os.ReadFile(target.path)
+				if err != nil {
+					return err
+				}
+				target.originalMode = info.Mode().Perm()
+				target.existed = true
+			case os.IsNotExist(err):
+				target.originalMode = 0o644
+			case err != nil:
 				return err
 			}
-			tmpPath := tmp.Name()
-			defer os.Remove(tmpPath)
-			if _, err := tmp.Write([]byte(file.Content)); err != nil {
-				_ = tmp.Close()
+			if err := os.Chmod(target.stagedPath, target.originalMode); err != nil {
 				return err
 			}
-			if err := tmp.Sync(); err != nil {
-				_ = tmp.Close()
-				return err
+		}
+
+		committed := 0
+		for i, target := range targets {
+			if err := replace(target.stagedPath, target.path); err != nil {
+				rollbackErr := rollbackTaskRestoreTargets(targets[:committed])
+				return errors.Join(fmt.Errorf("failed to replace %s: %w", target.path, err), rollbackErr)
 			}
-			if err := tmp.Close(); err != nil {
-				return err
-			}
-			return os.Rename(tmpPath, target)
-		}); err != nil {
-			return err
+			target.stagedPath = ""
+			committed = i + 1
+		}
+		return nil
+	})
+}
+
+func withTaskRestoreLocks(paths []string, action func() error) error {
+	var acquire func(int) error
+	acquire = func(index int) error {
+		if index == len(paths) {
+			return action()
+		}
+		return withCrossProcessFileLock(paths[index], func() error { return acquire(index + 1) })
+	}
+	return acquire(0)
+}
+
+func stageTaskRestoreTarget(target *taskRestoreTarget) error {
+	if err := os.MkdirAll(filepath.Dir(target.path), 0o755); err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(target.path), ".task-restore-*")
+	if err != nil {
+		return err
+	}
+	target.stagedPath = tmp.Name()
+	if err := tmp.Chmod(0o644); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if _, err := tmp.Write([]byte(target.content)); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	return tmp.Close()
+}
+
+func cleanupTaskRestoreStages(targets []*taskRestoreTarget) {
+	for _, target := range targets {
+		if target.stagedPath != "" {
+			_ = os.Remove(target.stagedPath)
+			target.stagedPath = ""
 		}
 	}
-	return nil
+}
+
+func rollbackTaskRestoreTargets(targets []*taskRestoreTarget) error {
+	var rollbackErr error
+	for i := len(targets) - 1; i >= 0; i-- {
+		target := targets[i]
+		if !target.existed {
+			if err := os.Remove(target.path); err != nil && !os.IsNotExist(err) {
+				rollbackErr = errors.Join(rollbackErr, fmt.Errorf("failed to remove restored %s: %w", target.path, err))
+			}
+			continue
+		}
+		if err := atomicRestoreTaskBytes(target.path, target.original, target.originalMode); err != nil {
+			rollbackErr = errors.Join(rollbackErr, fmt.Errorf("failed to roll back %s: %w", target.path, err))
+		}
+	}
+	return rollbackErr
+}
+
+func atomicRestoreTaskBytes(path string, content []byte, mode os.FileMode) error {
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".task-rollback-*")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	defer os.Remove(tmpPath)
+	if err := tmp.Chmod(mode); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if _, err := tmp.Write(content); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmpPath, path)
 }

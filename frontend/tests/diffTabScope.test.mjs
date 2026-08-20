@@ -24,6 +24,16 @@ assert.ok(backendCalls.length >= 8, `expected the diff entry points, found ${bac
 const withoutTab = (diff.match(/App\.(?:GetSessionDiff|GetFullDiff|RevertDiffFile|RevertDiffHunk)\([^;\n]*/g) ?? [])
   .filter((call) => !call.includes('tabIdx()') && !call.includes('target.windowIdx'));
 assert.deepEqual(withoutTab, [], 'every diff call must pass the tab index');
+assert.match(
+  diff,
+  /App\.GetSessionDiff\(sessionId, tabIdx\(\), loadedRoot\)/,
+  'copying the session diff must use the root snapshot shown to the user',
+);
+assert.match(
+  diff,
+  /App\.GetFullDiff\(sessionId, tabIdx\(\), loadedRoot\)/,
+  'copying the full diff must use the root snapshot shown to the user',
+);
 
 assert.match(
   diff,

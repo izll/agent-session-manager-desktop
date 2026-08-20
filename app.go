@@ -37,6 +37,9 @@ type App struct {
 	activityStats     *ActivityStatsRecorder
 	previewCancel     context.CancelFunc
 	previewWG         sync.WaitGroup
+	attentionMu       sync.Mutex
+	attentionCancel   context.CancelFunc
+	attentionWG       sync.WaitGroup
 	lastTypingSignal  int64 // unix nano timestamp of last typing signal
 	// projectLocked is true when THIS instance owns the active project's lock.
 	// otherInstancePID is the PID of the instance that owns it instead (0 if
@@ -159,7 +162,7 @@ func (a *App) startup(ctx context.Context) {
 
 	// Attention notifications (desktop/ntfy when an agent starts waiting).
 	// Backend-side so it keeps working while the window is unfocused.
-	a.startAttentionWatcher()
+	a.startAttentionWatcher(ctx)
 
 	// Set dictation callbacks (instance created in main.go)
 	a.dictation.SetTerminalServer(a.termServer)
@@ -250,6 +253,12 @@ func (a *App) IsDevMode() bool {
 
 // shutdown is called when the app is closing
 func (a *App) shutdown(ctx context.Context) {
+	// Stop notification polling before releasing the project lock or removing
+	// terminal mirrors. The watcher reads storage, captures tmux panes and may
+	// launch notification work, so letting it survive into teardown races every
+	// resource shutdown is about to invalidate.
+	a.stopAttentionWatcher()
+
 	a.projectMu.Lock()
 	// Persist Codex-generated conversation IDs before releasing the project
 	// lock or cleaning up GUI mirrors. The base tmux sessions intentionally
@@ -1208,10 +1217,11 @@ func (a *App) RestoreTaskBackup(id string) error {
 		return err
 	}
 	defer done()
-	if err := a.storage.RestoreTaskBackup(id); err != nil {
-		return err
-	}
-	return reloadTaskManagerCache()
+	restoreErr := a.storage.RestoreTaskBackup(id)
+	// A multi-file restore can encounter an I/O failure after touching a target.
+	// Reload even on error so memory never claims a different state than disk.
+	reloadErr := reloadTaskManagerCache()
+	return errors.Join(restoreErr, reloadErr)
 }
 
 func (a *App) RestoreBackup(id string) error {
@@ -2694,11 +2704,16 @@ type DiffData struct {
 }
 
 // GetSessionDiff returns git diff since session start
-func (a *App) GetSessionDiff(id string, windowIdx int) (*DiffData, error) {
+func (a *App) GetSessionDiff(id string, windowIdx int, expectedRoot string) (*DiffData, error) {
 	inst, err := a.browseInstance(id, windowIdx)
 	if err != nil {
 		return nil, err
 	}
+	resolvedRoot, err := validateDiffRoot(inst, expectedRoot)
+	if err != nil {
+		return nil, err
+	}
+	inst.BrowseRoot = resolvedRoot
 
 	diff := inst.GetSessionDiff()
 	return &DiffData{
@@ -2709,11 +2724,16 @@ func (a *App) GetSessionDiff(id string, windowIdx int) (*DiffData, error) {
 }
 
 // GetFullDiff returns full uncommitted diff for path
-func (a *App) GetFullDiff(id string, windowIdx int) (*DiffData, error) {
+func (a *App) GetFullDiff(id string, windowIdx int, expectedRoot string) (*DiffData, error) {
 	inst, err := a.browseInstance(id, windowIdx)
 	if err != nil {
 		return nil, err
 	}
+	resolvedRoot, err := validateDiffRoot(inst, expectedRoot)
+	if err != nil {
+		return nil, err
+	}
+	inst.BrowseRoot = resolvedRoot
 
 	diff := inst.GetFullDiff()
 	return &DiffData{
@@ -2724,20 +2744,30 @@ func (a *App) GetFullDiff(id string, windowIdx int) (*DiffData, error) {
 }
 
 // GetSessionDiffFiles returns the per-file diff since the session started.
-func (a *App) GetSessionDiffFiles(id string, windowIdx int) ([]session.DiffFile, error) {
+func (a *App) GetSessionDiffFiles(id string, windowIdx int, expectedRoot string) ([]session.DiffFile, error) {
 	inst, err := a.browseInstance(id, windowIdx)
 	if err != nil {
 		return nil, err
 	}
+	resolvedRoot, err := validateDiffRoot(inst, expectedRoot)
+	if err != nil {
+		return nil, err
+	}
+	inst.BrowseRoot = resolvedRoot
 	return inst.GetSessionDiffFiles()
 }
 
 // GetFullDiffFiles returns the per-file uncommitted diff.
-func (a *App) GetFullDiffFiles(id string, windowIdx int) ([]session.DiffFile, error) {
+func (a *App) GetFullDiffFiles(id string, windowIdx int, expectedRoot string) ([]session.DiffFile, error) {
 	inst, err := a.browseInstance(id, windowIdx)
 	if err != nil {
 		return nil, err
 	}
+	resolvedRoot, err := validateDiffRoot(inst, expectedRoot)
+	if err != nil {
+		return nil, err
+	}
+	inst.BrowseRoot = resolvedRoot
 	return inst.GetFullDiffFiles()
 }
 
@@ -2775,20 +2805,30 @@ func (a *App) DetectionPatternsVersion() int {
 // writing a lot of files — a build dropping its output into the tree produced a
 // diff the webview never finished rendering. Listing costs the same whatever
 // the files contain.
-func (a *App) GetSessionDiffFileList(id string, windowIdx int) ([]session.DiffFileSummary, error) {
+func (a *App) GetSessionDiffFileList(id string, windowIdx int, expectedRoot string) ([]session.DiffFileSummary, error) {
 	inst, err := a.browseInstance(id, windowIdx)
 	if err != nil {
 		return nil, err
 	}
+	resolvedRoot, err := validateDiffRoot(inst, expectedRoot)
+	if err != nil {
+		return nil, err
+	}
+	inst.BrowseRoot = resolvedRoot
 	return inst.GetSessionDiffFileList()
 }
 
 // GetFullDiffFileList lists files with uncommitted changes, without contents.
-func (a *App) GetFullDiffFileList(id string, windowIdx int) ([]session.DiffFileSummary, error) {
+func (a *App) GetFullDiffFileList(id string, windowIdx int, expectedRoot string) ([]session.DiffFileSummary, error) {
 	inst, err := a.browseInstance(id, windowIdx)
 	if err != nil {
 		return nil, err
 	}
+	resolvedRoot, err := validateDiffRoot(inst, expectedRoot)
+	if err != nil {
+		return nil, err
+	}
+	inst.BrowseRoot = resolvedRoot
 	return inst.GetFullDiffFileList()
 }
 
@@ -2796,20 +2836,30 @@ func (a *App) GetFullDiffFileList(id string, windowIdx int) ([]session.DiffFileS
 //
 // wholeFile asks for the whole file around the changes, for the view that shows
 // a change in the context of the file it lives in.
-func (a *App) GetSessionDiffForFile(id, path string, wholeFile bool, windowIdx int) (*session.DiffFile, error) {
+func (a *App) GetSessionDiffForFile(id, path string, wholeFile bool, windowIdx int, expectedRoot string) (*session.DiffFile, error) {
 	inst, err := a.browseInstance(id, windowIdx)
 	if err != nil {
 		return nil, err
 	}
+	resolvedRoot, err := validateDiffRoot(inst, expectedRoot)
+	if err != nil {
+		return nil, err
+	}
+	inst.BrowseRoot = resolvedRoot
 	return inst.GetSessionDiffForFile(path, wholeFile)
 }
 
 // GetFullDiffForFile returns one file's uncommitted diff.
-func (a *App) GetFullDiffForFile(id, path string, wholeFile bool, windowIdx int) (*session.DiffFile, error) {
+func (a *App) GetFullDiffForFile(id, path string, wholeFile bool, windowIdx int, expectedRoot string) (*session.DiffFile, error) {
 	inst, err := a.browseInstance(id, windowIdx)
 	if err != nil {
 		return nil, err
 	}
+	resolvedRoot, err := validateDiffRoot(inst, expectedRoot)
+	if err != nil {
+		return nil, err
+	}
+	inst.BrowseRoot = resolvedRoot
 	return inst.GetFullDiffForFile(path, wholeFile)
 }
 
@@ -2824,9 +2874,11 @@ func (a *App) RevertDiffFile(id, path string, sessionScope bool, windowIdx int, 
 	if err != nil {
 		return err
 	}
-	if err := validateDiffRoot(inst, expectedRoot); err != nil {
+	resolvedRoot, err := validateDiffRoot(inst, expectedRoot)
+	if err != nil {
 		return err
 	}
+	inst.BrowseRoot = resolvedRoot
 	baseRef := ""
 	if sessionScope {
 		baseRef = inst.BaseCommitSHA
@@ -2847,23 +2899,16 @@ func (a *App) RevertDiffHunk(id, patch string, windowIdx int, expectedRoot strin
 	if err != nil {
 		return err
 	}
-	if err := validateDiffRoot(inst, expectedRoot); err != nil {
+	resolvedRoot, err := validateDiffRoot(inst, expectedRoot)
+	if err != nil {
 		return err
 	}
+	inst.BrowseRoot = resolvedRoot
 	return inst.RevertHunk(patch)
 }
 
-func validateDiffRoot(inst *session.Instance, expectedRoot string) error {
-	actualRoot := inst.Path
-	if inst.BrowseRoot != "" {
-		actualRoot = inst.BrowseRoot
-	}
-	actualAbs, actualErr := filepath.Abs(actualRoot)
-	expectedAbs, expectedErr := filepath.Abs(expectedRoot)
-	if expectedRoot == "" || actualErr != nil || expectedErr != nil || filepath.Clean(actualAbs) != filepath.Clean(expectedAbs) {
-		return fmt.Errorf("the tab working directory changed; reopen the diff before reverting")
-	}
-	return nil
+func validateDiffRoot(inst *session.Instance, expectedRoot string) (string, error) {
+	return validateRootSnapshot(inst, expectedRoot, "the tab working directory changed; reopen the diff")
 }
 
 // ============================================================================
@@ -2896,10 +2941,18 @@ func (a *App) browseInstance(id string, windowIdx int) (*session.Instance, error
 	return inst, nil
 }
 
-func (a *App) ListSessionDirectory(id, path string, windowIdx int) (*session.BrowseListing, error) {
+func (a *App) ListSessionDirectory(id, path string, windowIdx int, expectedRoot string) (*session.BrowseListing, error) {
 	inst, err := a.browseInstance(id, windowIdx)
 	if err != nil {
 		return nil, err
+	}
+	isRoot := path == "" || filepath.Clean(filepath.FromSlash(path)) == "."
+	if !isRoot || expectedRoot != "" {
+		resolvedRoot, err := validateBrowseRoot(inst, expectedRoot)
+		if err != nil {
+			return nil, err
+		}
+		inst.BrowseRoot = resolvedRoot
 	}
 	return inst.ListDirectory(path)
 }
@@ -2909,11 +2962,16 @@ func (a *App) ListSessionDirectory(id, path string, windowIdx int) (*session.Bro
 //
 // The long name avoids ReadSessionFile, which already means "open the session
 // export the user picked".
-func (a *App) ReadSessionDirectoryFile(id, path string, windowIdx int) (*session.BrowseFile, error) {
+func (a *App) ReadSessionDirectoryFile(id, path string, windowIdx int, expectedRoot string) (*session.BrowseFile, error) {
 	inst, err := a.browseInstance(id, windowIdx)
 	if err != nil {
 		return nil, err
 	}
+	resolvedRoot, err := validateBrowseRoot(inst, expectedRoot)
+	if err != nil {
+		return nil, err
+	}
+	inst.BrowseRoot = resolvedRoot
 	return inst.ReadFileForBrowse(path)
 }
 
@@ -2921,11 +2979,16 @@ func (a *App) ReadSessionDirectoryFile(id, path string, windowIdx int) (*session
 // byte-layout details the editor cannot represent (BOM, line-ending convention,
 // trailing newline), which are handed straight back to SaveSessionFileEdit so an
 // unmodified file saves byte-identically.
-func (a *App) OpenSessionFileForEdit(id, path string, windowIdx int) (*session.EditableFile, error) {
+func (a *App) OpenSessionFileForEdit(id, path string, windowIdx int, expectedRoot string) (*session.EditableFile, error) {
 	inst, err := a.browseInstance(id, windowIdx)
 	if err != nil {
 		return nil, err
 	}
+	resolvedRoot, err := validateBrowseRoot(inst, expectedRoot)
+	if err != nil {
+		return nil, err
+	}
+	inst.BrowseRoot = resolvedRoot
 	return inst.ReadFileForEdit(path)
 }
 
@@ -2983,15 +3046,24 @@ func (a *App) SaveSessionFileEdit(id, path, text string, shape session.FileShape
 // two different roots that both contain the same relative path, and overwrite
 // intentionally bypasses that check. Root identity therefore fails closed.
 func validateBrowseRoot(inst *session.Instance, expectedRoot string) (string, error) {
-	actualAbs, actualErr := filepath.Abs(inst.BrowseRoot)
+	return validateRootSnapshot(inst, expectedRoot, "the tab working directory changed; reopen the file")
+}
+
+func validateRootSnapshot(inst *session.Instance, expectedRoot, message string) (string, error) {
+	actualRoot := inst.Path
+	if inst.BrowseRoot != "" {
+		actualRoot = inst.BrowseRoot
+	}
+	actualAbs, actualErr := filepath.Abs(actualRoot)
 	expectedAbs, expectedErr := filepath.Abs(expectedRoot)
 	actualResolved, actualResolveErr := filepath.EvalSymlinks(actualAbs)
 	expectedResolved, expectedResolveErr := filepath.EvalSymlinks(expectedAbs)
-	if expectedRoot == "" || inst.BrowseRoot == "" || actualErr != nil || expectedErr != nil ||
-		actualResolveErr != nil || expectedResolveErr != nil || filepath.Clean(actualResolved) != filepath.Clean(expectedResolved) {
-		return "", fmt.Errorf("the tab working directory changed; reopen the file before saving")
+	if expectedRoot == "" || actualRoot == "" || actualErr != nil || expectedErr != nil ||
+		actualResolveErr != nil || expectedResolveErr != nil ||
+		session.CanonicalProjectPath(actualResolved) != session.CanonicalProjectPath(expectedResolved) {
+		return "", fmt.Errorf("%s", message)
 	}
-	return expectedResolved, nil
+	return actualResolved, nil
 }
 
 // ============================================================================
@@ -3903,12 +3975,13 @@ func reloadTaskManagerCache() error {
 		managers = append(managers, manager)
 	}
 	taskManagerMu.RUnlock()
+	var reloadErr error
 	for _, manager := range managers {
 		if err := manager.Load(); err != nil {
-			return fmt.Errorf("failed to reload restored task store: %w", err)
+			reloadErr = errors.Join(reloadErr, fmt.Errorf("failed to reload restored task store: %w", err))
 		}
 	}
-	return nil
+	return reloadErr
 }
 
 // convertTask converts session.Task to TaskInfo for frontend
@@ -5010,74 +5083,80 @@ func (a *App) TaskMasterUpdateTaskDirect(sessionID, taskID, title, description, 
 // fields into the local task store made an MCP edit partially succeed and then
 // report "task not found" from a different provider.
 func updateTaskMasterFileDirect(tasksFile, taskID, title, description, details, priority, dueAt, taskSessionID string) error {
-	data, err := os.ReadFile(tasksFile)
-	if err != nil {
-		return fmt.Errorf("failed to read tasks.json: %w", err)
-	}
-
-	var root map[string]json.RawMessage
-	if err := json.Unmarshal(data, &root); err != nil {
-		return fmt.Errorf("failed to parse tasks.json: %w", err)
-	}
-
-	// Find and update the task in each context
-	updated := false
-	for ctxKey, ctxRaw := range root {
-		var ctx struct {
-			Tasks    []map[string]interface{} `json:"tasks"`
-			Metadata json.RawMessage          `json:"metadata,omitempty"`
+	return mcp.MutateTaskMasterFile(tasksFile, func(root map[string]interface{}) error {
+		context, err := directEditTaskMasterContext(root, taskID)
+		if err != nil {
+			return err
 		}
-		// Try parsing as context with tasks array
-		if err := json.Unmarshal(ctxRaw, &ctx); err != nil || ctx.Tasks == nil {
+		tasks := context["tasks"].([]interface{})
+		for _, rawTask := range tasks {
+			task, ok := rawTask.(map[string]interface{})
+			if !ok || taskMasterJSONID(task["id"]) != taskID {
+				continue
+			}
+			task["title"] = title
+			task["description"] = description
+			task["details"] = details
+			task["priority"] = priority
+			if dueAt == "" {
+				delete(task, "dueAt")
+			} else {
+				task["dueAt"] = dueAt
+			}
+			if taskSessionID == "" {
+				delete(task, "sessionId")
+			} else {
+				task["sessionId"] = taskSessionID
+			}
+			return nil
+		}
+		return fmt.Errorf("task %s disappeared from selected context", taskID)
+	})
+}
+
+func directEditTaskMasterContext(root map[string]interface{}, taskID string) (map[string]interface{}, error) {
+	if master, ok := root["master"].(map[string]interface{}); ok && taskMasterContextContains(master, taskID) {
+		return master, nil
+	}
+
+	matches := make([]map[string]interface{}, 0, 1)
+	for key, rawContext := range root {
+		if key == "master" {
 			continue
 		}
-
-		for i, task := range ctx.Tasks {
-			tid := fmt.Sprintf("%v", task["id"])
-			if tid == taskID {
-				ctx.Tasks[i]["title"] = title
-				ctx.Tasks[i]["description"] = description
-				ctx.Tasks[i]["details"] = details
-				ctx.Tasks[i]["priority"] = priority
-				if dueAt == "" {
-					delete(ctx.Tasks[i], "dueAt")
-				} else {
-					ctx.Tasks[i]["dueAt"] = dueAt
-				}
-				if taskSessionID == "" {
-					delete(ctx.Tasks[i], "sessionId")
-				} else {
-					ctx.Tasks[i]["sessionId"] = taskSessionID
-				}
-				updated = true
-				break
-			}
-		}
-
-		if updated {
-			ctxBytes, err := json.Marshal(ctx)
-			if err != nil {
-				return fmt.Errorf("failed to marshal context: %w", err)
-			}
-			root[ctxKey] = ctxBytes
-			break
+		context, ok := rawContext.(map[string]interface{})
+		if ok && taskMasterContextContains(context, taskID) {
+			matches = append(matches, context)
 		}
 	}
-
-	if !updated {
-		return fmt.Errorf("task %s not found in tasks.json", taskID)
+	switch len(matches) {
+	case 0:
+		return nil, fmt.Errorf("task %s not found in tasks.json", taskID)
+	case 1:
+		return matches[0], nil
+	default:
+		return nil, fmt.Errorf("task %s is ambiguous across %d Task Master contexts", taskID, len(matches))
 	}
+}
 
-	out, err := json.MarshalIndent(root, "", "  ")
-	if err != nil {
-		return fmt.Errorf("failed to marshal tasks.json: %w", err)
+func taskMasterContextContains(context map[string]interface{}, taskID string) bool {
+	tasks, ok := context["tasks"].([]interface{})
+	if !ok {
+		return false
 	}
-
-	if err := mcp.AtomicReplaceTaskMasterFile(tasksFile, out); err != nil {
-		return fmt.Errorf("failed to write tasks.json: %w", err)
+	for _, rawTask := range tasks {
+		if task, ok := rawTask.(map[string]interface{}); ok && taskMasterJSONID(task["id"]) == taskID {
+			return true
+		}
 	}
+	return false
+}
 
-	return nil
+func taskMasterJSONID(value interface{}) string {
+	if number, ok := value.(json.Number); ok {
+		return number.String()
+	}
+	return fmt.Sprint(value)
 }
 
 // TaskMasterAddDependency adds a dependency to a task

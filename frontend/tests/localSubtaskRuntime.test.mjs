@@ -42,6 +42,15 @@ let subtasks = stored[0].subtasks;
 assert.equal(subtasks.at(-1).id, '5', 'max numeric ID + 1 avoids the surviving ID 4');
 assert.equal(new Set(subtasks.map((subtask) => subtask.id)).size, subtasks.length, 'IDs remain unique with non-numeric siblings');
 
+await Promise.all([
+  store.addSubtask('session-one', 'task', 'rapid A'),
+  store.addSubtask('session-one', 'task', 'rapid B'),
+]);
+subtasks = stored[0].subtasks;
+assert.ok(subtasks.some((subtask) => subtask.title === 'rapid A'));
+assert.ok(subtasks.some((subtask) => subtask.title === 'rapid B'), 'queued local RMW must retain both rapid additions');
+assert.equal(new Set(subtasks.map((subtask) => subtask.id)).size, subtasks.length, 'queued additions allocate from the latest backend snapshot');
+
 await store.setSubtaskStatus('session-one', 'task.1', 'done', 'local');
 await store.setSubtaskStatus('session-one', 'task.1', 'done', 'local');
 let first = stored[0].subtasks.find((subtask) => subtask.id === '1');

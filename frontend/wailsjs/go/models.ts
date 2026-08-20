@@ -1937,6 +1937,7 @@ export namespace session {
 	export class EditableFile {
 	    path: string;
 	    absPath: string;
+	    root: string;
 	    text: string;
 	    shape: FileShape;
 	    version: string;
@@ -1953,6 +1954,7 @@ export namespace session {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.path = source["path"];
 	        this.absPath = source["absPath"];
+	        this.root = source["root"];
 	        this.text = source["text"];
 	        this.shape = this.convertValues(source["shape"], FileShape);
 	        this.version = source["version"];

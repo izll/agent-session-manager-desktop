@@ -2,6 +2,8 @@ package main
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -186,5 +188,63 @@ func TestInvalidateSessionFileIndexDropsBothWalks(t *testing.T) {
 	}
 	if !other {
 		t.Error("invalidation must not touch another session's index")
+	}
+}
+
+func TestSessionFileSearchRequiresCanonicalRootSnapshot(t *testing.T) {
+	clearFileIndexCache(t)
+	storage := guardedTestStorage(t)
+	root := t.TempDir()
+	other := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "root.txt"), []byte("unique needle\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(other, "other.txt"), []byte("wrong tree\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	inst := &session.Instance{ID: "quick-open-root", Path: root, Status: session.StatusStopped}
+	if err := storage.AddInstance(inst); err != nil {
+		t.Fatal(err)
+	}
+	app := &App{storage: storage}
+
+	alias := filepath.Join(t.TempDir(), "root-alias")
+	expectedRoot := root
+	if err := os.Symlink(root, alias); err == nil {
+		expectedRoot = alias
+	}
+	index, err := app.SearchSessionFileIndex(inst.ID, false, -1, expectedRoot)
+	if err != nil {
+		t.Fatalf("canonical root snapshot rejected: %v", err)
+	}
+	if len(index.Files) != 1 || index.Files[0].Path != "root.txt" {
+		t.Fatalf("index searched wrong root: %+v", index.Files)
+	}
+	resolvedRoot, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fileIndexMu.Lock()
+	_, cachedUnderCanonicalRoot := fileIndexCache[fileIndexKey{sessionID: inst.ID, root: resolvedRoot}]
+	fileIndexMu.Unlock()
+	if !cachedUnderCanonicalRoot {
+		t.Fatalf("index was not cached under canonical root %q", resolvedRoot)
+	}
+
+	contents, err := app.SearchSessionFileContents(inst.ID, "needle", false, false, -1, resolvedRoot)
+	if err != nil {
+		t.Fatalf("content search through root snapshot: %v", err)
+	}
+	if len(contents.Matches) != 1 || contents.Matches[0].Path != "root.txt" {
+		t.Fatalf("content search used wrong root: %+v", contents.Matches)
+	}
+	if _, err := app.SearchSessionFileIndex(inst.ID, false, -1, ""); err == nil {
+		t.Fatal("index accepted a missing root snapshot")
+	}
+	if _, err := app.SearchSessionFileIndex(inst.ID, false, -1, other); err == nil {
+		t.Fatal("index accepted a stale root snapshot")
+	}
+	if _, err := app.SearchSessionFileContents(inst.ID, "wrong", false, false, -1, other); err == nil {
+		t.Fatal("content search accepted a stale root snapshot")
 	}
 }

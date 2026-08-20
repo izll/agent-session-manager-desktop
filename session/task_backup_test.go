@@ -1,6 +1,7 @@
 package session
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -93,6 +94,48 @@ func TestRestoreSkipsMissingDirectories(t *testing.T) {
 	}
 	if _, err := os.Stat(taskFileFor(gone)); !os.IsNotExist(err) {
 		t.Error("nothing should have been created under a missing directory")
+	}
+}
+
+func TestRestoreTaskTargetsRollsBackEarlierReplacement(t *testing.T) {
+	root := t.TempDir()
+	firstPath := filepath.Join(root, "a", ".taskmaster", "tasks.json")
+	secondPath := filepath.Join(root, "b", ".taskmaster", "tasks.json")
+	for _, path := range []string{firstPath, secondPath} {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(firstPath, []byte("current-a"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(secondPath, []byte("current-b"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	targets := []*taskRestoreTarget{
+		{path: firstPath, content: "backup-a"},
+		{path: secondPath, content: "backup-b"},
+	}
+	calls := 0
+	injected := errors.New("injected second replace failure")
+	err := restoreTaskTargets(targets, func(oldPath, newPath string) error {
+		calls++
+		if calls == 2 {
+			return injected
+		}
+		return os.Rename(oldPath, newPath)
+	})
+	if !errors.Is(err, injected) {
+		t.Fatalf("restore error = %v, want injected failure", err)
+	}
+	for path, want := range map[string]string{firstPath: "current-a", secondPath: "current-b"} {
+		got, readErr := os.ReadFile(path)
+		if readErr != nil {
+			t.Fatal(readErr)
+		}
+		if string(got) != want {
+			t.Fatalf("%s after rollback = %q, want %q", path, got, want)
+		}
 	}
 }
 

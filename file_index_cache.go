@@ -50,11 +50,12 @@ var (
 //
 // includeAll disables the walk's skip list (node_modules and friends); it never
 // disables the containment check, which lives in session.BuildFileIndex.
-func (a *App) SearchSessionFileIndex(id string, includeAll bool, windowIdx int) (*session.FileIndex, error) {
-	root := a.GetTabWorkingDirectory(id, windowIdx)
-	return cachedFileIndex(fileIndexKey{sessionID: id, root: root, includeAll: includeAll}, func() (*session.FileIndex, error) {
-		return a.buildFileIndex(id, includeAll, windowIdx)
-	})
+func (a *App) SearchSessionFileIndex(id string, includeAll bool, windowIdx int, expectedRoot string) (*session.FileIndex, error) {
+	inst, root, err := a.fileSearchInstance(id, windowIdx, expectedRoot)
+	if err != nil {
+		return nil, err
+	}
+	return searchSessionFileIndexAtRoot(id, root, includeAll, inst)
 }
 
 // cachedFileIndex is the cache itself, with the walk passed in so it can be
@@ -99,13 +100,28 @@ func cachedFileIndex(key fileIndexKey, build func() (*session.FileIndex, error))
 	}
 }
 
-// buildFileIndex is the uncached walk.
-func (a *App) buildFileIndex(id string, includeAll bool, windowIdx int) (*session.FileIndex, error) {
+// fileSearchInstance resolves the tab once and pins every later operation to
+// that canonical tree. Looking up the tab again between the cached index and a
+// content scan would reopen the exact cwd-switch window expectedRoot closes.
+func (a *App) fileSearchInstance(id string, windowIdx int, expectedRoot string) (*session.Instance, string, error) {
 	inst, err := a.browseInstance(id, windowIdx)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
-	return inst.BuildFileIndex(includeAll)
+	root, err := validateRootSnapshot(inst, expectedRoot, "the tab working directory changed; reopen quick open")
+	if err != nil {
+		return nil, "", err
+	}
+	root = session.CanonicalProjectPath(root)
+	inst.BrowseRoot = root
+	return inst, root, nil
+}
+
+func searchSessionFileIndexAtRoot(id, root string, includeAll bool, inst *session.Instance) (*session.FileIndex, error) {
+	key := fileIndexKey{sessionID: id, root: root, includeAll: includeAll}
+	return cachedFileIndex(key, func() (*session.FileIndex, error) {
+		return inst.BuildFileIndex(includeAll)
+	})
 }
 
 // InvalidateSessionFileIndex drops the cached walk for a session, so the next
@@ -130,12 +146,12 @@ func (a *App) InvalidateSessionFileIndex(id string) {
 // SearchSessionFileContents greps the session's indexed files for a literal
 // substring. The index is taken from the same cache the quick-open uses, so a
 // content search right after a filename search costs no extra walk.
-func (a *App) SearchSessionFileContents(id, query string, caseSensitive, includeAll bool, windowIdx int) (*session.ContentSearchResult, error) {
-	index, err := a.SearchSessionFileIndex(id, includeAll, windowIdx)
+func (a *App) SearchSessionFileContents(id, query string, caseSensitive, includeAll bool, windowIdx int, expectedRoot string) (*session.ContentSearchResult, error) {
+	inst, root, err := a.fileSearchInstance(id, windowIdx, expectedRoot)
 	if err != nil {
 		return nil, err
 	}
-	inst, err := a.browseInstance(id, windowIdx)
+	index, err := searchSessionFileIndexAtRoot(id, root, includeAll, inst)
 	if err != nil {
 		return nil, err
 	}

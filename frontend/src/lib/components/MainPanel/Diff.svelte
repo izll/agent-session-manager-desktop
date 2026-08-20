@@ -227,7 +227,7 @@
   }
 
   async function copyDiff() {
-    if (!files.length || loading || copying || loadedDiffKey !== currentDiffKey) return;
+    if (!files.length || loading || copying || loadedDiffKey !== currentDiffKey || !loadedRoot) return;
     const sessionId = get(selectedSessionId);
     if (!sessionId) return;
     const generation = ++copyGeneration;
@@ -237,8 +237,8 @@
       // one thing that is genuinely expensive, and it is only needed when the
       // button is actually pressed.
       const whole = diffMode === 'session'
-        ? await App.GetSessionDiff(sessionId, tabIdx())
-        : await App.GetFullDiff(sessionId, tabIdx());
+        ? await App.GetSessionDiff(sessionId, tabIdx(), loadedRoot)
+        : await App.GetFullDiff(sessionId, tabIdx(), loadedRoot);
       if (destroyed || generation !== copyGeneration) return;
       const content = whole?.content || '';
       if (!content) { copying = false; return; }
@@ -264,32 +264,23 @@
     const mode = diffMode;
     const generation = ++loadGeneration;
     const requestedKey = `${sessionId || ''}:${windowIdx}:${mode}`;
-    loadedRoot = '';
     if (!sessionId) {
       diff = null;
       files = [];
       selectedPath = null;
       loadedDiffKey = '';
+      loadedRoot = '';
       resetCopyState();
       error = '';
       return;
     }
 
     if (loadedDiffKey !== requestedKey) {
-      // A cached list from a moment ago is shown straight away, so returning to
-      // the tab resumes instead of blinking through an empty view. The fetch
-      // below still runs and replaces it — this only covers the gap.
-      const cached = cachedDiff(requestedKey) as { diff: DiffData | null; files: session.DiffFileSummary[] } | null;
-      if (cached) {
-        diff = cached.diff;
-        files = cached.files;
-        loadedDiffKey = requestedKey;
-      } else {
-        diff = null;
-        files = [];
-        selectedPath = null;
-        resetCopyState();
-      }
+      loadedRoot = '';
+      diff = null;
+      files = [];
+      selectedPath = null;
+      resetCopyState();
     }
     // Keyed on session AND tab, matching the guard that calls this: a tab with
     // its own directory is a different diff even within one session.
@@ -309,9 +300,25 @@
       const root = await App.GetTabWorkingDirectory(sessionId, windowIdx);
       if (generation !== loadGeneration || sessionId !== get(selectedSessionId) ||
           windowIdx !== tabIdx() || mode !== diffMode || !active) return;
+      if (!root) throw new Error('diff target has no working directory');
+      const rootCacheKey = `${requestedKey}\x1f${root}`;
+      if (loadedDiffKey !== requestedKey || loadedRoot !== root) {
+        const cached = cachedDiff(rootCacheKey) as { diff: DiffData | null; files: session.DiffFileSummary[] } | null;
+        if (cached) {
+          diff = cached.diff;
+          files = cached.files;
+          loadedDiffKey = requestedKey;
+          loadedRoot = root;
+        } else {
+          diff = null;
+          files = [];
+          selectedPath = null;
+          resetCopyState();
+        }
+      }
       const fileResult = mode === 'session'
-        ? await App.GetSessionDiffFileList(sessionId, windowIdx)
-        : await App.GetFullDiffFileList(sessionId, windowIdx);
+        ? await App.GetSessionDiffFileList(sessionId, windowIdx, root)
+        : await App.GetFullDiffFileList(sessionId, windowIdx, root);
       if (generation !== loadGeneration || sessionId !== get(selectedSessionId) ||
           windowIdx !== tabIdx() || mode !== diffMode || !active) return;
       const summaries = fileResult || [];
@@ -327,16 +334,16 @@
       //
       // The places are forgotten with it: the files changed underneath, so the
       // cached contents are stale, and so is any offset into them.
-      if (noteListKey(sessionId, nextKey, windowIdx, mode)) {
+      if (noteListKey(sessionId, nextKey, windowIdx, mode, root)) {
         resetCopyState();
         fileCache = {};
       }
       diff = { content: '', added: totals.added, removed: totals.removed };
       files = summaries;
-      syncSelection();
       loadedDiffKey = requestedKey;
       loadedRoot = root;
-      cacheDiff(requestedKey, { diff, files });
+      syncSelection();
+      cacheDiff(rootCacheKey, { diff, files });
     } catch (e) {
       if (generation !== loadGeneration || sessionId !== get(selectedSessionId) ||
           windowIdx !== tabIdx() || mode !== diffMode || !active) return;
@@ -805,8 +812,8 @@
   // from git: whole-file asks for every line around the changes, hunks-only for
   // three lines of context. Keyed together, switching views would show the
   // previous answer.
-  $: cacheKey = selectedPath
-    ? `${currentDiffKey}:${wholeFileView ? 'whole' : 'hunks'}:${selectedPath}`
+  $: cacheKey = selectedPath && loadedRoot && loadedDiffKey === currentDiffKey
+    ? `${currentDiffKey}:${loadedRoot}:${wholeFileView ? 'whole' : 'hunks'}:${selectedPath}`
     : '';
   $: selectedFile = cacheKey ? fileCache[cacheKey] ?? null : null;
   // Fetch the hunks the first time a file is opened.
@@ -818,26 +825,27 @@
     const mode = diffMode;
     const whole = wholeFileView;
     const targetKey = `${sessionId || ''}:${windowIdx}:${mode}`;
-    const key = `${targetKey}:${whole ? 'whole' : 'hunks'}:${path}`;
-    if (!sessionId) return;
+    const expectedRoot = loadedRoot;
+    const key = `${targetKey}:${expectedRoot}:${whole ? 'whole' : 'hunks'}:${path}`;
+    if (!sessionId || !expectedRoot || loadedDiffKey !== targetKey) return;
     loadingFile = true;
     try {
       const loaded = mode === 'session'
-        ? await App.GetSessionDiffForFile(sessionId, path, whole, windowIdx)
-        : await App.GetFullDiffForFile(sessionId, path, whole, windowIdx);
+        ? await App.GetSessionDiffForFile(sessionId, path, whole, windowIdx, expectedRoot)
+        : await App.GetFullDiffForFile(sessionId, path, whole, windowIdx, expectedRoot);
       // Ignore a result that arrived after the user moved on, so a slow file
       // cannot overwrite the one now on screen.
       if (path !== selectedPath || mode !== diffMode || whole !== wholeFileView ||
-          sessionId !== get(selectedSessionId) || windowIdx !== tabIdx()) return;
+          sessionId !== get(selectedSessionId) || windowIdx !== tabIdx() || expectedRoot !== loadedRoot) return;
       fileCache = { ...fileCache, [key]: loaded };
     } catch (e) {
-      if (path !== selectedPath || targetKey !== currentDiffKey || whole !== wholeFileView) return;
+      if (path !== selectedPath || targetKey !== currentDiffKey || whole !== wholeFileView || expectedRoot !== loadedRoot) return;
       // Cached as null: a file that fails to load should not be retried on
       // every reactive pass.
       fileCache = { ...fileCache, [key]: null };
       error = String(e);
     } finally {
-      if (path === selectedPath && targetKey === currentDiffKey && whole === wholeFileView) loadingFile = false;
+      if (path === selectedPath && targetKey === currentDiffKey && whole === wholeFileView && expectedRoot === loadedRoot) loadingFile = false;
     }
   }
   // Split here rather than in the markup so the header can dim the directory
@@ -1267,7 +1275,7 @@
    * binary — does not leave the walk hanging.
    */
   async function waitForFileLoad(path: string): Promise<void> {
-    const key = `${currentDiffKey}:${wholeFileView ? 'whole' : 'hunks'}:${path}`;
+    const key = `${currentDiffKey}:${loadedRoot}:${wholeFileView ? 'whole' : 'hunks'}:${path}`;
     // ~1.5s at 25ms. Long enough for a git call on a large repository, short
     // enough that a file which never loads does not appear to hang the button.
     for (let attempt = 0; attempt < 60; attempt++) {
@@ -1353,7 +1361,7 @@
     const fresh = lastOffsetFor === offsetOwner(selectedPath, viewMode);
     const scrollTop = currentScrollOffset() || (fresh ? lastOffset : 0);
 
-    rememberPlace(sessionId, selectedPath, viewMode, { scrollTop, currentHunk, markedHunk }, tabIdx());
+    rememberPlace(sessionId, selectedPath, viewMode, { scrollTop, currentHunk, markedHunk }, tabIdx(), loadedRoot);
   }
 
   /**
@@ -1365,7 +1373,7 @@
   async function restorePlace(path: string, mode: string) {
     const sessionId = get(selectedSessionId);
     if (!sessionId) return;
-    const place = recallPlace(sessionId, path, mode, tabIdx());
+    const place = recallPlace(sessionId, path, mode, tabIdx(), loadedRoot);
     if (!place) return;
 
     currentHunk = place.currentHunk;

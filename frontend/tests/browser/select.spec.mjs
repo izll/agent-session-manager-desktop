@@ -18,6 +18,14 @@ test('a real Svelte component renders, portals, focuses and reacts in Chromium',
   expect(pageErrors).toEqual([]);
 });
 
+test('ConfirmDialog remains visible when its owning view is hidden', async ({ page }) => {
+  await page.goto('/tests/browser/confirm-portal-fixture.html');
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toBeVisible();
+  expect(await dialog.evaluate((node) => node.parentElement === document.body)).toBe(true);
+  await expect(page.getByRole('button', { name: 'Keep editing' })).toBeVisible();
+});
+
 test('TaskPanel keeps metadata on one right-aligned row with optional badges', async ({ page }) => {
   const pageErrors = [];
   page.on('pageerror', (error) => pageErrors.push(error.message));
@@ -75,6 +83,76 @@ test('TaskPanel keeps trailing status and priority inside a 520px combined-metad
   expect(geometry.priorityRight).toBeLessThanOrEqual(geometry.rowRight + 1);
   expect(geometry.optionalRight).toBeLessThanOrEqual(geometry.trailingLeft + 1);
   expect(Math.abs(geometry.statusTop - geometry.priorityTop)).toBeLessThanOrEqual(1);
+});
+
+test('TaskPanel keeps trailing metadata inside the realistic 300-320px main panel', async ({ page }) => {
+  await page.goto('/tests/browser/task-panel-fixture.html');
+  const combined = page.locator('.task-item').filter({ hasText: 'Minden metaadat' });
+  for (const width of [320, 300]) {
+    await page.locator('#fixture').evaluate((fixture, value) => { fixture.style.width = `${value}px`; }, width);
+    const geometry = await combined.evaluate((item) => {
+      const row = item.querySelector('.task-title-row').getBoundingClientRect();
+      const status = item.querySelector('.status-badge').getBoundingClientRect();
+      const priority = item.querySelector('.priority-badge').getBoundingClientRect();
+      return { rowLeft: row.left, rowRight: row.right, statusLeft: status.left, priorityRight: priority.right };
+    });
+    expect(geometry.statusLeft).toBeGreaterThanOrEqual(geometry.rowLeft - 1);
+    expect(geometry.priorityRight).toBeLessThanOrEqual(geometry.rowRight + 1);
+  }
+});
+
+test('TaskPanel closes stale context menus and edit modals on session change', async ({ page }) => {
+  await page.goto('/tests/browser/task-panel-fixture.html');
+  await page.locator('.task-item').first().click({ button: 'right' });
+  await expect(page.locator('.context-menu')).toBeVisible();
+  await page.evaluate(() => window.taskPanelFixture.select('other-session', [{
+    id: '4', title: 'OTHER SESSION ID 4', description: 'keep', details: 'keep', status: 'pending',
+    priority: 'low', tags: [], dependencies: [], subtasks: [],
+  }]));
+  await expect(page.getByText('OTHER SESSION ID 4')).toBeVisible();
+  await expect(page.locator('.context-menu')).toHaveCount(0);
+
+  await page.locator('.task-item').first().click({ button: 'right' });
+  await page.locator('.context-menu button').filter({ hasText: /Edit|Szerkeszt/ }).click();
+  await expect(page.locator('.dialog-overlay')).toBeVisible();
+  await page.evaluate(() => window.taskPanelFixture.select('third-session', [{
+    id: '4', title: 'THIRD SESSION ID 4', description: 'keep', details: 'keep', status: 'pending',
+    priority: 'low', tags: [], dependencies: [], subtasks: [],
+  }]));
+  await expect(page.locator('.dialog-overlay')).toHaveCount(0);
+  expect(await page.evaluate(() => window.taskPanelFixture.updates())).toEqual([]);
+});
+
+test('a delayed TaskPanel save cannot close or overwrite a newer session modal', async ({ page }) => {
+  await page.goto('/tests/browser/task-panel-fixture.html?delayUpdate=1');
+  await page.locator('.task-item').first().click({ button: 'right' });
+  await page.locator('.context-menu button').filter({ hasText: /Edit|Szerkeszt/ }).click();
+  const firstTitle = page.locator('.dialog-content input[type="text"]').first();
+  await firstTitle.fill('delayed session A edit');
+  await page.locator('.dialog-content .btn-primary').click();
+  await expect.poll(() => page.evaluate(() => window.taskPanelFixture.updates().length)).toBe(1);
+
+  await page.evaluate(() => window.taskPanelFixture.select('new-session', [{
+    id: '4', title: 'NEW SESSION TASK', description: '', details: '', status: 'pending',
+    priority: 'low', tags: [], dependencies: [], subtasks: [],
+  }]));
+  await expect(page.getByText('NEW SESSION TASK')).toBeVisible();
+  await page.locator('.task-item').first().click({ button: 'right' });
+  await page.locator('.context-menu button').filter({ hasText: /Edit|Szerkeszt/ }).click();
+  const newTitle = page.locator('.dialog-content input[type="text"]').first();
+  await newTitle.fill('new session draft survives');
+
+  await page.evaluate(() => window.taskPanelFixture.resolveUpdates());
+  await expect(newTitle).toBeVisible();
+  await expect(newTitle).toHaveValue('new session draft survives');
+});
+
+test('TaskPanel does not offer AI-only actions after MCP falls back to local tasks', async ({ page }) => {
+  await page.goto('/tests/browser/task-panel-fixture.html?fallback=1');
+  await expect(page.locator('.task-item')).toHaveCount(4);
+  await page.getByRole('button', { name: /Add Task|Feladat hozzáadása/ }).click();
+  await expect(page.getByRole('button', { name: /AI Generated|AI által generált/ })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /Expand All|Összes kibontása/ })).toHaveCount(0);
 });
 
 test('Notes preserves a per-target draft after save failure and fails closed on load failure', async ({ page }) => {
