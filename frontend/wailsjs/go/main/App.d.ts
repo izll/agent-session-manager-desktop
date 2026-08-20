@@ -285,9 +285,9 @@ export function SaveSessionTemplate(arg1:string,arg2:string,arg3:string,arg4:str
 
 export function SaveSettings(arg1:main.SettingsInfo):Promise<void>;
 
-export function SearchSessionFileContents(arg1:string,arg2:string,arg3:boolean,arg4:boolean):Promise<session.ContentSearchResult>;
+export function SearchSessionFileContents(arg1:string,arg2:string,arg3:boolean,arg4:boolean,arg5:number):Promise<session.ContentSearchResult>;
 
-export function SearchSessionFileIndex(arg1:string,arg2:boolean):Promise<session.FileIndex>;
+export function SearchSessionFileIndex(arg1:string,arg2:boolean,arg3:number):Promise<session.FileIndex>;
 
 export function SelectProject(arg1:string):Promise<void>;
 

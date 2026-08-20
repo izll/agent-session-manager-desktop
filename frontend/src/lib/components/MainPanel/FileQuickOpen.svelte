@@ -14,6 +14,15 @@
 
   export let show = false;
   export let sessionId = '';
+  /**
+   * Which tab's directory to search.
+   *
+   * Passed in rather than read from the store, like sessionId beside it. A tab
+   * can be opened in a directory of its own, and without this the quick-open
+   * searched the session's tree while the file tree next to it showed the
+   * tab's — the same screen answering one question two ways.
+   */
+  export let windowIdx = 0;
 
   const dispatch = createEventDispatcher<{ pick: { path: string }; close: void }>();
 
@@ -98,7 +107,7 @@
     loading = true;
     error = '';
     try {
-      const result = await App.SearchSessionFileIndex(sessionId, includeAll);
+      const result = await App.SearchSessionFileIndex(sessionId, includeAll, windowIdx);
       if (destroyed || generation !== loadGeneration) return;
       index = result;
     } catch (e) {
@@ -147,7 +156,7 @@
     contentError = '';
     searchedQuery = q;
     try {
-      const result = await App.SearchSessionFileContents(sessionId, q, false, includeAll);
+      const result = await App.SearchSessionFileContents(sessionId, q, false, includeAll, windowIdx);
       if (destroyed || generation !== searchGeneration) return;
       contentResult = result;
       selectedIdx = 0;

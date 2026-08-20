@@ -1459,6 +1459,7 @@
 <FileQuickOpen
   bind:show={showQuickOpen}
   sessionId={$selectedSessionId || ''}
+  windowIdx={$selectedWindowIdx ?? 0}
   on:pick={(e) => openFromQuickOpen(e.detail.path)}
 />
 

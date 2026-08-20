@@ -566,12 +566,12 @@ export function SaveSettings(arg1) {
   return window['go']['main']['App']['SaveSettings'](arg1);
 }
 
-export function SearchSessionFileContents(arg1, arg2, arg3, arg4) {
-  return window['go']['main']['App']['SearchSessionFileContents'](arg1, arg2, arg3, arg4);
+export function SearchSessionFileContents(arg1, arg2, arg3, arg4, arg5) {
+  return window['go']['main']['App']['SearchSessionFileContents'](arg1, arg2, arg3, arg4, arg5);
 }
 
-export function SearchSessionFileIndex(arg1, arg2) {
-  return window['go']['main']['App']['SearchSessionFileIndex'](arg1, arg2);
+export function SearchSessionFileIndex(arg1, arg2, arg3) {
+  return window['go']['main']['App']['SearchSessionFileIndex'](arg1, arg2, arg3);
 }
 
 export function SelectProject(arg1) {

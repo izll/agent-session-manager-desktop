@@ -169,6 +169,7 @@
   // the tab's own agent (might differ from the main session agent), otherwise
   // it stays null and the dialog falls back to session.agent.
   let pendingResumeAgent: string | null = null;
+  let pendingResumePath: string | null = null;
 
   // Track "any dialog open" to restore terminal focus after the last one closes.
   // Without this, closing a dialog leaves focus on the dialog's overlay/buttons,
@@ -940,7 +941,7 @@
     await restartTab($selectedSession.id, windowIdx);
   }
 
-  function handleResume() {
+  async function handleResume() {
     if (!$selectedSession) return;
     pendingResumeSession = $selectedSession;
     // Check if this is a tab-level resume (session running but tab stopped)
@@ -958,9 +959,14 @@
         if (fw?.agent) agent = fw.agent;
       }
       pendingResumeAgent = agent;
+      // The tab's directory too: agents index their conversations by working
+      // directory, so a tab opened elsewhere would otherwise be offered the
+      // session directory's history.
+      pendingResumePath = await resolveGitHistoryPath();
     } else {
       pendingResumeWindowIdx = null;
       pendingResumeAgent = null;
+      pendingResumePath = null;
     }
     showResumeSessionPicker = true;
   }
@@ -1527,6 +1533,7 @@
     bind:show={showResumeSessionPicker}
     session={pendingResumeSession}
     agentOverride={pendingResumeAgent}
+    pathOverride={pendingResumePath}
     on:select={handleResumeSessionSelect}
     on:cancel={handleResumeCancel}
   />

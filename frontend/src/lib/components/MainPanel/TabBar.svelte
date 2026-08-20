@@ -1290,9 +1290,21 @@
     return fw?.stopped || false;
   })();
 
+  // Whether the tab on screen can be resumed.
+  //
+  // The TAB's agent, not the session's: a Codex tab inside a Claude session has
+  // its own. handleResume already picks the tab's agent to decide which
+  // conversations to list — the button offering the action was still asking the
+  // session, so the two could disagree about whether resuming is possible.
   $: agentSupportsResume = (() => {
     if (!$selectedSession) return false;
-    const agentConfig = $agents.find(a => a.type === $selectedSession.agent);
+    const winIdx = $selectedWindowIdx ?? 0;
+    let agent = $selectedSession.agent;
+    if (winIdx !== 0) {
+      const fw = $selectedSession.followedWindows?.find((f: any) => f.index === winIdx);
+      if (fw?.agent) agent = fw.agent;
+    }
+    const agentConfig = $agents.find(a => a.type === agent);
     return agentConfig?.supportsResume || false;
   })();
 

@@ -32,7 +32,11 @@ type fileIndexCacheEntry struct {
 // fileIndexKey identifies one cached walk. includeAll produces a genuinely
 // different list, so it is part of the key rather than a filter applied after.
 type fileIndexKey struct {
-	sessionID  string
+	sessionID string
+	// The directory actually walked. A tab can be opened in a directory of its
+	// own, so the session id alone would serve one tab's index to another —
+	// with the file tree beside it showing something else entirely.
+	root       string
 	includeAll bool
 }
 
@@ -46,9 +50,10 @@ var (
 //
 // includeAll disables the walk's skip list (node_modules and friends); it never
 // disables the containment check, which lives in session.BuildFileIndex.
-func (a *App) SearchSessionFileIndex(id string, includeAll bool) (*session.FileIndex, error) {
-	return cachedFileIndex(fileIndexKey{sessionID: id, includeAll: includeAll}, func() (*session.FileIndex, error) {
-		return a.buildFileIndex(id, includeAll)
+func (a *App) SearchSessionFileIndex(id string, includeAll bool, windowIdx int) (*session.FileIndex, error) {
+	root := a.GetTabWorkingDirectory(id, windowIdx)
+	return cachedFileIndex(fileIndexKey{sessionID: id, root: root, includeAll: includeAll}, func() (*session.FileIndex, error) {
+		return a.buildFileIndex(id, includeAll, windowIdx)
 	})
 }
 
@@ -95,8 +100,8 @@ func cachedFileIndex(key fileIndexKey, build func() (*session.FileIndex, error))
 }
 
 // buildFileIndex is the uncached walk.
-func (a *App) buildFileIndex(id string, includeAll bool) (*session.FileIndex, error) {
-	inst, err := a.storage.GetInstance(id)
+func (a *App) buildFileIndex(id string, includeAll bool, windowIdx int) (*session.FileIndex, error) {
+	inst, err := a.browseInstance(id, windowIdx)
 	if err != nil {
 		return nil, err
 	}
@@ -109,11 +114,14 @@ func (a *App) buildFileIndex(id string, includeAll bool) (*session.FileIndex, er
 func (a *App) InvalidateSessionFileIndex(id string) {
 	fileIndexMu.Lock()
 	defer fileIndexMu.Unlock()
+	// Every root belonging to this session, not one: the key carries the
+	// directory walked, and the caller knows a file changed somewhere without
+	// knowing which of the session's tabs was looking at it.
+	//
 	// An in-flight walk is left alone: it will store its own result, which is
 	// newer than whatever the caller wanted dropped anyway.
-	for _, includeAll := range []bool{false, true} {
-		key := fileIndexKey{sessionID: id, includeAll: includeAll}
-		if entry, ok := fileIndexCache[key]; ok && entry.done == nil {
+	for key, entry := range fileIndexCache {
+		if key.sessionID == id && entry.done == nil {
 			delete(fileIndexCache, key)
 		}
 	}
@@ -122,12 +130,12 @@ func (a *App) InvalidateSessionFileIndex(id string) {
 // SearchSessionFileContents greps the session's indexed files for a literal
 // substring. The index is taken from the same cache the quick-open uses, so a
 // content search right after a filename search costs no extra walk.
-func (a *App) SearchSessionFileContents(id, query string, caseSensitive, includeAll bool) (*session.ContentSearchResult, error) {
-	index, err := a.SearchSessionFileIndex(id, includeAll)
+func (a *App) SearchSessionFileContents(id, query string, caseSensitive, includeAll bool, windowIdx int) (*session.ContentSearchResult, error) {
+	index, err := a.SearchSessionFileIndex(id, includeAll, windowIdx)
 	if err != nil {
 		return nil, err
 	}
-	inst, err := a.storage.GetInstance(id)
+	inst, err := a.browseInstance(id, windowIdx)
 	if err != nil {
 		return nil, err
 	}
