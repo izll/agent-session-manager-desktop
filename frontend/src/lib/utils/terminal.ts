@@ -500,6 +500,19 @@ export function createTerminal(
 
   // Intercept keyboard shortcuts
   terminal.attachCustomKeyEventHandler((event) => {
+    // A dialog on screen owns the keyboard.
+    //
+    // xterm listens on its own textarea, which is deeper in the tree than the
+    // window listeners a dialog uses — so it sees the key FIRST and a dialog's
+    // stopPropagation comes too late. Escape closed the commit history and was
+    // typed into the pane behind it at the same time.
+    //
+    // Returning false keeps the key out of the pane while still letting it
+    // bubble to whoever is listening above.
+    if (document.querySelector('.dialog-overlay')) {
+      return false;
+    }
+
     // Alt+Up/Down for session navigation
     if (event.altKey && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
       window.dispatchEvent(new CustomEvent('terminal-nav', {
