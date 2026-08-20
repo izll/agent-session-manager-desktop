@@ -114,12 +114,6 @@ function normalizeTask(task: any): Task {
 }
 
 // Derived stores
-export const selectedTask = derived(
-  [tasks, selectedTaskId],
-  ([$tasks, $selectedTaskId]) =>
-    $tasks.find(t => t.id === $selectedTaskId) || null
-);
-
 export const filteredTasks = derived(
   [tasks, taskFilter, hideDone],
   ([$tasks, $filter, $hideDone]) => {
@@ -158,24 +152,6 @@ export const filteredTasks = derived(
     return filtered;
   }
 );
-
-export const tasksByStatus = derived(tasks, ($tasks) => {
-  const result: Record<string, Task[]> = {
-    'pending': [],
-    'in-progress': [],
-    'done': [],
-    'blocked': [],
-    'deferred': []
-  };
-
-  for (const task of $tasks) {
-    if (result[task.status]) {
-      result[task.status].push(task);
-    }
-  }
-
-  return result;
-});
 
 export const taskStats = derived(tasks, ($tasks) => {
   const total = $tasks.length;

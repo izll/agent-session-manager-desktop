@@ -9,7 +9,6 @@ export interface Project {
 
 export const projects = writable<Project[]>([]);
 export const activeProjectId = writable<string>('');
-export const isLoadingProjects = writable<boolean>(false);
 
 // PID of another instance that holds the active project's lock (0 = we own
 // it). Kept in the store so the lock banner updates on every project switch,
@@ -28,7 +27,6 @@ export async function refreshLockStatus() {
 }
 
 export async function loadProjects() {
-  isLoadingProjects.set(true);
   try {
     const [projectList, currentId] = await Promise.all([
       App.GetProjects(),
@@ -38,8 +36,7 @@ export async function loadProjects() {
     activeProjectId.set(currentId);
   } catch (e) {
     console.error('Failed to load projects:', e);
-  } finally {
-    isLoadingProjects.set(false);
+    reportError(`Could not load projects: ${e}`);
   }
 }
 

@@ -9,7 +9,8 @@
     ungroupedSessions,
     searchFilter,
     moveSessionToIndex,
-    assignToGroup
+    assignToGroup,
+    isLoading
   } from '../../stores/sessions';
   import { onDestroy } from 'svelte';
   import { activities, getActivity } from '../../stores/activities';
@@ -244,8 +245,17 @@
       </div>
     {/if}
 
+    <!-- Still reading the store.
+         Without this the empty state appears first and says there are no
+         sessions — which on a slow multiplexer is both alarming and wrong. The
+         store has always known; nothing was asking it. -->
+    {#if $isLoading && $favorites.length === 0 && $groups.length === 0 && $ungroupedSessions.length === 0}
+      <div class="empty-state">
+        <div class="loading-spinner"></div>
+        <p>{$t('common.loading')}</p>
+      </div>
     <!-- Empty state -->
-    {#if $favorites.length === 0 && $groups.length === 0 && $ungroupedSessions.length === 0}
+    {:else if $favorites.length === 0 && $groups.length === 0 && $ungroupedSessions.length === 0}
       <div class="empty-state">
         <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
           <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
@@ -482,6 +492,22 @@
     padding: 40px 20px;
     color: #6b7280;
     text-align: center;
+  }
+
+  /* A ring rather than the SVG the dialogs spin: this sits where the empty
+     state's icon would be, at the same size, so the two do not jump. */
+  .loading-spinner {
+    width: 24px;
+    height: 24px;
+    margin-bottom: 12px;
+    border: 2px solid rgba(255, 255, 255, 0.1);
+    border-top-color: rgba(var(--accent-rgb), 0.7);
+    border-radius: 50%;
+    animation: sidebar-spin 0.9s linear infinite;
+  }
+
+  @keyframes sidebar-spin {
+    to { transform: rotate(360deg); }
   }
 
   .empty-state svg {
