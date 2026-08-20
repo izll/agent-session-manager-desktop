@@ -6,6 +6,32 @@ Entries describe what changed for someone using the app. Internal refactoring,
 test and CI work is left out unless it changed behaviour. Dates are release
 dates; the format follows [Keep a Changelog](https://keepachangelog.com).
 
+## 0.9.33 — 2026-08-20
+
+### Fixed
+
+- **The files view, the diff and the quick-open now follow the tab**, not the
+  session it belongs to. A tab opened in another directory showed the session's
+  files and the session's changes — and reverting from that diff wrote into the
+  session's repository, a file you could not see on screen.
+- **Escape in a dialog no longer reaches the terminal behind it.** Closing the
+  commit history typed an escape into the pane at the same time.
+- **The whole-file toggle in the diff is remembered.** It was saved to a setting
+  that does not exist, so the diff reopened on whole-file every time.
+- **The session list says it is loading**, rather than showing "no sessions
+  yet" until the list arrives — alarming as well as wrong when the multiplexer
+  is slow to answer.
+- **Failures now reach the screen.** Deleting a session from the sidebar,
+  renaming, reordering, and a settings save that fails all did so in silence —
+  the settings one by quietly reverting what you had just changed.
+- **A refused mobile push is logged.** A mistyped ntfy topic answers with a
+  refusal rather than an error, so it was swallowed whole and the only symptom
+  was notifications that never arrived.
+- **Returning to a tab asks the multiplexer to repaint**, which fixes the tab
+  that occasionally came back showing a stale screen.
+- Error messages stay up longer — long enough to read one and copy a path out
+  of it.
+
 ## 0.9.32 — 2026-08-19
 
 ### Fixed
