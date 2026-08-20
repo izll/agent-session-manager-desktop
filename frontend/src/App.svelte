@@ -33,6 +33,7 @@
   import ResumeSessionPickerDialog from './lib/components/Dialogs/ResumeSessionPickerDialog.svelte';
   import type { Session } from './lib/stores/sessions';
   import { error as sessionError } from './lib/stores/sessions';
+  import { appError } from './lib/stores/appErrors';
   import { sessions, loadSessions, selectSession, selectWindow, selectedSession, selectedSessionId, selectedWindowIdx, startSession, stopSession, stopTab, restartTab, restartTabWithResume, deleteSession, toggleFavorite, reorderSession, selectPrevSession, selectNextSession } from './lib/stores/sessions';
   import { activities } from './lib/stores/activities';
   import { statusLines, tabStatuses } from './lib/stores/statusLines';
@@ -138,6 +139,13 @@
     sessionErrorMessage = $sessionError;
     showSessionError = true;
     sessionError.set(null);
+  }
+  // The same treatment for failures reported from anywhere else — settings
+  // saves in particular, which used to reload the UI without a word.
+  $: if ($appError) {
+    sessionErrorMessage = $appError;
+    showSessionError = true;
+    appError.set(null);
   }
 
   let showGitHistory = false;

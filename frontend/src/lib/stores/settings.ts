@@ -1,6 +1,7 @@
 import { writable } from 'svelte/store';
 import * as App from '../../../wailsjs/go/main/App';
 import { defaultTerminalRenderer } from '../utils/terminal';
+import { reportError } from './appErrors';
 
 export type TerminalRenderer = 'canvas' | 'webgl' | 'dom';
 
@@ -181,6 +182,10 @@ export async function saveSettings(newSettings: Partial<Settings>) {
     await save;
   } catch (e) {
     console.error('Failed to save settings:', e);
+    // Reload puts the UI back to what is actually stored, which without a word
+    // looks like the app undoing the user's change by itself — worse than the
+    // failure, because it reads as the app being broken rather than the save.
+    reportError(`Could not save settings: ${e}`);
     await loadSettings();
   }
 }
