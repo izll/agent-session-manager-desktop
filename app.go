@@ -2649,8 +2649,29 @@ func (a *App) RevertDiffHunk(id, patch string) error {
 // that would escape the tree are rejected in session.Instance.
 //
 // Not named BrowseDirectory: that is already the native directory picker.
-func (a *App) ListSessionDirectory(id, path string) (*session.BrowseListing, error) {
+// browseInstance loads a session with its file browser pointed at the given
+// tab's directory.
+//
+// A tab can be opened in a directory of its own, and its pane may have been
+// cd-ed elsewhere since — GetTabWorkingDirectory resolves both. Without this
+// the files view showed the session's own tree whichever tab you were on.
+//
+// windowIdx < 0 means "the session itself", for callers with no tab in hand.
+func (a *App) browseInstance(id string, windowIdx int) (*session.Instance, error) {
 	inst, err := a.storage.GetInstance(id)
+	if err != nil {
+		return nil, err
+	}
+	if windowIdx >= 0 {
+		if dir := a.GetTabWorkingDirectory(id, windowIdx); dir != "" {
+			inst.BrowseRoot = dir
+		}
+	}
+	return inst, nil
+}
+
+func (a *App) ListSessionDirectory(id, path string, windowIdx int) (*session.BrowseListing, error) {
+	inst, err := a.browseInstance(id, windowIdx)
 	if err != nil {
 		return nil, err
 	}
@@ -2662,8 +2683,8 @@ func (a *App) ListSessionDirectory(id, path string) (*session.BrowseListing, err
 //
 // The long name avoids ReadSessionFile, which already means "open the session
 // export the user picked".
-func (a *App) ReadSessionDirectoryFile(id, path string) (*session.BrowseFile, error) {
-	inst, err := a.storage.GetInstance(id)
+func (a *App) ReadSessionDirectoryFile(id, path string, windowIdx int) (*session.BrowseFile, error) {
+	inst, err := a.browseInstance(id, windowIdx)
 	if err != nil {
 		return nil, err
 	}
@@ -2674,8 +2695,8 @@ func (a *App) ReadSessionDirectoryFile(id, path string) (*session.BrowseFile, er
 // byte-layout details the editor cannot represent (BOM, line-ending convention,
 // trailing newline), which are handed straight back to SaveSessionFileEdit so an
 // unmodified file saves byte-identically.
-func (a *App) OpenSessionFileForEdit(id, path string) (*session.EditableFile, error) {
-	inst, err := a.storage.GetInstance(id)
+func (a *App) OpenSessionFileForEdit(id, path string, windowIdx int) (*session.EditableFile, error) {
+	inst, err := a.browseInstance(id, windowIdx)
 	if err != nil {
 		return nil, err
 	}
@@ -2703,13 +2724,13 @@ type SaveFileEditResult struct {
 // Gated on the project lock for the same reason terminal attaches are: a second
 // application instance holding no lock must not write into a project another
 // instance owns.
-func (a *App) SaveSessionFileEdit(id, path, text string, shape session.FileShape, version string, overwrite bool) (*SaveFileEditResult, error) {
+func (a *App) SaveSessionFileEdit(id, path, text string, shape session.FileShape, version string, overwrite bool, windowIdx int) (*SaveFileEditResult, error) {
 	a.projectMu.RLock()
 	defer a.projectMu.RUnlock()
 	if !a.projectLocked {
 		return nil, fmt.Errorf("project is read-only in this application instance")
 	}
-	inst, err := a.storage.GetInstance(id)
+	inst, err := a.browseInstance(id, windowIdx)
 	if err != nil {
 		return nil, err
 	}

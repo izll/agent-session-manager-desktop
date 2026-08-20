@@ -103,6 +103,8 @@
   let rootLoading = false;
 
   let loadedSessionId: string | null = null;
+  /** Which session:tab the tree currently belongs to. */
+  let loadedBrowseKey = '';
   let treeGeneration = 0;
   let fileGeneration = 0;
   let destroyed = false;
@@ -336,7 +338,7 @@
     loadingDirs = new Set(loadingDirs).add(path);
     if (path === '') rootLoading = true;
     try {
-      const listing = await App.ListSessionDirectory(sessionId, path);
+      const listing = await App.ListSessionDirectory(sessionId, path, get(selectedWindowIdx) ?? 0);
       if (destroyed || generation !== treeGeneration) return;
       dirs = {
         ...dirs,
@@ -374,7 +376,7 @@
     fileError = '';
     selectedFile = null;
     try {
-      const file = await App.ReadSessionDirectoryFile(sessionId, path);
+      const file = await App.ReadSessionDirectoryFile(sessionId, path, get(selectedWindowIdx) ?? 0);
       if (destroyed || generation !== fileGeneration) return;
       selectedFile = file;
     } catch (e) {
@@ -400,7 +402,7 @@
       // version that guards the save has to describe the exact bytes the text
       // was decoded from, and a version taken from a separate read could
       // already be stale.
-      const file = await App.OpenSessionFileForEdit(sessionId, selectedPath);
+      const file = await App.OpenSessionFileForEdit(sessionId, selectedPath, get(selectedWindowIdx) ?? 0);
       if (destroyed || generation !== fileGeneration) return;
       openedFile = file;
       editText = file.text;
@@ -464,6 +466,7 @@
         openedFile.shape,
         openedFile.version,
         overwrite,
+        get(selectedWindowIdx) ?? 0,
       );
       if (destroyed) return;
       if (result.conflict) {
@@ -898,7 +901,13 @@
     if (off > 0) placeByFile.set(placeKey(selectedPath), off);
   }
 
-  $: if (active && $selectedSessionId !== loadedSessionId) {
+  // Keyed on the TAB, not the session. A tab can be opened in a directory of
+  // its own, so switching between tabs of one session changes which tree
+  // belongs on screen — and this block used to compare session ids alone, which
+  // are identical across those tabs.
+  $: browseKey = `${$selectedSessionId ?? ''}:${$selectedWindowIdx ?? 0}`;
+
+  $: if (active && browseKey !== loadedBrowseKey) {
     // Unsaved work first: resetForSession discards the buffer outright, and a
     // session switch is not the user's decision to lose what they typed. The
     // switch itself has already happened, so the prompt offers to save or
@@ -916,6 +925,7 @@
     const returningTo = $selectedSessionId ? lastFileBySession.get($selectedSessionId) : undefined;
 
     loadedSessionId = $selectedSessionId;
+    loadedBrowseKey = browseKey;
     resetForSession();
     if ($selectedSessionId) {
       void loadDir('').then(() => {

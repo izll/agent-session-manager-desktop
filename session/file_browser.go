@@ -124,7 +124,17 @@ func (i *Instance) resolveBrowsePath(rel string) (abs string, root string, err e
 	// The root itself may be reached through a symlink (/tmp on macOS, a
 	// symlinked project dir on Linux), so resolve it too — otherwise every
 	// child would compare against a prefix that never matches.
-	root, err = filepath.EvalSymlinks(i.Path)
+	//
+	// BrowseRoot overrides the session path when the caller is browsing on
+	// behalf of a tab: a tab can be opened in a directory of its own, and the
+	// files view showed the session's tree regardless. Everything below still
+	// runs against whatever root this resolves to, so the containment checks
+	// are unchanged — only where the tree starts moves.
+	base := i.Path
+	if i.BrowseRoot != "" {
+		base = i.BrowseRoot
+	}
+	root, err = filepath.EvalSymlinks(base)
 	if err != nil {
 		return "", "", fmt.Errorf("could not open the session directory: %w", err)
 	}

@@ -171,9 +171,17 @@ type Instance struct {
 	BaseCommitSHA     string           `json:"base_commit_sha,omitempty"`     // Git HEAD commit at session start (for diff)
 	Favorite          bool             `json:"favorite,omitempty"`            // Whether session is marked as favorite
 	MainWindowStopped bool             `json:"main_window_stopped,omitempty"` // Main window (0) is stopped but session still running
-	TabOrder          []int            `json:"tab_order,omitempty"`           // Custom tab display order (tmux window indices); if empty, default order is used
-	TerminalTheme     string           `json:"terminal_theme,omitempty"`      // Main window colour palette (empty inherits agent/global)
-	TerminalFontSize  int              `json:"terminal_font_size,omitempty"`  // Main window font size in px (0 inherits the global setting)
+
+	// BrowseRoot redirects the file browser to a directory other than Path.
+	//
+	// Set per call by the caller that knows which TAB is being browsed — a tab
+	// can be opened in its own directory, and the files view showed the session's
+	// tree whichever tab you were on. Deliberately not persisted: it describes
+	// one request, not the session.
+	BrowseRoot       string `json:"-"`
+	TabOrder         []int  `json:"tab_order,omitempty"`          // Custom tab display order (tmux window indices); if empty, default order is used
+	TerminalTheme    string `json:"terminal_theme,omitempty"`     // Main window colour palette (empty inherits agent/global)
+	TerminalFontSize int    `json:"terminal_font_size,omitempty"` // Main window font size in px (0 inherits the global setting)
 	// HideViewBar is tri-state: 0 follows the global setting, 1 hides, 2 shows.
 	// A plain bool could not express "explicitly shown" against a global hide.
 	HideViewBar   int `json:"hide_view_bar,omitempty"`

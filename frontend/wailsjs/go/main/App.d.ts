@@ -205,7 +205,7 @@ export function ListGitBranches(arg1:string):Promise<main.GitBranchList>;
 
 export function ListOnlineSchemes():Promise<Array<main.OnlineSchemeInfo>>;
 
-export function ListSessionDirectory(arg1:string,arg2:string):Promise<session.BrowseListing>;
+export function ListSessionDirectory(arg1:string,arg2:string,arg3:number):Promise<session.BrowseListing>;
 
 export function LogFrontend(arg1:string):Promise<void>;
 
@@ -223,7 +223,7 @@ export function OpenFolder(arg1:string):Promise<void>;
 
 export function OpenLogFolder(arg1:string):Promise<void>;
 
-export function OpenSessionFileForEdit(arg1:string,arg2:string):Promise<session.EditableFile>;
+export function OpenSessionFileForEdit(arg1:string,arg2:string,arg3:number):Promise<session.EditableFile>;
 
 export function PendingUpdate():Promise<string>;
 
@@ -233,7 +233,7 @@ export function PermanentlyDeleteTrashItem(arg1:string):Promise<void>;
 
 export function QuickReplyTab(arg1:string,arg2:number,arg3:string):Promise<void>;
 
-export function ReadSessionDirectoryFile(arg1:string,arg2:string):Promise<session.BrowseFile>;
+export function ReadSessionDirectoryFile(arg1:string,arg2:string,arg3:number):Promise<session.BrowseFile>;
 
 export function ReadSessionFile():Promise<main.PortableFileInfo>;
 
@@ -279,7 +279,7 @@ export function SaveCommandGroup(arg1:string,arg2:string):Promise<string>;
 
 export function SaveSessionAsTemplate(arg1:string,arg2:string,arg3:boolean):Promise<string>;
 
-export function SaveSessionFileEdit(arg1:string,arg2:string,arg3:string,arg4:session.FileShape,arg5:string,arg6:boolean):Promise<main.SaveFileEditResult>;
+export function SaveSessionFileEdit(arg1:string,arg2:string,arg3:string,arg4:session.FileShape,arg5:string,arg6:boolean,arg7:number):Promise<main.SaveFileEditResult>;
 
 export function SaveSessionTemplate(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string,arg6:string,arg7:boolean,arg8:string,arg9:Array<main.TemplateTabInfo>):Promise<string>;
 
