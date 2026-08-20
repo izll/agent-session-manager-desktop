@@ -3,7 +3,7 @@ name: CI
 on:
   push:
     branches:
-      - main
+      - master
   pull_request:
 
 permissions:
@@ -27,6 +27,8 @@ jobs:
       - run: npm ci
         working-directory: frontend
       - run: npm run check
+        working-directory: frontend
+      - run: npm test
         working-directory: frontend
       - run: npm run build
         working-directory: frontend

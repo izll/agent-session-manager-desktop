@@ -116,6 +116,7 @@ jobs:
           xvfb-run -a go test ./...
           go vet ./...
           npm run check --prefix frontend
+          npm test --prefix frontend
 
       - name: Set release metadata
         env:
