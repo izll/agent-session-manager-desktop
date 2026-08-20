@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os/exec"
@@ -120,7 +121,18 @@ func (a *App) sendAttentionNotification(settings *session.Settings, name, status
 				log.Printf("[notify] ntfy push failed: %v", err)
 				return
 			}
-			resp.Body.Close()
+			defer resp.Body.Close()
+
+			// A refused push answers with a status, not an error: a topic typo
+			// gives 404 and a protected one 403, both with err == nil. Without
+			// this the only symptom is notifications that never arrive, with
+			// nothing anywhere to say why — and the log is the one place a user
+			// can be pointed at.
+			if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+				detail, _ := io.ReadAll(io.LimitReader(resp.Body, 256))
+				log.Printf("[notify] ntfy refused the push: %s %s: %s",
+					resp.Status, url, strings.TrimSpace(string(detail)))
+			}
 		}()
 	}
 }

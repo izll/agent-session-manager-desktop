@@ -682,11 +682,17 @@ func (i *Instance) StartWithResume(resumeID string) error {
 		TmuxCommand("set-option", "-t", sessionName, "window-size", "latest").Run()
 		TmuxCommand("set-option", "-t", sessionName, "aggressive-resize", "on").Run()
 
-		// Enable xterm keys for Shift+PageUp/Down support
-		TmuxCommand("set-option", "-t", sessionName, "-g", "xterm-keys", "on").Run()
-
-		// Set terminal overrides for better key support
-		TmuxCommand("set-option", "-t", sessionName, "-ga", "terminal-overrides", ",xterm*:smcup@:rmcup@").Run()
+		// xterm-keys used to be set here "for Shift+PageUp/Down support". It was
+		// doing nothing on two counts: tmux removed the option in 3.3 (it is not
+		// in the 3.4 man page, and setting it is accepted in silence), and -t
+		// alongside -g is ignored anyway — the global scope wins. Shift+PageUp
+		// works through the root-table bindings just below, which is what
+		// actually implements it.
+		//
+		// -g here is deliberate and unavoidable: terminal-overrides is a server
+		// option, so this DOES affect other tmux sessions on the same server.
+		// -ga appends rather than replaces, which is what keeps that tolerable.
+		TmuxCommand("set-option", "-ga", "terminal-overrides", ",xterm*:smcup@:rmcup@").Run()
 
 		// Bind Shift+PageUp/Down for scrolling in copy mode (conditional - only in asmgr-* sessions)
 		TmuxCommand("bind-key", "-T", "root", "S-PageUp", "if-shell", "tmux display -p '#{session_name}' | grep -q '^asm_'", "copy-mode -eu", "").Run()
