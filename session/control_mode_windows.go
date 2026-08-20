@@ -36,8 +36,9 @@ type controlModeStream struct {
 	// from the WebSocket goroutine while Close may run from another.
 	writeMu sync.Mutex
 
-	closeOnce sync.Once
-	closeErr  error
+	closeOnce  sync.Once
+	closeErr   error
+	closedFlag atomic.Bool
 
 	// closed is shut when Close runs, so background helpers stop with the
 	// stream instead of outliving it.
@@ -74,6 +75,9 @@ func (c *controlModeStream) Write(p []byte) (int, error) {
 	if len(p) == 0 {
 		return 0, nil
 	}
+	if c.closedFlag.Load() {
+		return 0, io.ErrClosedPipe
+	}
 	// Hand off rather than deliver inline.
 	//
 	// Delivery means launching send-keys, and waiting for that process is the
@@ -88,6 +92,12 @@ func (c *controlModeStream) Write(p []byte) (int, error) {
 	buf := append([]byte(nil), p...)
 	select {
 	case c.keys <- buf:
+		// Close may have won immediately after the first check. The delivery
+		// goroutine also observes closedFlag and discards this batch, so report
+		// the close rather than claiming keystrokes that cannot be delivered.
+		if c.closedFlag.Load() {
+			return 0, io.ErrClosedPipe
+		}
 		return len(p), nil
 	case <-c.closed:
 		return 0, io.ErrClosedPipe
@@ -98,13 +108,25 @@ func (c *controlModeStream) Write(p []byte) (int, error) {
 // stream. Running in exactly one goroutine is what keeps input in order.
 func (c *controlModeStream) deliverKeys() {
 	for {
+		// A select chooses randomly when both a queued key and closed are ready.
+		// Give shutdown priority explicitly so buffered input is never launched
+		// as a new psmux process after the terminal has been detached.
+		if c.closedFlag.Load() {
+			return
+		}
 		select {
 		case <-c.closed:
 			return
 		case p := <-c.keys:
+			if c.closedFlag.Load() {
+				return
+			}
 			// Take anything else already queued: each extra batch would
 			// otherwise be another process launch, and a burst is common.
 			for len(p) < 4096 {
+				if c.closedFlag.Load() {
+					return
+				}
 				select {
 				case more := <-c.keys:
 					p = append(p, more...)
@@ -122,6 +144,12 @@ func (c *controlModeStream) deliverKeys() {
 func (c *controlModeStream) sendKeys(p []byte) {
 	c.writeMu.Lock()
 	defer c.writeMu.Unlock()
+	// Close sets this before waiting for writeMu. Therefore a delivery that was
+	// queued earlier but acquires the mutex after Close began cannot send into a
+	// pane the user has already detached from.
+	if c.closedFlag.Load() {
+		return
+	}
 	target := c.pane
 	if target == "" {
 		target = c.attachTarget
@@ -129,6 +157,9 @@ func (c *controlModeStream) sendKeys(p []byte) {
 	// One input burst can need several commands: Enter has to be sent by key
 	// name, so a payload containing CR splits around it (see keystrokeCommands).
 	for _, args := range keystrokeCommands(target, p) {
+		if c.closedFlag.Load() {
+			return
+		}
 		// Bounded: a send-keys that never returns would block every later
 		// keystroke behind it — a terminal that accepts focus and clicks while
 		// silently swallowing everything typed into it.
@@ -155,6 +186,7 @@ func (c *controlModeStream) sendKeys(p []byte) {
 // would hold a client slot on the session forever.
 func (c *controlModeStream) Close() error {
 	c.closeOnce.Do(func() {
+		c.closedFlag.Store(true)
 		close(c.closed)
 		c.writeMu.Lock()
 		c.closeErr = c.in.Close()

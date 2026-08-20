@@ -6,8 +6,49 @@ import (
 	"strings"
 	"testing"
 
+	"asmgr-desktop/mcp"
 	"asmgr-desktop/session"
 )
+
+func TestTaskMasterCacheKeyCanonicalizesProjectAliases(t *testing.T) {
+	realPath := t.TempDir()
+	alias := filepath.Join(t.TempDir(), "project-link")
+	if err := os.Symlink(realPath, alias); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	if got, want := taskMasterProjectPath(alias), taskMasterProjectPath(realPath); got != want {
+		t.Fatalf("Task Master cache keys differ for aliases: %q != %q", got, want)
+	}
+}
+
+func TestStopTaskMasterRejectsSessionWithoutProjectPath(t *testing.T) {
+	storage := guardedTestStorage(t)
+	instance := &session.Instance{ID: "pathless", Name: "pathless", Status: session.StatusStopped}
+	if err := storage.AddInstance(instance); err != nil {
+		t.Fatal(err)
+	}
+	app := &App{storage: storage, projectLocked: true}
+	key := taskMasterProjectPath("")
+	dummy := mcp.NewTaskMaster(key)
+	taskMasterMu.Lock()
+	taskMasterCache[key] = dummy
+	taskMasterMu.Unlock()
+	t.Cleanup(func() {
+		taskMasterMu.Lock()
+		delete(taskMasterCache, key)
+		taskMasterMu.Unlock()
+	})
+
+	if err := app.StopTaskMaster(instance.ID); err == nil || !strings.Contains(err.Error(), "sessionNoPath") {
+		t.Fatalf("pathless StopTaskMaster error = %v", err)
+	}
+	taskMasterMu.RLock()
+	kept := taskMasterCache[key] == dummy
+	taskMasterMu.RUnlock()
+	if !kept {
+		t.Fatal("pathless session stopped an unrelated Task Master cache entry")
+	}
+}
 
 // Proves the opt-in actually prevents the npx install: a fake `npx` is put at
 // the front of PATH which records every invocation, then every exported

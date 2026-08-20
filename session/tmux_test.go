@@ -16,20 +16,20 @@ func restoreTmuxBinary(t *testing.T) {
 	t.Cleanup(func() { SetTmuxBinary(previous) })
 }
 
-func TestTmuxCommandDefaultsToTmux(t *testing.T) {
-	if got := TmuxBinary(); got != "tmux" {
-		t.Fatalf("TmuxBinary() = %q, want %q", got, "tmux")
+func TestTmuxCommandUsesPlatformDefault(t *testing.T) {
+	if got := TmuxBinary(); got != defaultTmuxBinary {
+		t.Fatalf("TmuxBinary() = %q, want platform default %q", got, defaultTmuxBinary)
 	}
 
 	cmd := TmuxCommand("list-sessions")
 	// exec.Command resolves the name via PATH, so compare the base name: on a
 	// machine with tmux installed Path is absolute, on one without it stays
 	// the bare name plus a lookup error.
-	if base := filepath.Base(cmd.Path); base != "tmux" {
-		t.Errorf("cmd.Path = %q, want base %q", cmd.Path, "tmux")
+	if base := filepath.Base(cmd.Path); base != defaultTmuxBinary {
+		t.Errorf("cmd.Path = %q, want base %q", cmd.Path, defaultTmuxBinary)
 	}
-	if cmd.Args[0] != "tmux" {
-		t.Errorf("cmd.Args[0] = %q, want %q", cmd.Args[0], "tmux")
+	if cmd.Args[0] != defaultTmuxBinary {
+		t.Errorf("cmd.Args[0] = %q, want %q", cmd.Args[0], defaultTmuxBinary)
 	}
 }
 
@@ -69,8 +69,8 @@ func TestSetTmuxBinaryEmptyRestoresDefault(t *testing.T) {
 
 	SetTmuxBinary("psmux")
 	SetTmuxBinary("")
-	if got := TmuxBinary(); got != "tmux" {
-		t.Errorf("TmuxBinary() = %q, want %q after empty override", got, "tmux")
+	if got := TmuxBinary(); got != defaultTmuxBinary {
+		t.Errorf("TmuxBinary() = %q, want platform default %q after empty override", got, defaultTmuxBinary)
 	}
 }
 
@@ -94,12 +94,12 @@ func TestTmuxCommandPassesArgumentsUnaltered(t *testing.T) {
 // new-window) pass their argv, so it must behave like a literal arg list.
 func TestTmuxCommandAcceptsSpreadSliceAndNoArgs(t *testing.T) {
 	dynamic := append([]string{"new-window"}, "-t", "sess", "-n", "tab")
-	if got, want := TmuxCommand(dynamic...).Args, append([]string{"tmux"}, dynamic...); !reflect.DeepEqual(got, want) {
+	if got, want := TmuxCommand(dynamic...).Args, append([]string{defaultTmuxBinary}, dynamic...); !reflect.DeepEqual(got, want) {
 		t.Errorf("cmd.Args = %#v, want %#v", got, want)
 	}
 
-	if got := TmuxCommand().Args; !reflect.DeepEqual(got, []string{"tmux"}) {
-		t.Errorf("cmd.Args = %#v, want %#v", got, []string{"tmux"})
+	if got := TmuxCommand().Args; !reflect.DeepEqual(got, []string{defaultTmuxBinary}) {
+		t.Errorf("cmd.Args = %#v, want %#v", got, []string{defaultTmuxBinary})
 	}
 }
 
@@ -133,7 +133,7 @@ func TestTmuxCommandIsDropInForExecCommand(t *testing.T) {
 	args := []string{"send-keys", "-t", "sess:0", "hello", "Enter"}
 
 	got := TmuxCommand(args...)
-	want := exec.Command("tmux", args...)
+	want := exec.Command(defaultTmuxBinary, args...)
 
 	if got.Path != want.Path {
 		t.Errorf("Path = %q, want %q", got.Path, want.Path)

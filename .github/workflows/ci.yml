@@ -91,3 +91,19 @@ jobs:
       # covered by the release workflow, which builds the full bundle.
       - run: go test ./session/ ./updater/
       - run: go vet ./session/ ./updater/
+
+  # Windows has a different terminal transport, process checks and file-lock
+  # implementation, and its multiplexer default is psmux rather than tmux.
+  # Compiling the release catches type errors but does not execute any of those
+  # build-tagged tests, so keep them in the ordinary PR gate as well.
+  go-test-windows:
+    name: Go test (Windows)
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - run: go test ./session/ ./updater/
+      - run: go vet ./session/ ./updater/

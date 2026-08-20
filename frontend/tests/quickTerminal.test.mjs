@@ -58,7 +58,7 @@ assert.match(
 // A terminal, not an agent, with the session's own defaults.
 assert.match(
   dialog,
-  /App\.CreateTab\(sessionId, false, 'terminal', trimmed, '', ''\)/,
+  /App\.CreateTab\(targetSessionId, false, 'terminal', trimmed, '', ''\)/,
   'it must create a plain terminal tab with no extra arguments',
 );
 

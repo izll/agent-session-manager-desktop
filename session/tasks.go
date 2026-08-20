@@ -367,6 +367,21 @@ func (tm *TaskManager) createTask(title, description string, priority TaskPriori
 
 // UpdateTask updates an existing task
 func (tm *TaskManager) UpdateTask(id string, updates map[string]interface{}) error {
+	var dueAt *time.Time
+	_, dueAtPresent := updates["dueAt"]
+	if dueAtPresent {
+		text, ok := updates["dueAt"].(string)
+		if !ok {
+			return fmt.Errorf("dueAt must be an RFC 3339 string")
+		}
+		if text != "" {
+			parsed, err := time.Parse(time.RFC3339, text)
+			if err != nil {
+				return fmt.Errorf("invalid dueAt: %w", err)
+			}
+			dueAt = &parsed
+		}
+	}
 	tm.mu.Lock()
 	defer tm.mu.Unlock()
 	return tm.mutateLocked(func() error {
@@ -405,13 +420,8 @@ func (tm *TaskManager) UpdateTask(id string, updates map[string]interface{}) err
 				// caller that is not touching the deadline omits the key entirely,
 				// and a caller clearing it sends "". Without the distinction, every
 				// unrelated edit would wipe the deadline.
-				if raw, present := updates["dueAt"]; present {
-					task.DueAt = nil
-					if text, ok := raw.(string); ok && text != "" {
-						if parsed, err := time.Parse(time.RFC3339, text); err == nil {
-							task.DueAt = &parsed
-						}
-					}
+				if dueAtPresent {
+					task.DueAt = dueAt
 				}
 				if raw, present := updates["sessionId"]; present {
 					if text, ok := raw.(string); ok {
@@ -430,7 +440,9 @@ func (tm *TaskManager) UpdateTask(id string, updates map[string]interface{}) err
 					task.Dependencies = toStringList(deps)
 				}
 				if tags, ok := updates["tags"].([]string); ok {
-					task.Tags = tags
+					task.Tags = append([]string(nil), tags...)
+				} else if tags, ok := updates["tags"].([]interface{}); ok {
+					task.Tags = toStringList(tags)
 				}
 
 				task.UpdatedAt = time.Now()

@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"bufio"
 	"compress/gzip"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -57,6 +58,13 @@ var (
 	downloadClient  = &http.Client{Timeout: 5 * time.Minute}
 	installMu       sync.Mutex
 )
+
+// ExpectedMacTeamID is embedded by the signed macOS release build. It pins
+// automatic updates to this publisher rather than accepting any application
+// that happens to have a valid Developer ID signature and notarization ticket.
+// Development builds leave it empty and therefore cannot replace an installed
+// .app automatically; the safe fallback is a manual update.
+var ExpectedMacTeamID string
 
 type GitHubRelease struct {
 	TagName string `json:"tag_name"`
@@ -181,34 +189,49 @@ func isNewerVersion(candidate, current string) bool {
 
 // CheckForUpdate returns the latest tag when it is a valid semantic version
 // newer than currentVersion. Invalid and pre-release "latest" tags are ignored.
-func CheckForUpdate(currentVersion string) string {
+// Transport and response errors are returned so callers do not mistake a
+// failed check for a successful "up to date" result.
+func CheckForUpdate(currentVersion string) (string, error) {
 	url := fmt.Sprintf("%s/repos/%s/%s/releases/latest", apiBaseURL, RepoOwner, RepoName)
 	resp, err := checkClient.Get(url)
 	if err != nil {
-		return ""
+		return "", fmt.Errorf("update check failed: %w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return ""
+		return "", fmt.Errorf("update check failed: GitHub returned HTTP %d", resp.StatusCode)
 	}
 
 	var release GitHubRelease
 	limited := io.LimitReader(resp.Body, 1<<20)
 	if err := json.NewDecoder(limited).Decode(&release); err != nil {
-		return ""
+		return "", fmt.Errorf("decode update response: %w", err)
 	}
 	current, ok := parseSemver(currentVersion)
 	if !ok {
-		return ""
+		return "", fmt.Errorf("invalid current version %q", currentVersion)
 	}
 	latest, ok := parseSemver(release.TagName)
 	if !ok || latest.prerelease != "" {
-		return ""
+		return "", fmt.Errorf("invalid stable release tag %q", release.TagName)
 	}
 	if compareSemver(latest, current) > 0 {
-		return release.TagName
+		return release.TagName, nil
 	}
-	return ""
+	return "", nil
+}
+
+// RefreshAvailableUpdate performs a check and persists its result only after a
+// successful response. A transient GitHub/network failure therefore preserves
+// both a previously advertised update and the ability to retry immediately.
+func RefreshAvailableUpdate(currentVersion string) (string, error) {
+	latest, err := CheckForUpdate(currentVersion)
+	if err != nil {
+		return "", err
+	}
+	SaveLastCheckTime()
+	SaveAvailableUpdate(latest)
+	return latest, nil
 }
 
 type semVersion struct {
@@ -623,12 +646,20 @@ func installBundleUpdate(version string) error {
 	// CFBundleDisplayName says), so an older install updating to a newer
 	// release is looking for a name the archive no longer uses.
 	staged := filepath.Join(stageDir, filepath.Base(bundle))
-	if _, err := os.Stat(staged); err != nil {
+	if _, err := os.Lstat(staged); os.IsNotExist(err) {
 		found, findErr := findBundleIn(stageDir)
 		if findErr != nil {
 			return fmt.Errorf("the archive did not contain an .app bundle: %w", findErr)
 		}
 		staged = found
+	} else if err != nil {
+		return fmt.Errorf("cannot inspect staged application bundle: %w", err)
+	}
+	if err := validateBundleDirectory(staged); err != nil {
+		return err
+	}
+	if err := verifyStagedBundle(staged); err != nil {
+		return err
 	}
 
 	// Install under the archive's own name, so an update also carries the
@@ -640,14 +671,118 @@ func installBundleUpdate(version string) error {
 	return withInstallLock(func() error {
 		// Revalidate under the install lock. Downloading and extraction are safe to
 		// overlap across processes; only this filesystem mutation must serialize.
-		if info, err := os.Stat(bundle); err != nil || !info.IsDir() {
+		if err := validateBundleDirectory(bundle); err != nil {
 			return fmt.Errorf("installed application bundle is no longer available")
 		}
-		if info, err := os.Stat(staged); err != nil || !info.IsDir() {
+		if err := validateBundleDirectory(staged); err != nil {
 			return fmt.Errorf("staged application bundle is no longer available")
 		}
 		return swapBundle(bundle, staged, target)
 	})
+}
+
+// validateBundleDirectory rejects a symlink even when it resolves to a real
+// directory. swapBundle renames the path itself: accepting a staged symlink
+// would install only that link while its relative target remains in stageDir
+// and is deleted immediately afterwards, leaving a broken application.
+func validateBundleDirectory(bundle string) error {
+	info, err := os.Lstat(bundle)
+	if err != nil {
+		return fmt.Errorf("cannot inspect application bundle: %w", err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
+		return fmt.Errorf("application bundle is not a real directory")
+	}
+	return nil
+}
+
+type bundleVerificationRunner func(name string, args ...string) ([]byte, error)
+
+// verifyStagedBundle checks the independent trust signal carried by a macOS
+// release. The archive and its .sha256 file are downloaded from the same
+// release, so the checksum catches corruption but cannot authenticate one if
+// both assets were replaced. Developer ID signing and notarization do provide
+// that independent signal; refuse to swap the installed app unless both are
+// accepted by the host OS.
+func verifyStagedBundle(bundle string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	return verifyStagedBundleWith(bundle, ExpectedMacTeamID, func(name string, args ...string) ([]byte, error) {
+		return exec.CommandContext(ctx, name, args...).CombinedOutput()
+	})
+}
+
+func verifyStagedBundleWith(bundle, expectedTeamID string, run bundleVerificationRunner) error {
+	if !validMacTeamID(expectedTeamID) {
+		return fmt.Errorf("automatic macOS updates are disabled because the expected publisher identity is not configured; install this update manually")
+	}
+	checks := []struct {
+		name string
+		args []string
+		what string
+	}{
+		{
+			name: "/usr/bin/codesign",
+			args: []string{"--verify", "--deep", "--strict", bundle},
+			what: "Developer ID signature",
+		},
+	}
+	for _, check := range checks {
+		out, err := run(check.name, check.args...)
+		if err == nil {
+			continue
+		}
+		detail := strings.TrimSpace(string(out))
+		if detail == "" {
+			detail = err.Error()
+		}
+		return fmt.Errorf("staged application failed %s: %s", check.what, detail)
+	}
+	details, err := run("/usr/bin/codesign", "-dv", "--verbose=4", bundle)
+	if err != nil {
+		detail := strings.TrimSpace(string(details))
+		if detail == "" {
+			detail = err.Error()
+		}
+		return fmt.Errorf("cannot read staged application publisher identity: %s", detail)
+	}
+	teamID := macTeamIDFromCodesign(details)
+	if teamID == "" {
+		return fmt.Errorf("staged application has no valid Developer ID TeamIdentifier")
+	}
+	if teamID != expectedTeamID {
+		return fmt.Errorf("staged application publisher mismatch: got TeamIdentifier %q, expected %q", teamID, expectedTeamID)
+	}
+	if out, err := run("/usr/sbin/spctl", "--assess", "--type", "execute", bundle); err != nil {
+		detail := strings.TrimSpace(string(out))
+		if detail == "" {
+			detail = err.Error()
+		}
+		return fmt.Errorf("staged application failed Gatekeeper/notarization assessment: %s", detail)
+	}
+	return nil
+}
+
+func validMacTeamID(teamID string) bool {
+	if len(teamID) != 10 {
+		return false
+	}
+	for _, r := range teamID {
+		if (r < 'A' || r > 'Z') && (r < '0' || r > '9') {
+			return false
+		}
+	}
+	return true
+}
+
+func macTeamIDFromCodesign(output []byte) string {
+	for _, line := range strings.Split(string(output), "\n") {
+		teamID, ok := strings.CutPrefix(strings.TrimSpace(line), "TeamIdentifier=")
+		if ok && validMacTeamID(teamID) {
+			return teamID
+		}
+	}
+	return ""
 }
 
 func swapBundle(bundle, staged, target string) error {

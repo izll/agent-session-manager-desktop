@@ -9,6 +9,7 @@
   import { t } from '../../i18n';
 
   export let show = false;
+  export let sessionId = '';
 
   const dispatch = createEventDispatcher();
 
@@ -21,7 +22,7 @@
   let error = '';
   let userTouchedName = false;
 
-  $: sessionPath = $sessions.find(s => s.id === $selectedSessionId)?.path || '';
+  $: sessionPath = $sessions.find(s => s.id === sessionId)?.path || '';
 
   // Auto-fill name based on tab type / agent (only if user hasn't edited it)
   $: if (show && !userTouchedName) {
@@ -57,8 +58,8 @@
       return;
     }
 
-    const sessionId = get(selectedSessionId);
-    if (!sessionId) {
+    const targetSessionId = sessionId;
+    if (!targetSessionId) {
       error = $t('newTab.noSession');
       return;
     }
@@ -69,13 +70,13 @@
     try {
       const isAgent = tabType === 'agent';
       const agent = isAgent ? selectedAgent : 'terminal';
-      const newIdx = await App.CreateTab(sessionId, isAgent, agent, name.trim(), extraArgs.trim(), workDir.trim());
+      const newIdx = await App.CreateTab(targetSessionId, isAgent, agent, name.trim(), extraArgs.trim(), workDir.trim());
       await loadSessions();
       close();
       // Switch to the freshly created tab and put the keyboard focus into
       // its terminal (the window-change triggers the pool to attach; the
       // focus event lands after the dialog teardown released focus).
-      if (typeof newIdx === 'number' && newIdx >= 0) {
+      if (get(selectedSessionId) === targetSessionId && typeof newIdx === 'number' && newIdx >= 0) {
         selectWindow(newIdx);
         requestAnimationFrame(() =>
           window.dispatchEvent(new CustomEvent('terminal:focus')));

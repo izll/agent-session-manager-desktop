@@ -293,20 +293,27 @@
   let pollTimeout: ReturnType<typeof setTimeout> | null = null;
   let windowsLoadGeneration = 0;
   let showNewTabDialog = false;
+  let newTabSessionId = '';
   let showQuickTerminalDialog = false;
+  let quickTerminalSessionId = '';
   let showDeleteConfirm = false;
+  let deleteSessionTarget: { sessionId: string; name: string } | null = null;
   let showDeleteTabConfirm = false;
-  let deleteTabIndex: number | null = null;
+  let deleteTabTarget: { sessionId: string; windowIdx: number } | null = null;
   let showExtraArgsEditor = false;
   let showTabColorDialog = false;
   let tabColorTarget: TabColorTarget | null = null;
+  let tabColorSessionId = '';
   let extraArgsValue = '';
-  let extraArgsWindowIdx: number | null = null;
+  let extraArgsTarget: { sessionId: string; windowIdx: number; generation: number } | null = null;
+  let extraArgsGeneration = 0;
   let showErrorToast = false;
   let errorMessage = '';
 
   function handleCommandNewTab() {
-    if (!visible || get(selectedSession)?.status !== 'running') return;
+    const session = get(selectedSession);
+    if (!visible || session?.status !== 'running') return;
+    newTabSessionId = session.id;
     showNewTabDialog = true;
   }
 
@@ -332,7 +339,9 @@
       if (document.querySelector('.dialog-overlay')) return;
       e.preventDefault();
       e.stopPropagation();
-      if (get(selectedSession)?.status !== 'running') return;
+      const session = get(selectedSession);
+      if (session?.status !== 'running') return;
+      quickTerminalSessionId = session.id;
       showQuickTerminalDialog = true;
       return;
     }
@@ -809,6 +818,7 @@
 
   // Tab rename state
   let renamingTabIndex: number | null = null;
+  let renameTarget: { sessionId: string; windowIdx: number } | null = null;
   let tabRenameValue = '';
   let tabRenameInput: HTMLInputElement;
 
@@ -1088,6 +1098,7 @@
     if (tabContextMenuIndex !== null && $selectedSessionId) {
       const win = windows.find(w => w.Index === tabContextMenuIndex);
       if (win) {
+        tabColorSessionId = $selectedSessionId;
         tabColorTarget = {
           Index: win.Index,
           Name: win.Name,
@@ -1100,16 +1111,18 @@
     closeTabContextMenu();
   }
 
-  function handleTabColorApplied(event: CustomEvent<{ index: number; textColor: string; backgroundColor: string }>) {
-    const { index, textColor, backgroundColor } = event.detail;
-    windows = windows.map(win => win.Index === index
-      ? { ...win, TextColor: textColor, BackgroundColor: backgroundColor }
-      : win);
+  function handleTabColorApplied(event: CustomEvent<{ sessionId: string; index: number; textColor: string; backgroundColor: string }>) {
+    const { sessionId, index, textColor, backgroundColor } = event.detail;
+    if ($selectedSessionId === sessionId) {
+      windows = windows.map(win => win.Index === index
+        ? { ...win, TextColor: textColor, BackgroundColor: backgroundColor }
+        : win);
+    }
 
     // Keep the stopped-session representation in sync without waiting for the
     // next full reload. The backend remains the source of truth.
     sessions.update(items => items.map(sess => {
-      if (sess.id !== $selectedSessionId) return sess;
+      if (sess.id !== sessionId) return sess;
       if (index === 0) {
         return { ...sess, tabTextColor: textColor, tabBackgroundColor: backgroundColor };
       }
@@ -1121,6 +1134,12 @@
       };
     }));
     tabColorTarget = null;
+    tabColorSessionId = '';
+  }
+
+  function closeTabColor() {
+    tabColorTarget = null;
+    tabColorSessionId = '';
   }
 
   function tabStyle(win: session.WindowInfo): string {
@@ -1150,7 +1169,7 @@
 
   async function tabContextDelete() {
     if (tabContextMenuIndex !== null && tabContextMenuIndex !== 0 && $selectedSessionId) {
-      deleteTabIndex = tabContextMenuIndex;
+      deleteTabTarget = { sessionId: $selectedSessionId, windowIdx: tabContextMenuIndex };
       showDeleteTabConfirm = true;
     }
     closeTabContextMenu();
@@ -1158,10 +1177,16 @@
 
   async function tabContextEditExtraArgs() {
     if (tabContextMenuIndex !== null && $selectedSessionId) {
+      const generation = ++extraArgsGeneration;
+      const target = { sessionId: $selectedSessionId, windowIdx: tabContextMenuIndex, generation };
       try {
-        const args = await App.GetExtraArgs($selectedSessionId, tabContextMenuIndex);
+        const args = await App.GetExtraArgs(target.sessionId, target.windowIdx);
+        if (generation !== extraArgsGeneration || $selectedSessionId !== target.sessionId) {
+          closeTabContextMenu();
+          return;
+        }
         extraArgsValue = args || '';
-        extraArgsWindowIdx = tabContextMenuIndex;
+        extraArgsTarget = target;
         showExtraArgsEditor = true;
       } catch (e) {
         console.error('Failed to get extra args:', e);
@@ -1171,9 +1196,10 @@
   }
 
   async function saveExtraArgs() {
-    if (extraArgsWindowIdx !== null && $selectedSessionId) {
+    const target = extraArgsTarget;
+    if (target && target.generation === extraArgsGeneration && $selectedSessionId === target.sessionId) {
       try {
-        await App.SetExtraArgs($selectedSessionId, extraArgsWindowIdx, extraArgsValue.trim());
+        await App.SetExtraArgs(target.sessionId, target.windowIdx, extraArgsValue.trim());
       } catch (e) {
         console.error('Failed to save extra args:', e);
         errorMessage = `Failed to save extra args: ${e}`;
@@ -1181,12 +1207,13 @@
       }
     }
     showExtraArgsEditor = false;
-    extraArgsWindowIdx = null;
+    extraArgsTarget = null;
   }
 
   function cancelExtraArgs() {
+    extraArgsGeneration++;
     showExtraArgsEditor = false;
-    extraArgsWindowIdx = null;
+    extraArgsTarget = null;
   }
 
   function handleExtraArgsKeydown(e: KeyboardEvent) {
@@ -1201,23 +1228,26 @@
   }
 
   async function confirmDeleteTab() {
-    if (deleteTabIndex !== null && $selectedSessionId) {
-      const killedSession = $selectedSessionId;
-      const killedIdx = deleteTabIndex;
+    const target = deleteTabTarget;
+    deleteTabTarget = null;
+    if (target && $selectedSessionId === target.sessionId) {
       try {
-        await deleteTab(killedSession, killedIdx);
+        await deleteTab(target.sessionId, target.windowIdx);
         // Force refresh window list immediately
-        await loadWindowsForSession($selectedSessionId, currentSessionStatus, visible);
+        if ($selectedSessionId === target.sessionId) {
+          await loadWindowsForSession(target.sessionId, currentSessionStatus, visible);
+        }
       } catch (e) {
         errorMessage = `Failed to delete tab: ${e}`;
         showErrorToast = true;
       }
     }
-    deleteTabIndex = null;
     focusTerminal();
   }
 
   async function startTabRename(index: number, currentName: string) {
+    if (!$selectedSessionId) return;
+    renameTarget = { sessionId: $selectedSessionId, windowIdx: index };
     renamingTabIndex = index;
     tabRenameValue = currentName;
     await tick();
@@ -1226,24 +1256,28 @@
   }
 
   async function confirmTabRename() {
-    if (renamingTabIndex === null) return;
+    const target = renameTarget;
+    if (!target || renamingTabIndex === null || target.windowIdx !== renamingTabIndex) return;
     const trimmed = tabRenameValue.trim();
-    const sessionId = get(selectedSessionId);
-    if (trimmed && sessionId) {
-      const win = windows.find(w => w.Index === renamingTabIndex);
+    if (trimmed && $selectedSessionId === target.sessionId) {
+      const win = windows.find(w => w.Index === target.windowIdx);
       if (win && trimmed !== win.Name) {
-        await renameTab(sessionId, renamingTabIndex, trimmed);
+        await renameTab(target.sessionId, target.windowIdx, trimmed);
         // Update local windows list
-        windows = windows.map(w =>
-          w.Index === renamingTabIndex ? { ...w, Name: trimmed } : w
-        );
+        if ($selectedSessionId === target.sessionId) {
+          windows = windows.map(w =>
+            w.Index === target.windowIdx ? { ...w, Name: trimmed } : w
+          );
+        }
       }
     }
     renamingTabIndex = null;
+    renameTarget = null;
   }
 
   function cancelTabRename() {
     renamingTabIndex = null;
+    renameTarget = null;
   }
 
   function handleTabRenameKeydown(e: KeyboardEvent) {
@@ -1258,7 +1292,17 @@
   }
 
   function handleNewTab() {
+    if (!$selectedSessionId) return;
+    newTabSessionId = $selectedSessionId;
     showNewTabDialog = true;
+  }
+
+  function closeNewTabTarget() {
+    newTabSessionId = '';
+  }
+
+  function closeQuickTerminalTarget() {
+    quickTerminalSessionId = '';
   }
 
   function getAgentColor(agent: string): string {
@@ -1341,6 +1385,7 @@
 
   function handleDelete() {
     if (!$selectedSession) return;
+    deleteSessionTarget = { sessionId: $selectedSession.id, name: $selectedSession.name };
     showDeleteConfirm = true;
   }
 
@@ -1356,13 +1401,50 @@
   }
 
   async function confirmDelete() {
-    if (!$selectedSession) return;
+    const target = deleteSessionTarget;
+    deleteSessionTarget = null;
+    if (!target || $selectedSessionId !== target.sessionId) return;
     try {
-      await deleteSession($selectedSession.id);
+      await deleteSession(target.sessionId);
     } catch (e) {
       errorMessage = `Failed to delete session: ${e}`;
       showErrorToast = true;
     }
+  }
+
+  function cancelSessionDelete() {
+    deleteSessionTarget = null;
+  }
+
+  function cancelTabDelete() {
+    deleteTabTarget = null;
+  }
+
+  $: if (deleteSessionTarget && $selectedSessionId !== deleteSessionTarget.sessionId) {
+    showDeleteConfirm = false;
+    cancelSessionDelete();
+  }
+  $: if (deleteTabTarget && $selectedSessionId !== deleteTabTarget.sessionId) {
+    showDeleteTabConfirm = false;
+    cancelTabDelete();
+  }
+  $: if (extraArgsTarget && $selectedSessionId !== extraArgsTarget.sessionId) {
+    cancelExtraArgs();
+  }
+  $: if (renameTarget && $selectedSessionId !== renameTarget.sessionId) {
+    cancelTabRename();
+  }
+  $: if (tabColorSessionId && $selectedSessionId !== tabColorSessionId) {
+    showTabColorDialog = false;
+    closeTabColor();
+  }
+  $: if (newTabSessionId && $selectedSessionId !== newTabSessionId) {
+    showNewTabDialog = false;
+    closeNewTabTarget();
+  }
+  $: if (quickTerminalSessionId && $selectedSessionId !== quickTerminalSessionId) {
+    showQuickTerminalDialog = false;
+    closeQuickTerminalTarget();
   }
 
   function handleColorClick() {
@@ -1832,25 +1914,26 @@
   </div>
 {/if}
 
-<NewTabDialog bind:show={showNewTabDialog} />
-<QuickTerminalDialog bind:show={showQuickTerminalDialog} />
+<NewTabDialog bind:show={showNewTabDialog} sessionId={newTabSessionId} on:close={closeNewTabTarget} />
+<QuickTerminalDialog bind:show={showQuickTerminalDialog} sessionId={quickTerminalSessionId} on:close={closeQuickTerminalTarget} />
 
 <TabColorDialog
   bind:show={showTabColorDialog}
-  sessionId={$selectedSessionId || ''}
+  sessionId={tabColorSessionId}
   tab={tabColorTarget}
   on:applied={handleTabColorApplied}
-  on:close={() => tabColorTarget = null}
+  on:close={closeTabColor}
 />
 
 <ConfirmDialog
   bind:show={showDeleteConfirm}
   title={$t('tabBar.deleteTitle')}
-  message={$t('tabBar.deleteMessage', { name: $selectedSession?.name || '' })}
+  message={$t('tabBar.deleteMessage', { name: deleteSessionTarget?.name || '' })}
   confirmText={$t('tabBar.deleteConfirm')}
   cancelText={$t('common.cancel')}
   variant="danger"
   on:confirm={confirmDelete}
+  on:cancel={cancelSessionDelete}
 />
 
 <ConfirmDialog
@@ -1861,6 +1944,7 @@
   cancelText={$t('common.cancel')}
   variant="danger"
   on:confirm={confirmDeleteTab}
+  on:cancel={cancelTabDelete}
 />
 
 {#if showExtraArgsEditor}

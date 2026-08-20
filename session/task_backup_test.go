@@ -1,6 +1,7 @@
 package session
 
 import (
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -124,7 +125,7 @@ func TestRestoreTaskTargetsRollsBackEarlierReplacement(t *testing.T) {
 			return injected
 		}
 		return os.Rename(oldPath, newPath)
-	})
+	}, nil)
 	if !errors.Is(err, injected) {
 		t.Fatalf("restore error = %v, want injected failure", err)
 	}
@@ -136,6 +137,182 @@ func TestRestoreTaskTargetsRollsBackEarlierReplacement(t *testing.T) {
 		if string(got) != want {
 			t.Fatalf("%s after rollback = %q, want %q", path, got, want)
 		}
+	}
+}
+
+func TestRestoreTaskBackupSnapshotsExactLockedStateBeforeReplacement(t *testing.T) {
+	storage := &Storage{configDir: t.TempDir()}
+	project := t.TempDir()
+	current := `{"tasks":[{"id":"current"}]}`
+	restored := `{"tasks":[{"id":"restored"}]}`
+	writeTaskFile(t, project, current)
+
+	set := TaskBackupSet{
+		Files: []TaskBackup{{Path: project, Content: restored}},
+	}
+	raw, err := json.Marshal(set)
+	if err != nil {
+		t.Fatal(err)
+	}
+	backupDir := filepath.Join(storage.configDir, "backups", "tasks")
+	if err := os.MkdirAll(backupDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	const backupID = "20260820T120000.000000000Z-source.json"
+	if err := os.WriteFile(filepath.Join(backupDir, backupID), raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := storage.RestoreTaskBackup(backupID); err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(taskFileFor(project))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != restored {
+		t.Fatalf("restored content = %s, want %s", got, restored)
+	}
+
+	entries, err := os.ReadDir(backupDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	foundUndo := false
+	for _, entry := range backupJSONEntries(entries) {
+		if entry.Name() == backupID {
+			continue
+		}
+		raw, err := os.ReadFile(filepath.Join(backupDir, entry.Name()))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var undo TaskBackupSet
+		if err := json.Unmarshal(raw, &undo); err != nil {
+			t.Fatal(err)
+		}
+		if len(undo.Files) == 1 && undo.Files[0].Path == CanonicalProjectPath(project) && undo.Files[0].Content == current {
+			foundUndo = true
+		}
+	}
+	if !foundUndo {
+		t.Fatal("restore did not persist the exact pre-replacement task state")
+	}
+}
+
+func TestRestoreTaskBackupRejectsInvalidContentWithoutReplacingLiveFile(t *testing.T) {
+	storage := &Storage{configDir: t.TempDir()}
+	project := t.TempDir()
+	current := `{"tasks":[{"id":"current"}]}`
+	writeTaskFile(t, project, current)
+
+	set := TaskBackupSet{Files: []TaskBackup{{Path: project, Content: `{"tasks":`}}}
+	raw, err := json.Marshal(set)
+	if err != nil {
+		t.Fatal(err)
+	}
+	backupDir := filepath.Join(storage.configDir, "backups", "tasks")
+	if err := os.MkdirAll(backupDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	const backupID = "20260820T120000.000000000Z-corrupt.json"
+	if err := os.WriteFile(filepath.Join(backupDir, backupID), raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := storage.RestoreTaskBackup(backupID); err == nil {
+		t.Fatal("invalid task backup was accepted")
+	}
+	got, err := os.ReadFile(taskFileFor(project))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != current {
+		t.Fatalf("invalid backup changed live tasks to %q", got)
+	}
+}
+
+func TestRestoreTaskTargetsDoesNotCommitWhenUndoSnapshotFails(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, ".taskmaster", "tasks.json")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("current"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	want := errors.New("undo snapshot failed")
+	err := restoreTaskTargets([]*taskRestoreTarget{{path: path, content: "restored"}}, os.Rename, func(targets []*taskRestoreTarget) error {
+		if len(targets) != 1 || string(targets[0].original) != "current" {
+			t.Fatalf("pre-commit snapshot = %+v", targets)
+		}
+		return want
+	})
+	if !errors.Is(err, want) {
+		t.Fatalf("restore error = %v, want undo failure", err)
+	}
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "current" {
+		t.Fatalf("undo failure changed live file to %q", got)
+	}
+}
+
+func TestRestoreTaskBackupUndoRemovesFileCreatedByRestore(t *testing.T) {
+	storage := &Storage{configDir: t.TempDir()}
+	project := t.TempDir()
+	restored := `{"tasks":[{"id":"restored"}]}`
+	backupDir := filepath.Join(storage.configDir, "backups", "tasks")
+	if err := os.MkdirAll(backupDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	set := TaskBackupSet{Files: []TaskBackup{{Path: project, Content: restored}}}
+	raw, err := json.Marshal(set)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const sourceID = "20260820T120000.000000000Z-create.json"
+	if err := os.WriteFile(filepath.Join(backupDir, sourceID), raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := storage.RestoreTaskBackup(sourceID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(taskFileFor(project)); err != nil {
+		t.Fatalf("restore did not create task file: %v", err)
+	}
+
+	entries, err := os.ReadDir(backupDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	undoID := ""
+	for _, entry := range backupJSONEntries(entries) {
+		if entry.Name() == sourceID {
+			continue
+		}
+		raw, err := os.ReadFile(filepath.Join(backupDir, entry.Name()))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var undo TaskBackupSet
+		if err := json.Unmarshal(raw, &undo); err != nil {
+			t.Fatal(err)
+		}
+		if len(undo.Files) == 1 && undo.Files[0].Missing && undo.Files[0].Path == CanonicalProjectPath(project) {
+			undoID = entry.Name()
+		}
+	}
+	if undoID == "" {
+		t.Fatal("restore of a missing file did not create an undo tombstone")
+	}
+	if err := storage.RestoreTaskBackup(undoID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(taskFileFor(project)); !os.IsNotExist(err) {
+		t.Fatalf("tombstone undo did not remove restored task file: %v", err)
 	}
 }
 

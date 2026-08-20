@@ -16,7 +16,7 @@
   export let tab: TabColorTarget | null = null;
 
   const dispatch = createEventDispatcher<{
-    applied: { index: number; textColor: string; backgroundColor: string };
+    applied: { sessionId: string; index: number; textColor: string; backgroundColor: string };
     close: void;
   }>();
 
@@ -100,11 +100,13 @@
 
   async function apply() {
     if (!tab || !sessionId || saving) return;
+    const targetSessionId = sessionId;
+    const targetIndex = tab.Index;
     saving = true;
     error = '';
     try {
-      await App.SetTabColor(sessionId, tab.Index, textColor, backgroundColor);
-      dispatch('applied', { index: tab.Index, textColor, backgroundColor });
+      await App.SetTabColor(targetSessionId, targetIndex, textColor, backgroundColor);
+      dispatch('applied', { sessionId: targetSessionId, index: targetIndex, textColor, backgroundColor });
       show = false;
     } catch (e) {
       error = String(e);

@@ -2,6 +2,7 @@ package session
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -20,6 +21,7 @@ type Storage struct {
 	projectID          string // Active project ID ("" = default)
 	lockPath           string // Current out-of-tree lock file path
 	legacyLockPathHeld string // Compatibility lock visible to pre-migration app versions
+	readLockPath       string // Read-only viewer claim that blocks concurrent deletion
 }
 
 // Group represents a session group for organizing sessions
@@ -252,7 +254,28 @@ func (s *Storage) SetActiveProject(projectID string) error {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if err := s.requireProjectExists(projectID); err != nil {
+		return err
+	}
 	return s.setActiveProjectLocked(projectID)
+}
+
+func (s *Storage) requireProjectExists(projectID string) error {
+	if projectID == "" {
+		return nil
+	}
+	s.projectsMu.Lock()
+	projectsData, err := s.loadProjectsLocked()
+	s.projectsMu.Unlock()
+	if err != nil {
+		return err
+	}
+	for _, project := range projectsData.Projects {
+		if project.ID == projectID {
+			return nil
+		}
+	}
+	return fmt.Errorf("project not found")
 }
 
 // setActiveProjectLocked is the internal version that assumes the mutex is held.
@@ -299,6 +322,18 @@ func (s *Storage) legacyLockPath(projectID string) string {
 		return filepath.Join(s.configDir, "default.lock")
 	}
 	return filepath.Join(s.configDir, "projects", projectID, "project.lock")
+}
+
+func (s *Storage) projectDeletionLockPath(projectID string) string {
+	return s.getLockPath(projectID) + ".deleting"
+}
+
+func (s *Storage) projectReaderDir(projectID string) string {
+	name := projectID
+	if name == "" {
+		name = "default"
+	}
+	return filepath.Join(s.configDir, "project-readers", name)
 }
 
 // validProjectID ensures a caller-controlled ID can never escape the projects
@@ -364,6 +399,17 @@ type ErrProjectLocked struct {
 
 func (e *ErrProjectLocked) Error() string {
 	return fmt.Sprintf("project already open in another instance (pid %d)", e.PID)
+}
+
+// ErrProjectDeleting means a deletion transaction published its intent before
+// this process could establish either exclusive ownership or a read-only
+// viewer claim.
+type ErrProjectDeleting struct {
+	PID int
+}
+
+func (e *ErrProjectDeleting) Error() string {
+	return fmt.Sprintf("project is being deleted by another instance (pid %d)", e.PID)
 }
 
 // LockProject acquires the project's lock file for this process. If a LIVE
@@ -433,6 +479,81 @@ func (s *Storage) LockProject(projectID string) error {
 	s.lockPath = lockPath
 	s.legacyLockPathHeld = legacyPath
 	return nil
+}
+
+// LockProjectForUse acquires exclusive ownership when possible. If another
+// application owns the project, it registers this process as a read-only
+// viewer before returning ErrProjectLocked. The deletion marker/viewer claim
+// handshake makes opening and deletion mutually exclusive across processes.
+func (s *Storage) LockProjectForUse(projectID string) error {
+	if !validProjectID(projectID) {
+		return fmt.Errorf("invalid project ID")
+	}
+	if err := s.requireProjectExists(projectID); err != nil {
+		return err
+	}
+	err := s.LockProject(projectID)
+	if err == nil {
+		if deleting, pid := projectLockOwner(s.projectDeletionLockPath(projectID)); deleting {
+			s.UnlockProject()
+			return &ErrProjectDeleting{PID: pid}
+		}
+		return nil
+	}
+	var locked *ErrProjectLocked
+	if !errors.As(err, &locked) {
+		return err
+	}
+	if deleting, pid := projectLockOwner(s.projectDeletionLockPath(projectID)); deleting {
+		return &ErrProjectDeleting{PID: pid}
+	}
+	if claimErr := s.lockProjectReader(projectID); claimErr != nil {
+		return claimErr
+	}
+	if deleting, pid := projectLockOwner(s.projectDeletionLockPath(projectID)); deleting {
+		s.UnlockProject()
+		return &ErrProjectDeleting{PID: pid}
+	}
+	return err
+}
+
+func (s *Storage) lockProjectReader(projectID string) error {
+	s.lockMu.Lock()
+	defer s.lockMu.Unlock()
+	s.unlockProjectLocked()
+	path := filepath.Join(s.projectReaderDir(projectID), strconv.Itoa(os.Getpid())+".lock")
+	if err := claimPIDLockPath(path); err != nil {
+		return fmt.Errorf("failed to register read-only project viewer: %w", err)
+	}
+	s.readLockPath = path
+	return nil
+}
+
+func claimPIDLockPath(path string) error {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	prepared, err := os.CreateTemp(dir, ".pid-lock-*")
+	if err != nil {
+		return err
+	}
+	preparedPath := prepared.Name()
+	defer os.Remove(preparedPath)
+	pid := os.Getpid()
+	if err := prepared.Chmod(0o600); err == nil {
+		_, err = prepared.WriteString(strconv.Itoa(pid))
+	}
+	if err == nil {
+		err = prepared.Sync()
+	}
+	if closeErr := prepared.Close(); err == nil {
+		err = closeErr
+	}
+	if err != nil {
+		return err
+	}
+	return claimProjectLockPath(preparedPath, path, pid)
 }
 
 func claimProjectLockPath(preparedPath, lockPath string, pid int) error {
@@ -507,7 +628,7 @@ func (s *Storage) UnlockProject() {
 }
 
 func (s *Storage) unlockProjectLocked() {
-	if s.lockPath == "" && s.legacyLockPathHeld == "" {
+	if s.lockPath == "" && s.legacyLockPathHeld == "" && s.readLockPath == "" {
 		return
 	}
 	// Only remove a lock that still names this process. If another process
@@ -515,8 +636,10 @@ func (s *Storage) unlockProjectLocked() {
 	pid := os.Getpid()
 	removeProjectLockIfOwned(s.legacyLockPathHeld, pid)
 	removeProjectLockIfOwned(s.lockPath, pid)
+	removeProjectLockIfOwned(s.readLockPath, pid)
 	s.lockPath = ""
 	s.legacyLockPathHeld = ""
+	s.readLockPath = ""
 }
 
 // LoadProjects loads the list of projects
@@ -623,6 +746,11 @@ func (s *Storage) RemoveProject(id string) error {
 	if s.projectID == id {
 		return fmt.Errorf("cannot delete the active project")
 	}
+	finishDeletion, err := s.beginProjectDeletion(id)
+	if err != nil {
+		return err
+	}
+	defer finishDeletion()
 	// Own the same out-of-tree lock used by SelectProject for the complete
 	// delete transaction. This closes the check/rename race: a new opener cannot
 	// claim the project after our check, and an existing owner makes this fail.
@@ -676,13 +804,7 @@ func (s *Storage) RemoveProject(id string) error {
 		}
 		var movedNames []string
 		rollbackMoved := func() error {
-			for i := len(movedNames) - 1; i >= 0; i-- {
-				name := movedNames[i]
-				if err := os.Rename(filepath.Join(trashDir, name), filepath.Join(projectDir, name)); err != nil {
-					return err
-				}
-			}
-			return nil
+			return rollbackMovedProjectEntries(projectDir, trashDir, movedNames, os.Rename)
 		}
 		legacyName := filepath.Base(claim.legacyLockPathHeld)
 		for _, entry := range entries {
@@ -690,8 +812,7 @@ func (s *Storage) RemoveProject(id string) error {
 				continue
 			}
 			if err := os.Rename(filepath.Join(projectDir, entry.Name()), filepath.Join(trashDir, entry.Name())); err != nil {
-				_ = rollbackMoved()
-				return fmt.Errorf("failed to move project data to trash: %w", err)
+				return errors.Join(fmt.Errorf("failed to move project data to trash: %w", err), rollbackMoved())
 			}
 			movedNames = append(movedNames, entry.Name())
 		}
@@ -707,6 +828,45 @@ func (s *Storage) RemoveProject(id string) error {
 		}
 		return nil
 	})
+}
+
+func (s *Storage) beginProjectDeletion(projectID string) (func(), error) {
+	marker := s.projectDeletionLockPath(projectID)
+	if err := claimPIDLockPath(marker); err != nil {
+		return nil, fmt.Errorf("failed to claim project deletion: %w", err)
+	}
+	cleanup := func() { removeProjectLockIfOwned(marker, os.Getpid()) }
+	entries, err := os.ReadDir(s.projectReaderDir(projectID))
+	if err != nil && !os.IsNotExist(err) {
+		cleanup()
+		return nil, fmt.Errorf("failed to inspect project viewers: %w", err)
+	}
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		path := filepath.Join(s.projectReaderDir(projectID), entry.Name())
+		if viewing, pid := projectLockOwner(path); viewing {
+			cleanup()
+			return nil, &ErrProjectLocked{PID: pid}
+		}
+		// The deletion marker is already visible, so an initializing reader
+		// whose empty/stale claim is removed here must observe the marker on its
+		// mandatory recheck and fail rather than entering the project.
+		_ = os.Remove(path)
+	}
+	return cleanup, nil
+}
+
+func rollbackMovedProjectEntries(projectDir, trashDir string, movedNames []string, move func(string, string) error) error {
+	var rollbackErr error
+	for i := len(movedNames) - 1; i >= 0; i-- {
+		name := movedNames[i]
+		if err := move(filepath.Join(trashDir, name), filepath.Join(projectDir, name)); err != nil {
+			rollbackErr = errors.Join(rollbackErr, fmt.Errorf("failed to restore project entry %s: %w", name, err))
+		}
+	}
+	return rollbackErr
 }
 
 // RenameProject renames a project

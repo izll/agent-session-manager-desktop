@@ -174,7 +174,8 @@
 
   function isCurrentTarget(target: DiffTarget): boolean {
     return target.sessionId === get(selectedSessionId) &&
-      target.windowIdx === tabIdx() && target.mode === diffMode;
+      target.windowIdx === tabIdx() && target.mode === diffMode &&
+      target.root === loadedRoot && loadedDiffKey === currentDiffKey;
   }
 
   // Start/stop polling based on active state
@@ -686,7 +687,10 @@
     reverting = true;
     try {
       await action.run();
-      if (destroyed) return;
+      if (destroyed || !isCurrentTarget(action.target)) {
+        returnToLine = null;
+        return;
+      }
       error = '';
       // The cached list describes the tree before the revert, so it has to go
       // — otherwise the refresh below would show the reverted file as still
@@ -694,19 +698,23 @@
       invalidateDiffCache();
       // Refresh so the view reflects what's actually on disk now.
       await loadDiff();
-      if (destroyed) return;
+      if (destroyed || !isCurrentTarget(action.target)) {
+        returnToLine = null;
+        return;
+      }
       // And come back to where the reverted block was. loadDiff drops the
       // remembered position, rightly — the file has changed — but the change is
       // one just made here, at a place being looked at, so returning to the top
       // of a long file loses it.
       await returnAfterRevert();
     } catch (e) {
-      if (destroyed) return;
+      if (destroyed || !isCurrentTarget(action.target)) return;
       // A failed revert must be visible — the Go message explains that the file
       // changed since the diff was rendered.
       error = String(e);
+    } finally {
+      if (!destroyed) reverting = false;
     }
-    if (!destroyed) reverting = false;
   }
 
   function cancelRevert() {

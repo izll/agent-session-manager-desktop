@@ -346,3 +346,24 @@ func TestUnrelatedEditsKeepTheDeadline(t *testing.T) {
 		t.Errorf("deadline round-tripped as %q", got)
 	}
 }
+
+func TestInvalidDeadlineUpdateFailsWithoutClearingExistingValue(t *testing.T) {
+	due := time.Date(2026, 8, 20, 14, 30, 0, 0, time.UTC)
+	manager := &TaskManager{
+		projectPath: t.TempDir(),
+		store:       &TaskStore{Tasks: []Task{{ID: "1", Title: "before", DueAt: &due, Status: TaskStatusBacklog}}},
+	}
+	if err := manager.Save(); err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.UpdateTask("1", map[string]interface{}{"title": "after", "dueAt": "not-a-date"}); err == nil {
+		t.Fatal("invalid deadline update unexpectedly succeeded")
+	}
+	got, err := manager.GetTask("1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Title != "before" || got.DueAt == nil || !got.DueAt.Equal(due) {
+		t.Fatalf("invalid deadline partially changed task: %+v", got)
+	}
+}

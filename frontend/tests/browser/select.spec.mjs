@@ -161,7 +161,7 @@ test('Notes preserves a per-target draft after save failure and fails closed on 
   await page.goto('/tests/browser/notes-fixture.html');
 
   const textarea = page.locator('.notes-textarea');
-  await expect(textarea).toHaveValue('saved A');
+  await expect(textarea).toHaveValue('saved A', { timeout: 15000 });
   await textarea.fill('draft A survives');
   await page.evaluate(() => window.notesFixture.select('notes-b'));
   await expect(textarea).toHaveValue('saved B');
@@ -176,4 +176,25 @@ test('Notes preserves a per-target draft after save failure and fails closed on 
   await expect(page.locator('.notes-error')).toContainText('load refused');
   await expect(textarea).toBeDisabled();
   expect(pageErrors).toEqual([]);
+});
+
+test('Notes blocks a destructive action for a failed background draft', async ({ page }) => {
+  await page.goto('/tests/browser/notes-fixture.html');
+  const textarea = page.locator('.notes-textarea');
+  await expect(textarea).toHaveValue('saved A', { timeout: 15000 });
+  await textarea.fill('draft A survives quit');
+  await page.evaluate(() => window.notesFixture.select('notes-b'));
+  await expect(textarea).toHaveValue('saved B');
+  await expect.poll(() => page.evaluate(() => window.notesFixture.failedSaves())).toBe(1);
+
+  await page.evaluate(() => window.notesFixture.attemptDestructive());
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toBeVisible();
+  expect(await dialog.evaluate((node) => node.parentElement === document.body)).toBe(true);
+  await page.getByRole('button', { name: /Keep editing|Szerkesztés folytatása/ }).click();
+  await expect(page.locator('body')).toHaveAttribute('data-destructive', 'false');
+
+  await page.evaluate(() => window.notesFixture.attemptDestructive());
+  await page.getByRole('button', { name: /Discard changes|Módosítások elvetése/ }).click();
+  await expect(page.locator('body')).toHaveAttribute('data-destructive', 'true');
 });

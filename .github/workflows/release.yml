@@ -196,6 +196,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           draft: true
+          prerelease: ${{ contains(steps.ver.outputs.tag, '-') }}
           tag_name: ${{ steps.ver.outputs.tag }}
           name: ${{ steps.ver.outputs.tag }}
           body: ${{ steps.notes.outputs.body }}
@@ -272,9 +273,15 @@ jobs:
         # slice. This artifact therefore supports Apple Silicon Macs only.
         env:
           VERSION: ${{ steps.ver.outputs.num }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
+          if [[ ! "$APPLE_TEAM_ID" =~ ^[A-Z0-9]{10}$ ]]; then
+            echo "APPLE_TEAM_ID must be the 10-character TeamIdentifier of the signing certificate" >&2
+            exit 1
+          fi
           export PATH="$PATH:$(go env GOPATH)/bin"
-          wails build -platform darwin/arm64 -clean -ldflags "-X main.Version=$VERSION"
+          wails build -platform darwin/arm64 -clean \
+            -ldflags "-X main.Version=$VERSION -X asmgr-desktop/updater.ExpectedMacTeamID=$APPLE_TEAM_ID"
 
       - name: Bundle PortAudio runtime
         run: |
@@ -336,6 +343,8 @@ jobs:
           echo "MACOS_SIGNING_IDENTITY=$SIGNING_IDENTITY" >> "$GITHUB_ENV"
 
       - name: Sign with hardened runtime
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           APP="build/bin/Agent Session Manager.app"
           EXE="$APP/Contents/MacOS/asmgr-desktop"
@@ -357,6 +366,11 @@ jobs:
           codesign -d --entitlements :- "$APP" > "$SIGNED_ENTITLEMENTS"
           [ "$(plutil -extract com.apple.security.device.audio-input raw -o - "$SIGNED_ENTITLEMENTS")" = "true" ]
           test -n "$(plutil -extract NSMicrophoneUsageDescription raw -o - "$APP/Contents/Info.plist")"
+          SIGNED_TEAM_ID=$(codesign -dv --verbose=4 "$APP" 2>&1 | awk -F= '/^TeamIdentifier=/ {print $2; exit}')
+          if [ "$SIGNED_TEAM_ID" != "$APPLE_TEAM_ID" ]; then
+            echo "Signed bundle TeamIdentifier $SIGNED_TEAM_ID does not match configured $APPLE_TEAM_ID" >&2
+            exit 1
+          fi
 
       - name: Notarize and staple
         env:
@@ -395,6 +409,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           draft: true
+          prerelease: ${{ contains(steps.ver.outputs.tag, '-') }}
           tag_name: ${{ steps.ver.outputs.tag }}
           files: |
             asmgr-desktop_${{ steps.ver.outputs.num }}_darwin_arm64.tar.gz
@@ -569,6 +584,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           draft: true
+          prerelease: ${{ contains(steps.ver.outputs.tag, '-') }}
           tag_name: ${{ steps.ver.outputs.tag }}
           files: |
             asmgr-desktop_${{ steps.ver.outputs.num }}_windows_amd64.tar.gz

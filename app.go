@@ -49,6 +49,22 @@ type App struct {
 	otherInstancePID int
 }
 
+type eventThrottle struct {
+	mu       sync.Mutex
+	last     time.Time
+	interval time.Duration
+}
+
+func (t *eventThrottle) allow(now time.Time) bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if !t.last.IsZero() && now.Sub(t.last) < t.interval {
+		return false
+	}
+	t.last = now
+	return true
+}
+
 // ptySession represents an active PTY connection
 type ptySession struct {
 	// ptmx is a PTY master on Unix and a pipe pair on Windows — see
@@ -133,7 +149,7 @@ func (a *App) startup(ctx context.Context) {
 	// record the holder's PID so the frontend can warn instead of stomping
 	// the tmux state. We DON'T abort startup — the UI is still usable for
 	// read-only browsing — but terminal attaches are gated on a.projectLocked.
-	if lockErr := a.storage.LockProject(a.storage.GetActiveProjectID()); lockErr != nil {
+	if lockErr := a.storage.LockProjectForUse(a.storage.GetActiveProjectID()); lockErr != nil {
 		var locked *session.ErrProjectLocked
 		if errors.As(lockErr, &locked) {
 			a.otherInstancePID = locked.PID
@@ -176,13 +192,11 @@ func (a *App) startup(ctx context.Context) {
 		})
 	})
 	// Throttle voice level events to ~10Hz for smooth UI without flooding Wails events
-	var lastVoiceEmit time.Time
+	voiceEvents := eventThrottle{interval: 80 * time.Millisecond}
 	a.dictation.SetVoiceLevelCallback(func(level float64) {
-		now := time.Now()
-		if now.Sub(lastVoiceEmit) < 80*time.Millisecond {
+		if !voiceEvents.allow(time.Now()) {
 			return
 		}
-		lastVoiceEmit = now
 		runtime.EventsEmit(ctx, "dictation:voiceLevel", level)
 	})
 	a.dictation.SetInterimTextCallback(func(text string) {
@@ -229,12 +243,11 @@ func (a *App) autoCheckForUpdate(ctx context.Context) {
 	if !updater.ShouldCheckForUpdate() {
 		return
 	}
-	latest := updater.CheckForUpdate(Version)
-	updater.SaveLastCheckTime()
-	// Remember the answer either way: a pending update must stay visible on
-	// later launches that fall inside the daily throttle, and a stale one
-	// must stop being shown.
-	updater.SaveAvailableUpdate(latest)
+	latest, err := updater.RefreshAvailableUpdate(Version)
+	if err != nil {
+		log.Printf("[update] automatic check failed: %v", err)
+		return
+	}
 	if latest == "" {
 		return
 	}
@@ -253,11 +266,12 @@ func (a *App) IsDevMode() bool {
 
 // shutdown is called when the app is closing
 func (a *App) shutdown(ctx context.Context) {
-	// Stop notification polling before releasing the project lock or removing
-	// terminal mirrors. The watcher reads storage, captures tmux panes and may
-	// launch notification work, so letting it survive into teardown races every
-	// resource shutdown is about to invalidate.
+	// Stop every background storage/tmux reader before releasing the project
+	// lock or removing terminal mirrors. Both pollers capture panes and read the
+	// active project; letting either survive into teardown races the resources
+	// shutdown is about to invalidate.
 	a.stopAttentionWatcher()
+	a.stopPreviewPolling()
 
 	a.projectMu.Lock()
 	// Persist Codex-generated conversation IDs before releasing the project
@@ -278,10 +292,6 @@ func (a *App) shutdown(ctx context.Context) {
 		a.projectLocked = false
 	}
 	a.projectMu.Unlock()
-	if a.previewCancel != nil {
-		a.previewCancel()
-		a.previewWG.Wait()
-	}
 	if a.activityStats != nil {
 		if err := a.activityStats.Close(); err != nil {
 			log.Printf("[statistics] failed to flush: %v", err)
@@ -310,6 +320,20 @@ func (a *App) shutdown(ctx context.Context) {
 	}
 
 	stopAllTaskMasters()
+}
+
+// stopPreviewPolling cancels and reaps the sidebar polling goroutine. It is
+// deliberately separate from shutdown's project teardown so the ordering is
+// explicit and testable: the poller reads storage, captures tmux panes, writes
+// statistics and emits events, none of which may continue after the active
+// project's lock and mirrors are released.
+func (a *App) stopPreviewPolling() {
+	if a.previewCancel == nil {
+		return
+	}
+	a.previewCancel()
+	a.previewWG.Wait()
+	a.previewCancel = nil
 }
 
 // stopAllTaskMasters stops and reaps every cached MCP child. The values are
@@ -487,22 +511,28 @@ func (a *App) SelectProject(id string) error {
 	// session from the newly selected, possibly foreign-owned project.
 	a.projectLocked = false
 	a.otherInstancePID = 0
-	a.storage.UnlockProject()
-	if err := a.storage.SetActiveProject(id); err != nil {
+	lockErr := a.storage.LockProjectForUse(id)
+	var locked *session.ErrProjectLocked
+	if lockErr != nil && !errors.As(lockErr, &locked) {
 		_ = a.storage.SetActiveProject(oldID)
-		if lockErr := a.storage.LockProject(oldID); lockErr == nil {
+		if oldLockErr := a.storage.LockProjectForUse(oldID); oldLockErr == nil {
+			a.projectLocked = true
+		}
+		return lockErr
+	}
+	if err := a.storage.SetActiveProject(id); err != nil {
+		a.storage.UnlockProject()
+		_ = a.storage.SetActiveProject(oldID)
+		if oldLockErr := a.storage.LockProjectForUse(oldID); oldLockErr == nil {
 			a.projectLocked = true
 		}
 		return err
 	}
-	if err := a.storage.LockProject(id); err != nil {
-		var locked *session.ErrProjectLocked
-		if errors.As(err, &locked) {
-			a.otherInstancePID = locked.PID
-			log.Printf("[lock] switched to project %q which is open in pid %d — terminal attaches disabled", id, locked.PID)
-		}
-	} else {
+	if lockErr == nil {
 		a.projectLocked = true
+	} else {
+		a.otherInstancePID = locked.PID
+		log.Printf("[lock] switched to project %q which is open in pid %d — terminal attaches disabled", id, locked.PID)
 	}
 	return nil
 }
@@ -3770,10 +3800,14 @@ func (a *App) LogFrontend(msg string) {
 }
 
 // CheckForUpdate checks for updates
-func (a *App) CheckForUpdate() *UpdateInfo {
+func (a *App) CheckForUpdate() (*UpdateInfo, error) {
 	current := Version
 	started := time.Now()
-	latest := updater.CheckForUpdate(current)
+	latest, err := updater.RefreshAvailableUpdate(current)
+	if err != nil {
+		log.Printf("[update] check failed in %s: %v", time.Since(started).Round(time.Millisecond), err)
+		return nil, err
+	}
 
 	// Logged because a check that answers "nothing new" looks identical to one
 	// that never ran; without this there is no way to tell them apart after
@@ -3785,12 +3819,11 @@ func (a *App) CheckForUpdate() *UpdateInfo {
 			time.Since(started).Round(time.Millisecond), latest, current)
 	}
 
-	updater.SaveAvailableUpdate(latest)
 	return &UpdateInfo{
 		Available:      latest != "",
 		CurrentVersion: current,
 		LatestVersion:  latest,
-	}
+	}, nil
 }
 
 // PendingUpdate returns the version an earlier check found, so the UI can flag
@@ -4469,7 +4502,7 @@ func (a *App) getTaskMasterMCP(sessionID string) (*mcp.TaskMaster, error) {
 		return nil, fmt.Errorf("session not found: %w", err)
 	}
 
-	projectPath := sess.Path
+	projectPath := taskMasterProjectPath(sess.Path)
 	if projectPath == "" {
 		return nil, fmt.Errorf("error.sessionNoPath")
 	}
@@ -4542,6 +4575,10 @@ func (a *App) getTaskMasterMCP(sessionID string) (*mcp.TaskMaster, error) {
 		}
 		return candidate, nil
 	}
+}
+
+func taskMasterProjectPath(projectPath string) string {
+	return session.CanonicalProjectPath(projectPath)
 }
 
 // MCPTaskInfo represents a Task Master task for the frontend
@@ -4968,13 +5005,17 @@ func (a *App) StopTaskMaster(sessionID string) error {
 	if err != nil {
 		return err
 	}
+	if sess.Path == "" {
+		return fmt.Errorf("error.sessionNoPath")
+	}
+	projectPath := taskMasterProjectPath(sess.Path)
 
 	for {
 		taskMasterMu.Lock()
-		starting := taskMasterStarts[sess.Path]
+		starting := taskMasterStarts[projectPath]
 		if starting == nil {
-			tm := taskMasterCache[sess.Path]
-			delete(taskMasterCache, sess.Path)
+			tm := taskMasterCache[projectPath]
+			delete(taskMasterCache, projectPath)
 			taskMasterMu.Unlock()
 			if tm != nil {
 				return tm.Stop()

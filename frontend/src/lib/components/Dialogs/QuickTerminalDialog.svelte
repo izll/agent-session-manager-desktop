@@ -17,6 +17,7 @@
    * replaces it. Neither costs a keystroke more than the other.
    */
   export let show = false;
+  export let sessionId = '';
 
   const dispatch = createEventDispatcher();
 
@@ -56,6 +57,7 @@
   function close() {
     show = false;
     isSubmitting = false;
+    dispatch('close');
   }
 
   async function handleSubmit() {
@@ -65,8 +67,8 @@
       return;
     }
 
-    const sessionId = get(selectedSessionId);
-    if (!sessionId) {
+    const targetSessionId = sessionId;
+    if (!targetSessionId) {
       error = $t('newTab.noSession');
       return;
     }
@@ -77,12 +79,12 @@
     try {
       // A terminal, with no agent, no extra arguments and the session's own
       // working directory — the defaults the full dialog would have offered.
-      const newIdx = await App.CreateTab(sessionId, false, 'terminal', trimmed, '', '');
+      const newIdx = await App.CreateTab(targetSessionId, false, 'terminal', trimmed, '', '');
       await loadSessions();
       close();
       // Switch to it and put the keyboard in it, so the tab is ready to type
       // in rather than merely created.
-      if (typeof newIdx === 'number' && newIdx >= 0) {
+      if (get(selectedSessionId) === targetSessionId && typeof newIdx === 'number' && newIdx >= 0) {
         selectWindow(newIdx);
         requestAnimationFrame(() =>
           window.dispatchEvent(new CustomEvent('terminal:focus')));

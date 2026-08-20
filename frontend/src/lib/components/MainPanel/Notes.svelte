@@ -5,6 +5,8 @@
   import * as App from '../../../../wailsjs/go/main/App';
   import { createFieldDictation } from '../../utils/dictationField';
   import { t } from '../../i18n';
+  import { registerUnsavedGuard } from '../../stores/unsavedChanges';
+  import ConfirmDialog from '../Dialogs/ConfirmDialog.svelte';
 
   export let active = false;
 
@@ -26,6 +28,24 @@
   let loadingNotes = false;
   let saveError = '';
   let loadError = '';
+  let unregisterUnsavedGuard: (() => void) | null = null;
+  let pendingDiscard: (() => void) | null = null;
+
+  function hasUnsavedDrafts(): boolean {
+    return [...draftsByTarget.values()].some((draft) =>
+      draft.text !== draft.saved || !!draft.saveError
+    ) || notes !== lastSaved || !!saveError;
+  }
+
+  function confirmDiscardNotes() {
+    const continuation = pendingDiscard;
+    pendingDiscard = null;
+    if (continuation) continuation();
+  }
+
+  function cancelDiscardNotes() {
+    pendingDiscard = null;
+  }
 
   function noteKey(sessionId: string, windowIdx: number): string {
     return `${sessionId}:${windowIdx}`;
@@ -260,10 +280,17 @@
   const dictationListening = dictation.listening;
 
   onMount(() => {
+    unregisterUnsavedGuard = registerUnsavedGuard({
+      isDirty: hasUnsavedDrafts,
+      requestDiscard: (continueAfterDiscard) => { pendingDiscard = continueAfterDiscard; },
+    });
     loadNotes();
   });
 
   onDestroy(() => {
+    unregisterUnsavedGuard?.();
+    unregisterUnsavedGuard = null;
+    pendingDiscard = null;
     rememberCurrentDraft();
     // Save any pending changes
     if (saveTimeout) {
@@ -554,6 +581,19 @@
     ></textarea>
   </div>
 </div>
+
+{#if pendingDiscard}
+  <ConfirmDialog
+    show={true}
+    variant="warning"
+    title={$t('notes.unsavedQuitTitle')}
+    message={$t('notes.unsavedQuitMessage')}
+    confirmText={$t('browser.discardChanges')}
+    cancelText={$t('browser.keepEditing')}
+    on:confirm={confirmDiscardNotes}
+    on:cancel={cancelDiscardNotes}
+  />
+{/if}
 
 <style>
   .find-bar {

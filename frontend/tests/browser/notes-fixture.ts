@@ -1,12 +1,14 @@
 import { mount } from 'svelte';
 import Notes from '../../src/lib/components/MainPanel/Notes.svelte';
 import { selectedSessionId, selectedWindowIdx } from '../../src/lib/stores/sessions';
+import { afterUnsavedChanges } from '../../src/lib/stores/unsavedChanges';
 
 const stored = new Map<string, string>([
   ['notes-a:0', 'saved A'],
   ['notes-b:0', 'saved B'],
 ]);
 let failNextASave = true;
+let failedSaves = 0;
 
 const backend = new Proxy({
   GetTabNotes: async (sessionId: string, windowIdx: number) => {
@@ -16,6 +18,7 @@ const backend = new Proxy({
   SetTabNotes: async (sessionId: string, windowIdx: number, value: string) => {
     if (sessionId === 'notes-a' && failNextASave) {
       failNextASave = false;
+      failedSaves++;
       throw new Error('save refused');
     }
     stored.set(`${sessionId}:${windowIdx}`, value);
@@ -36,6 +39,13 @@ const backend = new Proxy({
   },
   stored(sessionId: string) {
     return stored.get(`${sessionId}:0`);
+  },
+  failedSaves() {
+    return failedSaves;
+  },
+  attemptDestructive() {
+    document.body.dataset.destructive = 'false';
+    afterUnsavedChanges(() => { document.body.dataset.destructive = 'true'; });
   },
 };
 

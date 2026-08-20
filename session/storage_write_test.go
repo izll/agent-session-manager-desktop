@@ -373,6 +373,21 @@ func TestRemoveProjectRejectsActiveProject(t *testing.T) {
 	}
 }
 
+func TestSetActiveProjectRejectsUnknownProjectWithoutCreatingDirectory(t *testing.T) {
+	storage := newTestStorage(t)
+	unknownID := "proj_unknown"
+
+	if err := storage.SetActiveProject(unknownID); err == nil || !strings.Contains(err.Error(), "not found") {
+		t.Fatalf("unknown project switch error = %v, want not found", err)
+	}
+	if got := storage.GetActiveProjectID(); got != "" {
+		t.Fatalf("active project changed to %q after rejected switch", got)
+	}
+	if _, err := os.Stat(filepath.Join(storage.configDir, "projects", unknownID)); !os.IsNotExist(err) {
+		t.Fatalf("unknown project directory was created: %v", err)
+	}
+}
+
 func TestRemoveProjectRejectsProjectLockedByAnotherProcess(t *testing.T) {
 	storage := newTestStorage(t)
 	project, err := storage.AddProject("locked")
@@ -397,6 +412,54 @@ func TestRemoveProjectRejectsProjectLockedByAnotherProcess(t *testing.T) {
 	var locked *ErrProjectLocked
 	if err := storage.RemoveProject(project.ID); !errors.As(err, &locked) {
 		t.Fatalf("locked project deletion error = %v, want ErrProjectLocked", err)
+	}
+}
+
+func TestRemoveProjectRejectsLiveReadOnlyViewer(t *testing.T) {
+	storage := newTestStorage(t)
+	project, err := storage.AddProject("viewed")
+	if err != nil {
+		t.Fatal(err)
+	}
+	viewer := &Storage{configDir: storage.configDir}
+	if err := viewer.lockProjectReader(project.ID); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(viewer.UnlockProject)
+
+	var locked *ErrProjectLocked
+	if err := storage.RemoveProject(project.ID); !errors.As(err, &locked) || locked.PID != os.Getpid() {
+		t.Fatalf("viewed project deletion error = %v, want current viewer PID", err)
+	}
+	if _, err := storage.GetProject(project.ID); err != nil {
+		t.Fatalf("viewed project disappeared after rejected deletion: %v", err)
+	}
+
+	viewer.UnlockProject()
+	if err := storage.RemoveProject(project.ID); err != nil {
+		t.Fatalf("project remained undeletable after viewer left: %v", err)
+	}
+}
+
+func TestProjectOpenFailsWhileDeletionClaimIsPublished(t *testing.T) {
+	storage := newTestStorage(t)
+	project, err := storage.AddProject("deleting")
+	if err != nil {
+		t.Fatal(err)
+	}
+	finish, err := storage.beginProjectDeletion(project.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer finish()
+
+	viewer := &Storage{configDir: storage.configDir}
+	var deleting *ErrProjectDeleting
+	if err := viewer.LockProjectForUse(project.ID); !errors.As(err, &deleting) || deleting.PID != os.Getpid() {
+		t.Fatalf("open during deletion error = %v, want ErrProjectDeleting", err)
+	}
+	if viewer.lockPath != "" || viewer.readLockPath != "" {
+		t.Fatalf("failed open retained project claims: exclusive=%q reader=%q", viewer.lockPath, viewer.readLockPath)
 	}
 }
 
@@ -460,6 +523,32 @@ func TestRemoveProjectRollsBackDataWhenCatalogSaveFails(t *testing.T) {
 	}
 	if _, err := storage.GetProject(project.ID); err != nil {
 		t.Fatalf("project disappeared from catalog after failed deletion: %v", err)
+	}
+}
+
+func TestProjectDeleteRollbackAttemptsEveryMovedEntry(t *testing.T) {
+	root := t.TempDir()
+	projectDir := filepath.Join(root, "project")
+	trashDir := filepath.Join(root, "trash")
+	wantFirst := errors.New("first rollback failure")
+	wantSecond := errors.New("second rollback failure")
+	var attempted []string
+	err := rollbackMovedProjectEntries(projectDir, trashDir, []string{"one", "two", "three"}, func(oldPath, newPath string) error {
+		attempted = append(attempted, filepath.Base(oldPath))
+		switch filepath.Base(oldPath) {
+		case "three":
+			return wantFirst
+		case "one":
+			return wantSecond
+		default:
+			return nil
+		}
+	})
+	if !errors.Is(err, wantFirst) || !errors.Is(err, wantSecond) {
+		t.Fatalf("rollback error = %v, want both failures", err)
+	}
+	if got := strings.Join(attempted, ","); got != "three,two,one" {
+		t.Fatalf("rollback attempts = %s, want three,two,one", got)
 	}
 }
 

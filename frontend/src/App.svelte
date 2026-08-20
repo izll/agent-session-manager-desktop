@@ -165,11 +165,21 @@
   let showColorDialog = false;
   let colorDialogSession: Session | null = null;
   let showDeleteConfirm = false;
+  let pendingDeleteTarget: { id: string; name: string; generation: number } | null = null;
+  let deleteRequestGeneration = 0;
   let showQuitConfirm = false;
   /** True from the moment quitting is confirmed until the window goes away. */
   let quitting = false;
   let showStopDialog = false;
   let showStartDialog = false;
+  type SessionDialogTarget = {
+    sessionId: string;
+    windowIdx: number;
+    name: string;
+    hasFollowedWindows: boolean;
+  };
+  let pendingStopTarget: SessionDialogTarget | null = null;
+  let pendingStartTarget: SessionDialogTarget | null = null;
   let showResumeChoice = false;
   let showResumeSessionPicker = false;
   let pendingResumeSession: Session | null = null;
@@ -438,10 +448,7 @@
    */
   let gitHistoryPath = '';
 
-  async function resolveGitHistoryPath(): Promise<string> {
-    const session = get(selectedSession);
-    if (!session) return '';
-    const windowIdx = get(selectedWindowIdx) ?? 0;
+  async function resolveGitHistoryPath(session: Session, windowIdx: number): Promise<string> {
     try {
       const live = await GetTabWorkingDirectory(session.id, windowIdx);
       if (live) return live;
@@ -453,9 +460,14 @@
   }
 
   async function handleShowGitHistory() {
+    const session = get(selectedSession);
+    if (!session) return;
+    const windowIdx = get(selectedWindowIdx) ?? 0;
     // Resolved before showing, so the dialog never opens against the previous
     // tab's repository and then swaps under the reader.
-    gitHistoryPath = await resolveGitHistoryPath();
+    const path = await resolveGitHistoryPath(session, windowIdx);
+    if ($selectedSessionId !== session.id || $selectedWindowIdx !== windowIdx) return;
+    gitHistoryPath = path;
     showGitHistory = true;
   }
 
@@ -857,10 +869,17 @@
   let pendingTasks: { title: string }[] = [];
 
   async function handleDelete() {
-    if (!$selectedSession) return;
+    const selected = $selectedSession;
+    if (!selected) return;
+    const generation = ++deleteRequestGeneration;
+    const target = { id: selected.id, name: selected.name, generation };
+    pendingDeleteTarget = target;
     try {
-      pendingTasks = await UnfinishedTasksForSession($selectedSession.id);
+      const tasks = await UnfinishedTasksForSession(target.id);
+      if (generation !== deleteRequestGeneration || $selectedSessionId !== target.id) return;
+      pendingTasks = tasks;
     } catch {
+      if (generation !== deleteRequestGeneration || $selectedSessionId !== target.id) return;
       // A session with no task store is the common case, not an error. Failing
       // to check must not block deletion.
       pendingTasks = [];
@@ -869,8 +888,21 @@
   }
 
   async function confirmDelete() {
-    if (!$selectedSession) return;
-    await deleteSession($selectedSession.id);
+    const target = pendingDeleteTarget;
+    if (!target || target.generation !== deleteRequestGeneration) return;
+    pendingDeleteTarget = null;
+    await deleteSession(target.id);
+  }
+
+  function cancelDelete() {
+    deleteRequestGeneration++;
+    pendingDeleteTarget = null;
+    pendingTasks = [];
+  }
+
+  $: if (pendingDeleteTarget && $selectedSessionId !== pendingDeleteTarget.id) {
+    cancelDelete();
+    showDeleteConfirm = false;
   }
 
   function handleQuit() {
@@ -904,20 +936,33 @@
 
   function handleStop() {
     if (!$selectedSession || $selectedSession.status !== 'running') return;
+    pendingStopTarget = {
+      sessionId: $selectedSession.id,
+      windowIdx: get(selectedWindowIdx),
+      name: $selectedSession.name,
+      hasFollowedWindows: ($selectedSession.followedWindows?.length || 0) > 0,
+    };
     showStopDialog = true;
   }
 
   async function handleStopSession() {
-    if (!$selectedSession) return;
+    const target = pendingStopTarget;
+    pendingStopTarget = null;
+    if (!target) return;
     // kill-session kills all tmux windows at once
-    await stopSession($selectedSession.id);
+    await stopSession(target.sessionId);
   }
 
   async function handleStopTab() {
-    if (!$selectedSession) return;
-    const windowIdx = get(selectedWindowIdx);
+    const target = pendingStopTarget;
+    pendingStopTarget = null;
+    if (!target) return;
     // StopTab kills the tmux window (or entire session for window 0)
-    await stopTab($selectedSession.id, windowIdx);
+    await stopTab(target.sessionId, target.windowIdx);
+  }
+
+  function cancelStop() {
+    pendingStopTarget = null;
   }
 
   function handleStart() {
@@ -936,6 +981,12 @@
     }
     // No resume support, start directly
     if ($selectedSession.followedWindows && $selectedSession.followedWindows.length > 0) {
+      pendingStartTarget = {
+        sessionId: $selectedSession.id,
+        windowIdx: get(selectedWindowIdx),
+        name: $selectedSession.name,
+        hasFollowedWindows: true,
+      };
       showStartDialog = true;
     } else {
       startSession($selectedSession.id);
@@ -943,22 +994,41 @@
   }
 
   async function handleStartSession() {
-    if (!$selectedSession) return;
+    const target = pendingStartTarget;
+    pendingStartTarget = null;
+    if (!target) return;
     // Start the main session (which will restore all followed windows)
-    await startSession($selectedSession.id);
+    await startSession(target.sessionId);
   }
 
   async function handleStartTab() {
-    if (!$selectedSession) return;
-    const windowIdx = get(selectedWindowIdx);
-    await restartTab($selectedSession.id, windowIdx);
+    const target = pendingStartTarget;
+    pendingStartTarget = null;
+    if (!target) return;
+    await restartTab(target.sessionId, target.windowIdx);
+  }
+
+  function cancelStart() {
+    pendingStartTarget = null;
+  }
+
+  $: if (pendingStopTarget &&
+    ($selectedSessionId !== pendingStopTarget.sessionId || $selectedWindowIdx !== pendingStopTarget.windowIdx)) {
+    showStopDialog = false;
+    cancelStop();
+  }
+  $: if (pendingStartTarget &&
+    ($selectedSessionId !== pendingStartTarget.sessionId || $selectedWindowIdx !== pendingStartTarget.windowIdx)) {
+    showStartDialog = false;
+    cancelStart();
   }
 
   async function handleResume() {
-    if (!$selectedSession) return;
-    pendingResumeSession = $selectedSession;
+    const session = $selectedSession;
+    if (!session) return;
+    pendingResumeSession = session;
     // Check if this is a tab-level resume (session running but tab stopped)
-    if ($selectedSession.status === 'running') {
+    if (session.status === 'running') {
       const winIdx = get(selectedWindowIdx);
       pendingResumeWindowIdx = winIdx;
       // Pick the agent of the tab being resumed, not the parent session.
@@ -966,22 +1036,33 @@
       // conversations in the picker.
       let agent: string | null = null;
       if (winIdx === 0) {
-        agent = $selectedSession.agent;
-      } else if ($selectedSession.followedWindows) {
-        const fw = $selectedSession.followedWindows.find((f: any) => f.index === winIdx);
+        agent = session.agent;
+      } else if (session.followedWindows) {
+        const fw = session.followedWindows.find((f: any) => f.index === winIdx);
         if (fw?.agent) agent = fw.agent;
       }
       pendingResumeAgent = agent;
       // The tab's directory too: agents index their conversations by working
       // directory, so a tab opened elsewhere would otherwise be offered the
       // session directory's history.
-      pendingResumePath = await resolveGitHistoryPath();
+      const path = await resolveGitHistoryPath(session, winIdx);
+      if (pendingResumeSession?.id !== session.id || pendingResumeWindowIdx !== winIdx ||
+          $selectedSessionId !== session.id || $selectedWindowIdx !== winIdx) return;
+      pendingResumePath = path;
     } else {
       pendingResumeWindowIdx = null;
       pendingResumeAgent = null;
       pendingResumePath = null;
     }
     showResumeSessionPicker = true;
+  }
+
+  $: if (pendingResumeSession &&
+    ($selectedSessionId !== pendingResumeSession.id ||
+      (pendingResumeWindowIdx !== null && $selectedWindowIdx !== pendingResumeWindowIdx))) {
+    showResumeChoice = false;
+    showResumeSessionPicker = false;
+    handleResumeCancel();
   }
 
   // Resume choice handlers
@@ -1394,15 +1475,16 @@
     bind:show={showDeleteConfirm}
     title={$t('confirm.deleteSession')}
     message={pendingTasks.length
-      ? $t('confirm.deleteSessionMessage', { name: $selectedSession?.name || '' }) + '\n\n' +
+      ? $t('confirm.deleteSessionMessage', { name: pendingDeleteTarget?.name || '' }) + '\n\n' +
         $t('confirm.deleteSessionTasks', { count: String(pendingTasks.length) }) + '\n' +
         pendingTasks.slice(0, 5).map((task) => '• ' + task.title).join('\n') +
         (pendingTasks.length > 5 ? '\n…' : '')
-      : $t('confirm.deleteSessionMessage', { name: $selectedSession?.name || '' })}
+      : $t('confirm.deleteSessionMessage', { name: pendingDeleteTarget?.name || '' })}
     confirmText={$t('confirm.deleteConfirm')}
     cancelText={$t('common.cancel')}
     variant="danger"
     on:confirm={confirmDelete}
+    on:cancel={cancelDelete}
   />
   <ConfirmDialog
     bind:show={showQuitConfirm}
@@ -1521,17 +1603,19 @@
   />
   <StopDialog
     bind:show={showStopDialog}
-    sessionName={$selectedSession?.name || ''}
-    hasFollowedWindows={($selectedSession?.followedWindows?.length || 0) > 0}
+    sessionName={pendingStopTarget?.name || ''}
+    hasFollowedWindows={pendingStopTarget?.hasFollowedWindows || false}
     on:stopSession={handleStopSession}
     on:stopTab={handleStopTab}
+    on:cancel={cancelStop}
   />
   <StartDialog
     bind:show={showStartDialog}
-    sessionName={$selectedSession?.name || ''}
-    hasFollowedWindows={($selectedSession?.followedWindows?.length || 0) > 0}
+    sessionName={pendingStartTarget?.name || ''}
+    hasFollowedWindows={pendingStartTarget?.hasFollowedWindows || false}
     on:startSession={handleStartSession}
     on:startTab={handleStartTab}
+    on:cancel={cancelStart}
   />
   <ResumeChoiceDialog
     bind:show={showResumeChoice}

@@ -9,6 +9,10 @@ const tasks = read('lib/stores/tasks.ts');
 const taskPanel = read('lib/components/MainPanel/TaskPanel.svelte');
 const undo = read('lib/stores/undo.ts');
 const undoToast = read('lib/components/common/UndoToast.svelte');
+const app = read('App.svelte');
+const tabBar = read('lib/components/MainPanel/TabBar.svelte');
+const newTabDialog = read('lib/components/Dialogs/NewTabDialog.svelte');
+const quickTerminalDialog = read('lib/components/Dialogs/QuickTerminalDialog.svelte');
 
 // A target reset must be held behind the same unsaved-change guard as a file
 // click. resetForSession itself must not erase the action that shows the prompt.
@@ -59,6 +63,9 @@ assert.match(notes, /if \(loadingNotes \|\| loadError\) return;[\s\S]*?recordHis
 assert.match(notes, /const draftsByTarget = new Map/);
 assert.match(notes, /latestDraft\.saveError \|\| latestDraft\.text !== latestDraft\.saved/,
   'a failed or dirty per-target draft must win over a stale backend read');
+assert.match(notes, /registerUnsavedGuard\(\{[\s\S]*?isDirty: hasUnsavedDrafts/,
+  'failed drafts hidden on another tab must participate in the global destructive-action guard');
+assert.match(notes, /\[\.\.\.draftsByTarget\.values\(\)\]\.some/);
 
 // Once MCP loading falls back, mutations use the provider that actually
 // produced the visible list. Late mutations cannot edit another session's
@@ -132,6 +139,45 @@ assert.match(tasks, /await App\.TaskMasterInit\(sessionId\);[\s\S]*?if \(isActiv
 assert.match(diff, /type DiffTarget = \{[\s\S]*?root: string/);
 assert.match(diff, /App\.RevertDiffFile\([\s\S]*?target\.root/);
 assert.match(diff, /const key = `\$\{currentDiffKey\}:\$\{loadedRoot\}:\$\{wholeFileView/);
+assert.match(diff, /target\.root === loadedRoot && loadedDiffKey === currentDiffKey/,
+  'revert identity must include the canonical tree that produced the displayed diff');
+const confirmRevert = diff.match(/async function confirmRevert\(\)[\s\S]*?\n  \}/)?.[0] ?? '';
+assert.match(confirmRevert, /await action\.run\(\);[\s\S]*?!isCurrentTarget\(action\.target\)/,
+  'a completed revert must not refresh or reposition a replacement diff target');
+
+// Confirmation dialogs must hold the exact session/tab they described. The
+// selection is allowed to change while the modal or a prerequisite await is
+// open, so reading the live store in the confirm handler is destructive.
+assert.match(app, /let pendingDeleteTarget:/);
+assert.match(app, /await deleteSession\(target\.id\)/);
+assert.match(app, /let pendingStopTarget: SessionDialogTarget/);
+assert.match(app, /await stopSession\(target\.sessionId\)/);
+assert.match(app, /await stopTab\(target\.sessionId, target\.windowIdx\)/);
+assert.match(app, /let pendingStartTarget: SessionDialogTarget/);
+assert.match(app, /await startSession\(target\.sessionId\)/);
+assert.match(app, /await restartTab\(target\.sessionId, target\.windowIdx\)/);
+assert.match(app, /resolveGitHistoryPath\(session: Session, windowIdx: number\)/);
+assert.match(app, /const path = await resolveGitHistoryPath\(session, winIdx\);[\s\S]*?pendingResumeSession\?\.id !== session\.id/,
+  'a delayed history-path lookup must not reopen the resume picker for the previous tab');
+assert.match(app, /pendingResumeSession &&[\s\S]*?showResumeSessionPicker = false;[\s\S]*?handleResumeCancel\(\)/,
+  'resume dialogs must close when their captured session/tab is no longer selected');
+assert.match(tabBar, /let deleteSessionTarget:/);
+assert.match(tabBar, /await deleteSession\(target\.sessionId\)/);
+assert.match(tabBar, /let deleteTabTarget:/);
+assert.match(tabBar, /await deleteTab\(target\.sessionId, target\.windowIdx\)/);
+assert.match(tabBar, /let extraArgsTarget:/);
+assert.match(tabBar, /App\.SetExtraArgs\(target\.sessionId, target\.windowIdx/);
+assert.match(tabBar, /let renameTarget:/);
+assert.match(tabBar, /await renameTab\(target\.sessionId, target\.windowIdx/);
+assert.match(tabBar, /let tabColorSessionId = ''/);
+assert.match(tabBar, /sessionId=\{tabColorSessionId\}/,
+  'the tab color dialog must not receive the live selected session beside an old tab snapshot');
+assert.match(tabBar, /sessionId=\{newTabSessionId\}/);
+assert.match(tabBar, /sessionId=\{quickTerminalSessionId\}/);
+assert.match(newTabDialog, /App\.CreateTab\(targetSessionId/);
+assert.match(newTabDialog, /get\(selectedSessionId\) === targetSessionId/);
+assert.match(quickTerminalDialog, /App\.CreateTab\(targetSessionId/);
+assert.match(quickTerminalDialog, /get\(selectedSessionId\) === targetSessionId/);
 
 const statusColumn = taskPanel.match(/\.meta-column\.status-badge \{[\s\S]*?\n  \}/)?.[0] ?? '';
 assert.match(statusColumn, /white-space: nowrap/);

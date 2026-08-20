@@ -258,6 +258,8 @@
   "notes.title": "Session Notes",
   "notes.saving": "Saving...",
   "notes.unsaved": "Unsaved",
+  "notes.unsavedQuitTitle": "Unsaved session notes",
+  "notes.unsavedQuitMessage": "Some session notes could not be saved. If you continue, those drafts will be lost.",
   "notes.placeholder": "Add notes for this session tab...",
   "notes.findPlaceholder": "Find in note…",
   "notes.noMatches": "none",

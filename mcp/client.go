@@ -271,11 +271,9 @@ func (c *Client) readResponses(runID uint64, scanner *bufio.Scanner) {
 			trimmed = trimmed[1:]
 		}
 		if len(trimmed) == 0 || trimmed[0] != '{' {
-			fmt.Printf("MCP stdout (non-JSON): %s\n", line)
+			fmt.Printf("MCP stdout: non-JSON message (%d bytes)\n", len(line))
 			continue
 		}
-
-		fmt.Printf("MCP <<< received: %s\n", line)
 
 		var msg JSONRPCMessage
 		if err := json.Unmarshal([]byte(line), &msg); err != nil {
@@ -297,6 +295,7 @@ func (c *Client) readResponses(runID uint64, scanner *bufio.Scanner) {
 
 		// Otherwise it's a response to our request
 		if msg.ID != nil {
+			fmt.Printf("MCP <<< response id=%d (%d bytes)\n", *msg.ID, len(line))
 			response := &JSONRPCResponse{
 				JSONRPC: msg.JSONRPC,
 				ID:      *msg.ID,
@@ -412,7 +411,7 @@ func (c *Client) sendSuccessResponse(runID uint64, id int64, result interface{})
 		return
 	}
 
-	fmt.Printf("MCP >>> responding: %s\n", data)
+	fmt.Printf("MCP >>> response id=%d (%d bytes)\n", id, len(data))
 	if err := c.writeForRun(runID, data); err != nil {
 		c.failRun(runID, fmt.Errorf("failed to write MCP response: %w", err))
 	}
@@ -435,7 +434,7 @@ func (c *Client) sendErrorResponse(runID uint64, id int64, code int, message str
 		return
 	}
 
-	fmt.Printf("MCP >>> responding error: %s\n", data)
+	fmt.Printf("MCP >>> error response id=%d code=%d (%d bytes)\n", id, code, len(data))
 	if err := c.writeForRun(runID, data); err != nil {
 		c.failRun(runID, fmt.Errorf("failed to write MCP error response: %w", err))
 	}
@@ -468,7 +467,7 @@ func (c *Client) readStderr(runID uint64, stderr io.Reader, serverReady chan str
 	serverReadySignaled := false
 	for scanner.Scan() {
 		line := scanner.Text()
-		fmt.Printf("MCP stderr: %s\n", line)
+		fmt.Printf("MCP stderr message (%d bytes)\n", len(line))
 
 		// Signal when server is ready (look for "Registered X tools successfully")
 		if !serverReadySignaled && (strings.Contains(line, "tools successfully") || strings.Contains(line, "Registered") && strings.Contains(line, "tools")) {
@@ -525,7 +524,7 @@ func (c *Client) sendRequestWithTimeout(method string, params interface{}, timeo
 	}()
 
 	// Send request
-	fmt.Printf("MCP >>> sending request: %s\n", string(data))
+	fmt.Printf("MCP >>> request method=%s id=%d (%d bytes)\n", method, id, len(data))
 	err = c.writeForRun(runID, data)
 	if err != nil {
 		c.failRun(runID, fmt.Errorf("failed to write MCP request: %w", err))
@@ -572,7 +571,7 @@ func (c *Client) initialize() error {
 		Method:  "notifications/initialized",
 	}
 	data, _ := json.Marshal(notif)
-	fmt.Printf("MCP >>> sending notification: %s\n", data)
+	fmt.Printf("MCP >>> notification method=%s (%d bytes)\n", notif.Method, len(data))
 	c.stateMu.Lock()
 	runID := c.runID
 	c.stateMu.Unlock()

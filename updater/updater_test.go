@@ -6,12 +6,14 @@ import (
 	"compress/gzip"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strings"
 	"testing"
@@ -71,8 +73,64 @@ func TestCheckForUpdateUsesSemanticVersioning(t *testing.T) {
 	checkClient = server.Client()
 	defer func() { apiBaseURL, checkClient = oldBase, oldClient }()
 
-	if got := CheckForUpdate("0.9.0"); got != "v0.10.0" {
+	got, err := CheckForUpdate("0.9.0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "v0.10.0" {
 		t.Fatalf("CheckForUpdate returned %q", got)
+	}
+}
+
+func TestRefreshAvailableUpdatePreservesStateOnHTTPFailure(t *testing.T) {
+	withTempHome(t)
+	SaveAvailableUpdate("v2.0.0")
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "temporary outage", http.StatusServiceUnavailable)
+	}))
+	defer server.Close()
+
+	oldBase, oldClient := apiBaseURL, checkClient
+	apiBaseURL = server.URL
+	checkClient = server.Client()
+	defer func() { apiBaseURL, checkClient = oldBase, oldClient }()
+
+	if _, err := RefreshAvailableUpdate("1.0.0"); err == nil {
+		t.Fatal("RefreshAvailableUpdate unexpectedly accepted an HTTP failure")
+	}
+	if got := CachedAvailableUpdate("1.0.0"); got != "v2.0.0" {
+		t.Fatalf("cached update was changed to %q after a failed check", got)
+	}
+	if !ShouldCheckForUpdate() {
+		t.Fatal("failed check wrote a throttle timestamp and suppressed an immediate retry")
+	}
+}
+
+func TestRefreshAvailableUpdatePersistsSuccessfulNoUpdate(t *testing.T) {
+	withTempHome(t)
+	SaveAvailableUpdate("v2.0.0")
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"tag_name":"v1.0.0"}`))
+	}))
+	defer server.Close()
+
+	oldBase, oldClient := apiBaseURL, checkClient
+	apiBaseURL = server.URL
+	checkClient = server.Client()
+	defer func() { apiBaseURL, checkClient = oldBase, oldClient }()
+
+	got, err := RefreshAvailableUpdate("1.0.0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "" || CachedAvailableUpdate("1.0.0") != "" {
+		t.Fatalf("successful no-update check left stale result %q", CachedAvailableUpdate("1.0.0"))
+	}
+	if ShouldCheckForUpdate() {
+		t.Fatal("successful check did not write the throttle timestamp")
 	}
 }
 
@@ -160,6 +218,90 @@ func TestExtractExecutableForEveryReleaseLayout(t *testing.T) {
 				t.Fatalf("extracted %q", got)
 			}
 		})
+	}
+}
+
+func TestVerifyStagedBundleRequiresSignatureAndGatekeeperAssessment(t *testing.T) {
+	bundle := "/tmp/Agent Session Manager.app"
+	teamID := "ABCDE12345"
+	var calls [][]string
+	err := verifyStagedBundleWith(bundle, teamID, func(name string, args ...string) ([]byte, error) {
+		calls = append(calls, append([]string{name}, args...))
+		if len(args) > 0 && args[0] == "-dv" {
+			return []byte("Executable=/staged\nTeamIdentifier=" + teamID + "\n"), nil
+		}
+		return nil, nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := [][]string{
+		{"/usr/bin/codesign", "--verify", "--deep", "--strict", bundle},
+		{"/usr/bin/codesign", "-dv", "--verbose=4", bundle},
+		{"/usr/sbin/spctl", "--assess", "--type", "execute", bundle},
+	}
+	if !reflect.DeepEqual(calls, want) {
+		t.Fatalf("verification calls = %#v, want %#v", calls, want)
+	}
+}
+
+func TestVerifyStagedBundleFailsClosed(t *testing.T) {
+	for _, failAt := range []int{0, 1, 2} {
+		t.Run(fmt.Sprintf("check-%d", failAt), func(t *testing.T) {
+			calls := 0
+			err := verifyStagedBundleWith("staged.app", "ABCDE12345", func(_ string, args ...string) ([]byte, error) {
+				current := calls
+				calls++
+				if current == failAt {
+					return []byte("rejected staged bundle"), errors.New("exit status 1")
+				}
+				if len(args) > 0 && args[0] == "-dv" {
+					return []byte("TeamIdentifier=ABCDE12345\n"), nil
+				}
+				return nil, nil
+			})
+			if err == nil || !strings.Contains(err.Error(), "rejected staged bundle") {
+				t.Fatalf("verification error = %v", err)
+			}
+			if calls != failAt+1 {
+				t.Fatalf("verification continued after failure: %d calls", calls)
+			}
+		})
+	}
+}
+
+func TestVerifyStagedBundlePinsPublisherIdentity(t *testing.T) {
+	run := func(_ string, args ...string) ([]byte, error) {
+		if len(args) > 0 && args[0] == "-dv" {
+			return []byte("Authority=Developer ID Application\nTeamIdentifier=OTHER12345\n"), nil
+		}
+		return nil, nil
+	}
+	if err := verifyStagedBundleWith("staged.app", "ABCDE12345", run); err == nil ||
+		!strings.Contains(err.Error(), "publisher mismatch") {
+		t.Fatalf("publisher mismatch error = %v", err)
+	}
+	if err := verifyStagedBundleWith("staged.app", "", run); err == nil ||
+		!strings.Contains(err.Error(), "not configured") {
+		t.Fatalf("missing publisher configuration error = %v", err)
+	}
+}
+
+func TestValidateBundleDirectoryRejectsTopLevelSymlink(t *testing.T) {
+	root := t.TempDir()
+	realBundle := filepath.Join(root, "Real.app")
+	if err := os.Mkdir(realBundle, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := validateBundleDirectory(realBundle); err != nil {
+		t.Fatalf("real bundle directory rejected: %v", err)
+	}
+	linkedBundle := filepath.Join(root, "Agent Session Manager.app")
+	if err := os.Symlink(filepath.Base(realBundle), linkedBundle); err != nil {
+		t.Skipf("symlinks are unavailable on this platform: %v", err)
+	}
+	if err := validateBundleDirectory(linkedBundle); err == nil {
+		t.Fatal("top-level bundle symlink was accepted")
 	}
 }
 

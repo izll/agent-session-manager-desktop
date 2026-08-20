@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -76,6 +77,57 @@ func TestProjectMutationsAreSerialized(t *testing.T) {
 		release()
 	case <-time.After(time.Second):
 		t.Fatal("second project mutation did not proceed after release")
+	}
+}
+
+func TestSelectProjectRejectsUnknownIDAndRestoresPreviousOwnership(t *testing.T) {
+	storage := guardedTestStorage(t)
+	if err := storage.LockProject(""); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(storage.UnlockProject)
+	app := &App{storage: storage, projectLocked: true}
+
+	if err := app.SelectProject("proj_unknown"); err == nil || !strings.Contains(err.Error(), "not found") {
+		t.Fatalf("unknown project switch error = %v, want not found", err)
+	}
+	if got := storage.GetActiveProjectID(); got != "" {
+		t.Fatalf("active project after rollback = %q, want default", got)
+	}
+	if !app.projectLocked {
+		t.Fatal("failed switch did not reacquire previous project ownership")
+	}
+}
+
+func TestSelectProjectRollsBackWhenTargetDeletionHasStarted(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	storage, err := session.NewStorage()
+	if err != nil {
+		t.Fatal(err)
+	}
+	project, err := storage.AddProject("deleting")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := storage.LockProjectForUse(""); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(storage.UnlockProject)
+	deletionMarker := filepath.Join(home, ".config", "agent-session-manager-desktop", "project-locks", project.ID+".lock.deleting")
+	if err := os.MkdirAll(filepath.Dir(deletionMarker), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(deletionMarker, []byte(fmt.Sprint(os.Getpid())), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	app := &App{storage: storage, projectLocked: true}
+	if err := app.SelectProject(project.ID); err == nil || !strings.Contains(err.Error(), "being deleted") {
+		t.Fatalf("switch during deletion error = %v", err)
+	}
+	if got := storage.GetActiveProjectID(); got != "" || !app.projectLocked {
+		t.Fatalf("failed switch did not restore default ownership: project=%q locked=%v", got, app.projectLocked)
 	}
 }
 
