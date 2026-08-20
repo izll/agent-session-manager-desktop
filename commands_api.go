@@ -73,11 +73,6 @@ func (a *App) GetCommands() (*CommandLibraryInfo, error) {
 
 // SaveCommand adds or updates one command. An empty ID creates a new entry.
 func (a *App) SaveCommand(id, name, command, description, groupID string, sendEnter bool) (string, error) {
-	lib, err := a.storage.LoadCommands()
-	if err != nil {
-		return "", err
-	}
-
 	entry := session.SavedCommand{
 		ID:          id,
 		Name:        strings.TrimSpace(name),
@@ -90,29 +85,26 @@ func (a *App) SaveCommand(id, name, command, description, groupID string, sendEn
 		return "", err
 	}
 
-	if id == "" {
-		entry.ID = fmt.Sprintf("cmd_%d", time.Now().UnixNano())
-		entry.CreatedAt = time.Now()
-		lib.Commands = append(lib.Commands, entry)
-	} else {
-		found := false
+	err := a.storage.UpdateCommands(func(lib *session.CommandLibrary) error {
+		if id == "" {
+			entry.ID = fmt.Sprintf("cmd_%d", time.Now().UnixNano())
+			entry.CreatedAt = time.Now()
+			lib.Commands = append(lib.Commands, entry)
+			return nil
+		}
 		for i := range lib.Commands {
-			if lib.Commands[i].ID != id {
-				continue
+			if lib.Commands[i].ID == id {
+				// Usage statistics belong to the command, not to this edit.
+				entry.CreatedAt = lib.Commands[i].CreatedAt
+				entry.UsedAt = lib.Commands[i].UsedAt
+				entry.UseCount = lib.Commands[i].UseCount
+				lib.Commands[i] = entry
+				return nil
 			}
-			// Usage statistics belong to the command, not to this edit.
-			entry.CreatedAt = lib.Commands[i].CreatedAt
-			entry.UsedAt = lib.Commands[i].UsedAt
-			entry.UseCount = lib.Commands[i].UseCount
-			lib.Commands[i] = entry
-			found = true
-			break
 		}
-		if !found {
-			return "", fmt.Errorf("no such command")
-		}
-	}
-	if err := a.storage.SaveCommands(lib); err != nil {
+		return fmt.Errorf("no such command")
+	})
+	if err != nil {
 		return "", err
 	}
 	return entry.ID, nil
@@ -120,93 +112,90 @@ func (a *App) SaveCommand(id, name, command, description, groupID string, sendEn
 
 // DeleteCommand removes one command.
 func (a *App) DeleteCommand(id string) error {
-	lib, err := a.storage.LoadCommands()
-	if err != nil {
-		return err
-	}
-	out := lib.Commands[:0]
-	removed := false
-	for _, c := range lib.Commands {
-		if c.ID == id {
-			removed = true
-			continue
+	return a.storage.UpdateCommands(func(lib *session.CommandLibrary) error {
+		out := lib.Commands[:0]
+		removed := false
+		for _, c := range lib.Commands {
+			if c.ID == id {
+				removed = true
+				continue
+			}
+			out = append(out, c)
 		}
-		out = append(out, c)
-	}
-	if !removed {
-		return fmt.Errorf("no such command")
-	}
-	lib.Commands = out
-	return a.storage.SaveCommands(lib)
+		if !removed {
+			return fmt.Errorf("no such command")
+		}
+		lib.Commands = out
+		return nil
+	})
 }
 
 // SaveCommandGroup adds or renames a group. An empty ID creates one.
 func (a *App) SaveCommandGroup(id, name string) (string, error) {
-	lib, err := a.storage.LoadCommands()
-	if err != nil {
-		return "", err
-	}
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return "", fmt.Errorf("the group needs a name")
 	}
-	if id == "" {
-		g := session.CommandGroup{
-			ID:    fmt.Sprintf("cgrp_%d", time.Now().UnixNano()),
-			Name:  name,
-			Order: len(lib.Groups),
+	resultID := id
+	err := a.storage.UpdateCommands(func(lib *session.CommandLibrary) error {
+		if id == "" {
+			g := session.CommandGroup{
+				ID:    fmt.Sprintf("cgrp_%d", time.Now().UnixNano()),
+				Name:  name,
+				Order: len(lib.Groups),
+			}
+			resultID = g.ID
+			lib.Groups = append(lib.Groups, g)
+			return nil
 		}
-		lib.Groups = append(lib.Groups, g)
-		if err := a.storage.SaveCommands(lib); err != nil {
-			return "", err
+		for i := range lib.Groups {
+			if lib.Groups[i].ID == id {
+				lib.Groups[i].Name = name
+				return nil
+			}
 		}
-		return g.ID, nil
+		return fmt.Errorf("no such group")
+	})
+	if err != nil {
+		return "", err
 	}
-	for i := range lib.Groups {
-		if lib.Groups[i].ID == id {
-			lib.Groups[i].Name = name
-			return id, a.storage.SaveCommands(lib)
-		}
-	}
-	return "", fmt.Errorf("no such group")
+	return resultID, nil
 }
 
 // DeleteCommandGroup removes a group. Its commands are kept and become
 // ungrouped — deleting a folder should not delete what is in it.
 func (a *App) DeleteCommandGroup(id string) error {
-	lib, err := a.storage.LoadCommands()
-	if err != nil {
-		return err
-	}
-	out := lib.Groups[:0]
-	removed := false
-	for _, g := range lib.Groups {
-		if g.ID == id {
-			removed = true
-			continue
+	return a.storage.UpdateCommands(func(lib *session.CommandLibrary) error {
+		out := lib.Groups[:0]
+		removed := false
+		for _, g := range lib.Groups {
+			if g.ID == id {
+				removed = true
+				continue
+			}
+			out = append(out, g)
 		}
-		out = append(out, g)
-	}
-	if !removed {
-		return fmt.Errorf("no such group")
-	}
-	lib.Groups = out
-	for i := range lib.Commands {
-		if lib.Commands[i].GroupID == id {
-			lib.Commands[i].GroupID = ""
+		if !removed {
+			return fmt.Errorf("no such group")
 		}
-	}
-	return a.storage.SaveCommands(lib)
+		lib.Groups = out
+		for i := range lib.Commands {
+			if lib.Commands[i].GroupID == id {
+				lib.Commands[i].GroupID = ""
+			}
+		}
+		return nil
+	})
 }
 
 // RunCommand types a saved command into a session window, substituting the
 // given placeholder values, and records that it was used.
 func (a *App) RunCommand(id, sessionID string, windowIdx int, values map[string]string) error {
-	a.projectMu.RLock()
-	defer a.projectMu.RUnlock()
-	if !a.projectLocked {
-		return fmt.Errorf("project is read-only in this application instance")
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return err
 	}
+	defer done()
 
 	lib, err := a.storage.LoadCommands()
 	if err != nil {
@@ -238,11 +227,18 @@ func (a *App) RunCommand(id, sessionID string, windowIdx int, values map[string]
 		return err
 	}
 
-	found.UsedAt = time.Now()
-	found.UseCount++
 	// A failed statistics write must not look like a failed command: the
 	// command already ran.
-	if serr := a.storage.SaveCommands(lib); serr != nil {
+	if serr := a.storage.UpdateCommands(func(latest *session.CommandLibrary) error {
+		for i := range latest.Commands {
+			if latest.Commands[i].ID == id {
+				latest.Commands[i].UsedAt = time.Now()
+				latest.Commands[i].UseCount++
+				return nil
+			}
+		}
+		return fmt.Errorf("no such command")
+	}); serr != nil {
 		log.Printf("[commands] could not record usage of %s: %v", id, serr)
 	}
 	return nil

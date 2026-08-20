@@ -27,8 +27,11 @@
     checkTaskMasterStatus,
     initializeTaskMaster,
     parsePRD,
+    prepareTasksSession,
     addTask,
     addManualTask,
+    restoreDeletedTask,
+    restoreDeletedSubtask,
     updateTask,
     updateTaskDirect,
     removeTask,
@@ -282,6 +285,7 @@
     if (!force && sessionId === lastSessionId) return;
     const generation = ++taskPanelLoadGeneration;
     lastSessionId = sessionId;
+    prepareTasksSession(sessionId);
 
     // Only ask about Task Master when it is switched on. The check runs it, and
     // running it is what triggers the npx install the opt-in exists to prevent
@@ -445,23 +449,15 @@
     const sessionId = get(selectedSessionId);
     if (!sessionId || !deleteTaskId) return;
 
-    // Undo re-creates the task rather than restoring it, so it comes back with
-    // a new id. Its subtasks and dependencies do not survive that — anything
-    // pointing at the old id would point at nothing. The offer says only that
-    // the task can be brought back, which is what actually happens.
+    // Capture the complete snapshot and the provider used for deletion. Undo
+    // restores the original ID and must not follow a later provider toggle.
     const removed = $tasks.find((task) => task.id === deleteTaskId);
 
-    await removeTask(sessionId, deleteTaskId);
+    const provider = await removeTask(sessionId, deleteTaskId);
     if (removed) {
       offerUndo({
         message: $t('undo.taskDeleted', { title: removed.title }),
-        undo: () => addManualTask(
-          sessionId,
-          removed.title,
-          removed.description || '',
-          removed.details || '',
-          removed.priority || 'medium',
-        ),
+        undo: () => restoreDeletedTask(sessionId, removed, provider),
       });
     }
     deleteTaskId = '';
@@ -477,13 +473,13 @@
     // there is nothing left to go back to.
     const previous = $tasks.find((task) => task.id === taskId)?.status;
 
-    await setTaskStatus(sessionId, taskId, newStatus);
+    const provider = await setTaskStatus(sessionId, taskId, newStatus);
     contextMenuTask = null;
 
     if (previous && previous !== newStatus) {
       offerUndo({
         message: $t('undo.taskStatus', { status: statusLabels[newStatus] || newStatus }),
-        undo: () => setTaskStatus(sessionId, taskId, previous as TaskStatus),
+        undo: () => setTaskStatus(sessionId, taskId, previous as TaskStatus, provider).then(() => undefined),
       });
     }
   }
@@ -639,10 +635,10 @@
 
     const newStatus = currentlyDone ? 'pending' : 'done';
     try {
-      await setSubtaskStatus(sessionId, subtaskId, newStatus as TaskStatus);
+      const provider = await setSubtaskStatus(sessionId, subtaskId, newStatus as TaskStatus);
       offerUndo({
         message: currentlyDone ? $t('undo.subtaskUnchecked') : $t('undo.subtaskChecked'),
-        undo: () => setSubtaskStatus(sessionId, subtaskId, (currentlyDone ? 'done' : 'pending') as TaskStatus),
+        undo: () => setSubtaskStatus(sessionId, subtaskId, (currentlyDone ? 'done' : 'pending') as TaskStatus, provider).then(() => undefined),
       });
     } catch (e) {
       console.error('Failed to toggle subtask status:', e);
@@ -659,9 +655,8 @@
     const sessionId = get(selectedSessionId);
     if (!sessionId || !removeSubtaskId) return;
 
-    // Kept before the delete, so undo has something to put back. A restored
-    // subtask gets a fresh id — nothing references subtask ids, so that is
-    // invisible here, unlike with tasks.
+    // Kept before the delete so Undo can restore the exact provider snapshot,
+    // including identity, completion state and implementation details.
     const parentId = parentTaskId(removeSubtaskId);
     const childId = String(removeSubtaskId).slice(parentId.length + 1);
     const removed = $tasks
@@ -669,11 +664,11 @@
       ?.find((sub) => String(sub.id) === childId);
 
     try {
-      await removeSubtask(sessionId, removeSubtaskId);
+      const provider = await removeSubtask(sessionId, removeSubtaskId);
       if (removed) {
         offerUndo({
           message: $t('undo.subtaskDeleted', { title: removed.title }),
-          undo: () => addSubtask(sessionId, parentId, removed.title),
+          undo: () => restoreDeletedSubtask(sessionId, parentId, removed, provider),
         });
       }
     } catch (e) {
@@ -740,10 +735,10 @@
     if (!sessionId) return;
 
     try {
-      await removeDependency(sessionId, taskId, depId);
+      const provider = await removeDependency(sessionId, taskId, depId);
       offerUndo({
         message: $t('undo.dependencyRemoved'),
-        undo: () => addDependency(sessionId, taskId, depId),
+        undo: () => addDependency(sessionId, taskId, depId, provider).then(() => undefined),
       });
     } catch (e) {
       console.error('Failed to remove dependency:', e);
@@ -1146,25 +1141,26 @@
 
 <!-- Context Menu -->
 {#if contextMenuTask}
+  {@const menuTask = contextMenuTask}
   <div
     class="context-menu"
     style="left: {contextMenuX}px; top: {contextMenuY}px"
     on:click|stopPropagation
   >
-    <button on:click={() => handleSendToAgent(contextMenuTask.id)}>{$t('tasks.sendToAgent')}</button>
-    <button on:click={() => openEditTaskModal(contextMenuTask)}>{$t('tasks.editTaskMenu')}</button>
+    <button on:click={() => handleSendToAgent(menuTask.id)}>{$t('tasks.sendToAgent')}</button>
+    <button on:click={() => openEditTaskModal(menuTask)}>{$t('tasks.editTaskMenu')}</button>
     {#if $settings.taskMasterEnabled}
-      <button on:click={() => handleExpandTask(contextMenuTask.id)}>{$t('tasks.expandTask')}</button>
+      <button on:click={() => handleExpandTask(menuTask.id)}>{$t('tasks.expandTask')}</button>
     {/if}
-    <button on:click={() => openAddSubtaskModal(contextMenuTask.id)}>{$t('tasks.addSubtaskMenu')}</button>
-    <button on:click={() => openDependencyModal(contextMenuTask.id)}>{$t('tasks.manageDependencies')}</button>
+    <button on:click={() => openAddSubtaskModal(menuTask.id)}>{$t('tasks.addSubtaskMenu')}</button>
+    <button on:click={() => openDependencyModal(menuTask.id)}>{$t('tasks.manageDependencies')}</button>
     <div class="menu-divider"></div>
-    <button on:click={() => handleMoveTask(contextMenuTask.id, 'pending')}>{$t('tasks.setPending')}</button>
-    <button on:click={() => handleMoveTask(contextMenuTask.id, 'in-progress')}>{$t('tasks.setInProgress')}</button>
-    <button on:click={() => handleMoveTask(contextMenuTask.id, 'done')}>{$t('tasks.setDone')}</button>
-    <button on:click={() => handleMoveTask(contextMenuTask.id, 'blocked')}>{$t('tasks.setBlocked')}</button>
+    <button on:click={() => handleMoveTask(menuTask.id, 'pending')}>{$t('tasks.setPending')}</button>
+    <button on:click={() => handleMoveTask(menuTask.id, 'in-progress')}>{$t('tasks.setInProgress')}</button>
+    <button on:click={() => handleMoveTask(menuTask.id, 'done')}>{$t('tasks.setDone')}</button>
+    <button on:click={() => handleMoveTask(menuTask.id, 'blocked')}>{$t('tasks.setBlocked')}</button>
     <div class="menu-divider"></div>
-    <button class="danger" on:click={() => handleDeleteTask(contextMenuTask.id)}>{$t('tasks.deleteTask')}</button>
+    <button class="danger" on:click={() => handleDeleteTask(menuTask.id)}>{$t('tasks.deleteTask')}</button>
   </div>
 {/if}
 
@@ -1852,12 +1848,20 @@
   }
 
   /* Sized in ch — the width of a "0" — plus room for the pill's own padding
-     and for the longest translated label. Measured at 11px: "FÜGGŐBEN" needs
-     73px and "Folyamatban"/"Elhalasztva" more, so status gets the wider slot.
-     A label longer than its slot wraps rather than pushing the column, which
-     keeps the alignment even where a translation runs long. */
-  .meta-column.priority-badge { width: 11ch; }
-  .meta-column.status-badge { width: 15ch; }
+     and for translated labels. A label that still exceeds its slot is clipped
+     instead of creating a second visual row or pushing the shared columns. */
+  .meta-column.priority-badge {
+    width: 14ch;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .meta-column.status-badge {
+    width: 18ch;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
 
   .subtask-badge,
   .dep-count-badge {

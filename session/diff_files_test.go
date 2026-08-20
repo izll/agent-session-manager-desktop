@@ -147,6 +147,24 @@ func TestRevertFileRestoresTrackedAndDeletesUntracked(t *testing.T) {
 	}
 }
 
+func TestRevertFileDeletesUntrackedFromTabWorkingDirectory(t *testing.T) {
+	sessionRepo := newDiffRepo(t)
+	tabRepo := newDiffRepo(t)
+	writeFile(t, sessionRepo, "same.txt", "keep the session file\n")
+	writeFile(t, tabRepo, "same.txt", "delete the tab file\n")
+
+	inst := &Instance{Path: sessionRepo, BrowseRoot: tabRepo}
+	if err := inst.RevertFile("same.txt", ""); err != nil {
+		t.Fatalf("RevertFile(tab untracked): %v", err)
+	}
+	if got := readFile(t, sessionRepo, "same.txt"); got != "keep the session file\n" {
+		t.Fatalf("session repository namesake was changed: %q", got)
+	}
+	if _, err := os.Stat(filepath.Join(tabRepo, "same.txt")); !os.IsNotExist(err) {
+		t.Fatalf("tab repository untracked file still exists: %v", err)
+	}
+}
+
 // The path arrives from the frontend, so it must not be able to reach outside
 // the repository.
 func TestRevertFileRejectsPathsOutsideRepo(t *testing.T) {

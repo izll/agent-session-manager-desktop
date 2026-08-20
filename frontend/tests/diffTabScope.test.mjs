@@ -22,8 +22,19 @@ assert.ok(backendCalls.length >= 8, `expected the diff entry points, found ${bac
 // Matched to the end of the statement rather than to the first ')': the
 // arguments contain calls of their own, and a lazy match stops inside them.
 const withoutTab = (diff.match(/App\.(?:GetSessionDiff|GetFullDiff|RevertDiffFile|RevertDiffHunk)\([^;\n]*/g) ?? [])
-  .filter((call) => !call.includes('tabIdx()'));
+  .filter((call) => !call.includes('tabIdx()') && !call.includes('target.windowIdx'));
 assert.deepEqual(withoutTab, [], 'every diff call must pass the tab index');
+
+assert.match(
+  diff,
+  /type DiffTarget = \{ sessionId: string; windowIdx: number; mode:/,
+  'a destructive action must snapshot the target it was offered for',
+);
+assert.match(
+  diff,
+  /if \(!isCurrentTarget\(action\.target\)\)/,
+  'a revert must be refused after its session, tab, or mode changes',
+);
 
 // The reload has to notice a tab change, or the screen keeps the previous
 // repository's diff while the revert targets the new one.

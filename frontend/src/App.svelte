@@ -90,7 +90,7 @@
       // Cleared only once the backend agrees it can find it — winget exiting 0
       // is not proof this process can run it.
       missingMultiplexer = s?.available === false
-        ? { name: s.name, hint: s.hint, canInstall: !!s.canInstall }
+        ? { name: s.name, hint: s.hint || '', canInstall: !!s.canInstall }
         : null;
     } catch (e: any) {
       multiplexerInstallError = e?.message || String(e);
@@ -694,7 +694,7 @@
 
     GetMultiplexerStatus().then((s) => {
       missingMultiplexer = s?.available === false
-        ? { name: s.name, hint: s.hint, canInstall: !!s.canInstall }
+        ? { name: s.name, hint: s.hint || '', canInstall: !!s.canInstall }
         : null;
     }).catch(() => { /* an older backend has no such call; say nothing */ });
 
@@ -1531,7 +1531,7 @@
   <ResumeChoiceDialog
     bind:show={showResumeChoice}
     session={pendingResumeSession}
-    hasTabs={pendingResumeSession?.followedWindows?.length > 0}
+    hasTabs={(pendingResumeSession?.followedWindows?.length || 0) > 0}
     on:newSession={handleResumeNewSession}
     on:continueExisting={handleResumeContinueExisting}
     on:restartWithTabs={handleResumeRestartWithTabs}

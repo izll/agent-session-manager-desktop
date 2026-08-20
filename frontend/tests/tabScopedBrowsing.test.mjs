@@ -34,8 +34,13 @@ assert.match(
 // backend resolves the session's directory instead.
 const calls = browser.match(/App\.(ListSessionDirectory|ReadSessionDirectoryFile|OpenSessionFileForEdit|SaveSessionFileEdit)/g) ?? [];
 assert.equal(calls.length, 4, 'expected the four browse entry points');
-const withWindowIdx = browser.match(/get\(selectedWindowIdx\) \?\? 0/g) ?? [];
-assert.equal(withWindowIdx.length, 4, 'each browse call must pass the window index');
+const liveWindowIdx = browser.match(/get\(selectedWindowIdx\) \?\? 0/g) ?? [];
+assert.ok(liveWindowIdx.length >= 3, 'browse reads must capture the selected window index');
+assert.match(
+  browser,
+  /App\.SaveSessionFileEdit\([\s\S]*?windowIdx,[\s\S]*?\);/,
+  'save must use the editor target snapshot, not whichever tab is selected when it returns',
+);
 
 // xterm listens on its own textarea, below the window listeners a dialog uses,
 // so it sees a key first and stopPropagation cannot help. Escape closed the

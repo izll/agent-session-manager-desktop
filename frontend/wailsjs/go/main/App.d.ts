@@ -263,13 +263,17 @@ export function RestartTabWithResume(arg1:string,arg2:number,arg3:string):Promis
 
 export function RestoreBackup(arg1:string):Promise<void>;
 
+export function RestoreDeletedSubtask(arg1:string,arg2:string,arg3:string,arg4:main.DeletedSubtaskSnapshot):Promise<void>;
+
+export function RestoreDeletedTask(arg1:string,arg2:string,arg3:main.DeletedTaskSnapshot):Promise<void>;
+
 export function RestoreTaskBackup(arg1:string):Promise<void>;
 
 export function RestoreTrashItem(arg1:string):Promise<session.RestoreResult>;
 
-export function RevertDiffFile(arg1:string,arg2:string,arg3:boolean,arg4:number):Promise<void>;
+export function RevertDiffFile(arg1:string,arg2:string,arg3:boolean,arg4:number,arg5:string):Promise<void>;
 
-export function RevertDiffHunk(arg1:string,arg2:string,arg3:number):Promise<void>;
+export function RevertDiffHunk(arg1:string,arg2:string,arg3:number,arg4:string):Promise<void>;
 
 export function RunCommand(arg1:string,arg2:string,arg3:number,arg4:Record<string, string>):Promise<void>;
 

@@ -188,7 +188,10 @@ func (s *Storage) commandsPath() string {
 func (s *Storage) LoadCommands() (*CommandLibrary, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return s.loadCommandsLocked()
+}
 
+func (s *Storage) loadCommandsLocked() (*CommandLibrary, error) {
 	data, err := os.ReadFile(s.commandsPath())
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -208,7 +211,10 @@ func (s *Storage) LoadCommands() (*CommandLibrary, error) {
 func (s *Storage) SaveCommands(lib *CommandLibrary) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return s.saveCommandsLocked(lib)
+}
 
+func (s *Storage) saveCommandsLocked(lib *CommandLibrary) error {
 	if lib == nil {
 		lib = &CommandLibrary{}
 	}
@@ -239,4 +245,23 @@ func (s *Storage) SaveCommands(lib *CommandLibrary) error {
 		return err
 	}
 	return nil
+}
+
+// UpdateCommands performs a complete load/change/save cycle while holding the
+// storage mutex. Callers that edit one entry must use this instead of separate
+// LoadCommands and SaveCommands calls, otherwise concurrent Wails requests can
+// both save snapshots derived from the same old library and lose one edit.
+func (s *Storage) UpdateCommands(change func(*CommandLibrary) error) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return withCrossProcessFileLock(filepath.Join(s.configDir, "commands.lock"), func() error {
+		lib, err := s.loadCommandsLocked()
+		if err != nil {
+			return err
+		}
+		if err := change(lib); err != nil {
+			return err
+		}
+		return s.saveCommandsLocked(lib)
+	})
 }

@@ -95,6 +95,11 @@ func (a *App) StopBackgroundAgent(shortID string) error {
 // running `claude attach <id>`, optionally placed into a group. Returns the
 // new session's ID so the frontend can select it.
 func (a *App) AttachBackgroundAgent(shortID, cwd, name, groupID string) (string, error) {
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return "", err
+	}
+	defer done()
 	if !bgAgentIDRe.MatchString(shortID) {
 		return "", fmt.Errorf("invalid agent id")
 	}
@@ -110,11 +115,12 @@ func (a *App) AttachBackgroundAgent(shortID, cwd, name, groupID string) (string,
 		return "", err
 	}
 	if groupID != "" {
-		if err := a.AssignToGroup(inst.ID, groupID); err != nil {
+		if err := a.storage.SetInstanceGroup(inst.ID, groupID); err != nil {
 			log.Printf("[bg-agent] group assignment failed for %s: %v", inst.ID, err)
 		}
 	}
 	if err := inst.Start(); err != nil {
+		_ = a.storage.RemoveInstance(inst.ID)
 		return inst.ID, err
 	}
 	if err := a.storage.UpdateInstance(inst); err != nil {
@@ -128,6 +134,11 @@ func (a *App) AttachBackgroundAgent(shortID, cwd, name, groupID string) (string,
 // running session — typically one detected to share the agent's working
 // directory. Returns the new tab's window index.
 func (a *App) AttachBackgroundAgentAsTab(sessionID, shortID, name string) (int, error) {
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return -1, err
+	}
+	defer done()
 	if !bgAgentIDRe.MatchString(shortID) {
 		return -1, fmt.Errorf("invalid agent id")
 	}

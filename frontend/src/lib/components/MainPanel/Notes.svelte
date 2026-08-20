@@ -18,6 +18,10 @@
   let saving = false;
   let lastSaved = '';
   let textareaEl: HTMLTextAreaElement;
+  const saveQueues = new Map<string, Promise<void>>();
+  let savesInFlight = 0;
+  let activationGeneration = 0;
+  let loadingNotes = false;
 
   /**
    * Find within the note.
@@ -238,7 +242,7 @@
     // Save any pending changes
     if (saveTimeout) {
       clearTimeout(saveTimeout);
-      saveNow(lastSessionId, lastWindowIdx, notes);
+      void saveNow(lastSessionId, lastWindowIdx, notes);
     }
     dictation.destroy();
   });
@@ -250,6 +254,7 @@
 
     if (!sessionId) {
       loadGeneration++;
+      loadingNotes = false;
       lastSessionId = null;
       notes = '';
       lastSaved = '';
@@ -264,10 +269,18 @@
 
     lastSessionId = sessionId;
     lastWindowIdx = windowIdx;
-    saving = false;
     const generation = ++loadGeneration;
+    const targetKey = `${sessionId}:${windowIdx}`;
+    loadingNotes = true;
 
     try {
+      // A previous visit to this tab may still be flushing its last edit.
+      // Read only after that tab's queue has drained; otherwise a fast
+      // A → B → A switch can fetch the pre-save value and put stale text
+      // back into the editor even though the later write succeeds.
+      const pendingSave = saveQueues.get(targetKey);
+      if (pendingSave) await pendingSave;
+      if (generation !== loadGeneration || sessionId !== lastSessionId || windowIdx !== lastWindowIdx) return;
       const content = await App.GetTabNotes(sessionId, windowIdx);
       if (generation !== loadGeneration || sessionId !== lastSessionId || windowIdx !== lastWindowIdx) return;
       notes = content || '';
@@ -279,6 +292,13 @@
       notes = '';
       lastSaved = '';
       resetHistory();
+    } finally {
+      // A stale request must not re-enable the textarea while the replacement
+      // target is still loading. Keeping the old note read-only in this short
+      // interval also prevents keystrokes from being saved under the new tab.
+      if (generation === loadGeneration && sessionId === lastSessionId && windowIdx === lastWindowIdx) {
+        loadingNotes = false;
+      }
     }
   }
 
@@ -286,9 +306,29 @@
   let wasActive = false;
   $: if (active && !wasActive) {
     wasActive = true;
-    loadNotes(true);
+    void activateNotes();
   } else if (!active) {
     wasActive = false;
+    activationGeneration++;
+  }
+
+  async function activateNotes() {
+    const generation = ++activationGeneration;
+    await flushPendingSave();
+    if (generation !== activationGeneration || !active) return;
+    // A keystroke made while the flush was in flight owns the textarea. A
+    // forced read here would replace it with the previous disk snapshot.
+    if (saveTimeout || notes !== lastSaved) return;
+    await loadNotes(true);
+  }
+
+  async function flushPendingSave() {
+    if (saveTimeout) {
+      clearTimeout(saveTimeout);
+      saveTimeout = null;
+    }
+    if (!lastSessionId || notes === lastSaved) return;
+    await saveNow(lastSessionId, lastWindowIdx, notes);
   }
 
   // Watch for session/window changes
@@ -296,13 +336,15 @@
     // Save current notes before loading new ones
     if (saveTimeout) {
       clearTimeout(saveTimeout);
-      saveNow(lastSessionId, lastWindowIdx, notes);
+      saveTimeout = null;
+      void saveNow(lastSessionId, lastWindowIdx, notes);
     }
-    loadNotes();
+    void loadNotes();
   }
 
   // Debounced save
   function handleInput() {
+    if (loadingNotes) return;
     recordHistory();
     if (saveTimeout) {
       clearTimeout(saveTimeout);
@@ -310,25 +352,38 @@
     const sessionId = lastSessionId;
     const windowIdx = lastWindowIdx;
     const snapshot = notes;
-    saveTimeout = setTimeout(() => saveNow(sessionId, windowIdx, snapshot), 500);
+    const timeout = setTimeout(() => {
+      if (saveTimeout === timeout) saveTimeout = null;
+      void saveNow(sessionId, windowIdx, snapshot);
+    }, 500);
+    saveTimeout = timeout;
   }
 
   async function saveNow(sessionId: string | null, windowIdx: number, snapshot: string) {
-    saveTimeout = null;
     if (!sessionId || (sessionId === lastSessionId && windowIdx === lastWindowIdx && snapshot === lastSaved)) return;
 
-    saving = true;
-    try {
-      await App.SetTabNotes(sessionId, windowIdx, snapshot);
-      if (sessionId === lastSessionId && windowIdx === lastWindowIdx && notes === snapshot) {
-        lastSaved = snapshot;
+    const key = `${sessionId}:${windowIdx}`;
+    const previous = saveQueues.get(key) ?? Promise.resolve();
+    const queued = previous.catch(() => undefined).then(async () => {
+      savesInFlight++;
+      saving = true;
+      try {
+        await App.SetTabNotes(sessionId, windowIdx, snapshot);
+        if (sessionId === lastSessionId && windowIdx === lastWindowIdx && notes === snapshot) {
+          lastSaved = snapshot;
+        }
+        // Notify parent to update status bar preview
+        dispatch('notesChange', { sessionId, windowIdx, notes: snapshot });
+      } catch (e) {
+        console.error('Failed to save notes:', e);
+      } finally {
+        savesInFlight--;
+        saving = savesInFlight > 0;
       }
-      // Notify parent to update status bar preview
-      dispatch('notesChange', { sessionId, windowIdx, notes: snapshot });
-    } catch (e) {
-      console.error('Failed to save notes:', e);
-    }
-    if (sessionId === lastSessionId && windowIdx === lastWindowIdx) saving = false;
+    });
+    saveQueues.set(key, queued);
+    await queued;
+    if (saveQueues.get(key) === queued) saveQueues.delete(key);
   }
 </script>
 
@@ -359,6 +414,7 @@
         class="mic-btn"
         class:active={$dictationListening}
         on:click={() => dictation.toggle()}
+        disabled={loadingNotes}
         title={$dictationListening ? $t('tabBar.stopDictation') : $t('tabBar.startDictation')}
       >
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -413,6 +469,7 @@
       bind:this={textareaEl}
       on:input={handleInput}
       on:keydown={handleContainerKeydown}
+      disabled={loadingNotes}
     ></textarea>
   </div>
 </div>

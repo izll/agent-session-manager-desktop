@@ -24,7 +24,10 @@
 
 {#if $undoState.action}
   <div class="undo-toast" transition:fly={{ y: 20, duration: 150 }} role="status" aria-live="polite">
-    <span class="message">{$undoState.action.message}</span>
+    <span class="message">
+      {$undoState.action.message}
+      {#if $undoState.error}<small class="error">{$undoState.error}</small>{/if}
+    </span>
 
     <button class="undo-btn" on:click={undo} disabled={busy}>
       {$t('undo.action')}
@@ -58,9 +61,18 @@
   }
 
   .message {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .error {
+    color: #fca5a5;
+    max-width: 440px;
+    white-space: normal;
   }
 
   .undo-btn {

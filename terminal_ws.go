@@ -131,10 +131,10 @@ type TerminalServer struct {
 	mu           sync.RWMutex
 	conns        map[string]*termConn
 	typingSignal *int64 // pointer to App.lastTypingSignal for zero-overhead typing detection
-	// attachAllowed points at App.projectLocked. When false (another instance
-	// owns the active project), we refuse terminal attaches so two GUIs can't
-	// fight over the same tmux sessions and kill each other's ptys.
-	attachAllowed *bool
+	// beginAttach pins App's active project until this handler has resolved the
+	// session and created its terminal attach. Returning only a bool would leave
+	// a check/use window where SelectProject could switch Storage in between.
+	beginAttach func() (release func(), allowed bool)
 }
 
 type termConn struct {
@@ -147,14 +147,14 @@ type termConn struct {
 	done      chan struct{}
 	writeMu   sync.Mutex
 	closeOnce sync.Once
-	// hidden: when 1, this tab is in the background. We keep reading the PTY
-	// (so tmux never blocks) but DROP the output instead of sending WS frames.
+	// hidden is true while this tab is in the background. We keep reading the PTY
+	// (so tmux never blocks) but hold the output instead of sending WS frames.
 	// On WebKitGTK every WS frame is dispatched on the single webview main
 	// thread; a background agent flooding output would otherwise starve the
 	// FOREGROUND tab's keystroke handling — the user-visible asymmetry where a
 	// heavy background agent made typing in the visible tab unbearably laggy.
-	// The agent keeps running; on un-hide the frontend asks tmux to redraw.
-	hidden int32
+	// The agent keeps running; on un-hide the held stream is replayed.
+	hidden bool
 
 	// Output produced while this tab was hidden, replayed when it comes back.
 	//
@@ -162,6 +162,10 @@ type termConn struct {
 	// current, so it sent only differences against a screen this client never
 	// received — a half-repainted pane with leftovers, recoverable only by a
 	// Ctrl-L, which is input and repeatedly landed in an agent's composer.
+	// heldMu protects the visibility transition as well as held. Keeping the
+	// decision and the buffer under one lock prevents output racing an un-hide:
+	// a chunk must be either replayed before the tab becomes visible or sent as
+	// live output afterwards, never stranded in held between those two steps.
 	heldMu   sync.Mutex
 	held     []byte
 	heldOver bool
@@ -194,6 +198,10 @@ func (tc *termConn) holdWhileHidden(data []byte) {
 	}
 	tc.heldMu.Lock()
 	defer tc.heldMu.Unlock()
+	tc.holdWhileHiddenLocked(data)
+}
+
+func (tc *termConn) holdWhileHiddenLocked(data []byte) {
 	tc.held = append(tc.held, data...)
 	if len(tc.held) <= maxHeldWhileHidden {
 		return
@@ -221,6 +229,61 @@ func (tc *termConn) holdWhileHidden(data []byte) {
 	copy(tail, tc.held[len(tc.held)-maxHeldWhileHidden:])
 	tc.held = tail
 	tc.heldOver = true
+}
+
+// deliverOrHold atomically chooses the destination for terminal bytes. The
+// callback runs while the visibility lock is held so hide/un-hide cannot cross
+// a websocket write and reorder live output ahead of the replay buffer.
+func (tc *termConn) deliverOrHold(data []byte, deliver func([]byte) error) (held bool, err error) {
+	if len(data) == 0 {
+		return false, nil
+	}
+	tc.heldMu.Lock()
+	defer tc.heldMu.Unlock()
+	if tc.hidden {
+		tc.holdWhileHiddenLocked(data)
+		return true, nil
+	}
+	return false, deliver(data)
+}
+
+func (tc *termConn) holdIfHidden(chunks ...[]byte) bool {
+	tc.heldMu.Lock()
+	defer tc.heldMu.Unlock()
+	if !tc.hidden {
+		return false
+	}
+	for _, chunk := range chunks {
+		if len(chunk) > 0 {
+			tc.holdWhileHiddenLocked(chunk)
+		}
+	}
+	return true
+}
+
+func (tc *termConn) setHidden() {
+	tc.heldMu.Lock()
+	tc.hidden = true
+	tc.heldMu.Unlock()
+}
+
+// reveal marks the connection visible and replays everything accumulated
+// while hidden before a live writer can overtake it.
+func (tc *termConn) reveal(deliver func([]byte) error) (wasHidden, overflowed bool, err error) {
+	tc.heldMu.Lock()
+	defer tc.heldMu.Unlock()
+	wasHidden = tc.hidden
+	if !wasHidden {
+		return false, false, nil
+	}
+	tc.hidden = false
+	data := tc.held
+	overflowed = tc.heldOver
+	tc.held, tc.heldOver = nil, false
+	if len(data) > 0 {
+		err = deliver(data)
+	}
+	return wasHidden, overflowed, err
 }
 
 // discardHeldWhileHidden frees the buffer without replaying it.
@@ -385,11 +448,24 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 	// Refuse attaches when another instance owns the project. Attaching would
 	// create/kill mirror tmux sessions that the owning instance is using,
 	// ripping its ptys out ("read /dev/ptmx: input/output error").
-	if ts.attachAllowed != nil && !*ts.attachAllowed {
-		http.Error(w, "project locked by another instance", http.StatusConflict)
-		log.Printf("[terminal] refused attach: project locked by another instance")
-		return
+	releaseAttach := func() {}
+	attachReleased := false
+	if ts.beginAttach != nil {
+		release, allowed := ts.beginAttach()
+		if !allowed {
+			http.Error(w, "project locked by another instance", http.StatusConflict)
+			log.Printf("[terminal] refused attach: project locked by another instance")
+			return
+		}
+		if release != nil {
+			releaseAttach = release
+		}
 	}
+	defer func() {
+		if !attachReleased {
+			releaseAttach()
+		}
+	}()
 
 	if sessionID == "" {
 		http.Error(w, "session required", http.StatusBadRequest)
@@ -628,6 +704,10 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 		ws.Close()
 		return
 	}
+	// The session lookup and terminal creation are now tied to the same pinned
+	// project snapshot. The long-lived WebSocket must not block later switches.
+	releaseAttach()
+	attachReleased = true
 
 	connID := fmt.Sprintf("%s-%d", sessionID, winIdx)
 	tc := &termConn{
@@ -649,6 +729,11 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 	ts.conns[connID] = tc
 	ts.mu.Unlock()
 	log.Printf("[ws] attach session=%s win=%d target=%s", sessionID, winIdx, attachTarget)
+	writeTerminalOutput := func(data []byte) error {
+		tc.writeMu.Lock()
+		defer tc.writeMu.Unlock()
+		return ws.WriteMessage(websocket.BinaryMessage, data)
+	}
 
 	// Read from PTY, write to WebSocket with output throttling.
 	// Without throttling, rapid terminal output (Claude Code spinners, etc.)
@@ -698,11 +783,21 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 			case <-tc.done:
 				return
 			case err := <-errCh:
-				// Flush remaining data before exit
+				// The reader sends every chunk before it reports EOF, but data and
+				// errors use separate buffered channels. Drain already-queued chunks
+				// because select is allowed to choose errCh first when both are ready.
+			drainTerminalData:
+				for {
+					select {
+					case chunk := <-dataCh:
+						pendingData = append(pendingData, chunk...)
+					default:
+						break drainTerminalData
+					}
+				}
+				// Flush remaining data before exit.
 				if len(pendingData) > 0 {
-					tc.writeMu.Lock()
-					ws.WriteMessage(websocket.BinaryMessage, pendingData)
-					tc.writeMu.Unlock()
+					_, _ = tc.deliverOrHold(pendingData, writeTerminalOutput)
 				}
 				if err != io.EOF {
 					log.Printf("PTY read error: %v", err)
@@ -738,11 +833,10 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 				// memory rather than the webview's, and the frontend's own
 				// hidden buffer never saw any of this anyway, because the bytes
 				// were gone before they reached it.
-				if atomic.LoadInt32(&tc.hidden) == 1 {
-					// Anything already queued goes in first, then this chunk,
-					// so the held bytes stay in the order tmux produced them.
-					tc.holdWhileHidden(pendingData)
-					tc.holdWhileHidden(chunk)
+				// Anything already queued goes in first, then this chunk, so
+				// the held bytes stay in the order tmux produced them. The
+				// visibility decision is made under the same lock as reveal.
+				if tc.holdIfHidden(pendingData, chunk) {
 					pendingData = pendingData[:0]
 					continue
 				}
@@ -753,9 +847,7 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 				// gets coalesced via the ticker instead of slamming the WebKit
 				// renderer with back-to-back canvas writes.
 				if len(pendingData) >= 65536 {
-					tc.writeMu.Lock()
-					err := ws.WriteMessage(websocket.BinaryMessage, pendingData)
-					tc.writeMu.Unlock()
+					_, err := tc.deliverOrHold(pendingData, writeTerminalOutput)
 					pendingData = pendingData[:0]
 					if err != nil {
 						log.Printf("WebSocket write error: %v", err)
@@ -763,17 +855,13 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 					}
 				}
 			case <-flushTicker.C:
-				if len(pendingData) > 0 && atomic.LoadInt32(&tc.hidden) == 0 {
-					tc.writeMu.Lock()
-					err := ws.WriteMessage(websocket.BinaryMessage, pendingData)
-					tc.writeMu.Unlock()
+				if len(pendingData) > 0 {
+					_, err := tc.deliverOrHold(pendingData, writeTerminalOutput)
 					pendingData = pendingData[:0]
 					if err != nil {
 						log.Printf("WebSocket write error: %v", err)
 						return
 					}
-				} else if atomic.LoadInt32(&tc.hidden) == 1 {
-					pendingData = pendingData[:0]
 				}
 			}
 		}
@@ -917,7 +1005,7 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 					// loop) so a background agent can't starve the foreground
 					// tab's input on the single webview main thread.
 					if data[1] == 0 {
-						atomic.StoreInt32(&tc.hidden, 1)
+						tc.setHidden()
 						// Also tell the stream: on Windows its pane-size watcher
 						// skips hidden tabs, which is most of them most of the
 						// time (each check is a process launch, ~20ms).
@@ -926,7 +1014,6 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 						// Was this tab actually hidden? The flag starts at 0, so
 						// the first "become visible" after an attach reports a
 						// transition that never happened.
-						wasHidden := atomic.SwapInt32(&tc.hidden, 0) == 1
 						session.SetTerminalVisible(ptmx, true)
 
 						// Coming back to the foreground: send what was held
@@ -937,17 +1024,13 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 						// leaves the client's screen exactly where the pane is —
 						// no repaint to ask for, and no Ctrl-L, which is input
 						// and repeatedly ended up in an agent's composer.
+						wasHidden, overflowed, replayErr := tc.reveal(writeTerminalOutput)
+						if replayErr != nil {
+							log.Printf("[ws] held output replay failed session=%s win=%d: %v",
+								sessionID, winIdx, replayErr)
+							return
+						}
 						if wasHidden {
-							held, overflowed := tc.takeHeldWhileHidden()
-							if len(held) > 0 {
-								tc.writeMu.Lock()
-								werr := ws.WriteMessage(websocket.BinaryMessage, held)
-								tc.writeMu.Unlock()
-								if session.DebugLogging {
-									log.Printf("[ws] replayed %d held bytes session=%s win=%d err=%v",
-										len(held), sessionID, winIdx, werr)
-								}
-							}
 							if overflowed {
 								// More was produced than is worth holding, so
 								// the screen cannot be reconstructed from the

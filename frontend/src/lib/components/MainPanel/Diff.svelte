@@ -161,7 +161,21 @@
   let showRevertConfirm = false;
   let revertTitle = '';
   let revertMessage = '';
-  let pendingRevert: (() => Promise<void>) | null = null;
+  type DiffTarget = { sessionId: string; windowIdx: number; mode: 'session' | 'full'; root: string };
+  let pendingRevert: { target: DiffTarget; run: () => Promise<void> } | null = null;
+  let loadedRoot = '';
+
+  function currentTarget(): DiffTarget | null {
+    const sessionId = get(selectedSessionId);
+    if (!sessionId) return null;
+    if (!loadedRoot || loadedDiffKey !== currentDiffKey) return null;
+    return { sessionId, windowIdx: tabIdx(), mode: diffMode, root: loadedRoot };
+  }
+
+  function isCurrentTarget(target: DiffTarget): boolean {
+    return target.sessionId === get(selectedSessionId) &&
+      target.windowIdx === tabIdx() && target.mode === diffMode;
+  }
 
   // Start/stop polling based on active state
   function startPolling() {
@@ -246,9 +260,11 @@
 
   async function loadDiff() {
     const sessionId = get(selectedSessionId);
+    const windowIdx = tabIdx();
     const mode = diffMode;
     const generation = ++loadGeneration;
-    const requestedKey = `${sessionId || ''}:${mode}`;
+    const requestedKey = `${sessionId || ''}:${windowIdx}:${mode}`;
+    loadedRoot = '';
     if (!sessionId) {
       diff = null;
       files = [];
@@ -268,7 +284,6 @@
         diff = cached.diff;
         files = cached.files;
         loadedDiffKey = requestedKey;
-      cacheDiff(requestedKey, { diff, files });
       } else {
         diff = null;
         files = [];
@@ -278,7 +293,7 @@
     }
     // Keyed on session AND tab, matching the guard that calls this: a tab with
     // its own directory is a different diff even within one session.
-    lastSessionId = `${sessionId}:${tabIdx()}`;
+    lastSessionId = `${sessionId}:${windowIdx}`;
     loading = files.length === 0;
     error = '';
 
@@ -291,10 +306,14 @@
       // of files — a build dropping its output into the tree produced a diff the
       // webview never finished rendering. A file's hunks are fetched when it is
       // opened, so the cost of listing does not depend on what the files hold.
+      const root = await App.GetTabWorkingDirectory(sessionId, windowIdx);
+      if (generation !== loadGeneration || sessionId !== get(selectedSessionId) ||
+          windowIdx !== tabIdx() || mode !== diffMode || !active) return;
       const fileResult = mode === 'session'
-        ? await App.GetSessionDiffFileList(sessionId, tabIdx())
-        : await App.GetFullDiffFileList(sessionId, tabIdx());
-      if (generation !== loadGeneration || sessionId !== get(selectedSessionId) || mode !== diffMode || !active) return;
+        ? await App.GetSessionDiffFileList(sessionId, windowIdx)
+        : await App.GetFullDiffFileList(sessionId, windowIdx);
+      if (generation !== loadGeneration || sessionId !== get(selectedSessionId) ||
+          windowIdx !== tabIdx() || mode !== diffMode || !active) return;
       const summaries = fileResult || [];
       const totals = summaries.reduce(
         (acc, f) => ({ added: acc.added + (f.added || 0), removed: acc.removed + (f.removed || 0) }),
@@ -308,7 +327,7 @@
       //
       // The places are forgotten with it: the files changed underneath, so the
       // cached contents are stale, and so is any offset into them.
-      if (noteListKey(sessionId, nextKey)) {
+      if (noteListKey(sessionId, nextKey, windowIdx, mode)) {
         resetCopyState();
         fileCache = {};
       }
@@ -316,8 +335,11 @@
       files = summaries;
       syncSelection();
       loadedDiffKey = requestedKey;
+      loadedRoot = root;
+      cacheDiff(requestedKey, { diff, files });
     } catch (e) {
-      if (generation !== loadGeneration || sessionId !== get(selectedSessionId) || mode !== diffMode || !active) return;
+      if (generation !== loadGeneration || sessionId !== get(selectedSessionId) ||
+          windowIdx !== tabIdx() || mode !== diffMode || !active) return;
       error = String(e);
       diff = null;
       files = [];
@@ -347,8 +369,9 @@
     const sessionId = get(selectedSessionId);
     if (!sessionId) return;
     const current = get(settings).diffLastFile ?? {};
-    if (current[sessionId] === path) return;
-    void saveSettings({ diffLastFile: { ...current, [sessionId]: path } });
+    const target = `${sessionId}:${tabIdx()}:${diffMode}`;
+    if (current[target] === path) return;
+    void saveSettings({ diffLastFile: { ...current, [target]: path } });
   }
 
   // Keep the selection pointing at a file that still exists. After a revert the
@@ -363,7 +386,10 @@
 
     // Back to what was open before the tab switch, if it is still in the diff.
     const sessionId = get(selectedSessionId);
-    const remembered = sessionId ? get(settings).diffLastFile?.[sessionId] : null;
+    const remembered = sessionId
+      ? get(settings).diffLastFile?.[`${sessionId}:${tabIdx()}:${diffMode}`] ??
+        get(settings).diffLastFile?.[sessionId]
+      : null;
     selectedPath = remembered && files.some(f => f.path === remembered)
       ? remembered
       : files[0].path;
@@ -387,6 +413,7 @@
     // old list is wrong for the new one too — drop it rather than risk showing
     // a file that is no longer in the diff.
     invalidateDiffCache();
+    fileCache = {};
     loadDiff();
   }
 
@@ -434,6 +461,8 @@
 
   function askRevertFile(file: session.DiffFileSummary) {
     if (reverting) return;
+    const target = currentTarget();
+    if (!target) return;
     // An untracked file has no committed version to restore — reverting DELETES
     // it. Say so explicitly; the generic "discard changes" wording would be a
     // lie here.
@@ -442,12 +471,17 @@
     revertMessage = isAdded
       ? $t('diff.revertFileAddedMessage', { file: file.path })
       : $t('diff.revertFileMessage', { file: file.path });
-    pendingRevert = () => App.RevertDiffFile(sessionIdForRevert(), file.path, diffMode === 'session', tabIdx());
+    pendingRevert = {
+      target,
+      run: () => App.RevertDiffFile(target.sessionId, file.path, target.mode === 'session', target.windowIdx, target.root),
+    };
     showRevertConfirm = true;
   }
 
   function askRevertHunk(file: session.DiffFile, hunk: session.DiffHunk) {
     if (reverting) return;
+    const target = currentTarget();
+    if (!target) return;
     revertTitle = $t('diff.revertHunkTitle');
     revertMessage = $t('diff.revertHunkMessage', { file: file.path, header: hunk.header });
     // Where to look once the file is rewritten: the line the hunk starts at, in
@@ -457,7 +491,10 @@
     // apply cleanly against a file that has since moved on — the round-trip is
     // exactly what makes git refuse.
     const patch = hunk.patch;
-    pendingRevert = () => App.RevertDiffHunk(sessionIdForRevert(), patch, tabIdx());
+    pendingRevert = {
+      target,
+      run: () => App.RevertDiffHunk(target.sessionId, patch, target.windowIdx, target.root),
+    };
     showRevertConfirm = true;
   }
 
@@ -476,6 +513,8 @@
    */
   function askRevertBlock(detail: { hunkIndex: number; fromRow: number; toRow: number }) {
     if (reverting || !selectedFile) return;
+    const target = currentTarget();
+    if (!target) return;
     const hunk = selectedFile.hunks.find((h) => h.index === detail.hunkIndex);
     if (!hunk) return;
 
@@ -530,7 +569,10 @@
 
     revertTitle = $t('diff.revertHunkTitle');
     revertMessage = $t('diff.revertBlockMessage', { file: selectedFile.path });
-    pendingRevert = () => App.RevertDiffHunk(sessionIdForRevert(), patch, tabIdx());
+    pendingRevert = {
+      target,
+      run: () => App.RevertDiffHunk(target.sessionId, patch, target.windowIdx, target.root),
+    };
     showRevertConfirm = true;
   }
 
@@ -615,10 +657,6 @@
     return -1;
   }
 
-  function sessionIdForRevert(): string {
-    return get(selectedSessionId) || '';
-  }
-
   /**
    * Which tab the diff is for.
    *
@@ -634,9 +672,13 @@
     const action = pendingRevert;
     pendingRevert = null;
     if (!action || reverting) return;
+    if (!isCurrentTarget(action.target)) {
+      error = 'The selected session, tab, or diff mode changed. Reopen the diff before reverting.';
+      return;
+    }
     reverting = true;
     try {
-      await action();
+      await action.run();
       if (destroyed) return;
       error = '';
       // The cached list describes the tree before the revert, so it has to go
@@ -689,7 +731,7 @@
   // while small-diff sessions (asmgr-desktop) stayed fluid.
   const MAX_DIFF_LINES = 2000;
 
-  $: currentDiffKey = `${$selectedSessionId || ''}:${diffMode}`;
+  $: currentDiffKey = `${$selectedSessionId || ''}:${$selectedWindowIdx ?? 0}:${diffMode}`;
   // Grouped by what happened to the file, because those are different kinds of
   // change to review: a modification is read line by line, a new file is read
   // as a whole, and a deletion usually only needs confirming. Mixed together
@@ -732,7 +774,7 @@
   // somewhere else.
   let filterKey = '';
   $: {
-    const key = `${$selectedSessionId || ''}:${diffMode}`;
+    const key = `${$selectedSessionId || ''}:${$selectedWindowIdx ?? 0}:${diffMode}`;
     if (key !== filterKey) {
       filterKey = key;
       statusFilter = 'modified';
@@ -763,35 +805,39 @@
   // from git: whole-file asks for every line around the changes, hunks-only for
   // three lines of context. Keyed together, switching views would show the
   // previous answer.
-  $: cacheKey = selectedPath ? `${wholeFileView ? 'whole' : 'hunks'}:${selectedPath}` : '';
+  $: cacheKey = selectedPath
+    ? `${currentDiffKey}:${wholeFileView ? 'whole' : 'hunks'}:${selectedPath}`
+    : '';
   $: selectedFile = cacheKey ? fileCache[cacheKey] ?? null : null;
   // Fetch the hunks the first time a file is opened.
   $: if (selectedPath && cacheKey && !(cacheKey in fileCache)) void loadSelectedFile(selectedPath);
 
   async function loadSelectedFile(path: string) {
     const sessionId = get(selectedSessionId);
+    const windowIdx = tabIdx();
     const mode = diffMode;
     const whole = wholeFileView;
-    const key = `${whole ? 'whole' : 'hunks'}:${path}`;
+    const targetKey = `${sessionId || ''}:${windowIdx}:${mode}`;
+    const key = `${targetKey}:${whole ? 'whole' : 'hunks'}:${path}`;
     if (!sessionId) return;
     loadingFile = true;
     try {
       const loaded = mode === 'session'
-        ? await App.GetSessionDiffForFile(sessionId, path, whole, tabIdx())
-        : await App.GetFullDiffForFile(sessionId, path, whole, tabIdx());
+        ? await App.GetSessionDiffForFile(sessionId, path, whole, windowIdx)
+        : await App.GetFullDiffForFile(sessionId, path, whole, windowIdx);
       // Ignore a result that arrived after the user moved on, so a slow file
       // cannot overwrite the one now on screen.
       if (path !== selectedPath || mode !== diffMode || whole !== wholeFileView ||
-          sessionId !== get(selectedSessionId)) return;
+          sessionId !== get(selectedSessionId) || windowIdx !== tabIdx()) return;
       fileCache = { ...fileCache, [key]: loaded };
     } catch (e) {
-      if (path !== selectedPath) return;
+      if (path !== selectedPath || targetKey !== currentDiffKey || whole !== wholeFileView) return;
       // Cached as null: a file that fails to load should not be retried on
       // every reactive pass.
       fileCache = { ...fileCache, [key]: null };
       error = String(e);
     } finally {
-      if (path === selectedPath) loadingFile = false;
+      if (path === selectedPath && targetKey === currentDiffKey && whole === wholeFileView) loadingFile = false;
     }
   }
   // Split here rather than in the markup so the header can dim the directory
@@ -818,9 +864,9 @@
   // content update. The diff polls every 5s and its content changes as the
   // agent works; resetting on content (the old behaviour) snapped the user back
   // to the warning every few seconds while they were reading the diff.
-  let forceShowSessionId: string | null = null;
-  $: if ($selectedSessionId !== forceShowSessionId) {
-    forceShowSessionId = $selectedSessionId;
+  let forceShowTarget = '';
+  $: if (currentDiffKey !== forceShowTarget) {
+    forceShowTarget = currentDiffKey;
     forceShowPaths = {};
   }
 
@@ -1182,8 +1228,12 @@
   // it tracks what a reactive statement reads directly, not what a function it
   // calls reads inside. Otherwise the label would keep whatever it said when
   // the file was opened.
-  $: nextFileName = fileAfterStep(1, currentHunk, hunkStarts, stepOrder, selectedPath);
-  $: prevFileName = fileAfterStep(-1, currentHunk, hunkStarts, stepOrder, selectedPath);
+  $: nextFileName = selectedPath
+    ? fileAfterStep(1, currentHunk, hunkStarts, stepOrder, selectedPath)
+    : null;
+  $: prevFileName = selectedPath
+    ? fileAfterStep(-1, currentHunk, hunkStarts, stepOrder, selectedPath)
+    : null;
 
   // Shown while the offer stands. Predicting it from the cursor instead meant
   // the label and the jump landed on the same press, so the name was never
@@ -1217,7 +1267,7 @@
    * binary — does not leave the walk hanging.
    */
   async function waitForFileLoad(path: string): Promise<void> {
-    const key = `${wholeFileView ? 'whole' : 'hunks'}:${path}`;
+    const key = `${currentDiffKey}:${wholeFileView ? 'whole' : 'hunks'}:${path}`;
     // ~1.5s at 25ms. Long enough for a git call on a large repository, short
     // enough that a file which never loads does not appear to hang the button.
     for (let attempt = 0; attempt < 60; attempt++) {
@@ -1303,7 +1353,7 @@
     const fresh = lastOffsetFor === offsetOwner(selectedPath, viewMode);
     const scrollTop = currentScrollOffset() || (fresh ? lastOffset : 0);
 
-    rememberPlace(sessionId, selectedPath, viewMode, { scrollTop, currentHunk, markedHunk });
+    rememberPlace(sessionId, selectedPath, viewMode, { scrollTop, currentHunk, markedHunk }, tabIdx());
   }
 
   /**
@@ -1315,7 +1365,7 @@
   async function restorePlace(path: string, mode: string) {
     const sessionId = get(selectedSessionId);
     if (!sessionId) return;
-    const place = recallPlace(sessionId, path, mode);
+    const place = recallPlace(sessionId, path, mode, tabIdx());
     if (!place) return;
 
     currentHunk = place.currentHunk;
@@ -1540,9 +1590,9 @@
   // different repo's directories after a session switch. Reset it with the
   // session; the tracking variable is assigned INSIDE the block because Svelte
   // 3 orders reactive statements by dependency, not by source position.
-  let collapseSessionId: string | null = null;
-  $: if ($selectedSessionId !== collapseSessionId) {
-    collapseSessionId = $selectedSessionId;
+  let collapseTarget = '';
+  $: if (diffKey !== collapseTarget) {
+    collapseTarget = diffKey;
     collapsedDirs = new Set<string>();
   }
 

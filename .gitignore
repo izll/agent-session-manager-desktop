@@ -1,6 +1,8 @@
 build/bin
 node_modules
 frontend/dist
+frontend/test-results/
+frontend/playwright-report/
 
 # Local dev / personal — not part of the published project
 .taskmaster/

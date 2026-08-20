@@ -1,5 +1,5 @@
 export namespace main {
-	
+
 	export class ActivityStatsAgent {
 	    agent: string;
 	    observedMs: number;
@@ -8,11 +8,11 @@ export namespace main {
 	    idleMs: number;
 	    waitingEvents: number;
 	    sharePercent: number;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new ActivityStatsAgent(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.agent = source["agent"];
@@ -29,11 +29,11 @@ export namespace main {
 	    busyMs: number;
 	    waitingMs: number;
 	    idleMs: number;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new ActivityStatsDay(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.date = source["date"];
@@ -394,6 +394,88 @@ export namespace main {
 		    return a;
 		}
 	}
+	export class DeletedSubtaskSnapshot {
+	    id: string;
+	    title: string;
+	    description?: string;
+	    status?: string;
+	    details?: string;
+	    done?: boolean;
+	    createdAt?: string;
+
+	    static createFrom(source: any = {}) {
+	        return new DeletedSubtaskSnapshot(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.title = source["title"];
+	        this.description = source["description"];
+	        this.status = source["status"];
+	        this.details = source["details"];
+	        this.done = source["done"];
+	        this.createdAt = source["createdAt"];
+	    }
+	}
+	export class DeletedTaskSnapshot {
+	    id: string;
+	    title: string;
+	    description: string;
+	    details?: string;
+	    status: string;
+	    priority: string;
+	    tags: string[];
+	    subtasks: DeletedSubtaskSnapshot[];
+	    dependencies: string[];
+	    complexity?: number;
+	    createdAt?: string;
+	    updatedAt?: string;
+	    completedAt?: string;
+	    dueAt?: string;
+	    sessionId?: string;
+
+	    static createFrom(source: any = {}) {
+	        return new DeletedTaskSnapshot(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.title = source["title"];
+	        this.description = source["description"];
+	        this.details = source["details"];
+	        this.status = source["status"];
+	        this.priority = source["priority"];
+	        this.tags = source["tags"];
+	        this.subtasks = this.convertValues(source["subtasks"], DeletedSubtaskSnapshot);
+	        this.dependencies = source["dependencies"];
+	        this.complexity = source["complexity"];
+	        this.createdAt = source["createdAt"];
+	        this.updatedAt = source["updatedAt"];
+	        this.completedAt = source["completedAt"];
+	        this.dueAt = source["dueAt"];
+	        this.sessionId = source["sessionId"];
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class DictationSettings {
 	    enabled: boolean;
 	    googleApiKey: string;
@@ -706,6 +788,7 @@ export namespace main {
 	    description?: string;
 	    status: string;
 	    details?: string;
+	    createdAt?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new MCPSubtaskInfo(source);
@@ -718,6 +801,7 @@ export namespace main {
 	        this.description = source["description"];
 	        this.status = source["status"];
 	        this.details = source["details"];
+	        this.createdAt = source["createdAt"];
 	    }
 	}
 	export class MCPTaskInfo {
@@ -732,6 +816,10 @@ export namespace main {
 	    complexity?: number;
 	    details?: string;
 	    createdAt?: string;
+	    updatedAt?: string;
+	    completedAt?: string;
+	    dueAt?: string;
+	    sessionId?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new MCPTaskInfo(source);
@@ -750,6 +838,10 @@ export namespace main {
 	        this.complexity = source["complexity"];
 	        this.details = source["details"];
 	        this.createdAt = source["createdAt"];
+	        this.updatedAt = source["updatedAt"];
+	        this.completedAt = source["completedAt"];
+	        this.dueAt = source["dueAt"];
+	        this.sessionId = source["sessionId"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -1217,6 +1309,7 @@ export namespace main {
 	    diffAboveHeight: number;
 	    dictationBuffer?: session.PanelGeometry;
 	    diffSideBySide: boolean;
+	    diffHunksOnly: boolean;
 	    diffLastFile: Record<string, string>;
 	    agentTerminalThemes: Record<string, string>;
 	    customTerminalThemes: session.CustomTerminalTheme[];
@@ -1265,6 +1358,7 @@ export namespace main {
 	        this.diffAboveHeight = source["diffAboveHeight"];
 	        this.dictationBuffer = this.convertValues(source["dictationBuffer"], session.PanelGeometry);
 	        this.diffSideBySide = source["diffSideBySide"];
+	        this.diffHunksOnly = source["diffHunksOnly"];
 	        this.diffLastFile = source["diffLastFile"];
 	        this.agentTerminalThemes = source["agentTerminalThemes"];
 	        this.customTerminalThemes = this.convertValues(source["customTerminalThemes"], session.CustomTerminalTheme);
@@ -1327,6 +1421,9 @@ export namespace main {
 	export class SubtaskInfo {
 	    id: string;
 	    title: string;
+	    description?: string;
+	    details?: string;
+	    status: string;
 	    done: boolean;
 	    createdAt: string;
 	
@@ -1338,6 +1435,9 @@ export namespace main {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
 	        this.title = source["title"];
+	        this.description = source["description"];
+	        this.details = source["details"];
+	        this.status = source["status"];
 	        this.done = source["done"];
 	        this.createdAt = source["createdAt"];
 	    }
@@ -2059,4 +2159,3 @@ export namespace session {
 	}
 
 }
-

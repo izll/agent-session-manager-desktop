@@ -164,11 +164,11 @@ func (a *App) readSessionFileAt(path string) (*PortableFileInfo, error) {
 // project. Names are used to identify them because an export has no IDs — they
 // are re-generated on import so two machines can't collide.
 func (a *App) ImportSessionFile(path string, names []string) (int, error) {
-	a.projectMu.RLock()
-	defer a.projectMu.RUnlock()
-	if !a.projectLocked {
-		return 0, fmt.Errorf("project is read-only in this application instance")
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return 0, err
 	}
+	defer done()
 
 	f, err := os.Open(path)
 	if err != nil {

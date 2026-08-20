@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy, createEventDispatcher, tick } from 'svelte';
   import { pendingFileJump, clearFileJump } from '../../stores/fileJump';
-  import { selectedSessionId, selectedWindowIdx } from '../../stores/sessions';
+  import { selectedSessionId, selectedWindowIdx, selectSession, selectWindow } from '../../stores/sessions';
   import { get } from 'svelte/store';
   import * as App from '../../../../wailsjs/go/main/App';
   import type { session } from '../../../../wailsjs/go/models';
@@ -20,19 +20,6 @@
 
   const dispatch = createEventDispatcher();
 
-  /**
-   * Open a file another view asked for — the diff, jumping to a changed file.
-   *
-   * Reacted to only while this view is active: honouring it in the background
-   * would load a file into a browser nobody is looking at, and clear the
-   * request before the view that shows it ever sees it.
-   */
-  $: if (active && $pendingFileJump) {
-    const jump = $pendingFileJump;
-    clearFileJump();
-    void openRequestedFile(jump.path, jump.line);
-  }
-
   async function openRequestedFile(path: string, line?: number) {
     // Same route as opening from quick-open, guard included: selecting a file
     // discards the edit buffer, and a jump from the diff must not throw away
@@ -40,7 +27,11 @@
     guardUnsaved(async () => {
       if (editing) leaveEditModeQuietly();
       selectedPath = path;
-      await loadFile(path);
+      // The request has reached the initialized target. From here a failed read
+      // is a normal file error, not a jump that should retry in another tab.
+      clearFileJump();
+      const loaded = await loadFile(path);
+      if (!loaded) return;
       void revealInTree(path);
 
       // After the document is in the editor, not before: CodeMirror has no
@@ -49,7 +40,7 @@
         await tick();
         scrollToLine(line);
       }
-    });
+    }, clearFileJump);
   }
 
   /**
@@ -103,6 +94,7 @@
   let rootLoading = false;
 
   let loadedSessionId: string | null = null;
+  let loadedWindowIdx = 0;
   /** Which session:tab the tree currently belongs to. */
   let loadedBrowseKey = '';
   let treeGeneration = 0;
@@ -138,6 +130,7 @@
   // A pending navigation held back by unsaved changes: the action to run once
   // the user confirms they are willing to lose them.
   let pendingLeave: (() => void) | null = null;
+  let pendingLeaveCancel: (() => void) | null = null;
 
   $: modified = editing && editText !== savedText;
   // Tied to the file currently selected, not merely to whatever was last
@@ -368,24 +361,27 @@
     if (path === '') rootLoading = false;
   }
 
-  async function loadFile(path: string) {
+  async function loadFile(path: string): Promise<boolean> {
     const sessionId = get(selectedSessionId);
-    if (!sessionId) return;
+    if (!sessionId) return false;
+    const windowIdx = get(selectedWindowIdx) ?? 0;
+    const targetKey = `${sessionId}:${windowIdx}`;
     const generation = ++fileGeneration;
     fileLoading = true;
     fileError = '';
     selectedFile = null;
     try {
-      const file = await App.ReadSessionDirectoryFile(sessionId, path, get(selectedWindowIdx) ?? 0);
-      if (destroyed || generation !== fileGeneration) return;
+      const file = await App.ReadSessionDirectoryFile(sessionId, path, windowIdx);
+      if (destroyed || generation !== fileGeneration || targetKey !== browseKey) return false;
       selectedFile = file;
     } catch (e) {
-      if (destroyed || generation !== fileGeneration) return;
+      if (destroyed || generation !== fileGeneration || targetKey !== browseKey) return false;
       // The Go side reports permission problems and missing files verbatim;
       // showing that beats a generic "could not load".
       fileError = String(e);
     }
-    if (!destroyed && generation === fileGeneration) fileLoading = false;
+    if (!destroyed && generation === fileGeneration && targetKey === browseKey) fileLoading = false;
+    return !destroyed && generation === fileGeneration && targetKey === browseKey && !!selectedFile;
   }
 
   // --- Edit mode ------------------------------------------------------------
@@ -431,9 +427,10 @@
   }
 
   /** Run `action`, first asking about unsaved changes if there are any. */
-  function guardUnsaved(action: () => void) {
+  function guardUnsaved(action: () => void, onCancel: (() => void) | null = null) {
     if (modified) {
       pendingLeave = action;
+      pendingLeaveCancel = onCancel;
       return;
     }
     action();
@@ -442,17 +439,24 @@
   function confirmDiscard() {
     const action = pendingLeave;
     pendingLeave = null;
+    pendingLeaveCancel = null;
     if (action) action();
   }
 
   function cancelDiscard() {
+    const cancel = pendingLeaveCancel;
     pendingLeave = null;
+    pendingLeaveCancel = null;
+    if (cancel) cancel();
   }
 
   async function save(overwrite = false) {
     if (!openedFile || !selectedPath || saving) return;
-    const sessionId = get(selectedSessionId);
+    const sessionId = loadedSessionId;
     if (!sessionId) return;
+    const windowIdx = loadedWindowIdx;
+    const targetKey = loadedBrowseKey;
+    const path = selectedPath;
     saving = true;
     saveError = '';
     // The text is captured before the await: the user keeps typing during the
@@ -461,14 +465,14 @@
     try {
       const result = await App.SaveSessionFileEdit(
         sessionId,
-        selectedPath,
+        path,
         submitted,
         openedFile.shape,
         openedFile.version,
         overwrite,
-        get(selectedWindowIdx) ?? 0,
+        windowIdx,
       );
-      if (destroyed) return;
+      if (destroyed || targetKey !== loadedBrowseKey || path !== selectedPath) return;
       if (result.conflict) {
         // The buffer is deliberately left alone — the whole point of refusing
         // is that the user's work survives to be re-offered.
@@ -480,10 +484,10 @@
       savedText = submitted;
       flashSaved();
     } catch (e) {
-      if (destroyed) return;
+      if (destroyed || targetKey !== loadedBrowseKey || path !== selectedPath) return;
       saveError = String(e);
     } finally {
-      if (!destroyed) saving = false;
+      if (!destroyed && targetKey === loadedBrowseKey) saving = false;
     }
   }
 
@@ -845,13 +849,20 @@
   function resetForSession() {
     treeGeneration++;
     fileGeneration++;
+    saving = false;
+    fileLoading = false;
+    rootLoading = false;
+    savedFlash = false;
+    if (savedFlashTimer) {
+      clearTimeout(savedFlashTimer);
+      savedFlashTimer = null;
+    }
     editing = false;
     openedFile = null;
     editText = '';
     savedText = '';
     saveError = '';
     conflict = '';
-    pendingLeave = null;
     dirs = {};
     dirErrors = {};
     loadingDirs = new Set<string>();
@@ -870,14 +881,14 @@
   //
   // Gated on `active` for the same reason the diff view is: reading a directory
   // for a tab nobody is looking at is work the user never asked for.
-  // Which file was open in each session, and where the caret was in it, so
+  // Which file was open in each session tab, and where the caret was in it, so
   // switching away and back returns you to the spot rather than to an empty
   // pane or the top of the file. In memory only: it records where you are in
   // this sitting, not a preference worth persisting.
-  const lastFileBySession = new Map<string, string>();
+  const lastFileByTab = new Map<string, string>();
 
   /**
-   * Where the user was in each file, keyed by session and path.
+   * Where the user was in each file, keyed by session, tab, and path.
    *
    * Per FILE rather than per session: switching tabs, sessions or away to the
    * terminal and back should land where you were, but picking a different file
@@ -889,7 +900,7 @@
   let restoreOffset = 0;
 
   function placeKey(path: string | null): string {
-    return `${loadedSessionId || ''}|${path || ''}`;
+    return `${loadedBrowseKey}|${path || ''}`;
   }
 
   /** Record where we are, so the next mount of this same file can return to it. */
@@ -908,49 +919,47 @@
   $: browseKey = `${$selectedSessionId ?? ''}:${$selectedWindowIdx ?? 0}`;
 
   $: if (active && browseKey !== loadedBrowseKey) {
-    // Unsaved work first: resetForSession discards the buffer outright, and a
-    // session switch is not the user's decision to lose what they typed. The
-    // switch itself has already happened, so the prompt offers to save or
-    // discard rather than to stay.
-    if (editing && editText !== savedText) {
-      pendingLeave = leaveEditModeQuietly;
-    }
-
-    // Both recorded before the reset clears them — the outgoing session's file
-    // is still in selectedPath at this point.
-    rememberPlace();
-    if (loadedSessionId && selectedPath) {
-      lastFileBySession.set(loadedSessionId, selectedPath);
-    }
-    const returningTo = $selectedSessionId ? lastFileBySession.get($selectedSessionId) : undefined;
-
-    loadedSessionId = $selectedSessionId;
-    loadedBrowseKey = browseKey;
-    resetForSession();
-    if ($selectedSessionId) {
-      void loadDir('').then(() => {
-        // Only if the user hasn't picked something else while the tree loaded,
-        // and only if this is still the session they are on.
-        if (returningTo && !selectedPath && loadedSessionId === $selectedSessionId) {
-          selectFile(returningTo);
-        }
-      });
-    }
+    requestBrowseTarget(browseKey, $selectedSessionId, $selectedWindowIdx ?? 0);
   }
 
-  // A tab change within one session needs less than a full reset — the tabs
-  // share a working directory, so the tree stands — but the edit state must go.
-  // It belongs to one file opened from one tab, and carrying it across left the
-  // browser showing an editor for the previous tab's file, which then rendered
-  // as an empty pane. The tracking variable is assigned INSIDE this block, per
-  // Svelte 3's dependency ordering.
-  let loadedWindowIdx: number | null = null;
-  $: if (active && ($selectedWindowIdx ?? 0) !== loadedWindowIdx) {
-    // Recorded before the index moves, so the spot is filed against the tab
-    // being left. Leaving edit mode here is no longer needed: canEdit requires
-    // openedFile to be the selected file, so a stale editor cannot show.
+  function requestBrowseTarget(targetKey: string, sessionId: string | null, windowIdx: number) {
+    const previousSessionId = loadedSessionId;
+    const previousWindowIdx = loadedWindowIdx;
+    if (modified) {
+      guardUnsaved(
+        () => applyBrowseTarget(targetKey, sessionId, windowIdx),
+        () => {
+          if (!previousSessionId) return;
+          selectSession(previousSessionId);
+          selectWindow(previousWindowIdx);
+        },
+      );
+      return;
+    }
+    applyBrowseTarget(targetKey, sessionId, windowIdx);
+  }
+
+  function applyBrowseTarget(targetKey: string, sessionId: string | null, windowIdx: number) {
     rememberPlace();
-    loadedWindowIdx = $selectedWindowIdx ?? 0;
+    if (loadedBrowseKey && selectedPath) lastFileByTab.set(loadedBrowseKey, selectedPath);
+    const returningTo = sessionId ? lastFileByTab.get(targetKey) : undefined;
+
+    loadedSessionId = sessionId;
+    loadedWindowIdx = windowIdx;
+    loadedBrowseKey = targetKey;
+    pendingLeave = null;
+    pendingLeaveCancel = null;
+    resetForSession();
+    if (!sessionId) return;
+    void loadDir('').then(() => {
+      if (returningTo && !selectedPath && loadedBrowseKey === targetKey) selectFile(returningTo);
+    });
+  }
+
+  /** Honour jumps only after the target tab's tree owns the component. */
+  $: if (active && loadedBrowseKey === browseKey && $pendingFileJump) {
+    const jump = $pendingFileJump;
+    void openRequestedFile(jump.path, jump.line);
   }
 
   // Navigating away from the Files tab keeps this component mounted but hidden,

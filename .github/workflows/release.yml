@@ -82,7 +82,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
+          go-version-file: go.mod
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -104,7 +104,7 @@ jobs:
             xvfb
 
       - name: Install Wails CLI
-        run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.11.0
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.14.0
 
       - name: Test and type-check
         # The frontend must be built BEFORE `go test`: main.go embeds
@@ -182,7 +182,7 @@ jobs:
           - Linux (Debian/Ubuntu): `.deb`
           - Linux (Fedora/RHEL): `.rpm`
           - Linux user-local install: `linux_amd64.tar.gz`
-          - macOS (Apple Silicon; Intel via Rosetta 2): `darwin_arm64.tar.gz`
+          - macOS (Apple Silicon): `darwin_arm64.tar.gz`
           - Windows x64 (installer): `windows_amd64_setup.exe`
           - Windows x64 (portable): `windows_amd64.tar.gz`
 
@@ -244,7 +244,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
+          go-version-file: go.mod
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -255,7 +255,7 @@ jobs:
         run: brew install portaudio
 
       - name: Install Wails CLI
-        run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.11.0
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.14.0
 
       - name: Set release metadata
         env:
@@ -267,7 +267,7 @@ jobs:
       - name: Build (Wails, macOS arm64)
         # Build arm64 only: the macos-14 runner is Apple Silicon and Homebrew's
         # portaudio is arm64-only, so a universal build fails to link the x86_64
-        # slice. Intel Macs run the arm64 build under Rosetta 2.
+        # slice. This artifact therefore supports Apple Silicon Macs only.
         env:
           VERSION: ${{ steps.ver.outputs.num }}
         run: |
@@ -353,7 +353,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
+          go-version-file: go.mod
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -378,7 +378,7 @@ jobs:
           echo "num=${TAG#v}" >> "$GITHUB_OUTPUT"
 
       - name: Install Wails CLI
-        run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.11.0
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.14.0
 
       - name: Set release metadata
         env:

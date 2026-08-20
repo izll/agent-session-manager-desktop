@@ -104,6 +104,24 @@ func TestTaskMasterOptInBlocksNpx(t *testing.T) {
 	if !app.taskMasterEnabled() {
 		t.Fatal("enabling the setting must be observed")
 	}
+	stopAllTaskMasters()
+	blockedStatus := app.TaskMasterStatus(inst.ID)
+	if blockedStatus["error"] == nil || !strings.Contains(blockedStatus["error"].(string), "taskMasterDisabled") {
+		t.Fatalf("a stop in progress must close the late-start registration gate: %v", blockedStatus)
+	}
+	if npxCalled() {
+		t.Fatal("a caller that observed the old setting must not start npx after stopAllTaskMasters")
+	}
+	// This mirrors the successful SaveSettings(enabled=true) path. The test
+	// writes storage directly so it opens the global gate directly as well.
+	taskMasterMu.Lock()
+	taskMasterStartsBlocked = false
+	taskMasterMu.Unlock()
+	t.Cleanup(func() {
+		taskMasterMu.Lock()
+		taskMasterStartsBlocked = false
+		taskMasterMu.Unlock()
+	})
 	_ = app.TaskMasterStatus(inst.ID)
 	if !npxCalled() {
 		t.Fatal("with the setting ON npx should have been attempted; the guard is not what gates it")

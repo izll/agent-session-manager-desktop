@@ -216,7 +216,10 @@ func (i *Instance) RevertFile(path string, baseRef string) error {
 	}
 
 	if i.isUntracked(path) {
-		full := filepath.Join(i.Path, filepath.FromSlash(path))
+		// All git queries above run in gitDir(), which is BrowseRoot for a
+		// tab-specific working directory. Delete from that exact same root too;
+		// using the session's original Path can remove an unrelated namesake.
+		full := filepath.Join(i.gitDir(), filepath.FromSlash(path))
 		if err := os.Remove(full); err != nil && !os.IsNotExist(err) {
 			return fmt.Errorf("could not delete %s: %w", path, err)
 		}

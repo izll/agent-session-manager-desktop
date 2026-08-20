@@ -20,17 +20,21 @@ type TaskMaster struct {
 
 // Task represents a Task Master task
 type Task struct {
-	ID           string     `json:"id"`
-	Title        string     `json:"title"`
-	Description  string     `json:"description"`
-	Status       string     `json:"status"`
-	Priority     string     `json:"priority"`
-	Tags         []string   `json:"tags"`
-	Subtasks     []Subtask  `json:"subtasks"`
-	Dependencies []string   `json:"dependencies"`
-	Complexity   *int       `json:"complexity,omitempty"`
-	Details      string     `json:"details,omitempty"`
-	CreatedAt    string     `json:"createdAt,omitempty"`
+	ID           string    `json:"id"`
+	Title        string    `json:"title"`
+	Description  string    `json:"description"`
+	Status       string    `json:"status"`
+	Priority     string    `json:"priority"`
+	Tags         []string  `json:"tags"`
+	Subtasks     []Subtask `json:"subtasks"`
+	Dependencies []string  `json:"dependencies"`
+	Complexity   *int      `json:"complexity,omitempty"`
+	Details      string    `json:"details,omitempty"`
+	CreatedAt    string    `json:"createdAt,omitempty"`
+	UpdatedAt    string    `json:"updatedAt,omitempty"`
+	CompletedAt  string    `json:"completedAt,omitempty"`
+	DueAt        string    `json:"dueAt,omitempty"`
+	SessionID    string    `json:"sessionId,omitempty"`
 }
 
 // Subtask represents a subtask within a task
@@ -40,6 +44,7 @@ type Subtask struct {
 	Description string `json:"description,omitempty"`
 	Status      string `json:"status"`
 	Details     string `json:"details,omitempty"`
+	CreatedAt   string `json:"createdAt,omitempty"`
 }
 
 // TasksResponse represents the response from get_tasks
@@ -289,6 +294,10 @@ func taskFromMap(m map[string]interface{}) *Task {
 	task.Priority = mapString(m, "priority")
 	task.Details = mapString(m, "details")
 	task.CreatedAt = mapString(m, "createdAt")
+	task.UpdatedAt = mapString(m, "updatedAt")
+	task.CompletedAt = mapString(m, "completedAt")
+	task.DueAt = mapString(m, "dueAt")
+	task.SessionID = mapString(m, "sessionId")
 
 	if tags, ok := m["tags"].([]interface{}); ok {
 		for _, t := range tags {
@@ -318,6 +327,7 @@ func taskFromMap(m map[string]interface{}) *Task {
 					Description: mapString(stMap, "description"),
 					Status:      mapString(stMap, "status"),
 					Details:     mapString(stMap, "details"),
+					CreatedAt:   mapString(stMap, "createdAt"),
 				}
 				task.Subtasks = append(task.Subtasks, sub)
 			}

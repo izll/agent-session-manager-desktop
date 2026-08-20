@@ -158,4 +158,20 @@ const place = (scrollTop, currentHunk = 2, markedHunk = 2) => ({ scrollTop, curr
   assert.equal(recallPlace('s9', 'y', 'whole'), null);
 }
 
+// Two tabs of one session may point at different repositories. Their identical
+// paths and list shapes must not share either content identity or scroll state.
+{
+  noteListKey('tabs', 'same.ts:1:0', 1, 'full');
+  noteListKey('tabs', 'same.ts:1:0', 2, 'full');
+  rememberPlace('tabs', 'same.ts', 'whole', place(111), 1);
+  rememberPlace('tabs', 'same.ts', 'whole', place(222), 2);
+
+  assert.equal(recallPlace('tabs', 'same.ts', 'whole', 1)?.scrollTop, 111);
+  assert.equal(recallPlace('tabs', 'same.ts', 'whole', 2)?.scrollTop, 222);
+
+  noteListKey('tabs', 'same.ts:9:9', 2, 'full');
+  assert.equal(recallPlace('tabs', 'same.ts', 'whole', 1)?.scrollTop, 111, 'another tab is untouched');
+  assert.equal(recallPlace('tabs', 'same.ts', 'whole', 2), null, 'the changed tab is forgotten');
+}
+
 console.log('diffViewState: ok');

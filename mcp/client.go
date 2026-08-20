@@ -222,14 +222,21 @@ func (c *Client) Stop() error {
 	if wasRunning {
 		c.failPending(fmt.Errorf("MCP client stopped"))
 	}
-	closeProcess(stdin, stdout, stderr, cmd)
+	c.closeProcess(stdin, stdout, stderr, cmd)
 	return nil
 }
 
-func closeProcess(stdin io.WriteCloser, stdout, stderr io.ReadCloser, cmd *exec.Cmd) {
+func (c *Client) closeProcess(stdin io.WriteCloser, stdout, stderr io.ReadCloser, cmd *exec.Cmd) {
+	// Closing the pipe first is intentional: a child that stopped reading can
+	// leave a writer blocked while it holds stdinMu. Close wakes that writer;
+	// the lock/unlock below is then only a barrier before the process is reaped.
+	// Writers keep a local pipe snapshot, so clearing c.stdin under stateMu does
+	// not create a nil dereference.
 	if stdin != nil {
 		_ = stdin.Close()
 	}
+	c.stdinMu.Lock()
+	c.stdinMu.Unlock()
 	if stdout != nil {
 		_ = stdout.Close()
 	}
@@ -278,7 +285,7 @@ func (c *Client) readResponses(runID uint64, scanner *bufio.Scanner) {
 
 		// Check if this is a server request (has method AND id)
 		if msg.Method != "" && msg.ID != nil {
-			c.handleServerRequest(msg)
+			c.handleServerRequest(runID, msg)
 			continue
 		}
 
@@ -340,7 +347,7 @@ func (c *Client) failRun(runID uint64, err error) {
 
 	fmt.Printf("MCP: %v\n", err)
 	c.failPending(err)
-	closeProcess(stdin, stdout, stderr, cmd)
+	c.closeProcess(stdin, stdout, stderr, cmd)
 }
 
 func (c *Client) failPending(err error) {
@@ -356,7 +363,7 @@ func (c *Client) failPending(err error) {
 }
 
 // handleServerRequest handles requests from the server to the client
-func (c *Client) handleServerRequest(msg JSONRPCMessage) {
+func (c *Client) handleServerRequest(runID uint64, msg JSONRPCMessage) {
 	fmt.Printf("MCP server request: %s (id=%d)\n", msg.Method, *msg.ID)
 
 	var result interface{}
@@ -379,20 +386,20 @@ func (c *Client) handleServerRequest(msg JSONRPCMessage) {
 
 	case "sampling/createMessage":
 		// We don't support sampling, return error
-		c.sendErrorResponse(*msg.ID, -32601, "Method not supported: sampling/createMessage")
+		c.sendErrorResponse(runID, *msg.ID, -32601, "Method not supported: sampling/createMessage")
 		return
 
 	default:
 		fmt.Printf("MCP: unknown server request method: %s\n", msg.Method)
-		c.sendErrorResponse(*msg.ID, -32601, "Method not found: "+msg.Method)
+		c.sendErrorResponse(runID, *msg.ID, -32601, "Method not found: "+msg.Method)
 		return
 	}
 
-	c.sendSuccessResponse(*msg.ID, result)
+	c.sendSuccessResponse(runID, *msg.ID, result)
 }
 
 // sendSuccessResponse sends a successful response to a server request
-func (c *Client) sendSuccessResponse(id int64, result interface{}) {
+func (c *Client) sendSuccessResponse(runID uint64, id int64, result interface{}) {
 	response := map[string]interface{}{
 		"jsonrpc": "2.0",
 		"id":      id,
@@ -406,13 +413,13 @@ func (c *Client) sendSuccessResponse(id int64, result interface{}) {
 	}
 
 	fmt.Printf("MCP >>> responding: %s\n", data)
-	c.stdinMu.Lock()
-	fmt.Fprintf(c.stdin, "%s\n", data)
-	c.stdinMu.Unlock()
+	if err := c.writeForRun(runID, data); err != nil {
+		c.failRun(runID, fmt.Errorf("failed to write MCP response: %w", err))
+	}
 }
 
 // sendErrorResponse sends an error response to a server request
-func (c *Client) sendErrorResponse(id int64, code int, message string) {
+func (c *Client) sendErrorResponse(runID uint64, id int64, code int, message string) {
 	response := map[string]interface{}{
 		"jsonrpc": "2.0",
 		"id":      id,
@@ -429,9 +436,30 @@ func (c *Client) sendErrorResponse(id int64, code int, message string) {
 	}
 
 	fmt.Printf("MCP >>> responding error: %s\n", data)
+	if err := c.writeForRun(runID, data); err != nil {
+		c.failRun(runID, fmt.Errorf("failed to write MCP error response: %w", err))
+	}
+}
+
+// writeForRun serializes writes with stdin closure and verifies that the
+// writer still belongs to the process that produced the message. Without the
+// run check, a late server request from a stopped process can be written into
+// a newly started MCP process; without the nil check Stop can make Fprintf
+// dereference a nil io.WriteCloser.
+func (c *Client) writeForRun(runID uint64, data []byte) error {
 	c.stdinMu.Lock()
-	fmt.Fprintf(c.stdin, "%s\n", data)
-	c.stdinMu.Unlock()
+	defer c.stdinMu.Unlock()
+
+	c.stateMu.Lock()
+	if !c.running || c.runID != runID || c.stdin == nil {
+		c.stateMu.Unlock()
+		return fmt.Errorf("MCP client run is no longer active")
+	}
+	stdin := c.stdin
+	c.stateMu.Unlock()
+
+	_, err := fmt.Fprintf(stdin, "%s\n", data)
+	return err
 }
 
 // readStderr reads and logs stderr from the server
@@ -468,7 +496,6 @@ func (c *Client) sendRequestWithTimeout(method string, params interface{}, timeo
 		c.stateMu.Unlock()
 		return nil, fmt.Errorf("MCP client not running")
 	}
-	stdin := c.stdin
 	runID := c.runID
 	c.stateMu.Unlock()
 	id := atomic.AddInt64(&c.requestID, 1)
@@ -499,10 +526,7 @@ func (c *Client) sendRequestWithTimeout(method string, params interface{}, timeo
 
 	// Send request
 	fmt.Printf("MCP >>> sending request: %s\n", string(data))
-	c.stdinMu.Lock()
-	_, err = fmt.Fprintf(stdin, "%s\n", data)
-	c.stdinMu.Unlock()
-
+	err = c.writeForRun(runID, data)
 	if err != nil {
 		c.failRun(runID, fmt.Errorf("failed to write MCP request: %w", err))
 		return nil, fmt.Errorf("failed to send request: %w", err)
@@ -549,9 +573,12 @@ func (c *Client) initialize() error {
 	}
 	data, _ := json.Marshal(notif)
 	fmt.Printf("MCP >>> sending notification: %s\n", data)
-	c.stdinMu.Lock()
-	fmt.Fprintf(c.stdin, "%s\n", data)
-	c.stdinMu.Unlock()
+	c.stateMu.Lock()
+	runID := c.runID
+	c.stateMu.Unlock()
+	if err := c.writeForRun(runID, data); err != nil {
+		return fmt.Errorf("failed to send initialized notification: %w", err)
+	}
 
 	// List available tools
 	return c.listTools()

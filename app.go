@@ -25,18 +25,19 @@ import (
 
 // App struct holds the application state
 type App struct {
-	ctx              context.Context
-	storage          *session.Storage
-	historyIndex     *session.HistoryIndex
-	ptys             map[string]*ptySession
-	ptyMu            sync.RWMutex
-	projectMu        sync.RWMutex
-	termServer       *TerminalServer
-	dictation        *DictationService
-	activityStats    *ActivityStatsRecorder
-	previewCancel    context.CancelFunc
-	previewWG        sync.WaitGroup
-	lastTypingSignal int64 // unix nano timestamp of last typing signal
+	ctx               context.Context
+	storage           *session.Storage
+	historyIndex      *session.HistoryIndex
+	ptys              map[string]*ptySession
+	ptyMu             sync.RWMutex
+	projectMu         sync.RWMutex
+	projectMutationMu sync.Mutex
+	termServer        *TerminalServer
+	dictation         *DictationService
+	activityStats     *ActivityStatsRecorder
+	previewCancel     context.CancelFunc
+	previewWG         sync.WaitGroup
+	lastTypingSignal  int64 // unix nano timestamp of last typing signal
 	// projectLocked is true when THIS instance owns the active project's lock.
 	// otherInstancePID is the PID of the instance that owns it instead (0 if
 	// none). Terminal attaches are refused unless projectLocked, so a second
@@ -151,7 +152,7 @@ func (a *App) startup(ctx context.Context) {
 	// Start WebSocket terminal server for low-latency terminal I/O
 	a.termServer = NewTerminalServer(storage, 9753)
 	a.termServer.typingSignal = &a.lastTypingSignal
-	a.termServer.attachAllowed = &a.projectLocked
+	a.termServer.beginAttach = a.beginTerminalAttach
 	if err := a.termServer.Start(); err != nil {
 		runtime.LogError(ctx, fmt.Sprintf("Failed to start terminal server: %v", err))
 	}
@@ -249,19 +250,25 @@ func (a *App) IsDevMode() bool {
 
 // shutdown is called when the app is closing
 func (a *App) shutdown(ctx context.Context) {
+	a.projectMu.Lock()
 	// Persist Codex-generated conversation IDs before releasing the project
 	// lock or cleaning up GUI mirrors. The base tmux sessions intentionally
 	// survive app shutdown, so this is what makes a later reboot resume the
 	// exact conversation.
 	if a.projectLocked {
 		a.persistActiveProjectCodexResumeIDs("shutdown")
+		// Mirrors belong to the project lock owner. Remove them before dropping
+		// ownership so the guard in cleanupAllGUISessions remains meaningful.
+		a.cleanupAllGUISessions()
 	}
 
 	// Release the project lock only if WE hold it — a second instance that
 	// failed to acquire it must not delete the real owner's lock file.
 	if a.projectLocked {
 		a.storage.UnlockProject()
+		a.projectLocked = false
 	}
+	a.projectMu.Unlock()
 	if a.previewCancel != nil {
 		a.previewCancel()
 		a.previewWG.Wait()
@@ -271,9 +278,6 @@ func (a *App) shutdown(ctx context.Context) {
 			log.Printf("[statistics] failed to flush: %v", err)
 		}
 	}
-
-	// Clean up all GUI linked tmux sessions
-	a.cleanupAllGUISessions()
 
 	// Close all PTY sessions
 	a.ptyMu.Lock()
@@ -303,6 +307,26 @@ func (a *App) shutdown(ctx context.Context) {
 // copied out before Stop so no potentially blocking process shutdown runs while
 // the global lock is held.
 func stopAllTaskMasters() {
+	taskMasterMu.Lock()
+	// Close the registration gate before looking at in-flight starts. Without
+	// this, a caller that observed the old enabled setting could register just
+	// after the loop saw an empty map and leave a new npx child behind.
+	taskMasterStartsBlocked = true
+	taskMasterMu.Unlock()
+	for {
+		taskMasterMu.RLock()
+		starts := make([]*taskMasterStart, 0, len(taskMasterStarts))
+		for _, start := range taskMasterStarts {
+			starts = append(starts, start)
+		}
+		taskMasterMu.RUnlock()
+		if len(starts) == 0 {
+			break
+		}
+		for _, start := range starts {
+			<-start.done
+		}
+	}
 	taskMasterMu.Lock()
 	taskMasters := make([]*mcp.TaskMaster, 0, len(taskMasterCache))
 	for path, tm := range taskMasterCache {
@@ -437,18 +461,27 @@ func (a *App) GetProjects() ([]ProjectInfo, error) {
 func (a *App) SelectProject(id string) error {
 	a.projectMu.Lock()
 	defer a.projectMu.Unlock()
+	oldID := a.storage.GetActiveProjectID()
 	// Once the active project changes, its running sessions are no longer part
 	// of sidebar polling. Capture their Codex IDs while we still own that
 	// project's lock and before switching storage to the new project.
 	if a.projectLocked {
 		a.persistActiveProjectCodexResumeIDs("project switch")
 	}
+	// Close the attach/mutation gate before changing the Storage's active
+	// project. Otherwise a connection can observe the old true value but load a
+	// session from the newly selected, possibly foreign-owned project.
+	a.projectLocked = false
+	a.otherInstancePID = 0
+	a.storage.UnlockProject()
 	if err := a.storage.SetActiveProject(id); err != nil {
+		_ = a.storage.SetActiveProject(oldID)
+		if lockErr := a.storage.LockProject(oldID); lockErr == nil {
+			a.projectLocked = true
+		}
 		return err
 	}
-	a.otherInstancePID = 0
 	if err := a.storage.LockProject(id); err != nil {
-		a.projectLocked = false
 		var locked *session.ErrProjectLocked
 		if errors.As(err, &locked) {
 			a.otherInstancePID = locked.PID
@@ -485,7 +518,45 @@ type LockStatusInfo struct {
 
 // GetLockStatus reports whether this instance owns the active project's lock.
 func (a *App) GetLockStatus() LockStatusInfo {
+	a.projectMu.RLock()
+	defer a.projectMu.RUnlock()
 	return LockStatusInfo{Locked: a.projectLocked, OtherInstancePID: a.otherInstancePID}
+}
+
+func (a *App) beginProjectMutation() (func(), error) {
+	// Project mutations are serialised as well as pinned to one active project.
+	// The Storage mutex protects individual calls, but many App operations do a
+	// load/change/save sequence or a tmux side effect followed by persistence.
+	// Letting two such operations overlap loses fields from the older snapshot.
+	a.projectMutationMu.Lock()
+	a.projectMu.RLock()
+	if !a.projectLocked {
+		a.projectMu.RUnlock()
+		a.projectMutationMu.Unlock()
+		return nil, fmt.Errorf("project is read-only in this application instance")
+	}
+	return func() {
+		a.projectMu.RUnlock()
+		a.projectMutationMu.Unlock()
+	}, nil
+}
+
+func (a *App) beginTerminalAttach() (func(), bool) {
+	a.projectMu.RLock()
+	if !a.projectLocked {
+		a.projectMu.RUnlock()
+		return nil, false
+	}
+	return a.projectMu.RUnlock, true
+}
+
+func (a *App) beginProjectReadWithSideEffects() (func(), error) {
+	a.projectMu.RLock()
+	if !a.projectLocked {
+		a.projectMu.RUnlock()
+		return nil, fmt.Errorf("project is read-only in this application instance")
+	}
+	return a.projectMu.RUnlock, nil
 }
 
 // CreateProject creates a new project
@@ -503,6 +574,11 @@ func (a *App) CreateProject(name string) (*ProjectInfo, error) {
 
 // DeleteProject deletes a project
 func (a *App) DeleteProject(id string) error {
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return err
+	}
+	defer done()
 	return a.storage.RemoveProject(id)
 }
 
@@ -550,6 +626,11 @@ func (a *App) GetProjectSessions(projectID string) ([]SessionInfo, error) {
 
 // ImportSessions imports selected sessions from another project
 func (a *App) ImportSessions(sourceProjectID string, sessionIDs []string) (int, error) {
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return 0, err
+	}
+	defer done()
 	// Load source project data atomically
 	sourceInstances, sourceGroups, err := a.storage.LoadAllForProject(sourceProjectID)
 	if err != nil {
@@ -738,6 +819,11 @@ func (a *App) instanceToSessionInfo(inst *session.Instance) SessionInfo {
 
 // CreateSession creates a new session
 func (a *App) CreateSession(name, path string, agent string, autoYes bool, extraArgs string) (*SessionInfo, error) {
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return nil, err
+	}
+	defer done()
 	inst, err := session.NewInstance(name, path, autoYes, session.AgentType(agent), extraArgs)
 	if err != nil {
 		return nil, err
@@ -767,6 +853,11 @@ func (a *App) CreateSession(name, path string, agent string, autoYes bool, extra
 
 // StartSession starts a session
 func (a *App) StartSession(id string) error {
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return err
+	}
+	defer done()
 	inst, err := a.storage.GetInstance(id)
 	if err != nil {
 		return err
@@ -789,6 +880,11 @@ func (a *App) StartSession(id string) error {
 // the conversation file, moved machine, etc.), we drop it and start fresh
 // instead of letting the CLI boot into a "No conversation found" error.
 func (a *App) StartSessionWithResume(id, resumeID string) error {
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return err
+	}
+	defer done()
 	inst, err := a.storage.GetInstance(id)
 	if err != nil {
 		return err
@@ -824,6 +920,11 @@ func (a *App) StartSessionWithResume(id, resumeID string) error {
 
 // StopSession stops a session
 func (a *App) StopSession(id string) error {
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return err
+	}
+	defer done()
 	inst, err := a.storage.GetInstance(id)
 	if err != nil {
 		return err
@@ -836,6 +937,11 @@ func (a *App) StopSession(id string) error {
 
 // RestartTab restarts a stopped tab (dead pane) in a session
 func (a *App) RestartTab(id string, windowIdx int) error {
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return err
+	}
+	defer done()
 	inst, err := a.storage.GetInstance(id)
 	if err != nil {
 		return err
@@ -848,6 +954,11 @@ func (a *App) RestartTab(id string, windowIdx int) error {
 
 // RestartTabWithResume restarts a stopped tab with a specific resume session ID
 func (a *App) RestartTabWithResume(id string, windowIdx int, resumeId string) error {
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return err
+	}
+	defer done()
 	inst, err := a.storage.GetInstance(id)
 	if err != nil {
 		return err
@@ -890,6 +1001,11 @@ func (a *App) RestartTabWithResume(id string, windowIdx int, resumeId string) er
 
 // StopTab stops a specific tab (tmux window) in a session
 func (a *App) StopTab(id string, windowIdx int) error {
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return err
+	}
+	defer done()
 	inst, err := a.storage.GetInstance(id)
 	if err != nil {
 		return err
@@ -902,11 +1018,11 @@ func (a *App) StopTab(id string, windowIdx int) error {
 
 // DeleteTab deletes a tab (followed window) from a session
 func (a *App) DeleteTab(id string, windowIdx int) error {
-	a.projectMu.RLock()
-	defer a.projectMu.RUnlock()
-	if !a.projectLocked {
-		return fmt.Errorf("project is read-only in this application instance")
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return err
 	}
+	defer done()
 	return a.storage.TrashTab(id, windowIdx)
 }
 
@@ -935,11 +1051,11 @@ func (a *App) UnfinishedTasksForSession(sessionID string) ([]TaskInfo, error) {
 }
 
 func (a *App) DeleteSession(id string) error {
-	a.projectMu.RLock()
-	defer a.projectMu.RUnlock()
-	if !a.projectLocked {
-		return fmt.Errorf("project is read-only in this application instance")
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return err
 	}
+	defer done()
 	return a.storage.TrashInstance(id)
 }
 
@@ -980,29 +1096,29 @@ func (a *App) GetTrashItems() ([]TrashItemInfo, error) {
 }
 
 func (a *App) RestoreTrashItem(id string) (*session.RestoreResult, error) {
-	a.projectMu.RLock()
-	defer a.projectMu.RUnlock()
-	if !a.projectLocked {
-		return nil, fmt.Errorf("project is read-only in this application instance")
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return nil, err
 	}
+	defer done()
 	return a.storage.RestoreTrashItem(id)
 }
 
 func (a *App) PermanentlyDeleteTrashItem(id string) error {
-	a.projectMu.RLock()
-	defer a.projectMu.RUnlock()
-	if !a.projectLocked {
-		return fmt.Errorf("project is read-only in this application instance")
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return err
 	}
+	defer done()
 	return a.storage.PermanentlyDeleteTrashItem(id)
 }
 
 func (a *App) EmptyTrash() error {
-	a.projectMu.RLock()
-	defer a.projectMu.RUnlock()
-	if !a.projectLocked {
-		return fmt.Errorf("project is read-only in this application instance")
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return err
 	}
+	defer done()
 	return a.storage.EmptyTrash()
 }
 
@@ -1025,11 +1141,11 @@ func (a *App) GetBackups() ([]BackupInfo, error) {
 }
 
 func (a *App) CreateBackup() error {
-	a.projectMu.RLock()
-	defer a.projectMu.RUnlock()
-	if !a.projectLocked {
-		return fmt.Errorf("project is read-only in this application instance")
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return err
 	}
+	defer done()
 	if err := a.storage.CreateBackup(); err != nil {
 		return err
 	}
@@ -1082,20 +1198,20 @@ func (a *App) GetTaskBackups() ([]BackupInfo, error) {
 // wanted separately: recovering a deleted task should not also roll back every
 // session and setting to that moment.
 func (a *App) RestoreTaskBackup(id string) error {
-	a.projectMu.RLock()
-	defer a.projectMu.RUnlock()
-	if !a.projectLocked {
-		return fmt.Errorf("project is read-only in this application instance")
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return err
 	}
+	defer done()
 	return a.storage.RestoreTaskBackup(id)
 }
 
 func (a *App) RestoreBackup(id string) error {
-	a.projectMu.RLock()
-	defer a.projectMu.RUnlock()
-	if !a.projectLocked {
-		return fmt.Errorf("project is read-only in this application instance")
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return err
 	}
+	defer done()
 	instances, err := a.storage.Load()
 	if err != nil {
 		return err
@@ -1110,6 +1226,11 @@ func (a *App) RestoreBackup(id string) error {
 
 // RenameSession renames a session
 func (a *App) RenameSession(id, name string) error {
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return err
+	}
+	defer done()
 	inst, err := a.storage.GetInstance(id)
 	if err != nil {
 		return err
@@ -1120,6 +1241,11 @@ func (a *App) RenameSession(id, name string) error {
 
 // ToggleFavorite toggles favorite status
 func (a *App) ToggleFavorite(id string) error {
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return err
+	}
+	defer done()
 	inst, err := a.storage.GetInstance(id)
 	if err != nil {
 		return err
@@ -1135,6 +1261,11 @@ func (a *App) ToggleFavorite(id string) error {
 // session restart. Falls back to the stored-flag toggle (+restart) when the
 // session isn't running or isn't Claude, so YOLO can still be preset offline.
 func (a *App) CycleYoloMode(id string, windowIdx int) error {
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return err
+	}
+	defer done()
 	inst, err := a.storage.GetInstance(id)
 	if err != nil {
 		return err
@@ -1153,11 +1284,20 @@ func (a *App) CycleYoloMode(id string, windowIdx int) error {
 		return inst.SendKeysToWindow(windowIdx, "BTab") // Shift+Tab
 	}
 	// Not running / not Claude: preset via the stored flag (restarts if alive).
-	return a.ToggleAutoYes(id)
+	return a.toggleAutoYes(id)
 }
 
 // ToggleAutoYes toggles YOLO mode and restarts the session if running
 func (a *App) ToggleAutoYes(id string) error {
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return err
+	}
+	defer done()
+	return a.toggleAutoYes(id)
+}
+
+func (a *App) toggleAutoYes(id string) error {
 	inst, err := a.storage.GetInstance(id)
 	if err != nil {
 		return err
@@ -1280,6 +1420,11 @@ func getClaudeSessionIDFromTmuxWindow(tmuxSession string, windowIdx int) string 
 
 // SetSessionColor sets session colors
 func (a *App) SetSessionColor(id, color, bgColor string, fullRow bool) error {
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return err
+	}
+	defer done()
 	inst, err := a.storage.GetInstance(id)
 	if err != nil {
 		return err
@@ -1292,6 +1437,11 @@ func (a *App) SetSessionColor(id, color, bgColor string, fullRow bool) error {
 
 // SetSessionNotes sets session notes
 func (a *App) SetSessionNotes(id string, notes string) error {
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return err
+	}
+	defer done()
 	inst, err := a.storage.GetInstance(id)
 	if err != nil {
 		return err
@@ -1302,94 +1452,45 @@ func (a *App) SetSessionNotes(id string, notes string) error {
 
 // AssignToGroup assigns session to group
 func (a *App) AssignToGroup(sessionID, groupID string) error {
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return err
+	}
+	defer done()
 	return a.storage.SetInstanceGroup(sessionID, groupID)
 }
 
 // ReorderSession moves a session up or down in the list
 func (a *App) ReorderSession(sessionID string, direction int) error {
-	instances, _, err := a.storage.LoadAll()
+	done, err := a.beginProjectMutation()
 	if err != nil {
 		return err
 	}
-
-	// Find current index
-	currentIdx := -1
-	for i, inst := range instances {
-		if inst.ID == sessionID {
-			currentIdx = i
-			break
-		}
-	}
-	if currentIdx == -1 {
-		return fmt.Errorf("error.sessionNotFound")
-	}
-
-	// Calculate new index
-	newIdx := currentIdx + direction
-	if newIdx < 0 || newIdx >= len(instances) {
-		return nil // Can't move further
-	}
-
-	// Swap
-	instances[currentIdx], instances[newIdx] = instances[newIdx], instances[currentIdx]
-
-	// Save
-	groups, err := a.storage.GetGroups()
-	if err != nil {
-		return err
-	}
-	return a.storage.SaveWithGroups(instances, groups)
+	defer done()
+	return a.storage.ReorderInstance(sessionID, direction)
 }
 
 // MoveSessionToIndex moves a session to a specific index in the list
 func (a *App) MoveSessionToIndex(sessionID string, targetIndex int) error {
-	instances, _, err := a.storage.LoadAll()
+	done, err := a.beginProjectMutation()
 	if err != nil {
 		return err
 	}
-
-	// Find current index
-	currentIdx := -1
-	for i, inst := range instances {
-		if inst.ID == sessionID {
-			currentIdx = i
-			break
-		}
-	}
-	if currentIdx == -1 {
-		return fmt.Errorf("error.sessionNotFound")
-	}
-
-	// Clamp target index
-	if targetIndex < 0 {
-		targetIndex = 0
-	}
-	if targetIndex >= len(instances) {
-		targetIndex = len(instances) - 1
-	}
-
-	// No change needed
-	if currentIdx == targetIndex {
-		return nil
-	}
-
-	// Remove from current position
-	item := instances[currentIdx]
-	instances = append(instances[:currentIdx], instances[currentIdx+1:]...)
-
-	// Insert at new position
-	instances = append(instances[:targetIndex], append([]*session.Instance{item}, instances[targetIndex:]...)...)
-
-	// Save
-	groups, err := a.storage.GetGroups()
-	if err != nil {
-		return err
-	}
-	return a.storage.SaveWithGroups(instances, groups)
+	defer done()
+	return a.storage.MoveInstanceToIndex(sessionID, targetIndex)
 }
 
 // SendPrompt sends text to session
 func (a *App) SendPrompt(id string, text string) error {
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return err
+	}
+	defer done()
+	return a.sendPrompt(id, text)
+}
+
+func (a *App) sendPrompt(id string, text string) error {
 	inst, err := a.storage.GetInstance(id)
 	if err != nil {
 		return err
@@ -1400,6 +1501,11 @@ func (a *App) SendPrompt(id string, text string) error {
 // SendPromptToWindow sends text to a specific tab rather than to whichever
 // window the session happens to have active.
 func (a *App) SendPromptToWindow(id string, windowIdx int, text string) error {
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return err
+	}
+	defer done()
 	inst, err := a.storage.GetInstance(id)
 	if err != nil {
 		return err
@@ -1423,6 +1529,11 @@ type ForkResult struct {
 // window every time, so forking from a second Claude tab branched a different
 // conversation than the one on screen.
 func (a *App) ForkSession(id string, windowIdx int) (*ForkResult, error) {
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return nil, err
+	}
+	defer done()
 	inst, err := a.storage.GetInstance(id)
 	if err != nil {
 		return nil, err
@@ -1485,6 +1596,11 @@ func (a *App) recordLiveConversation(inst *session.Instance, windowIdx int, live
 // ForkToNewTab creates the forked tab and returns its window index, so the
 // frontend can switch to it immediately — the same as CreateTab.
 func (a *App) ForkToNewTab(id, name, sessionID string) (int, error) {
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return 0, err
+	}
+	defer done()
 	inst, err := a.storage.GetInstance(id)
 	if err != nil {
 		return 0, err
@@ -1501,6 +1617,11 @@ func (a *App) ForkToNewTab(id, name, sessionID string) (int, error) {
 
 // ForkToNewSession creates a new session from forked Claude conversation
 func (a *App) ForkToNewSession(id, name, sessionID string) (*SessionInfo, error) {
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return nil, err
+	}
+	defer done()
 	origInst, err := a.storage.GetInstance(id)
 	if err != nil {
 		return nil, err
@@ -1599,6 +1720,11 @@ func (a *App) GetGroups() ([]GroupInfo, error) {
 
 // CreateGroup creates a new group
 func (a *App) CreateGroup(name string) (*GroupInfo, error) {
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return nil, err
+	}
+	defer done()
 	group, err := a.storage.AddGroup(name)
 	if err != nil {
 		return nil, err
@@ -1611,43 +1737,52 @@ func (a *App) CreateGroup(name string) (*GroupInfo, error) {
 
 // DeleteGroup deletes a group
 func (a *App) DeleteGroup(id string) error {
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return err
+	}
+	defer done()
 	return a.storage.RemoveGroup(id)
 }
 
 // RenameGroup renames a group
 func (a *App) RenameGroup(id, name string) error {
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return err
+	}
+	defer done()
 	return a.storage.RenameGroup(id, name)
 }
 
 // MoveGroup moves a group to a new position in the sidebar order
 func (a *App) MoveGroup(id string, newIndex int) error {
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return err
+	}
+	defer done()
 	return a.storage.MoveGroup(id, newIndex)
 }
 
 // ToggleGroupCollapse toggles group collapsed state
 func (a *App) ToggleGroupCollapse(id string) error {
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return err
+	}
+	defer done()
 	return a.storage.ToggleGroupCollapsed(id)
 }
 
 // SetGroupColor sets group colors
 func (a *App) SetGroupColor(id, color, bgColor string, fullRow bool) error {
-	groups, err := a.storage.GetGroups()
+	done, err := a.beginProjectMutation()
 	if err != nil {
 		return err
 	}
-	for _, g := range groups {
-		if g.ID == id {
-			g.Color = color
-			g.BgColor = bgColor
-			g.FullRowColor = fullRow
-			instances, _, err := a.storage.LoadAll()
-			if err != nil {
-				return err
-			}
-			return a.storage.SaveWithGroups(instances, groups)
-		}
-	}
-	return fmt.Errorf("error.groupNotFound")
+	defer done()
+	return a.storage.SetGroupColors(id, color, bgColor, fullRow)
 }
 
 // ============================================================================
@@ -1658,6 +1793,11 @@ func (a *App) SetGroupColor(id, color, bgColor string, fullRow bool) error {
 // CreateTab creates a new tab and returns the new tmux window index so the
 // frontend can switch to (and focus) it immediately.
 func (a *App) CreateTab(sessionID string, isAgent bool, agent string, name string, extraArgs string, workDir string) (int, error) {
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return -1, err
+	}
+	defer done()
 	inst, err := a.storage.GetInstance(sessionID)
 	if err != nil {
 		return -1, err
@@ -1683,16 +1823,21 @@ func (a *App) CreateTab(sessionID string, isAgent bool, agent string, name strin
 
 // CloseTab closes a tab
 func (a *App) CloseTab(sessionID string, windowIdx int) error {
-	a.projectMu.RLock()
-	defer a.projectMu.RUnlock()
-	if !a.projectLocked {
-		return fmt.Errorf("project is read-only in this application instance")
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return err
 	}
+	defer done()
 	return a.storage.TrashTab(sessionID, windowIdx)
 }
 
 // RenameTab renames a tab
 func (a *App) RenameTab(sessionID string, windowIdx int, name string) error {
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return err
+	}
+	defer done()
 	inst, err := a.storage.GetInstance(sessionID)
 	if err != nil {
 		return err
@@ -1710,6 +1855,11 @@ func (a *App) RenameTab(sessionID string, windowIdx int, name string) error {
 // ReorderTab reorders a tab within a session's display order.
 // fromPos and toPos are indices into the tab display order (0-based, including main window).
 func (a *App) ReorderTab(sessionID string, fromPos, toPos int) error {
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return err
+	}
+	defer done()
 	inst, err := a.storage.GetInstance(sessionID)
 	if err != nil {
 		return err
@@ -1731,6 +1881,11 @@ func (a *App) GetTabOrder(sessionID string) ([]int, error) {
 
 // SetTabNotes sets tab notes
 func (a *App) SetTabNotes(sessionID string, windowIdx int, notes string) error {
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return err
+	}
+	defer done()
 	inst, err := a.storage.GetInstance(sessionID)
 	if err != nil {
 		return err
@@ -1752,6 +1907,11 @@ func (a *App) SetTabNotes(sessionID string, windowIdx int, notes string) error {
 // SetTabColor sets the optional text and background colors for a tab.
 // Empty values clear an override; textColor also supports "auto".
 func (a *App) SetTabColor(sessionID string, windowIdx int, textColor, backgroundColor string) error {
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return err
+	}
+	defer done()
 	inst, err := a.storage.GetInstance(sessionID)
 	if err != nil {
 		return err
@@ -1809,6 +1969,11 @@ func (a *App) GetWindowAutoYes(sessionID string, windowIdx int) (bool, error) {
 
 // SetWindowAutoYes sets YOLO state for a specific window
 func (a *App) SetWindowAutoYes(sessionID string, windowIdx int, enabled bool) error {
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return err
+	}
+	defer done()
 	inst, err := a.storage.GetInstance(sessionID)
 	if err != nil {
 		return err
@@ -1846,6 +2011,11 @@ func (a *App) GetExtraArgs(sessionID string, windowIdx int) (string, error) {
 
 // SetExtraArgs sets the extra CLI arguments for a session window
 func (a *App) SetExtraArgs(sessionID string, windowIdx int, extraArgs string) error {
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return err
+	}
+	defer done()
 	inst, err := a.storage.GetInstance(sessionID)
 	if err != nil {
 		return err
@@ -1938,6 +2108,10 @@ type SidebarUpdate struct {
 
 // GetSidebarUpdates returns activity and status line data in one call (single LoadAll)
 func (a *App) GetSidebarUpdates() SidebarUpdate {
+	a.projectMu.RLock()
+	mayPersist := a.projectLocked
+	defer a.projectMu.RUnlock()
+
 	result := SidebarUpdate{
 		Activities:   make(map[string]string),
 		StatusLines:  make(map[string]string),
@@ -1968,7 +2142,7 @@ func (a *App) GetSidebarUpdates() SidebarUpdate {
 		// Auto-detect and persist Claude session ID from running process
 		// so that resume works correctly after app/machine restart
 		needSave := false
-		if inst.NeedsCodexResumeCapture() {
+		if mayPersist && inst.NeedsCodexResumeCapture() {
 			if _, err := a.storage.CaptureCodexResumeIDsForProject(projectID, inst.ID); err != nil {
 				log.Printf("[SidebarPoll] failed to capture Codex session IDs for session=%s: %v", inst.ID, err)
 			}
@@ -2033,7 +2207,7 @@ func (a *App) GetSidebarUpdates() SidebarUpdate {
 			}
 		}
 
-		if needSave {
+		if mayPersist && needSave {
 			if err := a.storage.MergeResumeSessionIDsForProject(projectID, inst); err != nil {
 				log.Printf("[SidebarPoll] failed to save auto-detected session IDs for session=%s: %v", inst.ID, err)
 			}
@@ -2258,6 +2432,11 @@ func (a *App) GetTerminalWSToken() string {
 
 // AttachSession attaches to a session terminal
 func (a *App) AttachSession(id string, windowIdx int) (string, error) {
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return "", err
+	}
+	defer done()
 	inst, err := a.storage.GetInstance(id)
 	if err != nil {
 		return "", err
@@ -2356,6 +2535,11 @@ func (a *App) DetachSession(ptyID string) error {
 
 // SendInput sends input to PTY
 func (a *App) SendInput(ptyID string, data string) error {
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return err
+	}
+	defer done()
 	a.ptyMu.RLock()
 	ps, exists := a.ptys[ptyID]
 	a.ptyMu.RUnlock()
@@ -2364,12 +2548,17 @@ func (a *App) SendInput(ptyID string, data string) error {
 		return fmt.Errorf("error.ptyNotFound")
 	}
 
-	_, err := ps.ptmx.Write([]byte(data))
+	_, err = ps.ptmx.Write([]byte(data))
 	return err
 }
 
 // ResizeTerminal resizes PTY and refreshes tmux
 func (a *App) ResizeTerminal(ptyID string, cols, rows int) error {
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return err
+	}
+	defer done()
 	a.ptyMu.RLock()
 	ps, exists := a.ptys[ptyID]
 	a.ptyMu.RUnlock()
@@ -2408,6 +2597,11 @@ func (a *App) ResizeTerminal(ptyID string, cols, rows int) error {
 // Fixes occasional rendering glitches (garbled characters) by sending Ctrl+L
 // to the pane and refreshing all clients attached to the tmux session.
 func (a *App) RefreshWindow(sessionID string, windowIdx int) error {
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return err
+	}
+	defer done()
 	inst, err := a.storage.GetInstance(sessionID)
 	if err != nil {
 		return err
@@ -2448,6 +2642,11 @@ func (a *App) RefreshWindow(sessionID string, windowIdx int) error {
 // trade for something that runs on its own: a cosmetic offset is recoverable,
 // text typed into an agent's prompt is not.
 func (a *App) RedrawWindow(sessionID string, windowIdx int) error {
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return err
+	}
+	defer done()
 	inst, err := a.storage.GetInstance(sessionID)
 	if err != nil {
 		return err
@@ -2607,14 +2806,17 @@ func (a *App) GetFullDiffForFile(id, path string, wholeFile bool, windowIdx int)
 }
 
 // RevertDiffFile discards every pending change to one file.
-func (a *App) RevertDiffFile(id, path string, sessionScope bool, windowIdx int) error {
-	a.projectMu.RLock()
-	defer a.projectMu.RUnlock()
-	if !a.projectLocked {
-		return fmt.Errorf("project is read-only in this application instance")
+func (a *App) RevertDiffFile(id, path string, sessionScope bool, windowIdx int, expectedRoot string) error {
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return err
 	}
+	defer done()
 	inst, err := a.browseInstance(id, windowIdx)
 	if err != nil {
+		return err
+	}
+	if err := validateDiffRoot(inst, expectedRoot); err != nil {
 		return err
 	}
 	baseRef := ""
@@ -2627,17 +2829,33 @@ func (a *App) RevertDiffFile(id, path string, sessionScope bool, windowIdx int) 
 // RevertDiffHunk undoes a single change block. The patch is the text the UI
 // displayed, so a file that moved on since makes git refuse instead of
 // reverting something the user never saw.
-func (a *App) RevertDiffHunk(id, patch string, windowIdx int) error {
-	a.projectMu.RLock()
-	defer a.projectMu.RUnlock()
-	if !a.projectLocked {
-		return fmt.Errorf("project is read-only in this application instance")
+func (a *App) RevertDiffHunk(id, patch string, windowIdx int, expectedRoot string) error {
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return err
 	}
+	defer done()
 	inst, err := a.browseInstance(id, windowIdx)
 	if err != nil {
 		return err
 	}
+	if err := validateDiffRoot(inst, expectedRoot); err != nil {
+		return err
+	}
 	return inst.RevertHunk(patch)
+}
+
+func validateDiffRoot(inst *session.Instance, expectedRoot string) error {
+	actualRoot := inst.Path
+	if inst.BrowseRoot != "" {
+		actualRoot = inst.BrowseRoot
+	}
+	actualAbs, actualErr := filepath.Abs(actualRoot)
+	expectedAbs, expectedErr := filepath.Abs(expectedRoot)
+	if expectedRoot == "" || actualErr != nil || expectedErr != nil || filepath.Clean(actualAbs) != filepath.Clean(expectedAbs) {
+		return fmt.Errorf("the tab working directory changed; reopen the diff before reverting")
+	}
+	return nil
 }
 
 // ============================================================================
@@ -2725,11 +2943,11 @@ type SaveFileEditResult struct {
 // application instance holding no lock must not write into a project another
 // instance owns.
 func (a *App) SaveSessionFileEdit(id, path, text string, shape session.FileShape, version string, overwrite bool, windowIdx int) (*SaveFileEditResult, error) {
-	a.projectMu.RLock()
-	defer a.projectMu.RUnlock()
-	if !a.projectLocked {
-		return nil, fmt.Errorf("project is read-only in this application instance")
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return nil, err
 	}
+	defer done()
 	inst, err := a.browseInstance(id, windowIdx)
 	if err != nil {
 		return nil, err
@@ -3040,12 +3258,12 @@ func (a *App) GetSettings() (*SettingsInfo, error) {
 
 // SaveSettings saves UI settings
 func (a *App) SaveSettings(settings SettingsInfo) error {
-	a.projectMu.RLock()
-	defer a.projectMu.RUnlock()
-	if !a.projectLocked {
-		return fmt.Errorf("project is read-only in this application instance")
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return err
 	}
-	err := a.storage.UpdateSettings(func(current *session.Settings) {
+	defer done()
+	err = a.storage.UpdateSettings(func(current *session.Settings) {
 		// Update only frontend-owned fields. Backend-only values (for example
 		// secrets and compatibility state) must survive an ordinary UI save.
 		current.CompactList = settings.CompactList
@@ -3107,6 +3325,14 @@ func (a *App) SaveSettings(settings SettingsInfo) error {
 	// alive, which is precisely what "off" is supposed to mean there isn't.
 	if !settings.TaskMasterEnabled {
 		stopAllTaskMasters()
+	} else {
+		// stopAllTaskMasters closes the start-registration gate before draining
+		// children. A deliberate re-enable is the only operation that opens it
+		// again; shutdown and an "off" setting therefore cannot be raced by an
+		// already-running RPC.
+		taskMasterMu.Lock()
+		taskMasterStartsBlocked = false
+		taskMasterMu.Unlock()
 	}
 	return nil
 }
@@ -3209,12 +3435,12 @@ func (a *App) InstallMultiplexer() (string, error) {
 // where the user left it. Best-effort: a failure here must never block
 // switching sessions, so callers may ignore the error.
 func (a *App) SetLastWindowIndex(sessionID string, windowIdx int) error {
-	a.projectMu.RLock()
-	defer a.projectMu.RUnlock()
-	if !a.projectLocked {
+	done, err := a.beginProjectMutation()
+	if err != nil {
 		// A read-only instance simply doesn't record it.
 		return nil
 	}
+	defer done()
 	if windowIdx < 0 {
 		return nil
 	}
@@ -3261,11 +3487,11 @@ func (a *App) SetTabViewBar(sessionID string, windowIdx int, state int) error {
 // differ only in which field they write, so the validation and the
 // main-window lookup are shared.
 func (a *App) setTabBarState(sessionID string, windowIdx, state int, viewBar bool) error {
-	a.projectMu.RLock()
-	defer a.projectMu.RUnlock()
-	if !a.projectLocked {
-		return fmt.Errorf("project is read-only in this application instance")
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return err
 	}
+	defer done()
 	if state < ViewBarInherit || state > ViewBarShown {
 		return fmt.Errorf("invalid bar state %d", state)
 	}
@@ -3303,11 +3529,11 @@ func (a *App) setTabBarState(sessionID string, windowIdx, state int, viewBar boo
 // SetTabFontSize overrides the terminal font size for one tab. A size of 0
 // clears the override so the tab follows the global setting again.
 func (a *App) SetTabFontSize(sessionID string, windowIdx int, size int) error {
-	a.projectMu.RLock()
-	defer a.projectMu.RUnlock()
-	if !a.projectLocked {
-		return fmt.Errorf("project is read-only in this application instance")
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return err
 	}
+	defer done()
 	// Guard the stored value, not just the UI: a size outside this range makes
 	// the terminal unusable and is hard to recover from.
 	if size != 0 && (size < MinTerminalFontSize || size > MaxTerminalFontSize) {
@@ -3337,11 +3563,11 @@ func (a *App) SetTabFontSize(sessionID string, windowIdx int, size int) error {
 }
 
 func (a *App) SetTabTerminalTheme(sessionID string, windowIdx int, themeID string) error {
-	a.projectMu.RLock()
-	defer a.projectMu.RUnlock()
-	if !a.projectLocked {
-		return fmt.Errorf("project is read-only in this application instance")
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return err
 	}
+	defer done()
 	inst, err := a.storage.GetInstance(sessionID)
 	if err != nil {
 		return err
@@ -3368,6 +3594,11 @@ func (a *App) SetTabTerminalTheme(sessionID string, windowIdx int, themeID strin
 // shown in the session list. windowIdx 0 (the main window) is stored on the
 // instance; followed windows carry their own flag.
 func (a *App) SetTabStatusLineVisibility(sessionID string, windowIdx int, hide bool) error {
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return err
+	}
+	defer done()
 	inst, err := a.storage.GetInstance(sessionID)
 	if err != nil {
 		return err
@@ -3395,6 +3626,11 @@ func (a *App) SetTabStatusLineVisibility(sessionID string, windowIdx int, hide b
 // inbox, without switching tabs. The whitelist keeps arbitrary key injection
 // out of the bound API surface.
 func (a *App) QuickReplyTab(sessionID string, windowIdx int, action string) error {
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return err
+	}
+	defer done()
 	inst, err := a.storage.GetInstance(sessionID)
 	if err != nil {
 		return err
@@ -3543,10 +3779,44 @@ type TaskInfo struct {
 
 // SubtaskInfo represents a subtask for the frontend
 type SubtaskInfo struct {
-	ID        string `json:"id"`
-	Title     string `json:"title"`
-	Done      bool   `json:"done"`
-	CreatedAt string `json:"createdAt"`
+	ID          string `json:"id"`
+	Title       string `json:"title"`
+	Description string `json:"description,omitempty"`
+	Details     string `json:"details,omitempty"`
+	Status      string `json:"status"`
+	Done        bool   `json:"done"`
+	CreatedAt   string `json:"createdAt"`
+}
+
+// DeletedTaskSnapshot is the provider-neutral shape captured by the frontend
+// before deletion. RestoreDeletedTask consumes it in one backend transaction,
+// preserving IDs so reverse dependencies remain valid.
+type DeletedTaskSnapshot struct {
+	ID           string                   `json:"id"`
+	Title        string                   `json:"title"`
+	Description  string                   `json:"description"`
+	Details      string                   `json:"details,omitempty"`
+	Status       string                   `json:"status"`
+	Priority     string                   `json:"priority"`
+	Tags         []string                 `json:"tags"`
+	Subtasks     []DeletedSubtaskSnapshot `json:"subtasks"`
+	Dependencies []string                 `json:"dependencies"`
+	Complexity   *int                     `json:"complexity,omitempty"`
+	CreatedAt    string                   `json:"createdAt,omitempty"`
+	UpdatedAt    string                   `json:"updatedAt,omitempty"`
+	CompletedAt  string                   `json:"completedAt,omitempty"`
+	DueAt        string                   `json:"dueAt,omitempty"`
+	SessionID    string                   `json:"sessionId,omitempty"`
+}
+
+type DeletedSubtaskSnapshot struct {
+	ID          string `json:"id"`
+	Title       string `json:"title"`
+	Description string `json:"description,omitempty"`
+	Status      string `json:"status,omitempty"`
+	Details     string `json:"details,omitempty"`
+	Done        bool   `json:"done,omitempty"`
+	CreatedAt   string `json:"createdAt,omitempty"`
 }
 
 // taskManagerCache caches task managers per project path
@@ -3593,11 +3863,21 @@ func (a *App) getTaskManager(sessionID string) (*session.TaskManager, error) {
 func convertTask(t session.Task) TaskInfo {
 	subtasks := make([]SubtaskInfo, len(t.Subtasks))
 	for i, st := range t.Subtasks {
+		status := st.Status
+		if status == "" {
+			status = session.TaskStatusBacklog
+		}
+		if st.Done {
+			status = session.TaskStatusDone
+		}
 		subtasks[i] = SubtaskInfo{
-			ID:        st.ID,
-			Title:     st.Title,
-			Done:      st.Done,
-			CreatedAt: st.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+			ID:          st.ID,
+			Title:       st.Title,
+			Description: st.Description,
+			Details:     st.Details,
+			Status:      string(status),
+			Done:        st.Done,
+			CreatedAt:   st.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 		}
 	}
 
@@ -3673,6 +3953,11 @@ func (a *App) GetTasksByStatus(sessionID string, status string) ([]TaskInfo, err
 
 // CreateTask creates a new task
 func (a *App) CreateTask(sessionID, title, description, priority string, tags []string) (*TaskInfo, error) {
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return nil, err
+	}
+	defer done()
 	tm, err := a.getTaskManager(sessionID)
 	if err != nil {
 		return nil, err
@@ -3682,17 +3967,9 @@ func (a *App) CreateTask(sessionID, title, description, priority string, tags []
 		tags = []string{}
 	}
 
-	task, err := tm.CreateTask(title, description, session.TaskPriority(priority), tags)
+	task, err := tm.CreateTaskForSession(title, description, session.TaskPriority(priority), tags, sessionID)
 	if err != nil {
 		return nil, err
-	}
-
-	// A task created from a session's own panel belongs to that session, so
-	// closing it can warn about work left behind. Assigned here rather than
-	// through a second call, which would leave the task unassigned if the
-	// caller crashed between the two.
-	if err := tm.UpdateTask(task.ID, map[string]interface{}{"sessionId": sessionID}); err == nil {
-		task.SessionID = sessionID
 	}
 
 	info := convertTask(*task)
@@ -3701,6 +3978,11 @@ func (a *App) CreateTask(sessionID, title, description, priority string, tags []
 
 // UpdateTask updates an existing task
 func (a *App) UpdateTask(sessionID, taskID string, updates map[string]interface{}) error {
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return err
+	}
+	defer done()
 	tm, err := a.getTaskManager(sessionID)
 	if err != nil {
 		return err
@@ -3711,6 +3993,11 @@ func (a *App) UpdateTask(sessionID, taskID string, updates map[string]interface{
 
 // DeleteTask deletes a task
 func (a *App) DeleteTask(sessionID, taskID string) error {
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return err
+	}
+	defer done()
 	tm, err := a.getTaskManager(sessionID)
 	if err != nil {
 		return err
@@ -3721,6 +4008,11 @@ func (a *App) DeleteTask(sessionID, taskID string) error {
 
 // MoveTask changes the status of a task
 func (a *App) MoveTask(sessionID, taskID, newStatus string) error {
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return err
+	}
+	defer done()
 	tm, err := a.getTaskManager(sessionID)
 	if err != nil {
 		return err
@@ -3731,6 +4023,11 @@ func (a *App) MoveTask(sessionID, taskID, newStatus string) error {
 
 // AddSubtask adds a subtask to a task
 func (a *App) AddSubtask(sessionID, taskID, title string) (*SubtaskInfo, error) {
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return nil, err
+	}
+	defer done()
 	tm, err := a.getTaskManager(sessionID)
 	if err != nil {
 		return nil, err
@@ -3751,6 +4048,11 @@ func (a *App) AddSubtask(sessionID, taskID, title string) (*SubtaskInfo, error) 
 
 // ToggleSubtask toggles the done status of a subtask
 func (a *App) ToggleSubtask(sessionID, taskID, subtaskID string) error {
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return err
+	}
+	defer done()
 	tm, err := a.getTaskManager(sessionID)
 	if err != nil {
 		return err
@@ -3761,12 +4063,194 @@ func (a *App) ToggleSubtask(sessionID, taskID, subtaskID string) error {
 
 // DeleteSubtask removes a subtask
 func (a *App) DeleteSubtask(sessionID, taskID, subtaskID string) error {
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return err
+	}
+	defer done()
 	tm, err := a.getTaskManager(sessionID)
 	if err != nil {
 		return err
 	}
 
 	return tm.DeleteSubtask(taskID, subtaskID)
+}
+
+// RestoreDeletedTask restores a full deleted-task snapshot through the
+// selected provider without allocating a replacement ID.
+func (a *App) RestoreDeletedTask(sessionID, provider string, snapshot DeletedTaskSnapshot) error {
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return err
+	}
+	defer done()
+	if snapshot.ID == "" {
+		return fmt.Errorf("restored task has no ID")
+	}
+
+	switch provider {
+	case "local":
+		tm, err := a.getTaskManager(sessionID)
+		if err != nil {
+			return err
+		}
+		return tm.RestoreTask(localTaskFromSnapshot(snapshot))
+	case "mcp":
+		instance, err := a.storage.GetInstance(sessionID)
+		if err != nil {
+			return err
+		}
+		if instance.Path == "" {
+			return fmt.Errorf("error.sessionNoPath")
+		}
+		// Restoring a file snapshot does not require starting npx/the MCP server.
+		// Undo must remain available if the provider exited after deletion.
+		return mcp.NewTaskMaster(instance.Path).RestoreTask(mcpTaskFromSnapshot(snapshot))
+	default:
+		return fmt.Errorf("unknown task provider %q", provider)
+	}
+}
+
+// RestoreDeletedSubtask restores a complete subtask snapshot to its original
+// parent and provider. The provider is captured when deletion happens.
+func (a *App) RestoreDeletedSubtask(sessionID, provider, taskID string, snapshot DeletedSubtaskSnapshot) error {
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return err
+	}
+	defer done()
+	if taskID == "" || snapshot.ID == "" {
+		return fmt.Errorf("restored subtask has no parent or ID")
+	}
+
+	switch provider {
+	case "local":
+		tm, err := a.getTaskManager(sessionID)
+		if err != nil {
+			return err
+		}
+		return tm.RestoreSubtask(taskID, localSubtaskFromSnapshot(snapshot))
+	case "mcp":
+		instance, err := a.storage.GetInstance(sessionID)
+		if err != nil {
+			return err
+		}
+		if instance.Path == "" {
+			return fmt.Errorf("error.sessionNoPath")
+		}
+		return mcp.NewTaskMaster(instance.Path).RestoreSubtask(taskID, mcpSubtaskFromSnapshot(snapshot))
+	default:
+		return fmt.Errorf("unknown task provider %q", provider)
+	}
+}
+
+func localTaskFromSnapshot(snapshot DeletedTaskSnapshot) session.Task {
+	status := snapshot.Status
+	if status == "" || status == "pending" {
+		status = string(session.TaskStatusBacklog)
+	}
+	task := session.Task{
+		ID:           snapshot.ID,
+		Title:        snapshot.Title,
+		Description:  snapshot.Description,
+		Details:      snapshot.Details,
+		Status:       session.TaskStatus(status),
+		Priority:     session.TaskPriority(snapshot.Priority),
+		Tags:         append([]string(nil), snapshot.Tags...),
+		Dependencies: append([]string(nil), snapshot.Dependencies...),
+		SessionID:    snapshot.SessionID,
+	}
+	task.CreatedAt, _ = time.Parse(time.RFC3339Nano, snapshot.CreatedAt)
+	task.UpdatedAt, _ = time.Parse(time.RFC3339Nano, snapshot.UpdatedAt)
+	if completed, err := time.Parse(time.RFC3339Nano, snapshot.CompletedAt); err == nil {
+		task.CompletedAt = &completed
+	}
+	if due, err := time.Parse(time.RFC3339Nano, snapshot.DueAt); err == nil {
+		task.DueAt = &due
+	}
+	task.Subtasks = make([]session.Subtask, 0, len(snapshot.Subtasks))
+	for _, subtask := range snapshot.Subtasks {
+		created, _ := time.Parse(time.RFC3339Nano, subtask.CreatedAt)
+		status := subtask.Status
+		if status == "" || status == "pending" {
+			status = string(session.TaskStatusBacklog)
+		}
+		done := subtask.Done || status == string(session.TaskStatusDone)
+		if done {
+			status = string(session.TaskStatusDone)
+		}
+		task.Subtasks = append(task.Subtasks, session.Subtask{
+			ID:          subtask.ID,
+			Title:       subtask.Title,
+			Description: subtask.Description,
+			Details:     subtask.Details,
+			Status:      session.TaskStatus(status),
+			Done:        done,
+			CreatedAt:   created,
+		})
+	}
+	return task
+}
+
+func localSubtaskFromSnapshot(snapshot DeletedSubtaskSnapshot) session.Subtask {
+	status := snapshot.Status
+	if status == "" || status == "pending" {
+		status = string(session.TaskStatusBacklog)
+	}
+	subtask := session.Subtask{
+		ID: snapshot.ID, Title: snapshot.Title, Description: snapshot.Description,
+		Details: snapshot.Details, Status: session.TaskStatus(status), Done: snapshot.Done,
+	}
+	if parsed, err := time.Parse(time.RFC3339Nano, snapshot.CreatedAt); err == nil {
+		subtask.CreatedAt = parsed
+	}
+	return subtask
+}
+
+func mcpTaskFromSnapshot(snapshot DeletedTaskSnapshot) mcp.Task {
+	task := mcp.Task{
+		ID:           snapshot.ID,
+		Title:        snapshot.Title,
+		Description:  snapshot.Description,
+		Details:      snapshot.Details,
+		Status:       snapshot.Status,
+		Priority:     snapshot.Priority,
+		Tags:         append([]string(nil), snapshot.Tags...),
+		Dependencies: append([]string(nil), snapshot.Dependencies...),
+		Complexity:   snapshot.Complexity,
+		CreatedAt:    snapshot.CreatedAt,
+		UpdatedAt:    snapshot.UpdatedAt,
+		CompletedAt:  snapshot.CompletedAt,
+		DueAt:        snapshot.DueAt,
+		SessionID:    snapshot.SessionID,
+		Subtasks:     make([]mcp.Subtask, 0, len(snapshot.Subtasks)),
+	}
+	for _, subtask := range snapshot.Subtasks {
+		task.Subtasks = append(task.Subtasks, mcp.Subtask{
+			ID:          subtask.ID,
+			Title:       subtask.Title,
+			Description: subtask.Description,
+			Status:      subtask.Status,
+			Details:     subtask.Details,
+			CreatedAt:   subtask.CreatedAt,
+		})
+	}
+	return task
+}
+
+func mcpSubtaskFromSnapshot(snapshot DeletedSubtaskSnapshot) mcp.Subtask {
+	status := snapshot.Status
+	if status == "" {
+		if snapshot.Done {
+			status = "done"
+		} else {
+			status = "pending"
+		}
+	}
+	return mcp.Subtask{
+		ID: snapshot.ID, Title: snapshot.Title, Description: snapshot.Description,
+		Details: snapshot.Details, Status: status, CreatedAt: snapshot.CreatedAt,
+	}
 }
 
 // GetNextTask returns the next recommended task to work on
@@ -3787,6 +4271,11 @@ func (a *App) GetNextTask(sessionID string) (*TaskInfo, error) {
 
 // SendTaskToAgent sends a task as a prompt to the active agent
 func (a *App) SendTaskToAgent(sessionID, taskID string) error {
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return err
+	}
+	defer done()
 	tm, err := a.getTaskManager(sessionID)
 	if err != nil {
 		return err
@@ -3799,7 +4288,7 @@ func (a *App) SendTaskToAgent(sessionID, taskID string) error {
 
 	log.Printf("[TaskManager] SendToAgent taskID=%s prompt=%q", taskID, prompt)
 	// Send the prompt to the active terminal
-	return a.SendPrompt(sessionID, prompt)
+	return a.sendPrompt(sessionID, prompt)
 }
 
 // ============================================================================
@@ -3809,6 +4298,15 @@ func (a *App) SendTaskToAgent(sessionID, taskID string) error {
 // taskMasterCache stores TaskMaster instances per project
 var taskMasterCache = make(map[string]*mcp.TaskMaster)
 var taskMasterMu sync.RWMutex
+
+type taskMasterStart struct {
+	done chan struct{}
+	tm   *mcp.TaskMaster
+	err  error
+}
+
+var taskMasterStarts = make(map[string]*taskMasterStart)
+var taskMasterStartsBlocked bool
 
 // taskMasterEnabled reports whether the user opted into the Task Master panel.
 // Read from storage on every call rather than cached: the setting can be
@@ -3843,34 +4341,74 @@ func (a *App) getTaskMasterMCP(sessionID string) (*mcp.TaskMaster, error) {
 		return nil, fmt.Errorf("error.sessionNoPath")
 	}
 
-	taskMasterMu.RLock()
-	tm, ok := taskMasterCache[projectPath]
-	taskMasterMu.RUnlock()
+	for {
+		taskMasterMu.RLock()
+		blocked := taskMasterStartsBlocked
+		tm := taskMasterCache[projectPath]
+		starting := taskMasterStarts[projectPath]
+		taskMasterMu.RUnlock()
+		if blocked {
+			return nil, fmt.Errorf("error.taskMasterDisabled")
+		}
+		if tm != nil && tm.IsRunning() {
+			return tm, nil
+		}
+		if starting != nil {
+			<-starting.done
+			if starting.err != nil {
+				return nil, starting.err
+			}
+			continue
+		}
 
-	if ok && tm.IsRunning() {
-		return tm, nil
-	}
-
-	taskMasterMu.Lock()
-	defer taskMasterMu.Unlock()
-
-	// Double-check after acquiring write lock
-	if tm, ok := taskMasterCache[projectPath]; ok && tm.IsRunning() {
-		return tm, nil
-	}
-	if stale, ok := taskMasterCache[projectPath]; ok {
-		_ = stale.Stop()
+		taskMasterMu.Lock()
+		if taskMasterStartsBlocked {
+			taskMasterMu.Unlock()
+			return nil, fmt.Errorf("error.taskMasterDisabled")
+		}
+		if tm = taskMasterCache[projectPath]; tm != nil && tm.IsRunning() {
+			taskMasterMu.Unlock()
+			return tm, nil
+		}
+		if starting = taskMasterStarts[projectPath]; starting != nil {
+			taskMasterMu.Unlock()
+			<-starting.done
+			if starting.err != nil {
+				return nil, starting.err
+			}
+			continue
+		}
+		stale := taskMasterCache[projectPath]
 		delete(taskMasterCache, projectPath)
-	}
+		starting = &taskMasterStart{done: make(chan struct{})}
+		taskMasterStarts[projectPath] = starting
+		taskMasterMu.Unlock()
 
-	// Uses Claude Code provider - no API key required
-	tm = mcp.NewTaskMaster(projectPath)
-	if err := tm.Start(); err != nil {
-		return nil, fmt.Errorf("failed to start Task Master: %w", err)
-	}
+		// Process shutdown/startup may block; only callers for this same project
+		// wait on starting.done. Other projects never queue behind it.
+		if stale != nil {
+			_ = stale.Stop()
+		}
+		candidate := mcp.NewTaskMaster(projectPath)
+		startErr := candidate.Start()
+		if startErr != nil {
+			startErr = fmt.Errorf("failed to start Task Master: %w", startErr)
+		}
 
-	taskMasterCache[projectPath] = tm
-	return tm, nil
+		taskMasterMu.Lock()
+		starting.tm = candidate
+		starting.err = startErr
+		if startErr == nil {
+			taskMasterCache[projectPath] = candidate
+		}
+		delete(taskMasterStarts, projectPath)
+		close(starting.done)
+		taskMasterMu.Unlock()
+		if startErr != nil {
+			return nil, startErr
+		}
+		return candidate, nil
+	}
 }
 
 // MCPTaskInfo represents a Task Master task for the frontend
@@ -3886,6 +4424,10 @@ type MCPTaskInfo struct {
 	Complexity   *int             `json:"complexity,omitempty"`
 	Details      string           `json:"details,omitempty"`
 	CreatedAt    string           `json:"createdAt,omitempty"`
+	UpdatedAt    string           `json:"updatedAt,omitempty"`
+	CompletedAt  string           `json:"completedAt,omitempty"`
+	DueAt        string           `json:"dueAt,omitempty"`
+	SessionID    string           `json:"sessionId,omitempty"`
 }
 
 // MCPSubtaskInfo represents a subtask for the frontend
@@ -3895,6 +4437,7 @@ type MCPSubtaskInfo struct {
 	Description string `json:"description,omitempty"`
 	Status      string `json:"status"`
 	Details     string `json:"details,omitempty"`
+	CreatedAt   string `json:"createdAt,omitempty"`
 }
 
 // convertMCPTask converts mcp.Task to MCPTaskInfo
@@ -3907,6 +4450,7 @@ func convertMCPTask(t mcp.Task) MCPTaskInfo {
 			Description: st.Description,
 			Status:      st.Status,
 			Details:     st.Details,
+			CreatedAt:   st.CreatedAt,
 		}
 	}
 
@@ -3932,6 +4476,10 @@ func convertMCPTask(t mcp.Task) MCPTaskInfo {
 		Dependencies: deps,
 		Complexity:   t.Complexity,
 		CreatedAt:    t.CreatedAt,
+		UpdatedAt:    t.UpdatedAt,
+		CompletedAt:  t.CompletedAt,
+		DueAt:        t.DueAt,
+		SessionID:    t.SessionID,
 	}
 }
 
@@ -3942,6 +4490,12 @@ func (a *App) TaskMasterStatus(sessionID string) map[string]interface{} {
 		"running":     false,
 		"error":       nil,
 	}
+	release, guardErr := a.beginProjectReadWithSideEffects()
+	if guardErr != nil {
+		result["error"] = guardErr.Error()
+		return result
+	}
+	defer release()
 
 	tm, err := a.getTaskMasterMCP(sessionID)
 	if err != nil {
@@ -3958,6 +4512,11 @@ func (a *App) TaskMasterStatus(sessionID string) map[string]interface{} {
 
 // TaskMasterInit initializes Task Master for a project
 func (a *App) TaskMasterInit(sessionID string) error {
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return err
+	}
+	defer done()
 	tm, err := a.getTaskMasterMCP(sessionID)
 	if err != nil {
 		return err
@@ -3968,6 +4527,11 @@ func (a *App) TaskMasterInit(sessionID string) error {
 
 // TaskMasterParsePRD parses a PRD file into tasks
 func (a *App) TaskMasterParsePRD(sessionID, prdContent string, numTasks int) error {
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return err
+	}
+	defer done()
 	tm, err := a.getTaskMasterMCP(sessionID)
 	if err != nil {
 		return err
@@ -3993,6 +4557,11 @@ func (a *App) TaskMasterParsePRD(sessionID, prdContent string, numTasks int) err
 
 // TaskMasterGetTasks returns all tasks from Task Master
 func (a *App) TaskMasterGetTasks(sessionID, status string) ([]MCPTaskInfo, error) {
+	release, err := a.beginProjectReadWithSideEffects()
+	if err != nil {
+		return nil, err
+	}
+	defer release()
 	tm, err := a.getTaskMasterMCP(sessionID)
 	if err != nil {
 		return nil, err
@@ -4013,6 +4582,11 @@ func (a *App) TaskMasterGetTasks(sessionID, status string) ([]MCPTaskInfo, error
 
 // TaskMasterGetTask returns a specific task
 func (a *App) TaskMasterGetTask(sessionID, taskID string) (*MCPTaskInfo, error) {
+	release, err := a.beginProjectReadWithSideEffects()
+	if err != nil {
+		return nil, err
+	}
+	defer release()
 	tm, err := a.getTaskMasterMCP(sessionID)
 	if err != nil {
 		return nil, err
@@ -4029,6 +4603,11 @@ func (a *App) TaskMasterGetTask(sessionID, taskID string) (*MCPTaskInfo, error) 
 
 // TaskMasterNextTask returns the next task to work on
 func (a *App) TaskMasterNextTask(sessionID string) (*MCPTaskInfo, error) {
+	release, err := a.beginProjectReadWithSideEffects()
+	if err != nil {
+		return nil, err
+	}
+	defer release()
 	tm, err := a.getTaskMasterMCP(sessionID)
 	if err != nil {
 		return nil, err
@@ -4049,6 +4628,11 @@ func (a *App) TaskMasterNextTask(sessionID string) (*MCPTaskInfo, error) {
 
 // TaskMasterSetStatus sets the status of a task
 func (a *App) TaskMasterSetStatus(sessionID, taskID, status string) error {
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return err
+	}
+	defer done()
 	tm, err := a.getTaskMasterMCP(sessionID)
 	if err != nil {
 		return err
@@ -4059,6 +4643,11 @@ func (a *App) TaskMasterSetStatus(sessionID, taskID, status string) error {
 
 // TaskMasterAddTask adds a new task
 func (a *App) TaskMasterAddTask(sessionID, prompt string, research bool, priority string) (*MCPTaskInfo, error) {
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return nil, err
+	}
+	defer done()
 	tm, err := a.getTaskMasterMCP(sessionID)
 	if err != nil {
 		return nil, err
@@ -4081,6 +4670,11 @@ func (a *App) TaskMasterAddTask(sessionID, prompt string, research bool, priorit
 
 // TaskMasterAddManualTask adds a new task without AI (manual mode)
 func (a *App) TaskMasterAddManualTask(sessionID, title, description, details, priority string) (*MCPTaskInfo, error) {
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return nil, err
+	}
+	defer done()
 	tm, err := a.getTaskMasterMCP(sessionID)
 	if err != nil {
 		return nil, err
@@ -4103,6 +4697,11 @@ func (a *App) TaskMasterAddManualTask(sessionID, title, description, details, pr
 
 // TaskMasterUpdateTask updates a task
 func (a *App) TaskMasterUpdateTask(sessionID, taskID, prompt string, research bool) error {
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return err
+	}
+	defer done()
 	tm, err := a.getTaskMasterMCP(sessionID)
 	if err != nil {
 		return err
@@ -4113,6 +4712,11 @@ func (a *App) TaskMasterUpdateTask(sessionID, taskID, prompt string, research bo
 
 // TaskMasterUpdateSubtask updates a subtask with notes
 func (a *App) TaskMasterUpdateSubtask(sessionID, subtaskID, prompt string) error {
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return err
+	}
+	defer done()
 	tm, err := a.getTaskMasterMCP(sessionID)
 	if err != nil {
 		return err
@@ -4123,6 +4727,11 @@ func (a *App) TaskMasterUpdateSubtask(sessionID, subtaskID, prompt string) error
 
 // TaskMasterExpandTask expands a task into subtasks
 func (a *App) TaskMasterExpandTask(sessionID, taskID string, research, force bool) error {
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return err
+	}
+	defer done()
 	tm, err := a.getTaskMasterMCP(sessionID)
 	if err != nil {
 		return err
@@ -4133,6 +4742,11 @@ func (a *App) TaskMasterExpandTask(sessionID, taskID string, research, force boo
 
 // TaskMasterExpandAll expands all eligible tasks
 func (a *App) TaskMasterExpandAll(sessionID string, research bool) error {
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return err
+	}
+	defer done()
 	tm, err := a.getTaskMasterMCP(sessionID)
 	if err != nil {
 		return err
@@ -4143,6 +4757,11 @@ func (a *App) TaskMasterExpandAll(sessionID string, research bool) error {
 
 // TaskMasterAnalyzeComplexity analyzes task complexity
 func (a *App) TaskMasterAnalyzeComplexity(sessionID string, research bool) (string, error) {
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return "", err
+	}
+	defer done()
 	tm, err := a.getTaskMasterMCP(sessionID)
 	if err != nil {
 		return "", err
@@ -4158,6 +4777,11 @@ func (a *App) TaskMasterAnalyzeComplexity(sessionID string, research bool) (stri
 
 // TaskMasterRemoveTask removes a task
 func (a *App) TaskMasterRemoveTask(sessionID, taskID string) error {
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return err
+	}
+	defer done()
 	tm, err := a.getTaskMasterMCP(sessionID)
 	if err != nil {
 		return err
@@ -4168,6 +4792,11 @@ func (a *App) TaskMasterRemoveTask(sessionID, taskID string) error {
 
 // TaskMasterSendToAgent sends a task as a prompt to the agent
 func (a *App) TaskMasterSendToAgent(sessionID, taskID string) error {
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return err
+	}
+	defer done()
 	tm, err := a.getTaskMasterMCP(sessionID)
 	if err != nil {
 		return err
@@ -4182,29 +4811,45 @@ func (a *App) TaskMasterSendToAgent(sessionID, taskID string) error {
 
 	prompt := mcp.FormatTaskForPrompt(task)
 	log.Printf("[TaskMaster] Prompt to send: %q", prompt)
-	return a.SendPrompt(sessionID, prompt)
+	return a.sendPrompt(sessionID, prompt)
 }
 
 // StopTaskMaster stops the Task Master MCP server for a project
 func (a *App) StopTaskMaster(sessionID string) error {
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return err
+	}
+	defer done()
 	sess, err := a.storage.GetInstance(sessionID)
 	if err != nil {
 		return err
 	}
 
-	taskMasterMu.Lock()
-	defer taskMasterMu.Unlock()
-
-	if tm, ok := taskMasterCache[sess.Path]; ok {
-		tm.Stop()
-		delete(taskMasterCache, sess.Path)
+	for {
+		taskMasterMu.Lock()
+		starting := taskMasterStarts[sess.Path]
+		if starting == nil {
+			tm := taskMasterCache[sess.Path]
+			delete(taskMasterCache, sess.Path)
+			taskMasterMu.Unlock()
+			if tm != nil {
+				return tm.Stop()
+			}
+			return nil
+		}
+		taskMasterMu.Unlock()
+		<-starting.done
 	}
-
-	return nil
 }
 
 // TaskMasterAddSubtask adds a subtask to a task
 func (a *App) TaskMasterAddSubtask(sessionID, taskID, title, description string) error {
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return err
+	}
+	defer done()
 	tm, err := a.getTaskMasterMCP(sessionID)
 	if err != nil {
 		return err
@@ -4216,6 +4861,11 @@ func (a *App) TaskMasterAddSubtask(sessionID, taskID, title, description string)
 
 // TaskMasterRemoveSubtask removes a specific subtask
 func (a *App) TaskMasterRemoveSubtask(sessionID, subtaskID string) error {
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return err
+	}
+	defer done()
 	tm, err := a.getTaskMasterMCP(sessionID)
 	if err != nil {
 		return err
@@ -4226,6 +4876,11 @@ func (a *App) TaskMasterRemoveSubtask(sessionID, subtaskID string) error {
 
 // TaskMasterClearSubtasks removes all subtasks from a task
 func (a *App) TaskMasterClearSubtasks(sessionID, taskID string) error {
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return err
+	}
+	defer done()
 	tm, err := a.getTaskMasterMCP(sessionID)
 	if err != nil {
 		return err
@@ -4236,6 +4891,11 @@ func (a *App) TaskMasterClearSubtasks(sessionID, taskID string) error {
 
 // TaskMasterSetSubtaskStatus sets the status of a subtask
 func (a *App) TaskMasterSetSubtaskStatus(sessionID, subtaskID, status string) error {
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return err
+	}
+	defer done()
 	tm, err := a.getTaskMasterMCP(sessionID)
 	if err != nil {
 		return err
@@ -4252,6 +4912,11 @@ func (a *App) TaskMasterSetSubtaskStatus(sessionID, subtaskID, status string) er
 // project's .taskmaster directory, which a disabled feature has no business
 // touching either.
 func (a *App) TaskMasterUpdateTaskDirect(sessionID, taskID, title, description, details, priority string) error {
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return err
+	}
+	defer done()
 	if !a.taskMasterEnabled() {
 		return fmt.Errorf("error.taskMasterDisabled")
 	}
@@ -4329,7 +4994,7 @@ func (a *App) TaskMasterUpdateTaskDirect(sessionID, taskID, title, description, 
 		return fmt.Errorf("failed to marshal tasks.json: %w", err)
 	}
 
-	if err := os.WriteFile(tasksFile, out, 0644); err != nil {
+	if err := mcp.AtomicReplaceTaskMasterFile(tasksFile, out); err != nil {
 		return fmt.Errorf("failed to write tasks.json: %w", err)
 	}
 
@@ -4338,6 +5003,11 @@ func (a *App) TaskMasterUpdateTaskDirect(sessionID, taskID, title, description, 
 
 // TaskMasterAddDependency adds a dependency to a task
 func (a *App) TaskMasterAddDependency(sessionID, taskID, dependsOnID string) error {
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return err
+	}
+	defer done()
 	tm, err := a.getTaskMasterMCP(sessionID)
 	if err != nil {
 		return err
@@ -4348,6 +5018,11 @@ func (a *App) TaskMasterAddDependency(sessionID, taskID, dependsOnID string) err
 
 // TaskMasterRemoveDependency removes a dependency from a task
 func (a *App) TaskMasterRemoveDependency(sessionID, taskID, dependsOnID string) error {
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return err
+	}
+	defer done()
 	tm, err := a.getTaskMasterMCP(sessionID)
 	if err != nil {
 		return err

@@ -88,11 +88,6 @@ func (a *App) GetSessionTemplates() ([]SessionTemplateInfo, error) {
 // SaveSessionTemplate adds or updates one template. An empty ID creates a new
 // entry. An empty path is allowed and means "ask when the template is used".
 func (a *App) SaveSessionTemplate(id, name, description, sessionName, path, agent string, autoYes bool, extraArgs string, tabs []TemplateTabInfo) (string, error) {
-	lib, err := a.storage.LoadTemplates()
-	if err != nil {
-		return "", err
-	}
-
 	entry := session.SessionTemplate{
 		ID:          id,
 		Name:        strings.TrimSpace(name),
@@ -119,31 +114,28 @@ func (a *App) SaveSessionTemplate(id, name, description, sessionName, path, agen
 		return "", err
 	}
 
-	if id == "" {
-		entry.ID = fmt.Sprintf("tpl_%d", time.Now().UnixNano())
-		entry.CreatedAt = time.Now()
-		entry.Name = uniqueTemplateName(entry.Name, lib.Templates, "")
-		lib.Templates = append(lib.Templates, entry)
-	} else {
-		found := false
+	err := a.storage.UpdateTemplates(func(lib *session.TemplateLibrary) error {
+		if id == "" {
+			entry.ID = fmt.Sprintf("tpl_%d", time.Now().UnixNano())
+			entry.CreatedAt = time.Now()
+			entry.Name = uniqueTemplateName(entry.Name, lib.Templates, "")
+			lib.Templates = append(lib.Templates, entry)
+			return nil
+		}
 		for i := range lib.Templates {
-			if lib.Templates[i].ID != id {
-				continue
+			if lib.Templates[i].ID == id {
+				// Usage statistics belong to the template, not to this edit.
+				entry.CreatedAt = lib.Templates[i].CreatedAt
+				entry.UsedAt = lib.Templates[i].UsedAt
+				entry.UseCount = lib.Templates[i].UseCount
+				entry.Name = uniqueTemplateName(entry.Name, lib.Templates, id)
+				lib.Templates[i] = entry
+				return nil
 			}
-			// Usage statistics belong to the template, not to this edit.
-			entry.CreatedAt = lib.Templates[i].CreatedAt
-			entry.UsedAt = lib.Templates[i].UsedAt
-			entry.UseCount = lib.Templates[i].UseCount
-			entry.Name = uniqueTemplateName(entry.Name, lib.Templates, id)
-			lib.Templates[i] = entry
-			found = true
-			break
 		}
-		if !found {
-			return "", fmt.Errorf("no such template")
-		}
-	}
-	if err := a.storage.SaveTemplates(lib); err != nil {
+		return fmt.Errorf("no such template")
+	})
+	if err != nil {
 		return "", err
 	}
 	return entry.ID, nil
@@ -155,12 +147,13 @@ func (a *App) SaveSessionTemplate(id, name, description, sessionName, path, agen
 // keepPath decides whether the template stays pinned to this session's
 // directory or becomes reusable across projects.
 func (a *App) SaveSessionAsTemplate(sessionID, templateName string, keepPath bool) (string, error) {
-	inst, err := a.storage.GetInstance(sessionID)
+	done, err := a.beginProjectMutation()
 	if err != nil {
 		return "", err
 	}
+	defer done()
 
-	lib, err := a.storage.LoadTemplates()
+	inst, err := a.storage.GetInstance(sessionID)
 	if err != nil {
 		return "", err
 	}
@@ -169,11 +162,13 @@ func (a *App) SaveSessionAsTemplate(sessionID, templateName string, keepPath boo
 	if err := entry.Validate(); err != nil {
 		return "", err
 	}
-	entry.ID = fmt.Sprintf("tpl_%d", time.Now().UnixNano())
-	entry.Name = uniqueTemplateName(entry.Name, lib.Templates, "")
-
-	lib.Templates = append(lib.Templates, entry)
-	if err := a.storage.SaveTemplates(lib); err != nil {
+	err = a.storage.UpdateTemplates(func(lib *session.TemplateLibrary) error {
+		entry.ID = fmt.Sprintf("tpl_%d", time.Now().UnixNano())
+		entry.Name = uniqueTemplateName(entry.Name, lib.Templates, "")
+		lib.Templates = append(lib.Templates, entry)
+		return nil
+	})
+	if err != nil {
 		return "", err
 	}
 	log.Printf("[templates] saved %q from session %s (%d tabs)", entry.Name, sessionID, len(entry.Session.Tabs))
@@ -183,24 +178,22 @@ func (a *App) SaveSessionAsTemplate(sessionID, templateName string, keepPath boo
 // DeleteSessionTemplate removes one template. Sessions already created from it
 // are untouched — a template is a starting point, not a live link.
 func (a *App) DeleteSessionTemplate(id string) error {
-	lib, err := a.storage.LoadTemplates()
-	if err != nil {
-		return err
-	}
-	out := lib.Templates[:0]
-	removed := false
-	for _, t := range lib.Templates {
-		if t.ID == id {
-			removed = true
-			continue
+	return a.storage.UpdateTemplates(func(lib *session.TemplateLibrary) error {
+		out := lib.Templates[:0]
+		removed := false
+		for _, t := range lib.Templates {
+			if t.ID == id {
+				removed = true
+				continue
+			}
+			out = append(out, t)
 		}
-		out = append(out, t)
-	}
-	if !removed {
-		return fmt.Errorf("no such template")
-	}
-	lib.Templates = out
-	return a.storage.SaveTemplates(lib)
+		if !removed {
+			return fmt.Errorf("no such template")
+		}
+		lib.Templates = out
+		return nil
+	})
 }
 
 // CreateSessionFromTemplate creates a session with the template's main window
@@ -214,11 +207,11 @@ func (a *App) DeleteSessionTemplate(id string) error {
 // name and path override the template's own; path is required when the
 // template has none.
 func (a *App) CreateSessionFromTemplate(id, name, path string) (*SessionInfo, error) {
-	a.projectMu.RLock()
-	defer a.projectMu.RUnlock()
-	if !a.projectLocked {
-		return nil, fmt.Errorf("project is read-only in this application instance")
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return nil, err
 	}
+	defer done()
 
 	lib, err := a.storage.LoadTemplates()
 	if err != nil {
@@ -252,11 +245,18 @@ func (a *App) CreateSessionFromTemplate(id, name, path string) (*SessionInfo, er
 		return nil, err
 	}
 
-	found.UsedAt = time.Now()
-	found.UseCount++
 	// A failed statistics write must not look like a failed creation: the
 	// session already exists.
-	if serr := a.storage.SaveTemplates(lib); serr != nil {
+	if serr := a.storage.UpdateTemplates(func(latest *session.TemplateLibrary) error {
+		for i := range latest.Templates {
+			if latest.Templates[i].ID == id {
+				latest.Templates[i].UsedAt = time.Now()
+				latest.Templates[i].UseCount++
+				return nil
+			}
+		}
+		return fmt.Errorf("no such template")
+	}); serr != nil {
 		log.Printf("[templates] could not record use of %s: %v", id, serr)
 	}
 

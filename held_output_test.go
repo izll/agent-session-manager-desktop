@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"sync"
 	"testing"
 )
 
@@ -116,5 +117,76 @@ func TestDiscardFreesTheBuffer(t *testing.T) {
 	}
 	if over {
 		t.Error("the overflow flag survived a discard")
+	}
+}
+
+// Visibility changes and PTY output are handled by different goroutines. A
+// chunk that observes "hidden" just before reveal must be part of that replay;
+// if reveal wins first it must be delivered live. Either order is valid, loss
+// or a chunk left in held after reveal is not.
+func TestRevealCannotStrandConcurrentOutput(t *testing.T) {
+	for i := 0; i < 500; i++ {
+		tc := &termConn{}
+		tc.setHidden()
+
+		start := make(chan struct{})
+		var wg sync.WaitGroup
+		var deliveredMu sync.Mutex
+		var delivered []byte
+		deliver := func(data []byte) error {
+			deliveredMu.Lock()
+			delivered = append(delivered, data...)
+			deliveredMu.Unlock()
+			return nil
+		}
+
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			<-start
+			_, _ = tc.deliverOrHold([]byte("chunk"), deliver)
+		}()
+		go func() {
+			defer wg.Done()
+			<-start
+			_, _, _ = tc.reveal(deliver)
+		}()
+		close(start)
+		wg.Wait()
+
+		deliveredMu.Lock()
+		got := string(delivered)
+		deliveredMu.Unlock()
+		if got != "chunk" {
+			t.Fatalf("iteration %d delivered %q, want the chunk exactly once", i, got)
+		}
+		if held, _ := tc.takeHeldWhileHidden(); len(held) != 0 {
+			t.Fatalf("iteration %d stranded %q after reveal", i, held)
+		}
+	}
+}
+
+func TestHiddenFlushIsHeldInsteadOfDropped(t *testing.T) {
+	tc := &termConn{}
+	tc.setHidden()
+	called := false
+	held, err := tc.deliverOrHold([]byte("pending ticker output"), func([]byte) error {
+		called = true
+		return nil
+	})
+	if err != nil || !held || called {
+		t.Fatalf("deliverOrHold: held=%v called=%v err=%v", held, called, err)
+	}
+
+	var replayed []byte
+	_, _, err = tc.reveal(func(data []byte) error {
+		replayed = append(replayed, data...)
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(replayed) != "pending ticker output" {
+		t.Fatalf("replayed %q; ticker output was lost", replayed)
 	}
 }

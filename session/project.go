@@ -39,11 +39,9 @@ func generateProjectID(name string) string {
 // GetSessionCount returns the number of sessions in a project
 // This requires loading the project's sessions file
 func (s *Storage) GetProjectSessionCount(projectID string) int {
-	// Temporarily switch to project and count
-	originalProject := s.projectID
-	s.SetActiveProject(projectID)
-	instances, _, _, _ := s.LoadAllWithSettings()
-	s.SetActiveProject(originalProject)
-
+	instances, _, err := s.LoadAllForProject(projectID)
+	if err != nil {
+		return 0
+	}
 	return len(instances)
 }

@@ -1,5 +1,6 @@
 import { writable, derived, get } from 'svelte/store';
 import * as App from '../../../wailsjs/go/main/App';
+import { main } from '../../../wailsjs/go/models';
 
 // Types - matching Task Master format
 export type TaskStatus = 'pending' | 'in-progress' | 'done' | 'blocked' | 'deferred';
@@ -11,6 +12,8 @@ export interface Subtask {
   description?: string;
   status: TaskStatus;
   details?: string;
+  done?: boolean;
+  createdAt?: string;
 }
 
 export interface Task {
@@ -25,6 +28,7 @@ export interface Task {
   complexity?: number;
   details?: string;
   createdAt?: string;
+  updatedAt?: string;
   /** When the task was ticked off. Absent while it is still open. */
   completedAt?: string;
   /**
@@ -85,6 +89,37 @@ let activeTasksSessionId = '';
 let activeStatusSessionId = '';
 let tasksLoadGeneration = 0;
 let statusLoadGeneration = 0;
+export type TaskProvider = 'mcp' | 'local';
+const effectiveProviderBySession = new Map<string, { requestedMCP: boolean; provider: TaskProvider }>();
+
+function providerFor(sessionId: string): TaskProvider {
+  const requestedMCP = get(useMCPMode);
+  const effective = effectiveProviderBySession.get(sessionId);
+  if (effective && effective.requestedMCP === requestedMCP) return effective.provider;
+  return requestedMCP ? 'mcp' : 'local';
+}
+
+function rememberProvider(sessionId: string, requestedMCP: boolean, provider: TaskProvider) {
+  effectiveProviderBySession.set(sessionId, { requestedMCP, provider });
+}
+
+function isActiveTasksSession(sessionId: string): boolean {
+  return sessionId === activeTasksSessionId;
+}
+
+/** Claim the visible list for a new session before any provider probe awaits. */
+export function prepareTasksSession(sessionId: string): void {
+  activeTasksSessionId = sessionId;
+  tasksLoadGeneration++;
+  tasks.set([]);
+  selectedTaskId.set(null);
+  taskError.set(null);
+  isLoadingTasks.set(!!sessionId);
+}
+
+async function reloadTasksIfActive(sessionId: string): Promise<void> {
+  if (isActiveTasksSession(sessionId)) await loadTasks(sessionId);
+}
 
 function normalizeStatus(status: string): TaskStatus {
   const normalized = status === 'backlog' ? 'pending' : status;
@@ -300,12 +335,12 @@ export async function initializeTaskMaster(sessionId: string) {
   try {
     await App.TaskMasterInit(sessionId);
     await checkTaskMasterStatus(sessionId);
-    await loadTasks(sessionId);
+    await reloadTasksIfActive(sessionId);
   } catch (e) {
-    taskError.set(String(e));
+    if (isActiveTasksSession(sessionId)) taskError.set(String(e));
     throw e;
   } finally {
-    isLoadingTasks.set(false);
+    if (isActiveTasksSession(sessionId)) isLoadingTasks.set(false);
   }
 }
 
@@ -318,12 +353,12 @@ export async function parsePRD(sessionId: string, prdContent: string, numTasks: 
 
   try {
     await App.TaskMasterParsePRD(sessionId, prdContent, numTasks);
-    await loadTasks(sessionId);
+    await reloadTasksIfActive(sessionId);
   } catch (e) {
-    taskError.set(String(e));
+    if (isActiveTasksSession(sessionId)) taskError.set(String(e));
     throw e;
   } finally {
-    isLoadingTasks.set(false);
+    if (isActiveTasksSession(sessionId)) isLoadingTasks.set(false);
   }
 }
 
@@ -361,12 +396,14 @@ export async function loadTasks(sessionId: string) {
   isLoadingTasks.set(true);
   taskError.set(null);
 
+  const requestedMCP = get(useMCPMode);
   try {
     // Try MCP mode first
-    if (get(useMCPMode)) {
+    if (requestedMCP) {
       try {
         const result = await App.TaskMasterGetTasks(sessionId, '');
         if (generation !== tasksLoadGeneration || sessionId !== activeTasksSessionId) return;
+        rememberProvider(sessionId, requestedMCP, 'mcp');
         tasks.set(mergeCreatedAt((result || []).map(normalizeTask)));
         return;
       } catch (e) {
@@ -379,12 +416,13 @@ export async function loadTasks(sessionId: string) {
     const result = await App.GetTasks(sessionId);
     // Convert local task format to MCP format
     if (generation !== tasksLoadGeneration || sessionId !== activeTasksSessionId) return;
+    rememberProvider(sessionId, requestedMCP, 'local');
     const converted = (result || []).map(normalizeTask);
     tasks.set(mergeCreatedAt(converted));
   } catch (e) {
     if (generation !== tasksLoadGeneration || sessionId !== activeTasksSessionId) return;
     console.error('Failed to load tasks:', e);
-    taskError.set(String(e));
+    if (isActiveTasksSession(sessionId)) taskError.set(String(e));
     tasks.set([]);
   } finally {
     if (generation === tasksLoadGeneration && sessionId === activeTasksSessionId) {
@@ -398,7 +436,7 @@ export async function getNextTask(sessionId: string): Promise<Task | null> {
   if (!sessionId) return null;
 
   try {
-    if (get(useMCPMode)) {
+    if (providerFor(sessionId) === 'mcp') {
       const task = await App.TaskMasterNextTask(sessionId);
       return task ? normalizeTask(task) : null;
     } else {
@@ -406,17 +444,19 @@ export async function getNextTask(sessionId: string): Promise<Task | null> {
       return task ? normalizeTask(task) : null;
     }
   } catch (e) {
-    taskError.set(String(e));
+    if (isActiveTasksSession(sessionId)) taskError.set(String(e));
     return null;
   }
 }
 
 // Set task status
-export async function setTaskStatus(sessionId: string, taskId: string, status: TaskStatus) {
-  if (!sessionId) return;
+export async function setTaskStatus(sessionId: string, taskId: string, status: TaskStatus, requestedProvider?: TaskProvider): Promise<TaskProvider> {
+  if (!sessionId) throw new Error('session is required');
+
+  const provider = requestedProvider ?? providerFor(sessionId);
 
   try {
-    if (get(useMCPMode)) {
+    if (provider === 'mcp') {
       await App.TaskMasterSetStatus(sessionId, taskId, status);
     } else {
       await App.MoveTask(sessionId, taskId, status);
@@ -427,8 +467,9 @@ export async function setTaskStatus(sessionId: string, taskId: string, status: T
         task.id === taskId ? { ...task, status } : task
       ));
     }
+    return provider;
   } catch (e) {
-    taskError.set(String(e));
+    if (isActiveTasksSession(sessionId)) taskError.set(String(e));
     throw e;
   }
 }
@@ -442,27 +483,27 @@ export async function addTask(sessionId: string, prompt: string, research: boole
 
   try {
     let newTask: any;
-    if (get(useMCPMode)) {
+    if (providerFor(sessionId) === 'mcp') {
       newTask = await App.TaskMasterAddTask(sessionId, prompt, research, priority);
     } else {
-      await App.CreateTask(sessionId, prompt, '', priority, []);
+      newTask = await App.CreateTask(sessionId, prompt, '', priority, []);
     }
     // Pre-inject createdAt so mergeCreatedAt preserves it across loadTasks
-    if (newTask?.id) {
+    if (newTask?.id && isActiveTasksSession(sessionId)) {
       const now = new Date().toISOString();
       tasks.update(t => [...t, { ...newTask, createdAt: newTask.createdAt || now } as Task]);
     }
-    await loadTasks(sessionId);
+    await reloadTasksIfActive(sessionId);
   } catch (e) {
-    taskError.set(String(e));
+    if (isActiveTasksSession(sessionId)) taskError.set(String(e));
     throw e;
   } finally {
-    isLoadingTasks.set(false);
+    if (isActiveTasksSession(sessionId)) isLoadingTasks.set(false);
   }
 }
 
 // Add a new task manually (no AI required)
-export async function addManualTask(sessionId: string, title: string, description: string = '', details: string = '', priority: string = 'medium') {
+export async function addManualTask(sessionId: string, title: string, description: string = '', details: string = '', priority: string = 'medium'): Promise<Task | undefined> {
   if (!sessionId || !title.trim()) return;
 
   isLoadingTasks.set(true);
@@ -470,23 +511,57 @@ export async function addManualTask(sessionId: string, title: string, descriptio
 
   try {
     let newTask: any;
-    if (get(useMCPMode)) {
+    if (providerFor(sessionId) === 'mcp') {
       newTask = await App.TaskMasterAddManualTask(sessionId, title, description, details, priority);
     } else {
-      await App.CreateTask(sessionId, title, description, priority, []);
+      newTask = await App.CreateTask(sessionId, title, description, priority, []);
     }
     // Pre-inject createdAt so mergeCreatedAt preserves it across loadTasks
-    if (newTask?.id) {
+    if (newTask?.id && isActiveTasksSession(sessionId)) {
       const now = new Date().toISOString();
       tasks.update(t => [...t, { ...newTask, createdAt: newTask.createdAt || now } as Task]);
     }
-    await loadTasks(sessionId);
+    await reloadTasksIfActive(sessionId);
+    return newTask ? normalizeTask(newTask) : undefined;
   } catch (e) {
-    taskError.set(String(e));
+    if (isActiveTasksSession(sessionId)) taskError.set(String(e));
     throw e;
   } finally {
-    isLoadingTasks.set(false);
+    if (isActiveTasksSession(sessionId)) isLoadingTasks.set(false);
   }
+}
+
+/** Restore the provider-neutral snapshot atomically with its original IDs. */
+export async function restoreDeletedTask(sessionId: string, snapshot: Task, provider: TaskProvider): Promise<void> {
+  if (!sessionId || !snapshot.title.trim()) return;
+  if (isActiveTasksSession(sessionId)) {
+    isLoadingTasks.set(true);
+    taskError.set(null);
+  }
+  try {
+    await App.RestoreDeletedTask(sessionId, provider, new main.DeletedTaskSnapshot(snapshot));
+    await reloadTasksIfActive(sessionId);
+  } catch (e) {
+    if (isActiveTasksSession(sessionId)) taskError.set(String(e));
+    throw e;
+  } finally {
+    if (isActiveTasksSession(sessionId)) isLoadingTasks.set(false);
+  }
+}
+
+export async function restoreDeletedSubtask(
+  sessionId: string,
+  taskId: string,
+  snapshot: Subtask,
+  provider: TaskProvider,
+): Promise<void> {
+  await App.RestoreDeletedSubtask(
+    sessionId,
+    provider,
+    taskId,
+    new main.DeletedSubtaskSnapshot(snapshot),
+  );
+  await reloadTasksIfActive(sessionId);
 }
 
 // Update task (MCP mode with AI)
@@ -494,14 +569,14 @@ export async function updateTask(sessionId: string, taskId: string, prompt: stri
   if (!sessionId || !taskId) return;
 
   try {
-    if (get(useMCPMode)) {
+    if (providerFor(sessionId) === 'mcp') {
       await App.TaskMasterUpdateTask(sessionId, taskId, prompt, research);
     } else {
       await App.UpdateTask(sessionId, taskId, { description: prompt });
     }
-    await loadTasks(sessionId);
+    await reloadTasksIfActive(sessionId);
   } catch (e) {
-    taskError.set(String(e));
+    if (isActiveTasksSession(sessionId)) taskError.set(String(e));
     throw e;
   }
 }
@@ -512,9 +587,9 @@ export async function updateSubtask(sessionId: string, subtaskId: string, notes:
 
   try {
     await App.TaskMasterUpdateSubtask(sessionId, subtaskId, notes);
-    await loadTasks(sessionId);
+    await reloadTasksIfActive(sessionId);
   } catch (e) {
-    taskError.set(String(e));
+    if (isActiveTasksSession(sessionId)) taskError.set(String(e));
     throw e;
   }
 }
@@ -528,12 +603,12 @@ export async function expandTask(sessionId: string, taskId: string, research: bo
 
   try {
     await App.TaskMasterExpandTask(sessionId, taskId, research, force);
-    await loadTasks(sessionId);
+    await reloadTasksIfActive(sessionId);
   } catch (e) {
-    taskError.set(String(e));
+    if (isActiveTasksSession(sessionId)) taskError.set(String(e));
     throw e;
   } finally {
-    isLoadingTasks.set(false);
+    if (isActiveTasksSession(sessionId)) isLoadingTasks.set(false);
   }
 }
 
@@ -546,12 +621,12 @@ export async function expandAllTasks(sessionId: string, research: boolean = true
 
   try {
     await App.TaskMasterExpandAll(sessionId, research);
-    await loadTasks(sessionId);
+    await reloadTasksIfActive(sessionId);
   } catch (e) {
-    taskError.set(String(e));
+    if (isActiveTasksSession(sessionId)) taskError.set(String(e));
     throw e;
   } finally {
-    isLoadingTasks.set(false);
+    if (isActiveTasksSession(sessionId)) isLoadingTasks.set(false);
   }
 }
 
@@ -564,32 +639,35 @@ export async function analyzeComplexity(sessionId: string, research: boolean = t
 
   try {
     const result = await App.TaskMasterAnalyzeComplexity(sessionId, research);
-    await loadTasks(sessionId);
+    await reloadTasksIfActive(sessionId);
     return result;
   } catch (e) {
-    taskError.set(String(e));
+    if (isActiveTasksSession(sessionId)) taskError.set(String(e));
     throw e;
   } finally {
-    isLoadingTasks.set(false);
+    if (isActiveTasksSession(sessionId)) isLoadingTasks.set(false);
   }
 }
 
 // Remove a task
-export async function removeTask(sessionId: string, taskId: string) {
-  if (!sessionId || !taskId) return;
+export async function removeTask(sessionId: string, taskId: string): Promise<TaskProvider> {
+  if (!sessionId || !taskId) throw new Error('session and task are required');
+
+  const provider = providerFor(sessionId);
 
   try {
-    if (get(useMCPMode)) {
+    if (provider === 'mcp') {
       await App.TaskMasterRemoveTask(sessionId, taskId);
     } else {
       await App.DeleteTask(sessionId, taskId);
     }
-    tasks.update(t => t.filter(task => task.id !== taskId));
-    if (get(selectedTaskId) === taskId) {
+    if (isActiveTasksSession(sessionId)) tasks.update(t => t.filter(task => task.id !== taskId));
+    if (isActiveTasksSession(sessionId) && get(selectedTaskId) === taskId) {
       selectedTaskId.set(null);
     }
+    return provider;
   } catch (e) {
-    taskError.set(String(e));
+    if (isActiveTasksSession(sessionId)) taskError.set(String(e));
     throw e;
   }
 }
@@ -599,13 +677,13 @@ export async function sendTaskToAgent(sessionId: string, taskId: string) {
   if (!sessionId || !taskId) return;
 
   try {
-    if (get(useMCPMode)) {
+    if (providerFor(sessionId) === 'mcp') {
       await App.TaskMasterSendToAgent(sessionId, taskId);
     } else {
       await App.SendTaskToAgent(sessionId, taskId);
     }
   } catch (e) {
-    taskError.set(String(e));
+    if (isActiveTasksSession(sessionId)) taskError.set(String(e));
     throw e;
   }
 }
@@ -628,7 +706,7 @@ export async function updateTaskDirect(sessionId: string, taskId: string, title:
   if (!sessionId || !taskId) return;
 
   try {
-    if (get(useMCPMode)) {
+    if (providerFor(sessionId) === 'mcp') {
       await App.TaskMasterUpdateTaskDirect(sessionId, taskId, title, description, details, priority);
       const extra: Record<string, unknown> = {};
       if (dueAt !== undefined) extra.dueAt = dueAt;
@@ -646,9 +724,9 @@ export async function updateTaskDirect(sessionId: string, taskId: string, title:
       if (sessionScoped !== undefined) updates.sessionId = sessionScoped ? sessionId : '';
       await App.UpdateTask(sessionId, taskId, updates);
     }
-    await loadTasks(sessionId);
+    await reloadTasksIfActive(sessionId);
   } catch (e) {
-    taskError.set(String(e));
+    if (isActiveTasksSession(sessionId)) taskError.set(String(e));
     throw e;
   }
 }
@@ -668,7 +746,13 @@ async function editTaskLocally(
   taskId: string,
   change: (task: Task) => Partial<Task>,
 ): Promise<void> {
-  const task = get(tasks).find((t) => String(t.id) === String(taskId));
+  // Undo can run after the user has moved to another session. In that case the
+  // global store belongs to the new session, so read the requested target
+  // instead of accidentally editing a same-id task from the visible list.
+  const source = isActiveTasksSession(sessionId)
+    ? get(tasks)
+    : ((await App.GetTasks(sessionId)) || []).map(normalizeTask);
+  const task = source.find((t) => String(t.id) === String(taskId));
   if (!task) throw new Error(`no such task: ${taskId}`);
   await App.UpdateTask(sessionId, String(taskId), change(task) as Record<string, any>);
 }
@@ -683,7 +767,7 @@ export async function addSubtask(sessionId: string, taskId: string, title: strin
   if (!sessionId || !taskId || !title.trim()) return;
 
   try {
-    if (get(useMCPMode)) {
+    if (providerFor(sessionId) === 'mcp') {
       await App.TaskMasterAddSubtask(sessionId, taskId, title, description);
     } else {
       await editTaskLocally(sessionId, taskId, (task) => ({
@@ -691,23 +775,25 @@ export async function addSubtask(sessionId: string, taskId: string, title: strin
           ...(task.subtasks || []),
           // Numbered within the task, as Task Master does, so the two stores
           // produce ids of the same shape.
-          { id: String((task.subtasks?.length || 0) + 1), title, status: 'pending' },
+          { id: String((task.subtasks?.length || 0) + 1), title, description, status: 'pending' },
         ],
       }));
     }
-    await loadTasks(sessionId);
+    await reloadTasksIfActive(sessionId);
   } catch (e) {
-    taskError.set(String(e));
+    if (isActiveTasksSession(sessionId)) taskError.set(String(e));
     throw e;
   }
 }
 
 // Remove a subtask
-export async function removeSubtask(sessionId: string, subtaskId: string) {
-  if (!sessionId || !subtaskId) return;
+export async function removeSubtask(sessionId: string, subtaskId: string): Promise<TaskProvider> {
+  if (!sessionId || !subtaskId) throw new Error('session and subtask are required');
+
+  const provider = providerFor(sessionId);
 
   try {
-    if (get(useMCPMode)) {
+    if (provider === 'mcp') {
       await App.TaskMasterRemoveSubtask(sessionId, subtaskId);
     } else {
       const parent = parentTaskId(subtaskId);
@@ -716,9 +802,10 @@ export async function removeSubtask(sessionId: string, subtaskId: string) {
         subtasks: (task.subtasks || []).filter((sub: any) => String(sub.id) !== child),
       }));
     }
-    await loadTasks(sessionId);
+    await reloadTasksIfActive(sessionId);
+    return provider;
   } catch (e) {
-    taskError.set(String(e));
+    if (isActiveTasksSession(sessionId)) taskError.set(String(e));
     throw e;
   }
 }
@@ -728,24 +815,26 @@ export async function clearSubtasks(sessionId: string, taskId: string) {
   if (!sessionId || !taskId) return;
 
   try {
-    if (get(useMCPMode)) {
+    if (providerFor(sessionId) === 'mcp') {
       await App.TaskMasterClearSubtasks(sessionId, taskId);
     } else {
       await editTaskLocally(sessionId, taskId, () => ({ subtasks: [] }));
     }
-    await loadTasks(sessionId);
+    await reloadTasksIfActive(sessionId);
   } catch (e) {
-    taskError.set(String(e));
+    if (isActiveTasksSession(sessionId)) taskError.set(String(e));
     throw e;
   }
 }
 
 // Set subtask status
-export async function setSubtaskStatus(sessionId: string, subtaskId: string, status: TaskStatus) {
-  if (!sessionId || !subtaskId) return;
+export async function setSubtaskStatus(sessionId: string, subtaskId: string, status: TaskStatus, requestedProvider?: TaskProvider): Promise<TaskProvider> {
+  if (!sessionId || !subtaskId) throw new Error('session and subtask are required');
+
+  const provider = requestedProvider ?? providerFor(sessionId);
 
   try {
-    if (get(useMCPMode)) {
+    if (provider === 'mcp') {
       await App.TaskMasterSetSubtaskStatus(sessionId, subtaskId, status);
     } else {
       // The app's own storage records a subtask as done/not-done, with no
@@ -756,19 +845,22 @@ export async function setSubtaskStatus(sessionId: string, subtaskId: string, sta
       const child = String(subtaskId).slice(parent.length + 1);
       await App.ToggleSubtask(sessionId, parent, child);
     }
-    await loadTasks(sessionId);
+    await reloadTasksIfActive(sessionId);
+    return provider;
   } catch (e) {
-    taskError.set(String(e));
+    if (isActiveTasksSession(sessionId)) taskError.set(String(e));
     throw e;
   }
 }
 
 // Add dependency to a task
-export async function addDependency(sessionId: string, taskId: string, dependsOnId: string) {
-  if (!sessionId || !taskId || !dependsOnId) return;
+export async function addDependency(sessionId: string, taskId: string, dependsOnId: string, requestedProvider?: TaskProvider): Promise<TaskProvider> {
+  if (!sessionId || !taskId || !dependsOnId) throw new Error('session, task and dependency are required');
+
+  const provider = requestedProvider ?? providerFor(sessionId);
 
   try {
-    if (get(useMCPMode)) {
+    if (provider === 'mcp') {
       await App.TaskMasterAddDependency(sessionId, taskId, dependsOnId);
     } else {
       await editTaskLocally(sessionId, taskId, (task) => ({
@@ -777,19 +869,22 @@ export async function addDependency(sessionId: string, taskId: string, dependsOn
         dependencies: Array.from(new Set([...(task.dependencies || []), String(dependsOnId)])),
       }));
     }
-    await loadTasks(sessionId);
+    await reloadTasksIfActive(sessionId);
+    return provider;
   } catch (e) {
-    taskError.set(String(e));
+    if (isActiveTasksSession(sessionId)) taskError.set(String(e));
     throw e;
   }
 }
 
 // Remove dependency from a task
-export async function removeDependency(sessionId: string, taskId: string, dependsOnId: string) {
-  if (!sessionId || !taskId || !dependsOnId) return;
+export async function removeDependency(sessionId: string, taskId: string, dependsOnId: string): Promise<TaskProvider> {
+  if (!sessionId || !taskId || !dependsOnId) throw new Error('session, task and dependency are required');
+
+  const provider = providerFor(sessionId);
 
   try {
-    if (get(useMCPMode)) {
+    if (provider === 'mcp') {
       await App.TaskMasterRemoveDependency(sessionId, taskId, dependsOnId);
     } else {
       await editTaskLocally(sessionId, taskId, (task) => ({
@@ -797,9 +892,10 @@ export async function removeDependency(sessionId: string, taskId: string, depend
           (dep: any) => String(dep) !== String(dependsOnId)),
       }));
     }
-    await loadTasks(sessionId);
+    await reloadTasksIfActive(sessionId);
+    return provider;
   } catch (e) {
-    taskError.set(String(e));
+    if (isActiveTasksSession(sessionId)) taskError.set(String(e));
     throw e;
   }
 }

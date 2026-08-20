@@ -1,6 +1,11 @@
 package session
 
 import (
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"reflect"
+	"sync"
 	"testing"
 	"time"
 )
@@ -21,6 +26,217 @@ func TestCompletedTasksAreNeverOverdue(t *testing.T) {
 	open := Task{Status: TaskStatusInProgress, DueAt: &past}
 	if !open.Overdue(now) {
 		t.Error("unfinished work past its deadline is overdue")
+	}
+}
+
+func TestTaskMutationsRollBackWhenSaveFails(t *testing.T) {
+	dir := t.TempDir()
+	manager := NewTaskManager(dir)
+	if err := manager.Load(); err != nil {
+		t.Fatal(err)
+	}
+	task, err := manager.CreateTask("before", "description", TaskPriorityMedium, []string{"tag"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	subtask, err := manager.AddSubtask(task.ID, "subtask")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Turn the storage directory into a plain file. Every following mutation
+	// reaches its in-memory change but must fail before replacing tasks.json.
+	taskDir := filepath.Join(dir, ".taskmaster")
+	if err := os.RemoveAll(taskDir); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(taskDir, []byte("not a directory"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	assertUnchanged := func(name string, mutate func() error) {
+		t.Helper()
+		before := manager.GetTasks()
+		if err := mutate(); err == nil {
+			t.Fatalf("%s unexpectedly succeeded", name)
+		}
+		after := manager.GetTasks()
+		if !reflect.DeepEqual(after, before) {
+			t.Fatalf("%s leaked a failed mutation into memory\nbefore: %#v\nafter:  %#v", name, before, after)
+		}
+	}
+
+	assertUnchanged("create", func() error {
+		_, err := manager.CreateTask("failed", "", TaskPriorityLow, nil)
+		return err
+	})
+	assertUnchanged("update", func() error {
+		return manager.UpdateTask(task.ID, map[string]interface{}{"title": "changed"})
+	})
+	assertUnchanged("add subtask", func() error {
+		_, err := manager.AddSubtask(task.ID, "failed")
+		return err
+	})
+	assertUnchanged("toggle subtask", func() error {
+		return manager.ToggleSubtask(task.ID, subtask.ID)
+	})
+	assertUnchanged("delete subtask", func() error {
+		return manager.DeleteSubtask(task.ID, subtask.ID)
+	})
+	assertUnchanged("delete task", func() error {
+		return manager.DeleteTask(task.ID)
+	})
+}
+
+func TestTaskManagerSerializesConcurrentCreatesAndWritesValidJSON(t *testing.T) {
+	dir := t.TempDir()
+	manager := NewTaskManager(dir)
+	if err := manager.Load(); err != nil {
+		t.Fatal(err)
+	}
+
+	const count = 40
+	var wg sync.WaitGroup
+	errs := make(chan error, count)
+	for i := 0; i < count; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, err := manager.CreateTask("task", "", TaskPriorityMedium, []string{"tag"})
+			errs <- err
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := len(manager.GetTasks()); got != count {
+		t.Fatalf("stored %d tasks, want %d", got, count)
+	}
+	raw, err := os.ReadFile(filepath.Join(dir, ".taskmaster", "tasks.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var store TaskStore
+	if err := json.Unmarshal(raw, &store); err != nil {
+		t.Fatalf("concurrent save left invalid JSON: %v", err)
+	}
+	if len(store.Tasks) != count {
+		t.Fatalf("disk has %d tasks, want %d", len(store.Tasks), count)
+	}
+}
+
+func TestTaskManagerReturnsDeepCopies(t *testing.T) {
+	due := time.Now().Add(time.Hour)
+	manager := &TaskManager{store: &TaskStore{Tasks: []Task{{
+		ID: "one", Tags: []string{"original"}, Subtasks: []Subtask{{ID: "sub", Title: "original"}},
+		Dependencies: []string{"dep"}, DueAt: &due,
+	}}}}
+
+	tasks := manager.GetTasks()
+	tasks[0].Tags[0] = "changed"
+	tasks[0].Subtasks[0].Title = "changed"
+	tasks[0].Dependencies[0] = "changed"
+	*tasks[0].DueAt = time.Time{}
+	got, err := manager.GetTask("one")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Tags[0] != "original" || got.Subtasks[0].Title != "original" || got.Dependencies[0] != "dep" || got.DueAt.IsZero() {
+		t.Fatalf("caller mutated manager-owned task through returned value: %+v", got)
+	}
+}
+
+func TestRestoreTaskPreservesIdentityAndReverseDependencies(t *testing.T) {
+	dir := t.TempDir()
+	manager := NewTaskManager(dir)
+	if err := manager.Load(); err != nil {
+		t.Fatal(err)
+	}
+	dependent := Task{
+		ID: "dependent", Title: "dependent", Status: TaskStatusBacklog,
+		Priority: TaskPriorityMedium, Dependencies: []string{"restored"}, CreatedAt: time.Now(), UpdatedAt: time.Now(),
+	}
+	manager.store.Tasks = append(manager.store.Tasks, dependent)
+	if err := manager.Save(); err != nil {
+		t.Fatal(err)
+	}
+	due := time.Now().Add(24 * time.Hour).Round(0)
+	restored := Task{
+		ID: "restored", Title: "original", Description: "description", Details: "details",
+		Status: TaskStatusInProgress, Priority: TaskPriorityHigh, Tags: []string{"tag"},
+		Dependencies: []string{"prerequisite"}, Subtasks: []Subtask{{ID: "sub-original", Title: "sub", Description: "sub description", Details: "sub details", Status: TaskStatusDone, Done: true}},
+		CreatedAt: time.Now().Add(-time.Hour).Round(0), UpdatedAt: time.Now().Round(0), DueAt: &due,
+	}
+	if err := manager.RestoreTask(restored); err != nil {
+		t.Fatal(err)
+	}
+
+	reloaded := NewTaskManager(dir)
+	if err := reloaded.Load(); err != nil {
+		t.Fatal(err)
+	}
+	got, err := reloaded.GetTask("restored")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.ID != restored.ID || got.Details != restored.Details || len(got.Subtasks) != 1 || got.Subtasks[0].ID != "sub-original" || got.Subtasks[0].Description != "sub description" || got.Subtasks[0].Details != "sub details" || got.Subtasks[0].Status != TaskStatusDone || got.DueAt == nil || !got.DueAt.Equal(due) {
+		t.Fatalf("restored snapshot changed: %+v", got)
+	}
+	dep, err := reloaded.GetTask("dependent")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(dep.Dependencies) != 1 || dep.Dependencies[0] != restored.ID {
+		t.Fatalf("reverse dependency no longer resolves to restored ID: %+v", dep.Dependencies)
+	}
+	if err := reloaded.RestoreTask(restored); err == nil {
+		t.Fatal("restoring the same ID twice should not overwrite the existing task")
+	}
+}
+
+func TestSubtaskEditRoundTripPreservesDescriptionDetailsAndStatus(t *testing.T) {
+	dir := t.TempDir()
+	manager := NewTaskManager(dir)
+	if err := manager.Load(); err != nil {
+		t.Fatal(err)
+	}
+	task, err := manager.CreateTask("task", "", TaskPriorityMedium, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.UpdateTask(task.ID, map[string]interface{}{
+		"subtasks": []interface{}{map[string]interface{}{
+			"id": "sub", "title": "subtask", "description": "description",
+			"details": "details", "status": "in-progress", "createdAt": "2026-08-20T12:00:00Z",
+		}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	reloaded := NewTaskManager(dir)
+	if err := reloaded.Load(); err != nil {
+		t.Fatal(err)
+	}
+	got, err := reloaded.GetTask(task.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Subtasks) != 1 || got.Subtasks[0].Description != "description" || got.Subtasks[0].Details != "details" || got.Subtasks[0].Status != TaskStatusInProgress || got.Subtasks[0].Done {
+		t.Fatalf("subtask fields did not round-trip: %+v", got.Subtasks)
+	}
+	if err := reloaded.ToggleSubtask(task.ID, "sub"); err != nil {
+		t.Fatal(err)
+	}
+	toggled, err := reloaded.GetTask(task.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !toggled.Subtasks[0].Done || toggled.Subtasks[0].Status != TaskStatusDone || toggled.Subtasks[0].Description != "description" || toggled.Subtasks[0].Details != "details" {
+		t.Fatalf("toggle lost subtask fields or status: %+v", toggled.Subtasks[0])
 	}
 }
 

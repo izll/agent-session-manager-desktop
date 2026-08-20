@@ -166,7 +166,10 @@ func (s *Storage) templatesPath() string {
 func (s *Storage) LoadTemplates() (*TemplateLibrary, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return s.loadTemplatesLocked()
+}
 
+func (s *Storage) loadTemplatesLocked() (*TemplateLibrary, error) {
 	data, err := os.ReadFile(s.templatesPath())
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -186,7 +189,10 @@ func (s *Storage) LoadTemplates() (*TemplateLibrary, error) {
 func (s *Storage) SaveTemplates(lib *TemplateLibrary) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return s.saveTemplatesLocked(lib)
+}
 
+func (s *Storage) saveTemplatesLocked(lib *TemplateLibrary) error {
 	if lib == nil {
 		lib = &TemplateLibrary{}
 	}
@@ -217,4 +223,22 @@ func (s *Storage) SaveTemplates(lib *TemplateLibrary) error {
 		return err
 	}
 	return nil
+}
+
+// UpdateTemplates performs a complete load/change/save cycle under one lock,
+// preventing concurrent template edits or usage updates from overwriting one
+// another with stale snapshots.
+func (s *Storage) UpdateTemplates(change func(*TemplateLibrary) error) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return withCrossProcessFileLock(filepath.Join(s.configDir, "templates.lock"), func() error {
+		lib, err := s.loadTemplatesLocked()
+		if err != nil {
+			return err
+		}
+		if err := change(lib); err != nil {
+			return err
+		}
+		return s.saveTemplatesLocked(lib)
+	})
 }

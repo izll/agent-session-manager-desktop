@@ -2,12 +2,48 @@ package session
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 )
+
+func TestProjectCatalogKeepsConcurrentEditsAcrossStorages(t *testing.T) {
+	dir := t.TempDir()
+	storages := []*Storage{{configDir: dir}, {configDir: dir}}
+	const count = 40
+	var wg sync.WaitGroup
+	errs := make(chan error, count)
+	for n := 0; n < count; n++ {
+		n := n
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, err := storages[n%len(storages)].AddProject(fmt.Sprintf("project-%02d", n))
+			errs <- err
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	projects, err := storages[0].LoadProjects()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(projects.Projects) != count {
+		t.Fatalf("saved %d projects, want %d", len(projects.Projects), count)
+	}
+}
 
 // The write path is what holds every session the user has. A regression here
 // does not break a feature — it loses work that cannot be typed back in.
@@ -208,6 +244,193 @@ func TestUnlockRemovesTheLockFile(t *testing.T) {
 
 	if _, err := os.Stat(lockPath); !os.IsNotExist(err) {
 		t.Error("the lock file outlived the unlock")
+	}
+}
+
+func TestLockProjectHelperProcess(t *testing.T) {
+	if os.Getenv("ASMGR_LOCK_HELPER") != "1" {
+		return
+	}
+	start := os.Getenv("ASMGR_LOCK_START")
+	for {
+		if _, err := os.Stat(start); err == nil {
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
+	dir := os.Getenv("ASMGR_LOCK_DIR")
+	storage := &Storage{configDir: dir, configPath: filepath.Join(dir, "sessions.json")}
+	err := storage.LockProject("")
+	result := "error"
+	if err == nil {
+		result = "acquired"
+	} else {
+		var locked *ErrProjectLocked
+		if errors.As(err, &locked) {
+			result = "locked"
+		}
+	}
+	if writeErr := os.WriteFile(os.Getenv("ASMGR_LOCK_RESULT"), []byte(result), 0600); writeErr != nil {
+		t.Fatal(writeErr)
+	}
+	if err == nil {
+		time.Sleep(300 * time.Millisecond)
+		storage.UnlockProject()
+	}
+}
+
+// Two independent processes starting at the same instant must never both own
+// the project. The lock is published as a fully-written inode via hard link,
+// so there is no empty-file interval that the contender can reclaim as stale.
+func TestLockProjectIsAtomicAcrossProcesses(t *testing.T) {
+	dir := t.TempDir()
+	start := filepath.Join(dir, "start")
+	results := []string{filepath.Join(dir, "result-a"), filepath.Join(dir, "result-b")}
+	commands := make([]*exec.Cmd, 0, 2)
+	for _, result := range results {
+		cmd := exec.Command(os.Args[0], "-test.run=^TestLockProjectHelperProcess$")
+		cmd.Env = append(os.Environ(),
+			"ASMGR_LOCK_HELPER=1",
+			"ASMGR_LOCK_DIR="+dir,
+			"ASMGR_LOCK_START="+start,
+			"ASMGR_LOCK_RESULT="+result,
+		)
+		if err := cmd.Start(); err != nil {
+			t.Fatal(err)
+		}
+		commands = append(commands, cmd)
+	}
+	if err := os.WriteFile(start, []byte("go"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	for _, cmd := range commands {
+		if err := cmd.Wait(); err != nil {
+			t.Fatalf("lock helper failed: %v", err)
+		}
+	}
+
+	acquired := 0
+	locked := 0
+	for _, result := range results {
+		raw, err := os.ReadFile(result)
+		if err != nil {
+			t.Fatal(err)
+		}
+		switch string(raw) {
+		case "acquired":
+			acquired++
+		case "locked":
+			locked++
+		default:
+			t.Fatalf("unexpected helper result %q", raw)
+		}
+	}
+	if acquired != 1 || locked != 1 {
+		t.Fatalf("acquired=%d locked=%d, want exactly one of each", acquired, locked)
+	}
+}
+
+func TestRemoveProjectRejectsActiveProject(t *testing.T) {
+	storage := newTestStorage(t)
+	project, err := storage.AddProject("active")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := storage.SetActiveProject(project.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := storage.RemoveProject(project.ID); err == nil || !strings.Contains(err.Error(), "active") {
+		t.Fatalf("active project deletion error = %v", err)
+	}
+}
+
+func TestRemoveProjectRejectsProjectLockedByAnotherProcess(t *testing.T) {
+	storage := newTestStorage(t)
+	project, err := storage.AddProject("locked")
+	if err != nil {
+		t.Fatal(err)
+	}
+	holder := exec.Command("sleep", "30")
+	if err := holder.Start(); err != nil {
+		t.Skipf("cannot start lock-holder process: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = holder.Process.Kill()
+		_ = holder.Wait()
+	})
+	lockPath := storage.getLockPath(project.ID)
+	if err := os.MkdirAll(filepath.Dir(lockPath), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(lockPath, []byte(strconv.Itoa(holder.Process.Pid)), 0644); err != nil {
+		t.Fatal(err)
+	}
+	var locked *ErrProjectLocked
+	if err := storage.RemoveProject(project.ID); !errors.As(err, &locked) {
+		t.Fatalf("locked project deletion error = %v, want ErrProjectLocked", err)
+	}
+}
+
+func TestFailedProjectSwitchReleasesPreviousLock(t *testing.T) {
+	storage := newTestStorage(t)
+	if err := storage.LockProject("one"); err != nil {
+		t.Fatal(err)
+	}
+	oldPath := storage.getLockPath("one")
+	holder := exec.Command("sleep", "30")
+	if err := holder.Start(); err != nil {
+		t.Skipf("cannot start lock-holder process: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = holder.Process.Kill()
+		_ = holder.Wait()
+	})
+	targetPath := storage.getLockPath("two")
+	if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(targetPath, []byte(strconv.Itoa(holder.Process.Pid)), 0644); err != nil {
+		t.Fatal(err)
+	}
+	var locked *ErrProjectLocked
+	if err := storage.LockProject("two"); !errors.As(err, &locked) {
+		t.Fatalf("target lock error = %v, want ErrProjectLocked", err)
+	}
+	if _, err := os.Stat(oldPath); !os.IsNotExist(err) {
+		t.Fatalf("old project remained locked after failed switch: %v", err)
+	}
+	if storage.lockPath != "" {
+		t.Fatalf("storage still records old lock path %q", storage.lockPath)
+	}
+}
+
+func TestRemoveProjectRollsBackDataWhenCatalogSaveFails(t *testing.T) {
+	storage := newTestStorage(t)
+	project, err := storage.AddProject("rollback")
+	if err != nil {
+		t.Fatal(err)
+	}
+	projectDir := filepath.Join(storage.configDir, "projects", project.ID)
+	if err := os.MkdirAll(projectDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	marker := filepath.Join(projectDir, "sessions.json")
+	if err := os.WriteFile(marker, []byte(`{"instances":[]}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	// saveProjectsLocked writes this fixed temp path before rename. A directory
+	// there forces the catalog commit to fail after data has moved to trash.
+	if err := os.Mkdir(filepath.Join(storage.configDir, "projects.json.tmp"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := storage.RemoveProject(project.ID); err == nil {
+		t.Fatal("deletion unexpectedly succeeded despite an unwritable catalog temp path")
+	}
+	if _, err := os.Stat(marker); err != nil {
+		t.Fatalf("project data was not rolled back: %v", err)
+	}
+	if _, err := storage.GetProject(project.ID); err != nil {
+		t.Fatalf("project disappeared from catalog after failed deletion: %v", err)
 	}
 }
 

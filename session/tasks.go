@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"sync"
 	"time"
 )
 
@@ -79,10 +80,13 @@ func (t Task) Unfinished() bool {
 
 // Subtask represents a subtask within a task
 type Subtask struct {
-	ID        string    `json:"id"`
-	Title     string    `json:"title"`
-	Done      bool      `json:"done"`
-	CreatedAt time.Time `json:"createdAt"`
+	ID          string     `json:"id"`
+	Title       string     `json:"title"`
+	Description string     `json:"description,omitempty"`
+	Details     string     `json:"details,omitempty"`
+	Status      TaskStatus `json:"status,omitempty"`
+	Done        bool       `json:"done"`
+	CreatedAt   time.Time  `json:"createdAt"`
 }
 
 // TaskStore holds all tasks for a project
@@ -102,6 +106,7 @@ type TaskStoreMeta struct {
 
 // TaskManager handles task operations for a project
 type TaskManager struct {
+	mu          sync.RWMutex
 	projectPath string
 	store       *TaskStore
 }
@@ -126,6 +131,12 @@ func (tm *TaskManager) ensureTaskDir() error {
 
 // Load loads tasks from the project's .taskmaster/tasks.json
 func (tm *TaskManager) Load() error {
+	tm.mu.Lock()
+	defer tm.mu.Unlock()
+	return tm.loadLocked()
+}
+
+func (tm *TaskManager) loadLocked() error {
 	filePath := tm.getTaskFilePath()
 
 	data, err := os.ReadFile(filePath)
@@ -158,6 +169,12 @@ func (tm *TaskManager) Load() error {
 
 // Save saves tasks to the project's .taskmaster/tasks.json
 func (tm *TaskManager) Save() error {
+	tm.mu.Lock()
+	defer tm.mu.Unlock()
+	return tm.saveLocked()
+}
+
+func (tm *TaskManager) saveLocked() error {
 	if tm.store == nil {
 		return fmt.Errorf("no task store loaded")
 	}
@@ -174,8 +191,29 @@ func (tm *TaskManager) Save() error {
 	}
 
 	filePath := tm.getTaskFilePath()
-	if err := os.WriteFile(filePath, data, 0644); err != nil {
+	tmp, err := os.CreateTemp(filepath.Dir(filePath), ".tasks-*")
+	if err != nil {
+		return fmt.Errorf("failed to create tasks temp file: %w", err)
+	}
+	tmpPath := tmp.Name()
+	defer os.Remove(tmpPath)
+	if err := tmp.Chmod(0644); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("failed to set tasks temp permissions: %w", err)
+	}
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
 		return fmt.Errorf("failed to write tasks file: %w", err)
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("failed to sync tasks file: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("failed to close tasks file: %w", err)
+	}
+	if err := os.Rename(tmpPath, filePath); err != nil {
+		return fmt.Errorf("failed to replace tasks file: %w", err)
 	}
 
 	return nil
@@ -183,14 +221,18 @@ func (tm *TaskManager) Save() error {
 
 // GetTasks returns all tasks
 func (tm *TaskManager) GetTasks() []Task {
+	tm.mu.RLock()
+	defer tm.mu.RUnlock()
 	if tm.store == nil {
 		return []Task{}
 	}
-	return tm.store.Tasks
+	return cloneTasks(tm.store.Tasks)
 }
 
 // GetTasksByStatus returns tasks filtered by status
 func (tm *TaskManager) GetTasksByStatus(status TaskStatus) []Task {
+	tm.mu.RLock()
+	defer tm.mu.RUnlock()
 	if tm.store == nil {
 		return []Task{}
 	}
@@ -198,7 +240,7 @@ func (tm *TaskManager) GetTasksByStatus(status TaskStatus) []Task {
 	var filtered []Task
 	for _, task := range tm.store.Tasks {
 		if task.Status == status {
-			filtered = append(filtered, task)
+			filtered = append(filtered, cloneTask(task))
 		}
 	}
 	return filtered
@@ -210,6 +252,8 @@ func (tm *TaskManager) GetTasksByStatus(status TaskStatus) []Task {
 // assigned to the session count: a project-wide task is not this session's
 // business, and warning about it on every close would train the warning away.
 func (tm *TaskManager) UnfinishedForSession(sessionID string) []Task {
+	tm.mu.RLock()
+	defer tm.mu.RUnlock()
 	if tm.store == nil || sessionID == "" {
 		return nil
 	}
@@ -217,7 +261,7 @@ func (tm *TaskManager) UnfinishedForSession(sessionID string) []Task {
 	var pending []Task
 	for _, task := range tm.store.Tasks {
 		if task.SessionID == sessionID && task.Unfinished() {
-			pending = append(pending, task)
+			pending = append(pending, cloneTask(task))
 		}
 	}
 	return pending
@@ -225,13 +269,16 @@ func (tm *TaskManager) UnfinishedForSession(sessionID string) []Task {
 
 // GetTask returns a task by ID
 func (tm *TaskManager) GetTask(id string) (*Task, error) {
+	tm.mu.RLock()
+	defer tm.mu.RUnlock()
 	if tm.store == nil {
 		return nil, fmt.Errorf("no task store loaded")
 	}
 
 	for i := range tm.store.Tasks {
 		if tm.store.Tasks[i].ID == id {
-			return &tm.store.Tasks[i], nil
+			copy := cloneTask(tm.store.Tasks[i])
+			return &copy, nil
 		}
 	}
 	return nil, fmt.Errorf("task not found: %s", id)
@@ -244,8 +291,19 @@ func (tm *TaskManager) generateTaskID() string {
 
 // CreateTask creates a new task
 func (tm *TaskManager) CreateTask(title, description string, priority TaskPriority, tags []string) (*Task, error) {
+	return tm.createTask(title, description, priority, tags, "")
+}
+
+// CreateTaskForSession persists ownership in the same transaction as creation.
+func (tm *TaskManager) CreateTaskForSession(title, description string, priority TaskPriority, tags []string, sessionID string) (*Task, error) {
+	return tm.createTask(title, description, priority, tags, sessionID)
+}
+
+func (tm *TaskManager) createTask(title, description string, priority TaskPriority, tags []string, sessionID string) (*Task, error) {
+	tm.mu.Lock()
+	defer tm.mu.Unlock()
 	if tm.store == nil {
-		if err := tm.Load(); err != nil {
+		if err := tm.loadLocked(); err != nil {
 			return nil, err
 		}
 	}
@@ -256,30 +314,39 @@ func (tm *TaskManager) CreateTask(title, description string, priority TaskPriori
 		Description:  description,
 		Status:       TaskStatusBacklog,
 		Priority:     priority,
-		Tags:         tags,
+		Tags:         append([]string(nil), tags...),
 		Subtasks:     []Subtask{},
 		Dependencies: []string{},
+		SessionID:    sessionID,
 		CreatedAt:    time.Now(),
 		UpdatedAt:    time.Now(),
 	}
 
+	previousMeta := tm.store.Meta
 	tm.store.Tasks = append(tm.store.Tasks, task)
 
-	if err := tm.Save(); err != nil {
+	if err := tm.saveLocked(); err != nil {
+		tm.store.Tasks = tm.store.Tasks[:len(tm.store.Tasks)-1]
+		tm.store.Meta = previousMeta
 		return nil, err
 	}
 
-	return &task, nil
+	copy := cloneTask(task)
+	return &copy, nil
 }
 
 // UpdateTask updates an existing task
 func (tm *TaskManager) UpdateTask(id string, updates map[string]interface{}) error {
+	tm.mu.Lock()
+	defer tm.mu.Unlock()
 	if tm.store == nil {
 		return fmt.Errorf("no task store loaded")
 	}
 
 	for i := range tm.store.Tasks {
 		if tm.store.Tasks[i].ID == id {
+			previous := cloneTask(tm.store.Tasks[i])
+			previousMeta := tm.store.Meta
 			task := &tm.store.Tasks[i]
 
 			if title, ok := updates["title"].(string); ok {
@@ -340,7 +407,12 @@ func (tm *TaskManager) UpdateTask(id string, updates map[string]interface{}) err
 			}
 
 			task.UpdatedAt = time.Now()
-			return tm.Save()
+			if err := tm.saveLocked(); err != nil {
+				tm.store.Tasks[i] = previous
+				tm.store.Meta = previousMeta
+				return err
+			}
+			return nil
 		}
 	}
 
@@ -361,14 +433,21 @@ func toSubtasks(raw []interface{}) []Subtask {
 		if id == "" || title == "" {
 			continue
 		}
-		sub := Subtask{ID: id, Title: title}
-		// The frontend speaks in statuses because Task Master does; the local
-		// store only records whether a subtask is finished, which is all its
-		// UI offers — a checkbox.
+		description, _ := fields["description"].(string)
+		details, _ := fields["details"].(string)
+		sub := Subtask{ID: id, Title: title, Description: description, Details: details}
 		if status, ok := fields["status"].(string); ok {
-			sub.Done = status == string(TaskStatusDone)
+			sub.Status = normalizeSubtaskStatus(status)
+			sub.Done = sub.Status == TaskStatusDone
 		} else if done, ok := fields["done"].(bool); ok {
 			sub.Done = done
+			if done {
+				sub.Status = TaskStatusDone
+			} else {
+				sub.Status = TaskStatusBacklog
+			}
+		} else {
+			sub.Status = TaskStatusBacklog
 		}
 		if created, ok := fields["createdAt"].(string); ok {
 			if parsed, err := time.Parse(time.RFC3339, created); err == nil {
@@ -381,6 +460,13 @@ func toSubtasks(raw []interface{}) []Subtask {
 		out = append(out, sub)
 	}
 	return out
+}
+
+func normalizeSubtaskStatus(status string) TaskStatus {
+	if status == "" || status == "pending" {
+		return TaskStatusBacklog
+	}
+	return TaskStatus(status)
 }
 
 // toStringList converts a JSON array of strings, dropping anything else.
@@ -396,18 +482,63 @@ func toStringList(raw []interface{}) []string {
 
 // DeleteTask deletes a task by ID
 func (tm *TaskManager) DeleteTask(id string) error {
+	tm.mu.Lock()
+	defer tm.mu.Unlock()
 	if tm.store == nil {
 		return fmt.Errorf("no task store loaded")
 	}
 
 	for i := range tm.store.Tasks {
 		if tm.store.Tasks[i].ID == id {
+			previousTasks := cloneTasks(tm.store.Tasks)
+			previousMeta := tm.store.Meta
 			tm.store.Tasks = append(tm.store.Tasks[:i], tm.store.Tasks[i+1:]...)
-			return tm.Save()
+			if err := tm.saveLocked(); err != nil {
+				tm.store.Tasks = previousTasks
+				tm.store.Meta = previousMeta
+				return err
+			}
+			return nil
 		}
 	}
 
 	return fmt.Errorf("task not found: %s", id)
+}
+
+// RestoreTask atomically puts a previously deleted task back with its original
+// identity. Keeping the ID is essential: other tasks may still depend on it,
+// and re-creating through CreateTask would silently break those reverse links.
+func (tm *TaskManager) RestoreTask(task Task) error {
+	if task.ID == "" {
+		return fmt.Errorf("restored task has no ID")
+	}
+	tm.mu.Lock()
+	defer tm.mu.Unlock()
+	if tm.store == nil {
+		if err := tm.loadLocked(); err != nil {
+			return err
+		}
+	}
+	for i := range tm.store.Tasks {
+		if tm.store.Tasks[i].ID == task.ID {
+			return fmt.Errorf("task already exists: %s", task.ID)
+		}
+	}
+	if task.CreatedAt.IsZero() {
+		task.CreatedAt = time.Now()
+	}
+	if task.UpdatedAt.IsZero() {
+		task.UpdatedAt = task.CreatedAt
+	}
+	task = cloneTask(task)
+	previousMeta := tm.store.Meta
+	tm.store.Tasks = append(tm.store.Tasks, task)
+	if err := tm.saveLocked(); err != nil {
+		tm.store.Tasks = tm.store.Tasks[:len(tm.store.Tasks)-1]
+		tm.store.Meta = previousMeta
+		return err
+	}
+	return nil
 }
 
 // MoveTask changes the status of a task
@@ -419,22 +550,29 @@ func (tm *TaskManager) MoveTask(id string, newStatus TaskStatus) error {
 
 // AddSubtask adds a subtask to a task
 func (tm *TaskManager) AddSubtask(taskID, title string) (*Subtask, error) {
+	tm.mu.Lock()
+	defer tm.mu.Unlock()
 	if tm.store == nil {
 		return nil, fmt.Errorf("no task store loaded")
 	}
 
 	for i := range tm.store.Tasks {
 		if tm.store.Tasks[i].ID == taskID {
+			previous := cloneTask(tm.store.Tasks[i])
+			previousMeta := tm.store.Meta
 			subtask := Subtask{
 				ID:        fmt.Sprintf("subtask_%d", time.Now().UnixNano()),
 				Title:     title,
+				Status:    TaskStatusBacklog,
 				Done:      false,
 				CreatedAt: time.Now(),
 			}
 			tm.store.Tasks[i].Subtasks = append(tm.store.Tasks[i].Subtasks, subtask)
 			tm.store.Tasks[i].UpdatedAt = time.Now()
 
-			if err := tm.Save(); err != nil {
+			if err := tm.saveLocked(); err != nil {
+				tm.store.Tasks[i] = previous
+				tm.store.Meta = previousMeta
 				return nil, err
 			}
 			return &subtask, nil
@@ -446,6 +584,8 @@ func (tm *TaskManager) AddSubtask(taskID, title string) (*Subtask, error) {
 
 // ToggleSubtask toggles the done status of a subtask
 func (tm *TaskManager) ToggleSubtask(taskID, subtaskID string) error {
+	tm.mu.Lock()
+	defer tm.mu.Unlock()
 	if tm.store == nil {
 		return fmt.Errorf("no task store loaded")
 	}
@@ -454,9 +594,21 @@ func (tm *TaskManager) ToggleSubtask(taskID, subtaskID string) error {
 		if tm.store.Tasks[i].ID == taskID {
 			for j := range tm.store.Tasks[i].Subtasks {
 				if tm.store.Tasks[i].Subtasks[j].ID == subtaskID {
+					previous := cloneTask(tm.store.Tasks[i])
+					previousMeta := tm.store.Meta
 					tm.store.Tasks[i].Subtasks[j].Done = !tm.store.Tasks[i].Subtasks[j].Done
+					if tm.store.Tasks[i].Subtasks[j].Done {
+						tm.store.Tasks[i].Subtasks[j].Status = TaskStatusDone
+					} else {
+						tm.store.Tasks[i].Subtasks[j].Status = TaskStatusBacklog
+					}
 					tm.store.Tasks[i].UpdatedAt = time.Now()
-					return tm.Save()
+					if err := tm.saveLocked(); err != nil {
+						tm.store.Tasks[i] = previous
+						tm.store.Meta = previousMeta
+						return err
+					}
+					return nil
 				}
 			}
 			return fmt.Errorf("subtask not found: %s", subtaskID)
@@ -468,6 +620,8 @@ func (tm *TaskManager) ToggleSubtask(taskID, subtaskID string) error {
 
 // DeleteSubtask removes a subtask from a task
 func (tm *TaskManager) DeleteSubtask(taskID, subtaskID string) error {
+	tm.mu.Lock()
+	defer tm.mu.Unlock()
 	if tm.store == nil {
 		return fmt.Errorf("no task store loaded")
 	}
@@ -476,12 +630,19 @@ func (tm *TaskManager) DeleteSubtask(taskID, subtaskID string) error {
 		if tm.store.Tasks[i].ID == taskID {
 			for j := range tm.store.Tasks[i].Subtasks {
 				if tm.store.Tasks[i].Subtasks[j].ID == subtaskID {
+					previous := cloneTask(tm.store.Tasks[i])
+					previousMeta := tm.store.Meta
 					tm.store.Tasks[i].Subtasks = append(
 						tm.store.Tasks[i].Subtasks[:j],
 						tm.store.Tasks[i].Subtasks[j+1:]...,
 					)
 					tm.store.Tasks[i].UpdatedAt = time.Now()
-					return tm.Save()
+					if err := tm.saveLocked(); err != nil {
+						tm.store.Tasks[i] = previous
+						tm.store.Meta = previousMeta
+						return err
+					}
+					return nil
 				}
 			}
 			return fmt.Errorf("subtask not found: %s", subtaskID)
@@ -491,9 +652,56 @@ func (tm *TaskManager) DeleteSubtask(taskID, subtaskID string) error {
 	return fmt.Errorf("task not found: %s", taskID)
 }
 
+// RestoreSubtask puts a deleted subtask back with its original identity and
+// metadata, so Undo does not turn a completed item into a new pending one.
+func (tm *TaskManager) RestoreSubtask(taskID string, subtask Subtask) error {
+	if taskID == "" || subtask.ID == "" {
+		return fmt.Errorf("restored subtask has no parent or ID")
+	}
+	tm.mu.Lock()
+	defer tm.mu.Unlock()
+	if tm.store == nil {
+		return fmt.Errorf("no task store loaded")
+	}
+	for i := range tm.store.Tasks {
+		if tm.store.Tasks[i].ID != taskID {
+			continue
+		}
+		for _, existing := range tm.store.Tasks[i].Subtasks {
+			if existing.ID == subtask.ID {
+				return fmt.Errorf("subtask already exists: %s", subtask.ID)
+			}
+		}
+		if subtask.Status == "" {
+			if subtask.Done {
+				subtask.Status = TaskStatusDone
+			} else {
+				subtask.Status = TaskStatusBacklog
+			}
+		}
+		subtask.Done = subtask.Status == TaskStatusDone
+		if subtask.CreatedAt.IsZero() {
+			subtask.CreatedAt = time.Now()
+		}
+		previous := cloneTask(tm.store.Tasks[i])
+		previousMeta := tm.store.Meta
+		tm.store.Tasks[i].Subtasks = append(tm.store.Tasks[i].Subtasks, subtask)
+		tm.store.Tasks[i].UpdatedAt = time.Now()
+		if err := tm.saveLocked(); err != nil {
+			tm.store.Tasks[i] = previous
+			tm.store.Meta = previousMeta
+			return err
+		}
+		return nil
+	}
+	return fmt.Errorf("task not found: %s", taskID)
+}
+
 // GetNextTask returns the next recommended task to work on
 // Based on: dependencies resolved, priority, creation date
 func (tm *TaskManager) GetNextTask() *Task {
+	tm.mu.RLock()
+	defer tm.mu.RUnlock()
 	if tm.store == nil || len(tm.store.Tasks) == 0 {
 		return nil
 	}
@@ -548,7 +756,31 @@ func (tm *TaskManager) GetNextTask() *Task {
 		return candidates[i].CreatedAt.Before(candidates[j].CreatedAt)
 	})
 
-	return &candidates[0]
+	copy := cloneTask(candidates[0])
+	return &copy
+}
+
+func cloneTasks(tasks []Task) []Task {
+	out := make([]Task, len(tasks))
+	for i := range tasks {
+		out[i] = cloneTask(tasks[i])
+	}
+	return out
+}
+
+func cloneTask(task Task) Task {
+	task.Tags = append([]string(nil), task.Tags...)
+	task.Subtasks = append([]Subtask(nil), task.Subtasks...)
+	task.Dependencies = append([]string(nil), task.Dependencies...)
+	if task.CompletedAt != nil {
+		completed := *task.CompletedAt
+		task.CompletedAt = &completed
+	}
+	if task.DueAt != nil {
+		due := *task.DueAt
+		task.DueAt = &due
+	}
+	return task
 }
 
 // FormatTaskForAgent formats a task as a prompt for an AI agent

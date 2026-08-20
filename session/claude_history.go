@@ -466,7 +466,6 @@ func GetChangedSessionID(projectPath string, snapshot map[string]int64) string {
 
 	var changedID string
 	var latestModTime int64
-	var changedFiles []string
 
 	for _, entry := range entries {
 		if entry.IsDir() {
@@ -490,18 +489,12 @@ func GetChangedSessionID(projectPath string, snapshot map[string]int64) string {
 
 		// Check if file is new or modified
 		if !existed || currentModTime > oldModTime {
-			changedFiles = append(changedFiles, fmt.Sprintf("%s (old=%d, new=%d)", sessionID[:8], oldModTime, currentModTime))
 			if currentModTime > latestModTime {
 				latestModTime = currentModTime
 				changedID = sessionID
 			}
 		}
 	}
-
-	// Debug log
-	debugLog := fmt.Sprintf("GetChangedSessionID:\n  changedFiles=%d: %v\n  result=%s\n",
-		len(changedFiles), changedFiles, changedID)
-	os.WriteFile("/tmp/asmgr_changed.log", []byte(debugLog), 0644)
 
 	return changedID
 }
@@ -521,9 +514,6 @@ func GetActiveSessionFromDebugLogs(projectPath string, afterTime time.Time) stri
 	if err != nil {
 		return ""
 	}
-
-	debugLog := fmt.Sprintf("GetActiveSessionFromDebugLogs:\n  projectDir=%s\n  afterTime=%s\n",
-		projectDir, afterTime.Format("15:04:05"))
 
 	var candidates []struct {
 		id        string
@@ -560,14 +550,9 @@ func GetActiveSessionFromDebugLogs(projectPath string, afterTime time.Time) stri
 			id        string
 			startTime time.Time
 		}{sessionID, startTime})
-		debugLog += fmt.Sprintf("  match: %s (started %s)\n", sessionID[:8], startTime.Format("15:04:05"))
 	}
 
-	debugLog += fmt.Sprintf("  candidates=%d\n", len(candidates))
-
 	if len(candidates) == 0 {
-		debugLog += "  result: none\n"
-		os.WriteFile("/tmp/asmgr_debug_session.log", []byte(debugLog), 0644)
 		return ""
 	}
 
@@ -578,9 +563,6 @@ func GetActiveSessionFromDebugLogs(projectPath string, afterTime time.Time) stri
 			latest = c
 		}
 	}
-
-	debugLog += fmt.Sprintf("  result: %s\n", latest.id)
-	os.WriteFile("/tmp/asmgr_debug_session.log", []byte(debugLog), 0644)
 
 	return latest.id
 }

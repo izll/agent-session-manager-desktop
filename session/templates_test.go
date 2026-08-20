@@ -1,11 +1,46 @@
 package session
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 )
+
+func TestUpdateTemplatesKeepsConcurrentEdits(t *testing.T) {
+	dir := t.TempDir()
+	storages := []*Storage{{configDir: dir}, {configDir: dir}}
+	const count = 40
+	var wg sync.WaitGroup
+	errs := make(chan error, count)
+	for i := 0; i < count; i++ {
+		i := i
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			errs <- storages[i%len(storages)].UpdateTemplates(func(lib *TemplateLibrary) error {
+				lib.Templates = append(lib.Templates, SessionTemplate{ID: fmt.Sprintf("tpl-%d", i), Name: "name"})
+				return nil
+			})
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	lib, err := storages[0].LoadTemplates()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(lib.Templates) != count {
+		t.Fatalf("saved %d templates, want %d", len(lib.Templates), count)
+	}
+}
 
 func TestTemplateLibraryRoundTrips(t *testing.T) {
 	dir := t.TempDir()

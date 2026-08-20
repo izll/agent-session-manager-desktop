@@ -11,7 +11,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"testing"
 	"time"
 )
@@ -509,17 +508,67 @@ func TestExtractBundleRefusesPathTraversal(t *testing.T) {
 	_ = err // confined either by refusal or by clamping; escaping is the failure
 }
 
+// A symlink target has to be validated exactly as os.Symlink will interpret
+// it. Cleaning ../../../outside before validation but passing the raw value to
+// os.Symlink lets the next regular entry write through the link and out of the
+// staging directory.
+func TestExtractBundleRefusesSymlinkTraversal(t *testing.T) {
+	root := t.TempDir()
+	dest := filepath.Join(root, "stage")
+	outside := filepath.Join(root, "outside")
+	if err := os.MkdirAll(dest, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(outside, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	archive := filepath.Join(root, "symlink-traversal.tar.gz")
+	f, err := os.Create(archive)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gz := gzip.NewWriter(f)
+	tw := tar.NewWriter(gz)
+	if err := tw.WriteHeader(&tar.Header{
+		Name: "Foo.app/a/link", Linkname: "../../../outside",
+		Mode: 0777, Typeflag: tar.TypeSymlink,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	body := []byte("must stay in the archive")
+	if err := tw.WriteHeader(&tar.Header{
+		Name: "Foo.app/a/link/pwn", Mode: 0644, Size: int64(len(body)), Typeflag: tar.TypeReg,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tw.Write(body); err != nil {
+		t.Fatal(err)
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := gz.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := extractBundle(archive, dest); err == nil {
+		t.Fatal("archive with an escaping symlink was accepted")
+	}
+	if _, err := os.Stat(filepath.Join(outside, "pwn")); !os.IsNotExist(err) {
+		t.Fatalf("archive wrote through its symlink outside the destination: %v", err)
+	}
+}
+
 // safeJoin is the guard the extraction relies on; check it directly too.
 func TestSafeJoinConfinesEntries(t *testing.T) {
 	dest := "/tmp/dest"
 	for _, name := range []string{"../evil", "../../evil", "a/../../evil", "/etc/passwd"} {
-		got, err := safeJoin(dest, name)
-		if err != nil {
-			continue // refused outright: fine
-		}
-		rel, relErr := filepath.Rel(dest, got)
-		if relErr != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-			t.Fatalf("safeJoin(%q, %q) = %q, which escapes", dest, name, got)
+		if got, err := safeJoin(dest, name); err == nil {
+			t.Fatalf("safeJoin(%q, %q) = %q; traversal must be refused", dest, name, got)
 		}
 	}
 }

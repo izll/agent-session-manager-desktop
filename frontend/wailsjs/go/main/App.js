@@ -522,6 +522,14 @@ export function RestoreBackup(arg1) {
   return window['go']['main']['App']['RestoreBackup'](arg1);
 }
 
+export function RestoreDeletedSubtask(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['RestoreDeletedSubtask'](arg1, arg2, arg3, arg4);
+}
+
+export function RestoreDeletedTask(arg1, arg2, arg3) {
+  return window['go']['main']['App']['RestoreDeletedTask'](arg1, arg2, arg3);
+}
+
 export function RestoreTaskBackup(arg1) {
   return window['go']['main']['App']['RestoreTaskBackup'](arg1);
 }
@@ -530,12 +538,12 @@ export function RestoreTrashItem(arg1) {
   return window['go']['main']['App']['RestoreTrashItem'](arg1);
 }
 
-export function RevertDiffFile(arg1, arg2, arg3, arg4) {
-  return window['go']['main']['App']['RevertDiffFile'](arg1, arg2, arg3, arg4);
+export function RevertDiffFile(arg1, arg2, arg3, arg4, arg5) {
+  return window['go']['main']['App']['RevertDiffFile'](arg1, arg2, arg3, arg4, arg5);
 }
 
-export function RevertDiffHunk(arg1, arg2, arg3) {
-  return window['go']['main']['App']['RevertDiffHunk'](arg1, arg2, arg3);
+export function RevertDiffHunk(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['RevertDiffHunk'](arg1, arg2, arg3, arg4);
 }
 
 export function RunCommand(arg1, arg2, arg3, arg4) {

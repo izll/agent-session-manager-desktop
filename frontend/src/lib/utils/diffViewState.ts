@@ -30,15 +30,15 @@ const places = new Map<string, FileState>();
 
 /**
  * The field separator: a unit separator, which cannot occur in a session id or
- * a path, so no two different triples can spell the same key. Written as an
+ * a path, so no two different target/view/path tuples can spell the same key. Written as an
  * escape because the character itself is invisible in an editor.
  */
 const SEP = '\x1f';
 
-function key(sessionId: string, path: string, mode: string): string {
+function key(sessionId: string, windowIdx: number, path: string, mode: string): string {
   // The mode is part of the key: the whole-file and hunks-only views lay the
   // same file out differently, so an offset from one means nothing in the other.
-  return `${sessionId}${SEP}${mode}${SEP}${path}`;
+  return `${sessionId}${SEP}${windowIdx}${SEP}${mode}${SEP}${path}`;
 }
 
 /** Remember where a file was left. */
@@ -47,9 +47,10 @@ export function rememberPlace(
   path: string,
   mode: string,
   state: FileState,
+  windowIdx = 0,
 ): void {
   if (!sessionId || !path) return;
-  places.set(key(sessionId, path, mode), state);
+  places.set(key(sessionId, windowIdx, path, mode), state);
 }
 
 /** Where a file was left, or null if it has not been open. */
@@ -57,9 +58,19 @@ export function recallPlace(
   sessionId: string,
   path: string,
   mode: string,
+  windowIdx = 0,
 ): FileState | null {
   if (!sessionId || !path) return null;
-  return places.get(key(sessionId, path, mode)) ?? null;
+  return places.get(key(sessionId, windowIdx, path, mode)) ?? null;
+}
+
+/** Forget one tab's places without disturbing another repository in the session. */
+export function forgetTarget(sessionId: string, windowIdx: number): void {
+  if (!sessionId) return;
+  const prefix = `${sessionId}${SEP}${windowIdx}${SEP}`;
+  for (const at of [...places.keys()]) {
+    if (at.startsWith(prefix)) places.delete(at);
+  }
 }
 
 /**
@@ -85,21 +96,23 @@ export function forgetSession(sessionId: string): void {
  * empty. Empty, every list looks changed, and the first load after the switch
  * forgot the places it was meant to restore — the position never came back.
  *
- * Keyed by session, since two sessions have different diffs.
+ * Keyed by session, tab, and diff mode: tabs may point at different repositories
+ * and session/full mode may have the same summary shape but different content.
  */
 const listKeys = new Map<string, string>();
 
 /**
- * Record the current shape of a session's diff, and say whether it changed.
+ * Record the current shape of one tab's diff mode, and say whether it changed.
  *
  * The caller drops its caches on a change; the places go with them, since an
  * offset into a file that has been rewritten means nothing.
  */
-export function noteListKey(sessionId: string, listKey: string): boolean {
+export function noteListKey(sessionId: string, listKey: string, windowIdx = 0, mode = 'session'): boolean {
   if (!sessionId) return false;
-  const changed = listKeys.get(sessionId) !== listKey;
-  listKeys.set(sessionId, listKey);
-  if (changed) forgetSession(sessionId);
+  const target = `${sessionId}${SEP}${windowIdx}${SEP}${mode}`;
+  const changed = listKeys.get(target) !== listKey;
+  listKeys.set(target, listKey);
+  if (changed) forgetTarget(sessionId, windowIdx);
   return changed;
 }
 

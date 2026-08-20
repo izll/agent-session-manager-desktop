@@ -8,13 +8,13 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 )
 
 type Storage struct {
 	mu         sync.Mutex
 	projectsMu sync.Mutex
+	lockMu     sync.Mutex
 	configDir  string
 	configPath string
 	projectID  string // Active project ID ("" = default)
@@ -259,16 +259,18 @@ func (s *Storage) setActiveProjectLocked(projectID string) error {
 	if !validProjectID(projectID) {
 		return fmt.Errorf("invalid project ID")
 	}
-	s.projectID = projectID
+	var configPath string
 	if projectID == "" {
-		s.configPath = filepath.Join(s.configDir, "sessions.json")
+		configPath = filepath.Join(s.configDir, "sessions.json")
 	} else {
 		projectDir := filepath.Join(s.configDir, "projects", projectID)
 		if err := os.MkdirAll(projectDir, 0755); err != nil {
 			return fmt.Errorf("failed to create project directory: %w", err)
 		}
-		s.configPath = filepath.Join(projectDir, "sessions.json")
+		configPath = filepath.Join(projectDir, "sessions.json")
 	}
+	s.projectID = projectID
+	s.configPath = configPath
 	return nil
 }
 
@@ -281,6 +283,17 @@ func (s *Storage) GetActiveProjectID() string {
 
 // getLockPath returns the lock file path for a project
 func (s *Storage) getLockPath(projectID string) string {
+	name := "default.lock"
+	if projectID != "" {
+		name = projectID + ".lock"
+	}
+	// Ownership must live outside the project data directory. Project deletion
+	// temporarily renames that directory; keeping the lock inside it created an
+	// unlocked window in which another process could open data being deleted.
+	return filepath.Join(s.configDir, "project-locks", name)
+}
+
+func (s *Storage) legacyLockPath(projectID string) string {
 	if projectID == "" {
 		return filepath.Join(s.configDir, "default.lock")
 	}
@@ -311,7 +324,17 @@ func (s *Storage) IsProjectLocked(projectID string) (bool, int) {
 	if !validProjectID(projectID) {
 		return false, 0
 	}
-	lockPath := s.getLockPath(projectID)
+	// Status checks never unlink. Reclamation belongs to LockProject, where a
+	// separate atomic claim serialises competing stale-lock removers.
+	if locked, pid := projectLockOwner(s.getLockPath(projectID)); locked {
+		return true, pid
+	}
+	// Recognise locks written by versions before locks moved out of the project
+	// directory, so an update cannot open a project still owned by an older app.
+	return projectLockOwner(s.legacyLockPath(projectID))
+}
+
+func projectLockOwner(lockPath string) (bool, int) {
 	data, err := os.ReadFile(lockPath)
 	if os.IsNotExist(err) {
 		return false, 0
@@ -322,23 +345,10 @@ func (s *Storage) IsProjectLocked(projectID string) (bool, int) {
 
 	pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
 	if err != nil {
-		// Invalid lock file, remove it
-		os.Remove(lockPath)
 		return false, 0
 	}
 
-	// Check if the process is still running
-	process, err := os.FindProcess(pid)
-	if err != nil {
-		os.Remove(lockPath)
-		return false, 0
-	}
-
-	// On Unix, FindProcess always succeeds, so we need to send signal 0 to check
-	err = process.Signal(syscall.Signal(0))
-	if err != nil {
-		// Process is not running, remove stale lock
-		os.Remove(lockPath)
+	if !processAlive(pid) {
 		return false, 0
 	}
 
@@ -366,34 +376,127 @@ func (s *Storage) LockProject(projectID string) error {
 		return fmt.Errorf("invalid project ID")
 	}
 
-	if locked, pid := s.IsProjectLocked(projectID); locked && pid != os.Getpid() {
-		return &ErrProjectLocked{PID: pid}
+	s.lockMu.Lock()
+	defer s.lockMu.Unlock()
+	if locked, owner := projectLockOwner(s.legacyLockPath(projectID)); locked && owner != os.Getpid() {
+		return &ErrProjectLocked{PID: owner}
 	}
 
-	// Release any lock this process previously held (e.g. on project switch).
-	s.UnlockProject()
-
 	lockPath := s.getLockPath(projectID)
+	if s.lockPath == lockPath {
+		if locked, pid := projectLockOwner(lockPath); locked && pid == os.Getpid() {
+			return nil
+		}
+	}
+
+	// A project switch must relinquish the old lock even when the target is
+	// already owned elsewhere. Otherwise this read-only instance leaves the old
+	// project looking live until its process exits.
+	s.unlockProjectLocked()
+
 	dir := filepath.Dir(lockPath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return fmt.Errorf("failed to create lock directory: %w", err)
 	}
 
 	pid := os.Getpid()
-	if err := os.WriteFile(lockPath, []byte(strconv.Itoa(pid)), 0644); err != nil {
-		return fmt.Errorf("failed to create lock file: %w", err)
+	prepared, err := os.CreateTemp(dir, ".project-lock-*")
+	if err != nil {
+		return fmt.Errorf("failed to prepare project lock: %w", err)
+	}
+	preparedPath := prepared.Name()
+	defer os.Remove(preparedPath)
+	if err := prepared.Chmod(0644); err == nil {
+		_, err = prepared.WriteString(strconv.Itoa(pid))
+	}
+	if err == nil {
+		err = prepared.Sync()
+	}
+	if closeErr := prepared.Close(); err == nil {
+		err = closeErr
+	}
+	if err != nil {
+		return fmt.Errorf("failed to prepare project lock: %w", err)
 	}
 
-	s.lockPath = lockPath
-	return nil
+	claimPath := lockPath + ".reclaim"
+	for attempts := 0; attempts < 100; attempts++ {
+		// Linking a fully-written private inode publishes the PID and claims the
+		// destination in one atomic operation. O_EXCL followed by Write would
+		// expose an empty file that another contender could mistake for stale.
+		err := os.Link(preparedPath, lockPath)
+		if err == nil {
+			s.lockPath = lockPath
+			return nil
+		}
+		if !os.IsExist(err) {
+			return fmt.Errorf("failed to create lock file: %w", err)
+		}
+
+		locked, owner := projectLockOwner(lockPath)
+		if locked {
+			if owner == pid {
+				s.lockPath = lockPath
+				return nil
+			}
+			return &ErrProjectLocked{PID: owner}
+		}
+		// Serialise stale reclamation too. Without this claim, two contenders can
+		// both inspect the old inode; one then replaces it and the other's delayed
+		// Remove deletes the new owner's lock.
+		if err := os.Link(preparedPath, claimPath); err == nil {
+			locked, owner = projectLockOwner(lockPath)
+			if locked {
+				_ = os.Remove(claimPath)
+				if owner == pid {
+					s.lockPath = lockPath
+					return nil
+				}
+				return &ErrProjectLocked{PID: owner}
+			}
+			if err := os.Remove(lockPath); err != nil && !os.IsNotExist(err) {
+				_ = os.Remove(claimPath)
+				return fmt.Errorf("failed to remove stale project lock: %w", err)
+			}
+			err = os.Link(preparedPath, lockPath)
+			_ = os.Remove(claimPath)
+			if err == nil {
+				s.lockPath = lockPath
+				return nil
+			}
+			if !os.IsExist(err) {
+				return fmt.Errorf("failed to create lock file: %w", err)
+			}
+		} else if !os.IsExist(err) {
+			return fmt.Errorf("failed to claim stale project lock: %w", err)
+		} else if claimLocked, claimPID := projectLockOwner(claimPath); !claimLocked && claimPID == 0 {
+			// A process that died during the tiny reclamation section can leave
+			// only the claim behind. It names its PID, so dead claims are safe to
+			// discard and retry.
+			_ = os.Remove(claimPath)
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+	return fmt.Errorf("failed to acquire project lock after stale-lock contention")
 }
 
 // UnlockProject removes the lock file
 func (s *Storage) UnlockProject() {
-	if s.lockPath != "" {
-		os.Remove(s.lockPath)
-		s.lockPath = ""
+	s.lockMu.Lock()
+	defer s.lockMu.Unlock()
+	s.unlockProjectLocked()
+}
+
+func (s *Storage) unlockProjectLocked() {
+	if s.lockPath == "" {
+		return
 	}
+	// Only remove a lock that still names this process. If another process
+	// replaced a stale/corrupt path, shutdown must never delete its ownership.
+	if locked, pid := projectLockOwner(s.lockPath); locked && pid == os.Getpid() {
+		_ = os.Remove(s.lockPath)
+	}
+	s.lockPath = ""
 }
 
 // LoadProjects loads the list of projects
@@ -429,7 +532,13 @@ func (s *Storage) loadProjectsLocked() (*ProjectsData, error) {
 func (s *Storage) SaveProjects(projectsData *ProjectsData) error {
 	s.projectsMu.Lock()
 	defer s.projectsMu.Unlock()
-	return s.saveProjectsLocked(projectsData)
+	return s.withProjectsCatalogLock(func() error {
+		return s.saveProjectsLocked(projectsData)
+	})
+}
+
+func (s *Storage) withProjectsCatalogLock(action func() error) error {
+	return withCrossProcessFileLock(filepath.Join(s.configDir, "projects.json.lock"), action)
 }
 
 func (s *Storage) saveProjectsLocked(projectsData *ProjectsData) error {
@@ -458,22 +567,26 @@ func (s *Storage) saveProjectsLocked(projectsData *ProjectsData) error {
 func (s *Storage) AddProject(name string) (*Project, error) {
 	s.projectsMu.Lock()
 	defer s.projectsMu.Unlock()
-	projectsData, err := s.loadProjectsLocked()
-	if err != nil {
-		return nil, err
-	}
-
-	// Check for duplicate names
-	for _, p := range projectsData.Projects {
-		if p.Name == name {
-			return nil, fmt.Errorf("project with name '%s' already exists", name)
+	var project *Project
+	err := s.withProjectsCatalogLock(func() error {
+		projectsData, err := s.loadProjectsLocked()
+		if err != nil {
+			return err
 		}
-	}
 
-	project := NewProject(name)
-	projectsData.Projects = append(projectsData.Projects, project)
+		// Check for duplicate names against the snapshot read while holding the
+		// process-wide file lock, not against a stale pre-lock catalog.
+		for _, p := range projectsData.Projects {
+			if p.Name == name {
+				return fmt.Errorf("project with name '%s' already exists", name)
+			}
+		}
 
-	if err := s.saveProjectsLocked(projectsData); err != nil {
+		project = NewProject(name)
+		projectsData.Projects = append(projectsData.Projects, project)
+		return s.saveProjectsLocked(projectsData)
+	})
+	if err != nil {
 		return nil, err
 	}
 
@@ -485,36 +598,78 @@ func (s *Storage) RemoveProject(id string) error {
 	if !validProjectID(id) {
 		return fmt.Errorf("invalid project ID")
 	}
-	s.projectsMu.Lock()
-	defer s.projectsMu.Unlock()
-	projectsData, err := s.loadProjectsLocked()
-	if err != nil {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.projectID == id {
+		return fmt.Errorf("cannot delete the active project")
+	}
+	// Own the same out-of-tree lock used by SelectProject for the complete
+	// delete transaction. This closes the check/rename race: a new opener cannot
+	// claim the project after our check, and an existing owner makes this fail.
+	claim := &Storage{configDir: s.configDir}
+	if err := claim.LockProject(id); err != nil {
 		return err
 	}
+	defer claim.UnlockProject()
 
-	newProjects := make([]*Project, 0, len(projectsData.Projects))
-	found := false
-	for _, p := range projectsData.Projects {
-		if p.ID == id {
-			found = true
-			continue
+	s.projectsMu.Lock()
+	defer s.projectsMu.Unlock()
+	return s.withProjectsCatalogLock(func() error {
+		projectsData, err := s.loadProjectsLocked()
+		if err != nil {
+			return err
 		}
-		newProjects = append(newProjects, p)
-	}
 
-	if !found {
-		return fmt.Errorf("project not found")
-	}
+		newProjects := make([]*Project, 0, len(projectsData.Projects))
+		found := false
+		for _, p := range projectsData.Projects {
+			if p.ID == id {
+				found = true
+				continue
+			}
+			newProjects = append(newProjects, p)
+		}
 
-	projectsData.Projects = newProjects
+		if !found {
+			return fmt.Errorf("project not found")
+		}
 
-	// Remove project directory
-	projectDir := filepath.Join(s.configDir, "projects", id)
-	if err := os.RemoveAll(projectDir); err != nil {
-		return fmt.Errorf("failed to remove project data: %w", err)
-	}
+		projectsData.Projects = newProjects
 
-	return s.saveProjectsLocked(projectsData)
+		// Move the data aside before committing the catalog change. If the catalog
+		// write fails, rename it back so an I/O error cannot leave a listed project
+		// whose sessions have already been irreversibly deleted.
+		projectDir := filepath.Join(s.configDir, "projects", id)
+		trashRoot := filepath.Join(s.configDir, "project-trash")
+		trashDir := filepath.Join(trashRoot, fmt.Sprintf("%s-%d-%d", id, os.Getpid(), time.Now().UnixNano()))
+		moved := false
+		if _, err := os.Stat(projectDir); err == nil {
+			if err := os.MkdirAll(trashRoot, 0700); err != nil {
+				return fmt.Errorf("failed to create project trash: %w", err)
+			}
+			if err := os.Rename(projectDir, trashDir); err != nil {
+				return fmt.Errorf("failed to move project data to trash: %w", err)
+			}
+			moved = true
+		} else if !os.IsNotExist(err) {
+			return fmt.Errorf("failed to inspect project data: %w", err)
+		}
+
+		if err := s.saveProjectsLocked(projectsData); err != nil {
+			if moved {
+				if rollbackErr := os.Rename(trashDir, projectDir); rollbackErr != nil {
+					return fmt.Errorf("failed to save projects: %v (also failed to restore project data: %w)", err, rollbackErr)
+				}
+			}
+			return err
+		}
+		if moved {
+			if err := os.RemoveAll(trashDir); err != nil {
+				fmt.Fprintf(os.Stderr, "failed to clean deleted project data %s: %v\n", trashDir, err)
+			}
+		}
+		return nil
+	})
 }
 
 // RenameProject renames a project
@@ -524,19 +679,21 @@ func (s *Storage) RenameProject(id, name string) error {
 	}
 	s.projectsMu.Lock()
 	defer s.projectsMu.Unlock()
-	projectsData, err := s.loadProjectsLocked()
-	if err != nil {
-		return err
-	}
-
-	for _, p := range projectsData.Projects {
-		if p.ID == id {
-			p.Name = name
-			return s.saveProjectsLocked(projectsData)
+	return s.withProjectsCatalogLock(func() error {
+		projectsData, err := s.loadProjectsLocked()
+		if err != nil {
+			return err
 		}
-	}
 
-	return fmt.Errorf("project not found")
+		for _, p := range projectsData.Projects {
+			if p.ID == id {
+				p.Name = name
+				return s.saveProjectsLocked(projectsData)
+			}
+		}
+
+		return fmt.Errorf("project not found")
+	})
 }
 
 // GetProject returns a project by ID
@@ -1298,6 +1455,88 @@ func (s *Storage) SetInstanceGroup(instanceID, groupID string) error {
 	}
 
 	return fmt.Errorf("instance not found")
+}
+
+// ReorderInstance changes one session's position using the latest on-disk
+// snapshot under a single storage lock.
+func (s *Storage) ReorderInstance(instanceID string, direction int) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	instances, groups, settings, err := s.loadAllWithSettingsLocked()
+	if err != nil {
+		return err
+	}
+	current := -1
+	for i := range instances {
+		if instances[i].ID == instanceID {
+			current = i
+			break
+		}
+	}
+	if current < 0 {
+		return fmt.Errorf("error.sessionNotFound")
+	}
+	target := current + direction
+	if target < 0 || target >= len(instances) {
+		return nil
+	}
+	instances[current], instances[target] = instances[target], instances[current]
+	return s.saveAllLocked(instances, groups, settings)
+}
+
+// MoveInstanceToIndex is the absolute-index variant of ReorderInstance.
+func (s *Storage) MoveInstanceToIndex(instanceID string, target int) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	instances, groups, settings, err := s.loadAllWithSettingsLocked()
+	if err != nil {
+		return err
+	}
+	current := -1
+	for i := range instances {
+		if instances[i].ID == instanceID {
+			current = i
+			break
+		}
+	}
+	if current < 0 {
+		return fmt.Errorf("error.sessionNotFound")
+	}
+	if target < 0 {
+		target = 0
+	}
+	if target >= len(instances) {
+		target = len(instances) - 1
+	}
+	if current == target {
+		return nil
+	}
+	item := instances[current]
+	instances = append(instances[:current], instances[current+1:]...)
+	instances = append(instances, nil)
+	copy(instances[target+1:], instances[target:])
+	instances[target] = item
+	return s.saveAllLocked(instances, groups, settings)
+}
+
+// SetGroupColors updates group presentation without a separate load/save
+// window that could overwrite a concurrent session change.
+func (s *Storage) SetGroupColors(id, color, bgColor string, fullRow bool) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	instances, groups, settings, err := s.loadAllWithSettingsLocked()
+	if err != nil {
+		return err
+	}
+	for _, group := range groups {
+		if group.ID == id {
+			group.Color = color
+			group.BgColor = bgColor
+			group.FullRowColor = fullRow
+			return s.saveAllLocked(instances, groups, settings)
+		}
+	}
+	return fmt.Errorf("error.groupNotFound")
 }
 
 // LoadAllForProject temporarily switches to a different project, loads its data, and switches back.

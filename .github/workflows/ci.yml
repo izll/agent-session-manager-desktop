@@ -26,9 +26,15 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
         working-directory: frontend
+      - run: npm audit --audit-level=moderate
+        working-directory: frontend
       - run: npm run check
         working-directory: frontend
       - run: npm test
+        working-directory: frontend
+      - run: npx playwright install --with-deps chromium
+        working-directory: frontend
+      - run: npm run test:browser
         working-directory: frontend
       - run: npm run build
         working-directory: frontend
@@ -40,7 +46,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
+          go-version-file: go.mod
           cache: true
       - name: Install native build dependencies
         run: |
@@ -63,7 +69,7 @@ jobs:
         working-directory: frontend
       - run: npm run build
         working-directory: frontend
-      - run: xvfb-run -a go test ./...
+      - run: xvfb-run -a go test -race ./...
       - run: go vet ./...
 
   # The Go suite had never run on macOS, and the first time it did it found a
@@ -77,7 +83,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
+          go-version-file: go.mod
           cache: true
       - name: Install native build dependencies
         run: brew install portaudio

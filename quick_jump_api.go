@@ -105,11 +105,11 @@ func (a *App) MoveQuickJump(from, to int) error {
 // Read-modify-write rather than a plain save, so two edits in quick succession
 // — which is how this list is used — cannot lose one another.
 func (a *App) storeQuickJump(change func([]session.QuickJumpEntry) []session.QuickJumpEntry) error {
-	a.projectMu.RLock()
-	defer a.projectMu.RUnlock()
-	if !a.projectLocked {
-		return fmt.Errorf("project is read-only in this application instance")
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return err
 	}
+	defer done()
 
 	return a.storage.UpdateSettings(func(current *session.Settings) {
 		current.QuickJump = session.NormaliseQuickJump(

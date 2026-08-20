@@ -22,14 +22,17 @@ type UndoState = {
   action: UndoAction | null;
   /** Whole seconds left, for the countdown. */
   remaining: number;
+  /** The last undo failure. The action stays available so it can be retried. */
+  error: string | null;
 };
 
-export const undoState = writable<UndoState>({ action: null, remaining: 0 });
+export const undoState = writable<UndoState>({ action: null, remaining: 0, error: null });
 
 /** How long an action stays undoable. */
 const WINDOW_SECONDS = 10;
 
 let timer: ReturnType<typeof setInterval> | null = null;
+let revision = 0;
 
 function stopTimer() {
   if (timer !== null) {
@@ -47,15 +50,21 @@ function stopTimer() {
  * sees the old value.
  */
 export function offerUndo(action: UndoAction): void {
+  revision++;
   stopTimer();
-  undoState.set({ action, remaining: WINDOW_SECONDS });
+  undoState.set({ action, remaining: WINDOW_SECONDS, error: null });
 
+  startTimer();
+}
+
+function startTimer(): void {
+  stopTimer();
   timer = setInterval(() => {
     undoState.update((state) => {
       const remaining = state.remaining - 1;
       if (remaining <= 0) {
         stopTimer();
-        return { action: null, remaining: 0 };
+        return { action: null, remaining: 0, error: null };
       }
       return { ...state, remaining };
     });
@@ -64,8 +73,9 @@ export function offerUndo(action: UndoAction): void {
 
 /** Dismiss the offer without undoing anything. */
 export function dismissUndo(): void {
+  revision++;
   stopTimer();
-  undoState.set({ action: null, remaining: 0 });
+  undoState.set({ action: null, remaining: 0, error: null });
 }
 
 /**
@@ -74,15 +84,26 @@ export function dismissUndo(): void {
  * The offer is cleared first, so a second click cannot run the undo twice
  * while the first is still in flight.
  */
-export async function runUndo(): Promise<void> {
+export async function runUndo(): Promise<boolean> {
   let pending: UndoAction | null = null;
   undoState.update((state) => {
     pending = state.action;
-    return { action: null, remaining: 0 };
+    return { action: null, remaining: 0, error: null };
   });
   stopTimer();
+  const startedAtRevision = revision;
 
-  if (pending) {
+  if (!pending) return false;
+  try {
     await (pending as UndoAction).undo();
+    return true;
+  } catch (e) {
+    // A failed undo is still undoable. Put it back with a fresh window and show
+    // the backend's explanation instead of turning the rejection into silence.
+    if (revision === startedAtRevision) {
+      undoState.set({ action: pending, remaining: WINDOW_SECONDS, error: String(e) });
+      startTimer();
+    }
+    return false;
   }
 }

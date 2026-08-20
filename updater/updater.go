@@ -26,6 +26,8 @@ const (
 	CheckTimeout  = 5 * time.Second
 	DownloadLimit = 512 << 20 // 512 MiB, including compressed release assets.
 	BinaryLimit   = 256 << 20 // 256 MiB uncompressed executable limit.
+	BundleLimit   = 1 << 30   // 1 GiB cumulative uncompressed app-bundle limit.
+	BundleEntries = 100000    // refuse archives designed to exhaust inode space.
 
 	// Automatic checks are throttled to once a day, matching the TUI version.
 	CheckInterval = 24 * time.Hour
@@ -640,6 +642,8 @@ func extractBundle(archivePath, destDir string) error {
 	defer gz.Close()
 
 	tr := tar.NewReader(gz)
+	var totalSize int64
+	entryCount := 0
 	for {
 		header, nextErr := tr.Next()
 		if nextErr == io.EOF {
@@ -647,6 +651,10 @@ func extractBundle(archivePath, destDir string) error {
 		}
 		if nextErr != nil {
 			return fmt.Errorf("failed to read archive: %w", nextErr)
+		}
+		entryCount++
+		if entryCount > BundleEntries {
+			return fmt.Errorf("archive contains too many entries")
 		}
 		target, err := safeJoin(destDir, header.Name)
 		if err != nil {
@@ -661,6 +669,10 @@ func extractBundle(archivePath, destDir string) error {
 			if header.Size < 0 || header.Size > BinaryLimit {
 				return fmt.Errorf("invalid entry %q in archive", header.Name)
 			}
+			if header.Size > BundleLimit-totalSize {
+				return fmt.Errorf("archive exceeds the uncompressed bundle limit")
+			}
+			totalSize += header.Size
 			if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
 				return err
 			}
@@ -680,9 +692,11 @@ func extractBundle(archivePath, destDir string) error {
 			}
 		case tar.TypeSymlink:
 			// Frameworks are conventionally symlinked inside a bundle. The link
-			// target is checked the same way as a path, so a symlink cannot be
-			// used to escape destDir either.
-			if _, err := safeJoin(destDir, filepath.Join(filepath.Dir(header.Name), header.Linkname)); err != nil {
+			// target is resolved from the link's actual extraction directory.
+			// Do not clean header.Linkname before that check: os.Symlink receives
+			// the raw value, so cleaning a leading "../../" only for validation
+			// would approve a link that points outside the staging directory.
+			if _, err := safeSymlinkTarget(destDir, target, header.Linkname); err != nil {
 				return err
 			}
 			if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
@@ -701,10 +715,31 @@ func extractBundle(archivePath, destDir string) error {
 // safeJoin resolves an archive entry against destDir, refusing anything that
 // would land outside it.
 func safeJoin(destDir, name string) (string, error) {
-	target := filepath.Join(destDir, filepath.Clean("/"+filepath.ToSlash(name)))
+	name = filepath.FromSlash(name)
+	if filepath.IsAbs(name) {
+		return "", fmt.Errorf("archive entry %q escapes the destination", name)
+	}
+	target := filepath.Join(destDir, name)
 	rel, err := filepath.Rel(destDir, target)
 	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return "", fmt.Errorf("archive entry %q escapes the destination", name)
+	}
+	return target, nil
+}
+
+// safeSymlinkTarget validates the raw target that will be passed to
+// os.Symlink. linkPath is already confined to destDir by safeJoin. Resolving
+// from its real parent mirrors the kernel's symlink semantics, including every
+// ".." component, instead of validating a separately cleaned path.
+func safeSymlinkTarget(destDir, linkPath, linkName string) (string, error) {
+	linkName = filepath.FromSlash(linkName)
+	if filepath.IsAbs(linkName) {
+		return "", fmt.Errorf("archive symlink %q escapes the destination", linkName)
+	}
+	target := filepath.Join(filepath.Dir(linkPath), linkName)
+	rel, err := filepath.Rel(destDir, target)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("archive symlink %q escapes the destination", linkName)
 	}
 	return target, nil
 }
