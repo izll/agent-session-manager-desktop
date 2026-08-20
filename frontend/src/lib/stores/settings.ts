@@ -23,7 +23,8 @@ export interface Settings {
   diffAboveHeight?: number;
   /** Show a change inside the whole file rather than only its hunks. Absent
    *  means on: the default is the fuller view. */
-  diffWholeFile?: boolean;
+  /** Inverted: whole-file is the default, so only the opt-out is stored. */
+  diffHunksOnly?: boolean;
   /** Show a diff as two aligned columns rather than one with markers. */
   diffSideBySide?: boolean;
   /** The file the diff had open, per session, so a tab switch resumes. */

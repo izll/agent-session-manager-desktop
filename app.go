@@ -2925,6 +2925,7 @@ type SettingsInfo struct {
 	DiffAboveHeight   int                    `json:"diffAboveHeight"`
 	DictationBuffer   *session.PanelGeometry `json:"dictationBuffer"`
 	DiffSideBySide    bool                   `json:"diffSideBySide"`
+	DiffHunksOnly     bool                   `json:"diffHunksOnly"`
 	DiffLastFile      map[string]string      `json:"diffLastFile"`
 	// Per-agent-type palette overrides ("claude" → "dracula", …) and the
 	// user-defined palette used when a theme id is "custom".
@@ -3028,6 +3029,7 @@ func (a *App) GetSettings() (*SettingsInfo, error) {
 		DiffAboveHeight:      settings.DiffAboveHeight,
 		DictationBuffer:      settings.DictationBuffer,
 		DiffSideBySide:       settings.DiffSideBySide,
+		DiffHunksOnly:        settings.DiffHunksOnly,
 		DiffLastFile:         settings.DiffLastFile,
 		TerminalTheme:        theme,
 		AgentDefaultTheme:    agentTheme,
@@ -3093,6 +3095,7 @@ func (a *App) SaveSettings(settings SettingsInfo) error {
 		current.DiffAboveHeight = settings.DiffAboveHeight
 		current.DictationBuffer = settings.DictationBuffer
 		current.DiffSideBySide = settings.DiffSideBySide
+		current.DiffHunksOnly = settings.DiffHunksOnly
 		current.DiffLastFile = settings.DiffLastFile
 	})
 	if err != nil {

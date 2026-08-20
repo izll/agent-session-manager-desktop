@@ -172,6 +172,13 @@ type Settings struct {
 	// with markers. Stored as an opt-in flag so the zero value keeps the
 	// unified view a config written before this existed opened at.
 	DiffSideBySide bool `json:"diff_side_by_side,omitempty"`
+	// DiffHunksOnly shows just the changed hunks rather than the whole file.
+	//
+	// Stored inverted, because whole-file is the default and an omitempty bool
+	// cannot distinguish "off" from "never set" — a plain DiffWholeFile would
+	// read as false for every config written before this existed and quietly
+	// flip everyone to hunks-only.
+	DiffHunksOnly bool `json:"diff_hunks_only,omitempty"`
 	// DiffLastFile is the file the diff had open, so leaving the tab and
 	// coming back resumes rather than restarts. Keyed by session id.
 	DiffLastFile map[string]string `json:"diff_last_file,omitempty"`

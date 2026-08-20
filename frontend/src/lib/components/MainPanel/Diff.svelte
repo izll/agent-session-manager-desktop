@@ -833,7 +833,9 @@
   // for when the file is large and the change is all that matters.
   //
   // Stored, so the choice survives reopening the diff.
-  $: wholeFileView = $settings.diffWholeFile !== false;
+  // Stored inverted — see Settings.DiffHunksOnly. Whole-file is the default,
+  // and an absent flag has to mean that rather than "off".
+  $: wholeFileView = $settings.diffHunksOnly !== true;
 
   /**
    * Two aligned columns rather than one with markers.
@@ -851,7 +853,7 @@
   }
 
   function setWholeFileView(on: boolean) {
-    void saveSettings({ diffWholeFile: on });
+    void saveSettings({ diffHunksOnly: !on });
   }
 
   // Which change the next/previous buttons will move to. -1 before the first
