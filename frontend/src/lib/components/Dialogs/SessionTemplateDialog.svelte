@@ -8,6 +8,9 @@
   import { agents, loadAgents } from '../../stores/agents';
   import { groups, assignToGroup, startSession, loadSessions } from '../../stores/sessions';
   import { t } from '../../i18n';
+  import { get } from 'svelte/store';
+  import { activeProjectId } from '../../stores/projects';
+  import { autoFocusDialog } from '../../utils/dialogActions';
 
   export let show = false;
   /** Pre-selects a template and jumps straight to "use it" when opened from the picker. */
@@ -21,6 +24,8 @@
   let error = '';
   let loadGeneration = 0;
   let operationGeneration = 0;
+  let dialogProjectId = '';
+  let hasDialogProject = false;
 
   // Which panel the dialog is showing. Kept as one variable rather than three
   // booleans so two panels can never be open at once.
@@ -69,6 +74,28 @@
       loadGeneration++;
       resetAll();
     }
+  }
+
+  // Editing the global template library may survive a project switch, but a
+  // "use template" workflow carries project-scoped group/session identities.
+  // Cancel that workflow rather than finishing its later steps in the new
+  // project with colliding ids.
+  $: if (show) {
+    if (!hasDialogProject) {
+      hasDialogProject = true;
+      dialogProjectId = $activeProjectId;
+    } else if (dialogProjectId !== $activeProjectId) {
+      dialogProjectId = $activeProjectId;
+      operationGeneration++;
+      creating = false;
+      if (mode === 'use') {
+        mode = 'list';
+        useTarget = null;
+      }
+    }
+  } else if (hasDialogProject) {
+    hasDialogProject = false;
+    dialogProjectId = '';
   }
 
   $: if (show && $agents.length === 0) {
@@ -291,10 +318,15 @@
     creating = true;
     error = '';
     const groupId = uGroupId;
+    const targetProjectId = get(activeProjectId);
     try {
       const created = await App.CreateSessionFromTemplate(target.id, sessionName, sessionPath);
+      if (targetProjectId !== get(activeProjectId)) return;
       if (created) {
-        if (groupId) await assignToGroup(created.id, groupId);
+        if (groupId) {
+          await assignToGroup(created.id, groupId);
+          if (targetProjectId !== get(activeProjectId)) return;
+        }
         // Starting is what actually spawns the tabs: the backend stores them
         // as followed windows and the session start recreates each one.
         if (autoStart) await startSession(created.id);
@@ -346,12 +378,12 @@
     close();
   }
 
-  function autoFocus(node: HTMLElement) {
-    node.focus();
-  }
-
   function focusInput(node: HTMLInputElement) {
-    requestAnimationFrame(() => node.focus());
+    const frame = requestAnimationFrame(() => {
+      const dialog = node.closest('[role="dialog"]');
+      if (!dialog?.contains(document.activeElement)) node.focus();
+    });
+    return { destroy: () => cancelAnimationFrame(frame) };
   }
 
   // Hoisted out of markup so no casts are needed there.
@@ -368,7 +400,7 @@
 {#if show}
   <div
     class="dialog-overlay template-overlay"
-    use:autoFocus
+    use:autoFocusDialog
     tabindex="-1"
     role="dialog"
     aria-modal="true"

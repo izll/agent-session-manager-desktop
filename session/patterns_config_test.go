@@ -2,6 +2,10 @@ package session
 
 import (
 	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+	"sync"
 	"testing"
 )
 
@@ -96,6 +100,37 @@ func TestPatternsFileIsValidJSON(t *testing.T) {
 	if _, ok := raw["$comment"]; !ok {
 		t.Error("the explanatory comment is gone; someone editing this file needs to " +
 			"know a too-general phrase makes an agent look permanently stuck")
+	}
+}
+
+func TestConcurrentPatternPublishKeepsNewestCompleteVersion(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "patterns.json")
+	versions := []int{2, 5, 3, 4, 1}
+	var wg sync.WaitGroup
+	for _, version := range versions {
+		version := version
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			body := []byte(fmt.Sprintf(`{"version":%d,"agents":{"codex":{"waiting":["x"]}}}`, version))
+			parsed := parsePatterns(body)
+			if parsed == nil {
+				t.Errorf("test pattern version %d did not parse", version)
+				return
+			}
+			if _, err := publishPatterns(path, body, parsed); err != nil {
+				t.Errorf("publish version %d: %v", version, err)
+			}
+		}()
+	}
+	wg.Wait()
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := parsePatterns(raw)
+	if got == nil || got.Version != 5 {
+		t.Fatalf("concurrent publication left %#v, raw=%q", got, raw)
 	}
 }
 

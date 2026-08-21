@@ -11,6 +11,12 @@ import (
 	"time"
 )
 
+const (
+	commandLibraryMaxBytes  = 16 << 20
+	commandLibraryMaxItems  = 10000
+	commandLibraryMaxGroups = 1000
+)
+
 // Saved commands: snippets the user keeps around and sends to a terminal from
 // a searchable list, optionally organised into groups.
 //
@@ -192,7 +198,7 @@ func (s *Storage) LoadCommands() (*CommandLibrary, error) {
 }
 
 func (s *Storage) loadCommandsLocked() (*CommandLibrary, error) {
-	data, err := os.ReadFile(s.commandsPath())
+	data, err := readFileAtMost(s.commandsPath(), commandLibraryMaxBytes)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return &CommandLibrary{}, nil
@@ -203,7 +209,49 @@ func (s *Storage) loadCommandsLocked() (*CommandLibrary, error) {
 	if err := json.Unmarshal(data, &lib); err != nil {
 		return nil, fmt.Errorf("the saved commands file is unreadable: %w", err)
 	}
+	if err := validateCommandLibrary(&lib); err != nil {
+		return nil, fmt.Errorf("the saved commands file is invalid: %w", err)
+	}
 	return &lib, nil
+}
+
+func validateCommandLibrary(lib *CommandLibrary) error {
+	if lib == nil {
+		return nil
+	}
+	if len(lib.Commands) > commandLibraryMaxItems || len(lib.Groups) > commandLibraryMaxGroups {
+		return fmt.Errorf("library exceeds the item limit")
+	}
+	groups := make(map[string]struct{}, len(lib.Groups))
+	for index, group := range lib.Groups {
+		if strings.TrimSpace(group.ID) == "" || strings.TrimSpace(group.Name) == "" {
+			return fmt.Errorf("group %d has an empty ID or name", index)
+		}
+		if _, duplicate := groups[group.ID]; duplicate {
+			return fmt.Errorf("duplicate group ID %q", group.ID)
+		}
+		groups[group.ID] = struct{}{}
+	}
+	commands := make(map[string]struct{}, len(lib.Commands))
+	for index := range lib.Commands {
+		command := &lib.Commands[index]
+		if strings.TrimSpace(command.ID) == "" {
+			return fmt.Errorf("command %d has an empty ID", index)
+		}
+		if _, duplicate := commands[command.ID]; duplicate {
+			return fmt.Errorf("duplicate command ID %q", command.ID)
+		}
+		if err := command.Validate(); err != nil {
+			return fmt.Errorf("command %q is invalid: %w", command.ID, err)
+		}
+		if command.GroupID != "" {
+			if _, exists := groups[command.GroupID]; !exists {
+				return fmt.Errorf("command %q references missing group %q", command.ID, command.GroupID)
+			}
+		}
+		commands[command.ID] = struct{}{}
+	}
+	return nil
 }
 
 // SaveCommands writes the library, replacing the file atomically so a failed
@@ -211,12 +259,17 @@ func (s *Storage) loadCommandsLocked() (*CommandLibrary, error) {
 func (s *Storage) SaveCommands(lib *CommandLibrary) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.saveCommandsLocked(lib)
+	return withCrossProcessFileLock(filepath.Join(s.configDir, "commands.lock"), func() error {
+		return s.saveCommandsLocked(lib)
+	})
 }
 
 func (s *Storage) saveCommandsLocked(lib *CommandLibrary) error {
 	if lib == nil {
 		lib = &CommandLibrary{}
+	}
+	if err := validateCommandLibrary(lib); err != nil {
+		return err
 	}
 	data, err := json.MarshalIndent(lib, "", "  ")
 	if err != nil {

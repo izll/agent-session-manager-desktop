@@ -32,6 +32,14 @@ func TestDirectoriesWithoutTasksAreSkipped(t *testing.T) {
 	}
 }
 
+func TestOversizedTaskFileIsNotCollected(t *testing.T) {
+	dir := t.TempDir()
+	writeTaskFile(t, dir, `{"tasks":[]}`)
+	if set := collectTaskFilesAtMost([]string{dir}, 4); len(set.Files) != 0 {
+		t.Fatalf("oversized task file entered backup: %+v", set.Files)
+	}
+}
+
 // The file is stored verbatim rather than parsed and re-serialised.
 //
 // Task Master owns this format. Round-tripping it through a struct this app

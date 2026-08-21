@@ -49,6 +49,8 @@ type AppService struct {
 	mu               sync.Mutex
 	callbackMu       sync.RWMutex
 	usageMu          sync.Mutex
+	asyncWG          sync.WaitGroup
+	shuttingDown     bool
 	onStateChange    func(bool)                  // Callback for UI updates
 	onError          func(title, message string) // Callback for error dialogs
 	onUploading      func(bool)                  // Callback for uploading state (free/api mode)
@@ -248,7 +250,7 @@ func NewAppService() *AppService {
 		Key:   app.settings.HotkeyKey,
 	}
 	app.hotkeyManager = NewHotkeyManagerReal(hotkeyConfig, func() {
-		go func() {
+		app.runAsync(func() {
 			// Check recording mode
 			popupCallback := app.popupDictateCallback()
 			if app.popupRecordingMode() && popupCallback != nil {
@@ -261,7 +263,7 @@ func NewAppService() *AppService {
 					logToFile("Error toggling from hotkey: %v\n", err)
 				}
 			}
-		}()
+		})
 	}, "toggle")
 
 	// Add instant send hotkey - forces immediate audio processing (for free/api mode)
@@ -278,9 +280,9 @@ func NewAppService() *AppService {
 		sendHotkeyConfig.Key = "s"
 	}
 	NewHotkeyManagerReal(sendHotkeyConfig, func() {
-		go func() {
+		app.runAsync(func() {
 			app.ForceProcessAudio()
-		}()
+		})
 	}, "send")
 
 	// Start the global hotkey listener only when dictation is actually on.
@@ -298,6 +300,23 @@ func NewAppService() *AppService {
 	}
 
 	return app
+}
+
+// runAsync ties background work to the service lifetime. Add and shutdown are
+// serialized by mu so Wait cannot race a late WaitGroup.Add.
+func (a *AppService) runAsync(fn func()) bool {
+	a.mu.Lock()
+	if a.shuttingDown {
+		a.mu.Unlock()
+		return false
+	}
+	a.asyncWG.Add(1)
+	a.mu.Unlock()
+	go func() {
+		defer a.asyncWG.Done()
+		fn()
+	}()
+	return true
 }
 
 func (a *AppService) popupRecordingMode() bool {
@@ -656,14 +675,16 @@ func (a *AppService) SaveSettings(settings Settings) error {
 	if wasListening && oldMode != newMode {
 		logToFile("🔄 Mode changed from '%s' to '%s' while recording - restarting...\n", oldMode, newMode)
 		// Run restart in goroutine to avoid blocking UI
-		go func() {
+		a.runAsync(func() {
 			// Stop current recording
-			a.ToggleListening()
+			if err := a.ToggleListening(); err != nil {
+				return
+			}
 			// Wait for clean stop - StopRecording can take up to 1 second
 			time.Sleep(800 * time.Millisecond)
 			// Start new recording with new mode
-			a.ToggleListening()
-		}()
+			_ = a.ToggleListening()
+		})
 	}
 
 	return nil
@@ -945,6 +966,10 @@ func (a *AppService) AddUsage(requests int, audioSeconds float64) error {
 // ToggleListening starts or stops speech recognition
 func (a *AppService) ToggleListening() error {
 	a.mu.Lock()
+	if a.shuttingDown {
+		a.mu.Unlock()
+		return fmt.Errorf("dictation service is shutting down")
+	}
 
 	var newState bool
 	var err error
@@ -975,7 +1000,9 @@ func (a *AppService) ToggleListening() error {
 		if a.originalPulseSource != "" {
 			sourceToRestore := a.originalPulseSource
 			a.originalPulseSource = ""
+			a.asyncWG.Add(1)
 			go func(originalSource string) {
+				defer a.asyncWG.Done()
 				// Wait for PortAudio to fully release resources
 				time.Sleep(500 * time.Millisecond)
 
@@ -1185,7 +1212,9 @@ func (a *AppService) Shutdown() {
 
 	// Stop listening if active
 	a.mu.Lock()
-	if a.isListening && a.speechRecognizer != nil {
+	a.shuttingDown = true
+	recognizer := a.speechRecognizer
+	if a.speechRecognizer != nil {
 		logToFile("Stopping speech recognizer..." + "\n")
 		a.speechRecognizer.Stop()
 	}
@@ -1215,6 +1244,14 @@ func (a *AppService) Shutdown() {
 	if a.hotkeyManager != nil {
 		logToFile("Disabling hotkey manager..." + "\n")
 		a.hotkeyManager.Disable()
+	}
+
+	// No service-owned callback or delayed restart may outlive teardown. In
+	// particular, changing mode used to schedule a delayed ToggleListening that
+	// could start PortAudio again after it had been terminated here.
+	a.asyncWG.Wait()
+	if recognizer != nil {
+		recognizer.Wait()
 	}
 
 	// Stop and cleanup audio
@@ -1292,7 +1329,7 @@ func (a *AppService) startSilenceMonitor() {
 					logToFile("⏱️ %d sec silence - auto-stopping\n", silenceTimeout)
 
 					// Stop listening (this will also stop the silence monitor)
-					go a.ToggleListening()
+					a.runAsync(func() { _ = a.ToggleListening() })
 					return
 				}
 			}

@@ -15,6 +15,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"golang.org/x/sys/unix"
@@ -25,6 +26,7 @@ const privilegedPackageInstallFlag = "--asmgr-verified-package-install"
 const (
 	privilegedPackageReady = "ASMGR_PACKAGE_STAGED_AND_VERIFIED_V1"
 	privilegedPackageAck   = "ASMGR_BEGIN_PACKAGE_TRANSACTION_V1\n"
+	preparedHelperExitWait = 2 * time.Second
 )
 
 // Do not inherit TMPDIR across the privilege boundary. pkexec normally
@@ -33,6 +35,11 @@ const (
 // directory on supported Linux distributions; the actual staging directory is
 // then made root-only below.
 const privilegedPackageTempRoot = "/var/tmp"
+
+const (
+	privilegedPackageStageMarker = ".asmgr-package-stage"
+	privilegedPackageStageOwner  = "asmgr-desktop privileged package stage v1\n"
+)
 
 // privilegedPackageHelperArgs deliberately invokes the package-owned asmgr
 // executable, not dpkg/rpm directly. The helper crosses the privilege boundary
@@ -57,6 +64,7 @@ func HandlePrivilegedPackageInstall(args []string) (handled bool, exitCode int) 
 		fmt.Fprintln(os.Stderr, "verified package installer must run through pkexec")
 		return true, 1
 	}
+	cleanStalePrivilegedPackageStages()
 
 	stageDir, staged, err := stageVerifiedPackage(args[2], args[3], args[4])
 	if stageDir != "" {
@@ -142,6 +150,9 @@ func stageVerifiedPackage(sourcePath, trustedChecksum, packageKind string) (stag
 	if err := os.Chmod(stageDir, 0o700); err != nil {
 		return cleanup(err)
 	}
+	if err := os.WriteFile(filepath.Join(stageDir, privilegedPackageStageMarker), []byte(privilegedPackageStageOwner), 0o600); err != nil {
+		return cleanup(fmt.Errorf("cannot mark privileged package staging directory: %w", err))
+	}
 	stagedPath = filepath.Join(stageDir, BinaryName+"."+packageKind)
 	staged, err := os.OpenFile(stagedPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if err != nil {
@@ -167,6 +178,48 @@ func stageVerifiedPackage(sourcePath, trustedChecksum, packageKind string) (stag
 		return cleanup(fmt.Errorf("downloaded package changed after verification"))
 	}
 	return stageDir, stagedPath, nil
+}
+
+// cleanStalePrivilegedPackageStages recovers root-owned space after a forced
+// timeout or crash, where deferred cleanup cannot run. Prefixes alone are not
+// ownership proof in /var/tmp: require our exact regular marker, the current
+// effective owner, and an age beyond any supported package transaction.
+func cleanStalePrivilegedPackageStages() {
+	entries, err := os.ReadDir(privilegedPackageTempRoot)
+	if err != nil {
+		return
+	}
+	for _, entry := range entries {
+		if !strings.HasPrefix(entry.Name(), "asmgr-package-install-") {
+			continue
+		}
+		stageDir := filepath.Join(privilegedPackageTempRoot, entry.Name())
+		dirInfo, err := os.Lstat(stageDir)
+		if err != nil || !dirInfo.IsDir() || dirInfo.Mode()&os.ModeSymlink != 0 || !ownedByEffectiveUser(dirInfo) {
+			continue
+		}
+		markerPath := filepath.Join(stageDir, privilegedPackageStageMarker)
+		markerInfo, err := os.Lstat(markerPath)
+		if err != nil || !markerInfo.Mode().IsRegular() || markerInfo.Mode()&os.ModeSymlink != 0 ||
+			!ownedByEffectiveUser(markerInfo) || time.Since(markerInfo.ModTime()) < stageCleanupAge {
+			continue
+		}
+		marker, err := os.Open(markerPath)
+		if err != nil {
+			continue
+		}
+		data, readErr := io.ReadAll(io.LimitReader(marker, int64(len(privilegedPackageStageOwner)+1)))
+		closeErr := marker.Close()
+		if readErr != nil || closeErr != nil || string(data) != privilegedPackageStageOwner {
+			continue
+		}
+		_ = os.RemoveAll(stageDir)
+	}
+}
+
+func ownedByEffectiveUser(info os.FileInfo) bool {
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	return ok && stat.Uid == uint32(os.Geteuid())
 }
 
 // runPrivilegedPackageCommand deliberately keeps the package manager in the
@@ -232,6 +285,7 @@ func runPrivilegedPackageInstall(
 
 	preparationDone := make(chan struct{})
 	watcherDone := make(chan struct{})
+	var helperReady atomic.Bool
 	var stopPreparationOnce sync.Once
 	stopPreparation := func() {
 		stopPreparationOnce.Do(func() { close(preparationDone) })
@@ -241,7 +295,14 @@ func runPrivilegedPackageInstall(
 		defer close(watcherDone)
 		select {
 		case <-ctx.Done():
-			_ = cmd.Cancel()
+			if helperReady.Load() {
+				// Once the helper reported readiness it is blocked before dpkg/rpm.
+				// EOF lets it return through its deferred root-owned staging cleanup;
+				// killing the process group here leaked that directory permanently.
+				_ = stdin.Close()
+			} else {
+				_ = cmd.Cancel()
+			}
 		case <-preparationDone:
 		}
 	}()
@@ -253,6 +314,10 @@ func runPrivilegedPackageInstall(
 		line := scanner.Text()
 		if line == privilegedPackageReady {
 			ready = true
+			// Publish the protocol state before yielding after the scanner loop.
+			// A cancellation in the tiny gap between seeing READY and storing it
+			// must close stdin for graceful cleanup, not SIGKILL the staged helper.
+			helperReady.Store(true)
 			break
 		}
 		_, _ = output.Write(append([]byte(line), '\n'))
@@ -279,7 +344,6 @@ func runPrivilegedPackageInstall(
 		}
 		return output.Bytes(), waitErr
 	}
-
 	// Drain package-manager output after consuming the private readiness line.
 	// Without this goroutine a noisy maintainer script could fill the pipe and
 	// deadlock the critical transaction.
@@ -297,9 +361,7 @@ func runPrivilegedPackageInstall(
 		// transaction, and shutdown waits for this callback to return.
 		stopPreparation()
 		if _, err := io.WriteString(stdin, privilegedPackageAck); err != nil {
-			_ = stdin.Close()
-			_ = cmd.Cancel()
-			waitErr := cmd.Wait()
+			waitErr := waitPreparedPackageHelper(cmd, stdin)
 			<-drainDone
 			if waitErr != nil {
 				return waitErr
@@ -321,11 +383,29 @@ func runPrivilegedPackageInstall(
 	// The application closed its critical-section gate during the prompt. No
 	// acknowledgement was sent, so the helper cannot have started dpkg/rpm.
 	stopPreparation()
-	_ = stdin.Close()
-	_ = cmd.Cancel()
-	_ = cmd.Wait()
+	_ = waitPreparedPackageHelper(cmd, stdin)
 	<-drainDone
 	return output.Bytes(), criticalErr
+}
+
+// waitPreparedPackageHelper stops a helper that has staged and verified the
+// package but has not received the transaction acknowledgement. Closing stdin
+// is the protocol's cancellation signal and lets the root process run deferred
+// cleanup. A malformed helper still gets a bounded grace period before the
+// complete process group is killed.
+func waitPreparedPackageHelper(cmd *exec.Cmd, stdin io.Closer) error {
+	_ = stdin.Close()
+	done := make(chan error, 1)
+	go func() { done <- cmd.Wait() }()
+	timer := time.NewTimer(preparedHelperExitWait)
+	defer timer.Stop()
+	select {
+	case err := <-done:
+		return err
+	case <-timer.C:
+		_ = cmd.Cancel()
+		return <-done
+	}
 }
 
 func equalChecksum(actual, expected []byte) bool {

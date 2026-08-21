@@ -36,6 +36,7 @@ type SpeechRecognizer struct {
 	stopChannel         chan bool
 	mu                  sync.Mutex
 	recognitionMux      sync.Mutex
+	loopWG              sync.WaitGroup
 	streamingRecognizer *StreamingRecognizer // For streaming mode
 	httpClient          *http.Client
 	requestCtx          context.Context
@@ -95,14 +96,24 @@ func (sr *SpeechRecognizer) Start() error {
 		return fmt.Errorf("speech recognition already running")
 	}
 	sr.isRunning = true
+	sr.loopWG.Add(1)
 	sr.mu.Unlock()
 
 	logToFile("DEBUG: Launching recognitionLoop goroutine...\n")
 	// Start recognition in goroutine
-	go sr.recognitionLoop()
+	go func() {
+		defer sr.loopWG.Done()
+		sr.recognitionLoop()
+	}()
 
 	logToFile("DEBUG: Start() returning nil\n")
 	return nil
+}
+
+// Wait blocks until the recognition loop has relinquished audio and callback
+// state. Stop must be called first.
+func (sr *SpeechRecognizer) Wait() {
+	sr.loopWG.Wait()
 }
 
 // Stop stops the speech recognition
@@ -538,8 +549,10 @@ func (sr *SpeechRecognizer) recognizeWithGoogleCloud(audioData []byte, language 
 			if strings.Contains(bodyStr, "billing") || strings.Contains(bodyStr, "BILLING_NOT_ENABLED") {
 				// Notify user about billing requirement
 				if callback := sr.app.errorCallback(); callback != nil {
-					go callback("API Billing Required",
-						"Speech-to-Text API requires billing to be enabled. Please enable billing at Google Cloud Console, or switch to FREE mode in settings.")
+					sr.app.runAsync(func() {
+						callback("API Billing Required",
+							"Speech-to-Text API requires billing to be enabled. Please enable billing at Google Cloud Console, or switch to FREE mode in settings.")
+					})
 				}
 				// Stop recording
 				go sr.Stop()
@@ -561,7 +574,7 @@ func (sr *SpeechRecognizer) recognizeWithGoogleCloud(audioData []byte, language 
 
 			if isAPIKeyError {
 				if callback := sr.app.errorCallback(); callback != nil {
-					go callback("api_key_invalid_title", "api_key_invalid_message")
+					sr.app.runAsync(func() { callback("api_key_invalid_title", "api_key_invalid_message") })
 				}
 				logError("API rejected the configured key (status %d)\n", resp.StatusCode)
 				go sr.Stop()
@@ -572,7 +585,7 @@ func (sr *SpeechRecognizer) recognizeWithGoogleCloud(audioData []byte, language 
 			// guessing. The message is what makes the difference between
 			// "your key is dead" and "the audio never arrived".
 			if callback := sr.app.errorCallback(); callback != nil {
-				go callback("request_rejected_title", bodyStr)
+				sr.app.runAsync(func() { callback("request_rejected_title", bodyStr) })
 			}
 			logError("API rejected the request (status %d)\n", resp.StatusCode)
 			go sr.Stop()

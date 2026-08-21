@@ -4,6 +4,7 @@
   import { agents, loadAgents } from '../../stores/agents';
   import { sessions, groups, selectedSession, createSession, startSession, assignToGroup } from '../../stores/sessions';
   import { get } from 'svelte/store';
+  import { activeProjectId } from '../../stores/projects';
   import AgentIcon from '../common/AgentIcon.svelte';
   import * as App from '../../../../wailsjs/go/main/App';
   import { t } from '../../i18n';
@@ -24,6 +25,8 @@
   let extraArgs = '';
   let operationGeneration = 0;
   let previousShow = false;
+  let dialogProjectId = '';
+  let hasDialogProject = false;
 
   // This dialog is mounted once and may be closed/reopened while a native
   // directory picker or backend mutation is still pending. Treat every open
@@ -35,6 +38,20 @@
       operationGeneration++;
       if (!show) isSubmitting = false;
     }
+  }
+
+  // Groups and session ids are project-scoped. A form opened in A must not
+  // finish its create -> assign -> start sequence in B after a project switch.
+  $: if (show) {
+    if (!hasDialogProject) {
+      hasDialogProject = true;
+      dialogProjectId = $activeProjectId;
+    } else if (dialogProjectId !== $activeProjectId) {
+      close();
+    }
+  } else if (hasDialogProject) {
+    hasDialogProject = false;
+    dialogProjectId = '';
   }
 
   // Resume session selection
@@ -226,6 +243,7 @@
     const resumeId = selectedResumeId;
     const automaticYes = autoYes;
     const args = extraArgs.trim();
+    const targetProjectId = $activeProjectId;
     isSubmitting = true;
     error = '';
 
@@ -235,16 +253,15 @@
 
     try {
       const session = await createSession(sessionName, sessionPath, agent, automaticYes, args);
+      if (targetProjectId !== $activeProjectId) return;
       if (session) {
         if (groupId) {
           await assignToGroup(session.id, groupId);
+          if (targetProjectId !== $activeProjectId) return;
         }
         // If resuming, start with resume ID
         if (resumeId && shouldAutoStart) {
-          await App.StartSessionWithResume(session.id, resumeId);
-          // Reload sessions to update store
-          const { loadSessions } = await import('../../stores/sessions');
-          await loadSessions();
+          await startSession(session.id, resumeId);
         } else if (shouldAutoStart) {
           await startSession(session.id);
         }

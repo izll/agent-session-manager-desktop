@@ -9,9 +9,31 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
+
+type overlappingTerminalStream struct {
+	active  atomic.Int32
+	overlap atomic.Bool
+	entered chan struct{}
+	release chan struct{}
+	once    sync.Once
+}
+
+func (s *overlappingTerminalStream) Read([]byte) (int, error) { return 0, io.EOF }
+func (s *overlappingTerminalStream) Close() error             { return nil }
+func (s *overlappingTerminalStream) Write(p []byte) (int, error) {
+	if s.active.Add(1) != 1 {
+		s.overlap.Store(true)
+	}
+	defer s.active.Add(-1)
+	s.once.Do(func() { close(s.entered) })
+	<-s.release
+	return len(p), nil
+}
 
 type closeCountingTerminalStream struct {
 	closes int
@@ -93,6 +115,50 @@ func TestInputWriteErrorClosesTerminalTransportExactlyOnce(t *testing.T) {
 	}
 }
 
+func TestTerminalInputIsSerializedIndependentlyOfWebsocketOutput(t *testing.T) {
+	stream := &overlappingTerminalStream{
+		entered: make(chan struct{}),
+		release: make(chan struct{}),
+	}
+	tc := &termConn{ptmx: stream, done: make(chan struct{})}
+
+	// Holding the websocket writer must not hold terminal input hostage.
+	tc.writeMu.Lock()
+	firstDone := make(chan struct{})
+	go func() {
+		defer close(firstDone)
+		_, _ = tc.writeInput([]byte("first"))
+	}()
+	select {
+	case <-stream.entered:
+	case <-time.After(time.Second):
+		t.Fatal("terminal input was blocked by websocket output backpressure")
+	}
+	tc.writeMu.Unlock()
+
+	secondDone := make(chan struct{})
+	go func() {
+		defer close(secondDone)
+		_, _ = tc.writeInput([]byte("second"))
+	}()
+	// Give an unserialized second Write ample opportunity to overlap the first.
+	time.Sleep(50 * time.Millisecond)
+	if stream.overlap.Load() {
+		t.Fatal("concurrent terminal input writes overlapped")
+	}
+	close(stream.release)
+	select {
+	case <-firstDone:
+	case <-time.After(time.Second):
+		t.Fatal("first terminal input did not finish")
+	}
+	select {
+	case <-secondDone:
+	case <-time.After(time.Second):
+		t.Fatal("serialized terminal input did not finish")
+	}
+}
+
 func TestTerminalServerStopClosesListenerAndActiveStreams(t *testing.T) {
 	probe, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -106,6 +172,15 @@ func TestTerminalServerStopClosesListenerAndActiveStreams(t *testing.T) {
 	ts := NewTerminalServer(nil, port)
 	if err := ts.Start(); err != nil {
 		t.Fatal(err)
+	}
+	ts.mu.RLock()
+	server := ts.server
+	ts.mu.RUnlock()
+	if server == nil || server.ReadHeaderTimeout != terminalHTTPReadHeaderTimeout ||
+		server.IdleTimeout != terminalHTTPIdleTimeout ||
+		server.MaxHeaderBytes != terminalHTTPMaxHeaderBytes {
+		t.Fatalf("terminal HTTP bounds = %#v, want read=%v idle=%v headers=%d",
+			server, terminalHTTPReadHeaderTimeout, terminalHTTPIdleTimeout, terminalHTTPMaxHeaderBytes)
 	}
 	resp, err := (&http.Client{Timeout: time.Second}).Get("http://127.0.0.1:" + fmt.Sprint(ts.GetPort()) + "/terminal")
 	if err != nil {

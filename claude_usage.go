@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -40,6 +41,7 @@ var (
 )
 
 const usageCacheTTL = 60 * time.Second
+const claudeUsagePayloadLimit = 1 << 20
 
 // GetClaudeUsage returns the Claude subscription utilization, cached for
 // a minute so dashboard polling can't hammer the endpoint.
@@ -109,7 +111,12 @@ func fetchClaudeUsage() *ClaudeUsageInfo {
 			ResetsAt    string  `json:"resets_at"`
 		} `json:"seven_day_opus"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+	body, err := io.ReadAll(io.LimitReader(resp.Body, claudeUsagePayloadLimit+1))
+	if err != nil || len(body) > claudeUsagePayloadLimit {
+		info.Error = "usage endpoint response exceeds the size limit"
+		return info
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
 		info.Error = err.Error()
 		return info
 	}
@@ -129,7 +136,7 @@ func readClaudeOAuthToken() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	raw, err := os.ReadFile(filepath.Join(home, ".claude", ".credentials.json"))
+	raw, err := readClaudeUsageFileAtMost(filepath.Join(home, ".claude", ".credentials.json"), claudeUsagePayloadLimit)
 	if err != nil {
 		return "", fmt.Errorf("no Claude credentials: %w", err)
 	}
@@ -145,4 +152,20 @@ func readClaudeOAuthToken() (string, error) {
 		return "", fmt.Errorf("no OAuth access token in credentials")
 	}
 	return creds.ClaudeAiOauth.AccessToken, nil
+}
+
+func readClaudeUsageFileAtMost(path string, limit int64) ([]byte, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	raw, err := io.ReadAll(io.LimitReader(file, limit+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(raw)) > limit {
+		return nil, fmt.Errorf("credentials file exceeds the size limit")
+	}
+	return raw, nil
 }

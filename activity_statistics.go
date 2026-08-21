@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -16,10 +17,12 @@ import (
 )
 
 const (
-	activityStatsVersion   = 1
-	activityStatsRetention = 90
-	activityStatsMaxGap    = 5 * time.Second
-	activityStatsFlushRate = 30 * time.Second
+	activityStatsVersion    = 1
+	activityStatsRetention  = 90
+	activityStatsMaxGap     = 5 * time.Second
+	activityStatsFlushRate  = 30 * time.Second
+	activityStatsMaxBytes   = 16 << 20
+	activityStatsMaxRecords = 100000
 )
 
 type activityObservation struct {
@@ -184,7 +187,7 @@ func (r *ActivityStatsRecorder) storeLocked(projectID string, now time.Time, cla
 }
 
 func (r *ActivityStatsRecorder) loadStoreLocked(store *activityProjectStore, now time.Time) {
-	raw, err := os.ReadFile(store.path)
+	raw, err := readActivityStatsFile(store.path, activityStatsMaxBytes)
 	if err == nil {
 		var data activityStatsFile
 		if parseErr := json.Unmarshal(raw, &data); parseErr == nil && validStatsFile(data) {
@@ -207,6 +210,22 @@ func (r *ActivityStatsRecorder) loadStoreLocked(store *activityProjectStore, now
 	} else if !os.IsNotExist(err) {
 		log.Printf("[statistics] failed to read %s: %v", store.path, err)
 	}
+}
+
+func readActivityStatsFile(path string, limit int64) ([]byte, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	raw, err := io.ReadAll(io.LimitReader(file, limit+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(raw)) > limit {
+		return nil, fmt.Errorf("activity statistics file exceeds %d bytes", limit)
+	}
+	return raw, nil
 }
 
 func acquireStatsWriter(path string) (bool, string) {
@@ -264,7 +283,7 @@ func releaseStatsWriter(store *activityProjectStore) {
 }
 
 func validStatsFile(data activityStatsFile) bool {
-	if data.Version != activityStatsVersion || data.Records == nil {
+	if data.Version != activityStatsVersion || data.Records == nil || len(data.Records) > activityStatsMaxRecords {
 		return false
 	}
 	for _, record := range data.Records {
@@ -275,7 +294,8 @@ func validStatsFile(data activityStatsFile) bool {
 			record.IdleMs < 0 || record.WaitingEvents < 0 {
 			return false
 		}
-		if record.BusyMs+record.WaitingMs+record.IdleMs != record.ObservedMs {
+		if record.BusyMs > record.ObservedMs || record.WaitingMs > record.ObservedMs-record.BusyMs ||
+			record.IdleMs != record.ObservedMs-record.BusyMs-record.WaitingMs {
 			return false
 		}
 	}

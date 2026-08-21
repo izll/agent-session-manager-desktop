@@ -24,6 +24,10 @@ func TestEveryPlatformMarksPrereleaseTagsInReleaseWorkflow(t *testing.T) {
 	if flags != actions {
 		t.Fatalf("prerelease flags = %d for %d release actions", flags, actions)
 	}
+	failClosedUploads := strings.Count(workflow, "fail_on_unmatched_files: true")
+	if failClosedUploads != actions {
+		t.Fatalf("fail-closed asset uploads = %d for %d release actions", failClosedUploads, actions)
+	}
 }
 
 func TestWorkflowActionsArePinnedToImmutableCommits(t *testing.T) {
@@ -85,6 +89,7 @@ func TestCIRegeneratesBindingsThroughPinnedWailsBuild(t *testing.T) {
 		"go install github.com/wailsapp/wails/v2/cmd/wails@v2.14.0",
 		"wails\" build -tags webkit2_41 -clean",
 		"npm run check --prefix frontend",
+		"find frontend/wailsjs -type f -exec chmod 0644 {} +",
 		"git diff --exit-code -- frontend/wailsjs",
 	} {
 		if !strings.Contains(backendJob, required) {
@@ -99,5 +104,37 @@ func TestCIRegeneratesBindingsThroughPinnedWailsBuild(t *testing.T) {
 	diffAt := strings.Index(backendJob, "git diff --exit-code -- frontend/wailsjs")
 	if diffAt < checkAt {
 		t.Fatal("backend CI must fail on uncommitted generated bindings after regeneration and type-checking")
+	}
+	modeAt := strings.Index(backendJob, "find frontend/wailsjs -type f -exec chmod 0644 {} +")
+	if modeAt < checkAt || modeAt > diffAt {
+		t.Fatal("backend CI must normalize Wails' generated executable modes immediately before the binding diff")
+	}
+}
+
+func TestWindowsCrossBuildVerifiesDownloadedNativeDependency(t *testing.T) {
+	raw, err := os.ReadFile("scripts/build-windows.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := string(raw)
+	shaDefinition := regexp.MustCompile(`(?m)^PA_SHA256="[0-9a-f]{64}"$`)
+	if !shaDefinition.MatchString(script) {
+		t.Fatal("Windows cross-build must pin PortAudio to an exact SHA-256")
+	}
+	for _, required := range []string{
+		"curl --fail --location --silent --show-error",
+		"sha256sum --check --strict",
+		`PA_CACHE_KEY="${PA_PKG%.pkg.tar.zst}-$PA_SHA256"`,
+		`PA_CACHE_MARKER="$CACHE/pa/$PA_CACHE_KEY/.verified"`,
+		`[ ! -f "$PA_DIR/bin/libportaudio.dll" ]`,
+	} {
+		if !strings.Contains(script, required) {
+			t.Fatalf("Windows cross-build does not fail closed with %q", required)
+		}
+	}
+	verifyAt := strings.Index(script, "sha256sum --check --strict")
+	extractAt := strings.Index(script, "tar --zstd -xf")
+	if verifyAt < 0 || extractAt < 0 || verifyAt > extractAt {
+		t.Fatal("Windows cross-build must verify the native package before extraction")
 	}
 }

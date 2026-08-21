@@ -58,6 +58,7 @@ const PatternsURL = "https://raw.githubusercontent.com/izll/agent-session-manage
 // patternsRefreshInterval bounds how often the file is fetched. Wording changes
 // arrive with agent releases, not by the minute.
 const patternsRefreshInterval = 24 * time.Hour
+const patternsMaxBytes = 256 * 1024
 
 // patternsPath returns where the downloaded copy lives.
 func patternsPath() (string, error) {
@@ -82,7 +83,7 @@ func currentPatterns() *patternsFile {
 		// A downloaded copy only replaces it when it is newer, so a stale file
 		// left behind by an older release cannot undo a fix shipped since.
 		if path, err := patternsPath(); err == nil {
-			if data, readErr := os.ReadFile(path); readErr == nil {
+			if data, readErr := readFileAtMost(path, patternsMaxBytes); readErr == nil {
 				if downloaded := parsePatterns(data); downloaded != nil &&
 					downloaded.Version > p.Version {
 					p = downloaded
@@ -180,8 +181,8 @@ func RefreshPatterns() {
 
 	// Bounded read: this is a small JSON file, and an unbounded read from the
 	// network is how a wrong URL turns into memory exhaustion.
-	data, err := io.ReadAll(io.LimitReader(resp.Body, 256*1024))
-	if err != nil {
+	data, err := io.ReadAll(io.LimitReader(resp.Body, patternsMaxBytes+1))
+	if err != nil || len(data) > patternsMaxBytes {
 		return
 	}
 
@@ -202,20 +203,49 @@ func RefreshPatterns() {
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		return
 	}
-	// Written via a temporary file: a partial write here would leave patterns
-	// that fail to parse on the next start.
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0644); err != nil {
-		return
-	}
-	if err := os.Rename(tmp, path); err != nil {
-		_ = os.Remove(tmp)
+	effective, err := publishPatterns(path, data, fetched)
+	if err != nil {
 		return
 	}
 
 	patternsMu.Lock()
-	loadedPatterns = fetched
+	loadedPatterns = effective
 	patternsMu.Unlock()
+}
+
+// publishPatterns serializes every local writer and rechecks the on-disk
+// version under that lock. Unique temporary files keep two application
+// processes from renaming one another's partially written download.
+func publishPatterns(path string, data []byte, fetched *patternsFile) (*patternsFile, error) {
+	effective := fetched
+	err := withCrossProcessFileLock(path+".lock", func() error {
+		if existingRaw, err := readFileAtMost(path, patternsMaxBytes); err == nil {
+			if existing := parsePatterns(existingRaw); existing != nil && existing.Version >= fetched.Version {
+				effective = existing
+				return nil
+			}
+		}
+		tmp, err := os.CreateTemp(filepath.Dir(path), ".patterns-*")
+		if err != nil {
+			return err
+		}
+		tmpPath := tmp.Name()
+		defer os.Remove(tmpPath)
+		if err = tmp.Chmod(0o644); err == nil {
+			_, err = tmp.Write(data)
+		}
+		if err == nil {
+			err = tmp.Sync()
+		}
+		if closeErr := tmp.Close(); err == nil {
+			err = closeErr
+		}
+		if err != nil {
+			return err
+		}
+		return os.Rename(tmpPath, path)
+	})
+	return effective, err
 }
 
 // ForceRefreshPatterns fetches the pattern file regardless of when it was last
@@ -242,8 +272,8 @@ func ForceRefreshPatterns() (version int, updated bool, err error) {
 	if resp.StatusCode != http.StatusOK {
 		return before, false, fmt.Errorf("error.patternsUnreachable")
 	}
-	data, err := io.ReadAll(io.LimitReader(resp.Body, 256*1024))
-	if err != nil {
+	data, err := io.ReadAll(io.LimitReader(resp.Body, patternsMaxBytes+1))
+	if err != nil || len(data) > patternsMaxBytes {
 		return before, false, fmt.Errorf("error.patternsUnreachable")
 	}
 	fetched := parsePatterns(data)
@@ -261,19 +291,15 @@ func ForceRefreshPatterns() (version int, updated bool, err error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		return before, false, fmt.Errorf("error.patternsNotWritten")
 	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0644); err != nil {
-		return before, false, fmt.Errorf("error.patternsNotWritten")
-	}
-	if err := os.Rename(tmp, path); err != nil {
-		_ = os.Remove(tmp)
+	effective, err := publishPatterns(path, data, fetched)
+	if err != nil {
 		return before, false, fmt.Errorf("error.patternsNotWritten")
 	}
 
 	patternsMu.Lock()
-	loadedPatterns = fetched
+	loadedPatterns = effective
 	patternsMu.Unlock()
-	return fetched.Version, true, nil
+	return effective.Version, effective.Version > before, nil
 }
 
 // PatternsVersion reports the version in force, for the About box and logs.

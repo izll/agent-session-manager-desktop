@@ -5,6 +5,7 @@
   import { get } from 'svelte/store';
   import * as App from '../../../../wailsjs/go/main/App';
   import { t } from '../../i18n';
+  import { activeProjectId } from '../../stores/projects';
 
   export let show = false;
 
@@ -19,6 +20,7 @@
    *  inside the session it was branched from. */
   let selectedGroupId = '';
   let operationGeneration = 0;
+  let dialogTarget: { projectId: string; sessionId: string; windowIdx: number } | null = null;
 
   // Generate default name only when dialog transitions from hidden to shown
   // Assign lastShow inside the same block: a separate `$: lastShow = show`
@@ -27,6 +29,11 @@
     if (show && !lastShow) {
       operationGeneration++;
       isSubmitting = false;
+      dialogTarget = {
+        projectId: get(activeProjectId),
+        sessionId: get(selectedSessionId) || '',
+        windowIdx: get(selectedWindowIdx) ?? 0,
+      };
       name = `Fork ${new Date().toLocaleTimeString()}`;
       // Defaults to where the original lives, which is what a fork inherited
       // silently before. Offered rather than assumed: a branch is often an
@@ -36,9 +43,17 @@
     lastShow = show;
   }
 
+  // A fork belongs to one exact conversation tab. Project, session or tab
+  // replacement closes the form instead of silently rebinding its draft.
+  $: if (show && dialogTarget &&
+      (dialogTarget.projectId !== $activeProjectId ||
+       dialogTarget.sessionId !== $selectedSessionId ||
+       dialogTarget.windowIdx !== $selectedWindowIdx)) close();
+
   function close() {
     operationGeneration++;
     isSubmitting = false;
+    dialogTarget = null;
     show = false;
     resetForm();
     dispatch('close');
@@ -58,15 +73,21 @@
       return;
     }
 
+    const target = dialogTarget;
     const sessionId = get(selectedSessionId);
     if (!sessionId) {
       error = $t('fork.noSession');
       return;
     }
+    if (!target || target.projectId !== get(activeProjectId) ||
+        target.sessionId !== sessionId || target.windowIdx !== get(selectedWindowIdx)) {
+      close();
+      return;
+    }
 
     const generation = operationGeneration;
     const submitted = {
-      windowIdx: get(selectedWindowIdx) ?? 0,
+      windowIdx: target.windowIdx,
       name: name.trim(),
       mode: forkMode,
       groupId: selectedGroupId,
@@ -80,7 +101,7 @@
       // backend read the session's main window, so forking from a second Claude
       // tab produced a branch of a different conversation.
       const result = await App.ForkSession(sessionId, submitted.windowIdx);
-      if (!show || generation !== operationGeneration || get(selectedSessionId) !== sessionId) return;
+      if (!targetIsCurrent(target, generation)) return;
       if (!result || !result.sessionId) {
         throw new Error('Fork failed - no session ID returned');
       }
@@ -88,7 +109,7 @@
       if (submitted.mode === 'tab') {
         const newIdx = await App.ForkToNewTab(sessionId, submitted.name, result.sessionId);
         await loadSessions();
-        if (!show || generation !== operationGeneration || get(selectedSessionId) !== sessionId) return;
+        if (!targetIsCurrent(target, generation)) return;
         // Switch to the branch. It was created and then left for the user to
         // find, which is half a feature.
         selectWindow(newIdx);
@@ -96,7 +117,7 @@
         dispatch('forked', { sessionId, windowIdx: newIdx, name: submitted.name });
       } else {
         const newSession = await App.ForkToNewSession(sessionId, submitted.name, result.sessionId);
-        if (!show || generation !== operationGeneration || get(selectedSessionId) !== sessionId) return;
+        if (!targetIsCurrent(target, generation)) return;
         if (!newSession) {
           // Closing silently here would look like it had worked.
           throw new Error('Fork failed - no session was created');
@@ -110,7 +131,7 @@
         }
 
         await loadSessions();
-        if (!show || generation !== operationGeneration || get(selectedSessionId) !== sessionId) return;
+        if (!targetIsCurrent(target, generation)) return;
         // Switch to the branch, as the new-tab case does. Created and then left
         // for the user to find, a fork to a new session looked like nothing had
         // happened at all: the dialog closed, the view stayed where it was, and
@@ -125,11 +146,18 @@
         dispatch('forked', { sessionId: newSession.id, name: submitted.name, isNewSession: true });
       }
     } catch (e) {
-      if (!show || generation !== operationGeneration || get(selectedSessionId) !== sessionId) return;
+      if (!targetIsCurrent(target, generation)) return;
       error = String(e);
     } finally {
       if (generation === operationGeneration) isSubmitting = false;
     }
+  }
+
+  function targetIsCurrent(target: { projectId: string; sessionId: string; windowIdx: number }, generation: number) {
+    return show && generation === operationGeneration &&
+      target.projectId === get(activeProjectId) &&
+      target.sessionId === get(selectedSessionId) &&
+      target.windowIdx === get(selectedWindowIdx);
   }
 
   function handleKeydown(e: KeyboardEvent) {

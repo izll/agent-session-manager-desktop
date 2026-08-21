@@ -4,9 +4,26 @@ package session
 
 import (
 	"bytes"
+	"reflect"
 	"strings"
 	"testing"
 )
+
+func TestMultiplexerInstallPinsExactPackageAndOfficialSource(t *testing.T) {
+	got := multiplexerInstallArgs()
+	wantPrefix := []string{
+		"install",
+		"--id", wingetPackageID,
+		"--exact",
+		"--source", wingetCommunitySource,
+	}
+	if len(got) < len(wantPrefix) || !reflect.DeepEqual(got[:len(wantPrefix)], wantPrefix) {
+		t.Fatalf("winget install args = %#v, want prefix %#v", got, wantPrefix)
+	}
+	if wingetCommunitySource != "winget" {
+		t.Fatalf("winget source = %q, want the built-in community repository", wingetCommunitySource)
+	}
+}
 
 func TestMultiplexerInstallOutputIsBounded(t *testing.T) {
 	var output boundedInstallOutput

@@ -1329,9 +1329,10 @@ func TestSafeJoinConfinesEntries(t *testing.T) {
 	}
 }
 
-// The old .app is left behind as a directory, so cleanup must remove trees and
-// not just files.
-func TestCleanStaleUpdateFilesRemovesOldDirectories(t *testing.T) {
+// A legacy name alone is not ownership proof. A user may have manually kept a
+// full bundle backup under this natural name; recursive startup cleanup must
+// not destroy it.
+func TestCleanStaleUpdateFilesPreservesUnmarkedOldDirectories(t *testing.T) {
 	dir := t.TempDir()
 	stale := filepath.Join(dir, "asmgr-desktop.app.old")
 	if err := os.MkdirAll(filepath.Join(stale, "Contents", "MacOS"), 0755); err != nil {
@@ -1347,8 +1348,8 @@ func TestCleanStaleUpdateFilesRemovesOldDirectories(t *testing.T) {
 
 	cleanStaleUpdateFilesIn(dir)
 
-	if _, err := os.Stat(stale); !os.IsNotExist(err) {
-		t.Fatal("the stale bundle was not removed")
+	if got, err := os.ReadFile(filepath.Join(stale, "Contents", "MacOS", "foo")); err != nil || string(got) != "x" {
+		t.Fatalf("unmarked legacy bundle backup was modified: got %q err=%v", got, err)
 	}
 	if _, err := os.Stat(keep); err != nil {
 		t.Fatal("the current bundle must be left alone")

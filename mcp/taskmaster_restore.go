@@ -4,10 +4,28 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strconv"
 )
+
+func decodeTaskMasterObject(raw []byte) (map[string]interface{}, error) {
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.UseNumber()
+	var decoded map[string]interface{}
+	if err := decoder.Decode(&decoded); err != nil {
+		return nil, err
+	}
+	var trailing interface{}
+	if err := decoder.Decode(&trailing); err != io.EOF {
+		if err == nil {
+			return nil, fmt.Errorf("unexpected trailing JSON value")
+		}
+		return nil, fmt.Errorf("invalid trailing JSON: %w", err)
+	}
+	return decoded, nil
+}
 
 // RestoreTask writes a deleted Task Master task back with its original task
 // and subtask IDs. Task Master's create tools always allocate a new ID, which
@@ -190,10 +208,8 @@ func firstSubtaskID(subtasks []Subtask) string {
 
 func taskMasterRestoreObject(rawJSON, expectedID string, known interface{}) (map[string]interface{}, bool, error) {
 	if rawJSON != "" {
-		decoder := json.NewDecoder(bytes.NewBufferString(rawJSON))
-		decoder.UseNumber()
-		var restored map[string]interface{}
-		if err := decoder.Decode(&restored); err != nil {
+		restored, err := decodeTaskMasterObject([]byte(rawJSON))
+		if err != nil {
 			return nil, false, fmt.Errorf("invalid raw provider snapshot: %w", err)
 		}
 		if taskMasterID(restored["id"]) != expectedID {
@@ -205,10 +221,8 @@ func taskMasterRestoreObject(rawJSON, expectedID string, known interface{}) (map
 	if err != nil {
 		return nil, false, err
 	}
-	decoder := json.NewDecoder(bytes.NewReader(encoded))
-	decoder.UseNumber()
-	var restored map[string]interface{}
-	if err := decoder.Decode(&restored); err != nil {
+	restored, err := decodeTaskMasterObject(encoded)
+	if err != nil {
 		return nil, false, err
 	}
 	return restored, false, nil

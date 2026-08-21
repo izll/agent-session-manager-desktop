@@ -175,7 +175,8 @@ type termConn struct {
 	ptmx      session.TerminalStream
 	cmd       *exec.Cmd
 	done      chan struct{}
-	writeMu   sync.Mutex
+	writeMu   sync.Mutex // websocket output/control frames
+	inputMu   sync.Mutex // terminal input from websocket, dictation and backspace
 	closeOnce sync.Once
 	// hidden is true while this tab is in the background. We keep reading the PTY
 	// (so tmux never blocks) but hold the output instead of sending WS frames.
@@ -206,6 +207,21 @@ type termConn struct {
 // the output pump (and its visibility/write locks) forever.
 const terminalWSWriteTimeout = 10 * time.Second
 
+const (
+	terminalHTTPReadHeaderTimeout = 5 * time.Second
+	terminalHTTPIdleTimeout       = 30 * time.Second
+	terminalHTTPMaxHeaderBytes    = 16 << 10
+	// A terminal keystroke/control frame is normally bytes or kilobytes. Bound
+	// the exceptional paste as well: gorilla otherwise allocates the complete
+	// frame before the input queue can apply backpressure, and Windows can queue
+	// many such frames while psmux drains them through send-keys.
+	terminalWSReadLimit = 1 << 20
+)
+
+func configureTerminalWebsocket(ws *websocket.Conn) {
+	ws.SetReadLimit(terminalWSReadLimit)
+}
+
 // closeTransport is the common, idempotent failure signal for both websocket
 // pumps. Closing the socket wakes ReadMessage, whose defer owns map removal,
 // process reaping and mirror cleanup; closing the stream wakes the PTY reader.
@@ -230,6 +246,18 @@ func (tc *termConn) writeBinary(data []byte) error {
 	err := tc.ws.WriteMessage(websocket.BinaryMessage, data)
 	_ = tc.ws.SetWriteDeadline(time.Time{})
 	return err
+}
+
+// writeInput serializes every producer of terminal input without coupling it
+// to websocket output backpressure. Dictation and backspace used to take
+// writeMu while ordinary websocket keystrokes did not: a slow browser could
+// hold voice input behind a ten-second socket deadline, and concurrent PTY
+// writes could interleave on streams whose implementation shells out to the
+// multiplexer (notably psmux on Windows).
+func (tc *termConn) writeInput(data []byte) (int, error) {
+	tc.inputMu.Lock()
+	defer tc.inputMu.Unlock()
+	return tc.ptmx.Write(data)
 }
 
 func (tc *termConn) handleOutputWriteError(err error) bool {
@@ -404,9 +432,7 @@ func (ts *TerminalServer) WriteToTerminal(sessionID string, windowIdx int, data 
 		return fmt.Errorf("no terminal connection for %s", connID)
 	}
 
-	tc.writeMu.Lock()
-	defer tc.writeMu.Unlock()
-	_, err := tc.ptmx.Write([]byte(data))
+	_, err := tc.writeInput([]byte(data))
 	return err
 }
 
@@ -431,9 +457,7 @@ func (ts *TerminalServer) SendBackspace(sessionID string, windowIdx int, count i
 		bs[i] = 0x7f
 	}
 
-	tc.writeMu.Lock()
-	defer tc.writeMu.Unlock()
-	_, err := tc.ptmx.Write(bs)
+	_, err := tc.writeInput(bs)
 	return err
 }
 
@@ -498,7 +522,12 @@ func (ts *TerminalServer) Start() error {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/terminal", ts.handleTerminal)
-	server := &http.Server{Handler: mux}
+	server := &http.Server{
+		Handler:           mux,
+		ReadHeaderTimeout: terminalHTTPReadHeaderTimeout,
+		IdleTimeout:       terminalHTTPIdleTimeout,
+		MaxHeaderBytes:    terminalHTTPMaxHeaderBytes,
+	}
 	serveDone := make(chan struct{})
 	ts.mu.Lock()
 	if ts.server != nil || ts.stopping {
@@ -710,6 +739,7 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 		log.Printf("WebSocket upgrade error: %v", err)
 		return
 	}
+	configureTerminalWebsocket(ws)
 	connectionOwned := false
 	defer func() {
 		if !connectionOwned {
@@ -1132,7 +1162,7 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 				// of failure invisible: on Windows this write shells out to
 				// send-keys, so it can fail on its own while the socket stays
 				// healthy — keystrokes vanish with nothing logged anywhere.
-				if _, werr := ptmx.Write(data); werr != nil {
+				if _, werr := tc.writeInput(data); werr != nil {
 					log.Printf("[ws] input write failed session=%s win=%d (%d bytes): %v",
 						sessionID, winIdx, len(data), werr)
 					tc.handleInputWriteError(werr)
@@ -1275,7 +1305,7 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 					if ts.typingSignal != nil {
 						atomic.StoreInt64(ts.typingSignal, time.Now().UnixNano())
 					}
-					if _, werr := ptmx.Write(data); werr != nil {
+					if _, werr := tc.writeInput(data); werr != nil {
 						log.Printf("[ws] binary input write failed session=%s win=%d (%d bytes): %v",
 							sessionID, winIdx, len(data), werr)
 						tc.handleInputWriteError(werr)

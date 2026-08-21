@@ -6,8 +6,10 @@
   // so the overlay was laid out inside the sidebar instead of the window.
   import { portal } from '../../utils/portal';
   import { createEventDispatcher } from 'svelte';
+  import { get } from 'svelte/store';
   import { setSessionColor, setGroupColor, type Group, type Session } from '../../stores/sessions';
   import { t } from '../../i18n';
+  import { activeProjectId } from '../../stores/projects';
   import {
     colorOptions,
     gradientOptions,
@@ -31,19 +33,33 @@
   let selectedBgColor = '';
   let fullRowColor = false;
   let colorMode: 'text' | 'bg' = 'text'; // Which color we're editing
-  let lastInitKey = '';
+  let targetProjectId = '';
+  let targetId = '';
+  let targetKind: 'session' | 'group' | '' = '';
+  let targetCaptured = false;
 
-  // Initialize fields only when dialog opens for a (new) target, not on every target update
+  // Initialize once per open cycle. If a keyed sidebar row is reused for a
+  // same-id object in another project, close instead of silently rebinding the
+  // already-edited swatches to that replacement object.
   $: {
-    const key = show && target ? `${show}|${target.id}` : '';
-    if (key && key !== lastInitKey) {
+    const kind = session ? 'session' : group ? 'group' : '';
+    if (show && target && !targetCaptured) {
       selectedColor = target!.color || '';
       selectedBgColor = target!.bgColor || '';
       fullRowColor = target!.fullRowColor || false;
       colorMode = 'text';
-      lastInitKey = key;
+      targetProjectId = $activeProjectId;
+      targetId = target!.id;
+      targetKind = kind;
+      targetCaptured = true;
+    } else if (show && targetCaptured &&
+        (targetProjectId !== $activeProjectId || targetId !== target?.id || targetKind !== kind)) {
+      close();
     } else if (!show) {
-      lastInitKey = '';
+      targetCaptured = false;
+      targetProjectId = '';
+      targetId = '';
+      targetKind = '';
     }
   }
 
@@ -71,14 +87,18 @@
   }
 
   async function applyColor() {
-    if (session) {
-      await setSessionColor(session.id, selectedColor, selectedBgColor, fullRowColor);
-    } else if (group) {
-      await setGroupColor(group.id, selectedColor, selectedBgColor, fullRowColor);
+    const projectId = targetProjectId;
+    const id = targetId;
+    const kind = targetKind;
+    if (projectId !== get(activeProjectId) || !id) return close();
+    if (kind === 'session') {
+      await setSessionColor(id, selectedColor, selectedBgColor, fullRowColor);
+    } else if (kind === 'group') {
+      await setGroupColor(id, selectedColor, selectedBgColor, fullRowColor);
     } else {
       return;
     }
-    close();
+    if (projectId === get(activeProjectId)) close();
   }
 
   function selectColor(color: string) {

@@ -2,6 +2,7 @@
   import * as App from '../../../../wailsjs/go/main/App';
   import type { main } from '../../../../wailsjs/go/models';
   import { t } from '../../i18n';
+  import { autoFocusDialog } from '../../utils/dialogActions';
 
   export let show = false;
   /** Session the picked command is sent to. Empty means "nothing selected". */
@@ -275,6 +276,7 @@
 {#if show}
   <div
     class="dialog-overlay picker-overlay"
+    use:autoFocusDialog
     tabindex="-1"
     role="dialog"
     aria-modal="true"

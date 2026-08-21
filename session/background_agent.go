@@ -13,6 +13,8 @@ var (
 	claudeBackgroundCommand        = CommandContext
 )
 
+const claudeBackgroundOutputLimit = 1 << 20
+
 func timedClaudeBackgroundCommand(args ...string) (context.CancelFunc, *exec.Cmd) {
 	ctx, cancel := context.WithTimeout(context.Background(), claudeBackgroundCommandTimeout)
 	cmd := claudeBackgroundCommand(ctx, "claude", args...)
@@ -69,10 +71,16 @@ func ReleaseClaudeBackgroundAgent(resumeID string) {
 // findBackgroundAgent reports whether a live background agent currently owns
 // the given session ID, and returns its short job id (used by `claude stop`).
 func findBackgroundAgent(resumeID string) (string, bool) {
+	return findBackgroundAgentWithLimit(resumeID, claudeBackgroundOutputLimit)
+}
+
+func findBackgroundAgentWithLimit(resumeID string, limit int) (string, bool) {
 	cancel, cmd := timedClaudeBackgroundCommand("agents", "--json")
-	out, err := cmd.Output()
+	output := &boundedGeminiOutput{limit: limit}
+	cmd.Stdout = output
+	err := cmd.Run()
 	cancel()
-	if err != nil {
+	if err != nil || output.truncated {
 		return "", false // claude CLI missing/old — treat as free
 	}
 	var agents []struct {
@@ -80,7 +88,7 @@ func findBackgroundAgent(resumeID string) (string, bool) {
 		Kind      string `json:"kind"`
 		SessionID string `json:"sessionId"`
 	}
-	if err := json.Unmarshal(out, &agents); err != nil {
+	if err := json.Unmarshal(output.data, &agents); err != nil {
 		return "", false
 	}
 	for _, ag := range agents {

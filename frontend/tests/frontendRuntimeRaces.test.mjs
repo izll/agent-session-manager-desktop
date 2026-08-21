@@ -24,6 +24,8 @@ const schemeImport = read('lib/components/Dialogs/SchemeImportDialog.svelte');
 const mainPanel = read('lib/components/MainPanel/MainPanel.svelte');
 const sideBySideDiff = read('lib/components/MainPanel/SideBySideDiff.svelte');
 const sessionItem = read('lib/components/Sidebar/SessionItem.svelte');
+const groupItem = read('lib/components/Sidebar/GroupItem.svelte');
+const sessionColor = read('lib/components/Dialogs/SessionColorDialog.svelte');
 const projectSelector = read('lib/components/Sidebar/ProjectSelector.svelte');
 const commandPalette = read('lib/components/Dialogs/CommandPalette.svelte');
 const sessionStore = read('lib/stores/sessions.ts');
@@ -44,6 +46,9 @@ const sessionTemplates = read('lib/components/Dialogs/SessionTemplateDialog.svel
 const saveAsTemplate = read('lib/components/Dialogs/SaveAsTemplateDialog.svelte');
 const commandManager = read('lib/components/Dialogs/CommandManagerDialog.svelte');
 const i18n = read('lib/i18n/index.ts');
+
+assert.match(app, /if \(\$selectedSessionId !== prevSelectedId\) \{[\s\S]*?if \(sidebarOverlayOpen\) sidebarOverlayOpen = false;[\s\S]*?prevSelectedId = \$selectedSessionId/,
+  'closed narrow sidebars must still advance their selection snapshot before the next open');
 
 assert.match(
   recovery,
@@ -244,6 +249,16 @@ assert.match(quickTerminalDialog, /get\(selectedSessionId\) === targetSessionId/
 assert.match(sessionItem, /<ConfirmDialog[\s\S]*?on:confirm=\{confirmDelete\}/,
   'the sidebar delete affordance must not delete a session on its first click');
 assert.match(sessionItem, /afterUnsavedChanges\(\(\) => \{ void deleteSession\(target\.id\); \}\)/);
+assert.match(sessionItem, /target\.projectId !== get\(activeProjectId\)/,
+  'session deletion must retain the project that opened its confirmation');
+assert.match(sessionItem, /uiProjectId !== \$activeProjectId[\s\S]*?showDeleteConfirm = false/,
+  'project switches must close a keyed session row\'s stale confirmation and editors');
+assert.match(groupItem, /const projectId = get\(activeProjectId\);[\s\S]*?get\(activeProjectId\) !== projectId\) break/,
+  'group bulk operations must stop before continuing in a replacement project');
+assert.match(groupItem, /uiProjectId !== \$activeProjectId[\s\S]*?showColorDialog = false/,
+  'keyed group rows must close project-scoped menus and editors on replacement');
+assert.match(sessionColor, /targetProjectId !== \$activeProjectId \|\| targetId !== target\?\.id/,
+  'the color dialog must not silently rebind edited colors to a replacement target');
 
 // Project switches invalidate both list reads and mutation continuations. A
 // repeated A -> B -> A sequence is why a request counter is required in
@@ -361,12 +376,22 @@ assert.match(sessionTemplates, /picked && show && generation === operationGenera
   'a native directory picker must belong to the template editor that opened it');
 assert.match(sessionTemplates, /await App\.DeleteSessionTemplate\(target\.id\);[\s\S]*?generation !== operationGeneration/,
   'a completed template delete must not mutate a replacement manager cycle');
+assert.match(sessionTemplates, /const targetProjectId = get\(activeProjectId\);[\s\S]*?CreateSessionFromTemplate[\s\S]*?targetProjectId !== get\(activeProjectId\)/,
+  'template creation must revalidate its project before project-scoped follow-up steps');
+assert.match(sessionTemplates, /use:autoFocusDialog/,
+  'the template manager must trap keyboard focus');
 assert.match(saveAsTemplate, /session\?\.id !== targetSessionId/,
   'save-as-template completion must belong to the captured session');
 assert.match(commandManager, /let savingCommand = false/);
 assert.match(commandManager, /let savingGroup = false/);
 assert.match(commandManager, /generation !== operationGeneration \|\| !editing \|\| editingId !== targetId/,
   'a late command save must not close a replacement editor');
+assert.match(commandManager, /use:autoFocusDialog/,
+  'the command manager must trap keyboard focus');
+assert.match(commandPicker, /use:autoFocusDialog/,
+  'the command picker must trap keyboard focus');
+assert.match(commandPalette, /use:autoFocusDialog/,
+  'the command palette must trap keyboard focus');
 assert.match(schemeImport, /let requestGeneration = 0/);
 for (const call of ['DiscoverLocalSchemes', 'ImportSchemeFiles', 'ListOnlineSchemes', 'FetchOnlineSchemes']) {
   assert.match(schemeImport, new RegExp(`await App\\.${call}[\\s\\S]*?generation !== requestGeneration \\|\\| tab !== targetTab`),
@@ -398,6 +423,10 @@ assert.match(newTabDialog, /dir && show && generation === operationGeneration &&
 assert.match(forkDialog, /<form on:submit\|preventDefault=\{handleSubmit\}>/);
 assert.doesNotMatch(forkDialog, /e\.key === 'Enter'/,
   'Fork native form submit must be the sole Enter path');
+assert.match(forkDialog, /dialogTarget\.projectId !== \$activeProjectId/,
+  'a fork draft must close rather than rebind across project replacement');
+assert.match(forkDialog, /targetIsCurrent\(target, generation\)/,
+  'fork follow-up steps must retain the open-cycle project/session/tab identity');
 for (const [name, source] of [
   ['NewGroup', newGroupDialog], ['QuickTerminal', quickTerminalDialog],
   ['Fork', forkDialog], ['Log', logDialog], ['SessionFile', sessionFileDialog],
@@ -407,8 +436,23 @@ for (const [name, source] of [
     `${name} must identify close/reopen async operations`);
 }
 assert.match(newSessionDialog, /const resumeId = selectedResumeId/);
+assert.match(newSessionDialog, /const targetProjectId = \$activeProjectId;[\s\S]*?targetProjectId !== \$activeProjectId/,
+  'new-session follow-up mutations must remain in the project where creation started');
+assert.doesNotMatch(newSessionDialog, /App\.StartSessionWithResume/,
+  'new-session resume must use the guarded session-store mutation path');
 assert.match(newSessionDialog, /selectedPath && show && generation === operationGeneration && path === initialPath/,
   'a native session directory picker must not overwrite a replacement form');
+assert.match(newGroupDialog, /dialogProjectId = get\(activeProjectId\)/);
+assert.match(newGroupDialog, /targetProjectId !== get\(activeProjectId\)/,
+  'a group draft and completion must stay in the project where the dialog opened');
+assert.match(bgAgents, /targetProjectId !== get\(activeProjectId\)/,
+  'background-agent attach completion must not select into a replacement project');
+assert.match(bgAgents, /\$activeProjectId !== dialogProjectId[\s\S]*?close\(\)/,
+  'the project-scoped background-agent chooser must close on project replacement');
+assert.match(groupItem, /projectId: get\(activeProjectId\)/,
+  'native group drag payloads must carry project identity');
+assert.match(sessionItem, /projectId: get\(activeProjectId\)/,
+  'native session drag payloads must carry project identity');
 
 assert.match(mainPanel, /onDestroy\(\(\) => \{[\s\S]*?activeSplitterCleanup\?\.\(\)/,
   'unmounting MainPanel mid-drag must release window listeners');

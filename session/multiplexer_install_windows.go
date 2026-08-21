@@ -31,6 +31,7 @@ import (
 // against the registry — this one is published from github.com/psmux, which is
 // the project itself.
 const wingetPackageID = "marlocarlo.psmux"
+const wingetCommunitySource = "winget"
 
 const (
 	multiplexerInstallOutputLimit = 1 << 20
@@ -75,6 +76,28 @@ func InstallMultiplexerSupported() bool {
 	return err == nil
 }
 
+func multiplexerInstallArgs() []string {
+	return []string{
+		"install",
+		"--id", wingetPackageID,
+		"--exact",
+		// Do not let another configured source satisfy the trusted package ID.
+		// WinGet evaluates all implicit sources by default; the documented
+		// community-repository name pins this install to the source whose manifest
+		// and installer hashes are reviewed by the winget repository.
+		"--source", wingetCommunitySource,
+		// Both agreements: without them winget stops on an interactive prompt
+		// that has nowhere to appear, and the call would time out looking like
+		// a hang.
+		"--accept-package-agreements",
+		"--accept-source-agreements",
+		// No interactive installer UI, and no progress bar redrawing into a
+		// buffer nobody renders.
+		"--silent",
+		"--disable-interactivity",
+	}
+}
+
 // InstallMultiplexer installs psmux with winget and reports what happened.
 //
 // Output is returned rather than logged: an install that fails does so for
@@ -92,19 +115,7 @@ func InstallMultiplexer() (output string, err error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "winget", "install",
-		"--id", wingetPackageID,
-		"--exact",
-		// Both agreements: without them winget stops on an interactive prompt
-		// that has nowhere to appear, and the call would time out looking like
-		// a hang.
-		"--accept-package-agreements",
-		"--accept-source-agreements",
-		// No interactive installer UI, and no progress bar redrawing into a
-		// buffer nobody renders.
-		"--silent",
-		"--disable-interactivity",
-	)
+	cmd := exec.CommandContext(ctx, "winget", multiplexerInstallArgs()...)
 	HideConsoleWindow(cmd)
 	// A detached installer process may inherit winget's output descriptors.
 	// Bound the post-cancellation pipe wait as well as winget itself.

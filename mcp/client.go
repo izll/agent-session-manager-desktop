@@ -12,6 +12,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode/utf8"
 
 	"asmgr-desktop/session"
 )
@@ -687,11 +688,50 @@ func GetToolResultText(result *ToolCallResult) string {
 		return ""
 	}
 
-	text := ""
+	var text strings.Builder
 	for _, block := range result.Content {
 		if block.Type == "text" {
-			text += block.Text
+			text.WriteString(block.Text)
 		}
 	}
-	return text
+	return text.String()
+}
+
+const maxToolErrorTextBytes = 4 << 10
+
+// GetToolResultErrorText bounds provider-controlled diagnostics before they
+// become a Wails error. A single MCP message is intentionally allowed to be
+// much larger for successful task payloads, but reflecting that entire body
+// through an error path can allocate and serialize megabytes for no benefit.
+func GetToolResultErrorText(result *ToolCallResult) string {
+	if result == nil {
+		return ""
+	}
+	var text strings.Builder
+	remaining := maxToolErrorTextBytes
+	truncated := false
+	for _, block := range result.Content {
+		if block.Type != "text" || remaining == 0 {
+			if block.Type == "text" && block.Text != "" {
+				truncated = true
+			}
+			continue
+		}
+		if len(block.Text) <= remaining {
+			text.WriteString(block.Text)
+			remaining -= len(block.Text)
+			continue
+		}
+		prefix := block.Text[:remaining]
+		for prefix != "" && !utf8.ValidString(prefix) {
+			prefix = prefix[:len(prefix)-1]
+		}
+		text.WriteString(prefix)
+		remaining = 0
+		truncated = true
+	}
+	if truncated {
+		text.WriteString("… [provider error truncated]")
+	}
+	return text.String()
 }

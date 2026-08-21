@@ -4,6 +4,7 @@
   import Select from '../common/Select.svelte';
   import ConfirmDialog from './ConfirmDialog.svelte';
   import { t } from '../../i18n';
+  import { autoFocusDialog } from '../../utils/dialogActions';
 
   export let show = false;
 
@@ -301,12 +302,12 @@
     close();
   }
 
-  function autoFocus(node: HTMLElement) {
-    node.focus();
-  }
-
   function focusInput(node: HTMLInputElement) {
-    requestAnimationFrame(() => node.focus());
+    const frame = requestAnimationFrame(() => {
+      const dialog = node.closest('[role="dialog"]');
+      if (!dialog?.contains(document.activeElement)) node.focus();
+    });
+    return { destroy: () => cancelAnimationFrame(frame) };
   }
 
   // Names for the confirm prompts; kept out of markup so no casts are needed.
@@ -317,7 +318,7 @@
 {#if show}
   <div
     class="dialog-overlay manager-overlay"
-    use:autoFocus
+    use:autoFocusDialog
     tabindex="-1"
     role="dialog"
     aria-modal="true"

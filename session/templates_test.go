@@ -99,7 +99,7 @@ func TestTemplateLibraryRoundTrips(t *testing.T) {
 	// The atomic write must not leave temporary files lying around.
 	entries, _ := os.ReadDir(dir)
 	for _, e := range entries {
-		if e.Name() != "templates.json" {
+		if e.Name() != "templates.json" && e.Name() != "templates.lock" {
 			t.Errorf("unexpected leftover file: %s", e.Name())
 		}
 	}

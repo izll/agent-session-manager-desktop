@@ -74,6 +74,7 @@ func TestPrivilegedPackageProtocolProcess(t *testing.T) {
 		fmt.Fprintln(os.Stdout, privilegedPackageReady)
 		ack := make([]byte, len(privilegedPackageAck))
 		if _, err := io.ReadFull(os.Stdin, ack); err != nil || string(ack) != privilegedPackageAck {
+			_ = os.WriteFile(mutationPath+".cleaned", []byte("cleaned"), 0o600)
 			os.Exit(3)
 		}
 		if err := os.WriteFile(mutationPath, []byte("mutated"), 0o600); err != nil {
@@ -165,6 +166,9 @@ func TestPrivilegedPackageCriticalRejectionSendsNoAcknowledgement(t *testing.T) 
 	if _, statErr := os.Stat(mutationPath); !os.IsNotExist(statErr) {
 		t.Fatalf("rejected package transaction mutated the system: %v", statErr)
 	}
+	if _, statErr := os.Stat(mutationPath + ".cleaned"); statErr != nil {
+		t.Fatalf("rejected prepared helper did not get a graceful cleanup opportunity: %v", statErr)
+	}
 }
 
 func TestStageVerifiedPackageCopiesToPrivateRoot(t *testing.T) {
@@ -206,6 +210,43 @@ func TestStageVerifiedPackageCopiesToPrivateRoot(t *testing.T) {
 	}
 	if got := fileInfo.Mode().Perm(); got != 0o600 {
 		t.Fatalf("staged package mode %o, want 600", got)
+	}
+}
+
+func TestPrivilegedPackageCleanupRequiresExactOldOwnedMarker(t *testing.T) {
+	content := []byte("verified package bytes")
+	source := filepath.Join(t.TempDir(), "update.deb")
+	if err := os.WriteFile(source, content, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	owned, _, err := stageVerifiedPackage(source, packageChecksum(content), "deb")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(owned)
+	old := time.Now().Add(-stageCleanupAge - time.Hour)
+	if err := os.Chtimes(filepath.Join(owned, privilegedPackageStageMarker), old, old); err != nil {
+		t.Fatal(err)
+	}
+
+	unowned, err := os.MkdirTemp(privilegedPackageTempRoot, "asmgr-package-install-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(unowned)
+	if err := os.WriteFile(filepath.Join(unowned, privilegedPackageStageMarker), []byte("not ours\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(filepath.Join(unowned, privilegedPackageStageMarker), old, old); err != nil {
+		t.Fatal(err)
+	}
+
+	cleanStalePrivilegedPackageStages()
+	if _, err := os.Stat(owned); !os.IsNotExist(err) {
+		t.Fatalf("old owned privileged stage survived cleanup: %v", err)
+	}
+	if _, err := os.Stat(unowned); err != nil {
+		t.Fatalf("unowned privileged stage was removed: %v", err)
 	}
 }
 

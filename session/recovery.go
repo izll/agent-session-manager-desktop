@@ -1,6 +1,7 @@
 package session
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -170,7 +171,7 @@ func (s *Storage) createBackupLocked(data *StorageData, skipIfUnchanged bool) er
 	if skipIfUnchanged && len(existing) > 0 {
 		latest := existing[len(existing)-1]
 		if !latest.IsDir() {
-			if previous, readErr := os.ReadFile(filepath.Join(dir, latest.Name())); readErr == nil && string(previous) == string(raw) {
+			if backupFileMatches(filepath.Join(dir, latest.Name()), raw, maxCanonicalStorageBytes) {
 				return nil
 			}
 		}
@@ -188,6 +189,11 @@ func (s *Storage) createBackupLocked(data *StorageData, skipIfUnchanged bool) er
 		return err
 	}
 	return pruneBackupDir(dir)
+}
+
+func backupFileMatches(path string, expected []byte, limit int64) bool {
+	previous, err := readFileAtMost(path, limit)
+	return err == nil && bytes.Equal(previous, expected)
 }
 
 func backupJSONEntries(entries []os.DirEntry) []os.DirEntry {
@@ -296,7 +302,7 @@ func (s *Storage) createProjectsBackupLocked(data *ProjectsData) error {
 	if len(entries) > 0 {
 		latest := entries[len(entries)-1]
 		if !latest.IsDir() {
-			if previous, readErr := os.ReadFile(filepath.Join(dir, latest.Name())); readErr == nil && string(previous) == string(raw) {
+			if backupFileMatches(filepath.Join(dir, latest.Name()), raw, maxProjectCatalogBytes) {
 				return nil
 			}
 		}

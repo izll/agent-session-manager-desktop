@@ -413,6 +413,89 @@ test('sidebar session deletion requires confirmation and waits for unsaved edito
   await expect.poll(() => page.evaluate(() => window.sessionDeleteFixture.deleted())).toEqual(['delete-target']);
 });
 
+test('a session delete lookup cannot open or delete in a replacement project', async ({ page }) => {
+  await page.goto('/tests/browser/session-delete-fixture.html');
+  await page.evaluate(() => window.sessionDeleteFixture.deferTaskLookup());
+  await page.locator('.session-item').click({ button: 'right' });
+  await page.getByRole('button', { name: 'Delete', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.sessionDeleteFixture.taskLookupPending())).toBe(true);
+
+  await page.evaluate(() => window.sessionDeleteFixture.switchProject('project-b'));
+  await page.evaluate(() => window.sessionDeleteFixture.resolveTaskLookup());
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  expect(await page.evaluate(() => window.sessionDeleteFixture.deleted())).toEqual([]);
+});
+
+test('group bulk stop aborts before a same-id replacement project session', async ({ page }) => {
+  await page.goto('/tests/browser/group-project-fixture.html');
+  await page.locator('.group-header').click({ button: 'right' });
+  await page.getByRole('button', { name: /Stop all|Összes leállítása/ }).click();
+  await expect.poll(() => page.evaluate(() => window.groupProjectFixture.stopCalls())).toEqual(['session-1']);
+
+  await page.evaluate(() => window.groupProjectFixture.switchProject('project-b'));
+  await page.evaluate(() => window.groupProjectFixture.resolveFirstStop());
+  await page.waitForTimeout(50);
+  expect(await page.evaluate(() => window.groupProjectFixture.stopCalls())).toEqual(['session-1']);
+
+  await page.locator('.group-header').click({ button: 'right' });
+  await expect(page.locator('.context-menu')).toBeVisible();
+  await page.evaluate(() => window.groupProjectFixture.switchProject('project-c'));
+  await expect(page.locator('.context-menu')).toHaveCount(0);
+});
+
+test('a native session drag payload cannot mutate a replacement project', async ({ page }) => {
+  await page.goto('/tests/browser/group-project-fixture.html');
+  await page.evaluate(() => window.groupProjectFixture.staleSessionDrop());
+  expect(await page.evaluate(() => window.groupProjectFixture.assignCalls())).toEqual([]);
+});
+
+test('new-session creation cannot continue its start step after project replacement', async ({ page }) => {
+  await gotoDialogRacesFixture(page, 'newsession');
+  await page.locator('#path').fill('/repo-a/new-session');
+  await page.locator('#name').fill('created in A');
+  await page.getByRole('button', { name: /Create Session|Munkamenet létrehozása/ }).click();
+  await expect.poll(() => page.evaluate(() => window.dialogRacesFixture.createSessionPending())).toBe(true);
+
+  await page.evaluate(() => window.dialogRacesFixture.switchRecoveryProject('project-b'));
+  await page.evaluate(() => window.dialogRacesFixture.resolveCreateSession());
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  expect(await page.evaluate(() => window.dialogRacesFixture.startSessionCalls())).toEqual([]);
+});
+
+test('project-scoped creation and attach dialogs close instead of rebinding their draft', async ({ page }) => {
+  await gotoDialogRacesFixture(page, 'newgroup');
+  await page.locator('#group-name').fill('Project A draft');
+  await page.evaluate(() => window.dialogRacesFixture.switchProject('project-b'));
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  expect(await page.evaluate(() => window.dialogRacesFixture.createGroupCalls())).toEqual([]);
+
+  await gotoDialogRacesFixture(page, 'bgagents');
+  await expect(page.getByRole('dialog')).toBeVisible();
+  await page.evaluate(() => window.dialogRacesFixture.switchProject('project-b'));
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+});
+
+test('a fork draft closes when its project identity is replaced', async ({ page }) => {
+  await gotoDialogRacesFixture(page, 'fork');
+  await page.locator('#fork-name').fill('Project A branch');
+  await page.evaluate(() => window.dialogRacesFixture.switchProject('project-b'));
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  expect(await page.evaluate(() => window.dialogRacesFixture.forkCalls())).toEqual([]);
+});
+
+test('command dialogs and template manager trap keyboard focus inside their forms', async ({ page }) => {
+  for (const mode of ['commandmanager', 'template', 'command', 'palette']) {
+    await gotoDialogRacesFixture(page, mode);
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
+    const controls = dialog.locator('button:not([disabled]), input:not([disabled]), textarea:not([disabled])');
+    const last = controls.last();
+    await last.focus();
+    await page.keyboard.press('Tab');
+    await expect.poll(() => dialog.evaluate((node) => node.contains(document.activeElement))).toBe(true);
+  }
+});
+
 test('clearing GlobalSearch invalidates an in-flight result and clears its spinner', async ({ page }) => {
   await gotoDialogRacesFixture(page, 'global');
   const input = page.locator('.search-input');

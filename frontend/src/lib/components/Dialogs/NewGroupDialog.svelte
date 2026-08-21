@@ -1,7 +1,9 @@
 <script lang="ts">
   import { autoFocusDialog, dialogEnterBelongsToControl } from '../../utils/dialogActions';
   import { createEventDispatcher } from 'svelte';
+  import { get } from 'svelte/store';
   import { createGroup } from '../../stores/sessions';
+  import { activeProjectId } from '../../stores/projects';
   import { t } from '../../i18n';
 
   export let show = false;
@@ -13,6 +15,8 @@
   let error = '';
   let lastShow = false;
   let operationGeneration = 0;
+  let dialogProjectId = '';
+  let hasDialogProject = false;
 
   // Reset form only when dialog transitions from hidden to shown
   // Assign lastShow inside the same block: a separate `$: lastShow = show`
@@ -20,12 +24,17 @@
   $: {
     if (show && !lastShow) {
       operationGeneration++;
+      dialogProjectId = get(activeProjectId);
+      hasDialogProject = true;
       groupName = '';
       error = '';
       loading = false;
     }
     lastShow = show;
   }
+
+  // A group name drafted for project A must never turn into a group in B.
+  $: if (show && hasDialogProject && $activeProjectId !== dialogProjectId) close();
 
   function close() {
     operationGeneration++;
@@ -46,13 +55,14 @@
     if (!groupName.trim() || loading) return;
 
     const generation = operationGeneration;
+    const targetProjectId = dialogProjectId;
     const submittedName = groupName.trim();
     loading = true;
     error = '';
 
     try {
       await createGroup(submittedName);
-      if (!show || generation !== operationGeneration) return;
+      if (!show || generation !== operationGeneration || targetProjectId !== get(activeProjectId)) return;
       close();
     } catch (e) {
       if (!show || generation !== operationGeneration) return;

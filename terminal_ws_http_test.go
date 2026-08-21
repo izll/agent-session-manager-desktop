@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -42,5 +44,34 @@ func TestTerminalRejectsMissingTmuxSessionBeforeWebSocketUpgrade(t *testing.T) {
 	}
 	if err == nil || response == nil || response.StatusCode != 404 {
 		t.Fatalf("dial error/status = %v/%v, want HTTP 404 before upgrade", err, response)
+	}
+}
+
+func TestTerminalWebsocketRejectsOversizedInputFrame(t *testing.T) {
+	readErr := make(chan error, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			readErr <- err
+			return
+		}
+		defer conn.Close()
+		configureTerminalWebsocket(conn)
+		_, _, err = conn.ReadMessage()
+		readErr <- err
+	}))
+	defer server.Close()
+
+	endpoint := "ws" + strings.TrimPrefix(server.URL, "http")
+	conn, _, err := websocket.DefaultDialer.Dial(endpoint, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	if err := conn.WriteMessage(websocket.BinaryMessage, bytes.Repeat([]byte{'x'}, terminalWSReadLimit+1)); err != nil {
+		t.Fatal(err)
+	}
+	if err := <-readErr; !errors.Is(err, websocket.ErrReadLimit) {
+		t.Fatalf("oversized terminal frame read error = %v, want ErrReadLimit", err)
 	}
 }

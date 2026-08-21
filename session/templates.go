@@ -10,6 +10,11 @@ import (
 	"time"
 )
 
+const (
+	templateLibraryMaxBytes = 16 << 20
+	templateLibraryMaxItems = 1000
+)
+
 // Session templates: a saved arrangement — the main window's agent plus the
 // tabs that usually sit beside it — that creates a whole set-up in one step.
 //
@@ -170,7 +175,7 @@ func (s *Storage) LoadTemplates() (*TemplateLibrary, error) {
 }
 
 func (s *Storage) loadTemplatesLocked() (*TemplateLibrary, error) {
-	data, err := os.ReadFile(s.templatesPath())
+	data, err := readFileAtMost(s.templatesPath(), templateLibraryMaxBytes)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return &TemplateLibrary{}, nil
@@ -181,7 +186,37 @@ func (s *Storage) loadTemplatesLocked() (*TemplateLibrary, error) {
 	if err := json.Unmarshal(data, &lib); err != nil {
 		return nil, fmt.Errorf("the session templates file is unreadable: %w", err)
 	}
+	if err := validateTemplateLibrary(&lib); err != nil {
+		return nil, fmt.Errorf("the session templates file is invalid: %w", err)
+	}
 	return &lib, nil
+}
+
+func validateTemplateLibrary(lib *TemplateLibrary) error {
+	if lib == nil {
+		return nil
+	}
+	if len(lib.Templates) > templateLibraryMaxItems {
+		return fmt.Errorf("library exceeds the template limit")
+	}
+	ids := make(map[string]struct{}, len(lib.Templates))
+	for index := range lib.Templates {
+		template := &lib.Templates[index]
+		if strings.TrimSpace(template.ID) == "" {
+			return fmt.Errorf("template %d has an empty ID", index)
+		}
+		if _, duplicate := ids[template.ID]; duplicate {
+			return fmt.Errorf("duplicate template ID %q", template.ID)
+		}
+		if err := template.Validate(); err != nil {
+			return fmt.Errorf("template %q is invalid: %w", template.ID, err)
+		}
+		if len(template.Session.Tabs) > portableTabsPerSession {
+			return fmt.Errorf("template %q has too many tabs", template.ID)
+		}
+		ids[template.ID] = struct{}{}
+	}
+	return nil
 }
 
 // SaveTemplates writes the library, replacing the file atomically so a failed
@@ -189,12 +224,17 @@ func (s *Storage) loadTemplatesLocked() (*TemplateLibrary, error) {
 func (s *Storage) SaveTemplates(lib *TemplateLibrary) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.saveTemplatesLocked(lib)
+	return withCrossProcessFileLock(filepath.Join(s.configDir, "templates.lock"), func() error {
+		return s.saveTemplatesLocked(lib)
+	})
 }
 
 func (s *Storage) saveTemplatesLocked(lib *TemplateLibrary) error {
 	if lib == nil {
 		lib = &TemplateLibrary{}
+	}
+	if err := validateTemplateLibrary(lib); err != nil {
+		return err
 	}
 	data, err := json.MarshalIndent(lib, "", "  ")
 	if err != nil {

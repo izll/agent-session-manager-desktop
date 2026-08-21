@@ -1,11 +1,13 @@
 <script lang="ts">
   import { onDestroy } from 'svelte';
+  import { get } from 'svelte/store';
   import * as App from '../../../../wailsjs/go/main/App';
   import { loadSessions, selectSession, selectWindow, sessions, groups } from '../../stores/sessions';
   import { focusTerminal } from '../../utils/focus';
   import Select from '../common/Select.svelte';
   import { t } from '../../i18n';
   import { autoFocusDialog } from '../../utils/dialogActions';
+  import { activeProjectId } from '../../stores/projects';
 
   export let show = false;
 
@@ -30,8 +32,23 @@
   let logsGeneration = 0;
   let attachGeneration = 0;
   let attaching = false;
+  let dialogProjectId = '';
+  let hasDialogProject = false;
 
-  $: if (show) startPolling(); else stopPolling();
+  $: {
+    if (show) {
+      if (!hasDialogProject) {
+        dialogProjectId = get(activeProjectId);
+        hasDialogProject = true;
+      } else if ($activeProjectId !== dialogProjectId) {
+        close();
+      }
+      if (show) startPolling();
+    } else {
+      hasDialogProject = false;
+      stopPolling();
+    }
+  }
 
   function startPolling() {
     if (pollTimer) return;
@@ -165,27 +182,31 @@
     const mode = attachMode;
     const targetSessionId = attachSessionId;
     const targetGroupId = attachGroupId;
+    const targetProjectId = dialogProjectId;
     const generation = ++attachGeneration;
     attaching = true;
     try {
       if (mode === 'tab' && targetSessionId) {
         const winIdx = await App.AttachBackgroundAgentAsTab(targetSessionId, agent.id, agent.name);
         await loadSessions();
-        if (!show || generation !== attachGeneration || attachFor?.id !== agent.id) return;
+        if (!show || generation !== attachGeneration || attachFor?.id !== agent.id ||
+            targetProjectId !== get(activeProjectId)) return;
         close();
         selectSession(targetSessionId);
         if (typeof winIdx === 'number' && winIdx >= 0) selectWindow(winIdx);
       } else {
         const sessionId = await App.AttachBackgroundAgent(agent.id, agent.cwd, agent.name, targetGroupId);
         await loadSessions();
-        if (!show || generation !== attachGeneration || attachFor?.id !== agent.id) return;
+        if (!show || generation !== attachGeneration || attachFor?.id !== agent.id ||
+            targetProjectId !== get(activeProjectId)) return;
         close();
         selectSession(sessionId);
       }
       attachFor = null;
       requestAnimationFrame(() => requestAnimationFrame(focusTerminal));
     } catch (e) {
-      if (!show || generation !== attachGeneration || attachFor?.id !== agent.id) return;
+      if (!show || generation !== attachGeneration || attachFor?.id !== agent.id ||
+          targetProjectId !== get(activeProjectId)) return;
       error = String(e);
     } finally {
       if (generation === attachGeneration) attaching = false;

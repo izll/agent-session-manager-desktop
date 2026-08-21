@@ -180,7 +180,10 @@ export async function createSession(name: string, path: string, agent: string, a
   const target = projectTarget();
   try {
     const session = await App.CreateSession(name, path, agent, autoYes, extraArgs);
-    if (!projectTargetIsCurrent(target)) return session;
+    // The session was durably created in the project that owned the bridge
+    // call, but callers must not continue a multi-step create/assign/start
+    // workflow in the replacement project using the same generated id.
+    if (!projectTargetIsCurrent(target)) return;
     if (session) {
       sessions.update(s => [...s, session as Session]);
       selectedSessionId.set(session.id);

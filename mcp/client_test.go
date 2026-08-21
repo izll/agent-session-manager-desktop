@@ -10,6 +10,7 @@ import (
 	"sync"
 	"testing"
 	"time"
+	"unicode/utf8"
 )
 
 func TestStartContextAlreadyCancelledDoesNotStartProcess(t *testing.T) {
@@ -175,6 +176,32 @@ func TestStaleRunCannotWriteToReplacementProcess(t *testing.T) {
 	}
 	if got := w.Writer.(*bytes.Buffer).Len(); got != 0 {
 		t.Fatalf("stale process wrote %d bytes to the replacement server", got)
+	}
+}
+
+func TestToolResultTextJoinsBlocksAndBoundsErrors(t *testing.T) {
+	result := &ToolCallResult{Content: []ContentBlock{
+		{Type: "image", Text: "ignored"},
+		{Type: "text", Text: "first"},
+		{Type: "text", Text: "second"},
+	}}
+	if got := GetToolResultText(result); got != "firstsecond" {
+		t.Fatalf("joined result = %q", got)
+	}
+
+	result.Content = []ContentBlock{
+		{Type: "text", Text: strings.Repeat("x", maxToolErrorTextBytes-1) + "é"},
+		{Type: "text", Text: strings.Repeat("y", maxToolErrorTextBytes)},
+	}
+	got := GetToolResultErrorText(result)
+	if !strings.HasSuffix(got, "[provider error truncated]") {
+		t.Fatalf("oversized provider error was not marked truncated: %q", got[len(got)-64:])
+	}
+	if !utf8.ValidString(got) {
+		t.Fatal("provider error truncation split a UTF-8 sequence")
+	}
+	if len(got) > maxToolErrorTextBytes+64 {
+		t.Fatalf("provider error result is still oversized: %d bytes", len(got))
 	}
 }
 

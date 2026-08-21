@@ -80,7 +80,7 @@ func (sr *StreamingRecognizer) reportStreamFailure(err error) {
 			title, message = "api_key_invalid_title", "api_key_invalid_message"
 		}
 	}
-	go callback(title, message)
+	sr.app.runAsync(func() { callback(title, message) })
 }
 
 // mentionsAPIKey reports whether a failure is about the credentials rather

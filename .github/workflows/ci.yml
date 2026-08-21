@@ -88,9 +88,13 @@ jobs:
       - name: Verify generated Wails bindings are committed
         run: |
           # Wails' models template emits whitespace-only tab lines. Normalise
-          # that generator quirk exactly as the repository does, then require
-          # every semantic binding/runtime change to be checked in.
+          # that generator quirk exactly as the repository does. Wails 2.14
+          # also chmods generated Go binding files to 0755 on Linux even though
+          # they are source files committed as 0644; normalize that deterministic
+          # generator side effect before requiring every semantic binding/runtime
+          # change to be checked in.
           perl -0pi -e 's/[ \t]+(?=\n)//g; s/\n+\z/\n/' frontend/wailsjs/go/models.ts
+          find frontend/wailsjs -type f -exec chmod 0644 {} +
           git diff --exit-code -- frontend/wailsjs
 
   # The Go suite had never run on macOS, and the first time it did it found a

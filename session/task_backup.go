@@ -58,6 +58,10 @@ func taskFileFor(dir string) string {
 //
 // A directory with no task file is not an error; most have none.
 func CollectTaskFiles(dirs []string) TaskBackupSet {
+	return collectTaskFilesAtMost(dirs, maxCanonicalStorageBytes)
+}
+
+func collectTaskFilesAtMost(dirs []string, limit int64) TaskBackupSet {
 	set := TaskBackupSet{CreatedAt: time.Now().UTC()}
 
 	seen := map[string]bool{}
@@ -67,7 +71,7 @@ func CollectTaskFiles(dirs []string) TaskBackupSet {
 		}
 		seen[dir] = true
 
-		content, err := os.ReadFile(taskFileFor(dir))
+		content, err := readFileAtMost(taskFileFor(dir), limit)
 		if err != nil {
 			continue
 		}
@@ -173,7 +177,7 @@ func latestTaskBackupMatches(dir string, comparable []byte) (bool, error) {
 	}
 	sort.Slice(files, func(i, j int) bool { return files[i].Name() < files[j].Name() })
 
-	previous, err := os.ReadFile(filepath.Join(dir, files[len(files)-1].Name()))
+	previous, err := readFileAtMost(filepath.Join(dir, files[len(files)-1].Name()), maxCanonicalStorageBytes)
 	if err != nil {
 		return false, err
 	}
@@ -342,7 +346,7 @@ func restoreTaskTargets(targets []*taskRestoreTarget, replace func(string, strin
 			case err == nil && !info.Mode().IsRegular():
 				return fmt.Errorf("task restore target is not a regular file: %s", target.path)
 			case err == nil:
-				target.original, err = os.ReadFile(target.path)
+				target.original, err = readFileAtMost(target.path, maxCanonicalStorageBytes)
 				if err != nil {
 					return err
 				}

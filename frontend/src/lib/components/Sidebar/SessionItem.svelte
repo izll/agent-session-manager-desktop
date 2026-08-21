@@ -1,5 +1,6 @@
 <script lang="ts">
   import { createEventDispatcher, onMount, onDestroy, tick } from 'svelte';
+  import { get } from 'svelte/store';
   import { portal } from '../../utils/portal';
   import { menuPosition } from '../../utils/menuPosition';
   import { claimMenu, releaseMenu } from '../../utils/openMenu';
@@ -15,6 +16,7 @@
   import { focusTerminal } from '../../utils/focus';
   import type { TabStatusInfo } from '../../stores/statusLines';
   import { afterUnsavedChanges } from '../../stores/unsavedChanges';
+  import { activeProjectId } from '../../stores/projects';
   import { UnfinishedTasksForSession } from '../../../../wailsjs/go/main/App';
   import {
     getGradientCSS,
@@ -45,7 +47,7 @@
   let contextMenuX = 0;
   let contextMenuY = 0;
   let showDeleteConfirm = false;
-  let deleteTarget: { id: string; name: string; generation: number } | null = null;
+  let deleteTarget: { projectId: string; id: string; name: string; generation: number } | null = null;
   let deleteGeneration = 0;
   let pendingTasks: { title: string }[] = [];
 
@@ -53,6 +55,9 @@
   let isRenaming = false;
   let renameValue = '';
   let renameInput: HTMLInputElement;
+  let renameTarget: { projectId: string; id: string; name: string } | null = null;
+  let uiProjectId = '';
+  let hasUIProject = false;
 
   $: isSelected = $selectedSessionId === session.id;
   $: sessionStatus = session.status as 'running' | 'paused' | 'stopped';
@@ -86,6 +91,27 @@
   let isDragging = false;
   let isDragOver = false;
 
+  // Session ids are unique only inside a project, and keyed rows can be reused
+  // for a same-id session after switching. Never carry A's menu/modal/editor
+  // into B, where its next click could mutate or delete the replacement row.
+  $: if (!hasUIProject) {
+    hasUIProject = true;
+    uiProjectId = $activeProjectId;
+  } else if (uiProjectId !== $activeProjectId) {
+    uiProjectId = $activeProjectId;
+    closeContextMenu();
+    deleteGeneration++;
+    deleteTarget = null;
+    pendingTasks = [];
+    showDeleteConfirm = false;
+    renameTarget = null;
+    isRenaming = false;
+    showColorDialog = false;
+    showSaveAsTemplate = false;
+    isDragging = false;
+    isDragOver = false;
+  }
+
   function handleContextMenu(e: MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
@@ -112,6 +138,7 @@
   async function startRename() {
     closeContextMenu();
     renameValue = session.name;
+    renameTarget = { projectId: get(activeProjectId), id: session.id, name: session.name };
     isRenaming = true;
     await tick();
     renameInput?.focus();
@@ -119,15 +146,24 @@
   }
 
   async function confirmRename() {
-    const trimmed = renameValue.trim();
-    if (trimmed && trimmed !== session.name) {
-      await renameSession(session.id, trimmed);
+    const target = renameTarget;
+    renameTarget = null;
+    if (!target || target.projectId !== get(activeProjectId) || target.id !== session.id) {
+      isRenaming = false;
+      return;
     }
-    isRenaming = false;
-    focusTerminal();
+    const trimmed = renameValue.trim();
+    if (trimmed && trimmed !== target.name) {
+      await renameSession(target.id, trimmed);
+    }
+    if (target.projectId === get(activeProjectId) && target.id === session.id) {
+      isRenaming = false;
+      focusTerminal();
+    }
   }
 
   function cancelRename() {
+    renameTarget = null;
     isRenaming = false;
     focusTerminal();
   }
@@ -146,14 +182,14 @@
   async function handleDelete() {
     closeContextMenu();
     const generation = ++deleteGeneration;
-    const target = { id: session.id, name: session.name, generation };
+    const target = { projectId: get(activeProjectId), id: session.id, name: session.name, generation };
     deleteTarget = target;
     try {
       const tasks = await UnfinishedTasksForSession(target.id);
-      if (deleteTarget?.generation !== generation) return;
+      if (deleteTarget?.generation !== generation || target.projectId !== get(activeProjectId)) return;
       pendingTasks = tasks || [];
     } catch {
-      if (deleteTarget?.generation !== generation) return;
+      if (deleteTarget?.generation !== generation || target.projectId !== get(activeProjectId)) return;
       pendingTasks = [];
     }
     showDeleteConfirm = true;
@@ -162,7 +198,7 @@
   function confirmDelete() {
     const target = deleteTarget;
     deleteTarget = null;
-    if (!target || target.generation !== deleteGeneration) return;
+    if (!target || target.generation !== deleteGeneration || target.projectId !== get(activeProjectId)) return;
     afterUnsavedChanges(() => { void deleteSession(target.id); });
   }
 
@@ -216,7 +252,11 @@
   function handleDragStart(e: DragEvent) {
     if (!e.dataTransfer) return;
     e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', JSON.stringify({ id: session.id, index }));
+    e.dataTransfer.setData('text/plain', JSON.stringify({
+      id: session.id,
+      index,
+      projectId: get(activeProjectId),
+    }));
     isDragging = true;
   }
 
@@ -243,8 +283,8 @@
 
     try {
       const data = JSON.parse(e.dataTransfer.getData('text/plain'));
-      if (data.id && data.id !== session.id) {
-        dispatch('drop', { sourceId: data.id, targetIndex: index });
+      if (data.projectId === get(activeProjectId) && data.id && data.id !== session.id) {
+        dispatch('drop', { sourceId: data.id, targetIndex: index, projectId: data.projectId });
       }
     } catch {
       // Invalid drop data

@@ -2,12 +2,17 @@ import { mount } from 'svelte';
 import SessionItem from '../../src/lib/components/Sidebar/SessionItem.svelte';
 import { sessions, selectedSessionId, type Session } from '../../src/lib/stores/sessions';
 import { registerUnsavedGuard } from '../../src/lib/stores/unsavedChanges';
+import { activeProjectId } from '../../src/lib/stores/projects';
 
 const deleted: string[] = [];
 let approveDiscard: (() => void) | null = null;
+let deferTaskLookup = false;
+let resolveTaskLookup: ((value: { title: string }[]) => void) | null = null;
 
 const backend = new Proxy({
-  UnfinishedTasksForSession: async () => [{ title: 'unfinished fixture task' }],
+  UnfinishedTasksForSession: () => deferTaskLookup
+    ? new Promise<{ title: string }[]>((resolve) => { resolveTaskLookup = resolve; })
+    : Promise.resolve([{ title: 'unfinished fixture task' }]),
   DeleteSession: async (id: string) => { deleted.push(id); },
 }, {
   get(target, key) {
@@ -29,6 +34,7 @@ const session: Session = {
 
 sessions.set([session]);
 selectedSessionId.set(session.id);
+activeProjectId.set('project-a');
 registerUnsavedGuard({
   isDirty: () => true,
   requestDiscard: (continuation) => { approveDiscard = continuation; },
@@ -41,6 +47,14 @@ registerUnsavedGuard({
     const continuation = approveDiscard;
     approveDiscard = null;
     continuation?.();
+  },
+  deferTaskLookup: () => { deferTaskLookup = true; },
+  taskLookupPending: () => !!resolveTaskLookup,
+  switchProject: (id: string) => activeProjectId.set(id),
+  resolveTaskLookup: () => {
+    const resolve = resolveTaskLookup;
+    resolveTaskLookup = null;
+    resolve?.([{ title: 'stale project task' }]);
   },
 };
 

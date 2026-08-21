@@ -335,8 +335,11 @@
 
   // Auto-close overlay when session selection changes
   let prevSelectedId = $selectedSessionId;
-  $: if (sidebarOverlayOpen && $selectedSessionId !== prevSelectedId) {
-    sidebarOverlayOpen = false;
+  $: if ($selectedSessionId !== prevSelectedId) {
+    // Keep the snapshot current even while the overlay is closed. Otherwise
+    // a keyboard/palette session change makes the next hamburger click look
+    // like the change itself and the freshly-opened sidebar closes at once.
+    if (sidebarOverlayOpen) sidebarOverlayOpen = false;
     prevSelectedId = $selectedSessionId;
   }
 

@@ -8,7 +8,6 @@ import (
 	"log"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"time"
 )
 
@@ -163,7 +162,7 @@ func (tm *TaskMaster) InitializeProject(skipInstall bool) error {
 	}
 
 	if result.IsError {
-		return fmt.Errorf("initialize failed: %s", GetToolResultText(result))
+		return fmt.Errorf("initialize failed: %s", GetToolResultErrorText(result))
 	}
 
 	return nil
@@ -188,7 +187,7 @@ func (tm *TaskMaster) ParsePRD(prdPath string, numTasks int, force bool) error {
 	}
 
 	if result.IsError {
-		return fmt.Errorf("parse_prd failed: %s", GetToolResultText(result))
+		return fmt.Errorf("parse_prd failed: %s", GetToolResultErrorText(result))
 	}
 
 	return nil
@@ -212,7 +211,7 @@ func (tm *TaskMaster) GetTasks(status string, withSubtasks bool) (*TasksResponse
 	}
 
 	if result.IsError {
-		return nil, fmt.Errorf("get_tasks failed: %s", GetToolResultText(result))
+		return nil, fmt.Errorf("get_tasks failed: %s", GetToolResultErrorText(result))
 	}
 
 	text := GetToolResultText(result)
@@ -256,16 +255,16 @@ func (tm *TaskMaster) GetTask(taskID string) (*Task, error) {
 	}
 
 	if result.IsError {
-		return nil, fmt.Errorf("get_task failed: %s", GetToolResultText(result))
+		return nil, fmt.Errorf("get_task failed: %s", GetToolResultErrorText(result))
 	}
 
 	text := GetToolResultText(result)
 
-	// Parse into generic map first to handle numeric IDs and various formats
-	var raw map[string]interface{}
-	decoder := json.NewDecoder(strings.NewReader(text))
-	decoder.UseNumber()
-	if err := decoder.Decode(&raw); err != nil {
+	// Parse into generic map first to handle numeric IDs and various formats.
+	// Reject trailing values so a provider cannot smuggle an unrelated task
+	// behind the object we act on.
+	raw, err := decodeTaskMasterObject([]byte(text))
+	if err != nil {
 		return nil, fmt.Errorf("failed to parse task response: %w", err)
 	}
 
@@ -434,7 +433,7 @@ func (tm *TaskMaster) NextTask() (*Task, error) {
 	}
 
 	if result.IsError {
-		return nil, fmt.Errorf("next_task failed: %s", GetToolResultText(result))
+		return nil, fmt.Errorf("next_task failed: %s", GetToolResultErrorText(result))
 	}
 
 	text := GetToolResultText(result)
@@ -490,7 +489,7 @@ func (tm *TaskMaster) SetTaskStatus(taskID, status string) error {
 	}
 
 	if result.IsError {
-		return fmt.Errorf("set_task_status failed: %s", GetToolResultText(result))
+		return fmt.Errorf("set_task_status failed: %s", GetToolResultErrorText(result))
 	}
 
 	return nil
@@ -518,7 +517,7 @@ func (tm *TaskMaster) AddTask(prompt string, research bool, priority string, dep
 	}
 
 	if result.IsError {
-		return nil, fmt.Errorf("add_task failed: %s", GetToolResultText(result))
+		return nil, fmt.Errorf("add_task failed: %s", GetToolResultErrorText(result))
 	}
 
 	text := GetToolResultText(result)
@@ -569,7 +568,7 @@ func (tm *TaskMaster) AddManualTask(title, description, details, priority string
 	}
 
 	if result.IsError {
-		return nil, fmt.Errorf("add_task failed: %s", GetToolResultText(result))
+		return nil, fmt.Errorf("add_task failed: %s", GetToolResultErrorText(result))
 	}
 
 	text := GetToolResultText(result)
@@ -610,7 +609,7 @@ func (tm *TaskMaster) UpdateTask(taskID, prompt string, research bool) error {
 	}
 
 	if result.IsError {
-		return fmt.Errorf("update_task failed: %s", GetToolResultText(result))
+		return fmt.Errorf("update_task failed: %s", GetToolResultErrorText(result))
 	}
 
 	return nil
@@ -630,7 +629,7 @@ func (tm *TaskMaster) UpdateSubtask(taskID, prompt string) error {
 	}
 
 	if result.IsError {
-		return fmt.Errorf("update_subtask failed: %s", GetToolResultText(result))
+		return fmt.Errorf("update_subtask failed: %s", GetToolResultErrorText(result))
 	}
 
 	return nil
@@ -658,7 +657,7 @@ func (tm *TaskMaster) ExpandTask(taskID string, research, force bool, numSubtask
 	}
 
 	if result.IsError {
-		return fmt.Errorf("expand_task failed: %s", GetToolResultText(result))
+		return fmt.Errorf("expand_task failed: %s", GetToolResultErrorText(result))
 	}
 
 	return nil
@@ -682,7 +681,7 @@ func (tm *TaskMaster) ExpandAllTasks(research, force bool) error {
 	}
 
 	if result.IsError {
-		return fmt.Errorf("expand_all failed: %s", GetToolResultText(result))
+		return fmt.Errorf("expand_all failed: %s", GetToolResultErrorText(result))
 	}
 
 	return nil
@@ -703,7 +702,7 @@ func (tm *TaskMaster) AnalyzeComplexity(research bool) (*ComplexityReport, error
 	}
 
 	if result.IsError {
-		return nil, fmt.Errorf("analyze_project_complexity failed: %s", GetToolResultText(result))
+		return nil, fmt.Errorf("analyze_project_complexity failed: %s", GetToolResultErrorText(result))
 	}
 
 	text := GetToolResultText(result)
@@ -728,7 +727,7 @@ func (tm *TaskMaster) GetComplexityReport() (*ComplexityReport, error) {
 	}
 
 	if result.IsError {
-		return nil, fmt.Errorf("complexity_report failed: %s", GetToolResultText(result))
+		return nil, fmt.Errorf("complexity_report failed: %s", GetToolResultErrorText(result))
 	}
 
 	text := GetToolResultText(result)
@@ -754,7 +753,7 @@ func (tm *TaskMaster) AddDependency(taskID, dependsOnID string) error {
 	}
 
 	if result.IsError {
-		return fmt.Errorf("add_dependency failed: %s", GetToolResultText(result))
+		return fmt.Errorf("add_dependency failed: %s", GetToolResultErrorText(result))
 	}
 
 	return nil
@@ -774,7 +773,7 @@ func (tm *TaskMaster) RemoveDependency(taskID, dependsOnID string) error {
 	}
 
 	if result.IsError {
-		return fmt.Errorf("remove_dependency failed: %s", GetToolResultText(result))
+		return fmt.Errorf("remove_dependency failed: %s", GetToolResultErrorText(result))
 	}
 
 	return nil
@@ -792,7 +791,7 @@ func (tm *TaskMaster) ValidateDependencies() (string, error) {
 	}
 
 	if result.IsError {
-		return "", fmt.Errorf("validate_dependencies failed: %s", GetToolResultText(result))
+		return "", fmt.Errorf("validate_dependencies failed: %s", GetToolResultErrorText(result))
 	}
 
 	return GetToolResultText(result), nil
@@ -811,7 +810,7 @@ func (tm *TaskMaster) RemoveTask(taskID string) error {
 	}
 
 	if result.IsError {
-		return fmt.Errorf("remove_task failed: %s", GetToolResultText(result))
+		return fmt.Errorf("remove_task failed: %s", GetToolResultErrorText(result))
 	}
 
 	return nil
@@ -829,7 +828,7 @@ func (tm *TaskMaster) Generate() error {
 	}
 
 	if result.IsError {
-		return fmt.Errorf("generate failed: %s", GetToolResultText(result))
+		return fmt.Errorf("generate failed: %s", GetToolResultErrorText(result))
 	}
 
 	return nil
@@ -852,7 +851,7 @@ func (tm *TaskMaster) AddSubtask(taskID, title, description string) (*Subtask, e
 	}
 
 	if result.IsError {
-		return nil, fmt.Errorf("add_subtask failed: %s", GetToolResultText(result))
+		return nil, fmt.Errorf("add_subtask failed: %s", GetToolResultErrorText(result))
 	}
 
 	text := GetToolResultText(result)
@@ -877,7 +876,7 @@ func (tm *TaskMaster) RemoveSubtask(subtaskID string) error {
 	}
 
 	if result.IsError {
-		return fmt.Errorf("remove_subtask failed: %s", GetToolResultText(result))
+		return fmt.Errorf("remove_subtask failed: %s", GetToolResultErrorText(result))
 	}
 
 	return nil
@@ -896,7 +895,7 @@ func (tm *TaskMaster) ClearSubtasks(taskID string) error {
 	}
 
 	if result.IsError {
-		return fmt.Errorf("clear_subtasks failed: %s", GetToolResultText(result))
+		return fmt.Errorf("clear_subtasks failed: %s", GetToolResultErrorText(result))
 	}
 
 	return nil
@@ -916,7 +915,7 @@ func (tm *TaskMaster) SetSubtaskStatus(subtaskID, status string) error {
 	}
 
 	if result.IsError {
-		return fmt.Errorf("set_subtask_status failed: %s", GetToolResultText(result))
+		return fmt.Errorf("set_subtask_status failed: %s", GetToolResultErrorText(result))
 	}
 
 	return nil
@@ -961,7 +960,7 @@ func (tm *TaskMaster) UpdateTaskDirect(taskID, title, description, details, prio
 	}
 
 	if result.IsError {
-		return fmt.Errorf("update_task failed: %s", GetToolResultText(result))
+		return fmt.Errorf("update_task failed: %s", GetToolResultErrorText(result))
 	}
 
 	return nil

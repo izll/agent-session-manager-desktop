@@ -197,6 +197,7 @@ jobs:
         with:
           draft: true
           prerelease: ${{ contains(steps.ver.outputs.tag, '-') }}
+          fail_on_unmatched_files: true
           tag_name: ${{ steps.ver.outputs.tag }}
           name: ${{ steps.ver.outputs.tag }}
           body: ${{ steps.notes.outputs.body }}
@@ -410,6 +411,7 @@ jobs:
         with:
           draft: true
           prerelease: ${{ contains(steps.ver.outputs.tag, '-') }}
+          fail_on_unmatched_files: true
           tag_name: ${{ steps.ver.outputs.tag }}
           files: |
             asmgr-desktop_${{ steps.ver.outputs.num }}_darwin_arm64.tar.gz
@@ -585,6 +587,7 @@ jobs:
         with:
           draft: true
           prerelease: ${{ contains(steps.ver.outputs.tag, '-') }}
+          fail_on_unmatched_files: true
           tag_name: ${{ steps.ver.outputs.tag }}
           files: |
             asmgr-desktop_${{ steps.ver.outputs.num }}_windows_amd64.tar.gz

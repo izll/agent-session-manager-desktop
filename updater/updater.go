@@ -1133,25 +1133,30 @@ func cleanStaleUpdateDownloads() {
 func cleanStaleUpdateFilesFor(execPath string) {
 	cleanStaleUpdateFilesIn(filepath.Dir(execPath))
 	cleanMarkedUpdateStagesIn(filepath.Dir(execPath))
-	_ = os.Remove(execPath + ".old")
 
 	bundle := bundleRootFor(execPath)
 	if bundle != "" {
 		cleanMarkedUpdateStagesIn(filepath.Dir(bundle))
-		_ = os.RemoveAll(bundle + ".old")
 	}
 	cleanRecordedUpdateFiles(execPath, bundle)
 }
 
-// cleanStaleUpdateFilesIn removes the exact legacy names produced by older
-// updater versions. It deliberately does not enumerate the directory by suffix.
+// cleanStaleUpdateFilesIn removes regular files with the exact legacy names
+// produced by older updater versions. It deliberately does not enumerate by
+// suffix and never recursively removes a directory without an ownership marker:
+// a user may reasonably keep a manual macOS bundle backup as Foo.app.old.
 func cleanStaleUpdateFilesIn(dir string) {
 	names := []string{BinaryName + ".old", BinaryName + ".exe.old", BinaryName + ".app.old"}
 	for _, dll := range windowsRuntimeDLLs {
 		names = append(names, dll+".old")
 	}
 	for _, name := range names {
-		_ = os.RemoveAll(filepath.Join(dir, name))
+		candidate := filepath.Join(dir, name)
+		info, err := os.Lstat(candidate)
+		if err != nil || !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 {
+			continue
+		}
+		_ = os.Remove(candidate)
 	}
 }
 

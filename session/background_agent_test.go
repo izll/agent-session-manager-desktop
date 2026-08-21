@@ -27,3 +27,14 @@ func TestFindBackgroundAgentDoesNotHangOnCLI(t *testing.T) {
 		t.Fatalf("background-agent lookup outlived its timeout: %v", elapsed)
 	}
 }
+
+func TestFindBackgroundAgentRejectsTruncatedCLIOutput(t *testing.T) {
+	oldCommand := claudeBackgroundCommand
+	t.Cleanup(func() { claudeBackgroundCommand = oldCommand })
+	claudeBackgroundCommand = func(ctx context.Context, _ string, _ ...string) *exec.Cmd {
+		return CommandContext(ctx, "sh", "-c", `printf '[{"id":"job","kind":"background","sessionId":"session-id"}]padding'`)
+	}
+	if _, held := findBackgroundAgentWithLimit("session-id", 16); held {
+		t.Fatal("truncated external CLI output was parsed as a complete agent list")
+	}
+}

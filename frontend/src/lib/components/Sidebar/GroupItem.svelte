@@ -1,5 +1,6 @@
 <script lang="ts">
   import { createEventDispatcher, onMount, onDestroy, tick } from 'svelte';
+  import { get } from 'svelte/store';
   import SessionItem from './SessionItem.svelte';
   import type { Group, Session } from '../../stores/sessions';
   import { toggleGroupCollapse, renameGroup, deleteGroup, moveGroup, sessions as allSessions, assignToGroup, startSession, stopSession } from '../../stores/sessions';
@@ -10,6 +11,7 @@
   import { portal } from '../../utils/portal';
   import { menuPosition } from '../../utils/menuPosition';
   import { claimMenu, releaseMenu } from '../../utils/openMenu';
+  import { activeProjectId } from '../../stores/projects';
   import SessionColorDialog from '../Dialogs/SessionColorDialog.svelte';
   import {
     getGradientCSS,
@@ -56,6 +58,26 @@
   let isRenaming = false;
   let renameValue = '';
   let renameInput: HTMLInputElement;
+  let renameTarget: { projectId: string; id: string; name: string } | null = null;
+  let uiProjectId = '';
+  let hasUIProject = false;
+
+  // A keyed group component can be reused when two projects contain the same
+  // group id. Close every project-scoped affordance before its prop changes;
+  // otherwise A's open menu/rename/color editor acts on B's replacement row.
+  $: if (!hasUIProject) {
+    hasUIProject = true;
+    uiProjectId = $activeProjectId;
+  } else if (uiProjectId !== $activeProjectId) {
+    uiProjectId = $activeProjectId;
+    closeContextMenu();
+    isRenaming = false;
+    renameTarget = null;
+    showColorDialog = false;
+    isDragging = false;
+    isDragOver = false;
+    isGroupDragOver = false;
+  }
 
   function handleToggle() {
     toggleGroupCollapse(group.id);
@@ -66,7 +88,10 @@
   // conversation (startSession(id) alone would wipe the resume ID).
   async function handleStartAll() {
     showContextMenu = false;
-    for (const s of sessions) {
+    const projectId = get(activeProjectId);
+    const targets = [...sessions];
+    for (const s of targets) {
+      if (get(activeProjectId) !== projectId) break;
       if (s.status === 'running') continue;
       try { await startSession(s.id, s.resumeSessionId || undefined); } catch { /* keep going */ }
     }
@@ -77,7 +102,9 @@
     const running = sessions.filter(s => s.status === 'running');
     if (running.length === 0) return;
     if (!window.confirm($t('group.stopAllConfirm', { n: running.length, name: group.name }))) return;
+    const projectId = get(activeProjectId);
     for (const s of running) {
+      if (get(activeProjectId) !== projectId) break;
       try { await stopSession(s.id); } catch { /* keep going */ }
     }
   }
@@ -106,6 +133,7 @@
   async function startRename() {
     closeContextMenu();
     renameValue = group.name;
+    renameTarget = { projectId: get(activeProjectId), id: group.id, name: group.name };
     isRenaming = true;
     await tick();
     renameInput?.focus();
@@ -113,14 +141,21 @@
   }
 
   async function confirmRename() {
-    const trimmed = renameValue.trim();
-    if (trimmed && trimmed !== group.name) {
-      await renameGroup(group.id, trimmed);
+    const target = renameTarget;
+    renameTarget = null;
+    if (!target || target.projectId !== get(activeProjectId) || target.id !== group.id) {
+      isRenaming = false;
+      return;
     }
-    isRenaming = false;
+    const trimmed = renameValue.trim();
+    if (trimmed && trimmed !== target.name) {
+      await renameGroup(target.id, trimmed);
+    }
+    if (target.projectId === get(activeProjectId) && target.id === group.id) isRenaming = false;
   }
 
   function cancelRename() {
+    renameTarget = null;
     isRenaming = false;
   }
 
@@ -156,8 +191,9 @@
     await moveGroup(group.id, index + 1);
   }
 
-  async function handleSessionDrop(e: CustomEvent<{ sourceId: string; targetIndex: number }>) {
-    const { sourceId } = e.detail;
+  async function handleSessionDrop(e: CustomEvent<{ sourceId: string; targetIndex: number; projectId: string }>) {
+    const { sourceId, projectId } = e.detail;
+    if (projectId !== get(activeProjectId)) return;
     const session = $allSessions.find(s => s.id === sourceId);
 
     // If session is from a different group, assign to this group
@@ -172,7 +208,11 @@
   function handleGroupDragStart(e: DragEvent) {
     if (!e.dataTransfer) return;
     e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData(GROUP_MIME, JSON.stringify({ id: group.id, index }));
+    e.dataTransfer.setData(GROUP_MIME, JSON.stringify({
+      id: group.id,
+      index,
+      projectId: get(activeProjectId),
+    }));
     isDragging = true;
   }
 
@@ -212,7 +252,7 @@
     if (groupPayload) {
       try {
         const data = JSON.parse(groupPayload);
-        if (data.id && data.id !== group.id) {
+        if (data.projectId === get(activeProjectId) && data.id && data.id !== group.id) {
           await moveGroup(data.id, index);
         }
       } catch {
@@ -244,7 +284,7 @@
 
     try {
       const data = JSON.parse(e.dataTransfer.getData('text/plain'));
-      if (data.id) {
+      if (data.projectId === get(activeProjectId) && data.id) {
         const session = $allSessions.find(s => s.id === data.id);
         if (session && session.groupId !== group.id) {
           await assignToGroup(data.id, group.id);

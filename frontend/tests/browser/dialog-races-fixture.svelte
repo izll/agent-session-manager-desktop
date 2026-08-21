@@ -1,10 +1,11 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
 
-  export let mode: 'global' | 'command' | 'history' | 'quickjump' | 'quickterminal' | 'scheme' | 'alltasks' | 'recovery' | 'update' = 'global';
+  export let mode: 'global' | 'palette' | 'command' | 'history' | 'quickjump' | 'quickterminal' | 'scheme' | 'alltasks' | 'recovery' | 'update' | 'newsession' | 'newgroup' | 'bgagents' | 'fork' | 'commandmanager' | 'template' = 'global';
   export let onFixtureReady: () => void = () => {};
 
   let showGlobal = mode === 'global';
+  let showPalette = mode === 'palette';
   let showCommand = mode === 'command';
   let showHistory = mode === 'history';
   let showQuickJump = mode === 'quickjump';
@@ -12,6 +13,12 @@
   let showSchemeImport = mode === 'scheme';
   let showRecovery = mode === 'recovery';
   let showUpdate = mode === 'update';
+  let showNewSession = mode === 'newsession';
+  let showNewGroup = mode === 'newgroup';
+  let showBgAgents = mode === 'bgagents';
+  let showFork = mode === 'fork';
+  let showCommandManager = mode === 'commandmanager';
+  let showTemplate = mode === 'template';
   let commandSession = 'session-a';
   let commandWindow = 3;
   let historyPath = '/repo-a';
@@ -28,6 +35,7 @@
     // for 15+ seconds. Per-mode imports make readiness describe the component,
     // not contention in an unrelated fixture dependency.
     switch (mode) {
+      case 'palette': FixtureComponent = (await import('../../src/lib/components/Dialogs/CommandPalette.svelte')).default; break;
       case 'command': FixtureComponent = (await import('../../src/lib/components/Dialogs/CommandPickerDialog.svelte')).default; break;
       case 'history': FixtureComponent = (await import('../../src/lib/components/Dialogs/GitHistoryDialog.svelte')).default; break;
       case 'quickjump': FixtureComponent = (await import('../../src/lib/components/Dialogs/QuickJumpDialog.svelte')).default; break;
@@ -36,6 +44,12 @@
       case 'alltasks': FixtureComponent = (await import('../../src/lib/components/Dashboard/AllTasks.svelte')).default; break;
       case 'recovery': FixtureComponent = (await import('../../src/lib/components/Dialogs/RecoveryCenterDialog.svelte')).default; break;
       case 'update': FixtureComponent = (await import('../../src/lib/components/Dialogs/UpdateDialog.svelte')).default; break;
+      case 'newsession': FixtureComponent = (await import('../../src/lib/components/Dialogs/NewSessionDialog.svelte')).default; break;
+      case 'newgroup': FixtureComponent = (await import('../../src/lib/components/Dialogs/NewGroupDialog.svelte')).default; break;
+      case 'bgagents': FixtureComponent = (await import('../../src/lib/components/Dialogs/BgAgentsDialog.svelte')).default; break;
+      case 'fork': FixtureComponent = (await import('../../src/lib/components/Dialogs/ForkDialog.svelte')).default; break;
+      case 'commandmanager': FixtureComponent = (await import('../../src/lib/components/Dialogs/CommandManagerDialog.svelte')).default; break;
+      case 'template': FixtureComponent = (await import('../../src/lib/components/Dialogs/SessionTemplateDialog.svelte')).default; break;
       default: FixtureComponent = (await import('../../src/lib/components/Dialogs/GlobalSearchDialog.svelte')).default;
     }
     // The dynamic component itself is part of the next Svelte flush.
@@ -57,6 +71,8 @@
 {#if FixtureComponent}
   {#if mode === 'command'}
     <svelte:component this={FixtureComponent} bind:show={showCommand} sessionId={commandSession} windowIdx={commandWindow} />
+  {:else if mode === 'palette'}
+    <svelte:component this={FixtureComponent} bind:show={showPalette} />
   {:else if mode === 'history'}
     <svelte:component this={FixtureComponent} bind:show={showHistory} projectId="project-a" sessionId="session-a" windowIdx={3} path={historyPath} />
   {:else if mode === 'quickjump'}
@@ -69,6 +85,18 @@
     <svelte:component this={FixtureComponent} bind:show={showRecovery} />
   {:else if mode === 'update'}
     <svelte:component this={FixtureComponent} bind:show={showUpdate} />
+  {:else if mode === 'newsession'}
+    <svelte:component this={FixtureComponent} bind:show={showNewSession} />
+  {:else if mode === 'newgroup'}
+    <svelte:component this={FixtureComponent} bind:show={showNewGroup} />
+  {:else if mode === 'bgagents'}
+    <svelte:component this={FixtureComponent} bind:show={showBgAgents} />
+  {:else if mode === 'fork'}
+    <svelte:component this={FixtureComponent} bind:show={showFork} />
+  {:else if mode === 'commandmanager'}
+    <svelte:component this={FixtureComponent} bind:show={showCommandManager} />
+  {:else if mode === 'template'}
+    <svelte:component this={FixtureComponent} bind:show={showTemplate} />
   {:else if mode === 'alltasks'}
     <svelte:component this={FixtureComponent} />
   {:else}

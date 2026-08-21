@@ -249,3 +249,27 @@ func TestFreshMalformedStatsWriterLockIsNotReclaimedDuringInitialization(t *test
 		t.Fatal("old malformed writer lock was not reclaimable")
 	}
 }
+
+func TestActivityStatsRejectsOversizedAndOverflowingInput(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "stats.json")
+	if err := os.WriteFile(path, []byte("12345"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readActivityStatsFile(path, 4); err == nil {
+		t.Fatal("oversized activity statistics file was accepted")
+	}
+
+	const maxInt64 = int64(1<<63 - 1)
+	data := activityStatsFile{
+		Version: activityStatsVersion,
+		Records: map[string]*activityStatsRecord{
+			"overflow": {
+				Date: "2026-08-21", SessionID: "session", Agent: "codex",
+				ObservedMs: 0, BusyMs: maxInt64, WaitingMs: maxInt64, IdleMs: 2,
+			},
+		},
+	}
+	if validStatsFile(data) {
+		t.Fatal("overflowing duration totals were accepted")
+	}
+}

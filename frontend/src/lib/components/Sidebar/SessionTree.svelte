@@ -17,6 +17,7 @@
   import { statusLines, spinnerTexts, tabStatuses, getStatusLine } from '../../stores/statusLines';
   import { settings } from '../../stores/settings';
   import { t } from '../../i18n';
+  import { activeProjectId } from '../../stores/projects';
 
   export let onNewSession: () => void;
   export let onNewGroup: () => void;
@@ -85,8 +86,9 @@
     stopAutoScroll();
   });
 
-  async function handleSessionDrop(e: CustomEvent<{ sourceId: string; targetIndex: number }>) {
-    const { sourceId, targetIndex } = e.detail;
+  async function handleSessionDrop(e: CustomEvent<{ sourceId: string; targetIndex: number; projectId: string }>) {
+    const { sourceId, targetIndex, projectId } = e.detail;
+    if (projectId !== $activeProjectId) return;
     await moveSessionToIndex(sourceId, targetIndex);
   }
 
@@ -109,7 +111,7 @@
 
     try {
       const data = JSON.parse(e.dataTransfer.getData('text/plain'));
-      if (data.id) {
+      if (data.projectId === $activeProjectId && data.id) {
         const session = $sessions.find(s => s.id === data.id);
         if (session && session.groupId) {
           await assignToGroup(data.id, '');

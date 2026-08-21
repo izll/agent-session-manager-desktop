@@ -15,8 +15,18 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 REPO="$PWD"
 CACHE="${ASMGR_BUILD_CACHE:-$HOME/.cache/asmgr-winbuild}"
-PA_DIR="$CACHE/pa/ucrt64"
-PA_PKG="mingw-w64-ucrt-x86_64-portaudio-1~19.7.0-5-any.pkg.tar.zst"
+PA_PKG="mingw-w64-ucrt-x86_64-portaudio-1~19.7.0-7-any.pkg.tar.zst"
+# Pin the repository's published SHA-256 as well as the filename. This archive
+# supplies a DLL that is loaded by every resulting Windows executable; TLS
+# alone must not turn a compromised/misconfigured mirror response into trusted
+# native code in the build.
+PA_SHA256="085e0ba89a659e6f66379552f7fb736b182ecaa7caf710d611e481f557e20c38"
+# Version the extraction cache with the authenticated package. Otherwise a
+# previously extracted older (or interrupted) archive silently wins forever
+# merely because one header happens to exist.
+PA_CACHE_KEY="${PA_PKG%.pkg.tar.zst}-$PA_SHA256"
+PA_DIR="$CACHE/pa/$PA_CACHE_KEY/ucrt64"
+PA_CACHE_MARKER="$CACHE/pa/$PA_CACHE_KEY/.verified"
 
 if ! command -v x86_64-w64-mingw32-gcc >/dev/null; then
   echo "Missing cross compiler. Install it with:" >&2
@@ -27,12 +37,19 @@ fi
 # PortAudio for Windows: headers, import library and the runtime DLL. Taken
 # from the same MSYS2 package the CI installs, so the app links against the
 # same library version it does.
-if [ ! -f "$PA_DIR/include/portaudio.h" ]; then
+if [ ! -f "$PA_CACHE_MARKER" ] || [ "$(cat "$PA_CACHE_MARKER")" != "$PA_SHA256" ] || \
+   [ ! -f "$PA_DIR/include/portaudio.h" ] || \
+   [ ! -f "$PA_DIR/lib/pkgconfig/portaudio-2.0.pc" ] || \
+   [ ! -f "$PA_DIR/bin/libportaudio.dll" ]; then
   echo "==> Fetching PortAudio for Windows"
-  mkdir -p "$CACHE/pa"
-  curl -sL -o "$CACHE/pa.zst" "https://mirror.msys2.org/mingw/ucrt64/$PA_PKG"
-  tar --zstd -xf "$CACHE/pa.zst" -C "$CACHE/pa"
-  rm -f "$CACHE/pa.zst"
+  mkdir -p "$CACHE/pa/$PA_CACHE_KEY"
+  PA_DOWNLOAD="$CACHE/pa/$PA_CACHE_KEY/package.$$"
+  curl --fail --location --silent --show-error \
+    -o "$PA_DOWNLOAD" "https://repo.msys2.org/mingw/ucrt64/$PA_PKG"
+  printf '%s  %s\n' "$PA_SHA256" "$PA_DOWNLOAD" | sha256sum --check --strict
+  tar --zstd -xf "$PA_DOWNLOAD" -C "$CACHE/pa/$PA_CACHE_KEY"
+  printf '%s\n' "$PA_SHA256" > "$PA_CACHE_MARKER"
+  rm -f "$PA_DOWNLOAD"
 fi
 
 # The packaged .pc file hardcodes /ucrt64 as its prefix; point it at the real

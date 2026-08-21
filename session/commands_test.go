@@ -172,7 +172,7 @@ func TestCommandLibraryRoundTrips(t *testing.T) {
 	// The write must not leave temporary files lying around.
 	entries, _ := os.ReadDir(dir)
 	for _, e := range entries {
-		if e.Name() != "commands.json" {
+		if e.Name() != "commands.json" && e.Name() != "commands.lock" {
 			t.Errorf("unexpected leftover file: %s", e.Name())
 		}
 	}

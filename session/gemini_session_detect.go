@@ -11,6 +11,8 @@ import (
 	"strings"
 )
 
+const geminiSessionMetadataLimit = 4 << 20
+
 // DetectGeminiSessionID finds the most recent Gemini session ID from the filesystem.
 // Gemini creates session files at ~/.gemini/tmp/<projectIdentifier>/chats/session-*.json
 // immediately on startup. The sessionId field in the JSON is used for --resume.
@@ -90,7 +92,7 @@ func getGeminiProjectIdentifiers(projectPath string, homeDir string) []string {
 
 	// Modern: slug from projects.json (if it exists)
 	projectsFile := filepath.Join(homeDir, ".gemini", "projects.json")
-	data, err := os.ReadFile(projectsFile)
+	data, err := readFileAtMost(projectsFile, geminiSessionMetadataLimit)
 	if err == nil {
 		slugs := findGeminiSlugs(data, projectPath)
 		identifiers = append(identifiers, slugs...)
@@ -123,7 +125,11 @@ func findGeminiSlugs(data []byte, projectPath string) []string {
 
 // extractGeminiSessionID reads a Gemini session JSON file and returns the sessionId field.
 func extractGeminiSessionID(path string) string {
-	data, err := os.ReadFile(path)
+	return extractGeminiSessionIDAtMost(path, geminiSessionMetadataLimit)
+}
+
+func extractGeminiSessionIDAtMost(path string, limit int64) string {
+	data, err := readFileAtMost(path, limit)
 	if err != nil {
 		return ""
 	}

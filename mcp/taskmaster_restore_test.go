@@ -106,6 +106,29 @@ func TestRestoreTaskKeepsNumericTaskMasterIDTypes(t *testing.T) {
 	}
 }
 
+func TestRestoreTaskRejectsTrailingProviderSnapshotWithoutWriting(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, ".taskmaster", "tasks", "tasks.json")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	before := []byte(`{"master":{"tasks":[]},"keep":true}`)
+	if err := os.WriteFile(path, before, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	task := Task{ID: "restored", RawJSON: `{"id":"restored","title":"first"} {"id":"other"}`}
+	if err := NewTaskMaster(root).RestoreTask(task); err == nil {
+		t.Fatal("restore accepted a second trailing provider object")
+	}
+	after, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(after, before) {
+		t.Fatal("failed restore changed Task Master storage")
+	}
+}
+
 func TestRestoreSubtaskPreservesSnapshotAndIdentity(t *testing.T) {
 	root := t.TempDir()
 	path := filepath.Join(root, ".taskmaster", "tasks", "tasks.json")

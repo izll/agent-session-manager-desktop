@@ -2,7 +2,8 @@ import { mount } from 'svelte';
 import { get } from 'svelte/store';
 import DialogRacesFixture from './dialog-races-fixture.svelte';
 import { activeProjectId } from '../../src/lib/stores/projects';
-import { selectedSessionId } from '../../src/lib/stores/sessions';
+import { selectedSessionId, sessions } from '../../src/lib/stores/sessions';
+import { agents } from '../../src/lib/stores/agents';
 
 let resolveSearch: ((value: unknown[]) => void) | null = null;
 let resolveRun: (() => void) | null = null;
@@ -19,6 +20,10 @@ let resolveTrashRestore: ((value: unknown) => void) | null = null;
 let recoverySessionLoads = 0;
 let resolveUpdate: (() => void) | null = null;
 let updateCalls = 0;
+let resolveCreateSession: ((value: unknown) => void) | null = null;
+const startSessionCalls: string[] = [];
+const createGroupCalls: string[] = [];
+const forkCalls: unknown[][] = [];
 
 const backend = new Proxy({
   GlobalSearch: (query: string) => {
@@ -71,6 +76,24 @@ const backend = new Proxy({
     projectName: 'Project A', projectPath: '/repo-a', overdue: false,
     dependencies: [], subtasks: [],
   }],
+  GetAgents: async () => [{
+    type: 'claude', name: 'Claude', icon: '', supportsResume: false, supportsAutoYes: true, supportsFork: false,
+  }],
+  CreateSession: () => new Promise((resolve) => { resolveCreateSession = resolve; }),
+  StartSession: async (id: string) => { startSessionCalls.push(id); },
+  GetSessionTemplates: async () => [],
+  CreateGroup: async (name: string) => {
+    createGroupCalls.push(name);
+    return { id: 'fixture-group', name, collapsed: false, color: '', bgColor: '', fullRowColor: false };
+  },
+  ListBackgroundAgents: async () => [{
+    id: 'agent-1', sessionId: '', pid: 42, cwd: '/repo-a', name: 'Background fixture',
+    status: 'running', startedAt: Date.now(),
+  }],
+  ForkSession: async (...args: unknown[]) => {
+    forkCalls.push(args);
+    return { sessionId: 'conversation-fork' };
+  },
 }, {
   get(target, key) {
     if (key in target) return target[key as keyof typeof target];
@@ -80,6 +103,7 @@ const backend = new Proxy({
 
 (window as any).go = { main: { App: backend, DictationService: backend } };
 (window as any).runtime = new Proxy({}, { get: () => (..._args: unknown[]) => () => {} });
+agents.set([{ type: 'claude', name: 'Claude', icon: '', supportsResume: false, supportsAutoYes: true, supportsFork: false }]);
 (window as any).dialogRacesFixture = {
   resolveSearch: (value: unknown[]) => resolveSearch?.(value),
   resolveRun: () => resolveRun?.(),
@@ -113,13 +137,41 @@ const backend = new Proxy({
   selectedSession: () => get(selectedSessionId),
   updateCalls: () => updateCalls,
   resolveUpdate: () => resolveUpdate?.(),
+  createSessionPending: () => !!resolveCreateSession,
+  resolveCreateSession: () => {
+    const resolve = resolveCreateSession;
+    resolveCreateSession = null;
+    resolve?.({
+      id: 'created-in-project-a', name: 'Created A', path: '/repo-a', status: 'stopped', agent: 'claude',
+      color: '', bgColor: '', fullRowColor: false, groupId: '', autoYes: false, hideStatusLine: false,
+      notes: '', favorite: false, resumeSessionId: '', followedWindows: [], tabOrder: [], mainWindowStopped: false,
+      extraArgs: '', tabTextColor: '', tabBackgroundColor: '', terminalTheme: '', terminalFontSize: 0,
+      hideViewBar: 0, hideStatusBar: 0, mainWindowIndex: 0, lastWindowIndex: 0, isGitRepo: false,
+    });
+  },
+  startSessionCalls: () => [...startSessionCalls],
+  createGroupCalls: () => [...createGroupCalls],
+  switchProject: (projectId: string) => activeProjectId.set(projectId),
+  forkCalls: () => structuredClone(forkCalls),
 };
 
 const target = document.getElementById('fixture');
 if (!target) throw new Error('fixture target is missing');
 const requestedMode = new URLSearchParams(location.search).get('mode');
-const mode = requestedMode === 'command' || requestedMode === 'history' || requestedMode === 'quickjump' || requestedMode === 'quickterminal' || requestedMode === 'scheme' || requestedMode === 'alltasks' || requestedMode === 'recovery' || requestedMode === 'update'
+const mode = requestedMode === 'palette' || requestedMode === 'command' || requestedMode === 'history' || requestedMode === 'quickjump' || requestedMode === 'quickterminal' || requestedMode === 'scheme' || requestedMode === 'alltasks' || requestedMode === 'recovery' || requestedMode === 'update' || requestedMode === 'newsession' || requestedMode === 'newgroup' || requestedMode === 'bgagents' || requestedMode === 'fork' || requestedMode === 'commandmanager' || requestedMode === 'template'
   ? requestedMode : 'global';
+if (mode === 'newgroup' || mode === 'bgagents' || mode === 'fork') {
+  activeProjectId.set('project-a');
+  sessions.set([{
+    id: 'session-a', name: 'Session A', path: '/repo-a', status: 'running', agent: 'claude',
+    color: '', bgColor: '', fullRowColor: false, groupId: '', autoYes: false,
+    hideStatusLine: false, notes: '', favorite: false, resumeSessionId: '', followedWindows: [],
+    tabOrder: [], mainWindowStopped: false, extraArgs: '', tabTextColor: '', tabBackgroundColor: '',
+    terminalTheme: '', terminalFontSize: 0, hideViewBar: 0, hideStatusBar: 0,
+    mainWindowIndex: 0, lastWindowIndex: 0, isGitRepo: false,
+  }]);
+  selectedSessionId.set('session-a');
+}
 mount(DialogRacesFixture, {
   target,
   props: {

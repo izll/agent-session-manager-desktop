@@ -9,6 +9,7 @@
   import { activities } from '../../stores/activities';
   import { tabStatuses } from '../../stores/statusLines';
   import { showDashboard, showSessionView } from '../../stores/navigation';
+  import { autoFocusDialog } from '../../utils/dialogActions';
   import { settings } from '../../stores/settings';
   import { GetSessionTemplates } from '../../../../wailsjs/go/main/App';
   import type { main } from '../../../../wailsjs/go/models';
@@ -363,7 +364,7 @@
 
 {#if show}
   <div class="dialog-overlay palette-overlay" on:click|self={close} role="presentation">
-    <div class="command-palette" role="dialog" aria-modal="true" aria-label={$t('palette.title')} on:keydown={handleKeydown}>
+    <div class="command-palette" use:autoFocusDialog role="dialog" aria-modal="true" aria-label={$t('palette.title')} on:keydown={handleKeydown}>
       <div class="palette-search">
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>

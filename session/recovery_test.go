@@ -42,6 +42,19 @@ func TestAutomaticBackupExcludesSecret(t *testing.T) {
 	}
 }
 
+func TestBackupComparisonRejectsOversizedCandidate(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "candidate.json")
+	if err := os.WriteFile(path, []byte("same plus untrusted tail"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if backupFileMatches(path, []byte("same"), 4) {
+		t.Fatal("oversized backup candidate was treated as an identical snapshot")
+	}
+	if !backupFileMatches(path, []byte("same plus untrusted tail"), 64) {
+		t.Fatal("bounded identical backup was not recognized")
+	}
+}
+
 func TestTrashAndRestoreSessionPreservesMetadata(t *testing.T) {
 	storage := newRecoveryTestStorage(t)
 	instance := &Instance{
