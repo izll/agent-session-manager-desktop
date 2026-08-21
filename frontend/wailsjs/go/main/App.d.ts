@@ -3,17 +3,17 @@
 import {main} from '../models';
 import {session} from '../models';
 
-export function AddQuickJump(arg1:string,arg2:number,arg3:string):Promise<void>;
+export function AddQuickJump(arg1:string,arg2:number,arg3:string,arg4:string):Promise<void>;
 
-export function AddSubtask(arg1:string,arg2:string,arg3:string):Promise<main.SubtaskInfo>;
+export function AddSubtask(arg1:string,arg2:string,arg3:string,arg4:string):Promise<main.SubtaskInfo>;
 
-export function AssignToGroup(arg1:string,arg2:string):Promise<void>;
+export function AssignToGroup(arg1:string,arg2:string,arg3:string):Promise<void>;
 
-export function AttachBackgroundAgent(arg1:string,arg2:string,arg3:string,arg4:string):Promise<string>;
+export function AttachBackgroundAgent(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string):Promise<string>;
 
-export function AttachBackgroundAgentAsTab(arg1:string,arg2:string,arg3:string):Promise<number>;
+export function AttachBackgroundAgentAsTab(arg1:string,arg2:string,arg3:string,arg4:string):Promise<number>;
 
-export function AttachSession(arg1:string,arg2:number):Promise<string>;
+export function AttachSession(arg1:string,arg2:number,arg3:string):Promise<string>;
 
 export function BrowseDirectory(arg1:string):Promise<string>;
 
@@ -21,41 +21,41 @@ export function CheckForUpdate():Promise<main.UpdateInfo>;
 
 export function ClearLog(arg1:string):Promise<void>;
 
-export function CloseTab(arg1:string,arg2:number):Promise<void>;
+export function CloseTab(arg1:string,arg2:number,arg3:string):Promise<void>;
 
-export function CreateBackup():Promise<void>;
+export function CreateBackup(arg1:string):Promise<void>;
 
-export function CreateGroup(arg1:string):Promise<main.GroupInfo>;
+export function CreateGroup(arg1:string,arg2:string):Promise<main.GroupInfo>;
 
 export function CreateProject(arg1:string):Promise<main.ProjectInfo>;
 
-export function CreateSession(arg1:string,arg2:string,arg3:string,arg4:boolean,arg5:string):Promise<main.SessionInfo>;
+export function CreateSession(arg1:string,arg2:string,arg3:string,arg4:boolean,arg5:string,arg6:string):Promise<main.SessionInfo>;
 
-export function CreateSessionFromTemplate(arg1:string,arg2:string,arg3:string):Promise<main.SessionInfo>;
+export function CreateSessionFromTemplate(arg1:string,arg2:string,arg3:string,arg4:string):Promise<main.SessionInfo>;
 
-export function CreateTab(arg1:string,arg2:boolean,arg3:string,arg4:string,arg5:string,arg6:string):Promise<number>;
+export function CreateTab(arg1:string,arg2:boolean,arg3:string,arg4:string,arg5:string,arg6:string,arg7:string):Promise<number>;
 
-export function CreateTask(arg1:string,arg2:string,arg3:string,arg4:string,arg5:Array<string>):Promise<main.TaskInfo>;
+export function CreateTask(arg1:string,arg2:string,arg3:string,arg4:string,arg5:Array<string>,arg6:string):Promise<main.TaskInfo>;
 
-export function CycleYoloMode(arg1:string,arg2:number):Promise<void>;
+export function CycleYoloMode(arg1:string,arg2:number,arg3:string):Promise<void>;
 
 export function DeleteCommand(arg1:string):Promise<void>;
 
 export function DeleteCommandGroup(arg1:string):Promise<void>;
 
-export function DeleteGroup(arg1:string):Promise<void>;
+export function DeleteGroup(arg1:string,arg2:string):Promise<void>;
 
 export function DeleteProject(arg1:string):Promise<void>;
 
-export function DeleteSession(arg1:string):Promise<void>;
+export function DeleteSession(arg1:string,arg2:string):Promise<void>;
 
 export function DeleteSessionTemplate(arg1:string):Promise<void>;
 
-export function DeleteSubtask(arg1:string,arg2:string,arg3:string):Promise<void>;
+export function DeleteSubtask(arg1:string,arg2:string,arg3:string,arg4:string):Promise<void>;
 
-export function DeleteTab(arg1:string,arg2:number):Promise<void>;
+export function DeleteTab(arg1:string,arg2:number,arg3:string):Promise<void>;
 
-export function DeleteTask(arg1:string,arg2:string):Promise<void>;
+export function DeleteTask(arg1:string,arg2:string,arg3:string):Promise<void>;
 
 export function DetachSession(arg1:string):Promise<void>;
 
@@ -63,17 +63,17 @@ export function DetectionPatternsVersion():Promise<number>;
 
 export function DiscoverLocalSchemes():Promise<Array<main.ImportedScheme>>;
 
-export function EmptyTrash():Promise<void>;
+export function EmptyTrash(arg1:string):Promise<void>;
 
 export function ExportSessions(arg1:Array<string>):Promise<string>;
 
 export function FetchOnlineSchemes(arg1:Array<string>):Promise<Array<main.ImportedScheme>>;
 
-export function ForkSession(arg1:string,arg2:number):Promise<main.ForkResult>;
+export function ForkSession(arg1:string,arg2:number,arg3:string):Promise<main.ForkResult>;
 
-export function ForkToNewSession(arg1:string,arg2:string,arg3:string):Promise<main.SessionInfo>;
+export function ForkToNewSession(arg1:string,arg2:string,arg3:string,arg4:string):Promise<main.SessionInfo>;
 
-export function ForkToNewTab(arg1:string,arg2:string,arg3:string):Promise<number>;
+export function ForkToNewTab(arg1:string,arg2:string,arg3:string,arg4:string):Promise<number>;
 
 export function GetActiveProjectID():Promise<string>;
 
@@ -187,9 +187,9 @@ export function GlobalSearch(arg1:string):Promise<Array<main.HistoryEntryInfo>>;
 
 export function ImportSchemeFiles():Promise<Array<main.ImportedScheme>>;
 
-export function ImportSessionFile(arg1:string,arg2:Array<string>):Promise<number>;
+export function ImportSessionFile(arg1:string,arg2:Array<string>,arg3:string):Promise<number>;
 
-export function ImportSessions(arg1:string,arg2:Array<string>):Promise<number>;
+export function ImportSessions(arg1:string,arg2:Array<string>,arg3:string):Promise<number>;
 
 export function InitHistorySearch():Promise<void>;
 
@@ -209,13 +209,13 @@ export function ListSessionDirectory(arg1:string,arg2:string,arg3:number,arg4:st
 
 export function LogFrontend(arg1:string):Promise<void>;
 
-export function MoveGroup(arg1:string,arg2:number):Promise<void>;
+export function MoveGroup(arg1:string,arg2:number,arg3:string):Promise<void>;
 
-export function MoveQuickJump(arg1:number,arg2:number):Promise<void>;
+export function MoveQuickJump(arg1:number,arg2:number,arg3:string):Promise<void>;
 
-export function MoveSessionToIndex(arg1:string,arg2:number):Promise<void>;
+export function MoveSessionToIndex(arg1:string,arg2:number,arg3:string):Promise<void>;
 
-export function MoveTask(arg1:string,arg2:string,arg3:string):Promise<void>;
+export function MoveTask(arg1:string,arg2:string,arg3:string,arg4:string):Promise<void>;
 
 export function OpenAppLogFolder():Promise<void>;
 
@@ -229,65 +229,65 @@ export function PendingUpdate():Promise<string>;
 
 export function PerformUpdate(arg1:string):Promise<void>;
 
-export function PermanentlyDeleteTrashItem(arg1:string):Promise<void>;
+export function PermanentlyDeleteTrashItem(arg1:string,arg2:string):Promise<void>;
 
-export function QuickReplyTab(arg1:string,arg2:number,arg3:string):Promise<void>;
+export function QuickReplyTab(arg1:string,arg2:number,arg3:string,arg4:string):Promise<void>;
 
 export function ReadSessionDirectoryFile(arg1:string,arg2:string,arg3:number,arg4:string):Promise<session.BrowseFile>;
 
 export function ReadSessionFile():Promise<main.PortableFileInfo>;
 
-export function RedrawWindow(arg1:string,arg2:number):Promise<void>;
+export function RedrawWindow(arg1:string,arg2:number,arg3:string):Promise<void>;
 
 export function RefreshDetectionPatterns():Promise<main.PatternRefreshResult>;
 
-export function RefreshWindow(arg1:string,arg2:number):Promise<void>;
+export function RefreshWindow(arg1:string,arg2:number,arg3:string):Promise<void>;
 
-export function RemoveQuickJump(arg1:string,arg2:number):Promise<void>;
+export function RemoveQuickJump(arg1:string,arg2:number,arg3:string):Promise<void>;
 
-export function RenameGroup(arg1:string,arg2:string):Promise<void>;
+export function RenameGroup(arg1:string,arg2:string,arg3:string):Promise<void>;
 
-export function RenameSession(arg1:string,arg2:string):Promise<void>;
+export function RenameSession(arg1:string,arg2:string,arg3:string):Promise<void>;
 
-export function RenameTab(arg1:string,arg2:number,arg3:string):Promise<void>;
+export function RenameTab(arg1:string,arg2:number,arg3:string,arg4:string):Promise<void>;
 
-export function ReorderSession(arg1:string,arg2:number):Promise<void>;
+export function ReorderSession(arg1:string,arg2:number,arg3:string):Promise<void>;
 
-export function ReorderTab(arg1:string,arg2:number,arg3:number):Promise<void>;
+export function ReorderTab(arg1:string,arg2:number,arg3:number,arg4:string):Promise<void>;
 
-export function ResizeTerminal(arg1:string,arg2:number,arg3:number):Promise<void>;
+export function ResizeTerminal(arg1:string,arg2:number,arg3:number,arg4:string):Promise<void>;
 
-export function RestartTab(arg1:string,arg2:number):Promise<void>;
+export function RestartTab(arg1:string,arg2:number,arg3:string):Promise<void>;
 
-export function RestartTabWithResume(arg1:string,arg2:number,arg3:string):Promise<void>;
+export function RestartTabWithResume(arg1:string,arg2:number,arg3:string,arg4:string):Promise<void>;
 
-export function RestoreBackup(arg1:string):Promise<void>;
+export function RestoreBackup(arg1:string,arg2:string):Promise<void>;
 
-export function RestoreDeletedSubtask(arg1:string,arg2:string,arg3:string,arg4:main.DeletedSubtaskSnapshot):Promise<void>;
+export function RestoreDeletedSubtask(arg1:string,arg2:string,arg3:string,arg4:main.DeletedSubtaskSnapshot,arg5:string):Promise<void>;
 
-export function RestoreDeletedTask(arg1:string,arg2:string,arg3:main.DeletedTaskSnapshot):Promise<void>;
+export function RestoreDeletedTask(arg1:string,arg2:string,arg3:main.DeletedTaskSnapshot,arg4:string):Promise<void>;
 
-export function RestoreTaskBackup(arg1:string):Promise<void>;
+export function RestoreTaskBackup(arg1:string,arg2:string):Promise<void>;
 
-export function RestoreTrashItem(arg1:string):Promise<session.RestoreResult>;
+export function RestoreTrashItem(arg1:string,arg2:string):Promise<session.RestoreResult>;
 
-export function RevertDiffFile(arg1:string,arg2:string,arg3:boolean,arg4:number,arg5:string):Promise<void>;
+export function RevertDiffFile(arg1:string,arg2:string,arg3:boolean,arg4:number,arg5:string,arg6:string):Promise<void>;
 
-export function RevertDiffHunk(arg1:string,arg2:string,arg3:number,arg4:string):Promise<void>;
+export function RevertDiffHunk(arg1:string,arg2:string,arg3:number,arg4:string,arg5:string):Promise<void>;
 
-export function RunCommand(arg1:string,arg2:string,arg3:number,arg4:Record<string, string>):Promise<void>;
+export function RunCommand(arg1:string,arg2:string,arg3:number,arg4:Record<string, string>,arg5:string):Promise<void>;
 
 export function SaveCommand(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string,arg6:boolean):Promise<string>;
 
 export function SaveCommandGroup(arg1:string,arg2:string):Promise<string>;
 
-export function SaveSessionAsTemplate(arg1:string,arg2:string,arg3:boolean):Promise<string>;
+export function SaveSessionAsTemplate(arg1:string,arg2:string,arg3:boolean,arg4:string):Promise<string>;
 
-export function SaveSessionFileEdit(arg1:string,arg2:string,arg3:string,arg4:session.FileShape,arg5:string,arg6:boolean,arg7:number,arg8:string):Promise<main.SaveFileEditResult>;
+export function SaveSessionFileEdit(arg1:string,arg2:string,arg3:string,arg4:session.FileShape,arg5:string,arg6:boolean,arg7:number,arg8:string,arg9:string):Promise<main.SaveFileEditResult>;
 
 export function SaveSessionTemplate(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string,arg6:string,arg7:boolean,arg8:string,arg9:Array<main.TemplateTabInfo>):Promise<string>;
 
-export function SaveSettings(arg1:main.SettingsInfo):Promise<void>;
+export function SaveSettings(arg1:main.SettingsInfo,arg2:string):Promise<void>;
 
 export function SearchSessionFileContents(arg1:string,arg2:string,arg3:boolean,arg4:boolean,arg5:number,arg6:string):Promise<session.ContentSearchResult>;
 
@@ -295,110 +295,110 @@ export function SearchSessionFileIndex(arg1:string,arg2:boolean,arg3:number,arg4
 
 export function SelectProject(arg1:string):Promise<void>;
 
-export function SendInput(arg1:string,arg2:string):Promise<void>;
+export function SendInput(arg1:string,arg2:string,arg3:string):Promise<void>;
 
-export function SendPrompt(arg1:string,arg2:string):Promise<void>;
+export function SendPrompt(arg1:string,arg2:string,arg3:string):Promise<void>;
 
-export function SendPromptToWindow(arg1:string,arg2:number,arg3:string):Promise<void>;
+export function SendPromptToWindow(arg1:string,arg2:number,arg3:string,arg4:string):Promise<void>;
 
-export function SendTaskToAgent(arg1:string,arg2:string):Promise<void>;
+export function SendTaskToAgent(arg1:string,arg2:string,arg3:string):Promise<void>;
 
-export function SetExtraArgs(arg1:string,arg2:number,arg3:string):Promise<void>;
+export function SetExtraArgs(arg1:string,arg2:number,arg3:string,arg4:string):Promise<void>;
 
-export function SetGroupColor(arg1:string,arg2:string,arg3:string,arg4:boolean):Promise<void>;
+export function SetGroupColor(arg1:string,arg2:string,arg3:string,arg4:boolean,arg5:string):Promise<void>;
 
 export function SetLastWindowIndex(arg1:string,arg2:number,arg3:string):Promise<void>;
 
-export function SetQuickJump(arg1:Array<session.QuickJumpEntry>):Promise<void>;
+export function SetQuickJump(arg1:Array<session.QuickJumpEntry>,arg2:string):Promise<void>;
 
-export function SetQuickJumpLabel(arg1:string,arg2:number,arg3:string):Promise<void>;
+export function SetQuickJumpLabel(arg1:string,arg2:number,arg3:string,arg4:string):Promise<void>;
 
-export function SetSessionColor(arg1:string,arg2:string,arg3:string,arg4:boolean):Promise<void>;
+export function SetSessionColor(arg1:string,arg2:string,arg3:string,arg4:boolean,arg5:string):Promise<void>;
 
-export function SetSessionNotes(arg1:string,arg2:string):Promise<void>;
+export function SetSessionNotes(arg1:string,arg2:string,arg3:string):Promise<void>;
 
-export function SetTabColor(arg1:string,arg2:number,arg3:string,arg4:string):Promise<void>;
+export function SetTabColor(arg1:string,arg2:number,arg3:string,arg4:string,arg5:string):Promise<void>;
 
 export function SetTabFontSize(arg1:string,arg2:number,arg3:number,arg4:string):Promise<void>;
 
-export function SetTabNotes(arg1:string,arg2:number,arg3:string):Promise<void>;
+export function SetTabNotes(arg1:string,arg2:number,arg3:string,arg4:string):Promise<void>;
 
-export function SetTabStatusBar(arg1:string,arg2:number,arg3:number):Promise<void>;
+export function SetTabStatusBar(arg1:string,arg2:number,arg3:number,arg4:string):Promise<void>;
 
-export function SetTabStatusLineVisibility(arg1:string,arg2:number,arg3:boolean):Promise<void>;
+export function SetTabStatusLineVisibility(arg1:string,arg2:number,arg3:boolean,arg4:string):Promise<void>;
 
-export function SetTabTerminalTheme(arg1:string,arg2:number,arg3:string):Promise<void>;
+export function SetTabTerminalTheme(arg1:string,arg2:number,arg3:string,arg4:string):Promise<void>;
 
-export function SetTabViewBar(arg1:string,arg2:number,arg3:number):Promise<void>;
+export function SetTabViewBar(arg1:string,arg2:number,arg3:number,arg4:string):Promise<void>;
 
-export function SetWindowAutoYes(arg1:string,arg2:number,arg3:boolean):Promise<void>;
+export function SetWindowAutoYes(arg1:string,arg2:number,arg3:boolean,arg4:string):Promise<void>;
 
-export function StartSession(arg1:string):Promise<void>;
+export function StartSession(arg1:string,arg2:string):Promise<void>;
 
-export function StartSessionWithResume(arg1:string,arg2:string):Promise<void>;
+export function StartSessionWithResume(arg1:string,arg2:string,arg3:string):Promise<void>;
 
-export function StopBackgroundAgent(arg1:string):Promise<void>;
+export function StopBackgroundAgent(arg1:string,arg2:string):Promise<void>;
 
-export function StopSession(arg1:string):Promise<void>;
+export function StopSession(arg1:string,arg2:string):Promise<void>;
 
-export function StopTab(arg1:string,arg2:number):Promise<void>;
+export function StopTab(arg1:string,arg2:number,arg3:string):Promise<void>;
 
-export function StopTaskMaster(arg1:string):Promise<void>;
+export function StopTaskMaster(arg1:string,arg2:string):Promise<void>;
 
-export function TaskMasterAddDependency(arg1:string,arg2:string,arg3:string):Promise<void>;
+export function TaskMasterAddDependency(arg1:string,arg2:string,arg3:string,arg4:string):Promise<void>;
 
-export function TaskMasterAddManualTask(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string):Promise<main.MCPTaskInfo>;
+export function TaskMasterAddManualTask(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string,arg6:string):Promise<main.MCPTaskInfo>;
 
-export function TaskMasterAddSubtask(arg1:string,arg2:string,arg3:string,arg4:string):Promise<void>;
+export function TaskMasterAddSubtask(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string):Promise<void>;
 
-export function TaskMasterAddTask(arg1:string,arg2:string,arg3:boolean,arg4:string):Promise<main.MCPTaskInfo>;
+export function TaskMasterAddTask(arg1:string,arg2:string,arg3:boolean,arg4:string,arg5:string):Promise<main.MCPTaskInfo>;
 
-export function TaskMasterAnalyzeComplexity(arg1:string,arg2:boolean):Promise<string>;
+export function TaskMasterAnalyzeComplexity(arg1:string,arg2:boolean,arg3:string):Promise<string>;
 
-export function TaskMasterClearSubtasks(arg1:string,arg2:string):Promise<void>;
+export function TaskMasterClearSubtasks(arg1:string,arg2:string,arg3:string):Promise<void>;
 
-export function TaskMasterExpandAll(arg1:string,arg2:boolean):Promise<void>;
+export function TaskMasterExpandAll(arg1:string,arg2:boolean,arg3:string):Promise<void>;
 
-export function TaskMasterExpandTask(arg1:string,arg2:string,arg3:boolean,arg4:boolean):Promise<void>;
+export function TaskMasterExpandTask(arg1:string,arg2:string,arg3:boolean,arg4:boolean,arg5:string):Promise<void>;
 
-export function TaskMasterGetTask(arg1:string,arg2:string):Promise<main.MCPTaskInfo>;
+export function TaskMasterGetTask(arg1:string,arg2:string,arg3:string):Promise<main.MCPTaskInfo>;
 
-export function TaskMasterGetTasks(arg1:string,arg2:string):Promise<Array<main.MCPTaskInfo>>;
+export function TaskMasterGetTasks(arg1:string,arg2:string,arg3:string):Promise<Array<main.MCPTaskInfo>>;
 
-export function TaskMasterInit(arg1:string):Promise<void>;
+export function TaskMasterInit(arg1:string,arg2:string):Promise<void>;
 
-export function TaskMasterNextTask(arg1:string):Promise<main.MCPTaskInfo>;
+export function TaskMasterNextTask(arg1:string,arg2:string):Promise<main.MCPTaskInfo>;
 
-export function TaskMasterParsePRD(arg1:string,arg2:string,arg3:number):Promise<void>;
+export function TaskMasterParsePRD(arg1:string,arg2:string,arg3:number,arg4:string):Promise<void>;
 
-export function TaskMasterRemoveDependency(arg1:string,arg2:string,arg3:string):Promise<void>;
+export function TaskMasterRemoveDependency(arg1:string,arg2:string,arg3:string,arg4:string):Promise<void>;
 
-export function TaskMasterRemoveSubtask(arg1:string,arg2:string):Promise<void>;
+export function TaskMasterRemoveSubtask(arg1:string,arg2:string,arg3:string):Promise<void>;
 
-export function TaskMasterRemoveTask(arg1:string,arg2:string):Promise<void>;
+export function TaskMasterRemoveTask(arg1:string,arg2:string,arg3:string):Promise<void>;
 
-export function TaskMasterSendToAgent(arg1:string,arg2:string):Promise<void>;
+export function TaskMasterSendToAgent(arg1:string,arg2:string,arg3:string):Promise<void>;
 
-export function TaskMasterSetStatus(arg1:string,arg2:string,arg3:string):Promise<void>;
+export function TaskMasterSetStatus(arg1:string,arg2:string,arg3:string,arg4:string):Promise<void>;
 
-export function TaskMasterSetSubtaskStatus(arg1:string,arg2:string,arg3:string):Promise<void>;
+export function TaskMasterSetSubtaskStatus(arg1:string,arg2:string,arg3:string,arg4:string):Promise<void>;
 
-export function TaskMasterStatus(arg1:string):Promise<Record<string, any>>;
+export function TaskMasterStatus(arg1:string,arg2:string):Promise<Record<string, any>>;
 
-export function TaskMasterUpdateSubtask(arg1:string,arg2:string,arg3:string):Promise<void>;
+export function TaskMasterUpdateSubtask(arg1:string,arg2:string,arg3:string,arg4:string):Promise<void>;
 
-export function TaskMasterUpdateTask(arg1:string,arg2:string,arg3:string,arg4:boolean):Promise<void>;
+export function TaskMasterUpdateTask(arg1:string,arg2:string,arg3:string,arg4:boolean,arg5:string):Promise<void>;
 
-export function TaskMasterUpdateTaskDirect(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string,arg6:string,arg7:string,arg8:string):Promise<void>;
+export function TaskMasterUpdateTaskDirect(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string,arg6:string,arg7:string,arg8:string,arg9:string):Promise<void>;
 
-export function ToggleAutoYes(arg1:string):Promise<void>;
+export function ToggleAutoYes(arg1:string,arg2:string):Promise<void>;
 
-export function ToggleFavorite(arg1:string):Promise<void>;
+export function ToggleFavorite(arg1:string,arg2:string):Promise<void>;
 
-export function ToggleGroupCollapse(arg1:string):Promise<void>;
+export function ToggleGroupCollapse(arg1:string,arg2:string):Promise<void>;
 
-export function ToggleSubtask(arg1:string,arg2:string,arg3:string):Promise<void>;
+export function ToggleSubtask(arg1:string,arg2:string,arg3:string,arg4:string):Promise<void>;
 
 export function UnfinishedTasksForSession(arg1:string):Promise<Array<main.TaskInfo>>;
 
-export function UpdateTask(arg1:string,arg2:string,arg3:Record<string, any>):Promise<void>;
+export function UpdateTask(arg1:string,arg2:string,arg3:Record<string, any>,arg4:string):Promise<void>;

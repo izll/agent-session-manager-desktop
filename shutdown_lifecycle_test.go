@@ -171,13 +171,14 @@ func TestResizeMaintenanceKeepsProjectPinnedUntilCanceled(t *testing.T) {
 	}
 
 	app := NewApp()
+	app.storage = guardedTestStorage(t)
 	app.projectLocked = true
 	app.ptys["pty"] = &ptySession{
 		session:  &session.Instance{ID: "asm_codex_resize"},
 		windowID: 3,
 	}
 	app.startTmuxMaintenance(context.Background())
-	if err := app.ResizeTerminal("pty", 120, 40); err != nil {
+	if err := app.ResizeTerminal("pty", 120, 40, ""); err != nil {
 		t.Fatal(err)
 	}
 	select {

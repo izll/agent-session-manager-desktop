@@ -69,3 +69,6 @@ groups.set([group]);
 const target = document.getElementById('fixture');
 if (!target) throw new Error('fixture target is missing');
 mount(GroupItem, { target, props: { group, sessions: groupSessions, index: 0, groupCount: 1 } });
+await tick();
+await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+document.body.dataset.fixtureReady = 'true';

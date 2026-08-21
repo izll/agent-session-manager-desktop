@@ -140,7 +140,7 @@
     beginOperation(target);
     error = '';
     try {
-      const result = await App.RestoreTrashItem(item.id);
+      const result = await App.RestoreTrashItem(item.id, target.projectId);
       if (!operationIsCurrent(target)) return;
       await loadSessions();
       if (!operationUIIsCurrent(target)) return;
@@ -165,7 +165,7 @@
       projectId: $activeProjectId,
       guardUnsaved: false,
       run: async (target) => {
-        await App.PermanentlyDeleteTrashItem(item.id);
+        await App.PermanentlyDeleteTrashItem(item.id, target.projectId);
         if (!operationUIIsCurrent(target)) return;
         await loadRecoveryData();
       },
@@ -181,7 +181,7 @@
       projectId: $activeProjectId,
       guardUnsaved: false,
       run: async (target) => {
-        await App.EmptyTrash();
+        await App.EmptyTrash(target.projectId);
         if (!operationUIIsCurrent(target)) return;
         await loadRecoveryData();
       },
@@ -195,7 +195,7 @@
     beginOperation(target);
     error = '';
     try {
-      await App.CreateBackup();
+      await App.CreateBackup(target.projectId);
       if (!operationUIIsCurrent(target)) return;
       await loadRecoveryData();
     } catch (e) {
@@ -213,7 +213,7 @@
       projectId: $activeProjectId,
       guardUnsaved: true,
       run: async (target) => {
-        await App.RestoreTaskBackup(item.id);
+        await App.RestoreTaskBackup(item.id, target.projectId);
         if (!operationIsCurrent(target)) return;
         // Only the task files changed, so the session list and settings are left
         // alone — reloading them would be work for nothing.
@@ -241,7 +241,7 @@
         // destructive call can hit the replacement project.
         if (!operationIsCurrent(target)) return;
         invalidateSettingsContext();
-        await App.RestoreBackup(item.id);
+        await App.RestoreBackup(item.id, target.projectId);
         if (!operationIsCurrent(target)) return;
         // The restored store replaces every session identity. Invalidate old
         // async continuations before exposing any of the replacement data.

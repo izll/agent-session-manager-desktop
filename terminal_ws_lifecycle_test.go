@@ -36,7 +36,21 @@ func (s *overlappingTerminalStream) Write(p []byte) (int, error) {
 }
 
 type closeCountingTerminalStream struct {
-	closes int
+	closes atomic.Int32
+}
+
+type blockingCloseTerminalStream struct {
+	started chan struct{}
+	release chan struct{}
+	once    sync.Once
+}
+
+func (s *blockingCloseTerminalStream) Read([]byte) (int, error)    { return 0, io.EOF }
+func (s *blockingCloseTerminalStream) Write(p []byte) (int, error) { return len(p), nil }
+func (s *blockingCloseTerminalStream) Close() error {
+	s.once.Do(func() { close(s.started) })
+	<-s.release
+	return nil
 }
 
 func TestMirrorCleanupUsesHandlerLifecycleContext(t *testing.T) {
@@ -59,7 +73,7 @@ func TestMirrorCleanupUsesHandlerLifecycleContext(t *testing.T) {
 func (s *closeCountingTerminalStream) Read([]byte) (int, error)    { return 0, io.EOF }
 func (s *closeCountingTerminalStream) Write(p []byte) (int, error) { return len(p), nil }
 func (s *closeCountingTerminalStream) Close() error {
-	s.closes++
+	s.closes.Add(1)
 	return nil
 }
 
@@ -75,14 +89,14 @@ func TestOutputWriteErrorClosesTerminalTransportExactlyOnce(t *testing.T) {
 	default:
 		t.Fatal("write failure did not signal the connection pumps to stop")
 	}
-	if stream.closes != 1 {
-		t.Fatalf("terminal stream close count = %d, want 1", stream.closes)
+	if got := stream.closes.Load(); got != 1 {
+		t.Fatalf("terminal stream close count = %d, want 1", got)
 	}
 
 	// A racing read-side cleanup or reconnect must be harmless.
 	tc.closeTransport()
-	if stream.closes != 1 {
-		t.Fatalf("idempotent cleanup closed terminal stream %d times", stream.closes)
+	if got := stream.closes.Load(); got != 1 {
+		t.Fatalf("idempotent cleanup closed terminal stream %d times", got)
 	}
 	if tc.handleOutputWriteError(nil) {
 		t.Fatal("nil write error was treated as a failure")
@@ -101,14 +115,14 @@ func TestInputWriteErrorClosesTerminalTransportExactlyOnce(t *testing.T) {
 	default:
 		t.Fatal("input write failure did not signal the connection pumps to stop")
 	}
-	if stream.closes != 1 {
-		t.Fatalf("terminal stream close count = %d, want 1", stream.closes)
+	if got := stream.closes.Load(); got != 1 {
+		t.Fatalf("terminal stream close count = %d, want 1", got)
 	}
 
 	// The reader/output pumps may discover the same failure concurrently.
 	tc.closeTransport()
-	if stream.closes != 1 {
-		t.Fatalf("idempotent cleanup closed terminal stream %d times", stream.closes)
+	if got := stream.closes.Load(); got != 1 {
+		t.Fatalf("idempotent cleanup closed terminal stream %d times", got)
 	}
 	if tc.handleInputWriteError(nil) {
 		t.Fatal("nil input write error was treated as a failure")
@@ -207,8 +221,8 @@ func TestTerminalServerStopClosesListenerAndActiveStreams(t *testing.T) {
 	if err := ts.Stop(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if stream.closes != 1 {
-		t.Fatalf("active terminal stream close count = %d, want 1", stream.closes)
+	if got := stream.closes.Load(); got != 1 {
+		t.Fatalf("active terminal stream close count = %d, want 1", got)
 	}
 	if conn, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", ts.GetPort()), 100*time.Millisecond); err == nil {
 		_ = conn.Close()
@@ -227,6 +241,72 @@ func TestTerminalServerStopClosesListenerAndActiveStreams(t *testing.T) {
 	if err := second.Stop(ctx); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func TestTerminalServerStopHonoursDeadlineWhenNativeStreamCloseBlocks(t *testing.T) {
+	stream := &blockingCloseTerminalStream{
+		started: make(chan struct{}),
+		release: make(chan struct{}),
+	}
+	tc := &termConn{ptmx: stream, done: make(chan struct{})}
+	ts := NewTerminalServer(nil, 0)
+	ts.mu.Lock()
+	ts.conns["blocked-0"] = tc
+	ts.mu.Unlock()
+
+	// Always release the injected native close so this regression test leaves
+	// no goroutine behind, even when an assertion below fails.
+	defer close(stream.release)
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	startedAt := time.Now()
+	err := ts.Stop(ctx)
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("Stop error = %v, want context deadline", err)
+	}
+	if elapsed := time.Since(startedAt); elapsed > 500*time.Millisecond {
+		t.Fatalf("Stop ignored its deadline while TerminalStream.Close blocked: %v", elapsed)
+	}
+	select {
+	case <-stream.started:
+	default:
+		t.Fatal("Stop did not start closing the native terminal stream")
+	}
+	select {
+	case <-tc.done:
+	default:
+		t.Fatal("Stop did not signal the connection before the native close finished")
+	}
+}
+
+func TestCloseConnectionsDrainsStreamsWithoutStoppingServer(t *testing.T) {
+	stream := &closeCountingTerminalStream{}
+	tc := &termConn{ptmx: stream, done: make(chan struct{})}
+	ts := NewTerminalServer(nil, 0)
+	ts.mu.Lock()
+	ts.conns["old-project-0"] = tc
+	ts.connWG.Add(1)
+	ts.mu.Unlock()
+	go func() {
+		defer ts.connWG.Done()
+		<-tc.done
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if err := ts.CloseConnections(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if got := stream.closes.Load(); got != 1 {
+		t.Fatalf("old-project terminal close count = %d, want 1", got)
+	}
+	// A project switch reuses the listener/lifecycle. Only final Stop closes the
+	// handler gate.
+	_, done, allowed := ts.beginHandler()
+	if !allowed {
+		t.Fatal("connection drain stopped the reusable terminal server")
+	}
+	done()
 }
 
 func TestTerminalServerStopCancelsAndWaitsForPendingAttachHandler(t *testing.T) {

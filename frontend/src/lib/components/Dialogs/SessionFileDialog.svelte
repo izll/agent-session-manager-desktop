@@ -3,6 +3,8 @@
   import * as App from '../../../../wailsjs/go/main/App';
   import type { main } from '../../../../wailsjs/go/models';
   import { loadSessions } from '../../stores/sessions';
+  import { activeProjectId } from '../../stores/projects';
+  import { get } from 'svelte/store';
   import { t } from '../../i18n';
 
   export let show = false;
@@ -10,6 +12,7 @@
   let file: main.PortableFileInfo | null = null;
   let selected = new Set<string>();
   let loading = false;
+  let importing = false;
   let error = '';
   let importedCount = 0;
   let requestGeneration = 0;
@@ -63,13 +66,15 @@
     if (!file || selected.size === 0) return;
     const targetToken = file.token;
     const targetSelection = [...selected];
+    const targetProjectId = get(activeProjectId);
     const generation = ++requestGeneration;
     loading = true;
+    importing = true;
     error = '';
     try {
       // The displayed path is user-controlled metadata. Only the opaque token
       // returned by ReadSessionFile identifies the backend-owned snapshot.
-      const count = await App.ImportSessionFile(targetToken, targetSelection);
+      const count = await App.ImportSessionFile(targetToken, targetSelection, targetProjectId);
       await loadSessions();
       if (!show || generation !== requestGeneration || file?.token !== targetToken) return;
       importedCount = count;
@@ -77,7 +82,10 @@
       if (!show || generation !== requestGeneration || file?.token !== targetToken) return;
       error = String(e);
     } finally {
-      if (generation === requestGeneration) loading = false;
+      if (generation === requestGeneration) {
+        loading = false;
+        importing = false;
+      }
     }
   }
 
@@ -89,6 +97,9 @@
   }
 
   function close() {
+    // ImportSessionFile is durable and cannot be cancelled. Do not allow a
+    // second picker/import owner while this token is still being consumed.
+    if (importing) return;
     requestGeneration++;
     loading = false;
     show = false;
@@ -111,7 +122,7 @@
     <div class="dialog-content file-import">
       <div class="dialog-header">
         <h2>{$t('sessionFile.importTitle')}</h2>
-        <button class="close-btn" on:click={close}>×</button>
+        <button class="close-btn" on:click={close} disabled={importing}>×</button>
       </div>
 
       <div class="dialog-body">
@@ -165,7 +176,7 @@
         {#if importedCount > 0}
           <button class="btn-primary" on:click={close}>{$t('sessionFile.close')}</button>
         {:else}
-          <button class="btn-secondary" on:click={close}>{$t('sessionFile.cancel')}</button>
+          <button class="btn-secondary" on:click={close} disabled={importing}>{$t('sessionFile.cancel')}</button>
           <button class="btn-primary" disabled={!file || selected.size === 0 || loading} on:click={doImport}>
             {$t('sessionFile.importSelected', { n: selected.size })}
           </button>

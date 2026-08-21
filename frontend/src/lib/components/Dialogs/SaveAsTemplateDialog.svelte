@@ -10,6 +10,8 @@
   import AgentIcon from '../common/AgentIcon.svelte';
   import type { Session } from '../../stores/sessions';
   import { t } from '../../i18n';
+  import { activeProjectId } from '../../stores/projects';
+  import { get } from 'svelte/store';
 
   export let show = false;
   export let session: Session | null = null;
@@ -22,6 +24,7 @@
   let saved = false;
   let error = '';
   let operationGeneration = 0;
+  let targetProjectId = '';
 
   // One guard block with the tracking variable assigned inside it: splitting
   // this in two would let the "opened just now" test race against its own
@@ -40,11 +43,14 @@
       saving = false;
       saved = false;
       error = '';
+      targetProjectId = get(activeProjectId);
     } else if (!show && lastInitKey) {
       operationGeneration++;
       lastInitKey = '';
     }
   }
+
+  $: if (show && targetProjectId && $activeProjectId !== targetProjectId) close();
 
   $: tabs = session?.followedWindows || [];
   $: sessionPath = session?.path || '';
@@ -59,12 +65,14 @@
     saving = true;
     error = '';
     try {
-      await App.SaveSessionAsTemplate(targetSessionId, templateName, includePath);
-      if (!show || generation !== operationGeneration || session?.id !== targetSessionId) return;
+      await App.SaveSessionAsTemplate(targetSessionId, templateName, includePath, targetProjectId);
+      if (!show || generation !== operationGeneration || session?.id !== targetSessionId ||
+          targetProjectId !== get(activeProjectId)) return;
       saved = true;
       close();
     } catch (e) {
-      if (!show || generation !== operationGeneration || session?.id !== targetSessionId) return;
+      if (!show || generation !== operationGeneration || session?.id !== targetSessionId ||
+          targetProjectId !== get(activeProjectId)) return;
       error = String(e);
     } finally {
       if (generation === operationGeneration) saving = false;

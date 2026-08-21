@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 // Several sessions often share one working directory, and so share one task
@@ -37,6 +38,99 @@ func TestOversizedTaskFileIsNotCollected(t *testing.T) {
 	writeTaskFile(t, dir, `{"tasks":[]}`)
 	if set := collectTaskFilesAtMost([]string{dir}, 4); len(set.Files) != 0 {
 		t.Fatalf("oversized task file entered backup: %+v", set.Files)
+	}
+}
+
+func TestBackupTaskFilesReportsOversizedSource(t *testing.T) {
+	project := t.TempDir()
+	writeTaskFile(t, project, `{"tasks":[]}`)
+	if err := os.Truncate(taskFileFor(project), maxCanonicalStorageBytes+1); err != nil {
+		t.Fatal(err)
+	}
+	storage := taskBackupTestStorage(t, project)
+	if err := storage.BackupTaskFiles([]string{project}); err == nil {
+		t.Fatal("explicit task backup silently omitted an oversized task file")
+	}
+	backups, err := storage.ListTaskBackups()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(backups) != 0 {
+		t.Fatalf("failed collection published a partial task backup: %+v", backups)
+	}
+}
+
+func TestTaskBackupsAreScopedToCreatingProject(t *testing.T) {
+	projectAPath := t.TempDir()
+	writeTaskFile(t, projectAPath, `{"tasks":[{"id":"a"}]}`)
+	storage := taskBackupTestStorage(t, projectAPath)
+	if err := storage.BackupTaskFiles([]string{projectAPath}); err != nil {
+		t.Fatal(err)
+	}
+	projectABackups, err := storage.ListTaskBackups()
+	if err != nil || len(projectABackups) != 1 {
+		t.Fatalf("project A backups = %+v, %v", projectABackups, err)
+	}
+
+	projectB, err := storage.AddProject("project-b")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := storage.SetActiveProject(projectB.ID); err != nil {
+		t.Fatal(err)
+	}
+	projectBPath := t.TempDir()
+	if err := storage.AddInstance(&Instance{ID: "project-b-session", Name: "B", Path: projectBPath, Status: StatusStopped}); err != nil {
+		t.Fatal(err)
+	}
+	backups, err := storage.ListTaskBackups()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(backups) != 0 {
+		t.Fatalf("project B saw project A task backups: %+v", backups)
+	}
+	if err := storage.RestoreTaskBackup(projectABackups[0].ID); err == nil {
+		t.Fatal("project B restored project A task backup")
+	}
+}
+
+func TestRestoreTaskBackupRejectsPathOutsideActiveProject(t *testing.T) {
+	project := t.TempDir()
+	storage := taskBackupTestStorage(t, project)
+	outside := t.TempDir()
+	writeTaskFile(t, outside, `{"tasks":[{"id":"keep"}]}`)
+	before, err := os.ReadFile(taskFileFor(outside))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defaultProject := ""
+	set := TaskBackupSet{
+		ProjectID: &defaultProject,
+		CreatedAt: time.Now().UTC(),
+		Files:     []TaskBackup{{Path: outside, Content: `{"tasks":[{"id":"attacker"}]}`}},
+	}
+	raw, err := json.Marshal(set)
+	if err != nil {
+		t.Fatal(err)
+	}
+	backupDir := filepath.Join(storage.configDir, "backups", "tasks")
+	if err := os.MkdirAll(backupDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	const backupID = "20260821T120000.000000000Z-forged.json"
+	if err := os.WriteFile(filepath.Join(backupDir, backupID), raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := storage.RestoreTaskBackup(backupID); err == nil {
+		t.Fatal("forged active-project metadata allowed an out-of-project restore")
+	}
+	after, err := os.ReadFile(taskFileFor(outside))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(after) != string(before) {
+		t.Fatalf("rejected backup changed outside task file: %s", after)
 	}
 }
 
@@ -149,8 +243,8 @@ func TestRestoreTaskTargetsRollsBackEarlierReplacement(t *testing.T) {
 }
 
 func TestRestoreTaskBackupSnapshotsExactLockedStateBeforeReplacement(t *testing.T) {
-	storage := &Storage{configDir: t.TempDir()}
 	project := t.TempDir()
+	storage := taskBackupTestStorage(t, project)
 	current := `{"tasks":[{"id":"current"}]}`
 	restored := `{"tasks":[{"id":"restored"}]}`
 	writeTaskFile(t, project, current)
@@ -209,8 +303,8 @@ func TestRestoreTaskBackupSnapshotsExactLockedStateBeforeReplacement(t *testing.
 }
 
 func TestRestoreTaskBackupRejectsInvalidContentWithoutReplacingLiveFile(t *testing.T) {
-	storage := &Storage{configDir: t.TempDir()}
 	project := t.TempDir()
+	storage := taskBackupTestStorage(t, project)
 	current := `{"tasks":[{"id":"current"}]}`
 	writeTaskFile(t, project, current)
 
@@ -269,8 +363,8 @@ func TestRestoreTaskTargetsDoesNotCommitWhenUndoSnapshotFails(t *testing.T) {
 }
 
 func TestRestoreTaskBackupUndoRemovesFileCreatedByRestore(t *testing.T) {
-	storage := &Storage{configDir: t.TempDir()}
 	project := t.TempDir()
+	storage := taskBackupTestStorage(t, project)
 	restored := `{"tasks":[{"id":"restored"}]}`
 	backupDir := filepath.Join(storage.configDir, "backups", "tasks")
 	if err := os.MkdirAll(backupDir, 0o700); err != nil {
@@ -333,4 +427,19 @@ func writeTaskFile(t *testing.T, dir, content string) {
 	if err := os.WriteFile(filepath.Join(taskDir, "tasks.json"), []byte(content), 0644); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func taskBackupTestStorage(t *testing.T, project string) *Storage {
+	t.Helper()
+	configDir := t.TempDir()
+	storage := &Storage{
+		configDir:  configDir,
+		configPath: filepath.Join(configDir, "sessions.json"),
+	}
+	if err := storage.AddInstance(&Instance{
+		ID: "task-backup-session", Name: "task backup", Path: project, Status: StatusStopped,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	return storage
 }

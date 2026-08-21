@@ -45,8 +45,8 @@ const (
 // executable, not dpkg/rpm directly. The helper crosses the privilege boundary
 // first, copies the user-writable download to a root-owned file, and verifies
 // the checksum there before a package manager is allowed to open it.
-func privilegedPackageHelperArgs(executable, packagePath, trustedChecksum, packageKind string) []string {
-	return []string{executable, privilegedPackageInstallFlag, packagePath, trustedChecksum, packageKind}
+func privilegedPackageHelperArgs(executable, packagePath, trustedChecksum, packageKind, version string) []string {
+	return []string{executable, privilegedPackageInstallFlag, packagePath, trustedChecksum, packageKind, version}
 }
 
 // HandlePrivilegedPackageInstall handles the narrow pkexec helper mode before
@@ -56,7 +56,7 @@ func HandlePrivilegedPackageInstall(args []string) (handled bool, exitCode int) 
 	if len(args) < 2 || args[1] != privilegedPackageInstallFlag {
 		return false, 0
 	}
-	if len(args) != 5 {
+	if len(args) != 6 {
 		fmt.Fprintln(os.Stderr, "invalid verified package installer arguments")
 		return true, 2
 	}
@@ -65,6 +65,20 @@ func HandlePrivilegedPackageInstall(args []string) (handled bool, exitCode int) 
 		return true, 1
 	}
 	cleanStalePrivilegedPackageStages()
+
+	// Do not trust the checksum merely because the unprivileged parent supplied
+	// it. This helper is a public pkexec entry point: without an independent
+	// fixed-origin check, any local process could invoke it directly and provide
+	// the checksum of an arbitrary package of its own choosing. Re-fetch only
+	// the tiny checksum sidecar as root and constrain its release/asset name from
+	// compiled constants before opening the user-writable package path.
+	verifyCtx, cancel := context.WithTimeout(context.Background(), CheckTimeout)
+	err := verifyOfficialPackageChecksum(verifyCtx, args[5], args[4], args[3], readChecksumContext)
+	cancel()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "package publisher verification failed: %v\n", err)
+		return true, 1
+	}
 
 	stageDir, staged, err := stageVerifiedPackage(args[2], args[3], args[4])
 	if stageDir != "" {
@@ -110,6 +124,34 @@ func HandlePrivilegedPackageInstall(args []string) (handled bool, exitCode int) 
 		return true, 1
 	}
 	return true, 0
+}
+
+type officialChecksumReader func(context.Context, string, string) (string, error)
+
+func verifyOfficialPackageChecksum(ctx context.Context, version, packageKind, suppliedChecksum string, read officialChecksumReader) error {
+	if err := validateReleaseVersion(version); err != nil {
+		return err
+	}
+	if packageKind != "deb" && packageKind != "rpm" {
+		return fmt.Errorf("unsupported package type %q", packageKind)
+	}
+	filename := fmt.Sprintf("%s_%s_linux_%s.%s", BinaryName, strings.TrimPrefix(version, "v"), packageArch(), packageKind)
+	officialChecksum, err := read(ctx, releaseURL(version, filename), filename)
+	if err != nil {
+		return fmt.Errorf("cannot verify the official release checksum: %w", err)
+	}
+	supplied, err := hex.DecodeString(strings.ToLower(suppliedChecksum))
+	if err != nil || len(supplied) != sha256.Size {
+		return fmt.Errorf("invalid supplied checksum")
+	}
+	official, err := hex.DecodeString(strings.ToLower(officialChecksum))
+	if err != nil || len(official) != sha256.Size {
+		return fmt.Errorf("invalid official checksum")
+	}
+	if !equalChecksum(supplied, official) {
+		return fmt.Errorf("package checksum is not the checksum published for %s", filename)
+	}
+	return nil
 }
 
 func stageVerifiedPackage(sourcePath, trustedChecksum, packageKind string) (stageDir, stagedPath string, err error) {

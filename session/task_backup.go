@@ -11,7 +11,10 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // Tasks live outside the store that everything else is backed up from.
@@ -41,6 +44,10 @@ type TaskBackup struct {
 
 // TaskBackupSet is what one backup run collected.
 type TaskBackupSet struct {
+	// ProjectID pins a snapshot to the project that created it. The pointer is
+	// intentional: an empty string is the real ID of the default project,
+	// while nil identifies a legacy snapshot written before project scoping.
+	ProjectID *string      `json:"projectId,omitempty"`
 	CreatedAt time.Time    `json:"createdAt"`
 	Files     []TaskBackup `json:"files"`
 }
@@ -71,7 +78,12 @@ func collectTaskFilesAtMost(dirs []string, limit int64) TaskBackupSet {
 		}
 		seen[dir] = true
 
-		content, err := readFileAtMost(taskFileFor(dir), limit)
+		taskRoot, err := openProjectTaskRoot(dir, false)
+		if err != nil {
+			continue
+		}
+		content, err := readRootFileAtMost(taskRoot, "tasks.json", limit)
+		_ = taskRoot.Close()
 		if err != nil {
 			continue
 		}
@@ -82,6 +94,43 @@ func collectTaskFilesAtMost(dirs []string, limit int64) TaskBackupSet {
 	// what lets the caller skip writing a backup that changed nothing.
 	sort.Slice(set.Files, func(i, j int) bool { return set.Files[i].Path < set.Files[j].Path })
 	return set
+}
+
+// collectTaskFilesForBackup is the fail-closed collection path used by an
+// explicit backup. A missing task file is normal; an unreadable or oversized
+// one is not. Treating both alike made CreateBackup report success while
+// silently omitting the very task data the user meant to protect.
+func collectTaskFilesForBackup(dirs []string, limit int64) (TaskBackupSet, error) {
+	set := TaskBackupSet{CreatedAt: time.Now().UTC()}
+	seen := make(map[string]struct{}, len(dirs))
+	for _, dir := range dirs {
+		if dir == "" {
+			continue
+		}
+		canonical := CanonicalProjectPath(dir)
+		if _, duplicate := seen[canonical]; duplicate {
+			continue
+		}
+		seen[canonical] = struct{}{}
+		taskRoot, err := openProjectTaskRoot(canonical, false)
+		if os.IsNotExist(err) {
+			continue
+		}
+		if err != nil {
+			return TaskBackupSet{}, fmt.Errorf("cannot open task directory for %s: %w", canonical, err)
+		}
+		content, err := readRootFileAtMost(taskRoot, "tasks.json", limit)
+		_ = taskRoot.Close()
+		if os.IsNotExist(err) {
+			continue
+		}
+		if err != nil {
+			return TaskBackupSet{}, fmt.Errorf("cannot back up tasks for %s: %w", canonical, err)
+		}
+		set.Files = append(set.Files, TaskBackup{Path: canonical, Content: string(content)})
+	}
+	sort.Slice(set.Files, func(i, j int) bool { return set.Files[i].Path < set.Files[j].Path })
+	return set, nil
 }
 
 // taskBackupDir is where task snapshots are kept, beside the main backups.
@@ -95,7 +144,10 @@ func (s *Storage) taskBackupDirLocked() string {
 // Returns nil when there is nothing to save or nothing has changed — a backup
 // identical to the last one is noise that pushes real history out.
 func (s *Storage) BackupTaskFiles(dirs []string) error {
-	set := CollectTaskFiles(dirs)
+	set, err := collectTaskFilesForBackup(dirs, maxCanonicalStorageBytes)
+	if err != nil {
+		return err
+	}
 	return s.writeTaskBackupSet(set)
 }
 
@@ -120,6 +172,12 @@ func (s *Storage) writeTaskBackupSet(set TaskBackupSet) error {
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if set.ProjectID == nil {
+		projectID := s.projectID
+		set.ProjectID = &projectID
+	} else if *set.ProjectID != s.projectID {
+		return fmt.Errorf("task backup project changed: expected %q, got %q", *set.ProjectID, s.projectID)
+	}
 
 	dir := s.taskBackupDirLocked()
 	return withCrossProcessFileLock(filepath.Join(dir, ".backup.lock"), func() error {
@@ -127,7 +185,7 @@ func (s *Storage) writeTaskBackupSet(set TaskBackupSet) error {
 			return err
 		}
 
-		if unchanged, err := latestTaskBackupMatches(dir, comparable); err == nil && unchanged {
+		if unchanged, err := latestTaskBackupMatches(dir, *set.ProjectID, comparable); err == nil && unchanged {
 			return nil
 		}
 
@@ -166,7 +224,7 @@ func (s *Storage) writeTaskBackupSet(set TaskBackupSet) error {
 
 // latestTaskBackupMatches reports whether the newest snapshot holds the same
 // files as what is about to be written.
-func latestTaskBackupMatches(dir string, comparable []byte) (bool, error) {
+func latestTaskBackupMatches(dir, projectID string, comparable []byte) (bool, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return false, err
@@ -177,19 +235,22 @@ func latestTaskBackupMatches(dir string, comparable []byte) (bool, error) {
 	}
 	sort.Slice(files, func(i, j int) bool { return files[i].Name() < files[j].Name() })
 
-	previous, err := readFileAtMost(filepath.Join(dir, files[len(files)-1].Name()), maxCanonicalStorageBytes)
-	if err != nil {
-		return false, err
+	for index := len(files) - 1; index >= 0; index-- {
+		previous, err := readFileAtMost(filepath.Join(dir, files[index].Name()), maxCanonicalStorageBytes)
+		if err != nil {
+			continue
+		}
+		var set TaskBackupSet
+		if err := json.Unmarshal(previous, &set); err != nil || set.ProjectID == nil || *set.ProjectID != projectID {
+			continue
+		}
+		current, err := json.Marshal(set.Files)
+		if err != nil {
+			return false, err
+		}
+		return string(current) == string(comparable), nil
 	}
-	var set TaskBackupSet
-	if err := json.Unmarshal(previous, &set); err != nil {
-		return false, err
-	}
-	current, err := json.Marshal(set.Files)
-	if err != nil {
-		return false, err
-	}
-	return string(current) == string(comparable), nil
+	return false, nil
 }
 
 // ListTaskBackups returns the task snapshots, newest first.
@@ -205,8 +266,34 @@ func (s *Storage) ListTaskBackups() ([]BackupInfo, error) {
 		return nil, err
 	}
 
+	data, err := s.loadStorageDataLocked()
+	if err != nil {
+		return nil, err
+	}
+	allowed := taskBackupAllowedPaths(data)
 	result := make([]BackupInfo, 0, len(entries))
 	for _, entry := range backupJSONEntries(entries) {
+		backupPath := filepath.Join(s.taskBackupDirLocked(), entry.Name())
+		storedProjectID, scoped, err := taskBackupProjectScope(backupPath)
+		if err != nil {
+			continue
+		}
+		if scoped {
+			if storedProjectID != s.projectID {
+				continue
+			}
+		} else {
+			// Legacy snapshots have no project ID. They are uncommon and need a
+			// one-time full path inspection to infer their owner safely.
+			raw, err := readFileAtMost(backupPath, maxCanonicalStorageBytes)
+			if err != nil {
+				continue
+			}
+			var set TaskBackupSet
+			if json.Unmarshal(raw, &set) != nil || !taskBackupBelongsToProject(&set, s.projectID, allowed) {
+				continue
+			}
+		}
 		info, err := entry.Info()
 		if err != nil {
 			continue
@@ -219,6 +306,91 @@ func (s *Storage) ListTaskBackups() ([]BackupInfo, error) {
 	}
 	sort.Slice(result, func(i, j int) bool { return result[i].CreatedAt.After(result[j].CreatedAt) })
 	return result, nil
+}
+
+// taskBackupProjectScope reads only the leading metadata of a modern backup.
+// Full task contents may be tens of megabytes; ListTaskBackups must not decode
+// every content string merely to decide which project's list it belongs in.
+func taskBackupProjectScope(path string) (projectID string, scoped bool, err error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return "", false, err
+	}
+	defer file.Close()
+	decoder := json.NewDecoder(io.LimitReader(file, maxCanonicalStorageBytes+1))
+	token, err := decoder.Token()
+	if err != nil {
+		return "", false, err
+	}
+	if delimiter, ok := token.(json.Delim); !ok || delimiter != '{' {
+		return "", false, fmt.Errorf("invalid task backup object")
+	}
+	for decoder.More() {
+		keyToken, err := decoder.Token()
+		if err != nil {
+			return "", false, err
+		}
+		key, ok := keyToken.(string)
+		if !ok {
+			return "", false, fmt.Errorf("invalid task backup key")
+		}
+		if key == "projectId" {
+			if err := decoder.Decode(&projectID); err != nil {
+				return "", false, err
+			}
+			return projectID, true, nil
+		}
+		if key == "files" {
+			return "", false, nil
+		}
+		var ignored json.RawMessage
+		if err := decoder.Decode(&ignored); err != nil {
+			return "", false, err
+		}
+	}
+	return "", false, nil
+}
+
+func taskBackupAllowedPaths(data *StorageData) map[string]struct{} {
+	allowed := make(map[string]struct{})
+	add := func(instance *Instance) {
+		if instance != nil && instance.Path != "" {
+			allowed[CanonicalProjectPath(instance.Path)] = struct{}{}
+		}
+	}
+	if data == nil {
+		return allowed
+	}
+	for _, instance := range data.Instances {
+		add(instance)
+	}
+	for _, entry := range data.Trash {
+		if entry != nil {
+			add(entry.Session)
+		}
+	}
+	return allowed
+}
+
+func taskBackupBelongsToProject(set *TaskBackupSet, projectID string, allowed map[string]struct{}) bool {
+	if set == nil || len(set.Files) == 0 {
+		return false
+	}
+	if set.ProjectID != nil && *set.ProjectID != projectID {
+		return false
+	}
+	// Paths are validated even for newly scoped snapshots. Backup files are
+	// local input and may be corrupted or synced from another machine; a forged
+	// projectId must not turn restore into an arbitrary tasks.json write.
+	for _, file := range set.Files {
+		if strings.TrimSpace(file.Path) == "" {
+			return false
+		}
+		if _, ok := allowed[CanonicalProjectPath(file.Path)]; !ok {
+			return false
+		}
+	}
+	return true
 }
 
 // RestoreTaskBackup writes a snapshot's task files back where they came from.
@@ -236,6 +408,17 @@ func (s *Storage) RestoreTaskBackup(id string) error {
 	s.mu.Lock()
 	path := filepath.Join(s.taskBackupDirLocked(), id)
 	raw, err := readFileAtMost(path, maxCanonicalStorageBytes)
+	var currentProjectID string
+	var allowed map[string]struct{}
+	if err == nil {
+		currentProjectID = s.projectID
+		data, loadErr := s.loadStorageDataLocked()
+		if loadErr != nil {
+			err = loadErr
+		} else {
+			allowed = taskBackupAllowedPaths(data)
+		}
+	}
 	s.mu.Unlock()
 	if err != nil {
 		return err
@@ -245,8 +428,18 @@ func (s *Storage) RestoreTaskBackup(id string) error {
 	if err := json.Unmarshal(raw, &set); err != nil {
 		return err
 	}
+	if !taskBackupBelongsToProject(&set, currentProjectID, allowed) {
+		return fmt.Errorf("task backup does not belong to the active project")
+	}
 
 	targetByPath := make(map[string]*taskRestoreTarget)
+	defer func() {
+		for _, target := range targetByPath {
+			if target.root != nil {
+				_ = target.root.Close()
+			}
+		}
+	}()
 	for _, file := range set.Files {
 		if !file.Missing {
 			if err := validateTaskBackupContent(file.Content); err != nil {
@@ -259,14 +452,22 @@ func (s *Storage) RestoreTaskBackup(id string) error {
 		if stat, err := os.Stat(projectPath); err != nil || !stat.IsDir() {
 			continue
 		}
+		taskRoot, err := openProjectTaskRoot(projectPath, !file.Missing)
+		if os.IsNotExist(err) && file.Missing {
+			continue
+		}
+		if err != nil {
+			return fmt.Errorf("cannot safely open task directory for %s: %w", projectPath, err)
+		}
 		target := taskFileFor(projectPath)
 		if existing := targetByPath[target]; existing != nil {
+			_ = taskRoot.Close()
 			if existing.remove != file.Missing || existing.content != file.Content {
 				return fmt.Errorf("backup contains conflicting snapshots for %s", target)
 			}
 			continue
 		}
-		targetByPath[target] = &taskRestoreTarget{path: target, content: file.Content, remove: file.Missing}
+		targetByPath[target] = &taskRestoreTarget{path: target, content: file.Content, remove: file.Missing, root: taskRoot}
 	}
 	targets := make([]*taskRestoreTarget, 0, len(targetByPath))
 	for _, target := range targetByPath {
@@ -274,7 +475,7 @@ func (s *Storage) RestoreTaskBackup(id string) error {
 	}
 	sort.Slice(targets, func(i, j int) bool { return targets[i].path < targets[j].path })
 	return restoreTaskTargets(targets, os.Rename, func(lockedTargets []*taskRestoreTarget) error {
-		undo := TaskBackupSet{CreatedAt: time.Now().UTC()}
+		undo := TaskBackupSet{ProjectID: &currentProjectID, CreatedAt: time.Now().UTC()}
 		for _, target := range lockedTargets {
 			entry := TaskBackup{
 				Path:    filepath.Dir(filepath.Dir(target.path)),
@@ -317,6 +518,7 @@ type taskRestoreTarget struct {
 	path         string
 	content      string
 	remove       bool
+	root         *os.Root
 	stagedPath   string
 	original     []byte
 	originalMode os.FileMode
@@ -324,11 +526,7 @@ type taskRestoreTarget struct {
 }
 
 func restoreTaskTargets(targets []*taskRestoreTarget, replace func(string, string) error, beforeCommit func([]*taskRestoreTarget) error) error {
-	lockPaths := make([]string, len(targets))
-	for i, target := range targets {
-		lockPaths[i] = target.path + ".lock"
-	}
-	return withTaskRestoreLocks(lockPaths, func() error {
+	return withTaskRestoreTargetLocks(targets, func() error {
 		for _, target := range targets {
 			if target.remove {
 				continue
@@ -341,12 +539,12 @@ func restoreTaskTargets(targets []*taskRestoreTarget, replace func(string, strin
 		defer cleanupTaskRestoreStages(targets)
 
 		for _, target := range targets {
-			info, err := os.Stat(target.path)
+			info, err := target.stat()
 			switch {
 			case err == nil && !info.Mode().IsRegular():
 				return fmt.Errorf("task restore target is not a regular file: %s", target.path)
 			case err == nil:
-				target.original, err = readFileAtMost(target.path, maxCanonicalStorageBytes)
+				target.original, err = target.read(maxCanonicalStorageBytes)
 				if err != nil {
 					return err
 				}
@@ -358,7 +556,7 @@ func restoreTaskTargets(targets []*taskRestoreTarget, replace func(string, strin
 				return err
 			}
 			if !target.remove {
-				if err := os.Chmod(target.stagedPath, target.originalMode); err != nil {
+				if err := target.chmodStaged(target.originalMode); err != nil {
 					return err
 				}
 			}
@@ -373,12 +571,12 @@ func restoreTaskTargets(targets []*taskRestoreTarget, replace func(string, strin
 		for i, target := range targets {
 			var err error
 			if target.remove {
-				err = os.Remove(target.path)
+				err = target.removeFile()
 				if os.IsNotExist(err) {
 					err = nil
 				}
 			} else {
-				err = replace(target.stagedPath, target.path)
+				err = target.replaceStaged(replace)
 			}
 			if err != nil {
 				rollbackErr := rollbackTaskRestoreTargets(targets[:committed])
@@ -393,18 +591,102 @@ func restoreTaskTargets(targets []*taskRestoreTarget, replace func(string, strin
 	})
 }
 
-func withTaskRestoreLocks(paths []string, action func() error) error {
+func withTaskRestoreTargetLocks(targets []*taskRestoreTarget, action func() error) error {
 	var acquire func(int) error
 	acquire = func(index int) error {
-		if index == len(paths) {
+		if index == len(targets) {
 			return action()
 		}
-		return withCrossProcessFileLock(paths[index], func() error { return acquire(index + 1) })
+		target := targets[index]
+		if target.root != nil {
+			return withCrossProcessRootFileLock(target.root, "tasks.json.lock", func() error { return acquire(index + 1) })
+		}
+		return withCrossProcessFileLock(target.path+".lock", func() error { return acquire(index + 1) })
 	}
 	return acquire(0)
 }
 
+func (target *taskRestoreTarget) stat() (os.FileInfo, error) {
+	if target.root != nil {
+		return target.root.Stat("tasks.json")
+	}
+	return os.Stat(target.path)
+}
+
+func (target *taskRestoreTarget) read(limit int64) ([]byte, error) {
+	if target.root != nil {
+		return readRootFileAtMost(target.root, "tasks.json", limit)
+	}
+	return readFileAtMost(target.path, limit)
+}
+
+func (target *taskRestoreTarget) chmodStaged(mode os.FileMode) error {
+	if target.root != nil {
+		return target.root.Chmod(target.stagedPath, mode)
+	}
+	return os.Chmod(target.stagedPath, mode)
+}
+
+func (target *taskRestoreTarget) removeFile() error {
+	if target.root != nil {
+		return target.root.Remove("tasks.json")
+	}
+	return os.Remove(target.path)
+}
+
+func (target *taskRestoreTarget) replaceStaged(replace func(string, string) error) error {
+	if target.root != nil {
+		return target.root.Rename(target.stagedPath, "tasks.json")
+	}
+	return replace(target.stagedPath, target.path)
+}
+
+func (target *taskRestoreTarget) restoreBytes(content []byte, mode os.FileMode) error {
+	if target.root == nil {
+		return atomicRestoreTaskBytes(target.path, content, mode)
+	}
+	tmpName := ".task-rollback-" + uuid.NewString()
+	tmp, err := target.root.OpenFile(tmpName, os.O_CREATE|os.O_EXCL|os.O_RDWR, 0o600)
+	if err != nil {
+		return err
+	}
+	defer target.root.Remove(tmpName)
+	if err := tmp.Chmod(mode); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if _, err := tmp.Write(content); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return target.root.Rename(tmpName, "tasks.json")
+}
+
 func stageTaskRestoreTarget(target *taskRestoreTarget) error {
+	if target.root != nil {
+		target.stagedPath = ".task-restore-" + uuid.NewString()
+		tmp, err := target.root.OpenFile(target.stagedPath, os.O_CREATE|os.O_EXCL|os.O_RDWR, 0o600)
+		if err != nil {
+			return err
+		}
+		if err := tmp.Chmod(0o644); err == nil {
+			_, err = tmp.Write([]byte(target.content))
+		}
+		if err == nil {
+			err = tmp.Sync()
+		}
+		if closeErr := tmp.Close(); err == nil {
+			err = closeErr
+		}
+		return err
+	}
 	if err := os.MkdirAll(filepath.Dir(target.path), 0o755); err != nil {
 		return err
 	}
@@ -431,7 +713,11 @@ func stageTaskRestoreTarget(target *taskRestoreTarget) error {
 func cleanupTaskRestoreStages(targets []*taskRestoreTarget) {
 	for _, target := range targets {
 		if target.stagedPath != "" {
-			_ = os.Remove(target.stagedPath)
+			if target.root != nil {
+				_ = target.root.Remove(target.stagedPath)
+			} else {
+				_ = os.Remove(target.stagedPath)
+			}
 			target.stagedPath = ""
 		}
 	}
@@ -442,12 +728,12 @@ func rollbackTaskRestoreTargets(targets []*taskRestoreTarget) error {
 	for i := len(targets) - 1; i >= 0; i-- {
 		target := targets[i]
 		if !target.existed {
-			if err := os.Remove(target.path); err != nil && !os.IsNotExist(err) {
+			if err := target.removeFile(); err != nil && !os.IsNotExist(err) {
 				rollbackErr = errors.Join(rollbackErr, fmt.Errorf("failed to remove restored %s: %w", target.path, err))
 			}
 			continue
 		}
-		if err := atomicRestoreTaskBytes(target.path, target.original, target.originalMode); err != nil {
+		if err := target.restoreBytes(target.original, target.originalMode); err != nil {
 			rollbackErr = errors.Join(rollbackErr, fmt.Errorf("failed to roll back %s: %w", target.path, err))
 		}
 	}

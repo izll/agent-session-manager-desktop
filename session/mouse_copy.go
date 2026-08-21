@@ -1,6 +1,9 @@
 package session
 
-import "log"
+import (
+	"context"
+	"log"
+)
 
 // A drag inside a pane belongs to tmux, not to the web terminal.
 //
@@ -172,8 +175,24 @@ var copyModeTables = []string{"copy-mode", "copy-mode-vi"}
 // restore them rather than simply leave them, or a stale one keeps deciding
 // what a drag does long after the code that wrote it is gone.
 func SetMouseCopyEnabled(enabled bool) {
+	ctx, cancel := context.WithTimeout(context.Background(), TmuxCommandTimeout)
+	defer cancel()
+	SetMouseCopyEnabledContext(ctx, enabled)
+}
+
+// SetMouseCopyEnabledContext applies every binding under one caller-owned
+// deadline. There are several tables and click variants; giving each command
+// its own timeout would still let one settings save stall for N×timeout when
+// the multiplexer is wedged.
+func SetMouseCopyEnabledContext(ctx context.Context, enabled bool) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	run := func(args []string) error {
+		return TmuxCommandContext(ctx, args...).Run()
+	}
 	for _, table := range copyModeTables {
-		if err := TmuxCommand(MouseCopyBinding(table, enabled)...).Run(); err != nil {
+		if err := run(MouseCopyBinding(table, enabled)); err != nil {
 			// A failure here is why the setting silently does nothing, so it
 			// has to be visible rather than dropped.
 			log.Printf("[clipboard] binding %s failed: %v", table, err)
@@ -182,7 +201,7 @@ func SetMouseCopyEnabled(enabled bool) {
 		// both copy unconditionally — so leaving them alone would let a double
 		// click fill the clipboard with the setting off.
 		for key, selector := range clickSelectKeys {
-			if err := TmuxCommand(ClickSelectBinding(table, key, selector, enabled)...).Run(); err != nil {
+			if err := run(ClickSelectBinding(table, key, selector, enabled)); err != nil {
 				log.Printf("[clipboard] binding %s/%s failed: %v", table, key, err)
 			}
 		}
@@ -192,7 +211,7 @@ func SetMouseCopyEnabled(enabled bool) {
 	// mode — which is the normal case. Without these, every binding above is
 	// unreachable for a click.
 	for key, selector := range clickSelectKeys {
-		if err := TmuxCommand(RootClickBinding(key, selector, enabled)...).Run(); err != nil {
+		if err := run(RootClickBinding(key, selector, enabled)); err != nil {
 			log.Printf("[clipboard] root binding %s failed: %v", key, err)
 		}
 	}

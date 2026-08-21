@@ -126,14 +126,14 @@ export const sessionsByGroup = derived(
 let sessionProjectGeneration = 0;
 let sessionsLoadGeneration = 0;
 
-type ProjectOperationTarget = { generation: number };
+type ProjectOperationTarget = { generation: number; projectId: string };
 
 function projectTarget(): ProjectOperationTarget {
-  return { generation: sessionProjectGeneration };
+  return { generation: sessionProjectGeneration, projectId: get(activeProjectId) };
 }
 
 function projectTargetIsCurrent(target: ProjectOperationTarget): boolean {
-  return target.generation === sessionProjectGeneration;
+  return target.generation === sessionProjectGeneration && target.projectId === get(activeProjectId);
 }
 
 /** Called before the backend's active project changes. */
@@ -179,7 +179,7 @@ export async function loadSessions() {
 export async function createSession(name: string, path: string, agent: string, autoYes: boolean = false, extraArgs: string = '') {
   const target = projectTarget();
   try {
-    const session = await App.CreateSession(name, path, agent, autoYes, extraArgs);
+    const session = await App.CreateSession(name, path, agent, autoYes, extraArgs, target.projectId);
     // The session was durably created in the project that owned the bridge
     // call, but callers must not continue a multi-step create/assign/start
     // workflow in the replacement project using the same generated id.
@@ -221,9 +221,9 @@ export async function startSession(id: string, resumeId?: string) {
     // WebSocket against it.
     dropPoolForSession(id);
     if (resumeId) {
-      await App.StartSessionWithResume(id, resumeId);
+      await App.StartSessionWithResume(id, resumeId, target.projectId);
     } else {
-      await App.StartSession(id);
+      await App.StartSession(id, target.projectId);
     }
     if (!projectTargetIsCurrent(target)) return;
     // Reset to window 0 when session starts (windows are recreated with potentially new indices)
@@ -241,7 +241,7 @@ export async function startSession(id: string, resumeId?: string) {
 export async function stopSession(id: string) {
   const target = projectTarget();
   try {
-    await App.StopSession(id);
+    await App.StopSession(id, target.projectId);
     if (!projectTargetIsCurrent(target)) return;
     dropPoolForSession(id);
     // Reset to window 0 when session stops
@@ -259,7 +259,7 @@ export async function stopSession(id: string) {
 export async function stopTab(id: string, windowIdx: number) {
   const target = projectTarget();
   try {
-    await App.StopTab(id, windowIdx);
+    await App.StopTab(id, windowIdx, target.projectId);
     if (!projectTargetIsCurrent(target)) return;
     // Reset to window 0 when main tab stops (kills entire session)
     if (windowIdx === 0 && get(selectedSessionId) === id) {
@@ -287,7 +287,7 @@ function dropPoolForWindow(id: string, windowIdx: number) {
 export async function restartTab(id: string, windowIdx: number) {
   const target = projectTarget();
   try {
-    await App.RestartTab(id, windowIdx);
+    await App.RestartTab(id, windowIdx, target.projectId);
     if (!projectTargetIsCurrent(target)) return;
     dropPoolForWindow(id, windowIdx);
     await loadSessions();
@@ -301,7 +301,7 @@ export async function restartTab(id: string, windowIdx: number) {
 export async function restartTabWithResume(id: string, windowIdx: number, resumeId: string) {
   const target = projectTarget();
   try {
-    await App.RestartTabWithResume(id, windowIdx, resumeId);
+    await App.RestartTabWithResume(id, windowIdx, resumeId, target.projectId);
     if (!projectTargetIsCurrent(target)) return;
     dropPoolForWindow(id, windowIdx);
     await loadSessions();
@@ -315,7 +315,7 @@ export async function restartTabWithResume(id: string, windowIdx: number, resume
 export async function deleteTab(id: string, windowIdx: number) {
   const target = projectTarget();
   try {
-    await App.DeleteTab(id, windowIdx);
+    await App.DeleteTab(id, windowIdx, target.projectId);
     if (!projectTargetIsCurrent(target)) return;
     dropPoolForWindow(id, windowIdx);
     // Switch to window 0 if the deleted tab was selected
@@ -325,7 +325,7 @@ export async function deleteTab(id: string, windowIdx: number) {
     const currentSettings = get(settings);
     if (currentSettings.splitView && currentSettings.markedSessionId === id &&
         currentSettings.markedWindowIdx === windowIdx) {
-      await saveSettings({ splitView: false, markedSessionId: '', markedWindowIdx: 0 });
+      await saveSettings({ splitView: false, markedSessionId: '', markedWindowIdx: 0 }, target.projectId);
       if (!projectTargetIsCurrent(target)) return;
     }
     await loadSessions();
@@ -339,7 +339,7 @@ export async function deleteTab(id: string, windowIdx: number) {
 export async function renameSession(id: string, name: string) {
   const target = projectTarget();
   try {
-    await App.RenameSession(id, name);
+    await App.RenameSession(id, name, target.projectId);
     if (!projectTargetIsCurrent(target)) return;
     sessions.update(s => s.map(sess =>
       sess.id === id ? { ...sess, name } : sess
@@ -354,7 +354,7 @@ export async function renameSession(id: string, name: string) {
 export async function renameTab(sessionId: string, windowIdx: number, name: string) {
   const target = projectTarget();
   try {
-    await App.RenameTab(sessionId, windowIdx, name);
+    await App.RenameTab(sessionId, windowIdx, name, target.projectId);
     if (!projectTargetIsCurrent(target)) return;
     await loadSessions();
   } catch (e) {
@@ -367,12 +367,12 @@ export async function renameTab(sessionId: string, windowIdx: number, name: stri
 export async function deleteSession(id: string) {
   const target = projectTarget();
   try {
-    await App.DeleteSession(id);
+    await App.DeleteSession(id, target.projectId);
     if (!projectTargetIsCurrent(target)) return;
     dropPoolForSession(id);
     const currentSettings = get(settings);
     if (currentSettings.splitView && currentSettings.markedSessionId === id) {
-      await saveSettings({ splitView: false, markedSessionId: '', markedWindowIdx: 0 });
+      await saveSettings({ splitView: false, markedSessionId: '', markedWindowIdx: 0 }, target.projectId);
       if (!projectTargetIsCurrent(target)) return;
     }
     sessionTabMemory.delete(id);
@@ -390,7 +390,7 @@ export async function deleteSession(id: string) {
 export async function toggleFavorite(id: string) {
   const target = projectTarget();
   try {
-    await App.ToggleFavorite(id);
+    await App.ToggleFavorite(id, target.projectId);
     if (!projectTargetIsCurrent(target)) return;
     // A refresh can land after the backend has toggled but before this Wails
     // promise resolves. Inverting that already-fresh store value would put the
@@ -407,7 +407,7 @@ export async function toggleFavorite(id: string) {
 export async function toggleAutoYes(id: string) {
   const target = projectTarget();
   try {
-    await App.ToggleAutoYes(id);
+    await App.ToggleAutoYes(id, target.projectId);
     if (!projectTargetIsCurrent(target)) return;
     await loadSessions();
   } catch (e) {
@@ -423,7 +423,7 @@ export async function toggleAutoYes(id: string) {
 export async function cycleYoloMode(id: string, windowIdx: number) {
   const target = projectTarget();
   try {
-    await App.CycleYoloMode(id, windowIdx);
+    await App.CycleYoloMode(id, windowIdx, target.projectId);
   } catch (e) {
     if (!projectTargetIsCurrent(target)) return;
     error.set(String(e));
@@ -434,7 +434,7 @@ export async function cycleYoloMode(id: string, windowIdx: number) {
 export async function setSessionColor(id: string, color: string, bgColor: string, fullRow: boolean) {
   const target = projectTarget();
   try {
-    await App.SetSessionColor(id, color, bgColor, fullRow);
+    await App.SetSessionColor(id, color, bgColor, fullRow, target.projectId);
     if (!projectTargetIsCurrent(target)) return;
     sessions.update(s => s.map(sess =>
       sess.id === id ? { ...sess, color, bgColor, fullRowColor: fullRow } : sess
@@ -449,7 +449,7 @@ export async function setSessionColor(id: string, color: string, bgColor: string
 export async function assignToGroup(sessionId: string, groupId: string) {
   const target = projectTarget();
   try {
-    await App.AssignToGroup(sessionId, groupId);
+    await App.AssignToGroup(sessionId, groupId, target.projectId);
     if (!projectTargetIsCurrent(target)) return;
     sessions.update(s => s.map(sess =>
       sess.id === sessionId ? { ...sess, groupId } : sess
@@ -464,7 +464,7 @@ export async function assignToGroup(sessionId: string, groupId: string) {
 export async function createGroup(name: string) {
   const target = projectTarget();
   try {
-    const group = await App.CreateGroup(name);
+    const group = await App.CreateGroup(name, target.projectId);
     if (!projectTargetIsCurrent(target)) return group;
     if (group) {
       groups.update(g => [...g, group as Group]);
@@ -480,7 +480,7 @@ export async function createGroup(name: string) {
 export async function deleteGroup(id: string) {
   const target = projectTarget();
   try {
-    await App.DeleteGroup(id);
+    await App.DeleteGroup(id, target.projectId);
     if (!projectTargetIsCurrent(target)) return;
     groups.update(g => g.filter(group => group.id !== id));
     // Unassign sessions from deleted group
@@ -497,7 +497,7 @@ export async function deleteGroup(id: string) {
 export async function renameGroup(id: string, name: string) {
   const target = projectTarget();
   try {
-    await App.RenameGroup(id, name);
+    await App.RenameGroup(id, name, target.projectId);
     if (!projectTargetIsCurrent(target)) return;
     groups.update(g => g.map(group =>
       group.id === id ? { ...group, name } : group
@@ -517,7 +517,7 @@ export async function renameGroup(id: string, name: string) {
 export async function moveGroup(id: string, newIndex: number) {
   const target = projectTarget();
   try {
-    await App.MoveGroup(id, newIndex);
+    await App.MoveGroup(id, newIndex, target.projectId);
     if (!projectTargetIsCurrent(target)) return;
     await loadSessions();
   } catch (e) {
@@ -530,7 +530,7 @@ export async function moveGroup(id: string, newIndex: number) {
 export async function setGroupColor(id: string, color: string, bgColor: string, fullRow: boolean) {
   const target = projectTarget();
   try {
-    await App.SetGroupColor(id, color, bgColor, fullRow);
+    await App.SetGroupColor(id, color, bgColor, fullRow, target.projectId);
     if (!projectTargetIsCurrent(target)) return;
     groups.update(g => g.map(group =>
       group.id === id ? { ...group, color, bgColor, fullRowColor: fullRow } : group
@@ -545,7 +545,7 @@ export async function setGroupColor(id: string, color: string, bgColor: string, 
 export async function toggleGroupCollapse(id: string) {
   const target = projectTarget();
   try {
-    await App.ToggleGroupCollapse(id);
+    await App.ToggleGroupCollapse(id, target.projectId);
     if (!projectTargetIsCurrent(target)) return;
     await loadSessions();
   } catch (e) {
@@ -642,7 +642,7 @@ export function selectWindow(idx: number) {
 export async function reorderSession(id: string, direction: number) {
   const target = projectTarget();
   try {
-    await App.ReorderSession(id, direction);
+    await App.ReorderSession(id, direction, target.projectId);
     if (!projectTargetIsCurrent(target)) return;
     await loadSessions();
   } catch (e) {
@@ -655,7 +655,7 @@ export async function reorderSession(id: string, direction: number) {
 export async function reorderTab(sessionId: string, fromIdx: number, toIdx: number) {
   const target = projectTarget();
   try {
-    await App.ReorderTab(sessionId, fromIdx, toIdx);
+    await App.ReorderTab(sessionId, fromIdx, toIdx, target.projectId);
     if (!projectTargetIsCurrent(target)) return;
     await loadSessions();
   } catch (e) {
@@ -668,7 +668,7 @@ export async function reorderTab(sessionId: string, fromIdx: number, toIdx: numb
 export async function moveSessionToIndex(id: string, targetIndex: number) {
   const target = projectTarget();
   try {
-    await App.MoveSessionToIndex(id, targetIndex);
+    await App.MoveSessionToIndex(id, targetIndex, target.projectId);
     if (!projectTargetIsCurrent(target)) return;
     await loadSessions();
   } catch (e) {

@@ -7,6 +7,7 @@
   import { t } from '../../i18n';
   import { registerUnsavedGuard } from '../../stores/unsavedChanges';
   import ConfirmDialog from '../Dialogs/ConfirmDialog.svelte';
+  import { activeProjectId } from '../../stores/projects';
 
   export let active = false;
 
@@ -15,6 +16,7 @@
   let notes = '';
   let lastSessionId: string | null = null;
   let lastWindowIdx: number = 0;
+  let lastProjectId = '';
   let saveTimeout: ReturnType<typeof setTimeout> | null = null;
   let loadGeneration = 0;
   let saving = false;
@@ -74,13 +76,13 @@
     if (cancel) cancel();
   }
 
-  function noteKey(sessionId: string, windowIdx: number): string {
-    return `${sessionId}:${windowIdx}`;
+  function noteKey(projectId: string, sessionId: string, windowIdx: number): string {
+    return `${projectId}:${sessionId}:${windowIdx}`;
   }
 
   function rememberCurrentDraft() {
     if (!lastSessionId) return;
-    draftsByTarget.set(noteKey(lastSessionId, lastWindowIdx), {
+    draftsByTarget.set(noteKey(lastProjectId, lastSessionId, lastWindowIdx), {
       text: notes,
       saved: lastSaved,
       saveError,
@@ -327,19 +329,21 @@
     // Save any pending changes
     if (saveTimeout) {
       clearTimeout(saveTimeout);
-      void saveNow(lastSessionId, lastWindowIdx, notes);
+      void saveNow(lastProjectId, lastSessionId, lastWindowIdx, notes);
     }
     dictation.destroy();
   });
 
   // Load notes when session or window changes
   async function loadNotes(force = false) {
+    const projectId = get(activeProjectId);
     const sessionId = get(selectedSessionId);
     const windowIdx = get(selectedWindowIdx);
 
     if (!sessionId) {
       loadGeneration++;
       loadingNotes = false;
+      lastProjectId = projectId;
       lastSessionId = null;
       notes = '';
       lastSaved = '';
@@ -350,14 +354,15 @@
     }
 
     // Only reload if session or window changed (unless forced)
-    if (!force && sessionId === lastSessionId && windowIdx === lastWindowIdx) {
+    if (!force && projectId === lastProjectId && sessionId === lastSessionId && windowIdx === lastWindowIdx) {
       return;
     }
 
+    lastProjectId = projectId;
     lastSessionId = sessionId;
     lastWindowIdx = windowIdx;
     const generation = ++loadGeneration;
-    const targetKey = noteKey(sessionId, windowIdx);
+    const targetKey = noteKey(projectId, sessionId, windowIdx);
     const remembered = draftsByTarget.get(targetKey) ?? {
       text: '', saved: '', saveError: '', loadError: '',
     };
@@ -371,7 +376,7 @@
       // back into the editor even though the later write succeeds.
       const pendingSave = saveQueues.get(targetKey);
       if (pendingSave) await pendingSave;
-      if (generation !== loadGeneration || sessionId !== lastSessionId || windowIdx !== lastWindowIdx) return;
+      if (generation !== loadGeneration || projectId !== lastProjectId || projectId !== get(activeProjectId) || sessionId !== lastSessionId || windowIdx !== lastWindowIdx) return;
       // A failed or not-yet-saved draft is the newest copy. Reading the backend
       // here would turn a failed save into apparent success and discard the only
       // copy of the user's text on a fast A -> B -> A switch.
@@ -382,7 +387,7 @@
         return;
       }
       const content = await App.GetTabNotes(sessionId, windowIdx);
-      if (generation !== loadGeneration || sessionId !== lastSessionId || windowIdx !== lastWindowIdx) return;
+      if (generation !== loadGeneration || projectId !== lastProjectId || projectId !== get(activeProjectId) || sessionId !== lastSessionId || windowIdx !== lastWindowIdx) return;
       notes = content || '';
       lastSaved = notes;
       saveError = '';
@@ -390,7 +395,7 @@
       draftsByTarget.set(targetKey, { text: notes, saved: notes, saveError: '', loadError: '' });
       resetHistory();
     } catch (e) {
-      if (generation !== loadGeneration || sessionId !== lastSessionId || windowIdx !== lastWindowIdx) return;
+      if (generation !== loadGeneration || projectId !== lastProjectId || projectId !== get(activeProjectId) || sessionId !== lastSessionId || windowIdx !== lastWindowIdx) return;
       console.error('Failed to load notes:', e);
       // Keep the per-target draft (including a clean cached copy) and make the
       // failed load explicit. An empty editable textarea is indistinguishable
@@ -403,7 +408,7 @@
       // A stale request must not re-enable the textarea while the replacement
       // target is still loading. Keeping the old note read-only in this short
       // interval also prevents keystrokes from being saved under the new tab.
-      if (generation === loadGeneration && sessionId === lastSessionId && windowIdx === lastWindowIdx) {
+      if (generation === loadGeneration && projectId === lastProjectId && projectId === get(activeProjectId) && sessionId === lastSessionId && windowIdx === lastWindowIdx) {
         loadingNotes = false;
       }
     }
@@ -435,17 +440,17 @@
       saveTimeout = null;
     }
     if (!lastSessionId || notes === lastSaved) return;
-    await saveNow(lastSessionId, lastWindowIdx, notes);
+    await saveNow(lastProjectId, lastSessionId, lastWindowIdx, notes);
   }
 
   // Watch for session/window changes
-  $: if ($selectedSessionId !== lastSessionId || $selectedWindowIdx !== lastWindowIdx) {
+  $: if ($activeProjectId !== lastProjectId || $selectedSessionId !== lastSessionId || $selectedWindowIdx !== lastWindowIdx) {
     rememberCurrentDraft();
     // Save current notes before loading new ones
     if (saveTimeout) {
       clearTimeout(saveTimeout);
       saveTimeout = null;
-      void saveNow(lastSessionId, lastWindowIdx, notes);
+      void saveNow(lastProjectId, lastSessionId, lastWindowIdx, notes);
     }
     void loadNotes();
   }
@@ -457,11 +462,12 @@
     if (saveTimeout) {
       clearTimeout(saveTimeout);
     }
+    const projectId = lastProjectId;
     const sessionId = lastSessionId;
     const windowIdx = lastWindowIdx;
     const snapshot = notes;
     if (sessionId) {
-      draftsByTarget.set(noteKey(sessionId, windowIdx), {
+      draftsByTarget.set(noteKey(projectId, sessionId, windowIdx), {
         text: snapshot,
         saved: lastSaved,
         saveError: '',
@@ -471,24 +477,24 @@
     }
     const timeout = setTimeout(() => {
       if (saveTimeout === timeout) saveTimeout = null;
-      void saveNow(sessionId, windowIdx, snapshot);
+      void saveNow(projectId, sessionId, windowIdx, snapshot);
     }, 500);
     saveTimeout = timeout;
   }
 
-  async function saveNow(sessionId: string | null, windowIdx: number, snapshot: string) {
-    if (!sessionId || (sessionId === lastSessionId && windowIdx === lastWindowIdx && snapshot === lastSaved)) return;
+  async function saveNow(projectId: string, sessionId: string | null, windowIdx: number, snapshot: string) {
+    if (!projectId || !sessionId || (projectId === lastProjectId && sessionId === lastSessionId && windowIdx === lastWindowIdx && snapshot === lastSaved)) return;
 
-    const key = noteKey(sessionId, windowIdx);
+    const key = noteKey(projectId, sessionId, windowIdx);
     const previous = saveQueues.get(key) ?? Promise.resolve();
     const queued = previous.catch(() => undefined).then(async () => {
       savesInFlight++;
       saving = true;
       try {
-        await App.SetTabNotes(sessionId, windowIdx, snapshot);
+        await App.SetTabNotes(sessionId, windowIdx, snapshot, projectId);
         const draft = draftsByTarget.get(key) ?? { text: snapshot, saved: lastSaved, saveError: '', loadError: '' };
         draftsByTarget.set(key, { ...draft, saved: snapshot, saveError: '', loadError: '' });
-        if (sessionId === lastSessionId && windowIdx === lastWindowIdx && notes === snapshot) {
+        if (projectId === lastProjectId && projectId === get(activeProjectId) && sessionId === lastSessionId && windowIdx === lastWindowIdx && notes === snapshot) {
           lastSaved = snapshot;
           saveError = '';
           loadError = '';
@@ -500,7 +506,7 @@
         const message = String(e);
         const draft = draftsByTarget.get(key) ?? { text: snapshot, saved: '', saveError: '', loadError: '' };
         draftsByTarget.set(key, { ...draft, saveError: message });
-        if (sessionId === lastSessionId && windowIdx === lastWindowIdx) saveError = message;
+        if (projectId === lastProjectId && projectId === get(activeProjectId) && sessionId === lastSessionId && windowIdx === lastWindowIdx) saveError = message;
       } finally {
         savesInFlight--;
         saving = savesInFlight > 0;
@@ -514,7 +520,7 @@
   async function retryNotes() {
     if (!lastSessionId) return;
     if (notes !== lastSaved || saveError) {
-      await saveNow(lastSessionId, lastWindowIdx, notes);
+      await saveNow(lastProjectId, lastSessionId, lastWindowIdx, notes);
       if (saveError) return;
     }
     await loadNotes(true);

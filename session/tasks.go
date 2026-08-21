@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -12,6 +13,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 var ErrTaskStoreConflict = errors.New("tasks.json changed during update")
@@ -118,6 +121,7 @@ type TaskManager struct {
 	expectedRevision       []byte
 	expectedRevisionSet    bool
 	expectedRevisionExists bool
+	transactionRoot        *os.Root
 }
 
 // NewTaskManager creates a new task manager for a project path
@@ -150,10 +154,38 @@ func (tm *TaskManager) getTaskFilePath() string {
 	return filepath.Join(tm.projectPath, ".taskmaster", "tasks.json")
 }
 
-// ensureTaskDir ensures the .taskmaster directory exists
-func (tm *TaskManager) ensureTaskDir() error {
-	dir := filepath.Join(tm.projectPath, ".taskmaster")
-	return os.MkdirAll(dir, 0755)
+// openProjectTaskRoot returns a directory capability rooted at .taskmaster.
+// A repository may itself contain a .taskmaster symlink; opening all files
+// through os.Root prevents that symlink (or a concurrent replacement) from
+// redirecting task writes outside the working tree.
+func openProjectTaskRoot(projectPath string, create bool) (*os.Root, error) {
+	projectRoot, err := os.OpenRoot(CanonicalProjectPath(projectPath))
+	if err != nil {
+		return nil, err
+	}
+	defer projectRoot.Close()
+	if create {
+		if err := projectRoot.MkdirAll(".taskmaster", 0o755); err != nil {
+			return nil, err
+		}
+	}
+	return projectRoot.OpenRoot(".taskmaster")
+}
+
+func readRootFileAtMost(root *os.Root, name string, limit int64) ([]byte, error) {
+	file, err := root.Open(name)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	data, err := io.ReadAll(io.LimitReader(file, limit+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(data)) > limit {
+		return nil, fmt.Errorf("%s exceeds the %d-byte limit", filepath.Base(name), limit)
+	}
+	return data, nil
 }
 
 // Load loads tasks from the project's .taskmaster/tasks.json
@@ -164,23 +196,22 @@ func (tm *TaskManager) Load() error {
 }
 
 func (tm *TaskManager) loadLocked() error {
-	filePath := tm.getTaskFilePath()
-
-	data, err := readFileAtMost(filePath, maxCanonicalStorageBytes)
+	taskRoot, err := openProjectTaskRoot(tm.projectPath, false)
 	if err != nil {
 		if os.IsNotExist(err) {
-			// Initialize empty store
-			tm.store = &TaskStore{
-				Meta: TaskStoreMeta{
-					Version:     "1.0",
-					ProjectName: filepath.Base(tm.projectPath),
-					ProjectPath: tm.projectPath,
-					CreatedAt:   time.Now(),
-					UpdatedAt:   time.Now(),
-				},
-				Tasks: []Task{},
-			}
-			return nil
+			return tm.initializeEmptyStoreLocked()
+		}
+		return fmt.Errorf("failed to open task directory: %w", err)
+	}
+	defer taskRoot.Close()
+	return tm.loadLockedFrom(taskRoot)
+}
+
+func (tm *TaskManager) loadLockedFrom(taskRoot *os.Root) error {
+	data, err := readRootFileAtMost(taskRoot, "tasks.json", maxCanonicalStorageBytes)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return tm.initializeEmptyStoreLocked()
 		}
 		return fmt.Errorf("failed to read tasks file: %w", err)
 	}
@@ -194,20 +225,47 @@ func (tm *TaskManager) loadLocked() error {
 	return nil
 }
 
+func (tm *TaskManager) initializeEmptyStoreLocked() error {
+	now := time.Now()
+	tm.store = &TaskStore{
+		Meta: TaskStoreMeta{
+			Version: "1.0", ProjectName: filepath.Base(tm.projectPath),
+			ProjectPath: tm.projectPath, CreatedAt: now, UpdatedAt: now,
+		},
+		Tasks: []Task{},
+	}
+	return nil
+}
+
 // Save saves tasks to the project's .taskmaster/tasks.json
 func (tm *TaskManager) Save() error {
 	tm.mu.Lock()
 	defer tm.mu.Unlock()
-	return withCrossProcessFileLock(tm.getTaskFilePath()+".lock", tm.saveLocked)
+	taskRoot, err := openProjectTaskRoot(tm.projectPath, true)
+	if err != nil {
+		return fmt.Errorf("failed to open task directory: %w", err)
+	}
+	defer taskRoot.Close()
+	return withCrossProcessRootFileLock(taskRoot, "tasks.json.lock", func() error {
+		return tm.saveLockedTo(taskRoot)
+	})
 }
 
 func (tm *TaskManager) saveLocked() error {
+	if tm.transactionRoot != nil {
+		return tm.saveLockedTo(tm.transactionRoot)
+	}
+	taskRoot, err := openProjectTaskRoot(tm.projectPath, true)
+	if err != nil {
+		return fmt.Errorf("failed to open task directory: %w", err)
+	}
+	defer taskRoot.Close()
+	return tm.saveLockedTo(taskRoot)
+}
+
+func (tm *TaskManager) saveLockedTo(taskRoot *os.Root) error {
 	if tm.store == nil {
 		return fmt.Errorf("no task store loaded")
-	}
-
-	if err := tm.ensureTaskDir(); err != nil {
-		return fmt.Errorf("failed to create task directory: %w", err)
 	}
 
 	tm.store.Meta.UpdatedAt = time.Now()
@@ -217,13 +275,12 @@ func (tm *TaskManager) saveLocked() error {
 		return fmt.Errorf("failed to serialize tasks: %w", err)
 	}
 
-	filePath := tm.getTaskFilePath()
-	tmp, err := os.CreateTemp(filepath.Dir(filePath), ".tasks-*")
+	tmpName := ".tasks-" + uuid.NewString()
+	tmp, err := taskRoot.OpenFile(tmpName, os.O_CREATE|os.O_EXCL|os.O_RDWR, 0o600)
 	if err != nil {
 		return fmt.Errorf("failed to create tasks temp file: %w", err)
 	}
-	tmpPath := tmp.Name()
-	defer os.Remove(tmpPath)
+	defer taskRoot.Remove(tmpName)
 	if err := tmp.Chmod(0644); err != nil {
 		_ = tmp.Close()
 		return fmt.Errorf("failed to set tasks temp permissions: %w", err)
@@ -240,7 +297,7 @@ func (tm *TaskManager) saveLocked() error {
 		return fmt.Errorf("failed to close tasks file: %w", err)
 	}
 	if tm.expectedRevisionSet {
-		current, readErr := readFileAtMost(filePath, maxCanonicalStorageBytes)
+		current, readErr := readRootFileAtMost(taskRoot, "tasks.json", maxCanonicalStorageBytes)
 		switch {
 		case readErr == nil && !tm.expectedRevisionExists:
 			return ErrTaskStoreConflict
@@ -252,7 +309,7 @@ func (tm *TaskManager) saveLocked() error {
 			return fmt.Errorf("failed to verify tasks file revision: %w", readErr)
 		}
 	}
-	if err := os.Rename(tmpPath, filePath); err != nil {
+	if err := taskRoot.Rename(tmpName, "tasks.json"); err != nil {
 		return fmt.Errorf("failed to replace tasks file: %w", err)
 	}
 
@@ -263,27 +320,34 @@ func (tm *TaskManager) saveLocked() error {
 // other process using this task file. Reloading after the OS lock is acquired
 // is essential: the in-memory store may predate another app instance's save.
 func (tm *TaskManager) mutateLocked(action func() error) error {
-	return withCrossProcessFileLock(tm.getTaskFilePath()+".lock", func() error {
-		before, readErr := readFileAtMost(tm.getTaskFilePath(), maxCanonicalStorageBytes)
+	taskRoot, err := openProjectTaskRoot(tm.projectPath, true)
+	if err != nil {
+		return fmt.Errorf("failed to open task directory: %w", err)
+	}
+	defer taskRoot.Close()
+	return withCrossProcessRootFileLock(taskRoot, "tasks.json.lock", func() error {
+		before, readErr := readRootFileAtMost(taskRoot, "tasks.json", maxCanonicalStorageBytes)
 		if readErr != nil && !os.IsNotExist(readErr) {
 			return readErr
 		}
-		if err := tm.loadLocked(); err != nil {
+		if err := tm.loadLockedFrom(taskRoot); err != nil {
 			return err
 		}
 		tm.expectedRevision = append(tm.expectedRevision[:0], before...)
 		tm.expectedRevisionSet = true
 		tm.expectedRevisionExists = readErr == nil
+		tm.transactionRoot = taskRoot
 		defer func() {
 			tm.expectedRevision = nil
 			tm.expectedRevisionSet = false
 			tm.expectedRevisionExists = false
+			tm.transactionRoot = nil
 		}()
 		err := action()
 		if errors.Is(err, ErrTaskStoreConflict) {
 			// The external writer won. Make reads reflect its bytes immediately
 			// instead of retaining the stale pre-conflict cache.
-			if reloadErr := tm.loadLocked(); reloadErr != nil {
+			if reloadErr := tm.loadLockedFrom(taskRoot); reloadErr != nil {
 				tm.store = nil
 				return errors.Join(err, reloadErr)
 			}

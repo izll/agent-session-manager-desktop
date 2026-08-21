@@ -30,6 +30,14 @@
         <string>{{.Info.Copyright}}</string>
         <key>NSMicrophoneUsageDescription</key>
         <string>Agent Session Manager uses the microphone only when you start dictation.</string>
+        <!-- The terminal transport is a token-authenticated WebSocket bound to
+             127.0.0.1. macOS 14 no longer permits IP-address loads by default;
+             keep this narrow local exception in the production bundle too. -->
+        <key>NSAppTransportSecurity</key>
+        <dict>
+            <key>NSAllowsLocalNetworking</key>
+            <true/>
+        </dict>
         {{if .Info.FileAssociations}}
         <key>CFBundleDocumentTypes</key>
         <array>

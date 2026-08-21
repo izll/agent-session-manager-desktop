@@ -138,3 +138,16 @@ func TestWindowsCrossBuildVerifiesDownloadedNativeDependency(t *testing.T) {
 		t.Fatal("Windows cross-build must verify the native package before extraction")
 	}
 }
+
+func TestMacBundlesAllowTheLoopbackTerminalTransport(t *testing.T) {
+	localATS := regexp.MustCompile(`(?s)<key>NSAppTransportSecurity</key>\s*<dict>.*?<key>NSAllowsLocalNetworking</key>\s*<true\s*/>.*?</dict>`)
+	for _, path := range []string{"build/darwin/Info.plist", "build/darwin/Info.dev.plist"} {
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !localATS.Match(raw) {
+			t.Errorf("%s does not allow the ws://127.0.0.1 terminal transport", path)
+		}
+	}
+}

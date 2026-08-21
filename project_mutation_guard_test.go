@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"asmgr-desktop/mcp"
 	"asmgr-desktop/session"
 )
 
@@ -34,7 +35,7 @@ func TestProjectMutatorsRefuseReadOnlyInstance(t *testing.T) {
 	}
 	app := &App{storage: storage, projectLocked: false}
 
-	if err := app.RenameSession(inst.ID, "after"); err == nil || !strings.Contains(err.Error(), "read-only") {
+	if err := app.RenameSession(inst.ID, "after", ""); err == nil || !strings.Contains(err.Error(), "read-only") {
 		t.Fatalf("RenameSession error = %v, want read-only refusal", err)
 	}
 	stored, err := storage.GetInstance(inst.ID)
@@ -45,7 +46,7 @@ func TestProjectMutatorsRefuseReadOnlyInstance(t *testing.T) {
 		t.Fatalf("read-only rename changed stored name to %q", stored.Name)
 	}
 
-	if _, err := app.CreateTask(inst.ID, "blocked", "", "medium", nil); err == nil || !strings.Contains(err.Error(), "read-only") {
+	if _, err := app.CreateTask(inst.ID, "blocked", "", "medium", nil, ""); err == nil || !strings.Contains(err.Error(), "read-only") {
 		t.Fatalf("CreateTask error = %v, want read-only refusal", err)
 	}
 	if _, err := os.Stat(filepath.Join(workDir, ".taskmaster", "tasks.json")); !os.IsNotExist(err) {
@@ -144,6 +145,71 @@ func TestSetLastWindowIndexRejectsStaleProjectTarget(t *testing.T) {
 	}
 }
 
+func TestSessionMutationRejectsStaleProjectWithSameSessionID(t *testing.T) {
+	storage := guardedTestStorage(t)
+	const sharedID = "copied-session-id"
+	if err := storage.AddInstance(&session.Instance{ID: sharedID, Name: "project-a", Path: t.TempDir(), Status: session.StatusStopped}); err != nil {
+		t.Fatal(err)
+	}
+	projectB, err := storage.AddProject("project-b")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := storage.SetActiveProject(projectB.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := storage.AddInstance(&session.Instance{ID: sharedID, Name: "project-b", Path: t.TempDir(), Status: session.StatusStopped}); err != nil {
+		t.Fatal(err)
+	}
+	app := &App{storage: storage, projectLocked: true}
+
+	// This represents a click dispatched while A was visible but delivered
+	// after SelectProject made B active. IDs are not globally unique across
+	// legacy/copied project stores, so checking the session ID alone is unsafe.
+	if err := app.RenameSession(sharedID, "wrong-project", ""); err == nil || !strings.Contains(err.Error(), "active project changed") {
+		t.Fatalf("stale mutation error = %v, want active-project refusal", err)
+	}
+	stored, err := storage.GetInstance(sharedID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored.Name != "project-b" {
+		t.Fatalf("stale project-A mutation changed project B to %q", stored.Name)
+	}
+	if err := app.RenameSession(sharedID, "project-b-renamed", projectB.ID); err != nil {
+		t.Fatalf("current project mutation failed: %v", err)
+	}
+}
+
+func TestTaskMasterProviderReadRejectsStaleProjectTarget(t *testing.T) {
+	storage := guardedTestStorage(t)
+	inst := &session.Instance{ID: "provider-target", Name: "provider", Path: t.TempDir(), Status: session.StatusStopped}
+	if err := storage.AddInstance(inst); err != nil {
+		t.Fatal(err)
+	}
+	taskMasterMu.Lock()
+	oldCache, oldStarts := taskMasterCache, taskMasterStarts
+	taskMasterCache = make(map[string]*mcp.TaskMaster)
+	taskMasterStarts = make(map[string]*taskMasterStart)
+	taskMasterMu.Unlock()
+	t.Cleanup(func() {
+		taskMasterMu.Lock()
+		taskMasterCache, taskMasterStarts = oldCache, oldStarts
+		taskMasterMu.Unlock()
+	})
+	app := &App{storage: storage, projectLocked: true}
+	status := app.TaskMasterStatus(inst.ID, "stale-project")
+	errorText, _ := status["error"].(string)
+	if !strings.Contains(errorText, "active project changed") {
+		t.Fatalf("stale provider read error = %q, want active-project refusal", errorText)
+	}
+	taskMasterMu.RLock()
+	defer taskMasterMu.RUnlock()
+	if len(taskMasterStarts) != 0 || len(taskMasterCache) != 0 {
+		t.Fatalf("stale provider read started a process: starts=%d cache=%d", len(taskMasterStarts), len(taskMasterCache))
+	}
+}
+
 func TestSelectProjectRejectsUnknownIDAndRestoresPreviousOwnership(t *testing.T) {
 	storage := guardedTestStorage(t)
 	if err := storage.LockProject(""); err != nil {
@@ -196,8 +262,15 @@ func TestSelectProjectRollsBackWhenTargetDeletionHasStarted(t *testing.T) {
 }
 
 func TestTerminalAttachPinsProjectUntilRelease(t *testing.T) {
-	app := &App{projectLocked: true}
-	release, allowed := app.beginTerminalAttach()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	storage, err := session.NewStorage()
+	if err != nil {
+		t.Fatal(err)
+	}
+	app := &App{storage: storage, projectLocked: true}
+	release, allowed := app.beginTerminalAttach("")
 	if !allowed || release == nil {
 		t.Fatal("project owner should be allowed to begin an attach")
 	}
@@ -218,9 +291,12 @@ func TestTerminalAttachPinsProjectUntilRelease(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("project switch remained blocked after attach setup released it")
 	}
+	if release, allowed := app.beginTerminalAttach("stale-project"); allowed || release != nil {
+		t.Fatal("stale project identity unexpectedly allowed a terminal attach")
+	}
 
 	app.projectLocked = false
-	if release, allowed := app.beginTerminalAttach(); allowed || release != nil {
+	if release, allowed := app.beginTerminalAttach(""); allowed || release != nil {
 		t.Fatal("read-only project unexpectedly allowed a terminal attach")
 	}
 }
@@ -262,7 +338,7 @@ func TestRestoreDeletedTaskUsesOriginalLocalIdentity(t *testing.T) {
 		DueAt: due.Format(time.RFC3339Nano), SessionID: inst.ID,
 		Subtasks: []DeletedSubtaskSnapshot{{ID: "stable-subtask-id", Title: "sub", Description: "sub description", Details: "sub details", Status: "done"}},
 	}
-	if err := app.RestoreDeletedTask(inst.ID, "local", snapshot); err != nil {
+	if err := app.RestoreDeletedTask(inst.ID, "local", snapshot, ""); err != nil {
 		t.Fatal(err)
 	}
 	manager, err := app.getTaskManager(inst.ID)
@@ -283,7 +359,7 @@ func TestRestoreDeletedTaskUsesOriginalLocalIdentity(t *testing.T) {
 	if err := manager.DeleteSubtask(snapshot.ID, "stable-subtask-id"); err != nil {
 		t.Fatal(err)
 	}
-	if err := app.RestoreDeletedSubtask(inst.ID, "local", snapshot.ID, snapshot.Subtasks[0]); err != nil {
+	if err := app.RestoreDeletedSubtask(inst.ID, "local", snapshot.ID, snapshot.Subtasks[0], ""); err != nil {
 		t.Fatal(err)
 	}
 	restoredAgain, err := manager.GetTask(snapshot.ID)

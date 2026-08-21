@@ -176,7 +176,12 @@ func (a *App) GetBackgroundAgentLogs(shortID string) (string, error) {
 }
 
 // StopBackgroundAgent stops a background agent via the official CLI.
-func (a *App) StopBackgroundAgent(shortID string) error {
+func (a *App) StopBackgroundAgent(shortID, expectedProjectID string) error {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
+	if err != nil {
+		return err
+	}
+	defer done()
 	if !bgAgentIDRe.MatchString(shortID) {
 		return fmt.Errorf("invalid agent id")
 	}
@@ -191,8 +196,8 @@ func (a *App) StopBackgroundAgent(shortID string) error {
 // session: a custom-agent session in the agent's own working directory
 // running `claude attach <id>`, optionally placed into a group. Returns the
 // new session's ID so the frontend can select it.
-func (a *App) AttachBackgroundAgent(shortID, cwd, name, groupID string) (string, error) {
-	done, err := a.beginProjectMutation()
+func (a *App) AttachBackgroundAgent(shortID, cwd, name, groupID, expectedProjectID string) (string, error) {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return "", err
 	}
@@ -232,8 +237,8 @@ func (a *App) AttachBackgroundAgent(shortID, cwd, name, groupID string) (string,
 // (custom-agent window running `claude attach <id>`) inside an EXISTING
 // running session — typically one detected to share the agent's working
 // directory. Returns the new tab's window index.
-func (a *App) AttachBackgroundAgentAsTab(sessionID, shortID, name string) (int, error) {
-	done, err := a.beginProjectMutation()
+func (a *App) AttachBackgroundAgentAsTab(sessionID, shortID, name, expectedProjectID string) (int, error) {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return -1, err
 	}

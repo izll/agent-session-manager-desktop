@@ -76,8 +76,13 @@ export interface TerminalInstance {
   fitAddon: FitAddon;
   searchAddon: SearchAddon;
   sessionId: string | null;
+  /** Project snapshot this socket was authorised for. */
+  projectId: string | null;
   windowIdx: number;
   ws: WebSocket | null;
+  /** Invalidates overlapping attaches and delayed reconnect callbacks. */
+  connectionGeneration: number;
+  reconnectTimer?: ReturnType<typeof setTimeout>;
   cleanup: () => void;
   dataDisposable: IDisposable | null;
   resizeDisposable: IDisposable | null;
@@ -612,8 +617,10 @@ export function createTerminal(
     fitAddon,
     searchAddon,
     sessionId: null,
+    projectId: null,
     windowIdx: 0,
     ws: null,
+    connectionGeneration: 0,
     dataDisposable: null,
     resizeDisposable: null,
     visible: true,
@@ -838,7 +845,8 @@ export function sendVisibility(terminalInstance: TerminalInstance, visible: bool
 export async function attachToSession(
   terminalInstance: TerminalInstance,
   sessionId: string,
-  windowIdx: number
+  windowIdx: number,
+  projectId: string,
 ): Promise<void> {
   const { terminal } = terminalInstance;
 
@@ -846,6 +854,11 @@ export async function attachToSession(
   if (terminalInstance.ws) {
     await detachFromSession(terminalInstance);
   }
+  if (terminalInstance.reconnectTimer) {
+    clearTimeout(terminalInstance.reconnectTimer);
+    terminalInstance.reconnectTimer = undefined;
+  }
+  const connectionGeneration = ++terminalInstance.connectionGeneration;
 
   // Dispose previous handlers
   if (terminalInstance.dataDisposable) {
@@ -866,7 +879,8 @@ export async function attachToSession(
     const port = await getTerminalWSPort();
     const token = await getTerminalWSToken();
     const wsUrl = `ws://127.0.0.1:${port}/terminal?session=${encodeURIComponent(sessionId)}` +
-      `&window=${windowIdx}&token=${encodeURIComponent(token)}`;
+      `&window=${windowIdx}&project=${encodeURIComponent(projectId)}` +
+      `&token=${encodeURIComponent(token)}`;
 
     const ws = new WebSocket(wsUrl);
     ws.binaryType = 'arraybuffer';
@@ -887,9 +901,15 @@ export async function attachToSession(
         reject(new Error('WebSocket connection failed'));
       };
     });
+    if (terminalInstance.connectionGeneration !== connectionGeneration) {
+      ws.onclose = null;
+      ws.close();
+      throw new Error('terminal connection was superseded');
+    }
 
     terminalInstance.ws = ws;
     terminalInstance.sessionId = sessionId;
+    terminalInstance.projectId = projectId;
     terminalInstance.windowIdx = windowIdx;
 
     // Sync the backend's hidden/visible state to this instance's current value
@@ -1013,11 +1033,15 @@ export async function attachToSession(
     };
 
     ws.onclose = (ev) => {
+      // A superseded socket must never clear or reconnect the newer owner.
+      if (terminalInstance.connectionGeneration !== connectionGeneration || terminalInstance.ws !== ws) return;
       void LogFrontend(`[term] ws closed code=${ev.code} reason=${ev.reason || '(none)'} clean=${ev.wasClean}`);
       const closedSessionId = terminalInstance.sessionId;
+      const closedProjectId = terminalInstance.projectId;
       const closedWindowIdx = terminalInstance.windowIdx;
       terminalInstance.ws = null;
       terminalInstance.sessionId = null;
+      terminalInstance.projectId = null;
 
       // The multiplexer can drop a client while the session itself is healthy.
       // Without a retry the tab looks stuck in a specific, confusing way: the
@@ -1027,13 +1051,14 @@ export async function attachToSession(
       //
       // Only for an unexpected close: detachFromSession() clears this handler
       // before closing, so a deliberate detach never lands here.
-      if (closedSessionId === null || closedSessionId === undefined) return;
+      if (closedSessionId === null || closedSessionId === undefined || closedProjectId === null) return;
       const delay = 750;
-      setTimeout(() => {
+      terminalInstance.reconnectTimer = setTimeout(() => {
+        terminalInstance.reconnectTimer = undefined;
         // Anything that re-attached in the meantime wins; do not fight it.
-        if (terminalInstance.ws) return;
+        if (terminalInstance.connectionGeneration !== connectionGeneration || terminalInstance.ws) return;
         void LogFrontend(`[term] reconnecting session=${closedSessionId} win=${closedWindowIdx}`);
-        attachToSession(terminalInstance, closedSessionId, closedWindowIdx ?? 0)
+        attachToSession(terminalInstance, closedSessionId, closedWindowIdx ?? 0, closedProjectId)
           .catch((e) => { void LogFrontend(`[term] reconnect failed: ${e}`); });
       }, delay);
     };
@@ -1134,18 +1159,33 @@ export async function attachToSession(
     // user has to fix by hand.
     setTimeout(() => {
       if (!terminalInstance.ws || terminalInstance.ws.readyState !== WebSocket.OPEN) return;
-      void RedrawWindow(sessionId, windowIdx).catch((e) => {
+      void RedrawWindow(sessionId, windowIdx, projectId).catch((e) => {
         void LogFrontend(`[term] redraw request failed session=${sessionId} win=${windowIdx}: ${e}`);
       });
     }, 250);
 
   } catch (e) {
+    // If setup failed after this generation had taken ownership of the socket,
+    // roll it back here too. Automatic reconnect calls attachToSession directly
+    // (outside TerminalPool), so relying only on the pool's catch would leak that
+    // partially-initialised connection.
+    if (terminalInstance.connectionGeneration === connectionGeneration) {
+      await detachFromSession(terminalInstance);
+    }
     console.error('Failed to attach session:', e);
     throw e;
   }
 }
 
 export async function detachFromSession(terminalInstance: TerminalInstance): Promise<void> {
+  // Invalidate in-flight attaches and reconnects even when the socket already
+  // closed. Otherwise a reconnect timer can resurrect an entry after its pool
+  // owner was destroyed, leaking a PTY or replacing the new visible socket.
+  terminalInstance.connectionGeneration++;
+  if (terminalInstance.reconnectTimer) {
+    clearTimeout(terminalInstance.reconnectTimer);
+    terminalInstance.reconnectTimer = undefined;
+  }
   // Dispose handlers
   if (terminalInstance.dataDisposable) {
     terminalInstance.dataDisposable.dispose();
@@ -1169,6 +1209,7 @@ export async function detachFromSession(terminalInstance: TerminalInstance): Pro
     terminalInstance.ws.close();
     terminalInstance.ws = null;
     terminalInstance.sessionId = null;
+    terminalInstance.projectId = null;
   }
 }
 

@@ -30,7 +30,8 @@ const transpiled = ts.transpileModule(source, {
 }).outputText
   .replace("from 'svelte/store'", `from '${import.meta.resolve('svelte/store')}'`)
   .replace("import * as App from '../../../wailsjs/go/main/App';", 'const App = globalThis.__taskApp;')
-  .replace("import { main } from '../../../wailsjs/go/models';", 'const main = globalThis.__taskModels;');
+  .replace("import { main } from '../../../wailsjs/go/models';", 'const main = globalThis.__taskModels;')
+  .replace("import { activeProjectId } from './projects';", "const activeProjectId = writable('project-a');");
 writeFileSync(output, transpiled);
 
 const store = await import(output);

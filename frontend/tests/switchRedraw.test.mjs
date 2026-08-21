@@ -48,7 +48,7 @@ assert.match(
 // call — and must not break the switch.
 assert.match(
   pool,
-  /RedrawWindow\(sessionId, windowIdx\)\.catch\(/,
+  /RedrawWindow\(sessionId, windowIdx, entry\.projectId\)\.catch\(/,
   'a failed redraw must not propagate',
 );
 

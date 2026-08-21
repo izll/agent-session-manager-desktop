@@ -37,7 +37,7 @@ func TestPortableImportUsesValidatedServerSnapshotToken(t *testing.T) {
 	if info.Token == "" {
 		t.Fatal("validated file did not receive an opaque import token")
 	}
-	if _, err := app.ImportSessionFile(info.Path, nil); err == nil {
+	if _, err := app.ImportSessionFile(info.Path, nil, ""); err == nil {
 		t.Fatal("frontend-supplied file path was accepted as an import token")
 	}
 	other, err := storage.AddProject("other")
@@ -47,17 +47,17 @@ func TestPortableImportUsesValidatedServerSnapshotToken(t *testing.T) {
 	if err := storage.SetActiveProject(other.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := app.ImportSessionFile(info.Token, nil); err == nil {
+	if _, err := app.ImportSessionFile(info.Token, nil, ""); err == nil {
 		t.Fatal("stale import snapshot crossed into another project")
 	}
 	if err := storage.SetActiveProject(""); err != nil {
 		t.Fatal(err)
 	}
-	count, err := app.ImportSessionFile(info.Token, nil)
+	count, err := app.ImportSessionFile(info.Token, nil, "")
 	if err != nil || count != 1 {
 		t.Fatalf("validated snapshot import = %d, %v", count, err)
 	}
-	if _, err := app.ImportSessionFile(info.Token, nil); err == nil {
+	if _, err := app.ImportSessionFile(info.Token, nil, ""); err == nil {
 		t.Fatal("successful one-shot import token was reusable")
 	}
 }

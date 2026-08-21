@@ -7,8 +7,8 @@ import (
 	"fmt"
 )
 
-func privilegedPackageHelperArgs(executable, packagePath, trustedChecksum, packageKind string) []string {
-	return []string{executable, packagePath, trustedChecksum, packageKind}
+func privilegedPackageHelperArgs(executable, packagePath, trustedChecksum, packageKind, version string) []string {
+	return []string{executable, packagePath, trustedChecksum, packageKind, version}
 }
 
 func HandlePrivilegedPackageInstall([]string) (handled bool, exitCode int) {

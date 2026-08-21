@@ -1602,7 +1602,7 @@ func installPackageUpdate(ctx context.Context, version string, critical func(fun
 	if resolved, resolveErr := filepath.EvalSymlinks(execPath); resolveErr == nil {
 		execPath = resolved
 	}
-	args := privilegedPackageHelperArgs(execPath, pkgPath, trustedChecksum, packageKind)
+	args := privilegedPackageHelperArgs(execPath, pkgPath, trustedChecksum, packageKind, version)
 	out, err := runPrivilegedPackageInstall(ctx, pkexec, args, func(action func() error) error {
 		// Authentication and root-owned staging are preparation, not mutation.
 		// Acquire the global lock only after the helper is verified and ready, and

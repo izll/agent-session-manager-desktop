@@ -190,8 +190,8 @@ func (a *App) DeleteCommandGroup(id string) error {
 
 // RunCommand types a saved command into a session window, substituting the
 // given placeholder values, and records that it was used.
-func (a *App) RunCommand(id, sessionID string, windowIdx int, values map[string]string) error {
-	done, err := a.beginProjectMutation()
+func (a *App) RunCommand(id, sessionID string, windowIdx int, values map[string]string, expectedProjectID string) error {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return err
 	}

@@ -100,14 +100,14 @@
       // Branch the conversation in THIS tab. Without the window index the
       // backend read the session's main window, so forking from a second Claude
       // tab produced a branch of a different conversation.
-      const result = await App.ForkSession(sessionId, submitted.windowIdx);
+      const result = await App.ForkSession(sessionId, submitted.windowIdx, target.projectId);
       if (!targetIsCurrent(target, generation)) return;
       if (!result || !result.sessionId) {
         throw new Error('Fork failed - no session ID returned');
       }
 
       if (submitted.mode === 'tab') {
-        const newIdx = await App.ForkToNewTab(sessionId, submitted.name, result.sessionId);
+        const newIdx = await App.ForkToNewTab(sessionId, submitted.name, result.sessionId, target.projectId);
         await loadSessions();
         if (!targetIsCurrent(target, generation)) return;
         // Switch to the branch. It was created and then left for the user to
@@ -116,7 +116,7 @@
         close();
         dispatch('forked', { sessionId, windowIdx: newIdx, name: submitted.name });
       } else {
-        const newSession = await App.ForkToNewSession(sessionId, submitted.name, result.sessionId);
+        const newSession = await App.ForkToNewSession(sessionId, submitted.name, result.sessionId, target.projectId);
         if (!targetIsCurrent(target, generation)) return;
         if (!newSession) {
           // Closing silently here would look like it had worked.

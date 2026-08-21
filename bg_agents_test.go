@@ -36,9 +36,10 @@ func TestStopBackgroundAgentTimesOutHungCLI(t *testing.T) {
 	backgroundAgentCommand = func(ctx context.Context, _ string, _ ...string) *exec.Cmd {
 		return session.CommandContext(ctx, "sh", "-c", "sleep 30")
 	}
+	app := &App{storage: guardedTestStorage(t), projectLocked: true}
 
 	started := time.Now()
-	err := (&App{}).StopBackgroundAgent("abcdef")
+	err := app.StopBackgroundAgent("abcdef", "")
 	if err == nil {
 		t.Fatal("hung background-agent CLI unexpectedly succeeded")
 	}

@@ -320,7 +320,7 @@
     const groupId = uGroupId;
     const targetProjectId = get(activeProjectId);
     try {
-      const created = await App.CreateSessionFromTemplate(target.id, sessionName, sessionPath);
+      const created = await App.CreateSessionFromTemplate(target.id, sessionName, sessionPath, targetProjectId);
       if (targetProjectId !== get(activeProjectId)) return;
       if (created) {
         if (groupId) {

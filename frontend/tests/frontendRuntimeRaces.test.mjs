@@ -58,7 +58,7 @@ assert.match(
 );
 assert.match(
   recovery,
-  /const result = await App\.RestoreTrashItem\(item\.id\);[\s\S]*?if \(!operationIsCurrent\(target\)\) return;[\s\S]*?await loadSessions\(\)/,
+  /const result = await App\.RestoreTrashItem\(item\.id, target\.projectId\);[\s\S]*?if \(!operationIsCurrent\(target\)\) return;[\s\S]*?await loadSessions\(\)/,
   'a restore completion from an old project must not refresh or select into the replacement project',
 );
 assert.match(recovery, /loadedProjectId !== \$activeProjectId/,
@@ -78,6 +78,8 @@ assert.match(browser, /return `\$\{loadedBrowseKey\}\|\$\{path \|\| ''\}`/);
 assert.match(browser, /let openedRoot = ''/);
 assert.match(browser, /App\.SaveSessionFileEdit\([\s\S]*?openedRoot/,
   'file saves must carry the absolute root whose editable snapshot was opened');
+assert.match(browser, /App\.SaveSessionFileEdit\([\s\S]*?openedRoot,[\s\S]*?projectId/,
+  'file saves must pin both the editable root and the project captured at save start');
 
 // A diff jump is consumed only after the target tree has initialized. Source
 // order matters for independent Svelte reactive blocks, so assert that too.
@@ -87,13 +89,15 @@ assert.ok(initAt >= 0 && jumpAt > initAt, 'target initialization must precede pe
 
 // Every diff identity includes the window and mode, including the per-file
 // cache; a mode change explicitly drops local contents.
-assert.match(diff, /requestedKey = `\$\{sessionId \|\| ''\}:\$\{windowIdx\}:\$\{mode\}`/);
-assert.match(diff, /currentDiffKey = `\$\{\$selectedSessionId \|\| ''\}:\$\{\$selectedWindowIdx \?\? 0\}:\$\{diffMode\}`/);
+assert.match(diff, /requestedKey = `\$\{projectId\}:\$\{sessionId \|\| ''\}:\$\{windowIdx\}:\$\{mode\}`/);
+assert.match(diff, /currentDiffKey = `\$\{\$activeProjectId\}:\$\{\$selectedSessionId \|\| ''\}:\$\{\$selectedWindowIdx \?\? 0\}:\$\{diffMode\}`/);
 assert.match(diff, /cacheKey = selectedPath[\s\S]*?`\$\{currentDiffKey\}:\$\{loadedRoot\}:/);
 assert.match(diff, /function handleModeChange[\s\S]*?fileCache = \{\}/);
 assert.match(diff, /windowIdx !== tabIdx\(\)/, 'late file/list responses must be target-checked');
 assert.match(diff, /App\.GetSessionDiffFileList\(sessionId, windowIdx, root\)/);
 assert.match(diff, /App\.GetFullDiffForFile\(sessionId, path, whole, windowIdx, expectedRoot\)/);
+assert.match(diff, /App\.RevertDiff(File|Hunk)\([\s\S]*?target\.root, target\.projectId\)/,
+  'destructive diff actions must pin project identity as well as the canonical root');
 assert.match(browser, /App\.OpenSessionFileForEdit\(sessionId, selectedPath, get\(selectedWindowIdx\) \?\? 0, expectedRoot\)/);
 assert.match(browser, /if \(!file\.root\)/, 'an edit snapshot without a canonical root must fail closed');
 
@@ -118,6 +122,10 @@ assert.match(notes, /latestDraft\.saveError \|\| latestDraft\.text !== latestDra
 assert.match(notes, /registerUnsavedGuard\(\{[\s\S]*?isDirty: hasUnsavedDrafts/,
   'failed drafts hidden on another tab must participate in the global destructive-action guard');
 assert.match(notes, /\[\.\.\.draftsByTarget\.values\(\)\]\.some/);
+assert.match(notes, /function noteKey\(projectId: string, sessionId: string, windowIdx: number\)/,
+  'same-id tabs in different projects must not share Notes drafts or save queues');
+assert.match(notes, /App\.SetTabNotes\(sessionId, windowIdx, snapshot, projectId\)/,
+  'a delayed Notes save must fail closed against its captured project');
 
 // Once MCP loading falls back, mutations use the provider that actually
 // produced the visible list. Late mutations cannot edit another session's
@@ -128,15 +136,16 @@ assert.ok(
   taskPanel.indexOf('prepareTasksSession(sessionId)') < taskPanel.indexOf('await checkTaskMasterStatus(sessionId)'),
   'the previous task list must be cleared before the provider probe awaits',
 );
-assert.match(tasks, /rememberProvider\(sessionId, requestedMCP, 'local'\)/);
-assert.match(tasks, /if \(providerFor\(sessionId\) === 'mcp'\)/);
+assert.match(tasks, /rememberProvider\(sessionId, requestedMCP, 'local', projectId\)/);
+assert.match(tasks, /providerKey\(projectId, sessionId\)/,
+  'effective provider state must not cross projects that reuse a session id');
 const removeTask = tasks.match(/export async function removeTask[\s\S]*?\n\}/)?.[0] ?? '';
 assert.match(removeTask, /captureActiveTasksTarget\(sessionId\)/);
 assert.match(removeTask, /activeTasksTargetIsCurrent\(target\)/);
 assert.match(tasks, /async function reloadTasksIfActive/);
 assert.match(tasks, /const localMutationQueues = new Map/);
 const localEdit = tasks.match(/async function editTaskLocally[\s\S]*?\n\}/)?.[0] ?? '';
-assert.match(localEdit, /const queueKey = target \? `\$\{target\.generation\}\\x1f\$\{sessionId\}` : sessionId/);
+assert.match(localEdit, /const queueKey = `\$\{projectId\}\\x1f\$\{target\?\.generation \?\? tasksContextGeneration\}\\x1f\$\{sessionId\}`/);
 assert.match(localEdit, /activeTasksTargetIsCurrent\(target\)/,
   'a queued local read-modify-write must fail closed after its project/session context is invalidated');
 assert.match(localEdit, /await App\.GetTasks\(sessionId\)/,
@@ -151,11 +160,11 @@ assert.match(taskPanel, /restoreDeletedTask\(sessionId, removed, provider\)/);
 assert.match(taskPanel, /restoreDeletedSubtask\(sessionId, parentId, removed, provider\)/);
 assert.match(tasks, /export async function restoreDeletedTask/);
 const restoreTask = tasks.match(/export async function restoreDeletedTask[\s\S]*?\n\}/)?.[0] ?? '';
-assert.match(restoreTask, /App\.RestoreDeletedTask\(sessionId, provider, new main\.DeletedTaskSnapshot\(snapshot\)\)/);
+assert.match(restoreTask, /App\.RestoreDeletedTask\(sessionId, provider, new main\.DeletedTaskSnapshot\(snapshot\), projectId\)/);
 assert.doesNotMatch(restoreTask, /CreateTask|TaskMasterAddManualTask|TaskMasterRemoveTask/, 'restore must be one atomic backend operation');
 
 const directEdit = tasks.match(/export async function updateTaskDirect[\s\S]*?\n\}/)?.[0] ?? '';
-const mcpDirectEdit = directEdit.match(/if \(\(requestedProvider \?\? providerFor\(sessionId\)\) === 'mcp'\) \{[\s\S]*?\} else/)?.[0] ?? '';
+const mcpDirectEdit = directEdit.match(/if \(\(requestedProvider \?\? providerFor\(sessionId, projectId\)\) === 'mcp'\) \{[\s\S]*?\} else/)?.[0] ?? '';
 assert.match(mcpDirectEdit, /TaskMasterUpdateTaskDirect\([\s\S]*?dueAt/);
 assert.doesNotMatch(mcpDirectEdit, /App\.UpdateTask/,
   'an MCP edit must not partially update Task Master and then write the local provider');
@@ -188,7 +197,7 @@ for (const [name, next] of [
   assert.match(body, /await[\s\S]*operationIsCurrent\(/,
     `${name} must not mutate UI after a stale async completion`);
 }
-assert.match(tasks, /await App\.TaskMasterInit\(sessionId\);[\s\S]*?if \(isActiveTasksSession\(sessionId\)\) await checkTaskMasterStatus/,
+assert.match(tasks, /await App\.TaskMasterInit\(sessionId, projectId\);[\s\S]*?if \(isActiveTasksProject\(sessionId, projectId\)\) await checkTaskMasterStatus/,
   'late initialization must not reclaim the status store from the new session');
 
 assert.match(diff, /type DiffTarget = \{[\s\S]*?root: string/);
@@ -254,8 +263,12 @@ assert.match(sessionItem, /target\.projectId !== get\(activeProjectId\)/,
   'session deletion must retain the project that opened its confirmation');
 assert.match(sessionItem, /uiProjectId !== \$activeProjectId[\s\S]*?showDeleteConfirm = false/,
   'project switches must close a keyed session row\'s stale confirmation and editors');
-assert.match(groupItem, /const projectId = get\(activeProjectId\);[\s\S]*?get\(activeProjectId\) !== projectId\) break/,
+assert.match(groupItem, /target\.projectId !== get\(activeProjectId\)[\s\S]*?break/,
   'group bulk operations must stop before continuing in a replacement project');
+assert.match(groupItem, /if \(bulkBusy\) return;[\s\S]*?revision: \+\+bulkRevision/,
+  'a group must not start a second bulk operation while one is already running');
+assert.match(groupItem, /disabled=\{bulkBusy\}/,
+  'group bulk controls must expose their busy state to pointer and keyboard users');
 assert.match(groupItem, /uiProjectId !== \$activeProjectId[\s\S]*?showColorDialog = false/,
   'keyed group rows must close project-scoped menus and editors on replacement');
 assert.match(sessionColor, /targetProjectId !== \$activeProjectId \|\| targetId !== target\?\.id/,
@@ -301,16 +314,20 @@ assert.match(settingsStore, /expectedRevision !== undefined && expectedRevision 
 assert.match(importDialog, /const generation = \+\+requestGeneration/);
 assert.match(importDialog, /selectedProjectId !== projectId/,
   'a late import-source response must not replace the newly selected project');
+assert.match(importDialog, /function close\(\) \{[\s\S]*?if \(isImporting\) return;/,
+  'a durable project import must keep one modal owner until it settles');
 assert.match(globalSearch, /function clearQuery\(\)[\s\S]*?handleQueryChange\(\)/,
   'clearing search must use the same request invalidation as typing');
 assert.match(globalSearch, /App\.GetHistoryPreview\(entry\.id\)/,
   'history previews must use the backend-issued opaque id, not displayed path metadata');
-assert.match(sessionFileDialog, /App\.ImportSessionFile\(targetToken, targetSelection\)/,
+assert.match(sessionFileDialog, /App\.ImportSessionFile\(targetToken, targetSelection, targetProjectId\)/,
   'portable imports must consume the backend snapshot token instead of reopening a displayed path');
+assert.match(sessionFileDialog, /function close\(\) \{[\s\S]*?if \(importing\) return;/,
+  'a durable token import must not be dismissible and restarted while pending');
 assert.match(commandPicker, /targetSessionId = sessionId;[\s\S]*?targetWindowIdx = windowIdx/);
 assert.match(commandPicker, /if \(running \|\| !targetSessionId\) return/,
   'a command must have one captured target and one in-flight execution');
-assert.match(commandPicker, /sessionId !== targetSessionId \|\| windowIdx !== targetWindowIdx\)\) close\(\)/,
+assert.match(commandPicker, /sessionId !== targetSessionId \|\| windowIdx !== targetWindowIdx \|\|[\s\S]*?\$activeProjectId !== targetProjectId\)\) close\(\)/,
   'a command picker must close when its captured tab is no longer selected');
 assert.match(resumePicker, /generation !== loadGeneration \|\| key !== lastLoadKey/);
 assert.match(gitHistory, /repositoryGeneration/);

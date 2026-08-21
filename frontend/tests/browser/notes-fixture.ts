@@ -2,19 +2,24 @@ import { mount } from 'svelte';
 import Notes from '../../src/lib/components/MainPanel/Notes.svelte';
 import { selectedSessionId, selectedWindowIdx } from '../../src/lib/stores/sessions';
 import { afterUnsavedChanges, registerUnsavedGuard } from '../../src/lib/stores/unsavedChanges';
-import { selectProject } from '../../src/lib/stores/projects';
+import { activeProjectId, selectProject } from '../../src/lib/stores/projects';
 
 const stored = new Map<string, string>([
-  ['notes-a:0', 'saved A'],
-  ['notes-b:0', 'saved B'],
+  ['project-a\x1fnotes-a:0', 'saved A'],
+  ['project-a\x1fnotes-b:0', 'saved B'],
+  ['project-b\x1fnotes-b:0', 'saved B in project B'],
 ]);
 let failNextASave = true;
 let failedSaves = 0;
-let selectedProject = '';
+let selectedProject = 'project-a';
 let secondGuardRegistered = false;
 let secondGuardDirty = false;
 let secondGuardRevision = 0;
 let continueAfterSecondDiscard: (() => void) | null = null;
+
+function noteKey(projectId: string, sessionId: string, windowIdx: number) {
+  return `${projectId}\x1f${sessionId}:${windowIdx}`;
+}
 
 function enableSecondGuard() {
   if (!secondGuardRegistered) {
@@ -45,15 +50,15 @@ function approveSecondGuard() {
 const backend = new Proxy({
   GetTabNotes: async (sessionId: string, windowIdx: number) => {
     if (sessionId === 'notes-load-fails') throw new Error('load refused');
-    return stored.get(`${sessionId}:${windowIdx}`) ?? '';
+    return stored.get(noteKey(selectedProject, sessionId, windowIdx)) ?? '';
   },
-  SetTabNotes: async (sessionId: string, windowIdx: number, value: string) => {
+  SetTabNotes: async (sessionId: string, windowIdx: number, value: string, expectedProjectId: string) => {
     if (sessionId === 'notes-a' && failNextASave) {
       failNextASave = false;
       failedSaves++;
       throw new Error('save refused');
     }
-    stored.set(`${sessionId}:${windowIdx}`, value);
+    stored.set(noteKey(expectedProjectId, sessionId, windowIdx), value);
   },
   SelectProject: async (id: string) => { selectedProject = id; },
   GetActiveProjectID: async () => selectedProject,
@@ -75,8 +80,8 @@ const backend = new Proxy({
     selectedSessionId.set(sessionId);
     selectedWindowIdx.set(0);
   },
-  stored(sessionId: string) {
-    return stored.get(`${sessionId}:0`);
+  stored(sessionId: string, projectId = selectedProject) {
+    return stored.get(noteKey(projectId, sessionId, 0));
   },
   failedSaves() {
     return failedSaves;
@@ -93,8 +98,15 @@ const backend = new Proxy({
   selectedProject() {
     return selectedProject;
   },
+  replaceProject(projectId: string, sessionId: string) {
+    selectedProject = projectId;
+    activeProjectId.set(projectId);
+    selectedSessionId.set(sessionId);
+    selectedWindowIdx.set(0);
+  },
 };
 
+activeProjectId.set('project-a');
 selectedSessionId.set('notes-a');
 selectedWindowIdx.set(0);
 const target = document.getElementById('fixture');

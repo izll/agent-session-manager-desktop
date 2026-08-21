@@ -326,8 +326,9 @@
   }
 
   async function quickReply(tab: WaitingTab, action: string) {
+    const projectId = $activeProjectId;
     try {
-      await QuickReplyTab(tab.sessionId, tab.windowIdx, action);
+      await QuickReplyTab(tab.sessionId, tab.windowIdx, action, projectId);
     } catch (e) {
       console.error('Quick reply failed:', e);
     }
@@ -535,7 +536,7 @@
       // today.
       const suggested = suggestedQuickJumpName(targetWindow, targetSession);
       await AddQuickJump(targetSession, targetWindow,
-        chosen === suggested ? '' : chosen);
+        chosen === suggested ? '' : chosen, projectId);
       if (generation !== quickJumpNamingGeneration || projectId !== $activeProjectId || anyDialogOpen) return;
       showQuickJump = true;
     } catch (err) {

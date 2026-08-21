@@ -61,6 +61,7 @@
   import { rememberPlace, recallPlace, noteListKey, cacheDiff, cachedDiff, invalidateDiffCache } from '../../utils/diffViewState';
   import { buildBlockPatch } from '../../utils/blockPatch';
   import { parseHunkHeader } from '../../utils/sideBySide';
+  import { activeProjectId } from '../../stores/projects';
 
   export let active = false;
   export let initialMode: 'session' | 'full' = 'session';
@@ -161,7 +162,7 @@
   let showRevertConfirm = false;
   let revertTitle = '';
   let revertMessage = '';
-  type DiffTarget = { sessionId: string; windowIdx: number; mode: 'session' | 'full'; root: string };
+  type DiffTarget = { projectId: string; sessionId: string; windowIdx: number; mode: 'session' | 'full'; root: string };
   let pendingRevert: { target: DiffTarget; run: () => Promise<void> } | null = null;
   let loadedRoot = '';
 
@@ -169,11 +170,11 @@
     const sessionId = get(selectedSessionId);
     if (!sessionId) return null;
     if (!loadedRoot || loadedDiffKey !== currentDiffKey) return null;
-    return { sessionId, windowIdx: tabIdx(), mode: diffMode, root: loadedRoot };
+    return { projectId: get(activeProjectId), sessionId, windowIdx: tabIdx(), mode: diffMode, root: loadedRoot };
   }
 
   function isCurrentTarget(target: DiffTarget): boolean {
-    return target.sessionId === get(selectedSessionId) &&
+    return target.projectId === get(activeProjectId) && target.sessionId === get(selectedSessionId) &&
       target.windowIdx === tabIdx() && target.mode === diffMode &&
       target.root === loadedRoot && loadedDiffKey === currentDiffKey;
   }
@@ -260,11 +261,12 @@
   }
 
   async function loadDiff() {
+    const projectId = get(activeProjectId);
     const sessionId = get(selectedSessionId);
     const windowIdx = tabIdx();
     const mode = diffMode;
     const generation = ++loadGeneration;
-    const requestedKey = `${sessionId || ''}:${windowIdx}:${mode}`;
+    const requestedKey = `${projectId}:${sessionId || ''}:${windowIdx}:${mode}`;
     if (!sessionId) {
       diff = null;
       files = [];
@@ -285,7 +287,7 @@
     }
     // Keyed on session AND tab, matching the guard that calls this: a tab with
     // its own directory is a different diff even within one session.
-    lastSessionId = `${sessionId}:${windowIdx}`;
+    lastSessionId = `${projectId}:${sessionId}:${windowIdx}`;
     loading = files.length === 0;
     error = '';
 
@@ -299,7 +301,7 @@
       // webview never finished rendering. A file's hunks are fetched when it is
       // opened, so the cost of listing does not depend on what the files hold.
       const root = await App.GetTabWorkingDirectory(sessionId, windowIdx);
-      if (generation !== loadGeneration || sessionId !== get(selectedSessionId) ||
+      if (generation !== loadGeneration || projectId !== get(activeProjectId) || sessionId !== get(selectedSessionId) ||
           windowIdx !== tabIdx() || mode !== diffMode || !active) return;
       if (!root) throw new Error('diff target has no working directory');
       const rootCacheKey = `${requestedKey}\x1f${root}`;
@@ -320,7 +322,7 @@
       const fileResult = mode === 'session'
         ? await App.GetSessionDiffFileList(sessionId, windowIdx, root)
         : await App.GetFullDiffFileList(sessionId, windowIdx, root);
-      if (generation !== loadGeneration || sessionId !== get(selectedSessionId) ||
+      if (generation !== loadGeneration || projectId !== get(activeProjectId) || sessionId !== get(selectedSessionId) ||
           windowIdx !== tabIdx() || mode !== diffMode || !active) return;
       const summaries = fileResult || [];
       const totals = summaries.reduce(
@@ -346,7 +348,7 @@
       syncSelection();
       cacheDiff(rootCacheKey, { diff, files });
     } catch (e) {
-      if (generation !== loadGeneration || sessionId !== get(selectedSessionId) ||
+      if (generation !== loadGeneration || projectId !== get(activeProjectId) || sessionId !== get(selectedSessionId) ||
           windowIdx !== tabIdx() || mode !== diffMode || !active) return;
       error = String(e);
       diff = null;
@@ -409,7 +411,7 @@
   // parsed its enormous diff in the background — freezing the UI on a plain tab
   // switch. Gating on `active` means the diff only ever runs when you're looking
   // at it.
-  $: diffKey = `${$selectedSessionId ?? ''}:${$selectedWindowIdx ?? 0}`;
+  $: diffKey = `${$activeProjectId}:${$selectedSessionId ?? ''}:${$selectedWindowIdx ?? 0}`;
   $: if (active && diffKey !== lastSessionId) {
     loadDiff();
   }
@@ -481,7 +483,7 @@
       : $t('diff.revertFileMessage', { file: file.path });
     pendingRevert = {
       target,
-      run: () => App.RevertDiffFile(target.sessionId, file.path, target.mode === 'session', target.windowIdx, target.root),
+      run: () => App.RevertDiffFile(target.sessionId, file.path, target.mode === 'session', target.windowIdx, target.root, target.projectId),
     };
     showRevertConfirm = true;
   }
@@ -501,7 +503,7 @@
     const patch = hunk.patch;
     pendingRevert = {
       target,
-      run: () => App.RevertDiffHunk(target.sessionId, patch, target.windowIdx, target.root),
+      run: () => App.RevertDiffHunk(target.sessionId, patch, target.windowIdx, target.root, target.projectId),
     };
     showRevertConfirm = true;
   }
@@ -579,7 +581,7 @@
     revertMessage = $t('diff.revertBlockMessage', { file: selectedFile.path });
     pendingRevert = {
       target,
-      run: () => App.RevertDiffHunk(target.sessionId, patch, target.windowIdx, target.root),
+      run: () => App.RevertDiffHunk(target.sessionId, patch, target.windowIdx, target.root, target.projectId),
     };
     showRevertConfirm = true;
   }
@@ -746,7 +748,7 @@
   // while small-diff sessions (asmgr-desktop) stayed fluid.
   const MAX_DIFF_LINES = 2000;
 
-  $: currentDiffKey = `${$selectedSessionId || ''}:${$selectedWindowIdx ?? 0}:${diffMode}`;
+  $: currentDiffKey = `${$activeProjectId}:${$selectedSessionId || ''}:${$selectedWindowIdx ?? 0}:${diffMode}`;
   // Grouped by what happened to the file, because those are different kinds of
   // change to review: a modification is read line by line, a new file is read
   // as a whole, and a deletion usually only needs confirming. Mixed together

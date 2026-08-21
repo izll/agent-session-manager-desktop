@@ -25,6 +25,7 @@
   import type { session } from '../../../../wailsjs/go/models';
   import { afterUnsavedChanges } from '../../stores/unsavedChanges';
   import { autoFocusDialog } from '../../utils/dialogActions';
+  import { activeProjectId } from '../../stores/projects';
 
   interface TabColorTarget {
     Index: number;
@@ -314,15 +315,15 @@
   let showQuickTerminalDialog = false;
   let quickTerminalSessionId = '';
   let showDeleteConfirm = false;
-  let deleteSessionTarget: { sessionId: string; name: string } | null = null;
+  let deleteSessionTarget: { projectId: string; sessionId: string; name: string } | null = null;
   let showDeleteTabConfirm = false;
-  let deleteTabTarget: { sessionId: string; windowIdx: number } | null = null;
+  let deleteTabTarget: { projectId: string; sessionId: string; windowIdx: number } | null = null;
   let showExtraArgsEditor = false;
   let showTabColorDialog = false;
   let tabColorTarget: TabColorTarget | null = null;
   let tabColorSessionId = '';
   let extraArgsValue = '';
-  let extraArgsTarget: { sessionId: string; windowIdx: number; generation: number } | null = null;
+  let extraArgsTarget: { projectId: string; sessionId: string; windowIdx: number; generation: number } | null = null;
   let extraArgsGeneration = 0;
   let showErrorToast = false;
   let errorMessage = '';
@@ -641,6 +642,7 @@
     const submitted = bufferText;
     const sid = get(selectedSessionId);
     const widx = get(selectedWindowIdx);
+    const projectId = get(activeProjectId);
     if (!sid) return;
     bufferBusy = true;
     try {
@@ -659,7 +661,8 @@
       // Name and snapshot the tab as well as the text before the await. A tab
       // switch while SendPromptToWindow is running must not redirect this send,
       // and a second click/key path must not submit the same prompt twice.
-      await App.SendPromptToWindow(sid, widx, submitted);
+      await App.SendPromptToWindow(sid, widx, submitted, projectId);
+      if (projectId !== get(activeProjectId)) return;
       // From here the prompt is committed. Clear the visible copy before the
       // second bridge call: if backend cleanup fails, leaving the text in the
       // sendable editor invites an accidental duplicate submission.
@@ -897,7 +900,7 @@
 
   // Tab rename state
   let renamingTabIndex: number | null = null;
-  let renameTarget: { sessionId: string; windowIdx: number; generation: number } | null = null;
+  let renameTarget: { projectId: string; sessionId: string; windowIdx: number; generation: number } | null = null;
   let renameGeneration = 0;
   let tabRenameValue = '';
   let tabRenameInput: HTMLInputElement;
@@ -1123,12 +1126,14 @@
     if (!sess) return;
     const idx = forIndex ?? $selectedWindowIdx ?? 0;
     const next = currentlyHidden ? 2 : 1; // 2 = show, 1 = hide
+    const projectId = get(activeProjectId);
     try {
       if (viewBar) {
-        await App.SetTabViewBar(sess.id, idx, next);
+        await App.SetTabViewBar(sess.id, idx, next, projectId);
       } else {
-        await App.SetTabStatusBar(sess.id, idx, next);
+        await App.SetTabStatusBar(sess.id, idx, next, projectId);
       }
+      if (projectId !== get(activeProjectId)) return;
       await loadSessions();
     } catch (e) {
       console.error('Toggle bar failed:', e);
@@ -1153,8 +1158,11 @@
     showTabThemeMenu = false;
     closeTabContextMenu();
     if (idx === null || !$selectedSession) return;
+    const projectId = get(activeProjectId);
+    const sessionId = $selectedSession.id;
     try {
-      await App.SetTabTerminalTheme($selectedSession.id, idx, themeID);
+      await App.SetTabTerminalTheme(sessionId, idx, themeID, projectId);
+      if (projectId !== get(activeProjectId)) return;
       await loadSessions();
     } catch (e) {
       console.error('Set tab theme failed:', e);
@@ -1166,8 +1174,11 @@
     const hidden = tabContextHidesStatus;
     closeTabContextMenu();
     if (idx === null || !$selectedSession) return;
+    const projectId = get(activeProjectId);
+    const sessionId = $selectedSession.id;
     try {
-      await App.SetTabStatusLineVisibility($selectedSession.id, idx, !hidden);
+      await App.SetTabStatusLineVisibility(sessionId, idx, !hidden, projectId);
+      if (projectId !== get(activeProjectId)) return;
       await loadSessions();
     } catch (e) {
       console.error('Toggle status line failed:', e);
@@ -1249,7 +1260,7 @@
 
   async function tabContextDelete() {
     if (tabContextMenuIndex !== null && tabContextMenuIndex !== 0 && $selectedSessionId) {
-      deleteTabTarget = { sessionId: $selectedSessionId, windowIdx: tabContextMenuIndex };
+      deleteTabTarget = { projectId: get(activeProjectId), sessionId: $selectedSessionId, windowIdx: tabContextMenuIndex };
       showDeleteTabConfirm = true;
     }
     closeTabContextMenu();
@@ -1258,10 +1269,11 @@
   async function tabContextEditExtraArgs() {
     if (tabContextMenuIndex !== null && $selectedSessionId) {
       const generation = ++extraArgsGeneration;
-      const target = { sessionId: $selectedSessionId, windowIdx: tabContextMenuIndex, generation };
+      const target = { projectId: get(activeProjectId), sessionId: $selectedSessionId, windowIdx: tabContextMenuIndex, generation };
       try {
         const args = await App.GetExtraArgs(target.sessionId, target.windowIdx);
-        if (generation !== extraArgsGeneration || $selectedSessionId !== target.sessionId) {
+        if (generation !== extraArgsGeneration || $selectedSessionId !== target.sessionId ||
+            $activeProjectId !== target.projectId) {
           closeTabContextMenu();
           return;
         }
@@ -1277,10 +1289,11 @@
 
   async function saveExtraArgs() {
     const target = extraArgsTarget;
-    if (!target || target.generation !== extraArgsGeneration || $selectedSessionId !== target.sessionId) return;
+    if (!target || target.generation !== extraArgsGeneration || $selectedSessionId !== target.sessionId ||
+        $activeProjectId !== target.projectId) return;
     const submitted = extraArgsValue.trim();
     try {
-      await App.SetExtraArgs(target.sessionId, target.windowIdx, submitted);
+      await App.SetExtraArgs(target.sessionId, target.windowIdx, submitted, target.projectId);
     } catch (e) {
       // Cancelling and reopening the editor while this request is pending
       // creates a different operation. A late error from the old save must not
@@ -1321,13 +1334,14 @@
   function confirmDeleteTab() {
     const target = deleteTabTarget;
     deleteTabTarget = null;
-    if (target && $selectedSessionId === target.sessionId) {
+    if (target && $selectedSessionId === target.sessionId && $activeProjectId === target.projectId) {
       afterUnsavedChanges(() => { void deleteCapturedTab(target); });
     }
     focusTerminal();
   }
 
-  async function deleteCapturedTab(target: { sessionId: string; windowIdx: number }) {
+  async function deleteCapturedTab(target: { projectId: string; sessionId: string; windowIdx: number }) {
+    if (target.projectId !== get(activeProjectId)) return;
     try {
       await deleteTab(target.sessionId, target.windowIdx);
       // Force refresh window list immediately, but never install the result
@@ -1344,7 +1358,7 @@
   async function startTabRename(index: number, currentName: string) {
     if (!$selectedSessionId) return;
     const generation = ++renameGeneration;
-    renameTarget = { sessionId: $selectedSessionId, windowIdx: index, generation };
+    renameTarget = { projectId: get(activeProjectId), sessionId: $selectedSessionId, windowIdx: index, generation };
     renamingTabIndex = index;
     tabRenameValue = currentName;
     await tick();
@@ -1357,13 +1371,13 @@
     const target = renameTarget;
     if (!target || target.generation !== renameGeneration || renamingTabIndex === null || target.windowIdx !== renamingTabIndex) return;
     const trimmed = tabRenameValue.trim();
-    if (trimmed && $selectedSessionId === target.sessionId) {
+    if (trimmed && $selectedSessionId === target.sessionId && $activeProjectId === target.projectId) {
       const win = windows.find(w => w.Index === target.windowIdx);
       if (win && trimmed !== win.Name) {
         await renameTab(target.sessionId, target.windowIdx, trimmed);
         // Update local windows list
         if (target === renameTarget && target.generation === renameGeneration &&
-            $selectedSessionId === target.sessionId) {
+            $selectedSessionId === target.sessionId && $activeProjectId === target.projectId) {
           windows = windows.map(w =>
             w.Index === target.windowIdx ? { ...w, Name: trimmed } : w
           );
@@ -1487,14 +1501,18 @@
 
   function handleDelete() {
     if (!$selectedSession) return;
-    deleteSessionTarget = { sessionId: $selectedSession.id, name: $selectedSession.name };
+    deleteSessionTarget = { projectId: get(activeProjectId), sessionId: $selectedSession.id, name: $selectedSession.name };
     showDeleteConfirm = true;
   }
 
   async function handleRefresh() {
     if (!$selectedSession) return;
+    const projectId = get(activeProjectId);
+    const sessionId = $selectedSession.id;
+    const windowIdx = $selectedWindowIdx;
     try {
-      await App.RefreshWindow($selectedSession.id, $selectedWindowIdx);
+      await App.RefreshWindow(sessionId, windowIdx, projectId);
+      if (projectId !== get(activeProjectId)) return;
       focusTerminal();
     } catch (e) {
       errorMessage = `Failed to refresh: ${e}`;
@@ -1505,11 +1523,12 @@
   function confirmDelete() {
     const target = deleteSessionTarget;
     deleteSessionTarget = null;
-    if (!target || $selectedSessionId !== target.sessionId) return;
+    if (!target || $selectedSessionId !== target.sessionId || $activeProjectId !== target.projectId) return;
     afterUnsavedChanges(() => { void deleteCapturedSession(target); });
   }
 
-  async function deleteCapturedSession(target: { sessionId: string; name: string }) {
+  async function deleteCapturedSession(target: { projectId: string; sessionId: string; name: string }) {
+    if (target.projectId !== get(activeProjectId)) return;
     try {
       await deleteSession(target.sessionId);
     } catch (e) {
@@ -1526,18 +1545,18 @@
     deleteTabTarget = null;
   }
 
-  $: if (deleteSessionTarget && $selectedSessionId !== deleteSessionTarget.sessionId) {
+  $: if (deleteSessionTarget && ($selectedSessionId !== deleteSessionTarget.sessionId || $activeProjectId !== deleteSessionTarget.projectId)) {
     showDeleteConfirm = false;
     cancelSessionDelete();
   }
-  $: if (deleteTabTarget && $selectedSessionId !== deleteTabTarget.sessionId) {
+  $: if (deleteTabTarget && ($selectedSessionId !== deleteTabTarget.sessionId || $activeProjectId !== deleteTabTarget.projectId)) {
     showDeleteTabConfirm = false;
     cancelTabDelete();
   }
-  $: if (extraArgsTarget && $selectedSessionId !== extraArgsTarget.sessionId) {
+  $: if (extraArgsTarget && ($selectedSessionId !== extraArgsTarget.sessionId || $activeProjectId !== extraArgsTarget.projectId)) {
     cancelExtraArgs();
   }
-  $: if (renameTarget && $selectedSessionId !== renameTarget.sessionId) {
+  $: if (renameTarget && ($selectedSessionId !== renameTarget.sessionId || $activeProjectId !== renameTarget.projectId)) {
     cancelTabRename();
   }
   $: if (tabColorSessionId && $selectedSessionId !== tabColorSessionId) {

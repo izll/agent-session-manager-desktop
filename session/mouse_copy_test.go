@@ -1,8 +1,13 @@
 package session
 
 import (
+	"context"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
+	"time"
 )
 
 // A drag inside a pane is tmux's event, not the web terminal's.
@@ -80,6 +85,27 @@ func TestBothCopyModeTablesAreCovered(t *testing.T) {
 		if !strings.Contains(joined, "-T "+table) {
 			t.Errorf("table %q is not addressed: %q", table, joined)
 		}
+	}
+}
+
+func TestSetMouseCopyEnabledContextHasOneOverallDeadline(t *testing.T) {
+	if testing.Short() || runtime.GOOS == "windows" {
+		t.Skip("uses a helper process")
+	}
+	bin := filepath.Join(t.TempDir(), "wedged-tmux")
+	if err := os.WriteFile(bin, []byte("#!/bin/sh\nexec sleep 30\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	oldBinary := TmuxBinary()
+	SetTmuxBinary(bin)
+	t.Cleanup(func() { SetTmuxBinary(oldBinary) })
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	started := time.Now()
+	SetMouseCopyEnabledContext(ctx, true)
+	if elapsed := time.Since(started); elapsed > time.Second {
+		t.Fatalf("binding all tables multiplied the deadline: %v", elapsed)
 	}
 }
 

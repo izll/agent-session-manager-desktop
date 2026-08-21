@@ -26,6 +26,7 @@ func TestPrivilegedPackageHelperArgsUseVerifiedHelperMode(t *testing.T) {
 		"/home/user/.config/asmgr/updates/update.deb",
 		"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
 		"deb",
+		"v1.2.3",
 	)
 	want := []string{
 		"/usr/bin/asmgr-desktop",
@@ -33,12 +34,51 @@ func TestPrivilegedPackageHelperArgsUseVerifiedHelperMode(t *testing.T) {
 		"/home/user/.config/asmgr/updates/update.deb",
 		"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
 		"deb",
+		"v1.2.3",
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("privileged helper argv = %#v, want %#v", got, want)
 	}
 	if got[0] == "dpkg" || got[0] == "rpm" {
 		t.Fatalf("untrusted package path would be opened directly by %q", got[0])
+	}
+}
+
+func TestPrivilegedPackageHelperPinsChecksumToOfficialReleaseAsset(t *testing.T) {
+	official := packageChecksum([]byte("official package"))
+	var gotURL, gotFilename string
+	reader := func(_ context.Context, url, filename string) (string, error) {
+		gotURL, gotFilename = url, filename
+		return official, nil
+	}
+	if err := verifyOfficialPackageChecksum(context.Background(), "v1.2.3", "deb", official, reader); err != nil {
+		t.Fatal(err)
+	}
+	wantFilename := fmt.Sprintf("%s_1.2.3_linux_%s.deb", BinaryName, packageArch())
+	if gotFilename != wantFilename || gotURL != releaseURL("v1.2.3", wantFilename) {
+		t.Fatalf("official checksum target = %q / %q, want %q / %q", gotURL, gotFilename, releaseURL("v1.2.3", wantFilename), wantFilename)
+	}
+
+	attackerChecksum := packageChecksum([]byte("attacker-controlled package"))
+	if err := verifyOfficialPackageChecksum(context.Background(), "v1.2.3", "deb", attackerChecksum, reader); err == nil {
+		t.Fatal("pkexec helper accepted a caller-selected checksum that differs from the official release")
+	}
+}
+
+func TestPrivilegedPackageHelperRejectsUnconstrainedReleaseBeforeNetwork(t *testing.T) {
+	readerCalled := false
+	reader := func(context.Context, string, string) (string, error) {
+		readerCalled = true
+		return "", nil
+	}
+	if err := verifyOfficialPackageChecksum(context.Background(), "../../evil", "deb", packageChecksum(nil), reader); err == nil {
+		t.Fatal("invalid release version was accepted")
+	}
+	if err := verifyOfficialPackageChecksum(context.Background(), "v1.2.3", "script", packageChecksum(nil), reader); err == nil {
+		t.Fatal("invalid package kind was accepted")
+	}
+	if readerCalled {
+		t.Fatal("invalid helper arguments reached the network checksum reader")
 	}
 }
 

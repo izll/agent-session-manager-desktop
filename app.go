@@ -680,6 +680,19 @@ func (a *App) SelectProject(id string) error {
 	if a.projectLocked {
 		a.persistActiveProjectCodexResumeIDs("project switch")
 	}
+	// Terminal connections are owned by the same per-project lock as their
+	// mirror sessions. Drain them before LockProjectForUse releases that lock;
+	// otherwise another application instance can claim the old project while
+	// this process still has a live PTY attached to it. The frontend normally
+	// detaches first, but backend ownership must not depend on event timing.
+	if a.termServer != nil && a.projectLocked {
+		drainCtx, cancel := context.WithTimeout(a.lifecycleContext(), 2*session.TmuxCommandTimeout+2*time.Second)
+		drainErr := a.termServer.CloseConnections(drainCtx)
+		cancel()
+		if drainErr != nil {
+			return fmt.Errorf("cannot close terminals for the current project: %w", drainErr)
+		}
+	}
 	// MCP clients are scoped to working directories, but the cache is global.
 	// Reap the old project's providers while the project write lock excludes
 	// every TaskMaster call; otherwise visiting projects over a long app run
@@ -810,9 +823,9 @@ func (a *App) beginExpectedProjectMutation(expectedProjectID string) (func(), er
 	return done, nil
 }
 
-func (a *App) beginTerminalAttach() (func(), bool) {
+func (a *App) beginTerminalAttach(expectedProjectID string) (func(), bool) {
 	a.projectMu.RLock()
-	if !a.projectLocked {
+	if !a.projectLocked || a.storage == nil || a.storage.GetActiveProjectID() != expectedProjectID {
 		a.projectMu.RUnlock()
 		return nil, false
 	}
@@ -866,6 +879,18 @@ func (a *App) beginProjectReadWithSideEffects() (func(), error) {
 		return nil, fmt.Errorf("project is read-only in this application instance")
 	}
 	return a.projectMu.RUnlock, nil
+}
+
+func (a *App) beginExpectedProjectReadWithSideEffects(expectedProjectID string) (func(), error) {
+	done, err := a.beginProjectReadWithSideEffects()
+	if err != nil {
+		return nil, err
+	}
+	if activeProjectID := a.storage.GetActiveProjectID(); activeProjectID != expectedProjectID {
+		done()
+		return nil, fmt.Errorf("active project changed: expected %q, got %q", expectedProjectID, activeProjectID)
+	}
+	return done, nil
 }
 
 // CreateProject creates a new project
@@ -934,8 +959,8 @@ func (a *App) GetProjectSessions(projectID string) ([]SessionInfo, error) {
 }
 
 // ImportSessions imports selected sessions from another project
-func (a *App) ImportSessions(sourceProjectID string, sessionIDs []string) (int, error) {
-	done, err := a.beginProjectMutation()
+func (a *App) ImportSessions(sourceProjectID string, sessionIDs []string, expectedProjectID string) (int, error) {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return 0, err
 	}
@@ -1073,8 +1098,8 @@ func (a *App) instanceToSessionInfo(inst *session.Instance) SessionInfo {
 }
 
 // CreateSession creates a new session
-func (a *App) CreateSession(name, path string, agent string, autoYes bool, extraArgs string) (*SessionInfo, error) {
-	done, err := a.beginProjectMutation()
+func (a *App) CreateSession(name, path string, agent string, autoYes bool, extraArgs, expectedProjectID string) (*SessionInfo, error) {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return nil, err
 	}
@@ -1107,8 +1132,8 @@ func (a *App) CreateSession(name, path string, agent string, autoYes bool, extra
 }
 
 // StartSession starts a session
-func (a *App) StartSession(id string) error {
-	done, err := a.beginProjectMutation()
+func (a *App) StartSession(id, expectedProjectID string) error {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return err
 	}
@@ -1137,8 +1162,8 @@ func (a *App) StartSession(id string) error {
 // If the supplied resume ID no longer exists on disk (Claude/Codex deleted
 // the conversation file, moved machine, etc.), we drop it and start fresh
 // instead of letting the CLI boot into a "No conversation found" error.
-func (a *App) StartSessionWithResume(id, resumeID string) error {
-	done, err := a.beginProjectMutation()
+func (a *App) StartSessionWithResume(id, resumeID, expectedProjectID string) error {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return err
 	}
@@ -1184,8 +1209,8 @@ func resolveResumeID(agent session.AgentType, requested, stored string, exists f
 }
 
 // StopSession stops a session
-func (a *App) StopSession(id string) error {
-	done, err := a.beginProjectMutation()
+func (a *App) StopSession(id, expectedProjectID string) error {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return err
 	}
@@ -1201,8 +1226,8 @@ func (a *App) StopSession(id string) error {
 }
 
 // RestartTab restarts a stopped tab (dead pane) in a session
-func (a *App) RestartTab(id string, windowIdx int) error {
-	done, err := a.beginProjectMutation()
+func (a *App) RestartTab(id string, windowIdx int, expectedProjectID string) error {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return err
 	}
@@ -1221,8 +1246,8 @@ func (a *App) RestartTab(id string, windowIdx int) error {
 }
 
 // RestartTabWithResume restarts a stopped tab with a specific resume session ID
-func (a *App) RestartTabWithResume(id string, windowIdx int, resumeId string) error {
-	done, err := a.beginProjectMutation()
+func (a *App) RestartTabWithResume(id string, windowIdx int, resumeId, expectedProjectID string) error {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return err
 	}
@@ -1271,8 +1296,8 @@ func (a *App) RestartTabWithResume(id string, windowIdx int, resumeId string) er
 }
 
 // StopTab stops a specific tab (tmux window) in a session
-func (a *App) StopTab(id string, windowIdx int) error {
-	done, err := a.beginProjectMutation()
+func (a *App) StopTab(id string, windowIdx int, expectedProjectID string) error {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return err
 	}
@@ -1288,8 +1313,8 @@ func (a *App) StopTab(id string, windowIdx int) error {
 }
 
 // DeleteTab deletes a tab (followed window) from a session
-func (a *App) DeleteTab(id string, windowIdx int) error {
-	done, err := a.beginProjectMutation()
+func (a *App) DeleteTab(id string, windowIdx int, expectedProjectID string) error {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return err
 	}
@@ -1321,8 +1346,8 @@ func (a *App) UnfinishedTasksForSession(sessionID string) ([]TaskInfo, error) {
 	return result, nil
 }
 
-func (a *App) DeleteSession(id string) error {
-	done, err := a.beginProjectMutation()
+func (a *App) DeleteSession(id, expectedProjectID string) error {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return err
 	}
@@ -1366,8 +1391,8 @@ func (a *App) GetTrashItems() ([]TrashItemInfo, error) {
 	return result, nil
 }
 
-func (a *App) RestoreTrashItem(id string) (*session.RestoreResult, error) {
-	done, err := a.beginProjectMutation()
+func (a *App) RestoreTrashItem(id, expectedProjectID string) (*session.RestoreResult, error) {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return nil, err
 	}
@@ -1375,8 +1400,8 @@ func (a *App) RestoreTrashItem(id string) (*session.RestoreResult, error) {
 	return a.storage.RestoreTrashItem(id)
 }
 
-func (a *App) PermanentlyDeleteTrashItem(id string) error {
-	done, err := a.beginProjectMutation()
+func (a *App) PermanentlyDeleteTrashItem(id, expectedProjectID string) error {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return err
 	}
@@ -1384,8 +1409,8 @@ func (a *App) PermanentlyDeleteTrashItem(id string) error {
 	return a.storage.PermanentlyDeleteTrashItem(id)
 }
 
-func (a *App) EmptyTrash() error {
-	done, err := a.beginProjectMutation()
+func (a *App) EmptyTrash(expectedProjectID string) error {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return err
 	}
@@ -1411,8 +1436,8 @@ func (a *App) GetBackups() ([]BackupInfo, error) {
 	return result, nil
 }
 
-func (a *App) CreateBackup() error {
-	done, err := a.beginProjectMutation()
+func (a *App) CreateBackup(expectedProjectID string) error {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return err
 	}
@@ -1422,9 +1447,11 @@ func (a *App) CreateBackup() error {
 	}
 	// Tasks live in each working directory rather than in the store, so they
 	// need their own snapshot — see session/task_backup.go. A failure here is
-	// reported but does not undo the backup that already succeeded.
+	// reported explicitly. The canonical backup is still a valid restore point,
+	// so keep it and make the partial outcome clear rather than deleting the
+	// only successful half during an I/O failure.
 	if err := a.backupTaskFiles(); err != nil {
-		log.Printf("[backup] task files: %v", err)
+		return fmt.Errorf("session backup succeeded, but task backup failed: %w", err)
 	}
 	return nil
 }
@@ -1468,8 +1495,8 @@ func (a *App) GetTaskBackups() ([]BackupInfo, error) {
 // Separate from RestoreBackup because the two cover different things and are
 // wanted separately: recovering a deleted task should not also roll back every
 // session and setting to that moment.
-func (a *App) RestoreTaskBackup(id string) error {
-	done, err := a.beginProjectMutation()
+func (a *App) RestoreTaskBackup(id, expectedProjectID string) error {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return err
 	}
@@ -1481,8 +1508,8 @@ func (a *App) RestoreTaskBackup(id string) error {
 	return errors.Join(restoreErr, reloadErr)
 }
 
-func (a *App) RestoreBackup(id string) error {
-	done, err := a.beginProjectMutation()
+func (a *App) RestoreBackup(id, expectedProjectID string) error {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return err
 	}
@@ -1500,8 +1527,8 @@ func (a *App) RestoreBackup(id string) error {
 }
 
 // RenameSession renames a session
-func (a *App) RenameSession(id, name string) error {
-	done, err := a.beginProjectMutation()
+func (a *App) RenameSession(id, name, expectedProjectID string) error {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return err
 	}
@@ -1515,8 +1542,8 @@ func (a *App) RenameSession(id, name string) error {
 }
 
 // ToggleFavorite toggles favorite status
-func (a *App) ToggleFavorite(id string) error {
-	done, err := a.beginProjectMutation()
+func (a *App) ToggleFavorite(id, expectedProjectID string) error {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return err
 	}
@@ -1535,8 +1562,8 @@ func (a *App) ToggleFavorite(id string) error {
 // button consistent with the live indicator (which reads the pane), with no
 // session restart. Falls back to the stored-flag toggle (+restart) when the
 // session isn't running or isn't Claude, so YOLO can still be preset offline.
-func (a *App) CycleYoloMode(id string, windowIdx int) error {
-	done, err := a.beginProjectMutation()
+func (a *App) CycleYoloMode(id string, windowIdx int, expectedProjectID string) error {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return err
 	}
@@ -1563,8 +1590,8 @@ func (a *App) CycleYoloMode(id string, windowIdx int) error {
 }
 
 // ToggleAutoYes toggles YOLO mode and restarts the session if running
-func (a *App) ToggleAutoYes(id string) error {
-	done, err := a.beginProjectMutation()
+func (a *App) ToggleAutoYes(id, expectedProjectID string) error {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return err
 	}
@@ -1705,8 +1732,8 @@ func getClaudeSessionIDFromTmuxWindowContext(ctx context.Context, tmuxSession st
 }
 
 // SetSessionColor sets session colors
-func (a *App) SetSessionColor(id, color, bgColor string, fullRow bool) error {
-	done, err := a.beginProjectMutation()
+func (a *App) SetSessionColor(id, color, bgColor string, fullRow bool, expectedProjectID string) error {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return err
 	}
@@ -1722,8 +1749,8 @@ func (a *App) SetSessionColor(id, color, bgColor string, fullRow bool) error {
 }
 
 // SetSessionNotes sets session notes
-func (a *App) SetSessionNotes(id string, notes string) error {
-	done, err := a.beginProjectMutation()
+func (a *App) SetSessionNotes(id string, notes string, expectedProjectID string) error {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return err
 	}
@@ -1737,8 +1764,8 @@ func (a *App) SetSessionNotes(id string, notes string) error {
 }
 
 // AssignToGroup assigns session to group
-func (a *App) AssignToGroup(sessionID, groupID string) error {
-	done, err := a.beginProjectMutation()
+func (a *App) AssignToGroup(sessionID, groupID, expectedProjectID string) error {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return err
 	}
@@ -1747,8 +1774,8 @@ func (a *App) AssignToGroup(sessionID, groupID string) error {
 }
 
 // ReorderSession moves a session up or down in the list
-func (a *App) ReorderSession(sessionID string, direction int) error {
-	done, err := a.beginProjectMutation()
+func (a *App) ReorderSession(sessionID string, direction int, expectedProjectID string) error {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return err
 	}
@@ -1757,8 +1784,8 @@ func (a *App) ReorderSession(sessionID string, direction int) error {
 }
 
 // MoveSessionToIndex moves a session to a specific index in the list
-func (a *App) MoveSessionToIndex(sessionID string, targetIndex int) error {
-	done, err := a.beginProjectMutation()
+func (a *App) MoveSessionToIndex(sessionID string, targetIndex int, expectedProjectID string) error {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return err
 	}
@@ -1767,8 +1794,8 @@ func (a *App) MoveSessionToIndex(sessionID string, targetIndex int) error {
 }
 
 // SendPrompt sends text to session
-func (a *App) SendPrompt(id string, text string) error {
-	done, err := a.beginProjectMutation()
+func (a *App) SendPrompt(id string, text string, expectedProjectID string) error {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return err
 	}
@@ -1786,8 +1813,8 @@ func (a *App) sendPrompt(id string, text string) error {
 
 // SendPromptToWindow sends text to a specific tab rather than to whichever
 // window the session happens to have active.
-func (a *App) SendPromptToWindow(id string, windowIdx int, text string) error {
-	done, err := a.beginProjectMutation()
+func (a *App) SendPromptToWindow(id string, windowIdx int, text, expectedProjectID string) error {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return err
 	}
@@ -1814,8 +1841,8 @@ type ForkResult struct {
 // windowIdx names the tab being forked. Without it this read the session's main
 // window every time, so forking from a second Claude tab branched a different
 // conversation than the one on screen.
-func (a *App) ForkSession(id string, windowIdx int) (*ForkResult, error) {
-	done, err := a.beginProjectMutation()
+func (a *App) ForkSession(id string, windowIdx int, expectedProjectID string) (*ForkResult, error) {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return nil, err
 	}
@@ -1879,8 +1906,8 @@ func (a *App) recordLiveConversation(inst *session.Instance, windowIdx int, live
 // ForkToNewTab forks to a new tab
 // ForkToNewTab creates the forked tab and returns its window index, so the
 // frontend can switch to it immediately — the same as CreateTab.
-func (a *App) ForkToNewTab(id, name, sessionID string) (int, error) {
-	done, err := a.beginProjectMutation()
+func (a *App) ForkToNewTab(id, name, sessionID, expectedProjectID string) (int, error) {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return 0, err
 	}
@@ -1903,8 +1930,8 @@ func (a *App) ForkToNewTab(id, name, sessionID string) (int, error) {
 }
 
 // ForkToNewSession creates a new session from forked Claude conversation
-func (a *App) ForkToNewSession(id, name, sessionID string) (*SessionInfo, error) {
-	done, err := a.beginProjectMutation()
+func (a *App) ForkToNewSession(id, name, sessionID, expectedProjectID string) (*SessionInfo, error) {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return nil, err
 	}
@@ -2019,8 +2046,8 @@ func (a *App) GetGroups() ([]GroupInfo, error) {
 }
 
 // CreateGroup creates a new group
-func (a *App) CreateGroup(name string) (*GroupInfo, error) {
-	done, err := a.beginProjectMutation()
+func (a *App) CreateGroup(name, expectedProjectID string) (*GroupInfo, error) {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return nil, err
 	}
@@ -2036,8 +2063,8 @@ func (a *App) CreateGroup(name string) (*GroupInfo, error) {
 }
 
 // DeleteGroup deletes a group
-func (a *App) DeleteGroup(id string) error {
-	done, err := a.beginProjectMutation()
+func (a *App) DeleteGroup(id, expectedProjectID string) error {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return err
 	}
@@ -2046,8 +2073,8 @@ func (a *App) DeleteGroup(id string) error {
 }
 
 // RenameGroup renames a group
-func (a *App) RenameGroup(id, name string) error {
-	done, err := a.beginProjectMutation()
+func (a *App) RenameGroup(id, name, expectedProjectID string) error {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return err
 	}
@@ -2056,8 +2083,8 @@ func (a *App) RenameGroup(id, name string) error {
 }
 
 // MoveGroup moves a group to a new position in the sidebar order
-func (a *App) MoveGroup(id string, newIndex int) error {
-	done, err := a.beginProjectMutation()
+func (a *App) MoveGroup(id string, newIndex int, expectedProjectID string) error {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return err
 	}
@@ -2066,8 +2093,8 @@ func (a *App) MoveGroup(id string, newIndex int) error {
 }
 
 // ToggleGroupCollapse toggles group collapsed state
-func (a *App) ToggleGroupCollapse(id string) error {
-	done, err := a.beginProjectMutation()
+func (a *App) ToggleGroupCollapse(id, expectedProjectID string) error {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return err
 	}
@@ -2076,8 +2103,8 @@ func (a *App) ToggleGroupCollapse(id string) error {
 }
 
 // SetGroupColor sets group colors
-func (a *App) SetGroupColor(id, color, bgColor string, fullRow bool) error {
-	done, err := a.beginProjectMutation()
+func (a *App) SetGroupColor(id, color, bgColor string, fullRow bool, expectedProjectID string) error {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return err
 	}
@@ -2092,8 +2119,8 @@ func (a *App) SetGroupColor(id, color, bgColor string, fullRow bool) error {
 // CreateTab creates a new tab in session
 // CreateTab creates a new tab and returns the new tmux window index so the
 // frontend can switch to (and focus) it immediately.
-func (a *App) CreateTab(sessionID string, isAgent bool, agent string, name string, extraArgs string, workDir string) (int, error) {
-	done, err := a.beginProjectMutation()
+func (a *App) CreateTab(sessionID string, isAgent bool, agent string, name string, extraArgs string, workDir string, expectedProjectID string) (int, error) {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return -1, err
 	}
@@ -2128,8 +2155,8 @@ func (a *App) CreateTab(sessionID string, isAgent bool, agent string, name strin
 }
 
 // CloseTab closes a tab
-func (a *App) CloseTab(sessionID string, windowIdx int) error {
-	done, err := a.beginProjectMutation()
+func (a *App) CloseTab(sessionID string, windowIdx int, expectedProjectID string) error {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return err
 	}
@@ -2138,8 +2165,8 @@ func (a *App) CloseTab(sessionID string, windowIdx int) error {
 }
 
 // RenameTab renames a tab
-func (a *App) RenameTab(sessionID string, windowIdx int, name string) error {
-	done, err := a.beginProjectMutation()
+func (a *App) RenameTab(sessionID string, windowIdx int, name, expectedProjectID string) error {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return err
 	}
@@ -2170,8 +2197,8 @@ func persistOrRollbackExternalMutation(persist, rollback func() error) error {
 
 // ReorderTab reorders a tab within a session's display order.
 // fromPos and toPos are indices into the tab display order (0-based, including main window).
-func (a *App) ReorderTab(sessionID string, fromPos, toPos int) error {
-	done, err := a.beginProjectMutation()
+func (a *App) ReorderTab(sessionID string, fromPos, toPos int, expectedProjectID string) error {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return err
 	}
@@ -2196,8 +2223,8 @@ func (a *App) GetTabOrder(sessionID string) ([]int, error) {
 }
 
 // SetTabNotes sets tab notes
-func (a *App) SetTabNotes(sessionID string, windowIdx int, notes string) error {
-	done, err := a.beginProjectMutation()
+func (a *App) SetTabNotes(sessionID string, windowIdx int, notes, expectedProjectID string) error {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return err
 	}
@@ -2222,8 +2249,8 @@ func (a *App) SetTabNotes(sessionID string, windowIdx int, notes string) error {
 
 // SetTabColor sets the optional text and background colors for a tab.
 // Empty values clear an override; textColor also supports "auto".
-func (a *App) SetTabColor(sessionID string, windowIdx int, textColor, backgroundColor string) error {
-	done, err := a.beginProjectMutation()
+func (a *App) SetTabColor(sessionID string, windowIdx int, textColor, backgroundColor, expectedProjectID string) error {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return err
 	}
@@ -2284,8 +2311,8 @@ func (a *App) GetWindowAutoYes(sessionID string, windowIdx int) (bool, error) {
 }
 
 // SetWindowAutoYes sets YOLO state for a specific window
-func (a *App) SetWindowAutoYes(sessionID string, windowIdx int, enabled bool) error {
-	done, err := a.beginProjectMutation()
+func (a *App) SetWindowAutoYes(sessionID string, windowIdx int, enabled bool, expectedProjectID string) error {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return err
 	}
@@ -2326,8 +2353,8 @@ func (a *App) GetExtraArgs(sessionID string, windowIdx int) (string, error) {
 }
 
 // SetExtraArgs sets the extra CLI arguments for a session window
-func (a *App) SetExtraArgs(sessionID string, windowIdx int, extraArgs string) error {
-	done, err := a.beginProjectMutation()
+func (a *App) SetExtraArgs(sessionID string, windowIdx int, extraArgs, expectedProjectID string) error {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return err
 	}
@@ -2753,8 +2780,8 @@ func (a *App) GetTerminalWSToken() string {
 // ============================================================================
 
 // AttachSession attaches to a session terminal
-func (a *App) AttachSession(id string, windowIdx int) (string, error) {
-	done, err := a.beginProjectMutation()
+func (a *App) AttachSession(id string, windowIdx int, expectedProjectID string) (string, error) {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return "", err
 	}
@@ -2856,8 +2883,8 @@ func (a *App) DetachSession(ptyID string) error {
 }
 
 // SendInput sends input to PTY
-func (a *App) SendInput(ptyID string, data string) error {
-	done, err := a.beginProjectMutation()
+func (a *App) SendInput(ptyID string, data string, expectedProjectID string) error {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return err
 	}
@@ -2875,8 +2902,8 @@ func (a *App) SendInput(ptyID string, data string) error {
 }
 
 // ResizeTerminal resizes PTY and refreshes tmux
-func (a *App) ResizeTerminal(ptyID string, cols, rows int) error {
-	done, err := a.beginProjectMutation()
+func (a *App) ResizeTerminal(ptyID string, cols, rows int, expectedProjectID string) error {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return err
 	}
@@ -2926,8 +2953,8 @@ func (a *App) ResizeTerminal(ptyID string, cols, rows int) error {
 // RefreshWindow forces tmux to redraw the pane for the given session window.
 // Fixes occasional rendering glitches (garbled characters) by sending Ctrl+L
 // to the pane and refreshing all clients attached to the tmux session.
-func (a *App) RefreshWindow(sessionID string, windowIdx int) error {
-	done, err := a.beginProjectMutation()
+func (a *App) RefreshWindow(sessionID string, windowIdx int, expectedProjectID string) error {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return err
 	}
@@ -2973,8 +3000,8 @@ func (a *App) RefreshWindow(sessionID string, windowIdx int) error {
 // visually offset until something else prompts a redraw. That is the right
 // trade for something that runs on its own: a cosmetic offset is recoverable,
 // text typed into an agent's prompt is not.
-func (a *App) RedrawWindow(sessionID string, windowIdx int) error {
-	done, err := a.beginProjectMutation()
+func (a *App) RedrawWindow(sessionID string, windowIdx int, expectedProjectID string) error {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return err
 	}
@@ -3180,8 +3207,8 @@ func (a *App) GetFullDiffForFile(id, path string, wholeFile bool, windowIdx int,
 }
 
 // RevertDiffFile discards every pending change to one file.
-func (a *App) RevertDiffFile(id, path string, sessionScope bool, windowIdx int, expectedRoot string) error {
-	done, err := a.beginProjectMutation()
+func (a *App) RevertDiffFile(id, path string, sessionScope bool, windowIdx int, expectedRoot, expectedProjectID string) error {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return err
 	}
@@ -3205,8 +3232,8 @@ func (a *App) RevertDiffFile(id, path string, sessionScope bool, windowIdx int, 
 // RevertDiffHunk undoes a single change block. The patch is the text the UI
 // displayed, so a file that moved on since makes git refuse instead of
 // reverting something the user never saw.
-func (a *App) RevertDiffHunk(id, patch string, windowIdx int, expectedRoot string) error {
-	done, err := a.beginProjectMutation()
+func (a *App) RevertDiffHunk(id, patch string, windowIdx int, expectedRoot, expectedProjectID string) error {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return err
 	}
@@ -3329,8 +3356,8 @@ type SaveFileEditResult struct {
 // Gated on the project lock for the same reason terminal attaches are: a second
 // application instance holding no lock must not write into a project another
 // instance owns.
-func (a *App) SaveSessionFileEdit(id, path, text string, shape session.FileShape, version string, overwrite bool, windowIdx int, expectedRoot string) (*SaveFileEditResult, error) {
-	done, err := a.beginProjectMutation()
+func (a *App) SaveSessionFileEdit(id, path, text string, shape session.FileShape, version string, overwrite bool, windowIdx int, expectedRoot, expectedProjectID string) (*SaveFileEditResult, error) {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return nil, err
 	}
@@ -3708,9 +3735,16 @@ func (a *App) GetSettings() (*SettingsInfo, error) {
 	}, nil
 }
 
+// Runtime settings seams keep persistence ordering testable without launching
+// a real multiplexer. Production values are the session package functions.
+var (
+	applyRuntimeMouseCopy     = session.SetMouseCopyEnabledContext
+	applyRuntimeTerminalShell = session.SetTerminalShell
+)
+
 // SaveSettings saves UI settings
-func (a *App) SaveSettings(settings SettingsInfo) error {
-	done, err := a.beginProjectMutation()
+func (a *App) SaveSettings(settings SettingsInfo, expectedProjectID string) error {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return err
 	}
@@ -3732,16 +3766,8 @@ func (a *App) SaveSettings(settings SettingsInfo) error {
 		current.UIAccent = settings.UIAccent
 		current.TerminalRenderer = settings.TerminalRenderer
 		current.TerminalCopyMode = settings.TerminalCopyMode
-		// tmux is what sees a drag inside a pane, so the setting has to reach
-		// its key bindings — the web terminal never gets the chance to act on
-		// it. Existing sessions are re-bound too: the tables are global, so one
-		// call covers every open pane rather than only the next new one.
-		session.SetMouseCopyEnabled(settings.TerminalCopyMode == "select")
 		current.TerminalFontFamily = settings.TerminalFontFamily
 		current.TerminalShell = settings.TerminalShell
-		// Applied immediately: a tab restarted before the next launch should
-		// use the shell that was just chosen, not the previous one.
-		session.SetTerminalShell(settings.TerminalShell)
 		current.GitBranchDisplay = settings.GitBranchDisplay
 		current.DiffFlatFileList = settings.DiffFlatFileList
 		current.TrashRetentionDays = settings.TrashRetentionDays
@@ -3771,6 +3797,16 @@ func (a *App) SaveSettings(settings SettingsInfo) error {
 	if err != nil {
 		return err
 	}
+
+	// Apply process/tmux state only after the settings snapshot is durable. A
+	// failed write must leave runtime state on the old persisted value. tmux is
+	// also external and used to run here while Storage held s.mu; one wedged
+	// server then blocked every storage call indefinitely. One shared deadline
+	// bounds the complete set of global binding updates.
+	applyRuntimeTerminalShell(settings.TerminalShell)
+	applyCtx, cancelApply := context.WithTimeout(a.lifecycleContext(), session.TmuxCommandTimeout)
+	applyRuntimeMouseCopy(applyCtx, settings.TerminalCopyMode == "select")
+	cancelApply()
 
 	// Turning the feature off has to take effect on the process too, not only
 	// on the next start: a client left running from before keeps an npx child
@@ -3924,21 +3960,21 @@ const (
 
 // SetTabStatusBar overrides whether the bottom status bar shows for one tab.
 // ViewBarInherit clears the override so the tab follows the global setting.
-func (a *App) SetTabStatusBar(sessionID string, windowIdx int, state int) error {
-	return a.setTabBarState(sessionID, windowIdx, state, false)
+func (a *App) SetTabStatusBar(sessionID string, windowIdx int, state int, expectedProjectID string) error {
+	return a.setTabBarState(sessionID, windowIdx, state, false, expectedProjectID)
 }
 
 // SetTabViewBar overrides whether the view bar shows for one tab.
 // ViewBarInherit clears the override so the tab follows the global setting.
-func (a *App) SetTabViewBar(sessionID string, windowIdx int, state int) error {
-	return a.setTabBarState(sessionID, windowIdx, state, true)
+func (a *App) SetTabViewBar(sessionID string, windowIdx int, state int, expectedProjectID string) error {
+	return a.setTabBarState(sessionID, windowIdx, state, true, expectedProjectID)
 }
 
 // setTabBarState stores a tri-state override for one of the two bars. They
 // differ only in which field they write, so the validation and the
 // main-window lookup are shared.
-func (a *App) setTabBarState(sessionID string, windowIdx, state int, viewBar bool) error {
-	done, err := a.beginProjectMutation()
+func (a *App) setTabBarState(sessionID string, windowIdx, state int, viewBar bool, expectedProjectID string) error {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return err
 	}
@@ -4013,8 +4049,8 @@ func (a *App) SetTabFontSize(sessionID string, windowIdx int, size int, expected
 	return a.storage.UpdateInstance(inst)
 }
 
-func (a *App) SetTabTerminalTheme(sessionID string, windowIdx int, themeID string) error {
-	done, err := a.beginProjectMutation()
+func (a *App) SetTabTerminalTheme(sessionID string, windowIdx int, themeID, expectedProjectID string) error {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return err
 	}
@@ -4044,8 +4080,8 @@ func (a *App) SetTabTerminalTheme(sessionID string, windowIdx int, themeID strin
 // SetTabStatusLineVisibility stores whether a tab's status line should be
 // shown in the session list. windowIdx 0 (the main window) is stored on the
 // instance; followed windows carry their own flag.
-func (a *App) SetTabStatusLineVisibility(sessionID string, windowIdx int, hide bool) error {
-	done, err := a.beginProjectMutation()
+func (a *App) SetTabStatusLineVisibility(sessionID string, windowIdx int, hide bool, expectedProjectID string) error {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return err
 	}
@@ -4076,8 +4112,8 @@ func (a *App) SetTabStatusLineVisibility(sessionID string, windowIdx int, hide b
 // user can respond to a waiting agent prompt straight from the attention
 // inbox, without switching tabs. The whitelist keeps arbitrary key injection
 // out of the bound API surface.
-func (a *App) QuickReplyTab(sessionID string, windowIdx int, action string) error {
-	done, err := a.beginProjectMutation()
+func (a *App) QuickReplyTab(sessionID string, windowIdx int, action, expectedProjectID string) error {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return err
 	}
@@ -4486,8 +4522,8 @@ func (a *App) GetTasksByStatus(sessionID string, status string) ([]TaskInfo, err
 }
 
 // CreateTask creates a new task
-func (a *App) CreateTask(sessionID, title, description, priority string, tags []string) (*TaskInfo, error) {
-	done, err := a.beginProjectMutation()
+func (a *App) CreateTask(sessionID, title, description, priority string, tags []string, expectedProjectID string) (*TaskInfo, error) {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return nil, err
 	}
@@ -4511,8 +4547,8 @@ func (a *App) CreateTask(sessionID, title, description, priority string, tags []
 }
 
 // UpdateTask updates an existing task
-func (a *App) UpdateTask(sessionID, taskID string, updates map[string]interface{}) error {
-	done, err := a.beginProjectMutation()
+func (a *App) UpdateTask(sessionID, taskID string, updates map[string]interface{}, expectedProjectID string) error {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return err
 	}
@@ -4526,8 +4562,8 @@ func (a *App) UpdateTask(sessionID, taskID string, updates map[string]interface{
 }
 
 // DeleteTask deletes a task
-func (a *App) DeleteTask(sessionID, taskID string) error {
-	done, err := a.beginProjectMutation()
+func (a *App) DeleteTask(sessionID, taskID, expectedProjectID string) error {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return err
 	}
@@ -4541,8 +4577,8 @@ func (a *App) DeleteTask(sessionID, taskID string) error {
 }
 
 // MoveTask changes the status of a task
-func (a *App) MoveTask(sessionID, taskID, newStatus string) error {
-	done, err := a.beginProjectMutation()
+func (a *App) MoveTask(sessionID, taskID, newStatus, expectedProjectID string) error {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return err
 	}
@@ -4556,8 +4592,8 @@ func (a *App) MoveTask(sessionID, taskID, newStatus string) error {
 }
 
 // AddSubtask adds a subtask to a task
-func (a *App) AddSubtask(sessionID, taskID, title string) (*SubtaskInfo, error) {
-	done, err := a.beginProjectMutation()
+func (a *App) AddSubtask(sessionID, taskID, title, expectedProjectID string) (*SubtaskInfo, error) {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return nil, err
 	}
@@ -4581,8 +4617,8 @@ func (a *App) AddSubtask(sessionID, taskID, title string) (*SubtaskInfo, error) 
 }
 
 // ToggleSubtask toggles the done status of a subtask
-func (a *App) ToggleSubtask(sessionID, taskID, subtaskID string) error {
-	done, err := a.beginProjectMutation()
+func (a *App) ToggleSubtask(sessionID, taskID, subtaskID, expectedProjectID string) error {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return err
 	}
@@ -4596,8 +4632,8 @@ func (a *App) ToggleSubtask(sessionID, taskID, subtaskID string) error {
 }
 
 // DeleteSubtask removes a subtask
-func (a *App) DeleteSubtask(sessionID, taskID, subtaskID string) error {
-	done, err := a.beginProjectMutation()
+func (a *App) DeleteSubtask(sessionID, taskID, subtaskID, expectedProjectID string) error {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return err
 	}
@@ -4612,8 +4648,8 @@ func (a *App) DeleteSubtask(sessionID, taskID, subtaskID string) error {
 
 // RestoreDeletedTask restores a full deleted-task snapshot through the
 // selected provider without allocating a replacement ID.
-func (a *App) RestoreDeletedTask(sessionID, provider string, snapshot DeletedTaskSnapshot) error {
-	done, err := a.beginProjectMutation()
+func (a *App) RestoreDeletedTask(sessionID, provider string, snapshot DeletedTaskSnapshot, expectedProjectID string) error {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return err
 	}
@@ -4647,8 +4683,8 @@ func (a *App) RestoreDeletedTask(sessionID, provider string, snapshot DeletedTas
 
 // RestoreDeletedSubtask restores a complete subtask snapshot to its original
 // parent and provider. The provider is captured when deletion happens.
-func (a *App) RestoreDeletedSubtask(sessionID, provider, taskID string, snapshot DeletedSubtaskSnapshot) error {
-	done, err := a.beginProjectMutation()
+func (a *App) RestoreDeletedSubtask(sessionID, provider, taskID string, snapshot DeletedSubtaskSnapshot, expectedProjectID string) error {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return err
 	}
@@ -4812,8 +4848,8 @@ func (a *App) GetNextTask(sessionID string) (*TaskInfo, error) {
 }
 
 // SendTaskToAgent sends a task as a prompt to the active agent
-func (a *App) SendTaskToAgent(sessionID, taskID string) error {
-	done, err := a.beginProjectMutation()
+func (a *App) SendTaskToAgent(sessionID, taskID, expectedProjectID string) error {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return err
 	}
@@ -5046,13 +5082,13 @@ func convertMCPTask(t mcp.Task) MCPTaskInfo {
 }
 
 // TaskMasterStatus returns the status of Task Master for a session
-func (a *App) TaskMasterStatus(sessionID string) map[string]interface{} {
+func (a *App) TaskMasterStatus(sessionID, expectedProjectID string) map[string]interface{} {
 	result := map[string]interface{}{
 		"initialized": false,
 		"running":     false,
 		"error":       nil,
 	}
-	release, guardErr := a.beginProjectReadWithSideEffects()
+	release, guardErr := a.beginExpectedProjectReadWithSideEffects(expectedProjectID)
 	if guardErr != nil {
 		result["error"] = guardErr.Error()
 		return result
@@ -5073,8 +5109,8 @@ func (a *App) TaskMasterStatus(sessionID string) map[string]interface{} {
 }
 
 // TaskMasterInit initializes Task Master for a project
-func (a *App) TaskMasterInit(sessionID string) error {
-	done, err := a.beginProjectMutation()
+func (a *App) TaskMasterInit(sessionID, expectedProjectID string) error {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return err
 	}
@@ -5088,8 +5124,8 @@ func (a *App) TaskMasterInit(sessionID string) error {
 }
 
 // TaskMasterParsePRD parses a PRD file into tasks
-func (a *App) TaskMasterParsePRD(sessionID, prdContent string, numTasks int) error {
-	done, err := a.beginProjectMutation()
+func (a *App) TaskMasterParsePRD(sessionID, prdContent string, numTasks int, expectedProjectID string) error {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return err
 	}
@@ -5118,8 +5154,8 @@ func (a *App) TaskMasterParsePRD(sessionID, prdContent string, numTasks int) err
 }
 
 // TaskMasterGetTasks returns all tasks from Task Master
-func (a *App) TaskMasterGetTasks(sessionID, status string) ([]MCPTaskInfo, error) {
-	release, err := a.beginProjectReadWithSideEffects()
+func (a *App) TaskMasterGetTasks(sessionID, status, expectedProjectID string) ([]MCPTaskInfo, error) {
+	release, err := a.beginExpectedProjectReadWithSideEffects(expectedProjectID)
 	if err != nil {
 		return nil, err
 	}
@@ -5143,8 +5179,8 @@ func (a *App) TaskMasterGetTasks(sessionID, status string) ([]MCPTaskInfo, error
 }
 
 // TaskMasterGetTask returns a specific task
-func (a *App) TaskMasterGetTask(sessionID, taskID string) (*MCPTaskInfo, error) {
-	release, err := a.beginProjectReadWithSideEffects()
+func (a *App) TaskMasterGetTask(sessionID, taskID, expectedProjectID string) (*MCPTaskInfo, error) {
+	release, err := a.beginExpectedProjectReadWithSideEffects(expectedProjectID)
 	if err != nil {
 		return nil, err
 	}
@@ -5164,8 +5200,8 @@ func (a *App) TaskMasterGetTask(sessionID, taskID string) (*MCPTaskInfo, error) 
 }
 
 // TaskMasterNextTask returns the next task to work on
-func (a *App) TaskMasterNextTask(sessionID string) (*MCPTaskInfo, error) {
-	release, err := a.beginProjectReadWithSideEffects()
+func (a *App) TaskMasterNextTask(sessionID, expectedProjectID string) (*MCPTaskInfo, error) {
+	release, err := a.beginExpectedProjectReadWithSideEffects(expectedProjectID)
 	if err != nil {
 		return nil, err
 	}
@@ -5189,8 +5225,8 @@ func (a *App) TaskMasterNextTask(sessionID string) (*MCPTaskInfo, error) {
 }
 
 // TaskMasterSetStatus sets the status of a task
-func (a *App) TaskMasterSetStatus(sessionID, taskID, status string) error {
-	done, err := a.beginProjectMutation()
+func (a *App) TaskMasterSetStatus(sessionID, taskID, status, expectedProjectID string) error {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return err
 	}
@@ -5204,8 +5240,8 @@ func (a *App) TaskMasterSetStatus(sessionID, taskID, status string) error {
 }
 
 // TaskMasterAddTask adds a new task
-func (a *App) TaskMasterAddTask(sessionID, prompt string, research bool, priority string) (*MCPTaskInfo, error) {
-	done, err := a.beginProjectMutation()
+func (a *App) TaskMasterAddTask(sessionID, prompt string, research bool, priority, expectedProjectID string) (*MCPTaskInfo, error) {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return nil, err
 	}
@@ -5231,8 +5267,8 @@ func (a *App) TaskMasterAddTask(sessionID, prompt string, research bool, priorit
 }
 
 // TaskMasterAddManualTask adds a new task without AI (manual mode)
-func (a *App) TaskMasterAddManualTask(sessionID, title, description, details, priority string) (*MCPTaskInfo, error) {
-	done, err := a.beginProjectMutation()
+func (a *App) TaskMasterAddManualTask(sessionID, title, description, details, priority, expectedProjectID string) (*MCPTaskInfo, error) {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return nil, err
 	}
@@ -5258,8 +5294,8 @@ func (a *App) TaskMasterAddManualTask(sessionID, title, description, details, pr
 }
 
 // TaskMasterUpdateTask updates a task
-func (a *App) TaskMasterUpdateTask(sessionID, taskID, prompt string, research bool) error {
-	done, err := a.beginProjectMutation()
+func (a *App) TaskMasterUpdateTask(sessionID, taskID, prompt string, research bool, expectedProjectID string) error {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return err
 	}
@@ -5273,8 +5309,8 @@ func (a *App) TaskMasterUpdateTask(sessionID, taskID, prompt string, research bo
 }
 
 // TaskMasterUpdateSubtask updates a subtask with notes
-func (a *App) TaskMasterUpdateSubtask(sessionID, subtaskID, prompt string) error {
-	done, err := a.beginProjectMutation()
+func (a *App) TaskMasterUpdateSubtask(sessionID, subtaskID, prompt, expectedProjectID string) error {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return err
 	}
@@ -5288,8 +5324,8 @@ func (a *App) TaskMasterUpdateSubtask(sessionID, subtaskID, prompt string) error
 }
 
 // TaskMasterExpandTask expands a task into subtasks
-func (a *App) TaskMasterExpandTask(sessionID, taskID string, research, force bool) error {
-	done, err := a.beginProjectMutation()
+func (a *App) TaskMasterExpandTask(sessionID, taskID string, research, force bool, expectedProjectID string) error {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return err
 	}
@@ -5303,8 +5339,8 @@ func (a *App) TaskMasterExpandTask(sessionID, taskID string, research, force boo
 }
 
 // TaskMasterExpandAll expands all eligible tasks
-func (a *App) TaskMasterExpandAll(sessionID string, research bool) error {
-	done, err := a.beginProjectMutation()
+func (a *App) TaskMasterExpandAll(sessionID string, research bool, expectedProjectID string) error {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return err
 	}
@@ -5318,8 +5354,8 @@ func (a *App) TaskMasterExpandAll(sessionID string, research bool) error {
 }
 
 // TaskMasterAnalyzeComplexity analyzes task complexity
-func (a *App) TaskMasterAnalyzeComplexity(sessionID string, research bool) (string, error) {
-	done, err := a.beginProjectMutation()
+func (a *App) TaskMasterAnalyzeComplexity(sessionID string, research bool, expectedProjectID string) (string, error) {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return "", err
 	}
@@ -5338,8 +5374,8 @@ func (a *App) TaskMasterAnalyzeComplexity(sessionID string, research bool) (stri
 }
 
 // TaskMasterRemoveTask removes a task
-func (a *App) TaskMasterRemoveTask(sessionID, taskID string) error {
-	done, err := a.beginProjectMutation()
+func (a *App) TaskMasterRemoveTask(sessionID, taskID, expectedProjectID string) error {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return err
 	}
@@ -5353,8 +5389,8 @@ func (a *App) TaskMasterRemoveTask(sessionID, taskID string) error {
 }
 
 // TaskMasterSendToAgent sends a task as a prompt to the agent
-func (a *App) TaskMasterSendToAgent(sessionID, taskID string) error {
-	done, err := a.beginProjectMutation()
+func (a *App) TaskMasterSendToAgent(sessionID, taskID, expectedProjectID string) error {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return err
 	}
@@ -5375,8 +5411,8 @@ func (a *App) TaskMasterSendToAgent(sessionID, taskID string) error {
 }
 
 // StopTaskMaster stops the Task Master MCP server for a project
-func (a *App) StopTaskMaster(sessionID string) error {
-	done, err := a.beginProjectMutation()
+func (a *App) StopTaskMaster(sessionID, expectedProjectID string) error {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return err
 	}
@@ -5416,8 +5452,8 @@ func (a *App) StopTaskMaster(sessionID string) error {
 }
 
 // TaskMasterAddSubtask adds a subtask to a task
-func (a *App) TaskMasterAddSubtask(sessionID, taskID, title, description string) error {
-	done, err := a.beginProjectMutation()
+func (a *App) TaskMasterAddSubtask(sessionID, taskID, title, description, expectedProjectID string) error {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return err
 	}
@@ -5432,8 +5468,8 @@ func (a *App) TaskMasterAddSubtask(sessionID, taskID, title, description string)
 }
 
 // TaskMasterRemoveSubtask removes a specific subtask
-func (a *App) TaskMasterRemoveSubtask(sessionID, subtaskID string) error {
-	done, err := a.beginProjectMutation()
+func (a *App) TaskMasterRemoveSubtask(sessionID, subtaskID, expectedProjectID string) error {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return err
 	}
@@ -5447,8 +5483,8 @@ func (a *App) TaskMasterRemoveSubtask(sessionID, subtaskID string) error {
 }
 
 // TaskMasterClearSubtasks removes all subtasks from a task
-func (a *App) TaskMasterClearSubtasks(sessionID, taskID string) error {
-	done, err := a.beginProjectMutation()
+func (a *App) TaskMasterClearSubtasks(sessionID, taskID, expectedProjectID string) error {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return err
 	}
@@ -5462,8 +5498,8 @@ func (a *App) TaskMasterClearSubtasks(sessionID, taskID string) error {
 }
 
 // TaskMasterSetSubtaskStatus sets the status of a subtask
-func (a *App) TaskMasterSetSubtaskStatus(sessionID, subtaskID, status string) error {
-	done, err := a.beginProjectMutation()
+func (a *App) TaskMasterSetSubtaskStatus(sessionID, subtaskID, status, expectedProjectID string) error {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return err
 	}
@@ -5483,8 +5519,8 @@ func (a *App) TaskMasterSetSubtaskStatus(sessionID, subtaskID, status string) er
 // copy of the opt-in check. It spawns nothing, but it does write into the
 // project's .taskmaster directory, which a disabled feature has no business
 // touching either.
-func (a *App) TaskMasterUpdateTaskDirect(sessionID, taskID, title, description, details, priority, dueAt, taskSessionID string) error {
-	done, err := a.beginProjectMutation()
+func (a *App) TaskMasterUpdateTaskDirect(sessionID, taskID, title, description, details, priority, dueAt, taskSessionID, expectedProjectID string) error {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return err
 	}
@@ -5589,8 +5625,8 @@ func taskMasterJSONID(value interface{}) string {
 }
 
 // TaskMasterAddDependency adds a dependency to a task
-func (a *App) TaskMasterAddDependency(sessionID, taskID, dependsOnID string) error {
-	done, err := a.beginProjectMutation()
+func (a *App) TaskMasterAddDependency(sessionID, taskID, dependsOnID, expectedProjectID string) error {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return err
 	}
@@ -5604,8 +5640,8 @@ func (a *App) TaskMasterAddDependency(sessionID, taskID, dependsOnID string) err
 }
 
 // TaskMasterRemoveDependency removes a dependency from a task
-func (a *App) TaskMasterRemoveDependency(sessionID, taskID, dependsOnID string) error {
-	done, err := a.beginProjectMutation()
+func (a *App) TaskMasterRemoveDependency(sessionID, taskID, dependsOnID, expectedProjectID string) error {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return err
 	}

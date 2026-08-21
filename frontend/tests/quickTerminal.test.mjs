@@ -68,8 +68,8 @@ assert.match(
 // A terminal, not an agent, with the session's own defaults.
 assert.match(
   dialog,
-  /App\.CreateTab\(targetSessionId, false, 'terminal', submittedName, '', ''\)/,
-  'it must create a plain terminal tab with no extra arguments',
+  /App\.CreateTab\(targetSessionId, false, 'terminal', submittedName, '', '', targetProjectId\)/,
+  'it must create a plain terminal tab with no extra arguments in the captured project',
 );
 
 // Bound, and rebindable like every other shortcut rather than hard-coded.

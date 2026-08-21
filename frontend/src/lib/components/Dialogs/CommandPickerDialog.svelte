@@ -3,6 +3,8 @@
   import type { main } from '../../../../wailsjs/go/models';
   import { t } from '../../i18n';
   import { autoFocusDialog } from '../../utils/dialogActions';
+  import { activeProjectId } from '../../stores/projects';
+  import { get } from 'svelte/store';
 
   export let show = false;
   /** Session the picked command is sent to. Empty means "nothing selected". */
@@ -23,6 +25,7 @@
   let operationGeneration = 0;
   let targetSessionId = '';
   let targetWindowIdx = 0;
+  let targetProjectId = '';
 
   let query = '';
   let selectedIdx = 0;
@@ -49,13 +52,15 @@
   // A command can be destructive. If keyboard navigation changes the active
   // tab behind the modal, close instead of silently offering the old target.
   $: if (show && targetSessionId &&
-         (sessionId !== targetSessionId || windowIdx !== targetWindowIdx)) close();
+         (sessionId !== targetSessionId || windowIdx !== targetWindowIdx ||
+          $activeProjectId !== targetProjectId)) close();
 
   async function open() {
     const generation = ++operationGeneration;
     reset();
     targetSessionId = sessionId;
     targetWindowIdx = windowIdx;
+    targetProjectId = get(activeProjectId);
     loading = true;
     try {
       const lib = await App.GetCommands();
@@ -166,15 +171,16 @@
     const generation = operationGeneration;
     const targetSession = targetSessionId;
     const targetWindow = targetWindowIdx;
+    const targetProject = targetProjectId;
     const submittedValues = { ...vals };
     running = true;
     error = '';
     try {
-      await App.RunCommand(c.id, targetSession, targetWindow, submittedValues);
-      if (!show || generation !== operationGeneration) return;
+      await App.RunCommand(c.id, targetSession, targetWindow, submittedValues, targetProject);
+      if (!show || generation !== operationGeneration || targetProject !== get(activeProjectId)) return;
       close();
     } catch (e) {
-      if (!show || generation !== operationGeneration) return;
+      if (!show || generation !== operationGeneration || targetProject !== get(activeProjectId)) return;
       error = String(e);
       pending = null;
     } finally {

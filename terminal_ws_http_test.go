@@ -35,6 +35,7 @@ func TestTerminalRejectsMissingTmuxSessionBeforeWebSocketUpgrade(t *testing.T) {
 	endpoint := "ws" + strings.TrimPrefix(server.URL, "http") + "/?" + url.Values{
 		"session": {inst.ID},
 		"token":   {ts.authToken},
+		"project": {""},
 	}.Encode()
 
 	conn, response, err := websocket.DefaultDialer.Dial(endpoint, nil)
@@ -44,6 +45,26 @@ func TestTerminalRejectsMissingTmuxSessionBeforeWebSocketUpgrade(t *testing.T) {
 	}
 	if err == nil || response == nil || response.StatusCode != 404 {
 		t.Fatalf("dial error/status = %v/%v, want HTTP 404 before upgrade", err, response)
+	}
+}
+
+func TestTerminalRejectsMissingProjectIdentityBeforeWebSocketUpgrade(t *testing.T) {
+	ts := NewTerminalServer(nil, 0)
+	ts.authToken = "test-token"
+	server := httptest.NewServer(http.HandlerFunc(ts.handleTerminal))
+	defer server.Close()
+	endpoint := "ws" + strings.TrimPrefix(server.URL, "http") + "/?" + url.Values{
+		"session": {"same-id-can-exist-in-another-project"},
+		"token":   {ts.authToken},
+	}.Encode()
+
+	conn, response, err := websocket.DefaultDialer.Dial(endpoint, nil)
+	if conn != nil {
+		_ = conn.Close()
+		t.Fatal("missing project identity was upgraded to a WebSocket")
+	}
+	if err == nil || response == nil || response.StatusCode != http.StatusBadRequest {
+		t.Fatalf("dial error/status = %v/%v, want HTTP 400 before upgrade", err, response)
 	}
 }
 

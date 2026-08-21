@@ -146,8 +146,8 @@ func (a *App) SaveSessionTemplate(id, name, description, sessionName, path, agen
 //
 // keepPath decides whether the template stays pinned to this session's
 // directory or becomes reusable across projects.
-func (a *App) SaveSessionAsTemplate(sessionID, templateName string, keepPath bool) (string, error) {
-	done, err := a.beginProjectMutation()
+func (a *App) SaveSessionAsTemplate(sessionID, templateName string, keepPath bool, expectedProjectID string) (string, error) {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return "", err
 	}
@@ -206,8 +206,8 @@ func (a *App) DeleteSessionTemplate(id string) error {
 //
 // name and path override the template's own; path is required when the
 // template has none.
-func (a *App) CreateSessionFromTemplate(id, name, path string) (*SessionInfo, error) {
-	done, err := a.beginProjectMutation()
+func (a *App) CreateSessionFromTemplate(id, name, path, expectedProjectID string) (*SessionInfo, error) {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return nil, err
 	}

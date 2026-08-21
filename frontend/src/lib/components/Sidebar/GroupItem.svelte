@@ -59,6 +59,8 @@
   let renameValue = '';
   let renameInput: HTMLInputElement;
   let renameTarget: { projectId: string; id: string; name: string } | null = null;
+  let bulkBusy = false;
+  let bulkRevision = 0;
   let uiProjectId = '';
   let hasUIProject = false;
 
@@ -74,6 +76,8 @@
     isRenaming = false;
     renameTarget = null;
     showColorDialog = false;
+    bulkRevision++;
+    bulkBusy = false;
     isDragging = false;
     isDragOver = false;
     isGroupDragOver = false;
@@ -88,12 +92,18 @@
   // conversation (startSession(id) alone would wipe the resume ID).
   async function handleStartAll() {
     showContextMenu = false;
-    const projectId = get(activeProjectId);
+    if (bulkBusy) return;
+    bulkBusy = true;
+    const target = { projectId: get(activeProjectId), groupId: group.id, revision: ++bulkRevision };
     const targets = [...sessions];
-    for (const s of targets) {
-      if (get(activeProjectId) !== projectId) break;
-      if (s.status === 'running') continue;
-      try { await startSession(s.id, s.resumeSessionId || undefined); } catch { /* keep going */ }
+    try {
+      for (const s of targets) {
+        if (target.revision !== bulkRevision || target.projectId !== get(activeProjectId) || target.groupId !== group.id) break;
+        if (s.status === 'running') continue;
+        try { await startSession(s.id, s.resumeSessionId || undefined); } catch { /* keep going */ }
+      }
+    } finally {
+      if (target.revision === bulkRevision) bulkBusy = false;
     }
   }
 
@@ -102,10 +112,16 @@
     const running = sessions.filter(s => s.status === 'running');
     if (running.length === 0) return;
     if (!window.confirm($t('group.stopAllConfirm', { n: running.length, name: group.name }))) return;
-    const projectId = get(activeProjectId);
-    for (const s of running) {
-      if (get(activeProjectId) !== projectId) break;
-      try { await stopSession(s.id); } catch { /* keep going */ }
+    if (bulkBusy) return;
+    bulkBusy = true;
+    const target = { projectId: get(activeProjectId), groupId: group.id, revision: ++bulkRevision };
+    try {
+      for (const s of running) {
+        if (target.revision !== bulkRevision || target.projectId !== get(activeProjectId) || target.groupId !== group.id) break;
+        try { await stopSession(s.id); } catch { /* keep going */ }
+      }
+    } finally {
+      if (target.revision === bulkRevision) bulkBusy = false;
     }
   }
 
@@ -374,13 +390,13 @@
       use:menuPosition={{ x: contextMenuX, y: contextMenuY }}
       on:click|stopPropagation
     >
-      <button class="context-menu-item" on:click={handleStartAll}>
+      <button class="context-menu-item" on:click={handleStartAll} disabled={bulkBusy}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <polygon points="5 3 19 12 5 21 5 3"/>
         </svg>
         {$t('group.startAll')}
       </button>
-      <button class="context-menu-item" on:click={handleStopAll}>
+      <button class="context-menu-item" on:click={handleStopAll} disabled={bulkBusy}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <rect x="6" y="6" width="12" height="12" rx="1"/>
         </svg>

@@ -50,13 +50,13 @@ function requestRedraw(entry: PoolEntry): void {
   if (!sessionId) return;
   const windowIdx = ti.windowIdx ?? 0;
 
-  const key = `${sessionId}:${windowIdx}`;
+  const key = `${ti.projectId ?? ''}:${sessionId}:${windowIdx}`;
   const now = Date.now();
   const previous = lastRedrawAt.get(key) ?? 0;
   if (now - previous < 500) return;
   lastRedrawAt.set(key, now);
 
-  void RedrawWindow(sessionId, windowIdx).catch((e) => {
+  void RedrawWindow(sessionId, windowIdx, entry.projectId).catch((e) => {
     // Never let a repaint hint break the switch that triggered it: a session
     // that stopped between the switch and this call fails here routinely.
     logPoolError('pool: redraw request failed', e);
@@ -67,6 +67,9 @@ export interface PoolEntry {
   terminalInstance: TerminalInstance;
   containerEl: HTMLDivElement;
   key: string;
+  projectId: string;
+  sessionId: string;
+  windowIdx: number;
   /** Palette inputs for this pane, so a settings change can re-resolve it. */
   themeCtx: { tabTheme?: string; agent?: string; fontSize?: number };
 }
@@ -126,8 +129,10 @@ export class TerminalPool {
     try { arm(); } catch (e) { logPoolError('pool: watching pixel ratio failed', e); }
   }
 
-  private makeKey(sessionId: string, windowIdx: number): string {
-    return `${sessionId}:${windowIdx}`;
+  private makeKey(projectId: string, sessionId: string, windowIdx: number): string {
+    // JSON avoids separator ambiguity and makes the project identity part of
+    // cache ownership. Session IDs are not globally unique across projects.
+    return JSON.stringify([projectId, sessionId, windowIdx]);
   }
 
   /** Ensure exactly one entry is visible (the activeKey), all others hidden */
@@ -218,9 +223,9 @@ export class TerminalPool {
     }
   }
 
-  async getOrCreate(sessionId: string, windowIdx: number, themeCtx: { tabTheme?: string; agent?: string; fontSize?: number } = {}): Promise<PoolEntry> {
+  async getOrCreate(projectId: string, sessionId: string, windowIdx: number, themeCtx: { tabTheme?: string; agent?: string; fontSize?: number } = {}): Promise<PoolEntry> {
     if (this.disposed) throw new Error('terminal pool is disposed');
-    const key = this.makeKey(sessionId, windowIdx);
+    const key = this.makeKey(projectId, sessionId, windowIdx);
     let entry = this.entries.get(key);
     if (entry) {
       const pending = this.connecting.get(key);
@@ -267,14 +272,14 @@ export class TerminalPool {
     // Start hidden — applyVisibility() will flip this when show() runs.
     terminalInstance.visible = false;
 
-    entry = { terminalInstance, containerEl, key, themeCtx };
+    entry = { terminalInstance, containerEl, key, projectId, sessionId, windowIdx, themeCtx };
     this.entries.set(key, entry);
 
     // Attach WebSocket. On failure EVICT the entry: leaving it in the map
     // would poison the pool — every later show()/getOrCreate() would return
     // this dead, never-connected entry (permanently black terminal) until a
     // manual detach/attach happened to rebuild it.
-    const attachPromise = attachToSession(terminalInstance, sessionId, windowIdx);
+    const attachPromise = attachToSession(terminalInstance, sessionId, windowIdx, projectId);
     this.connecting.set(key, attachPromise);
     try {
       await attachPromise;
@@ -283,6 +288,11 @@ export class TerminalPool {
       if (this.activeKey === key) {
         this.activeKey = null;
       }
+      // attachToSession can fail after the socket has opened (for example while
+      // installing xterm handlers). Cleanup alone only disposes the renderer;
+      // detach also closes that partially-owned socket and invalidates any
+      // reconnect it managed to schedule.
+      try { await detachFromSession(terminalInstance); } catch (e) { logPoolError('pool attach rollback: detach failed', e); }
       try { terminalInstance.cleanup(); } catch { /* already torn down */ }
       containerEl.remove();
       throw err;
@@ -300,10 +310,10 @@ export class TerminalPool {
     return entry;
   }
 
-  async show(sessionId: string, windowIdx: number, shouldFocus: boolean | (() => boolean) = true, themeCtx: { tabTheme?: string; agent?: string; fontSize?: number } = {}): Promise<void> {
+  async show(projectId: string, sessionId: string, windowIdx: number, shouldFocus: boolean | (() => boolean) = true, themeCtx: { tabTheme?: string; agent?: string; fontSize?: number } = {}): Promise<void> {
     if (this.disposed) return;
     const canFocus = () => typeof shouldFocus === 'function' ? shouldFocus() : shouldFocus;
-    const key = this.makeKey(sessionId, windowIdx);
+    const key = this.makeKey(projectId, sessionId, windowIdx);
 
     // If already active and still connected, just fit. A split pane may have
     // replaced this target's backend connection while the cached entry stayed
@@ -339,7 +349,7 @@ export class TerminalPool {
     }
 
     // Get or create the target entry (async for new entries - WebSocket connect)
-    const entry = await this.getOrCreate(sessionId, windowIdx, themeCtx);
+    const entry = await this.getOrCreate(projectId, sessionId, windowIdx, themeCtx);
 
     // If another show() was called while we were awaiting, bail out
     if (this.showGeneration !== gen) return;
@@ -506,9 +516,10 @@ export class TerminalPool {
   }
 
   async destroyWindow(sessionId: string, windowIdx: number): Promise<void> {
-    const key = this.makeKey(sessionId, windowIdx);
-    const entry = this.entries.get(key);
-    if (!entry) return;
+    const found = [...this.entries].find(([, candidate]) =>
+      candidate.sessionId === sessionId && candidate.windowIdx === windowIdx);
+    if (!found) return;
+    const [key, entry] = found;
     // An unrelated, hidden tab can be cleaned up while the visible one is
     // connecting. Invalidating the global show generation in that case makes
     // the visible show() return before applyVisibility(), leaving it black.
@@ -524,11 +535,11 @@ export class TerminalPool {
     // See destroyWindow: only a destroy that owns the intended/visible target
     // may cancel its in-flight show. A delayed cleanup for another session must
     // not cancel the tab the user switched to in the meantime.
-    if (this.activeKey?.startsWith(sessionId + ':')) this.showGeneration++;
+    if (this.activeKey && this.entries.get(this.activeKey)?.sessionId === sessionId) this.showGeneration++;
     // Detach map state synchronously first (see note above), then tear down.
     const doomed: PoolEntry[] = [];
     for (const [key, entry] of this.entries) {
-      if (key.startsWith(sessionId + ':')) {
+      if (entry.sessionId === sessionId) {
         doomed.push(entry);
         this.entries.delete(key);
         if (this.activeKey === key) {
@@ -640,8 +651,9 @@ export class TerminalPool {
   ): Promise<void> {
     const key = this.activeKey;
     if (!key) return;
-    const sessionId = key.slice(0, key.lastIndexOf(':'));
-    const widx = parseInt(key.slice(key.lastIndexOf(':') + 1), 10);
+    const activeEntry = this.entries.get(key);
+    if (!activeEntry) return;
+    const { projectId, sessionId, windowIdx: widx } = activeEntry;
 
     // Invalidate any pending async work tied to current entries.
     this.showGeneration++;
@@ -664,7 +676,7 @@ export class TerminalPool {
     this.entries.clear();
     this.activeKey = null;
 
-    await this.show(sessionId, widx, shouldFocus, themeCtx);
+    await this.show(projectId, sessionId, widx, shouldFocus, themeCtx);
   }
 
   hideAll(): void {
@@ -738,8 +750,8 @@ export class TerminalPool {
     return this.entries.get(this.activeKey) || null;
   }
 
-  hasEntry(sessionId: string, windowIdx: number): boolean {
-    return this.entries.has(this.makeKey(sessionId, windowIdx));
+  hasEntry(projectId: string, sessionId: string, windowIdx: number): boolean {
+    return this.entries.has(this.makeKey(projectId, sessionId, windowIdx));
   }
 
   get size(): number {

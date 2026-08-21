@@ -147,10 +147,13 @@
   }
 
   async function stopAgent(agent: BgAgent) {
+    const targetProjectId = dialogProjectId;
     try {
-      await App.StopBackgroundAgent(agent.id);
+      await App.StopBackgroundAgent(agent.id, targetProjectId);
+      if (!show || targetProjectId !== get(activeProjectId)) return;
       await refresh();
     } catch (e) {
+      if (!show || targetProjectId !== get(activeProjectId)) return;
       error = String(e);
     }
   }
@@ -204,7 +207,7 @@
     attaching = true;
     try {
       if (mode === 'tab' && targetSessionId) {
-        const winIdx = await App.AttachBackgroundAgentAsTab(targetSessionId, agent.id, agent.name);
+        const winIdx = await App.AttachBackgroundAgentAsTab(targetSessionId, agent.id, agent.name, targetProjectId);
         await loadSessions();
         if (!show || generation !== attachGeneration || attachFor?.id !== agent.id ||
             targetProjectId !== get(activeProjectId)) return;
@@ -212,7 +215,7 @@
         selectSession(targetSessionId);
         if (typeof winIdx === 'number' && winIdx >= 0) selectWindow(winIdx);
       } else {
-        const sessionId = await App.AttachBackgroundAgent(agent.id, agent.cwd, agent.name, targetGroupId);
+        const sessionId = await App.AttachBackgroundAgent(agent.id, agent.cwd, agent.name, targetGroupId, targetProjectId);
         await loadSessions();
         if (!show || generation !== attachGeneration || attachFor?.id !== agent.id ||
             targetProjectId !== get(activeProjectId)) return;

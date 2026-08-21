@@ -31,6 +31,11 @@ async function gotoTabEditorRacesFixture(page) {
   await expect(page.locator('body')).toHaveAttribute('data-fixture-ready', 'true', { timeout: 15_000 });
 }
 
+async function gotoGroupProjectFixture(page) {
+  await page.goto('/tests/browser/group-project-fixture.html');
+  await expect(page.locator('body')).toHaveAttribute('data-fixture-ready', 'true', { timeout: 15_000 });
+}
+
 test('a real Svelte component renders, portals, focuses and reacts in Chromium', async ({ page }) => {
   const pageErrors = [];
   page.on('pageerror', (error) => pageErrors.push(error.message));
@@ -283,12 +288,26 @@ test('Notes preserves a per-target draft after save failure and fails closed on 
   await expect(textarea).toHaveValue('draft A survives');
   await expect(page.locator('.notes-error')).toContainText('save refused');
   await expect(textarea).toBeEnabled();
-  expect(await page.evaluate(() => window.notesFixture.stored('notes-a'))).toBe('saved A');
+  expect(await page.evaluate(() => window.notesFixture.stored('notes-a', 'project-a'))).toBe('saved A');
 
   await page.evaluate(() => window.notesFixture.select('notes-load-fails'));
   await expect(page.locator('.notes-error')).toContainText('load refused');
   await expect(textarea).toBeDisabled();
   expect(pageErrors).toEqual([]);
+});
+
+test('Notes keeps identical session and tab IDs isolated between projects', async ({ page }) => {
+  await gotoNotesFixture(page);
+  const textarea = page.locator('.notes-textarea');
+
+  await page.evaluate(() => window.notesFixture.select('notes-b'));
+  await expect(textarea).toHaveValue('saved B');
+
+  await page.evaluate(() => window.notesFixture.replaceProject('project-b', 'notes-b'));
+  await expect(textarea).toHaveValue('saved B in project B');
+
+  await page.evaluate(() => window.notesFixture.replaceProject('project-a', 'notes-b'));
+  await expect(textarea).toHaveValue('saved B');
 });
 
 test('Notes blocks a destructive action for a failed background draft', async ({ page }) => {
@@ -360,6 +379,53 @@ test('SchemeImport ignores a stale source response and traps focus inside its mo
   await expect(dialog).toContainText('current online result');
 });
 
+test('project import cannot be dismissed and duplicated while its durable operation is pending', async ({ page }) => {
+  await gotoDialogRacesFixture(page, 'import');
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toBeVisible();
+
+  await dialog.locator('.select-trigger').click();
+  await page.locator('body > .select-dropdown').getByRole('button', { name: 'Source Project' }).click();
+  const session = dialog.getByText('Portable Session');
+  await expect(session).toBeVisible();
+  await dialog.locator('input[type="checkbox"]').check();
+  await dialog.getByRole('button', { name: /Import Selected|Kijelöltek importálása/ }).click();
+  await expect.poll(() => page.evaluate(() => window.dialogRacesFixture.importSessionCalls().length)).toBe(1);
+
+  await page.keyboard.press('Escape');
+  await expect(dialog).toBeVisible();
+  await expect(dialog.locator('.close-btn')).toBeDisabled();
+  await expect(dialog.locator('.btn-cancel')).toBeDisabled();
+  await expect(dialog.locator('.btn-primary')).toBeDisabled();
+  expect(await page.evaluate(() => window.dialogRacesFixture.importSessionCalls().length)).toBe(1);
+
+  await page.evaluate(() => window.dialogRacesFixture.resolveImportSessions(0, 1));
+  await expect(dialog).toContainText(/Successfully imported 1 session/);
+  await expect(dialog.locator('.btn-cancel')).toBeEnabled();
+  await dialog.locator('.btn-cancel').click();
+  await expect(dialog).toHaveCount(0);
+});
+
+test('portable file import cannot be dismissed and duplicated while its token is pending', async ({ page }) => {
+  await gotoDialogRacesFixture(page, 'sessionfile');
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.getByText('Portable File Session')).toBeVisible();
+  await dialog.getByRole('button', { name: /Import \(1\)|Importálás \(1\)/ }).click();
+  await expect.poll(() => page.evaluate(() => window.dialogRacesFixture.sessionFileImportCalls().length)).toBe(1);
+
+  await page.keyboard.press('Escape');
+  await expect(dialog).toBeVisible();
+  await expect(dialog.locator('.close-btn')).toBeDisabled();
+  await expect(dialog.locator('.btn-secondary')).toBeDisabled();
+  await expect(dialog.locator('.btn-primary')).toBeDisabled();
+  expect(await page.evaluate(() => window.dialogRacesFixture.sessionFileImportCalls().length)).toBe(1);
+
+  await page.evaluate(() => window.dialogRacesFixture.resolveSessionFileImport(0, 1));
+  await expect(dialog).toContainText(/1 sessions imported|1 munkamenet importálva/);
+  await dialog.locator('.btn-primary').click();
+  await expect(dialog).toHaveCount(0);
+});
+
 test('AllTasks detail owns focus, closes with Escape and restores its opener', async ({ page }) => {
   await gotoDialogRacesFixture(page, 'alltasks');
   const opener = page.getByRole('button', { name: /Fixture dashboard task/ });
@@ -385,14 +451,14 @@ test('project switching is cancelled or delayed until a Notes draft is discarded
   let dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible();
   await dialog.getByRole('button', { name: /Keep editing|Szerkesztés folytatása/ }).click();
-  expect(await page.evaluate(() => window.notesFixture.selectedProject())).toBe('');
+  expect(await page.evaluate(() => window.notesFixture.selectedProject())).toBe('project-a');
   await expect(textarea).toHaveValue('project-scoped draft');
 
   await page.evaluate(() => window.notesFixture.switchProject('project-b'));
   dialog = page.getByRole('dialog');
   await dialog.getByRole('button', { name: /Discard changes|Módosítások elvetése/ }).click();
   await expect.poll(() => page.evaluate(() => window.notesFixture.selectedProject())).toBe('project-b');
-  expect(await page.evaluate(() => window.notesFixture.stored('notes-a'))).toBe('saved A');
+  expect(await page.evaluate(() => window.notesFixture.stored('notes-a', 'project-a'))).toBe('saved A');
 });
 
 test('sidebar session deletion requires confirmation and waits for unsaved editors', async ({ page }) => {
@@ -427,7 +493,7 @@ test('a session delete lookup cannot open or delete in a replacement project', a
 });
 
 test('group bulk stop aborts before a same-id replacement project session', async ({ page }) => {
-  await page.goto('/tests/browser/group-project-fixture.html');
+  await gotoGroupProjectFixture(page);
   await page.locator('.group-header').click({ button: 'right' });
   await page.getByRole('button', { name: /Stop all|Összes leállítása/ }).click();
   await expect.poll(() => page.evaluate(() => window.groupProjectFixture.stopCalls())).toEqual(['session-1']);
@@ -443,8 +509,22 @@ test('group bulk stop aborts before a same-id replacement project session', asyn
   await expect(page.locator('.context-menu')).toHaveCount(0);
 });
 
+test('group bulk actions cannot be started twice while the first session is pending', async ({ page }) => {
+  await gotoGroupProjectFixture(page);
+  await page.locator('.group-header').click({ button: 'right' });
+  await page.getByRole('button', { name: /Stop all|Összes leállítása/ }).click();
+  await expect.poll(() => page.evaluate(() => window.groupProjectFixture.stopCalls())).toEqual(['session-1']);
+
+  await page.locator('.group-header').click({ button: 'right' });
+  const menu = page.locator('.context-menu');
+  await expect(menu.getByRole('button', { name: /Start all|Összes indítása/ })).toBeDisabled();
+  await expect(menu.getByRole('button', { name: /Stop all|Összes leállítása/ })).toBeDisabled();
+  await page.evaluate(() => window.groupProjectFixture.resolveFirstStop());
+  await expect.poll(() => page.evaluate(() => window.groupProjectFixture.stopCalls())).toEqual(['session-1', 'session-2']);
+});
+
 test('a native session drag payload cannot mutate a replacement project', async ({ page }) => {
-  await page.goto('/tests/browser/group-project-fixture.html');
+  await gotoGroupProjectFixture(page);
   await page.evaluate(() => window.groupProjectFixture.staleSessionDrop());
   expect(await page.evaluate(() => window.groupProjectFixture.assignCalls())).toEqual([]);
 });

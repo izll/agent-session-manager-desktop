@@ -7,6 +7,7 @@
   import * as App from '../../../../wailsjs/go/main/App';
   import AgentIcon from '../common/AgentIcon.svelte';
   import { t } from '../../i18n';
+  import { activeProjectId } from '../../stores/projects';
 
   export let show = false;
   export let sessionId = '';
@@ -23,6 +24,7 @@
   let userTouchedName = false;
   let operationGeneration = 0;
   let lastTargetKey = '';
+  let targetProjectId = '';
 
   $: {
     const key = show ? sessionId : '';
@@ -30,8 +32,11 @@
       operationGeneration++;
       lastTargetKey = key;
       if (show) isSubmitting = false;
+      if (show) targetProjectId = get(activeProjectId);
     }
   }
+
+  $: if (show && targetProjectId && $activeProjectId !== targetProjectId) close();
 
   $: sessionPath = $sessions.find(s => s.id === sessionId)?.path || '';
 
@@ -96,9 +101,10 @@
 
     try {
       const newIdx = await App.CreateTab(targetSessionId, submitted.isAgent, submitted.agent,
-        submitted.name, submitted.extraArgs, submitted.workDir);
+        submitted.name, submitted.extraArgs, submitted.workDir, targetProjectId);
       await loadSessions();
-      if (!show || generation !== operationGeneration || sessionId !== targetSessionId) return;
+      if (!show || generation !== operationGeneration || sessionId !== targetSessionId ||
+          targetProjectId !== get(activeProjectId)) return;
       close();
       // Switch to the freshly created tab and put the keyboard focus into
       // its terminal (the window-change triggers the pool to attach; the
@@ -110,7 +116,8 @@
       }
       dispatch('created', { name: submitted.name, type: submitted.type, agent: submitted.agent });
     } catch (e) {
-      if (!show || generation !== operationGeneration || sessionId !== targetSessionId) return;
+      if (!show || generation !== operationGeneration || sessionId !== targetSessionId ||
+          targetProjectId !== get(activeProjectId)) return;
       error = String(e);
     } finally {
       if (generation === operationGeneration) isSubmitting = false;

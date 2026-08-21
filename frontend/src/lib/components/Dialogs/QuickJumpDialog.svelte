@@ -231,7 +231,7 @@
       // session later would leave this row showing the old one.
       const chosen = editingText.trim();
       const label = chosen === resolved[index]?.defaultName ? '' : chosen;
-      await App.SetQuickJumpLabel(target.sessionId, target.windowIdx, label);
+      await App.SetQuickJumpLabel(target.sessionId, target.windowIdx, label, editingProjectId);
       await load({ keepCursor: index });
     } catch (e) {
       console.error('Renaming the entry failed:', e);
@@ -319,10 +319,12 @@
     if (mutationPending) return;
     const target = entries[index];
     if (!target) return;
+    const projectId = $activeProjectId;
     mutationPending = true;
     try {
       // Keep the cursor where the eye is rather than sending it home.
-      await App.RemoveQuickJump(target.sessionId, target.windowIdx);
+      await App.RemoveQuickJump(target.sessionId, target.windowIdx, projectId);
+      if (projectId !== $activeProjectId) return;
       await load({ keepCursor: index });
     } catch (e) {
       console.error('Removing the entry failed:', e);
@@ -336,8 +338,10 @@
   async function move(from: number, to: number) {
     if (mutationPending || to < 0 || to >= entries.length) return;
     mutationPending = true;
+    const projectId = $activeProjectId;
     try {
-      await App.MoveQuickJump(from, to);
+      await App.MoveQuickJump(from, to, projectId);
+      if (projectId !== $activeProjectId) return;
       await load({ keepCursor: to });
     } catch (e) {
       console.error('Reordering failed:', e);

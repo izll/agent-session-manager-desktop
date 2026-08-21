@@ -32,8 +32,8 @@ func (a *App) GetQuickJump() ([]session.QuickJumpEntry, error) {
 }
 
 // SetQuickJump replaces the list, normalising it first.
-func (a *App) SetQuickJump(entries []session.QuickJumpEntry) error {
-	return a.storeQuickJump(func([]session.QuickJumpEntry) []session.QuickJumpEntry {
+func (a *App) SetQuickJump(entries []session.QuickJumpEntry, expectedProjectID string) error {
+	return a.storeQuickJump(expectedProjectID, func([]session.QuickJumpEntry) []session.QuickJumpEntry {
 		return session.NormaliseQuickJump(entries)
 	})
 }
@@ -43,13 +43,13 @@ func (a *App) SetQuickJump(entries []session.QuickJumpEntry) error {
 // The end rather than the front: the numbers are what make this useful, and
 // inserting at the front would shift every one of them each time something new
 // is added.
-func (a *App) AddQuickJump(sessionID string, windowIdx int, label string) error {
+func (a *App) AddQuickJump(sessionID string, windowIdx int, label, expectedProjectID string) error {
 	if sessionID == "" {
 		return fmt.Errorf("no session to add")
 	}
 	entry := session.QuickJumpEntry{SessionID: sessionID, WindowIdx: windowIdx, Label: label}
 
-	return a.storeQuickJump(func(current []session.QuickJumpEntry) []session.QuickJumpEntry {
+	return a.storeQuickJump(expectedProjectID, func(current []session.QuickJumpEntry) []session.QuickJumpEntry {
 		for _, existing := range current {
 			if existing.SameTarget(entry) {
 				return current
@@ -60,10 +60,10 @@ func (a *App) AddQuickJump(sessionID string, windowIdx int, label string) error 
 }
 
 // RemoveQuickJump drops one place from the list.
-func (a *App) RemoveQuickJump(sessionID string, windowIdx int) error {
+func (a *App) RemoveQuickJump(sessionID string, windowIdx int, expectedProjectID string) error {
 	entry := session.QuickJumpEntry{SessionID: sessionID, WindowIdx: windowIdx}
 
-	return a.storeQuickJump(func(current []session.QuickJumpEntry) []session.QuickJumpEntry {
+	return a.storeQuickJump(expectedProjectID, func(current []session.QuickJumpEntry) []session.QuickJumpEntry {
 		kept := make([]session.QuickJumpEntry, 0, len(current))
 		for _, existing := range current {
 			if !existing.SameTarget(entry) {
@@ -79,10 +79,10 @@ func (a *App) RemoveQuickJump(sessionID string, windowIdx int) error {
 // Kept separate from writing the whole list: a rename is one entry at a time,
 // and rewriting everything to change a few characters would race with anything
 // else editing the list at that moment.
-func (a *App) SetQuickJumpLabel(sessionID string, windowIdx int, label string) error {
+func (a *App) SetQuickJumpLabel(sessionID string, windowIdx int, label, expectedProjectID string) error {
 	target := session.QuickJumpEntry{SessionID: sessionID, WindowIdx: windowIdx}
 
-	return a.storeQuickJump(func(current []session.QuickJumpEntry) []session.QuickJumpEntry {
+	return a.storeQuickJump(expectedProjectID, func(current []session.QuickJumpEntry) []session.QuickJumpEntry {
 		for i := range current {
 			if current[i].SameTarget(target) {
 				current[i].Label = label
@@ -94,8 +94,8 @@ func (a *App) SetQuickJumpLabel(sessionID string, windowIdx int, label string) e
 }
 
 // MoveQuickJump changes an entry's position, which is what assigns the numbers.
-func (a *App) MoveQuickJump(from, to int) error {
-	return a.storeQuickJump(func(current []session.QuickJumpEntry) []session.QuickJumpEntry {
+func (a *App) MoveQuickJump(from, to int, expectedProjectID string) error {
+	return a.storeQuickJump(expectedProjectID, func(current []session.QuickJumpEntry) []session.QuickJumpEntry {
 		return session.MoveQuickJumpEntry(current, from, to)
 	})
 }
@@ -104,8 +104,8 @@ func (a *App) MoveQuickJump(from, to int) error {
 //
 // Read-modify-write rather than a plain save, so two edits in quick succession
 // — which is how this list is used — cannot lose one another.
-func (a *App) storeQuickJump(change func([]session.QuickJumpEntry) []session.QuickJumpEntry) error {
-	done, err := a.beginProjectMutation()
+func (a *App) storeQuickJump(expectedProjectID string, change func([]session.QuickJumpEntry) []session.QuickJumpEntry) error {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return err
 	}

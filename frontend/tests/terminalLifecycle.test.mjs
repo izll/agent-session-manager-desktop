@@ -64,6 +64,9 @@ pool.showGeneration = 7;
 pool.activeKey = 'new-session:2';
 pool.entries.set('old-session:1', {
   key: 'old-session:1',
+  projectId: 'project-a',
+  sessionId: 'old-session',
+  windowIdx: 1,
   containerEl: { remove() {} },
   terminalInstance: { cleanup() {} },
   themeCtx: {},
@@ -82,6 +85,8 @@ delete globalThis.cancelAnimationFrame;
 
 // Component-level contracts for stale async continuations and duplicate input.
 const terminal = readFileSync(new URL('src/lib/components/MainPanel/Terminal.svelte', root), 'utf8');
+const terminalTransport = readFileSync(new URL('src/lib/utils/terminal.ts', root), 'utf8');
+const terminalPool = readFileSync(new URL('src/lib/utils/terminalPool.ts', root), 'utf8');
 const tabBar = readFileSync(new URL('src/lib/components/MainPanel/TabBar.svelte', root), 'utf8');
 const browser = readFileSync(new URL('src/lib/components/MainPanel/FileBrowser.svelte', root), 'utf8');
 const quickOpen = readFileSync(new URL('src/lib/components/MainPanel/FileQuickOpen.svelte', root), 'utf8');
@@ -97,13 +102,31 @@ assert.match(terminal, /const projectId = get\(activeProjectId\)[\s\S]*?if \(get
   'a debounced font-size save must remain pinned to the project where the gesture occurred');
 assert.match(terminal, /SetTabFontSize\(sid, widx, 0, projectId\)[\s\S]*?get\(activeProjectId\) !== projectId/,
   'font-size reset and its refresh must remain pinned to one project');
+assert.match(terminalTransport, /project=\$\{encodeURIComponent\(projectId\)\}/,
+  'every terminal WebSocket must carry its captured project identity');
+assert.match(terminalTransport, /const closedProjectId = terminalInstance\.projectId[\s\S]*?attachToSession\(terminalInstance, closedSessionId, closedWindowIdx \?\? 0, closedProjectId\)/,
+  'an automatic reconnect must reuse the closed socket project, not the current project');
+assert.match(terminalTransport, /const connectionGeneration = \+\+terminalInstance\.connectionGeneration[\s\S]*?terminalInstance\.connectionGeneration !== connectionGeneration[\s\S]*?terminal connection was superseded/,
+  'overlapping terminal attaches must not let an older socket replace the newer owner');
+assert.match(terminalTransport, /terminalInstance\.reconnectTimer = setTimeout[\s\S]*?terminalInstance\.connectionGeneration !== connectionGeneration[\s\S]*?attachToSession/,
+  'a delayed reconnect must verify that its closed socket still owns the instance');
+assert.match(terminalTransport, /function detachFromSession[\s\S]*?terminalInstance\.connectionGeneration\+\+[\s\S]*?clearTimeout\(terminalInstance\.reconnectTimer\)/,
+  'destroying an already-closed terminal must cancel its pending reconnect');
+assert.match(terminalTransport, /catch \(e\) \{[\s\S]*?terminalInstance\.connectionGeneration === connectionGeneration[\s\S]*?await detachFromSession\(terminalInstance\)/,
+  'a direct reconnect setup failure must roll back any socket it already claimed');
+assert.match(terminalPool, /JSON\.stringify\(\[projectId, sessionId, windowIdx\]\)/,
+  'terminal pool identity must include the project because session IDs are not global');
+assert.match(terminalPool, /catch \(err\) \{[\s\S]*?await detachFromSession\(terminalInstance\)[\s\S]*?terminalInstance\.cleanup\(\)/,
+  'an attach that fails after opening its socket must roll back the transport before disposing xterm');
+assert.match(terminal, /pool\.show\(projectId, newSessionId[\s\S]*?get\(activeProjectId\) !== projectId/,
+  'a completed terminal attach must be ignored after a project switch');
 assert.match(tabBar, /if \(!bufferText\.trim\(\) \|\| bufferBusy\) return/);
-assert.match(tabBar, /const widx = get\(selectedWindowIdx\)[\s\S]*?SendPromptToWindow\(sid, widx, submitted\)/);
+assert.match(tabBar, /const widx = get\(selectedWindowIdx\)[\s\S]*?const projectId = get\(activeProjectId\)[\s\S]*?SendPromptToWindow\(sid, widx, submitted, projectId\)/);
 assert.match(tabBar, /const queued = previous[\s\S]*?SetBufferText\(submitted\)/,
   'dictation-buffer writes must be serialized');
 assert.match(tabBar, /await bufferSyncQueue\.catch[\s\S]*?SendPromptToWindow/,
   'send must wait for old editor syncs before clearing the backend buffer');
-assert.match(tabBar, /SendPromptToWindow\(sid, widx, submitted\)[\s\S]*?bufferText = ''[\s\S]*?ClearBuffer\(\)/,
+assert.match(tabBar, /SendPromptToWindow\(sid, widx, submitted, projectId\)[\s\S]*?bufferText = ''[\s\S]*?ClearBuffer\(\)/,
   'a committed prompt must stop being sendable before fallible buffer cleanup');
 assert.match(tabBar, /if \(!componentMounted\) return;[\s\S]*?EventsOn\('dictation:state'/,
   'a late initial settings read must not register listeners after teardown');

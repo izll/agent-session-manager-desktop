@@ -487,6 +487,7 @@
     const sessionId = loadedSessionId;
     if (!sessionId) return;
     const windowIdx = loadedWindowIdx;
+    const projectId = get(activeProjectId);
     const targetKey = loadedBrowseKey;
     const path = selectedPath;
     saving = true;
@@ -504,6 +505,7 @@
         overwrite,
         windowIdx,
         openedRoot,
+        projectId,
       );
       if (destroyed || targetKey !== loadedBrowseKey || path !== selectedPath) return;
       if (result.conflict) {

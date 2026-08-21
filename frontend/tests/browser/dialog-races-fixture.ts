@@ -18,6 +18,10 @@ const createTabResolvers: Array<(value: number) => void> = [];
 const createTabCalls: unknown[][] = [];
 const localSchemeResolvers: Array<(value: unknown[]) => void> = [];
 const onlineSchemeResolvers: Array<(value: unknown[]) => void> = [];
+const importSessionResolvers: Array<(value: number) => void> = [];
+const importSessionCalls: unknown[][] = [];
+const sessionFileImportResolvers: Array<(value: number) => void> = [];
+const sessionFileImportCalls: unknown[][] = [];
 let resolveTrashRestore: ((value: unknown) => void) | null = null;
 let recoverySessionLoads = 0;
 let resolveUpdate: (() => void) | null = null;
@@ -74,6 +78,27 @@ const backend = new Proxy({
   },
   DiscoverLocalSchemes: () => new Promise<unknown[]>((resolve) => { localSchemeResolvers.push(resolve); }),
   ListOnlineSchemes: () => new Promise<unknown[]>((resolve) => { onlineSchemeResolvers.push(resolve); }),
+  GetProjects: async () => [
+    { id: 'project-a', name: 'Project A', isLocked: false },
+    { id: 'project-b', name: 'Source Project', isLocked: false },
+  ],
+  GetActiveProjectID: async () => 'project-a',
+  GetProjectSessions: async () => [{
+    id: 'source-session', name: 'Portable Session', path: '/source', status: 'stopped',
+    agent: 'claude', color: '', favorite: false,
+  }],
+  ImportSessions: (...args: unknown[]) => {
+    importSessionCalls.push(args);
+    return new Promise<number>((resolve) => { importSessionResolvers.push(resolve); });
+  },
+  ReadSessionFile: async () => ({
+    token: 'opaque-import-token', path: '/display-only/session.json', exportedAt: '2026-08-21T10:00:00Z',
+    sessions: [{ name: 'Portable File Session', path: '/portable', agent: 'claude', tabs: 1, pathExists: true }],
+  }),
+  ImportSessionFile: (...args: unknown[]) => {
+    sessionFileImportCalls.push(args);
+    return new Promise<number>((resolve) => { sessionFileImportResolvers.push(resolve); });
+  },
   GetTrashItems: async () => [{
     id: 'trash-1', kind: 'session', name: 'Old project session',
     parentSessionId: '', parentSessionName: '', deletedAt: '2026-08-20T10:00:00Z',
@@ -167,6 +192,10 @@ agents.set([{ type: 'claude', name: 'Claude', icon: '', supportsResume: false, s
   resolveOnlineSchemes: (index: number, name: string) => onlineSchemeResolvers[index]?.([
     { name, file: `${name}.json` },
   ]),
+  importSessionCalls: () => structuredClone(importSessionCalls),
+  resolveImportSessions: (index: number, count: number) => importSessionResolvers[index]?.(count),
+  sessionFileImportCalls: () => structuredClone(sessionFileImportCalls),
+  resolveSessionFileImport: (index: number, count: number) => sessionFileImportResolvers[index]?.(count),
   trashRestorePending: () => !!resolveTrashRestore,
   switchRecoveryProject: (projectId: string) => activeProjectId.set(projectId),
   resolveTrashRestore: (sessionId: string) => resolveTrashRestore?.({ sessionId, windowIdx: 0 }),
@@ -207,7 +236,7 @@ agents.set([{ type: 'claude', name: 'Claude', icon: '', supportsResume: false, s
 const target = document.getElementById('fixture');
 if (!target) throw new Error('fixture target is missing');
 const requestedMode = new URLSearchParams(location.search).get('mode');
-const mode = requestedMode === 'palette' || requestedMode === 'command' || requestedMode === 'history' || requestedMode === 'quickjump' || requestedMode === 'quickterminal' || requestedMode === 'scheme' || requestedMode === 'alltasks' || requestedMode === 'taskbadge' || requestedMode === 'dashboard' || requestedMode === 'recovery' || requestedMode === 'update' || requestedMode === 'settings' || requestedMode === 'newsession' || requestedMode === 'newgroup' || requestedMode === 'bgagents' || requestedMode === 'fork' || requestedMode === 'commandmanager' || requestedMode === 'template'
+const mode = requestedMode === 'palette' || requestedMode === 'command' || requestedMode === 'history' || requestedMode === 'quickjump' || requestedMode === 'quickterminal' || requestedMode === 'scheme' || requestedMode === 'import' || requestedMode === 'sessionfile' || requestedMode === 'alltasks' || requestedMode === 'taskbadge' || requestedMode === 'dashboard' || requestedMode === 'recovery' || requestedMode === 'update' || requestedMode === 'settings' || requestedMode === 'newsession' || requestedMode === 'newgroup' || requestedMode === 'bgagents' || requestedMode === 'fork' || requestedMode === 'commandmanager' || requestedMode === 'template'
   ? requestedMode : 'global';
 if (mode === 'newgroup' || mode === 'bgagents' || mode === 'fork') {
   activeProjectId.set('project-a');

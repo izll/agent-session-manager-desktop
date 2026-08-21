@@ -267,9 +267,11 @@
         const session = get(sessions).find(s => s.id === sessionId);
         if (session?.status !== 'running') return;
         const targetWindowIdx = currentTargetWindowIdx();
+        const projectId = get(activeProjectId);
         try {
-          await pool.show(sessionId, targetWindowIdx, () => mounted && active && focusOwner && focusAllowed, themeCtxFor(sessionId, targetWindowIdx));
+          await pool.show(projectId, sessionId, targetWindowIdx, () => mounted && active && focusOwner && focusAllowed, themeCtxFor(sessionId, targetWindowIdx));
           if (!mounted || operationRevision !== poolChangeGeneration ||
+              get(activeProjectId) !== projectId ||
               currentTargetSessionId() !== sessionId ||
               currentTargetWindowIdx() !== targetWindowIdx) return;
           isAttached = true;
@@ -279,6 +281,7 @@
           LogFrontend(`reshow ok session=${sessionId} win=${targetWindowIdx}`);
         } catch (err) {
           if (!mounted || operationRevision !== poolChangeGeneration ||
+              get(activeProjectId) !== projectId ||
               currentTargetSessionId() !== sessionId ||
               currentTargetWindowIdx() !== targetWindowIdx) return;
           console.error('Re-show after pool destroy failed:', err);
@@ -370,6 +373,7 @@
     // Initial auto-attach if session is already selected and running
     const currentId = currentTargetSessionId();
     const initialWindowIdx = currentTargetWindowIdx();
+    const initialProjectId = get(activeProjectId);
     if (currentId) {
       const session = get(sessions).find(s => s.id === currentId);
       if (session && session.status === 'running') {
@@ -377,15 +381,18 @@
         schedule(async () => {
           try {
             if (!pool || operationRevision !== poolChangeGeneration ||
+                get(activeProjectId) !== initialProjectId ||
                 currentTargetSessionId() !== currentId ||
                 currentTargetWindowIdx() !== initialWindowIdx) return;
-            await pool.show(currentId, initialWindowIdx, () => mounted && active && focusOwner && focusAllowed, themeCtxFor(currentId, initialWindowIdx));
+            await pool.show(initialProjectId, currentId, initialWindowIdx, () => mounted && active && focusOwner && focusAllowed, themeCtxFor(currentId, initialWindowIdx));
             if (!mounted || operationRevision !== poolChangeGeneration ||
+                get(activeProjectId) !== initialProjectId ||
                 currentTargetSessionId() !== currentId ||
                 currentTargetWindowIdx() !== initialWindowIdx) return;
             isAttached = true;
           } catch (e) {
             if (!mounted || operationRevision !== poolChangeGeneration ||
+                get(activeProjectId) !== initialProjectId ||
                 currentTargetSessionId() !== currentId ||
                 currentTargetWindowIdx() !== initialWindowIdx) return;
             console.error('Initial auto-attach failed:', e);
@@ -421,6 +428,7 @@
     unsubRestarted = EventsOn('session:restarted', async (sessionId: string) => {
       const currentId = currentTargetSessionId();
       const restartWindowIdx = currentTargetWindowIdx();
+      const restartProjectId = get(activeProjectId);
       if (sessionId === currentId && pool) {
         const operationRevision = ++poolChangeGeneration;
         // Destroy old terminal for this session
@@ -431,18 +439,21 @@
         // Wait for new tmux session to be ready
         await new Promise(r => setTimeout(r, 800));
         if (!mounted || operationRevision !== poolChangeGeneration ||
+            get(activeProjectId) !== restartProjectId ||
             sessionId !== currentTargetSessionId() ||
             restartWindowIdx !== currentTargetWindowIdx() || !pool) return;
 
         // Create fresh terminal and show it
         try {
-          await pool.show(sessionId, restartWindowIdx, () => mounted && active && focusOwner && focusAllowed, themeCtxFor(sessionId, restartWindowIdx));
+          await pool.show(restartProjectId, sessionId, restartWindowIdx, () => mounted && active && focusOwner && focusAllowed, themeCtxFor(sessionId, restartWindowIdx));
           if (!mounted || operationRevision !== poolChangeGeneration ||
+              get(activeProjectId) !== restartProjectId ||
               sessionId !== currentTargetSessionId() ||
               restartWindowIdx !== currentTargetWindowIdx()) return;
           isAttached = true;
         } catch (e) {
           if (!mounted || operationRevision !== poolChangeGeneration ||
+              get(activeProjectId) !== restartProjectId ||
               sessionId !== currentTargetSessionId() ||
               restartWindowIdx !== currentTargetWindowIdx()) return;
           console.error('Reattach after restart failed:', e);
@@ -477,6 +488,7 @@
   async function handlePoolChange(newSessionId: string | null, newWindowIdx: number, newStatus?: string) {
     if (!pool) return;
     const generation = ++poolChangeGeneration;
+    const projectId = get(activeProjectId);
 
     const statusChanged = lastKnownStatus !== newStatus;
     const sessionJustStopped = statusChanged && newStatus !== 'running' && lastKnownStatus === 'running';
@@ -521,11 +533,13 @@
       // Small delay when session just started to let tmux initialize
       if (sessionJustStarted) {
         await new Promise(r => setTimeout(r, 500));
-        if (!mounted || generation !== poolChangeGeneration || !pool) return;
+        if (!mounted || generation !== poolChangeGeneration ||
+            get(activeProjectId) !== projectId || !pool) return;
       }
       try {
-        await pool.show(newSessionId, newWindowIdx, () => mounted && active && focusOwner && focusAllowed, themeCtxFor(newSessionId, newWindowIdx));
+        await pool.show(projectId, newSessionId, newWindowIdx, () => mounted && active && focusOwner && focusAllowed, themeCtxFor(newSessionId, newWindowIdx));
         if (!mounted || generation !== poolChangeGeneration ||
+            get(activeProjectId) !== projectId ||
             currentTargetSessionId() !== newSessionId || currentTargetWindowIdx() !== newWindowIdx) return;
         isAttached = true;
         // Ensure the freshly-shown terminal grabs focus on session/tab switch.
@@ -537,6 +551,7 @@
         }
       } catch (e) {
         if (!mounted || generation !== poolChangeGeneration ||
+            get(activeProjectId) !== projectId ||
             currentTargetSessionId() !== newSessionId || currentTargetWindowIdx() !== newWindowIdx) return;
         console.error('Pool show failed:', e);
         LogFrontend(`pool show FAILED session=${newSessionId} win=${newWindowIdx}: ${e}`);
@@ -688,14 +703,17 @@
 
     error = '';
     const windowIdx = currentTargetWindowIdx();
+    const projectId = get(activeProjectId);
     const operationRevision = ++poolChangeGeneration;
     try {
-      await pool.show(session.id, windowIdx, () => mounted && active && focusOwner && focusAllowed, themeCtxFor(session.id, windowIdx));
+      await pool.show(projectId, session.id, windowIdx, () => mounted && active && focusOwner && focusAllowed, themeCtxFor(session.id, windowIdx));
       if (!mounted || operationRevision !== poolChangeGeneration ||
+          get(activeProjectId) !== projectId ||
           currentTargetSessionId() !== session.id || currentTargetWindowIdx() !== windowIdx) return;
       isAttached = true;
     } catch (e) {
       if (!mounted || operationRevision !== poolChangeGeneration ||
+          get(activeProjectId) !== projectId ||
           currentTargetSessionId() !== session.id ||
           currentTargetWindowIdx() !== windowIdx) return;
       console.error('Failed to attach:', e);

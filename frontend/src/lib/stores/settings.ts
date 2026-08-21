@@ -1,7 +1,8 @@
-import { writable } from 'svelte/store';
+import { get, writable } from 'svelte/store';
 import * as App from '../../../wailsjs/go/main/App';
 import { defaultTerminalRenderer } from '../utils/terminal';
 import { reportError } from './appErrors';
+import { activeProjectId } from './projects';
 
 export type TerminalRenderer = 'canvas' | 'webgl' | 'dom';
 
@@ -182,7 +183,7 @@ export async function loadSettings(expectedRevision?: number) {
   }
 }
 
-export async function saveSettings(newSettings: Partial<Settings>) {
+export async function saveSettings(newSettings: Partial<Settings>, expectedProjectId = get(activeProjectId)) {
   const revision = ++settingsRevision;
   const context = settingsContextGeneration;
   let updated!: Settings;
@@ -195,7 +196,7 @@ export async function saveSettings(newSettings: Partial<Settings>) {
     // A queued snapshot from the project that was left must never be written
     // through the backend's new implicit project target.
     .then(() => context === settingsContextGeneration
-      ? App.SaveSettings(updated as any)
+      ? App.SaveSettings(updated as any, expectedProjectId)
       : undefined);
   saveQueue = save;
   try {

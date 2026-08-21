@@ -156,7 +156,7 @@ type TerminalServer struct {
 	// beginAttach pins App's active project until this handler has resolved the
 	// session and created its terminal attach. Returning only a bool would leave
 	// a check/use window where SelectProject could switch Storage in between.
-	beginAttach func() (release func(), allowed bool)
+	beginAttach func(expectedProjectID string) (release func(), allowed bool)
 	server      *http.Server
 	listener    net.Listener
 	serveDone   chan struct{}
@@ -231,11 +231,16 @@ func configureTerminalWebsocket(ws *websocket.Conn) {
 func (tc *termConn) closeTransport() {
 	tc.closeOnce.Do(func() {
 		close(tc.done)
-		if tc.ptmx != nil {
-			_ = tc.ptmx.Close()
-		}
+		// Close the network side first. A TerminalStream.Close may itself have
+		// to wait for a currently-running multiplexer command (notably psmux
+		// send-keys on Windows). Keeping the WebSocket open behind that wait
+		// leaves the frontend believing the terminal is still connected even
+		// though shutdown has already begun.
 		if tc.ws != nil {
 			_ = tc.ws.Close()
+		}
+		if tc.ptmx != nil {
+			_ = tc.ptmx.Close()
 		}
 	})
 }
@@ -614,9 +619,24 @@ func (ts *TerminalServer) Stop(ctx context.Context) error {
 	}
 	ts.mu.Unlock()
 
+	// TerminalStream.Close is normally prompt, but it ultimately wraps a native
+	// PTY or multiplexer process and is not context-aware. Start every close in
+	// parallel so one wedged stream neither prevents later WebSockets from being
+	// signalled nor makes Stop ignore its caller's deadline before it even reaches
+	// the bounded waits below.
+	var closeWG sync.WaitGroup
+	closeWG.Add(len(conns))
 	for _, tc := range conns {
-		tc.closeTransport()
+		go func(tc *termConn) {
+			defer closeWG.Done()
+			tc.closeTransport()
+		}(tc)
 	}
+	transportsDone := make(chan struct{})
+	go func() {
+		closeWG.Wait()
+		close(transportsDone)
+	}()
 
 	var stopErr error
 	if server != nil {
@@ -657,7 +677,46 @@ func (ts *TerminalServer) Stop(ctx context.Context) error {
 			stopErr = errors.Join(stopErr, ctx.Err())
 		}
 	}
+	select {
+	case <-transportsDone:
+	case <-ctx.Done():
+		stopErr = errors.Join(stopErr, ctx.Err())
+	}
 	return stopErr
+}
+
+// CloseConnections drains every registered terminal without stopping the HTTP
+// listener. Project switching uses this while it holds App.projectMu: an old
+// project's PTY must be gone before that project's cross-process ownership is
+// released, but the same per-process WebSocket server is reused for the next
+// project.
+//
+// The caller must prevent new attaches for the duration (App does that with
+// its project write lock). Stop has the stronger stopping flag for final
+// application teardown.
+func (ts *TerminalServer) CloseConnections(ctx context.Context) error {
+	ts.mu.RLock()
+	conns := make([]*termConn, 0, len(ts.conns))
+	for _, tc := range ts.conns {
+		conns = append(conns, tc)
+	}
+	ts.mu.RUnlock()
+
+	for _, tc := range conns {
+		go tc.closeTransport()
+	}
+
+	done := make(chan struct{})
+	go func() {
+		ts.connWG.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 func (ts *TerminalServer) beginHandler() (context.Context, func(), bool) {
@@ -681,6 +740,7 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 
 	sessionID := r.URL.Query().Get("session")
 	windowIdx := r.URL.Query().Get("window")
+	projectValues, projectPresent := r.URL.Query()["project"]
 
 	// Require the per-launch token before doing anything else (and before
 	// the WS upgrade). Constant-time compare to avoid a timing oracle.
@@ -694,6 +754,15 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 		log.Printf("[terminal] rejected connection: bad/missing token (origin=%q)", r.Header.Get("Origin"))
 		return
 	}
+	// The active project is process-global while session IDs are not globally
+	// unique. Require the frontend snapshot explicitly: an attach started for
+	// project A can otherwise wait behind SelectProject and resolve the same ID
+	// in project B after the switch.
+	if !projectPresent || len(projectValues) != 1 {
+		http.Error(w, "project required", http.StatusBadRequest)
+		return
+	}
+	expectedProjectID := projectValues[0]
 
 	// Refuse attaches when another instance owns the project. Attaching would
 	// create/kill mirror tmux sessions that the owning instance is using,
@@ -701,7 +770,7 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 	releaseAttach := func() {}
 	attachReleased := false
 	if ts.beginAttach != nil {
-		release, allowed := ts.beginAttach()
+		release, allowed := ts.beginAttach(expectedProjectID)
 		if !allowed {
 			http.Error(w, "project locked by another instance", http.StatusConflict)
 			log.Printf("[terminal] refused attach: project locked by another instance")
@@ -969,11 +1038,6 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 		}
 		return
 	}
-	// The session lookup and terminal creation are now tied to the same pinned
-	// project snapshot. The long-lived WebSocket must not block later switches.
-	releaseAttach()
-	attachReleased = true
-
 	connID := fmt.Sprintf("%s-%d", sessionID, winIdx)
 	tc := &termConn{
 		ws:   ws,
@@ -1008,6 +1072,12 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 	// a connection is still about to register one of its goroutines.
 	ts.connWG.Add(3)
 	ts.mu.Unlock()
+	// Keep the project snapshot pinned through connection registration. If it
+	// were released after StartTerminal but before connWG.Add, SelectProject
+	// could snapshot an empty connection set, release the old project lock, and
+	// this old-project connection would register afterwards unobserved.
+	releaseAttach()
+	attachReleased = true
 	connectionOwned = true
 	log.Printf("[ws] attach session=%s win=%d target=%s", sessionID, winIdx, attachTarget)
 	writeTerminalOutput := tc.writeBinary

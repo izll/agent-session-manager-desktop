@@ -3,6 +3,8 @@
   import { autoFocusDialog } from '../../utils/dialogActions';
   import { t } from '../../i18n';
   import * as App from '../../../../wailsjs/go/main/App';
+  import { activeProjectId } from '../../stores/projects';
+  import { get } from 'svelte/store';
 
   interface TabColorTarget {
     Index: number;
@@ -36,6 +38,7 @@
   let saving = false;
   let error = '';
   let lastInitKey = '';
+  let targetProjectId = '';
 
   $: {
     const key = show && tab ? `${sessionId}:${tab.Index}` : '';
@@ -46,11 +49,14 @@
       if (isHex(backgroundColor)) customBackgroundColor = normalizeColorInput(backgroundColor);
       error = '';
       saving = false;
+      targetProjectId = get(activeProjectId);
       lastInitKey = key;
     } else if (!show) {
       lastInitKey = '';
     }
   }
+
+  $: if (show && targetProjectId && $activeProjectId !== targetProjectId) close();
 
   function isHex(color: string): boolean {
     return /^#[0-9a-fA-F]{3,8}$/.test(color);
@@ -105,10 +111,12 @@
     saving = true;
     error = '';
     try {
-      await App.SetTabColor(targetSessionId, targetIndex, textColor, backgroundColor);
+      await App.SetTabColor(targetSessionId, targetIndex, textColor, backgroundColor, targetProjectId);
+      if (targetProjectId !== get(activeProjectId)) return;
       dispatch('applied', { sessionId: targetSessionId, index: targetIndex, textColor, backgroundColor });
       show = false;
     } catch (e) {
+      if (targetProjectId !== get(activeProjectId)) return;
       error = String(e);
     } finally {
       saving = false;

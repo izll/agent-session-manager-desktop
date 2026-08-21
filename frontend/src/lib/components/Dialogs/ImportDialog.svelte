@@ -131,7 +131,7 @@
     error = '';
 
     try {
-      const count = await App.ImportSessions(sourceProjectId, sessionIds);
+      const count = await App.ImportSessions(sourceProjectId, sessionIds, currentProjectId);
       // The import itself is durable even if the dialog was closed. Always
       // refresh the active project, but never write its result into a reopened
       // dialog for another source project.
@@ -148,6 +148,10 @@
   }
 
   function close() {
+    // ImportSessions is durable and cannot be cancelled. Keep this modal as
+    // the single owner of the pending operation so closing and reopening it
+    // cannot start the same portable import a second time.
+    if (isImporting) return;
     requestGeneration++;
     show = false;
     isLoading = false;
@@ -177,7 +181,7 @@
     <div class="dialog-content">
       <div class="dialog-header">
         <h2>{$t('import.title')}</h2>
-        <button class="close-btn" on:click={close}>
+        <button class="close-btn" on:click={close} disabled={isImporting}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <line x1="18" y1="6" x2="6" y2="18"/>
             <line x1="6" y1="6" x2="18" y2="18"/>
@@ -226,11 +230,11 @@
             <div class="sessions-header">
               <span class="sessions-label">{$t('import.sessions')} ({sessions.length})</span>
               <div class="sessions-actions">
-                <button class="link-btn" on:click={selectAll} disabled={sessions.length === 0}>
+                <button class="link-btn" on:click={selectAll} disabled={isImporting || sessions.length === 0}>
                   {$t('import.selectAll')}
                 </button>
                 <span class="separator">|</span>
-                <button class="link-btn" on:click={selectNone} disabled={selectedSessionIds.size === 0}>
+                <button class="link-btn" on:click={selectNone} disabled={isImporting || selectedSessionIds.size === 0}>
                   {$t('import.selectNone')}
                 </button>
               </div>
@@ -252,6 +256,7 @@
                     <input
                       type="checkbox"
                       checked={selectedSessionIds.has(session.id)}
+                      disabled={isImporting}
                       on:change={() => toggleSession(session.id)}
                     />
                     <AgentIcon agent={session.agent} size="sm" />
@@ -300,7 +305,7 @@
               {$t('import.importSelected')}
             {/if}
           </button>
-          <button class="btn-cancel" on:click={close}>
+          <button class="btn-cancel" on:click={close} disabled={isImporting}>
             {$t('import.cancel')}
           </button>
         </div>

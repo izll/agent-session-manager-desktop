@@ -37,7 +37,7 @@ assert.match(
 
 assert.match(
   diff,
-  /type DiffTarget = \{ sessionId: string; windowIdx: number; mode:/,
+  /type DiffTarget = \{ projectId: string; sessionId: string; windowIdx: number; mode:/,
   'a destructive action must snapshot the target it was offered for',
 );
 assert.match(
@@ -50,8 +50,8 @@ assert.match(
 // repository's diff while the revert targets the new one.
 assert.match(
   diff,
-  /\$: diffKey = `\$\{\$selectedSessionId \?\? ''\}:\$\{\$selectedWindowIdx \?\? 0\}`/,
-  'the diff must be keyed on session AND tab',
+  /\$: diffKey = `\$\{\$activeProjectId\}:\$\{\$selectedSessionId \?\? ''\}:\$\{\$selectedWindowIdx \?\? 0\}`/,
+  'the diff must be keyed on project, session, and tab',
 );
 assert.match(diff, /if \(active && diffKey !== lastSessionId\)/, 'the guard must compare the tab key');
 

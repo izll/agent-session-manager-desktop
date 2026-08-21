@@ -191,8 +191,8 @@ func (a *App) readSessionFileAt(path string) (*PortableFileInfo, error) {
 // ImportSessionFile adds the named sessions from an export file to the current
 // project. Names are used to identify them because an export has no IDs — they
 // are re-generated on import so two machines can't collide.
-func (a *App) ImportSessionFile(token string, names []string) (int, error) {
-	done, err := a.beginProjectMutation()
+func (a *App) ImportSessionFile(token string, names []string, expectedProjectID string) (int, error) {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return 0, err
 	}

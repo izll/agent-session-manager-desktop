@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
 
-  export let mode: 'global' | 'palette' | 'command' | 'history' | 'quickjump' | 'quickterminal' | 'scheme' | 'alltasks' | 'taskbadge' | 'dashboard' | 'recovery' | 'update' | 'settings' | 'newsession' | 'newgroup' | 'bgagents' | 'fork' | 'commandmanager' | 'template' = 'global';
+  export let mode: 'global' | 'palette' | 'command' | 'history' | 'quickjump' | 'quickterminal' | 'scheme' | 'import' | 'sessionfile' | 'alltasks' | 'taskbadge' | 'dashboard' | 'recovery' | 'update' | 'settings' | 'newsession' | 'newgroup' | 'bgagents' | 'fork' | 'commandmanager' | 'template' = 'global';
   export let onFixtureReady: () => void = () => {};
 
   let showGlobal = mode === 'global';
@@ -11,6 +11,8 @@
   let showQuickJump = mode === 'quickjump';
   let showQuickTerminal = mode === 'quickterminal';
   let showSchemeImport = mode === 'scheme';
+  let showImport = mode === 'import';
+  let showSessionFile = mode === 'sessionfile';
   let showRecovery = mode === 'recovery';
   let showUpdate = mode === 'update';
   let showSettings = mode === 'settings';
@@ -42,6 +44,8 @@
       case 'quickjump': FixtureComponent = (await import('../../src/lib/components/Dialogs/QuickJumpDialog.svelte')).default; break;
       case 'quickterminal': FixtureComponent = (await import('../../src/lib/components/Dialogs/QuickTerminalDialog.svelte')).default; break;
       case 'scheme': FixtureComponent = (await import('../../src/lib/components/Dialogs/SchemeImportDialog.svelte')).default; break;
+      case 'import': FixtureComponent = (await import('../../src/lib/components/Dialogs/ImportDialog.svelte')).default; break;
+      case 'sessionfile': FixtureComponent = (await import('../../src/lib/components/Dialogs/SessionFileDialog.svelte')).default; break;
       case 'alltasks': FixtureComponent = (await import('../../src/lib/components/Dashboard/AllTasks.svelte')).default; break;
       case 'taskbadge': FixtureComponent = null; break;
       case 'dashboard': FixtureComponent = (await import('../../src/lib/components/Dashboard/ProjectDashboard.svelte')).default; break;
@@ -85,6 +89,10 @@
     <svelte:component this={FixtureComponent} bind:show={showQuickTerminal} sessionId="session-a" />
   {:else if mode === 'scheme'}
     <svelte:component this={FixtureComponent} bind:show={showSchemeImport} />
+  {:else if mode === 'import'}
+    <svelte:component this={FixtureComponent} bind:show={showImport} />
+  {:else if mode === 'sessionfile'}
+    <svelte:component this={FixtureComponent} bind:show={showSessionFile} />
   {:else if mode === 'recovery'}
     <svelte:component this={FixtureComponent} bind:show={showRecovery} />
   {:else if mode === 'update'}

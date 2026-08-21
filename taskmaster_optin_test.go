@@ -40,7 +40,7 @@ func TestStopTaskMasterRejectsSessionWithoutProjectPath(t *testing.T) {
 		taskMasterMu.Unlock()
 	})
 
-	if err := app.StopTaskMaster(instance.ID); err == nil || !strings.Contains(err.Error(), "sessionNoPath") {
+	if err := app.StopTaskMaster(instance.ID, ""); err == nil || !strings.Contains(err.Error(), "sessionNoPath") {
 		t.Fatalf("pathless StopTaskMaster error = %v", err)
 	}
 	taskMasterMu.RLock()
@@ -96,33 +96,33 @@ func TestTaskMasterOptInBlocksNpx(t *testing.T) {
 
 	callAll := func() []error {
 		return []error{
-			errOf(app.TaskMasterInit(inst.ID)),
-			errOf(app.TaskMasterParsePRD(inst.ID, "prd", 3)),
-			errOf(app.TaskMasterSetStatus(inst.ID, "1", "done")),
-			errOf(app.TaskMasterUpdateTask(inst.ID, "1", "x", false)),
-			errOf(app.TaskMasterUpdateSubtask(inst.ID, "1.1", "x")),
-			errOf(app.TaskMasterExpandTask(inst.ID, "1", false, false)),
-			errOf(app.TaskMasterExpandAll(inst.ID, false)),
-			errOf(app.TaskMasterRemoveTask(inst.ID, "1")),
-			errOf(app.TaskMasterSendToAgent(inst.ID, "1")),
-			errOf(app.TaskMasterAddSubtask(inst.ID, "1", "t", "d")),
-			errOf(app.TaskMasterRemoveSubtask(inst.ID, "1.1")),
-			errOf(app.TaskMasterClearSubtasks(inst.ID, "1")),
-			errOf(app.TaskMasterSetSubtaskStatus(inst.ID, "1.1", "done")),
-			errOf(app.TaskMasterAddDependency(inst.ID, "1", "2")),
-			errOf(app.TaskMasterRemoveDependency(inst.ID, "1", "2")),
-			errOf(app.TaskMasterUpdateTaskDirect(inst.ID, "1", "t", "d", "x", "high", "", "")),
+			errOf(app.TaskMasterInit(inst.ID, "")),
+			errOf(app.TaskMasterParsePRD(inst.ID, "prd", 3, "")),
+			errOf(app.TaskMasterSetStatus(inst.ID, "1", "done", "")),
+			errOf(app.TaskMasterUpdateTask(inst.ID, "1", "x", false, "")),
+			errOf(app.TaskMasterUpdateSubtask(inst.ID, "1.1", "x", "")),
+			errOf(app.TaskMasterExpandTask(inst.ID, "1", false, false, "")),
+			errOf(app.TaskMasterExpandAll(inst.ID, false, "")),
+			errOf(app.TaskMasterRemoveTask(inst.ID, "1", "")),
+			errOf(app.TaskMasterSendToAgent(inst.ID, "1", "")),
+			errOf(app.TaskMasterAddSubtask(inst.ID, "1", "t", "d", "")),
+			errOf(app.TaskMasterRemoveSubtask(inst.ID, "1.1", "")),
+			errOf(app.TaskMasterClearSubtasks(inst.ID, "1", "")),
+			errOf(app.TaskMasterSetSubtaskStatus(inst.ID, "1.1", "done", "")),
+			errOf(app.TaskMasterAddDependency(inst.ID, "1", "2", "")),
+			errOf(app.TaskMasterRemoveDependency(inst.ID, "1", "2", "")),
+			errOf(app.TaskMasterUpdateTaskDirect(inst.ID, "1", "t", "d", "x", "high", "", "", "")),
 		}
 	}
 
 	errs := callAll()
-	_, _ = app.TaskMasterGetTasks(inst.ID, "")
-	_, _ = app.TaskMasterGetTask(inst.ID, "1")
-	_, _ = app.TaskMasterNextTask(inst.ID)
-	_, _ = app.TaskMasterAddTask(inst.ID, "p", false, "high")
-	_, _ = app.TaskMasterAddManualTask(inst.ID, "t", "d", "x", "high")
-	_, _ = app.TaskMasterAnalyzeComplexity(inst.ID, false)
-	status := app.TaskMasterStatus(inst.ID)
+	_, _ = app.TaskMasterGetTasks(inst.ID, "", "")
+	_, _ = app.TaskMasterGetTask(inst.ID, "1", "")
+	_, _ = app.TaskMasterNextTask(inst.ID, "")
+	_, _ = app.TaskMasterAddTask(inst.ID, "p", false, "high", "")
+	_, _ = app.TaskMasterAddManualTask(inst.ID, "t", "d", "x", "high", "")
+	_, _ = app.TaskMasterAnalyzeComplexity(inst.ID, false, "")
+	status := app.TaskMasterStatus(inst.ID, "")
 
 	for i, err := range errs {
 		if err == nil || !strings.Contains(err.Error(), "taskMasterDisabled") {
@@ -147,7 +147,7 @@ func TestTaskMasterOptInBlocksNpx(t *testing.T) {
 		t.Fatal("enabling the setting must be observed")
 	}
 	stopAllTaskMasters()
-	blockedStatus := app.TaskMasterStatus(inst.ID)
+	blockedStatus := app.TaskMasterStatus(inst.ID, "")
 	if blockedStatus["error"] == nil || !strings.Contains(blockedStatus["error"].(string), "taskMasterDisabled") {
 		t.Fatalf("a stop in progress must close the late-start registration gate: %v", blockedStatus)
 	}
@@ -164,7 +164,7 @@ func TestTaskMasterOptInBlocksNpx(t *testing.T) {
 		taskMasterStartsBlocked = false
 		taskMasterMu.Unlock()
 	})
-	_ = app.TaskMasterStatus(inst.ID)
+	_ = app.TaskMasterStatus(inst.ID, "")
 	if !npxCalled() {
 		t.Fatal("with the setting ON npx should have been attempted; the guard is not what gates it")
 	}
@@ -220,7 +220,7 @@ func TestStopAllTaskMastersCancelsInFlightExternalStart(t *testing.T) {
 	requestDone := make(chan struct{})
 	go func() {
 		defer close(requestDone)
-		_ = app.TaskMasterStatus(instance.ID)
+		_ = app.TaskMasterStatus(instance.ID, "")
 	}()
 	deadline := time.Now().Add(3 * time.Second)
 	for {
@@ -298,7 +298,7 @@ func TestStopTaskMasterCancelsItsInFlightExternalStart(t *testing.T) {
 	requestDone := make(chan struct{})
 	go func() {
 		defer close(requestDone)
-		_ = app.TaskMasterStatus(instance.ID)
+		_ = app.TaskMasterStatus(instance.ID, "")
 	}()
 	deadline := time.Now().Add(3 * time.Second)
 	for {
@@ -312,7 +312,7 @@ func TestStopTaskMasterCancelsItsInFlightExternalStart(t *testing.T) {
 	}
 
 	startedStop := time.Now()
-	if err := app.StopTaskMaster(instance.ID); err != nil {
+	if err := app.StopTaskMaster(instance.ID, ""); err != nil {
 		t.Fatal(err)
 	}
 	if elapsed := time.Since(startedStop); elapsed > 3*time.Second {

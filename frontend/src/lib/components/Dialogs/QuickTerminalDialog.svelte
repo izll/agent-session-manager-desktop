@@ -5,6 +5,7 @@
   import * as App from '../../../../wailsjs/go/main/App';
   import { t } from '../../i18n';
   import { autoFocusDialog, dialogEnterBelongsToControl } from '../../utils/dialogActions';
+  import { activeProjectId } from '../../stores/projects';
 
   /**
    * Open a terminal tab in one keystroke.
@@ -30,6 +31,7 @@
   let error = '';
   let operationGeneration = 0;
   let lastShow = false;
+  let targetProjectId = '';
 
   // Fresh every time it opens: a name left over from last time is not a
   // starting point, it is something to delete first.
@@ -40,9 +42,12 @@
       error = '';
       isSubmitting = false;
       selectSuggestedName = true;
+      targetProjectId = get(activeProjectId);
     }
     lastShow = show;
   }
+
+  $: if (show && targetProjectId && $activeProjectId !== targetProjectId) close();
 
   function handleNameFocus(event: FocusEvent) {
     if (!selectSuggestedName) return;
@@ -81,9 +86,10 @@
     try {
       // A terminal, with no agent, no extra arguments and the session's own
       // working directory — the defaults the full dialog would have offered.
-      const newIdx = await App.CreateTab(targetSessionId, false, 'terminal', submittedName, '', '');
+      const newIdx = await App.CreateTab(targetSessionId, false, 'terminal', submittedName, '', '', targetProjectId);
       await loadSessions();
-      if (!show || generation !== operationGeneration || sessionId !== targetSessionId) return;
+      if (!show || generation !== operationGeneration || sessionId !== targetSessionId ||
+          targetProjectId !== get(activeProjectId)) return;
       close();
       // Switch to it and put the keyboard in it, so the tab is ready to type
       // in rather than merely created.
@@ -94,7 +100,8 @@
       }
       dispatch('created', { name: submittedName });
     } catch (e) {
-      if (!show || generation !== operationGeneration || sessionId !== targetSessionId) return;
+      if (!show || generation !== operationGeneration || sessionId !== targetSessionId ||
+          targetProjectId !== get(activeProjectId)) return;
       error = String(e);
       isSubmitting = false;
     }
