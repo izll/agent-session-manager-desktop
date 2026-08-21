@@ -20,6 +20,7 @@ const forkDialog = read('lib/components/Dialogs/ForkDialog.svelte');
 const logDialog = read('lib/components/Dialogs/LogDialog.svelte');
 const sessionFileDialog = read('lib/components/Dialogs/SessionFileDialog.svelte');
 const updateDialog = read('lib/components/Dialogs/UpdateDialog.svelte');
+const schemeImport = read('lib/components/Dialogs/SchemeImportDialog.svelte');
 const mainPanel = read('lib/components/MainPanel/MainPanel.svelte');
 const sideBySideDiff = read('lib/components/MainPanel/SideBySideDiff.svelte');
 const sessionItem = read('lib/components/Sidebar/SessionItem.svelte');
@@ -195,6 +196,12 @@ assert.match(app, /const path = await resolveGitHistoryPath\(session, winIdx\);[
   'a delayed history-path lookup must not reopen the resume picker for the previous tab');
 assert.match(app, /pendingResumeSession &&[\s\S]*?showResumeSessionPicker = false;[\s\S]*?handleResumeCancel\(\)/,
   'resume dialogs must close when their captured session/tab is no longer selected');
+assert.match(app, /let resumeOperationGeneration = 0/);
+assert.match(app, /const target = pendingResumeSession;[\s\S]*?const generation = resumeOperationGeneration;[\s\S]*?await[\s\S]*?generation === resumeOperationGeneration[\s\S]*?handleResumeCancel\(\)/,
+  'a late resume completion must not clear a replacement session/tab picker');
+assert.match(app, /let quickJumpNamingGeneration = 0/);
+assert.match(app, /const targetSession = quickJumpTargetSession;[\s\S]*?await AddQuickJump\(targetSession, targetWindow,[\s\S]*?generation !== quickJumpNamingGeneration \|\| projectId !== \$activeProjectId \|\| anyDialogOpen/,
+  'a late quick-jump add must not reopen its list over a replacement dialog or project');
 assert.match(tabBar, /let deleteSessionTarget:/);
 assert.match(tabBar, /afterUnsavedChanges\(\(\) => \{ void deleteCapturedSession\(target\); \}\)/);
 assert.match(tabBar, /let deleteTabTarget:/);
@@ -333,6 +340,13 @@ assert.match(commandManager, /let savingCommand = false/);
 assert.match(commandManager, /let savingGroup = false/);
 assert.match(commandManager, /generation !== operationGeneration \|\| !editing \|\| editingId !== targetId/,
   'a late command save must not close a replacement editor');
+assert.match(schemeImport, /let requestGeneration = 0/);
+for (const call of ['DiscoverLocalSchemes', 'ImportSchemeFiles', 'ListOnlineSchemes', 'FetchOnlineSchemes']) {
+  assert.match(schemeImport, new RegExp(`await App\\.${call}[\\s\\S]*?generation !== requestGeneration \\|\\| tab !== targetTab`),
+    `${call} must not populate a different scheme-source tab or open cycle`);
+}
+assert.match(schemeImport, /function switchTab[\s\S]*?requestGeneration\+\+/,
+  'switching scheme sources must invalidate the previous source request');
 
 // Enter bubbles out of native buttons. The safe button in a destructive
 // confirmation must retain its native action, and single-field/form dialogs

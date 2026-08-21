@@ -93,4 +93,49 @@ const { registerUnsavedGuard, afterUnsavedChanges } = await import(js);
   unregister();
 }
 
+// Approval covers one exact draft revision, not the guard forever. Editor A
+// can become dirty again while editor B's confirmation is open (for example a
+// delayed save failure restores its failed draft); the destructive action must
+// then return to A instead of losing that new state.
+{
+  let aDirty = true;
+  let aRevision = 1;
+  let bDirty = true;
+  let acted = false;
+  let prompt = '';
+  let continueA;
+  let continueB;
+  const unregisterA = registerUnsavedGuard({
+    isDirty: () => aDirty,
+    revision: () => aRevision,
+    requestDiscard: (next) => {
+      prompt = 'a';
+      continueA = () => { aDirty = false; next(); };
+    },
+  });
+  const unregisterB = registerUnsavedGuard({
+    isDirty: () => bDirty,
+    revision: () => Number(bDirty),
+    requestDiscard: (next) => {
+      prompt = 'b';
+      continueB = () => { bDirty = false; next(); };
+    },
+  });
+
+  afterUnsavedChanges(() => { acted = true; });
+  assert.equal(prompt, 'a');
+  continueA();
+  assert.equal(prompt, 'b');
+  aDirty = true;
+  aRevision++;
+  continueB();
+  assert.equal(acted, false);
+  assert.equal(prompt, 'a');
+  continueA();
+  assert.equal(acted, true);
+
+  unregisterA();
+  unregisterB();
+}
+
 console.log('unsavedChanges: ok');

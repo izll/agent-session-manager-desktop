@@ -1,5 +1,5 @@
 import { mount } from 'svelte';
-import TaskPanel from '../../src/lib/components/MainPanel/TaskPanel.svelte';
+import TaskPanelFixture from './task-panel-fixture.svelte';
 import { selectedSessionId } from '../../src/lib/stores/sessions';
 import { settings } from '../../src/lib/stores/settings';
 
@@ -70,4 +70,9 @@ selectedSessionId.set('layout-session');
 };
 const target = document.getElementById('fixture');
 if (!target) throw new Error('fixture target is missing');
-mount(TaskPanel, { target, props: { active: true } });
+mount(TaskPanelFixture, {
+  target,
+  props: {
+    onFixtureReady: () => { document.body.dataset.fixtureReady = 'true'; },
+  },
+});

@@ -211,17 +211,14 @@ func (hm *HotkeyManagerReal) listenForHotkey() {
 
 				if isCtrl {
 					ctrlPressed = true
-					logToFile("🔑 Ctrl pressed\n")
 				} else if isAlt {
 					altPressed = true
-					logToFile("🔑 Alt pressed\n")
 				} else if isShift {
 					shiftPressed = true
-					logToFile("🔑 Shift pressed\n")
 				} else {
-					// Log the rawcode for debugging
-					logToFile("🔑 Key pressed: rawcode=%d, char=%s, modifiers: ctrl=%v alt=%v shift=%v\n",
-						ev.Rawcode, hook.RawcodetoKeychar(ev.Rawcode), ctrlPressed, altPressed, shiftPressed)
+					// Never log key presses. This hook sees every key in
+					// every application, so even a debug trace would become a
+					// persistent keylogger containing passwords and messages.
 					// Check all registered hotkeys
 					hm.configMutex.RLock()
 					configs := make(map[string]HotkeyConfig)

@@ -344,11 +344,11 @@ func (sr *StreamingRecognizer) receiveResults(stream speechpb.Speech_StreamingRe
 			}
 
 			if isFinal {
-				logToFile("✅ [FINAL #%d] Transcript: '%s' (confidence: %.2f, endTime: %s)\n",
-					idx, transcript, confidence, endTimeStr)
+				logToFile("✅ [FINAL #%d] %d character(s) (confidence: %.2f, endTime: %s)\n",
+					idx, len([]rune(transcript)), confidence, endTimeStr)
 			} else {
-				logToFile("⏳ [INTERIM #%d] Transcript: '%s' (stability: %.2f, endTime: %s)\n",
-					idx, transcript, stability, endTimeStr)
+				logToFile("⏳ [INTERIM #%d] %d character(s) (stability: %.2f, endTime: %s)\n",
+					idx, len([]rune(transcript)), stability, endTimeStr)
 			}
 		}
 
@@ -371,7 +371,7 @@ func (sr *StreamingRecognizer) receiveResults(stream speechpb.Speech_StreamingRe
 						fullTranscript += result.Alternatives[0].Transcript
 					}
 				}
-				logToFile("✅ [FINAL COMBINED] Full transcript: '%s'\n", fullTranscript)
+				logToFile("✅ [FINAL COMBINED] %d character(s)\n", len([]rune(fullTranscript)))
 				sr.processFinalResult(fullTranscript)
 				sr.lastInterimText = ""
 			} else {
@@ -387,7 +387,7 @@ func (sr *StreamingRecognizer) receiveResults(stream speechpb.Speech_StreamingRe
 						}
 					}
 				}
-				logToFile("⏳ [INTERIM COMBINED] Full transcript: '%s' (max stability: %.2f)\n", fullTranscript, maxStability)
+				logToFile("⏳ [INTERIM COMBINED] %d character(s) (max stability: %.2f)\n", len([]rune(fullTranscript)), maxStability)
 				sr.processInterimResult(fullTranscript, maxStability)
 			}
 		}
@@ -407,8 +407,8 @@ func (sr *StreamingRecognizer) processFinalResult(transcript string) {
 	// Trim whitespace
 	transcript = strings.TrimSpace(transcript)
 
-	logToFile("📋 FINAL: '%s'\n", transcript)
-	logToFile("📺 Screen has (typed): '%s', (original): '%s'\n", sr.typedTextOnScreen, sr.originalTranscriptOnScreen)
+	logToFile("📋 FINAL: %d character(s)\n", len([]rune(transcript)))
+	logToFile("📺 Screen tracking: typed=%d original=%d character(s)\n", len([]rune(sr.typedTextOnScreen)), len([]rune(sr.originalTranscriptOnScreen)))
 
 	// POPUP MODE: No interim text was typed to PTY, so just type the full final text directly
 	// This completely avoids the backspace correction issues in terminal environments
@@ -417,7 +417,7 @@ func (sr *StreamingRecognizer) processFinalResult(transcript string) {
 		processedText, deleteCount := sr.app.speechRecognizer.ProcessText(transcript, settings.Language)
 
 		if deleteCount > 0 {
-			logToFile("🗑️  [FINAL-POPUP] Delete command: '%s' (count: %d)\n", transcript, deleteCount)
+			logToFile("🗑️  [FINAL-POPUP] Delete command (count: %d)\n", deleteCount)
 			historySize := sr.app.keyboard.GetHistorySize()
 			if historySize > 0 {
 				actualDeleteCount := deleteCount
@@ -437,7 +437,7 @@ func (sr *StreamingRecognizer) processFinalResult(transcript string) {
 			if err != nil {
 				logToFile("❌ [FINAL-POPUP] Error typing: %v\n", err)
 			} else {
-				logToFile("✅ [FINAL-POPUP] Typed: '%s'\n", processedText)
+				logToFile("✅ [FINAL-POPUP] Typed %d character(s)\n", len([]rune(processedText)))
 			}
 		}
 
@@ -456,18 +456,18 @@ func (sr *StreamingRecognizer) processFinalResult(transcript string) {
 	_, deleteCount := sr.app.speechRecognizer.ProcessText(transcript, settings.Language)
 
 	if deleteCount > 0 {
-		logToFile("🗑️  [FINAL] Delete command: '%s' (count: %d)\n", transcript, deleteCount)
+		logToFile("🗑️  [FINAL] Delete command (count: %d)\n", deleteCount)
 
 		// STEP 1: Delete any misrecognized interim words from screen (e.g., "go ku" before "goku" was recognized)
 		if sr.typedTextOnScreen != "" {
 			typedWords := strings.Fields(sr.typedTextOnScreen)
-			logToFile("🧹 [FINAL] Cleaning up %d interim word(s) from screen: '%s'\n", len(typedWords), sr.typedTextOnScreen)
+			logToFile("🧹 [FINAL] Cleaning up %d interim word(s) from screen\n", len(typedWords))
 			for i := len(typedWords) - 1; i >= 0; i-- {
 				wordToDelete := typedWords[i]
 				backspaceCount := len([]rune(wordToDelete)) + 1 // +1 for space
 				err := sr.app.keyboard.PressBackspace(backspaceCount)
 				if err != nil {
-					logToFile("❌ Error cleaning up '%s': %v\n", wordToDelete, err)
+					logToFile("❌ Error cleaning up interim word: %v\n", err)
 				}
 			}
 		}
@@ -509,7 +509,7 @@ func (sr *StreamingRecognizer) processFinalResult(transcript string) {
 		if processedText != "" {
 			words := strings.Fields(processedText)
 			sr.app.keyboard.AddToHistory(words)
-			logToFile("📝 Added %d word(s) to history: %v\n", len(words), words)
+			logToFile("📝 Added %d word(s) to history\n", len(words))
 		}
 
 		sr.lastFinalText = transcript
@@ -526,7 +526,7 @@ func (sr *StreamingRecognizer) processFinalResult(transcript string) {
 		missing = strings.TrimSpace(missing)
 
 		if missing != "" {
-			logToFile("📝 [FINAL] Screen has prefix, typing missing: '%s'\n", missing)
+			logToFile("📝 [FINAL] Screen has prefix, typing %d missing character(s)\n", len([]rune(missing)))
 
 			// NEW STRATEGY: In FINAL, we handle delete commands!
 			// Since we skipped them in INTERIM, they were never typed, so we process them here.
@@ -568,7 +568,7 @@ func (sr *StreamingRecognizer) processFinalResult(transcript string) {
 				if err != nil {
 					logToFile("❌ Error typing: %v\n", err)
 				} else {
-					logToFile("✅ Typed missing part: '%s'\n", processedText)
+					logToFile("✅ Typed %d missing character(s)\n", len([]rune(processedText)))
 				}
 			}
 		}
@@ -577,8 +577,7 @@ func (sr *StreamingRecognizer) processFinalResult(transcript string) {
 		// This happens when interim was wrong, but final is correct
 		// We need to CORRECT the screen text
 		logToFile("⚠️  [FINAL] Screen mismatch - recognition changed!\n")
-		logToFile("    Expected: '%s'\n", transcript)
-		logToFile("    Have:     '%s'\n", sr.typedTextOnScreen)
+		logToFile("    Expected/actual lengths: %d/%d character(s)\n", len([]rune(transcript)), len([]rune(sr.typedTextOnScreen)))
 
 		// FIRST: Delete ALL interim text from screen using backspaces
 		// Interim words are NOT in history (TypeTextNoHistory was used), so we MUST use backspaces
@@ -590,7 +589,7 @@ func (sr *StreamingRecognizer) processFinalResult(transcript string) {
 				backspaceCount := len([]rune(wordToDelete)) + 1 // +1 for space
 				err := sr.app.keyboard.PressBackspace(backspaceCount)
 				if err != nil {
-					logToFile("❌ Error deleting '%s': %v\n", wordToDelete, err)
+					logToFile("❌ Error deleting interim word: %v\n", err)
 				}
 			}
 		}
@@ -615,7 +614,7 @@ func (sr *StreamingRecognizer) processFinalResult(transcript string) {
 			if err != nil {
 				logToFile("❌ Error typing corrected text: %v\n", err)
 			} else {
-				logToFile("✅ Typed corrected text: '%s'\n", processedText)
+				logToFile("✅ Typed %d corrected character(s)\n", len([]rune(processedText)))
 			}
 		}
 	}
@@ -647,7 +646,7 @@ func (sr *StreamingRecognizer) processInterimResult(transcript string, stability
 	// CRITICAL: Skip if this is the same interim we already processed
 	// This prevents duplicate delete command execution when Google sends the same interim multiple times with different stability
 	if transcript == sr.lastInterimText {
-		logToFile("⏭️  [INTERIM] Skipping duplicate interim (already processed): '%s'\n", transcript)
+		logToFile("⏭️  [INTERIM] Skipping duplicate interim (%d character(s))\n", len([]rune(transcript)))
 		return
 	}
 
@@ -663,7 +662,7 @@ func (sr *StreamingRecognizer) processInterimResult(transcript string, stability
 		} else {
 			sr.app.NotifyInterimText(strings.TrimSpace(processedText))
 		}
-		logToFile("⏳ [INTERIM-POPUP] '%s' → overlay (stability: %.2f)\n", transcript, stability)
+		logToFile("⏳ [INTERIM-POPUP] %d character(s) → overlay (stability: %.2f)\n", len([]rune(transcript)), stability)
 		return
 	}
 
@@ -725,8 +724,8 @@ func (sr *StreamingRecognizer) processInterimResult(transcript string, stability
 	// How many words from screen need to be deleted?
 	wordsToDelete := len(screenOriginalWords) - commonPrefixLength
 
-	logToFile("⏳ [INTERIM] '%s' (stability: %.2f, screen original: '%s', screen typed: '%s', common: %d, delete: %d, type: %d, hasDeleteCmd: %v)\n",
-		transcript, stability, sr.originalTranscriptOnScreen, sr.typedTextOnScreen, commonPrefixLength, wordsToDelete, len(wordsToType), containsDeleteCommand)
+	logToFile("⏳ [INTERIM] %d character(s) (stability: %.2f, screen original/typed lengths: %d/%d, common: %d, delete: %d, type: %d, hasDeleteCmd: %v)\n",
+		len([]rune(transcript)), stability, len([]rune(sr.originalTranscriptOnScreen)), len([]rune(sr.typedTextOnScreen)), commonPrefixLength, wordsToDelete, len(wordsToType), containsDeleteCommand)
 
 	// Delete outdated words from screen using backspaces (NOT DeleteLastWord - history is not used for interim)
 	if wordsToDelete > 0 {
@@ -742,7 +741,7 @@ func (sr *StreamingRecognizer) processInterimResult(transcript string, stability
 				if wordIdx >= 0 {
 					wordToDelete := typedWords[wordIdx]
 					backspaceCount := len([]rune(wordToDelete)) + 1 // +1 for space
-					logToFile("🔙 Deleting word '%s' (%d backspaces)\n", wordToDelete, backspaceCount)
+					logToFile("🔙 Deleting interim word (%d backspaces)\n", backspaceCount)
 					err := sr.app.keyboard.PressBackspace(backspaceCount)
 					if err != nil {
 						logToFile("❌ Error deleting word with backspace: %v\n", err)
@@ -781,7 +780,7 @@ func (sr *StreamingRecognizer) processInterimResult(transcript string, stability
 
 			// Handle delete commands
 			if deleteCount > 0 {
-				logToFile("🗑️  [INTERIM] Delete command detected: '%s' (count: %d, stability: %.2f ✅ HIGH)\n", word, deleteCount, stability)
+				logToFile("🗑️  [INTERIM] Delete command detected (count: %d, stability: %.2f ✅ HIGH)\n", deleteCount, stability)
 
 				// STEP 1: Delete any misrecognized words from screen AND history
 				// These are words that Google misrecognized before recognizing the delete command.
@@ -802,7 +801,7 @@ func (sr *StreamingRecognizer) processInterimResult(transcript string, stability
 							backspaceCount := len([]rune(wordToDelete)) + 1        // +1 for space
 							err := sr.app.keyboard.PressBackspace(backspaceCount)
 							if err != nil {
-								logToFile("❌ Error deleting '%s' from screen: %v\n", wordToDelete, err)
+								logToFile("❌ Error deleting misrecognized word from screen: %v\n", err)
 							}
 						}
 						// Remove these words from history too (without backspace - already deleted from screen)
@@ -856,7 +855,7 @@ func (sr *StreamingRecognizer) processInterimResult(transcript string, stability
 				if err != nil {
 					logToFile("❌ Error typing interim word: %v\n", err)
 				} else {
-					logToFile("⚡ Typed interim word: '%s' (original: '%s')\n", processedWord, word)
+					logToFile("⚡ Typed interim word (%d character(s))\n", len([]rune(processedWord)))
 
 					// Update BOTH tracking variables
 					// 1. originalTranscriptOnScreen: track the original word (for comparison)
@@ -873,7 +872,7 @@ func (sr *StreamingRecognizer) processInterimResult(transcript string, stability
 						sr.typedTextOnScreen = sr.typedTextOnScreen + " " + strings.TrimSpace(processedWord)
 					}
 
-					logToFile("📺 Screen now has: '%s' (original: '%s')\n", sr.typedTextOnScreen, sr.originalTranscriptOnScreen)
+					logToFile("📺 Screen tracking now has typed/original lengths %d/%d\n", len([]rune(sr.typedTextOnScreen)), len([]rune(sr.originalTranscriptOnScreen)))
 				}
 			}
 		}

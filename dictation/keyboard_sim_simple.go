@@ -1,6 +1,7 @@
 package dictation
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -11,6 +12,44 @@ import (
 
 	"github.com/go-vgo/robotgo"
 )
+
+const keyboardCommandOutputLimit = 64 * 1024
+
+var keyboardCommandTimeout = 5 * time.Second
+
+type keyboardCommandOutput struct {
+	data      []byte
+	truncated bool
+}
+
+func (w *keyboardCommandOutput) Write(p []byte) (int, error) {
+	remaining := keyboardCommandOutputLimit - len(w.data)
+	if remaining > 0 {
+		if remaining > len(p) {
+			remaining = len(p)
+		}
+		w.data = append(w.data, p[:remaining]...)
+	}
+	if remaining < len(p) {
+		w.truncated = true
+	}
+	return len(p), nil
+}
+
+// runKeyboardCommand bounds both runtime and captured output. These helpers
+// run on recognition/hotkey paths, where an unresponsive or PATH-shadowed
+// desktop tool must not stall dictation or exhaust memory.
+func runKeyboardCommand(name string, args ...string) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), keyboardCommandTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, name, args...)
+	configureKeyboardCommand(cmd)
+	var output keyboardCommandOutput
+	cmd.Stdout = &output
+	cmd.Stderr = &output
+	err := cmd.Run()
+	return output.data, err
+}
 
 // Global timestamp to indicate when typing last occurred (used by hotkey manager to ignore events)
 var (
@@ -171,16 +210,18 @@ func ensureYdotoold() {
 	}
 
 	// Check if ydotoold is already running
-	cmd := exec.Command("pgrep", "-x", "ydotoold")
-	if err := cmd.Run(); err == nil {
+	if _, err := runKeyboardCommand("pgrep", "-x", "ydotoold"); err == nil {
 		// Already running
 		return
 	}
 
 	// Start ydotoold in background
 	logToFile("🚀 Starting ydotoold daemon..." + "\n")
-	cmd = exec.Command("ydotoold")
-	cmd.Start() // Don't wait, run in background
+	cmd := exec.Command("ydotoold")
+	if err := cmd.Start(); err == nil {
+		// Don't wait synchronously, but always reap the daemon if it exits.
+		go func() { _ = cmd.Wait() }()
+	}
 
 	// Give it a moment to start
 	time.Sleep(100 * time.Millisecond)
@@ -195,7 +236,7 @@ func (ks *KeyboardSimulatorSimple) typeTextInternal(text string) error {
 
 	if handler != nil {
 		// Popup mode: write directly to popup handler
-		logToFile("⌨️  Typing to popup: '%s'\n", text)
+		logToFile("⌨️  Typing %d character(s) to popup\n", len([]rune(text)))
 		handler.AppendText(text)
 		logToFile("✅ popup append completed\n")
 		return nil
@@ -207,23 +248,21 @@ func (ks *KeyboardSimulatorSimple) typeTextInternal(text string) error {
 
 	// Platform-specific typing
 	if runtime.GOOS == "linux" {
-		logToFile("⌨️  Typing: '%s'\n", text)
+		logToFile("⌨️  Typing %d character(s)\n", len([]rune(text)))
 
 		if ks.sessionType == "wayland" {
 			// Wayland: use ydotool
-			cmd := exec.Command("ydotool", "type", "--key-delay", "0", "--", text)
-			output, err := cmd.CombinedOutput()
+			_, err := runKeyboardCommand("ydotool", "type", "--key-delay", "0", "--", text)
 			if err != nil {
-				logToFile("❌ ydotool error: %v, output: %s\n", err, string(output))
+				logToFile("❌ ydotool failed: %v\n", err)
 				return fmt.Errorf("failed to type text: %w", err)
 			}
 			logToFile("✅ ydotool type completed\n")
 		} else {
 			// X11: use xdotool
-			cmd := exec.Command("xdotool", "type", "--", text)
-			output, err := cmd.CombinedOutput()
+			_, err := runKeyboardCommand("xdotool", "type", "--", text)
 			if err != nil {
-				logToFile("❌ xdotool error: %v, output: %s\n", err, string(output))
+				logToFile("❌ xdotool failed: %v\n", err)
 				return fmt.Errorf("failed to type text: %w", err)
 			}
 			logToFile("✅ xdotool type completed\n")
@@ -271,19 +310,20 @@ func (ks *KeyboardSimulatorSimple) PressBackspace(count int) error {
 	defer markTypingEnded()
 
 	if runtime.GOOS == "linux" {
-		var cmd *exec.Cmd
 		if ks.sessionType == "wayland" {
 			// Wayland: ydotool
 			logToFile("⌫ Pressing %d backspace(s) via ydotool\n", count)
-			cmd = exec.Command("ydotool", "key", "--repeat", fmt.Sprintf("%d", count), "--key-delay", "0", "Backspace")
+			_, err := runKeyboardCommand("ydotool", "key", "--repeat", fmt.Sprintf("%d", count), "--key-delay", "0", "Backspace")
+			if err != nil {
+				return fmt.Errorf("failed to press backspace: %w", err)
+			}
 		} else {
 			// X11: xdotool
 			logToFile("⌫ Pressing %d backspace(s) via xdotool\n", count)
-			cmd = exec.Command("xdotool", "key", "--repeat", fmt.Sprintf("%d", count), "--delay", "0", "BackSpace")
-		}
-		err := cmd.Run()
-		if err != nil {
-			return fmt.Errorf("failed to press backspace: %w", err)
+			_, err := runKeyboardCommand("xdotool", "key", "--repeat", fmt.Sprintf("%d", count), "--delay", "0", "BackSpace")
+			if err != nil {
+				return fmt.Errorf("failed to press backspace: %w", err)
+			}
 		}
 		logToFile("✅ backspace completed\n")
 	} else {
@@ -306,17 +346,18 @@ func (ks *KeyboardSimulatorSimple) PressDelete(count int) error {
 	defer markTypingEnded()
 
 	if runtime.GOOS == "linux" {
-		var cmd *exec.Cmd
 		if ks.sessionType == "wayland" {
 			// Wayland: ydotool
-			cmd = exec.Command("ydotool", "key", "--repeat", fmt.Sprintf("%d", count), "--key-delay", "0", "Delete")
+			_, err := runKeyboardCommand("ydotool", "key", "--repeat", fmt.Sprintf("%d", count), "--key-delay", "0", "Delete")
+			if err != nil {
+				return fmt.Errorf("failed to press delete: %w", err)
+			}
 		} else {
 			// X11: xdotool
-			cmd = exec.Command("xdotool", "key", "--repeat", fmt.Sprintf("%d", count), "--delay", "0", "Delete")
-		}
-		err := cmd.Run()
-		if err != nil {
-			return fmt.Errorf("failed to press delete: %w", err)
+			_, err := runKeyboardCommand("xdotool", "key", "--repeat", fmt.Sprintf("%d", count), "--delay", "0", "Delete")
+			if err != nil {
+				return fmt.Errorf("failed to press delete: %w", err)
+			}
 		}
 	} else {
 		// Windows/macOS: use robotgo
@@ -331,11 +372,11 @@ func (ks *KeyboardSimulatorSimple) PressDelete(count int) error {
 func (ks *KeyboardSimulatorSimple) PressEnter() error {
 	if runtime.GOOS == "linux" {
 		if ks.sessionType == "wayland" {
-			cmd := exec.Command("ydotool", "key", "Enter")
-			return cmd.Run()
+			_, err := runKeyboardCommand("ydotool", "key", "Enter")
+			return err
 		}
-		cmd := exec.Command("xdotool", "key", "Return")
-		return cmd.Run()
+		_, err := runKeyboardCommand("xdotool", "key", "Return")
+		return err
 	}
 	robotgo.KeyTap("enter")
 	return nil
@@ -345,11 +386,11 @@ func (ks *KeyboardSimulatorSimple) PressEnter() error {
 func (ks *KeyboardSimulatorSimple) PressTab() error {
 	if runtime.GOOS == "linux" {
 		if ks.sessionType == "wayland" {
-			cmd := exec.Command("ydotool", "key", "Tab")
-			return cmd.Run()
+			_, err := runKeyboardCommand("ydotool", "key", "Tab")
+			return err
 		}
-		cmd := exec.Command("xdotool", "key", "Tab")
-		return cmd.Run()
+		_, err := runKeyboardCommand("xdotool", "key", "Tab")
+		return err
 	}
 	robotgo.KeyTap("tab")
 	return nil
@@ -358,8 +399,7 @@ func (ks *KeyboardSimulatorSimple) PressTab() error {
 // PressCtrlBackspace simulates pressing Ctrl+Backspace (word delete)
 func (ks *KeyboardSimulatorSimple) PressCtrlBackspace() error {
 	if runtime.GOOS == "linux" {
-		cmd := exec.Command("xdotool", "key", "--clearmodifiers", "ctrl+BackSpace")
-		err := cmd.Run()
+		_, err := runKeyboardCommand("xdotool", "key", "--clearmodifiers", "ctrl+BackSpace")
 		if err != nil {
 			return fmt.Errorf("failed to press Ctrl+Backspace: %w", err)
 		}
@@ -377,8 +417,7 @@ func (ks *KeyboardSimulatorSimple) PressCtrlBackspace() error {
 // PressCtrlAltBackspace simulates pressing Ctrl+Alt+Backspace (line delete)
 func (ks *KeyboardSimulatorSimple) PressCtrlAltBackspace() error {
 	if runtime.GOOS == "linux" {
-		cmd := exec.Command("xdotool", "key", "--clearmodifiers", "ctrl+alt+BackSpace")
-		err := cmd.Run()
+		_, err := runKeyboardCommand("xdotool", "key", "--clearmodifiers", "ctrl+alt+BackSpace")
 		if err != nil {
 			return fmt.Errorf("failed to press Ctrl+Alt+Backspace: %w", err)
 		}
@@ -417,8 +456,7 @@ func (ks *KeyboardSimulatorSimple) isActiveWindowTerminal() bool {
 	// X11 - use xdotool and xprop
 	if ks.sessionType == "x11" || ks.sessionType == "" {
 		// Get window class using xprop
-		cmd := exec.Command("sh", "-c", "xdotool getactivewindow | xargs -I {} xprop -id {} WM_CLASS")
-		output, err := cmd.Output()
+		output, err := runKeyboardCommand("sh", "-c", "xdotool getactivewindow | xargs -I {} xprop -id {} WM_CLASS")
 		if err != nil {
 			// If detection fails, assume non-terminal
 			return false
@@ -463,12 +501,12 @@ func (ks *KeyboardSimulatorSimple) deleteLastWordWithBackspaces(lastWord string)
 	if len(ks.wordHistory) > 0 {
 		// There are more words before this one → delete the trailing space too
 		deleteCount = characterCount + 1
-		logToFile("🗑️  Deleting last word: '%s' (%d characters + 1 space = %d backspaces, %d words remain)\n",
-			lastWord, characterCount, deleteCount, len(ks.wordHistory))
+		logToFile("🗑️  Deleting last word (%d characters + 1 space = %d backspaces, %d words remain)\n",
+			characterCount, deleteCount, len(ks.wordHistory))
 	} else {
 		// This was the last word → no trailing space to delete
-		logToFile("🗑️  Deleting last word: '%s' (%d characters, no space = %d backspaces, history empty)\n",
-			lastWord, characterCount, deleteCount)
+		logToFile("🗑️  Deleting last word (%d characters, no space = %d backspaces, history empty)\n",
+			characterCount, deleteCount)
 	}
 
 	// Check if popup mode is enabled - route through popup handler
@@ -488,17 +526,18 @@ func (ks *KeyboardSimulatorSimple) deleteLastWordWithBackspaces(lastWord string)
 
 	// Press backspace multiple times
 	if runtime.GOOS == "linux" {
-		var cmd *exec.Cmd
 		if ks.sessionType == "wayland" {
 			// Wayland: ydotool
-			cmd = exec.Command("ydotool", "key", "--repeat", fmt.Sprintf("%d", deleteCount), "--key-delay", "0", "Backspace")
+			_, err := runKeyboardCommand("ydotool", "key", "--repeat", fmt.Sprintf("%d", deleteCount), "--key-delay", "0", "Backspace")
+			if err != nil {
+				return fmt.Errorf("failed to press backspace: %w", err)
+			}
 		} else {
 			// X11: xdotool
-			cmd = exec.Command("xdotool", "key", "--repeat", fmt.Sprintf("%d", deleteCount), "--delay", "0", "BackSpace")
-		}
-		err := cmd.Run()
-		if err != nil {
-			return fmt.Errorf("failed to press backspace: %w", err)
+			_, err := runKeyboardCommand("xdotool", "key", "--repeat", fmt.Sprintf("%d", deleteCount), "--delay", "0", "BackSpace")
+			if err != nil {
+				return fmt.Errorf("failed to press backspace: %w", err)
+			}
 		}
 	} else {
 		// Windows/macOS: use robotgo (still needs loop but it's faster)
@@ -516,7 +555,7 @@ func (ks *KeyboardSimulatorSimple) deleteLastWordWithShortcut(lastWord string) e
 	if lastWord == "" {
 		logToFile("🗑️  Deleting word (using Ctrl+Backspace)" + "\n")
 	} else {
-		logToFile("🗑️  Deleting word: '%s' (using Ctrl+Backspace)\n", lastWord)
+		logToFile("🗑️  Deleting word using Ctrl+Backspace\n")
 	}
 
 	// Platform-specific deletion - always use Ctrl+Backspace
@@ -529,23 +568,20 @@ func (ks *KeyboardSimulatorSimple) deleteLastWordWithShortcut(lastWord string) e
 			// Wayland - use ydotool
 			// Key codes: 29=Ctrl, 14=Backspace
 			// Format: keycode:1 (press), keycode:0 (release)
-			cmd := exec.Command("ydotool", "key", "29:1", "14:1", "14:0", "29:0")
-			err := cmd.Run()
+			_, err := runKeyboardCommand("ydotool", "key", "29:1", "14:1", "14:0", "29:0")
 			if err != nil {
 				return fmt.Errorf("failed to send delete shortcut: %w", err)
 			}
 		} else {
 			// X11 - use xdotool
 			// Send Ctrl+Backspace and ensure modifiers are cleared after
-			cmd := exec.Command("xdotool", "key", "--clearmodifiers", "ctrl+BackSpace")
-			err := cmd.Run()
+			_, err := runKeyboardCommand("xdotool", "key", "--clearmodifiers", "ctrl+BackSpace")
 			if err != nil {
 				return fmt.Errorf("failed to send delete shortcut: %w", err)
 			}
 
 			// Extra safety: explicitly clear any stuck modifiers
-			clearCmd := exec.Command("xdotool", "keyup", "ctrl", "alt", "shift", "super")
-			clearCmd.Run() // Ignore errors
+			_, _ = runKeyboardCommand("xdotool", "keyup", "ctrl", "alt", "shift", "super")
 		}
 	} else if runtime.GOOS == "windows" {
 		// Windows - Ctrl+Backspace works in most apps

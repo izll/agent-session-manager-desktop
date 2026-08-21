@@ -10,6 +10,8 @@ const historyCalls: string[] = [];
 const quickJumpResolvers: Array<(value: unknown[]) => void> = [];
 const createTabResolvers: Array<(value: number) => void> = [];
 const createTabCalls: unknown[][] = [];
+const localSchemeResolvers: Array<(value: unknown[]) => void> = [];
+const onlineSchemeResolvers: Array<(value: unknown[]) => void> = [];
 
 const backend = new Proxy({
   GlobalSearch: (query: string) => {
@@ -38,8 +40,16 @@ const backend = new Proxy({
     createTabCalls.push(args);
     return new Promise<number>((resolve) => { createTabResolvers.push(resolve); });
   },
+  DiscoverLocalSchemes: () => new Promise<unknown[]>((resolve) => { localSchemeResolvers.push(resolve); }),
+  ListOnlineSchemes: () => new Promise<unknown[]>((resolve) => { onlineSchemeResolvers.push(resolve); }),
   GetSessions: async () => [],
   GetGroups: async () => [],
+  GetAllTasks: async () => [{
+    id: 'task-1', title: 'Fixture dashboard task', description: '', details: '',
+    status: 'pending', priority: 'medium', projectId: 'project-a',
+    projectName: 'Project A', projectPath: '/repo-a', overdue: false,
+    dependencies: [], subtasks: [],
+  }],
 }, {
   get(target, key) {
     if (key in target) return target[key as keyof typeof target];
@@ -67,12 +77,20 @@ const backend = new Proxy({
   ]),
   createTabCalls: () => structuredClone(createTabCalls),
   resolveCreateTab: (index: number, windowIdx: number) => createTabResolvers[index]?.(windowIdx),
+  localSchemeCalls: () => localSchemeResolvers.length,
+  resolveLocalSchemes: (index: number, name: string) => localSchemeResolvers[index]?.([
+    { name, source: 'local', colors: {} },
+  ]),
+  onlineSchemeCalls: () => onlineSchemeResolvers.length,
+  resolveOnlineSchemes: (index: number, name: string) => onlineSchemeResolvers[index]?.([
+    { name, file: `${name}.json` },
+  ]),
 };
 
 const target = document.getElementById('fixture');
 if (!target) throw new Error('fixture target is missing');
 const requestedMode = new URLSearchParams(location.search).get('mode');
-const mode = requestedMode === 'command' || requestedMode === 'history' || requestedMode === 'quickjump' || requestedMode === 'quickterminal'
+const mode = requestedMode === 'command' || requestedMode === 'history' || requestedMode === 'quickjump' || requestedMode === 'quickterminal' || requestedMode === 'scheme' || requestedMode === 'alltasks'
   ? requestedMode : 'global';
 mount(DialogRacesFixture, {
   target,

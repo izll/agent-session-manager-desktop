@@ -17,7 +17,27 @@ const (
 	projectDashboardTimeout = 12 * time.Second
 	projectGitRepoTimeout   = 3 * time.Second
 	projectGitWorkers       = 6
+	projectGitOutputLimit   = 8 << 20
 )
+
+var errProjectGitOutputLimit = errors.New("git output exceeded dashboard limit")
+
+type boundedProjectGitOutput struct {
+	data      []byte
+	truncated bool
+}
+
+func (w *boundedProjectGitOutput) Write(p []byte) (int, error) {
+	available := projectGitOutputLimit - len(w.data)
+	if available > 0 {
+		keep := min(available, len(p))
+		w.data = append(w.data, p[:keep]...)
+	}
+	if len(p) > max(available, 0) {
+		w.truncated = true
+	}
+	return len(p), nil
+}
 
 // ProjectGitSummary is the dashboard's Git snapshot for one session.
 // Sessions sharing the same path receive the same repository snapshot while
@@ -213,8 +233,14 @@ func inspectGitRepository(ctx context.Context, path string) ProjectGitSummary {
 
 func runDashboardGit(ctx context.Context, path string, args ...string) (string, error) {
 	cmd := session.GitCommandContext(ctx, append([]string{"-C", path}, args...)...)
-	output, err := cmd.CombinedOutput()
-	return string(output), err
+	var output boundedProjectGitOutput
+	cmd.Stdout = &output
+	cmd.Stderr = &output
+	err := cmd.Run()
+	if output.truncated {
+		return "", errProjectGitOutputLimit
+	}
+	return string(output.data), err
 }
 
 func (s *ProjectGitSummary) addError(operation string, err error) {

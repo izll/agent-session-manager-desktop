@@ -2,12 +2,53 @@ package session
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
 )
+
+func TestTaskManagerRejectsNonCooperatingExternalWriter(t *testing.T) {
+	project := t.TempDir()
+	manager := NewTaskManager(project)
+	if err := manager.Load(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.CreateTask("original", "", TaskPriorityMedium, nil); err != nil {
+		t.Fatal(err)
+	}
+	path := manager.getTaskFilePath()
+	before, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	external := bytes.Replace(before, []byte("original"), []byte("external"), 1)
+	manager.mu.Lock()
+	err = manager.mutateLocked(func() error {
+		manager.store.Tasks[0].Title = "local overwrite"
+		if err := os.WriteFile(path, external, 0o644); err != nil {
+			return err
+		}
+		return manager.saveLocked()
+	})
+	manager.mu.Unlock()
+	if !errors.Is(err, ErrTaskStoreConflict) {
+		t.Fatalf("save error = %v, want ErrTaskStoreConflict", err)
+	}
+	got, readErr := os.ReadFile(path)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if !bytes.Equal(got, external) {
+		t.Fatal("conflicting local save overwrote the external writer")
+	}
+	tasks := manager.GetTasks()
+	if len(tasks) != 1 || tasks[0].Title != "external" {
+		t.Fatalf("cache after conflict = %#v; want external store", tasks)
+	}
+}
 
 func TestTaskManagerCanonicalAliasDoesNotLoseUpdates(t *testing.T) {
 	realPath := t.TempDir()

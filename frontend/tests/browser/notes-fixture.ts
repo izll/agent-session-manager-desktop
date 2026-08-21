@@ -1,7 +1,7 @@
 import { mount } from 'svelte';
 import Notes from '../../src/lib/components/MainPanel/Notes.svelte';
 import { selectedSessionId, selectedWindowIdx } from '../../src/lib/stores/sessions';
-import { afterUnsavedChanges } from '../../src/lib/stores/unsavedChanges';
+import { afterUnsavedChanges, registerUnsavedGuard } from '../../src/lib/stores/unsavedChanges';
 import { selectProject } from '../../src/lib/stores/projects';
 
 const stored = new Map<string, string>([
@@ -11,6 +11,36 @@ const stored = new Map<string, string>([
 let failNextASave = true;
 let failedSaves = 0;
 let selectedProject = '';
+let secondGuardRegistered = false;
+let secondGuardDirty = false;
+let secondGuardRevision = 0;
+let continueAfterSecondDiscard: (() => void) | null = null;
+
+function enableSecondGuard() {
+  if (!secondGuardRegistered) {
+    secondGuardRegistered = true;
+    registerUnsavedGuard({
+      isDirty: () => secondGuardDirty,
+      revision: () => secondGuardRevision,
+      requestDiscard: (continueAfterDiscard) => {
+        continueAfterSecondDiscard = continueAfterDiscard;
+        document.body.dataset.secondPrompt = 'true';
+      },
+    });
+  }
+  secondGuardDirty = true;
+  secondGuardRevision++;
+  document.body.dataset.secondPrompt = 'false';
+}
+
+function approveSecondGuard() {
+  secondGuardDirty = false;
+  secondGuardRevision++;
+  document.body.dataset.secondPrompt = 'false';
+  const continuation = continueAfterSecondDiscard;
+  continueAfterSecondDiscard = null;
+  continuation?.();
+}
 
 const backend = new Proxy({
   GetTabNotes: async (sessionId: string, windowIdx: number) => {
@@ -55,6 +85,8 @@ const backend = new Proxy({
     document.body.dataset.destructive = 'false';
     afterUnsavedChanges(() => { document.body.dataset.destructive = 'true'; });
   },
+  enableSecondGuard,
+  approveSecondGuard,
   switchProject(id: string) {
     void selectProject(id);
   },

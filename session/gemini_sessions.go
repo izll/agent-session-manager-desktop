@@ -1,25 +1,65 @@
 package session
 
 import (
+	"context"
 	"fmt"
 	"regexp"
 	"strings"
 	"time"
 )
 
+const geminiSessionListOutputLimit = 4 << 20
+
+var (
+	geminiSessionListTimeout = 15 * time.Second
+	geminiSessionCommand     = CommandContext
+)
+
+type boundedGeminiOutput struct {
+	data      []byte
+	limit     int
+	truncated bool
+}
+
+func (w *boundedGeminiOutput) Write(p []byte) (int, error) {
+	available := w.limit - len(w.data)
+	if available > 0 {
+		keep := min(available, len(p))
+		w.data = append(w.data, p[:keep]...)
+	}
+	if len(p) > max(available, 0) {
+		w.truncated = true
+	}
+	return len(p), nil
+}
+
 // ListGeminiSessions lists all Gemini sessions for the given project path
 func ListGeminiSessions(projectPath string) ([]AgentSession, error) {
 	// Run gemini --list-sessions in the project directory
-	cmd := Command("gemini", "--list-sessions")
+	ctx, cancel := context.WithTimeout(context.Background(), geminiSessionListTimeout)
+	defer cancel()
+	cmd := geminiSessionCommand(ctx, "gemini", "--list-sessions")
 	cmd.Dir = projectPath
+	// A descendant that inherits the CLI's output handles must not keep this
+	// user-facing request alive after the direct process has been cancelled.
+	cmd.WaitDelay = time.Second
+	var output boundedGeminiOutput
+	output.limit = geminiSessionListOutputLimit
+	cmd.Stdout = &output
+	cmd.Stderr = &output
 
-	output, err := cmd.CombinedOutput()
+	err := cmd.Run()
 	if err != nil {
 		// If command fails, assume no sessions (gemini not installed or no sessions)
 		return []AgentSession{}, nil
 	}
+	if output.truncated {
+		// Parsing a partial record set would present it as complete. Fail closed;
+		// callers already treat an unavailable Gemini listing as empty.
+		return []AgentSession{}, nil
+	}
 
-	return parseGeminiSessionList(string(output))
+	return parseGeminiSessionList(string(output.data))
 }
 
 // parseGeminiSessionList parses the output of "gemini --list-sessions"

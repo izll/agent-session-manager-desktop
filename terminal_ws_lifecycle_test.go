@@ -7,12 +7,31 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"os"
+	"strings"
 	"testing"
 	"time"
 )
 
 type closeCountingTerminalStream struct {
 	closes int
+}
+
+func TestMirrorCleanupUsesHandlerLifecycleContext(t *testing.T) {
+	source, err := os.ReadFile("terminal_ws.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	legacy := `terminalTmuxRun(context.Background(), "kill-session", "-t", linkedName)`
+	if strings.Contains(string(source), legacy) {
+		t.Fatal("mirror cleanup can outlive TerminalServer.Stop through context.Background")
+	}
+
+	current := `terminalTmuxRun(handlerCtx, "kill-session", "-t", linkedName)`
+	if got := strings.Count(string(source), current); got < 4 {
+		t.Fatalf("handler-scoped mirror cleanup count = %d, want at least 4", got)
+	}
 }
 
 func (s *closeCountingTerminalStream) Read([]byte) (int, error)    { return 0, io.EOF }

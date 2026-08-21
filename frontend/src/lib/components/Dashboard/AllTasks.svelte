@@ -16,6 +16,7 @@
   import { showSessionView, goBack } from '../../stores/navigation';
   import Select from '../common/Select.svelte';
   import { isGradient, getGradientCSS } from '../../utils/rowColors';
+  import { autoFocusDialog } from '../../utils/dialogActions';
 
   type OverviewTask = {
     id: string;
@@ -44,6 +45,17 @@
 
   let projectFilter = 'all';
   let statusFilter = 'open';
+
+  function closeDetails() {
+    selected = null;
+  }
+
+  function handleDetailKeydown(event: KeyboardEvent) {
+    if (event.key !== 'Escape') return;
+    event.preventDefault();
+    event.stopPropagation();
+    closeDetails();
+  }
 
   async function load() {
     const generation = ++loadGeneration;
@@ -412,9 +424,15 @@
 </div>
 
 {#if selected}
-  <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
-  <div class="overlay" on:click={() => (selected = null)}>
-    <div class="detail" on:click|stopPropagation role="dialog" aria-modal="true">
+  <div
+    class="overlay"
+    use:autoFocusDialog
+    role="dialog"
+    aria-modal="true"
+    on:click|self={closeDetails}
+    on:keydown={handleDetailKeydown}
+  >
+    <div class="detail">
       <h3>{selected.title}</h3>
 
       <dl class="meta">
@@ -476,7 +494,7 @@
             {$t('allTasks.openSession')}
           </button>
         {/if}
-        <button class="btn-cancel" on:click={() => (selected = null)}>{$t('common.close')}</button>
+        <button class="btn-cancel" on:click={closeDetails}>{$t('common.close')}</button>
       </div>
     </div>
   </div>

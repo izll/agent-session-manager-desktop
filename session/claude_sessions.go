@@ -113,8 +113,9 @@ func ListAgentSessions(projectPath string) ([]AgentSession, error) {
 		// -home-izll-NetBeansProjects-foo -> /home/izll/NetBeansProjects/foo
 		dirPath := unsanitizePath(projectDir.Name())
 
-		// Check prefix match
-		if !strings.HasPrefix(dirPath, projectPath) {
+		// Match the selected directory itself or a real descendant. A raw
+		// string prefix would leak /repo2 sessions into a /repo query.
+		if !pathWithinProject(dirPath, projectPath) {
 			continue
 		}
 
@@ -238,8 +239,7 @@ func loadHistoryDisplaysPrefix(projectPath string) map[string]string {
 			entryProject = realEntryPath
 		}
 
-		// PREFIX match for this project
-		if strings.HasPrefix(entryProject, projectPath) {
+		if pathWithinProject(entryProject, projectPath) {
 			if entry.Timestamp > sessionData[entry.SessionID].time {
 				sessionData[entry.SessionID] = historyData{
 					time:    entry.Timestamp,
@@ -254,6 +254,25 @@ func loadHistoryDisplaysPrefix(projectPath string) map[string]string {
 	}
 
 	return result
+}
+
+func pathWithinProject(candidate, projectPath string) bool {
+	if candidate == "" || projectPath == "" {
+		return false
+	}
+	if resolved, err := filepath.EvalSymlinks(candidate); err == nil {
+		candidate = resolved
+	}
+	if resolved, err := filepath.EvalSymlinks(projectPath); err == nil {
+		projectPath = resolved
+	}
+	candidate = filepath.Clean(candidate)
+	projectPath = filepath.Clean(projectPath)
+	rel, err := filepath.Rel(projectPath, candidate)
+	if err != nil {
+		return false
+	}
+	return rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)))
 }
 
 // ListAllClaudeSessions returns all Claude sessions from all projects globally

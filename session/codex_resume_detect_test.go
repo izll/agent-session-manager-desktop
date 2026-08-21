@@ -1,12 +1,26 @@
 package session
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
+
+func TestCodexProcessTreeTraversalHonorsCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	started := time.Now()
+	if got := detectCodexSessionIDFromProcessTreeContext(ctx, t.TempDir(), t.TempDir(), 1, ""); got != "" {
+		t.Fatalf("cancelled traversal returned %q", got)
+	}
+	if elapsed := time.Since(started); elapsed > time.Second {
+		t.Fatalf("cancelled traversal took %v", elapsed)
+	}
+}
 
 func codexMetaLine(id, sessionID, cwd, source, threadSource, parentID string) string {
 	return fmt.Sprintf(

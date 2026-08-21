@@ -18,6 +18,14 @@ async function gotoDialogRacesFixture(page, mode) {
   await expect(page.locator('body')).toHaveAttribute('data-fixture-ready', 'true', { timeout: 15_000 });
 }
 
+async function gotoTaskPanelFixture(page, query = '') {
+  await page.goto(`/tests/browser/task-panel-fixture.html${query}`);
+  // The marker is emitted by a Svelte onMount -> tick -> animation-frame
+  // chain. It distinguishes a cold Vite transform from a TaskPanel render
+  // regression without relying on the generic five-second locator timeout.
+  await expect(page.locator('body')).toHaveAttribute('data-fixture-ready', 'true', { timeout: 15_000 });
+}
+
 test('a real Svelte component renders, portals, focuses and reacts in Chromium', async ({ page }) => {
   const pageErrors = [];
   page.on('pageerror', (error) => pageErrors.push(error.message));
@@ -75,7 +83,7 @@ test('Enter on the focused safe confirmation button cannot trigger the destructi
 test('TaskPanel keeps metadata on one right-aligned row with optional badges', async ({ page }) => {
   const pageErrors = [];
   page.on('pageerror', (error) => pageErrors.push(error.message));
-  await page.goto('/tests/browser/task-panel-fixture.html');
+  await gotoTaskPanelFixture(page);
   await expect(page.locator('.task-item')).toHaveCount(4);
 
   const geometry = await page.locator('.task-item').evaluateAll((items) => items.map((item) => {
@@ -103,7 +111,7 @@ test('TaskPanel keeps metadata on one right-aligned row with optional badges', a
 });
 
 test('TaskPanel keeps trailing status and priority inside a 520px combined-metadata row', async ({ page }) => {
-  await page.goto('/tests/browser/task-panel-fixture.html');
+  await gotoTaskPanelFixture(page);
   await expect(page.locator('.task-item')).toHaveCount(4);
   await page.locator('#fixture').evaluate((fixture) => { fixture.style.width = '520px'; });
 
@@ -132,7 +140,7 @@ test('TaskPanel keeps trailing status and priority inside a 520px combined-metad
 });
 
 test('TaskPanel keeps trailing metadata inside the realistic 300-320px main panel', async ({ page }) => {
-  await page.goto('/tests/browser/task-panel-fixture.html');
+  await gotoTaskPanelFixture(page);
   const combined = page.locator('.task-item').filter({ hasText: 'Minden metaadat' });
   for (const width of [320, 300]) {
     await page.locator('#fixture').evaluate((fixture, value) => { fixture.style.width = `${value}px`; }, width);
@@ -148,7 +156,7 @@ test('TaskPanel keeps trailing metadata inside the realistic 300-320px main pane
 });
 
 test('TaskPanel closes stale context menus and edit modals on session change', async ({ page }) => {
-  await page.goto('/tests/browser/task-panel-fixture.html');
+  await gotoTaskPanelFixture(page);
   await page.locator('.task-item').first().click({ button: 'right' });
   await expect(page.locator('.context-menu')).toBeVisible();
   await page.evaluate(() => window.taskPanelFixture.select('other-session', [{
@@ -170,7 +178,7 @@ test('TaskPanel closes stale context menus and edit modals on session change', a
 });
 
 test('a delayed TaskPanel save cannot close or overwrite a newer session modal', async ({ page }) => {
-  await page.goto('/tests/browser/task-panel-fixture.html?delayUpdate=1');
+  await gotoTaskPanelFixture(page, '?delayUpdate=1');
   await page.locator('.task-item').first().click({ button: 'right' });
   await page.locator('.context-menu button').filter({ hasText: /Edit|Szerkeszt/ }).click();
   const firstTitle = page.locator('.dialog-content input[type="text"]').first();
@@ -194,7 +202,7 @@ test('a delayed TaskPanel save cannot close or overwrite a newer session modal',
 });
 
 test('TaskPanel does not offer AI-only actions after MCP falls back to local tasks', async ({ page }) => {
-  await page.goto('/tests/browser/task-panel-fixture.html?fallback=1');
+  await gotoTaskPanelFixture(page, '?fallback=1');
   await expect(page.locator('.task-item')).toHaveCount(4);
   await page.getByRole('button', { name: /Add Task|Feladat hozzáadása/ }).click();
   await expect(page.getByRole('button', { name: /AI Generated|AI által generált/ })).toHaveCount(0);
@@ -243,6 +251,69 @@ test('Notes blocks a destructive action for a failed background draft', async ({
   await page.evaluate(() => window.notesFixture.attemptDestructive());
   await page.getByRole('button', { name: /Discard changes|Módosítások elvetése/ }).click();
   await expect(page.locator('body')).toHaveAttribute('data-destructive', 'true');
+});
+
+test('a destructive action re-confirms a Notes draft changed while another editor prompt is open', async ({ page }) => {
+  await gotoNotesFixture(page);
+  const textarea = page.locator('.notes-textarea');
+  await expect(textarea).toHaveValue('saved A', { timeout: 15000 });
+
+  // Notes is registered first; this second guard keeps the destructive flow
+  // pending after the first Notes approval.
+  await page.evaluate(() => window.notesFixture.enableSecondGuard());
+  await textarea.fill('first draft');
+  await page.evaluate(() => window.notesFixture.attemptDestructive());
+  await page.getByRole('button', { name: /Discard changes|Módosítások elvetése/ }).click();
+  await expect(page.locator('body')).toHaveAttribute('data-second-prompt', 'true');
+
+  // A new draft is a different revision from the one already approved. It
+  // must be confirmed again after the second editor releases the action.
+  await textarea.fill('new draft while another confirmation is open');
+  await page.evaluate(() => window.notesFixture.approveSecondGuard());
+  await expect(page.getByRole('dialog')).toBeVisible();
+  await expect(page.locator('body')).toHaveAttribute('data-destructive', 'false');
+
+  await page.getByRole('button', { name: /Discard changes|Módosítások elvetése/ }).click();
+  await expect(page.locator('body')).toHaveAttribute('data-destructive', 'true');
+});
+
+test('SchemeImport ignores a stale source response and traps focus inside its modal', async ({ page }) => {
+  await gotoDialogRacesFixture(page, 'scheme');
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toBeVisible();
+  await expect.poll(() => page.evaluate(() => window.dialogRacesFixture.localSchemeCalls())).toBe(1);
+
+  // The shared focus action starts on the close button. Reverse tabbing must
+  // wrap to the last control in the dialog, never to a fixture/Settings
+  // control behind the modal.
+  await expect(dialog.locator('.close-btn')).toBeFocused();
+  await page.keyboard.press('Shift+Tab');
+  expect(await page.evaluate(() => {
+    const modal = document.querySelector('[role="dialog"]');
+    return !!modal?.contains(document.activeElement);
+  })).toBe(true);
+
+  await dialog.locator('.source-tabs button').nth(1).click();
+  await expect.poll(() => page.evaluate(() => window.dialogRacesFixture.onlineSchemeCalls())).toBe(1);
+  await page.evaluate(() => window.dialogRacesFixture.resolveLocalSchemes(0, 'stale local result'));
+  await expect(dialog).not.toContainText('stale local result');
+  await page.evaluate(() => window.dialogRacesFixture.resolveOnlineSchemes(0, 'current online result'));
+  await expect(dialog).toContainText('current online result');
+});
+
+test('AllTasks detail owns focus, closes with Escape and restores its opener', async ({ page }) => {
+  await gotoDialogRacesFixture(page, 'alltasks');
+  const opener = page.getByRole('button', { name: /Fixture dashboard task/ });
+  await expect(opener).toBeVisible();
+  await opener.focus();
+  await opener.press('Enter');
+
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole('button', { name: /Close|Bezárás/ })).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
+  await expect(opener).toBeFocused();
 });
 
 test('project switching is cancelled or delayed until a Notes draft is discarded', async ({ page }) => {

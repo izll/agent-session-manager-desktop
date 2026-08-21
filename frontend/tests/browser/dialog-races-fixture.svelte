@@ -5,8 +5,10 @@
   import GitHistoryDialog from '../../src/lib/components/Dialogs/GitHistoryDialog.svelte';
   import QuickJumpDialog from '../../src/lib/components/Dialogs/QuickJumpDialog.svelte';
   import QuickTerminalDialog from '../../src/lib/components/Dialogs/QuickTerminalDialog.svelte';
+  import SchemeImportDialog from '../../src/lib/components/Dialogs/SchemeImportDialog.svelte';
+  import AllTasks from '../../src/lib/components/Dashboard/AllTasks.svelte';
 
-  export let mode: 'global' | 'command' | 'history' | 'quickjump' | 'quickterminal' = 'global';
+  export let mode: 'global' | 'command' | 'history' | 'quickjump' | 'quickterminal' | 'scheme' | 'alltasks' = 'global';
   export let onFixtureReady: () => void = () => {};
 
   let showGlobal = mode === 'global';
@@ -14,6 +16,7 @@
   let showHistory = mode === 'history';
   let showQuickJump = mode === 'quickjump';
   let showQuickTerminal = mode === 'quickterminal';
+  let showSchemeImport = mode === 'scheme';
   let commandSession = 'session-a';
   let commandWindow = 3;
   let historyPath = '/repo-a';
@@ -44,3 +47,5 @@
 <GitHistoryDialog bind:show={showHistory} path={historyPath} />
 <QuickJumpDialog bind:show={showQuickJump} />
 <QuickTerminalDialog bind:show={showQuickTerminal} sessionId="session-a" />
+<SchemeImportDialog bind:show={showSchemeImport} />
+{#if mode === 'alltasks'}<AllTasks />{/if}

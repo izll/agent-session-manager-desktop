@@ -892,7 +892,7 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 	if err != nil {
 		// Clean up linked session on error (only if it was created)
 		if attachedToOwnMirror {
-			_ = terminalTmuxRun(context.Background(), "kill-session", "-t", linkedName)
+			_ = terminalTmuxRun(handlerCtx, "kill-session", "-t", linkedName)
 		}
 		if handlerCtx.Err() == nil {
 			_ = ws.SetWriteDeadline(time.Now().Add(terminalWSWriteTimeout))
@@ -925,7 +925,7 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 		}
 		_ = cmd.Wait()
 		if attachedToOwnMirror {
-			_ = terminalTmuxRun(context.Background(), "kill-session", "-t", linkedName)
+			_ = terminalTmuxRun(handlerCtx, "kill-session", "-t", linkedName)
 		}
 		return
 	}
@@ -1102,7 +1102,7 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 
 			// Clean up the linked tmux session (only if it was created)
 			if attachedToOwnMirror {
-				_ = terminalTmuxRun(context.Background(), "kill-session", "-t", linkedName)
+				_ = terminalTmuxRun(handlerCtx, "kill-session", "-t", linkedName)
 			}
 			// A redraw waiting for this tab has nowhere to go now.
 			log.Printf("[ws] detach session=%s win=%d target=%s", sessionID, winIdx, attachTarget)

@@ -15,6 +15,20 @@ import (
 	"time"
 )
 
+const maxSpeechAPIResponseBytes = 4 * 1024 * 1024
+
+func readSpeechAPIResponse(r io.Reader) ([]byte, error) {
+	limited := io.LimitReader(r, maxSpeechAPIResponseBytes+1)
+	body, err := io.ReadAll(limited)
+	if err != nil {
+		return nil, err
+	}
+	if len(body) > maxSpeechAPIResponseBytes {
+		return nil, fmt.Errorf("speech API response exceeds %d bytes", maxSpeechAPIResponseBytes)
+	}
+	return body, nil
+}
+
 // SpeechRecognizer handles speech recognition
 type SpeechRecognizer struct {
 	app                 *AppService
@@ -306,11 +320,11 @@ func (sr *SpeechRecognizer) processAudioChunk() {
 	// Update last speech time for auto-stop silence monitoring
 	sr.app.UpdateLastSpeechTime()
 
-	logToFile("Recognized: %s\n", transcript)
+	logToFile("Recognized %d character(s)\n", len([]rune(transcript)))
 
 	// Process text (handle commands, transformations)
 	processedText, deleteCount := sr.ProcessText(transcript, settings.Language)
-	logToFile("Processed text: '%s' (delete count: %d)\n", processedText, deleteCount)
+	logToFile("Processed %d character(s) (delete count: %d)\n", len([]rune(processedText)), deleteCount)
 
 	// Handle delete/undo commands
 	if deleteCount > 0 && sr.app.keyboard != nil {
@@ -490,27 +504,27 @@ func (sr *SpeechRecognizer) recognizeWithGoogleCloud(audioData []byte, language 
 
 	req, err := http.NewRequestWithContext(sr.requestCtx, http.MethodPost, url, bytes.NewReader(requestBody))
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to create speech API request")
 	}
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := sr.httpClient.Do(req)
 	if err != nil {
-		logToFile("❌ [API] Request failed: %v\n", err)
-		return "", err
+		logToFile("❌ [API] Request failed\n")
+		return "", fmt.Errorf("speech API request failed")
 	}
 	defer resp.Body.Close()
 
 	logToFile("📥 [API] Response status: %d\n", resp.StatusCode)
 
 	// Read response
-	body, err := io.ReadAll(resp.Body)
+	body, err := readSpeechAPIResponse(resp.Body)
 	if err != nil {
 		logToFile("❌ [API] Failed to read response: %v\n", err)
 		return "", err
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		logToFile("❌ [API] Error response: %s\n", string(body))
+		logToFile("❌ [API] Request rejected with status %d\n", resp.StatusCode)
 
 		// Check for authentication/billing errors
 		// Status codes: 400 (Bad Request), 401 (Unauthorized), 403 (Forbidden)
@@ -549,9 +563,9 @@ func (sr *SpeechRecognizer) recognizeWithGoogleCloud(audioData []byte, language 
 				if callback := sr.app.errorCallback(); callback != nil {
 					go callback("api_key_invalid_title", "api_key_invalid_message")
 				}
-				logError("API rejected the key: %s\n", bodyStr)
+				logError("API rejected the configured key (status %d)\n", resp.StatusCode)
 				go sr.Stop()
-				return "", fmt.Errorf("API authentication failed: %s", bodyStr)
+				return "", fmt.Errorf("API authentication failed")
 			}
 
 			// Anything else that failed: say what Google said, rather than
@@ -560,12 +574,12 @@ func (sr *SpeechRecognizer) recognizeWithGoogleCloud(audioData []byte, language 
 			if callback := sr.app.errorCallback(); callback != nil {
 				go callback("request_rejected_title", bodyStr)
 			}
-			logError("API rejected the request (%d): %s\n", resp.StatusCode, bodyStr)
+			logError("API rejected the request (status %d)\n", resp.StatusCode)
 			go sr.Stop()
-			return "", fmt.Errorf("API request rejected (%d): %s", resp.StatusCode, bodyStr)
+			return "", fmt.Errorf("API request rejected (status %d)", resp.StatusCode)
 		}
 
-		return "", fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
+		return "", fmt.Errorf("API request failed with status %d", resp.StatusCode)
 	}
 
 	// Parse response
@@ -581,7 +595,7 @@ func (sr *SpeechRecognizer) recognizeWithGoogleCloud(audioData []byte, language 
 		transcript := response.Results[0].Alternatives[0].Transcript
 		confidence := response.Results[0].Alternatives[0].Confidence
 
-		logToFile("✅ [API] Success! Transcript: '%s' (confidence: %.2f)\n", transcript, confidence)
+		logToFile("✅ [API] Success: %d character(s), confidence %.2f\n", len([]rune(transcript)), confidence)
 
 		// Update usage stats
 		go sr.updateUsageStats(len(audioData))
@@ -624,8 +638,8 @@ func (sr *SpeechRecognizer) recognizeWithFreeMode(audioData []byte, language str
 	// Send raw PCM data directly (no WAV header needed with L16 content type)
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(audioData))
 	if err != nil {
-		logToFile("❌ [FREE] Failed to create request: %v\n", err)
-		return "", err
+		logToFile("❌ [FREE] Failed to create request\n")
+		return "", fmt.Errorf("failed to create free speech request")
 	}
 
 	// Set headers - L16 (Linear PCM) format with rate specification
@@ -636,26 +650,26 @@ func (sr *SpeechRecognizer) recognizeWithFreeMode(audioData []byte, language str
 	// Send request
 	resp, err := sr.httpClient.Do(req.WithContext(sr.requestCtx))
 	if err != nil {
-		logToFile("❌ [FREE] Request failed: %v\n", err)
-		return "", err
+		logToFile("❌ [FREE] Request failed\n")
+		return "", fmt.Errorf("free speech request failed")
 	}
 	defer resp.Body.Close()
 
 	logToFile("📥 [FREE] Response status: %d\n", resp.StatusCode)
 
 	// Read response
-	body, err := io.ReadAll(resp.Body)
+	body, err := readSpeechAPIResponse(resp.Body)
 	if err != nil {
 		logToFile("❌ [FREE] Failed to read response: %v\n", err)
 		return "", err
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		logToFile("❌ [FREE] Error response: %s\n", string(body))
-		return "", fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
+		logToFile("❌ [FREE] Request rejected with status %d\n", resp.StatusCode)
+		return "", fmt.Errorf("API request failed with status %d", resp.StatusCode)
 	}
 
-	logToFile("📥 [FREE] Response body: %s\n", string(body))
+	logToFile("📥 [FREE] Response received (%d bytes)\n", len(body))
 
 	// Parse response - Google Web Speech API returns multiple JSON objects separated by newlines
 	// Format: {"result":[]}
@@ -679,7 +693,7 @@ func (sr *SpeechRecognizer) recognizeWithFreeMode(audioData []byte, language str
 
 		err = json.Unmarshal([]byte(line), &result)
 		if err != nil {
-			logToFile("⚠️  [FREE] Failed to parse line: %s\n", line)
+			logToFile("⚠️  [FREE] Failed to parse response line\n")
 			continue
 		}
 
@@ -687,7 +701,7 @@ func (sr *SpeechRecognizer) recognizeWithFreeMode(audioData []byte, language str
 			transcript := result.Result[0].Alternative[0].Transcript
 			confidence := result.Result[0].Alternative[0].Confidence
 
-			logToFile("✅ [FREE] Success! Transcript: '%s' (confidence: %.2f)\n", transcript, confidence)
+			logToFile("✅ [FREE] Success: %d character(s), confidence %.2f\n", len([]rune(transcript)), confidence)
 			return transcript, nil
 		}
 	}
@@ -821,7 +835,7 @@ func (sr *SpeechRecognizer) ProcessText(text string, language string) (string, i
 	for _, word := range words {
 		if _, ok := langDeleteCommands[word]; ok {
 			deleteCount++
-			logToFile("🗑️  Delete command detected: '%s'\n", word)
+			logToFile("🗑️  Delete command detected\n")
 		}
 	}
 

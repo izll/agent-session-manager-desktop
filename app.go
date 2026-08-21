@@ -3380,23 +3380,27 @@ func (a *App) GetResumeSessions(agent string, path string) ([]AgentSessionInfo, 
 
 	result := make([]AgentSessionInfo, len(sessions))
 	for i, s := range sessions {
-		// Create display name from first prompt
-		displayName := s.FirstPrompt
-		if len(displayName) > 50 {
-			displayName = displayName[:50] + "..."
-		}
-		if displayName == "" {
-			displayName = s.SessionID[:8] + "..."
-		}
-
 		result[i] = AgentSessionInfo{
 			ID:          s.SessionID,
-			DisplayName: displayName,
+			DisplayName: resumeSessionDisplayName(s),
 			Path:        path,
 			Timestamp:   s.UpdatedAt.Format("2006-01-02 15:04"),
 		}
 	}
 	return result, nil
+}
+
+func resumeSessionDisplayName(s session.AgentSession) string {
+	if s.FirstPrompt != "" {
+		if len(s.FirstPrompt) > 50 {
+			return s.FirstPrompt[:50] + "..."
+		}
+		return s.FirstPrompt
+	}
+	if len(s.SessionID) > 8 {
+		return s.SessionID[:8] + "..."
+	}
+	return s.SessionID
 }
 
 // ============================================================================

@@ -173,6 +173,21 @@ func TestCollectProjectGitSummariesHonorsParentTimeout(t *testing.T) {
 	}
 }
 
+func TestDashboardGitOutputIsBounded(t *testing.T) {
+	var output boundedProjectGitOutput
+	payload := strings.Repeat("x", projectGitOutputLimit+1024)
+	written, err := output.Write([]byte(payload))
+	if err != nil || written != len(payload) {
+		t.Fatalf("Write = %d, %v", written, err)
+	}
+	if !output.truncated {
+		t.Fatal("oversized git output was not marked truncated")
+	}
+	if len(output.data) != projectGitOutputLimit {
+		t.Fatalf("retained %d bytes, want %d", len(output.data), projectGitOutputLimit)
+	}
+}
+
 func dashboardWriteFile(t *testing.T, dir, name, contents string) {
 	t.Helper()
 	if err := os.WriteFile(filepath.Join(dir, name), []byte(contents), 0o644); err != nil {

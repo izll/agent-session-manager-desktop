@@ -11,9 +11,11 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 )
 
 const maxCodexMetaLineSize = 1024 * 1024
+const codexProcessDiscoveryTimeout = 10 * time.Second
 
 type codexSessionDetector func(tmuxSession string, windowIdx int, expectedCWD string) string
 
@@ -29,11 +31,15 @@ func DetectCodexSessionIDFromTmux(tmuxSession string, windowIdx int, expectedCWD
 // DetectCodexSessionIDFromTmuxContext is cancellable so periodic detection
 // cannot retain the storage lock across application shutdown.
 func DetectCodexSessionIDFromTmuxContext(ctx context.Context, tmuxSession string, windowIdx int, expectedCWD string) string {
-	if !tmuxWindowExistsContext(ctx, tmuxSession, windowIdx) {
+	// One budget covers the complete tmux probe and process-tree traversal.
+	// Per-process limits alone multiply by the number of descendants.
+	discoveryCtx, cancelDiscovery := context.WithTimeout(ctx, codexProcessDiscoveryTimeout)
+	defer cancelDiscovery()
+	if !tmuxWindowExistsContext(discoveryCtx, tmuxSession, windowIdx) {
 		return ""
 	}
 	target := fmt.Sprintf("%s:%d", tmuxSession, windowIdx)
-	commandCtx, cancel := context.WithTimeout(ctx, TmuxCommandTimeout)
+	commandCtx, cancel := context.WithTimeout(discoveryCtx, TmuxCommandTimeout)
 	defer cancel()
 	out, err := TmuxCommandContext(commandCtx, "display-message", "-p", "-t", target, "#{pane_pid}").Output()
 	if err != nil {
@@ -48,7 +54,7 @@ func DetectCodexSessionIDFromTmuxContext(ctx context.Context, tmuxSession string
 	if err != nil {
 		return ""
 	}
-	return detectCodexSessionIDFromLiveProcessTree(ctx, sessionsRoot, panePID, expectedCWD)
+	return detectCodexSessionIDFromLiveProcessTree(discoveryCtx, sessionsRoot, panePID, expectedCWD)
 }
 
 // detectCodexSessionIDFromOpenPaths applies the same containment, format and
@@ -97,6 +103,10 @@ func detectCodexSessionIDFromOpenPaths(sessionsRoot, expectedCWD string, paths [
 }
 
 func detectCodexSessionIDFromProcessTree(procRoot, sessionsRoot string, rootPID int, expectedCWD string) string {
+	return detectCodexSessionIDFromProcessTreeContext(context.Background(), procRoot, sessionsRoot, rootPID, expectedCWD)
+}
+
+func detectCodexSessionIDFromProcessTreeContext(ctx context.Context, procRoot, sessionsRoot string, rootPID int, expectedCWD string) string {
 	sessionsRoot, err := filepath.Abs(sessionsRoot)
 	if err != nil {
 		return ""
@@ -110,6 +120,9 @@ func detectCodexSessionIDFromProcessTree(procRoot, sessionsRoot string, rootPID 
 	queue := []int{rootPID}
 
 	for len(queue) > 0 {
+		if ctx.Err() != nil {
+			return ""
+		}
 		pid := queue[0]
 		queue = queue[1:]
 		if pid <= 0 {
@@ -132,6 +145,9 @@ func detectCodexSessionIDFromProcessTree(procRoot, sessionsRoot string, rootPID 
 			continue
 		}
 		for _, entry := range entries {
+			if ctx.Err() != nil {
+				return ""
+			}
 			fdPath := filepath.Join(fdDir, entry.Name())
 			target, err := os.Readlink(fdPath)
 			if err != nil || !filepath.IsAbs(target) || strings.HasSuffix(target, " (deleted)") {

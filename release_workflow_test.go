@@ -85,6 +85,7 @@ func TestCIRegeneratesBindingsThroughPinnedWailsBuild(t *testing.T) {
 		"go install github.com/wailsapp/wails/v2/cmd/wails@v2.14.0",
 		"wails\" build -tags webkit2_41 -clean",
 		"npm run check --prefix frontend",
+		"git diff --exit-code -- frontend/wailsjs",
 	} {
 		if !strings.Contains(backendJob, required) {
 			t.Errorf("backend CI does not validate generated Wails bindings with %q", required)
@@ -94,5 +95,9 @@ func TestCIRegeneratesBindingsThroughPinnedWailsBuild(t *testing.T) {
 	checkAt := strings.LastIndex(backendJob, "npm run check --prefix frontend")
 	if buildAt < 0 || checkAt < buildAt {
 		t.Fatal("backend CI must type-check after Wails regenerates the bindings")
+	}
+	diffAt := strings.Index(backendJob, "git diff --exit-code -- frontend/wailsjs")
+	if diffAt < checkAt {
+		t.Fatal("backend CI must fail on uncommitted generated bindings after regeneration and type-checking")
 	}
 }

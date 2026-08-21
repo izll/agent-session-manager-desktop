@@ -208,7 +208,7 @@ func (c *Client) StartContext(ctx context.Context) error {
 	}
 
 	// Initialize connection and list tools
-	if err := c.initialize(); err != nil {
+	if err := c.initialize(ctx); err != nil {
 		c.Stop()
 		return fmt.Errorf("failed to initialize MCP connection: %w", err)
 	}
@@ -508,6 +508,20 @@ func (c *Client) sendRequest(method string, params interface{}) (*JSONRPCRespons
 
 // sendRequestWithTimeout sends a JSON-RPC request with a custom timeout
 func (c *Client) sendRequestWithTimeout(method string, params interface{}, timeout time.Duration) (*JSONRPCResponse, error) {
+	return c.sendRequestWithContext(context.Background(), method, params, timeout)
+}
+
+// sendRequestWithContext also observes the lifecycle that owns a request. MCP
+// startup uses it for initialize/tools-list: without this, StartContext stopped
+// observing cancellation as soon as the server-ready phase finished and could
+// remain stuck in either initialization request for the full 60-second timeout.
+func (c *Client) sendRequestWithContext(ctx context.Context, method string, params interface{}, timeout time.Duration) (*JSONRPCResponse, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	c.stateMu.Lock()
 	if !c.running || c.stdin == nil {
 		c.stateMu.Unlock()
@@ -550,19 +564,23 @@ func (c *Client) sendRequestWithTimeout(method string, params interface{}, timeo
 	}
 
 	// Wait for response with timeout
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
 	select {
 	case response := <-responseCh:
 		if response.Error != nil {
 			return nil, response.Error
 		}
 		return response, nil
-	case <-time.After(timeout):
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-timer.C:
 		return nil, fmt.Errorf("request timeout after %v for method %s", timeout, method)
 	}
 }
 
 // initialize initializes the MCP connection
-func (c *Client) initialize() error {
+func (c *Client) initialize(ctx context.Context) error {
 	// Send initialize request with sampling and roots capabilities
 	initParams := map[string]interface{}{
 		"protocolVersion": "2024-11-05",
@@ -578,7 +596,7 @@ func (c *Client) initialize() error {
 		},
 	}
 
-	_, err := c.sendRequest("initialize", initParams)
+	_, err := c.sendRequestWithContext(ctx, "initialize", initParams, 60*time.Second)
 	if err != nil {
 		return fmt.Errorf("initialize failed: %w", err)
 	}
@@ -598,12 +616,12 @@ func (c *Client) initialize() error {
 	}
 
 	// List available tools
-	return c.listTools()
+	return c.listTools(ctx)
 }
 
 // listTools retrieves the list of available tools from the server
-func (c *Client) listTools() error {
-	response, err := c.sendRequest("tools/list", map[string]interface{}{})
+func (c *Client) listTools(ctx context.Context) error {
+	response, err := c.sendRequestWithContext(ctx, "tools/list", map[string]interface{}{}, 60*time.Second)
 	if err != nil {
 		return fmt.Errorf("tools/list failed: %w", err)
 	}

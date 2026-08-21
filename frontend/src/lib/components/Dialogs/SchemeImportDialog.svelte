@@ -4,6 +4,7 @@
   import { nextCustomId, TERMINAL_THEMES, type CustomPalette } from '../../utils/terminalThemes';
   import PalettePicker from '../common/PalettePicker.svelte';
   import { t } from '../../i18n';
+  import { autoFocusDialog } from '../../utils/dialogActions';
 
   export let show = false;
 
@@ -23,6 +24,7 @@
   let onlineList: Array<{ name: string; file: string }> = [];
   let onlineFilter = '';
   let onlineSelected = new Set<string>();
+  let requestGeneration = 0;
 
   $: customPalettes = ((($settings as any).customTerminalThemes || []) as CustomPalette[]);
   $: filteredOnline = onlineFilter.trim()
@@ -55,23 +57,31 @@
   }
 
   async function scanLocal() {
+    const generation = ++requestGeneration;
+    const targetTab = tab;
     loading = true; error = ''; found = []; selected = new Set();
     try {
-      found = ((await App.DiscoverLocalSchemes()) || []) as Imported[];
-      if (found.length === 0) error = $t('schemeImport.noneFound');
+      const result = ((await App.DiscoverLocalSchemes()) || []) as Imported[];
+      if (!show || generation !== requestGeneration || tab !== targetTab) return;
+      found = result;
+      if (result.length === 0) error = $t('schemeImport.noneFound');
       // Nothing is preselected: importing 19 schemes by accident is worse
       // than one extra click, and the preview strip stays readable.
     } catch (e) {
+      if (!show || generation !== requestGeneration || tab !== targetTab) return;
       error = String(e);
     } finally {
-      loading = false;
+      if (show && generation === requestGeneration && tab === targetTab) loading = false;
     }
   }
 
   async function pickFiles() {
+    const generation = ++requestGeneration;
+    const targetTab = tab;
     loading = true; error = '';
     try {
       const res = ((await App.ImportSchemeFiles()) || []) as Imported[];
+      if (!show || generation !== requestGeneration || tab !== targetTab) return;
       if (res.length) {
         found = res;
         selected = new Set(res.map(r => r.name));
@@ -79,9 +89,10 @@
       // A cancelled picker leaves whatever was there; the tab still offers
       // the button to try again.
     } catch (e) {
+      if (!show || generation !== requestGeneration || tab !== targetTab) return;
       error = String(e);
     } finally {
-      loading = false;
+      if (show && generation === requestGeneration && tab === targetTab) loading = false;
     }
   }
 
@@ -91,26 +102,37 @@
 
   async function loadOnline() {
     if (onlineList.length) return;
+    const generation = ++requestGeneration;
+    const targetTab = tab;
     loading = true; error = '';
     try {
-      onlineList = ((await App.ListOnlineSchemes()) || []) as Array<{ name: string; file: string }>;
+      const result = ((await App.ListOnlineSchemes()) || []) as Array<{ name: string; file: string }>;
+      if (!show || generation !== requestGeneration || tab !== targetTab) return;
+      onlineList = result;
     } catch (e) {
+      if (!show || generation !== requestGeneration || tab !== targetTab) return;
       error = String(e);
     } finally {
-      loading = false;
+      if (show && generation === requestGeneration && tab === targetTab) loading = false;
     }
   }
 
   async function previewOnline() {
     if (onlineSelected.size === 0) return;
+    const generation = ++requestGeneration;
+    const targetTab = tab;
+    const files = [...onlineSelected];
     loading = true; error = '';
     try {
-      found = ((await App.FetchOnlineSchemes([...onlineSelected])) || []) as Imported[];
-      selected = new Set(found.map(f => f.name));
+      const result = ((await App.FetchOnlineSchemes(files)) || []) as Imported[];
+      if (!show || generation !== requestGeneration || tab !== targetTab) return;
+      found = result;
+      selected = new Set(result.map(f => f.name));
     } catch (e) {
+      if (!show || generation !== requestGeneration || tab !== targetTab) return;
       error = String(e);
     } finally {
-      loading = false;
+      if (show && generation === requestGeneration && tab === targetTab) loading = false;
     }
   }
 
@@ -153,6 +175,8 @@
   }
 
   function close() {
+    requestGeneration++;
+    loading = false;
     show = false;
     found = []; selected = new Set(); onlineSelected = new Set();
     error = ''; onlineFilter = '';
@@ -162,6 +186,8 @@
 
   function switchTab(next: Tab) {
     if (next === tab) return;
+    requestGeneration++;
+    loading = false;
     tab = next;
     error = '';
     found = []; selected = new Set();
@@ -178,17 +204,12 @@
     close();
   }
 
-  // Focus the overlay on open so Escape reaches it even before the user
-  // clicks anything inside.
-  function autoFocus(node: HTMLElement) {
-    node.focus();
-  }
 </script>
 
 {#if show}
   <div
     class="dialog-overlay scheme-overlay"
-    use:autoFocus
+    use:autoFocusDialog
     tabindex="-1"
     role="dialog"
     aria-modal="true"

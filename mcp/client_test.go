@@ -24,6 +24,36 @@ func TestStartContextAlreadyCancelledDoesNotStartProcess(t *testing.T) {
 	}
 }
 
+func TestStartupRequestStopsImmediatelyWhenContextIsCancelled(t *testing.T) {
+	stdin := &writeCloser{Writer: &bytes.Buffer{}}
+	client := &Client{
+		running:      true,
+		runID:        1,
+		stdin:        stdin,
+		responseChan: make(map[int64]chan *JSONRPCResponse),
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	started := time.Now()
+	_, err := client.sendRequestWithContext(ctx, "initialize", map[string]any{}, time.Hour)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("startup request error = %v, want context.Canceled", err)
+	}
+	if elapsed := time.Since(started); elapsed > time.Second {
+		t.Fatalf("cancelled startup request waited %v instead of returning promptly", elapsed)
+	}
+	client.responseMu.RLock()
+	pending := len(client.responseChan)
+	client.responseMu.RUnlock()
+	if pending != 0 {
+		t.Fatalf("cancelled startup request left %d response waiters registered", pending)
+	}
+	if written := stdin.Writer.(*bytes.Buffer).Len(); written != 0 {
+		t.Fatalf("already-cancelled startup request wrote %d bytes to the server", written)
+	}
+}
+
 type blockingWriteCloser struct {
 	started chan struct{}
 	release chan struct{}

@@ -1,7 +1,9 @@
 package session
 
 import (
+	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,6 +13,8 @@ import (
 	"sync"
 	"time"
 )
+
+var ErrTaskStoreConflict = errors.New("tasks.json changed during update")
 
 // TaskStatus represents the status of a task
 type TaskStatus string
@@ -108,9 +112,12 @@ type TaskStoreMeta struct {
 
 // TaskManager handles task operations for a project
 type TaskManager struct {
-	mu          sync.RWMutex
-	projectPath string
-	store       *TaskStore
+	mu                     sync.RWMutex
+	projectPath            string
+	store                  *TaskStore
+	expectedRevision       []byte
+	expectedRevisionSet    bool
+	expectedRevisionExists bool
 }
 
 // NewTaskManager creates a new task manager for a project path
@@ -232,6 +239,19 @@ func (tm *TaskManager) saveLocked() error {
 	if err := tmp.Close(); err != nil {
 		return fmt.Errorf("failed to close tasks file: %w", err)
 	}
+	if tm.expectedRevisionSet {
+		current, readErr := os.ReadFile(filePath)
+		switch {
+		case readErr == nil && !tm.expectedRevisionExists:
+			return ErrTaskStoreConflict
+		case readErr == nil && !bytes.Equal(current, tm.expectedRevision):
+			return ErrTaskStoreConflict
+		case os.IsNotExist(readErr) && tm.expectedRevisionExists:
+			return ErrTaskStoreConflict
+		case readErr != nil && !os.IsNotExist(readErr):
+			return fmt.Errorf("failed to verify tasks file revision: %w", readErr)
+		}
+	}
 	if err := os.Rename(tmpPath, filePath); err != nil {
 		return fmt.Errorf("failed to replace tasks file: %w", err)
 	}
@@ -244,10 +264,31 @@ func (tm *TaskManager) saveLocked() error {
 // is essential: the in-memory store may predate another app instance's save.
 func (tm *TaskManager) mutateLocked(action func() error) error {
 	return withCrossProcessFileLock(tm.getTaskFilePath()+".lock", func() error {
+		before, readErr := os.ReadFile(tm.getTaskFilePath())
+		if readErr != nil && !os.IsNotExist(readErr) {
+			return readErr
+		}
 		if err := tm.loadLocked(); err != nil {
 			return err
 		}
-		return action()
+		tm.expectedRevision = append(tm.expectedRevision[:0], before...)
+		tm.expectedRevisionSet = true
+		tm.expectedRevisionExists = readErr == nil
+		defer func() {
+			tm.expectedRevision = nil
+			tm.expectedRevisionSet = false
+			tm.expectedRevisionExists = false
+		}()
+		err := action()
+		if errors.Is(err, ErrTaskStoreConflict) {
+			// The external writer won. Make reads reflect its bytes immediately
+			// instead of retaining the stale pre-conflict cache.
+			if reloadErr := tm.loadLocked(); reloadErr != nil {
+				tm.store = nil
+				return errors.Join(err, reloadErr)
+			}
+		}
+		return err
 	})
 }
 

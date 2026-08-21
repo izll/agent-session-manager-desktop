@@ -308,6 +308,10 @@
     window.addEventListener('keydown', handleWindowKeydown, true);
     unregisterUnsavedGuard = registerUnsavedGuard({
       isDirty: () => modified,
+      revision: () => JSON.stringify([
+        loadedSessionId, loadedWindowIdx, openedRoot, openedFile?.path || '',
+        editText, savedText, saveError, conflict,
+      ]),
       requestDiscard: (continueAfterDiscard, cancelDiscard) => {
         guardUnsaved(() => {
           if (editing) leaveEditMode();

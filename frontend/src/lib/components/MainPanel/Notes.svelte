@@ -38,6 +38,14 @@
     ) || notes !== lastSaved || !!saveError;
   }
 
+  function unsavedRevision(): string {
+    return JSON.stringify([
+      notes, lastSaved, saveError,
+      [...draftsByTarget.entries()].map(([key, draft]) =>
+        [key, draft.text, draft.saved, draft.saveError]),
+    ]);
+  }
+
   async function confirmDiscardNotes() {
     const continuation = pendingDiscard;
     pendingDiscard = null;
@@ -301,6 +309,7 @@
   onMount(() => {
     unregisterUnsavedGuard = registerUnsavedGuard({
       isDirty: hasUnsavedDrafts,
+      revision: unsavedRevision,
       requestDiscard: (continueAfterDiscard, cancelDiscard) => {
         pendingDiscard = continueAfterDiscard;
         pendingDiscardCancel = cancelDiscard ?? null;

@@ -38,7 +38,7 @@
   import { activities } from './lib/stores/activities';
   import { statusLines, tabStatuses } from './lib/stores/statusLines';
   import { QuickReplyTab, ExportSessions, PendingUpdate, AddQuickJump } from '../wailsjs/go/main/App';
-  import { loadProjects, otherInstancePID, refreshLockStatus } from './lib/stores/projects';
+  import { activeProjectId, loadProjects, otherInstancePID, refreshLockStatus } from './lib/stores/projects';
   import { appView, goBack, showTasksView } from './lib/stores/navigation';
   import { openTaskCount, watchOpenCount, refreshOpenCount } from './lib/stores/taskAlerts';
   import { flushSettingsSaves, loadSettings, settings } from './lib/stores/settings';
@@ -189,6 +189,7 @@
   // it stays null and the dialog falls back to session.agent.
   let pendingResumeAgent: string | null = null;
   let pendingResumePath: string | null = null;
+  let resumeOperationGeneration = 0;
 
   // Track "any dialog open" to restore terminal focus after the last one closes.
   // Without this, closing a dialog leaves focus on the dialog's overlay/buttons,
@@ -427,13 +428,24 @@
    * with the event rather than being read from the selection.
    */
   let quickJumpTargetSession = '';
+  let quickJumpTargetProject = '';
+  let quickJumpNamingGeneration = 0;
 
   function openQuickJumpNaming(sessionId: string, windowIdx: number) {
+    quickJumpNamingGeneration++;
     quickJumpTargetSession = sessionId;
+    quickJumpTargetProject = $activeProjectId;
     quickJumpWindowIdx = windowIdx;
     quickJumpName = suggestedQuickJumpName(windowIdx, sessionId);
     quickJumpNaming = true;
   }
+
+  function closeQuickJumpNaming() {
+    quickJumpNamingGeneration++;
+    quickJumpNaming = false;
+  }
+
+  $: if (quickJumpNaming && quickJumpTargetProject !== $activeProjectId) closeQuickJumpNaming();
 
   /**
    * Which directory the commit history should open on.
@@ -500,16 +512,21 @@
 
   /** Appended at the end, so adding something never renumbers what is there. */
   async function confirmQuickJumpAdd() {
+    const generation = quickJumpNamingGeneration;
+    const projectId = quickJumpTargetProject;
+    const targetSession = quickJumpTargetSession;
+    const targetWindow = quickJumpWindowIdx;
+    const chosen = quickJumpName.trim();
     quickJumpNaming = false;
-    if (!quickJumpTargetSession) return;
+    if (!targetSession || projectId !== $activeProjectId) return;
     try {
       // A name left as suggested is stored as no name, so the entry keeps
       // following its session and tab rather than pinning what they are called
       // today.
-      const chosen = quickJumpName.trim();
-      const suggested = suggestedQuickJumpName(quickJumpWindowIdx, quickJumpTargetSession);
-      await AddQuickJump(quickJumpTargetSession, quickJumpWindowIdx,
+      const suggested = suggestedQuickJumpName(targetWindow, targetSession);
+      await AddQuickJump(targetSession, targetWindow,
         chosen === suggested ? '' : chosen);
+      if (generation !== quickJumpNamingGeneration || projectId !== $activeProjectId || anyDialogOpen) return;
       showQuickJump = true;
     } catch (err) {
       console.error('Adding to the quick-jump list failed:', err);
@@ -525,7 +542,7 @@
   function handleKeydown(e: KeyboardEvent) {
     if (e.key === 'Escape' && quickJumpNaming) {
       e.preventDefault();
-      quickJumpNaming = false;
+      closeQuickJumpNaming();
       return;
     }
 
@@ -997,6 +1014,7 @@
     // Check if agent supports resume
     const agentConfig = $agents.find(a => a.type === $selectedSession.agent);
     if (agentConfig?.supportsResume) {
+      resumeOperationGeneration++;
       pendingResumeSession = $selectedSession;
       showResumeChoice = true;
       return;
@@ -1048,6 +1066,7 @@
   async function handleResume() {
     const session = $selectedSession;
     if (!session) return;
+    const generation = ++resumeOperationGeneration;
     pendingResumeSession = session;
     // Check if this is a tab-level resume (session running but tab stopped)
     if (session.status === 'running') {
@@ -1068,7 +1087,7 @@
       // directory, so a tab opened elsewhere would otherwise be offered the
       // session directory's history.
       const path = await resolveGitHistoryPath(session, winIdx);
-      if (pendingResumeSession?.id !== session.id || pendingResumeWindowIdx !== winIdx ||
+      if (generation !== resumeOperationGeneration || pendingResumeSession?.id !== session.id || pendingResumeWindowIdx !== winIdx ||
           $selectedSessionId !== session.id || $selectedWindowIdx !== winIdx) return;
       pendingResumePath = path;
     } else {
@@ -1105,18 +1124,23 @@
   }
 
   async function handleResumeSessionSelect(event: CustomEvent<{ resumeId: string }>) {
-    if (!pendingResumeSession) return;
+    const target = pendingResumeSession;
+    if (!target) return;
 
     const { resumeId } = event.detail;
-    if (pendingResumeWindowIdx !== null) {
+    const windowIdx = pendingResumeWindowIdx;
+    const generation = resumeOperationGeneration;
+    if (windowIdx !== null) {
       // Tab-level resume: restart just this tab with the selected resume ID
-      await restartTabWithResume(pendingResumeSession.id, pendingResumeWindowIdx, resumeId);
+      await restartTabWithResume(target.id, windowIdx, resumeId);
     } else {
-      await startSession(pendingResumeSession.id, resumeId);
+      await startSession(target.id, resumeId);
     }
-    pendingResumeSession = null;
-    pendingResumeWindowIdx = null;
-    pendingResumeAgent = null;
+    // The picker closes before dispatching. During the backend await the user
+    // can select another session and open a replacement picker; completion of
+    // the old resume must not clear that new target.
+    if (generation === resumeOperationGeneration && pendingResumeSession?.id === target.id &&
+        pendingResumeWindowIdx === windowIdx) handleResumeCancel();
   }
 
   function handleResumeRestartWithTabs() {
@@ -1133,6 +1157,7 @@
   }
 
   function handleResumeCancel() {
+    resumeOperationGeneration++;
     pendingResumeSession = null;
     pendingResumeWindowIdx = null;
     pendingResumeAgent = null;
@@ -1573,11 +1598,11 @@
 
   {#if quickJumpNaming}
     <!-- svelte-ignore a11y-click-events-have-key-events -->
-    <div class="dialog-overlay" on:click|self={() => (quickJumpNaming = false)}>
+    <div class="dialog-overlay" on:click|self={closeQuickJumpNaming}>
       <div class="dialog-content quick-add">
         <div class="dialog-header">
           <h2>{$t('quickJump.nameTitle')}</h2>
-          <button class="close-btn" on:click={() => (quickJumpNaming = false)}
+          <button class="close-btn" on:click={closeQuickJumpNaming}
             aria-label={$t('common.close')}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <line x1="18" y1="6" x2="6" y2="18"/>
@@ -1594,13 +1619,13 @@
             placeholder={$t('quickJump.namePlaceholder')}
             on:keydown={(e) => {
               if (e.key === 'Enter') { e.preventDefault(); confirmQuickJumpAdd(); }
-              else if (e.key === 'Escape') { e.preventDefault(); quickJumpNaming = false; }
+              else if (e.key === 'Escape') { e.preventDefault(); closeQuickJumpNaming(); }
             }}
           />
         </div>
 
         <div class="dialog-footer">
-          <button class="btn-cancel" on:click={() => (quickJumpNaming = false)}>
+          <button class="btn-cancel" on:click={closeQuickJumpNaming}>
             {$t('common.cancel')}
           </button>
           <button class="btn-primary" on:click={confirmQuickJumpAdd}>

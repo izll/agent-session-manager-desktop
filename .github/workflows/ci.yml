@@ -85,6 +85,13 @@ jobs:
       # only when the frontend calls it at runtime.
       - name: Type-check regenerated Wails bindings
         run: npm run check --prefix frontend
+      - name: Verify generated Wails bindings are committed
+        run: |
+          # Wails' models template emits whitespace-only tab lines. Normalise
+          # that generator quirk exactly as the repository does, then require
+          # every semantic binding/runtime change to be checked in.
+          perl -0pi -e 's/[ \t]+(?=\n)//g; s/\n+\z/\n/' frontend/wailsjs/go/models.ts
+          git diff --exit-code -- frontend/wailsjs
 
   # The Go suite had never run on macOS, and the first time it did it found a
   # real bug: /tmp there is a symlink to /private/tmp, so a path comparison that
