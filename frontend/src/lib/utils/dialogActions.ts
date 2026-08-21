@@ -86,6 +86,11 @@ function installDialogFocus(node: HTMLElement, preferred: () => HTMLElement | nu
   // a dialog can be opened and synchronously replaced, and a late focus from
   // the removed dialog must not steal focus from its replacement.
   const frame = requestAnimationFrame(() => {
+    // A click, a fill operation, or a fast keyboard interaction can focus a
+    // dialog control before this deferred callback. That is more specific
+    // than our default; moving focus or the selection now can corrupt the
+    // first input (for example by appending to a title being replaced).
+    if (node.contains(document.activeElement)) return;
     const target = preferred();
     if (target) {
       target.focus();

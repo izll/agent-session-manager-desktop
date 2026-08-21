@@ -4,6 +4,7 @@ import type { main } from '../../../wailsjs/go/models';
 import { showSessionView } from './navigation';
 import { settings, saveSettings } from './settings';
 import { invalidateSidebarProject } from './sidebarPolling';
+import { activeProjectId } from './projects';
 
 // Types
 export interface Session {
@@ -605,7 +606,12 @@ export function selectSession(id: string | null) {
  * than surfaced as an error the user has to dismiss.
  */
 function persistLastWindow(id: string, idx: number) {
-  void App.SetLastWindowIndex(id, idx).catch(e => {
+  const projectId = get(activeProjectId);
+  // The bridge call is intentionally fire-and-forget, but the backend project
+  // is process-global. Pin the write to the project whose tab is being left so
+  // an immediately-following project switch cannot write the same session id
+  // in its replacement project.
+  void App.SetLastWindowIndex(id, idx, projectId).catch(e => {
     console.warn('could not persist last tab', id, e);
   });
 }

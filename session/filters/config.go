@@ -2,29 +2,34 @@ package filters
 
 import (
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 )
 
 // FilterConfig defines filter rules for an agent
 type FilterConfig struct {
-	SkipContains   []string `json:"skip_contains"`    // Skip if line contains any of these
-	SkipPrefixes   []string `json:"skip_prefixes"`    // Skip if line starts with any of these
-	SkipSuffixes   []string `json:"skip_suffixes"`    // Skip if line ends with any of these
-	SkipExact      []string `json:"skip_exact"`       // Skip if line equals any of these
-	MinSeparators  int      `json:"min_separators"`   // Skip if line has more than N separator chars (─━)
-	ContentPrefix  string   `json:"content_prefix"`   // Extract content after this prefix (e.g., "┃")
-	MinContentLen  int      `json:"min_content_len"`  // Minimum content length to show
-	ShowContains   []string `json:"show_contains"`    // Show special status if line contains (e.g., "Generating")
-	ShowAs         []string `json:"show_as"`          // What to show for each ShowContains match
+	SkipContains  []string `json:"skip_contains"`   // Skip if line contains any of these
+	SkipPrefixes  []string `json:"skip_prefixes"`   // Skip if line starts with any of these
+	SkipSuffixes  []string `json:"skip_suffixes"`   // Skip if line ends with any of these
+	SkipExact     []string `json:"skip_exact"`      // Skip if line equals any of these
+	MinSeparators int      `json:"min_separators"`  // Skip if line has more than N separator chars (─━)
+	ContentPrefix string   `json:"content_prefix"`  // Extract content after this prefix (e.g., "┃")
+	MinContentLen int      `json:"min_content_len"` // Minimum content length to show
+	ShowContains  []string `json:"show_contains"`   // Show special status if line contains (e.g., "Generating")
+	ShowAs        []string `json:"show_as"`         // What to show for each ShowContains match
 }
 
 // AgentFilters holds all agent filter configurations
 type AgentFilters map[string]*FilterConfig
 
-var loadedFilters AgentFilters
-var filtersLoaded bool
+var (
+	filtersMu     sync.Mutex
+	loadedFilters AgentFilters
+	filtersLoaded bool
+)
 
 // GetFiltersPath returns the path to the user-local override filters file.
 // Highest precedence; lets a user tweak filters by hand without rebuilding.
@@ -41,35 +46,63 @@ func GetRemoteCachePath() string {
 }
 
 // LoadFilters returns the merged filter set with this priority:
-//   1. User overrides (~/.config/agent-session-manager/filters.json)
-//   2. Cached remote bundle (~/.cache/agent-session-manager/filters-remote.json)
-//   3. Compiled-in defaults
+//  1. User overrides (~/.config/agent-session-manager/filters.json)
+//  2. Cached remote bundle (~/.cache/agent-session-manager/filters-remote.json)
+//  3. Compiled-in defaults
 //
 // Each layer overrides the previous one per agent key, so a partial override
 // only changes that agent's filter — the rest fall through to the layer below.
 func LoadFilters() AgentFilters {
+	filtersMu.Lock()
+	defer filtersMu.Unlock()
 	if filtersLoaded {
-		return loadedFilters
+		return cloneAgentFilters(loadedFilters)
 	}
 
-	loadedFilters = getDefaultFilters()
-	filtersLoaded = true
+	merged := getDefaultFilters()
 
 	// Layer 2: cached remote bundle.
 	if remote, ok := readFiltersFile(GetRemoteCachePath()); ok {
 		for agent, cfg := range remote {
-			loadedFilters[agent] = cfg
+			merged[agent] = cfg
 		}
 	}
 
 	// Layer 1: user override (highest priority).
 	if user, ok := readFiltersFile(GetFiltersPath()); ok {
 		for agent, cfg := range user {
-			loadedFilters[agent] = cfg
+			merged[agent] = cfg
 		}
 	}
 
-	return loadedFilters
+	// Publish only the completely merged map. Setting filtersLoaded before the
+	// file layers were applied let a concurrent status detector observe a
+	// partially initialized map.
+	loadedFilters = merged
+	filtersLoaded = true
+	return cloneAgentFilters(loadedFilters)
+}
+
+func cloneAgentFilters(source AgentFilters) AgentFilters {
+	if source == nil {
+		return nil
+	}
+	clone := make(AgentFilters, len(source))
+	for agent, config := range source {
+		if config == nil {
+			clone[agent] = nil
+			continue
+		}
+		copy := *config
+		copy.SkipContains = append([]string(nil), config.SkipContains...)
+		copy.SkipPrefixes = append([]string(nil), config.SkipPrefixes...)
+		copy.SkipSuffixes = append([]string(nil), config.SkipSuffixes...)
+		copy.SkipExact = append([]string(nil), config.SkipExact...)
+		copy.ShowContains = append([]string(nil), config.ShowContains...)
+		copy.ShowAs = append([]string(nil), config.ShowAs...)
+		clone[agent] = &copy
+	}
+	return clone
 }
 
 // readFiltersFile reads and unmarshals an AgentFilters JSON file.
@@ -77,15 +110,13 @@ func LoadFilters() AgentFilters {
 // the caller falls through to the next layer.
 func readFiltersFile(path string) (AgentFilters, bool) {
 	const maxBytes = 64 * 1024
-	info, err := os.Stat(path)
+	file, err := os.Open(path)
 	if err != nil {
 		return nil, false
 	}
-	if info.Size() > maxBytes {
-		return nil, false
-	}
-	data, err := os.ReadFile(path)
-	if err != nil {
+	defer file.Close()
+	data, err := io.ReadAll(io.LimitReader(file, maxBytes+1))
+	if err != nil || len(data) > maxBytes {
 		return nil, false
 	}
 	var f AgentFilters
@@ -98,6 +129,8 @@ func readFiltersFile(path string) (AgentFilters, bool) {
 // ResetCache forces the next LoadFilters call to re-read every layer.
 // Intended for the remote updater to call after a successful refresh.
 func ResetCache() {
+	filtersMu.Lock()
+	defer filtersMu.Unlock()
 	filtersLoaded = false
 	loadedFilters = nil
 }
@@ -232,14 +265,14 @@ func getDefaultFilters() AgentFilters {
 			MinSeparators: 20,
 		},
 		"opencode": {
-			SkipContains:   []string{"ctrl+?", "Context:", "press enter to send", "press esc", "No diagnostics", "GPT-4o", "Cost:"},
-			SkipPrefixes:   []string{"└", "├", "│", "Glob:", "List:", "Task:"},
-			SkipExact:      []string{">", "›"},
-			MinSeparators:  15,
-			ContentPrefix:  "┃",
-			MinContentLen:  15,
-			ShowContains:   []string{"Generating"},
-			ShowAs:         []string{"Generating..."},
+			SkipContains:  []string{"ctrl+?", "Context:", "press enter to send", "press esc", "No diagnostics", "GPT-4o", "Cost:"},
+			SkipPrefixes:  []string{"└", "├", "│", "Glob:", "List:", "Task:"},
+			SkipExact:     []string{">", "›"},
+			MinSeparators: 15,
+			ContentPrefix: "┃",
+			MinContentLen: 15,
+			ShowContains:  []string{"Generating"},
+			ShowAs:        []string{"Generating..."},
 		},
 		"custom": {},
 	}

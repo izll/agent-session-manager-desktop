@@ -31,7 +31,17 @@ assert.doesNotMatch(dialog, /<select\b/, 'no agent picker — this opens a termi
 // typing; a selection is what makes both true at once. The shared
 // autoFocusField action deliberately does the opposite (cursor at the end),
 // which is right for dialogs opening on text you came to amend, wrong here.
-assert.match(dialog, /inputEl\?\.select\(\)/, 'the suggested name must arrive selected');
+assert.match(
+  dialog,
+  /function handleNameFocus[\s\S]*?currentTarget as HTMLInputElement\)\.select\(\)/,
+  'the suggested name must be selected by the input\'s first focus event',
+);
+assert.match(dialog, /on:focus=\{handleNameFocus\}/, 'the input must own the one-time selection');
+assert.doesNotMatch(
+  dialog,
+  /function focusAndSelect/,
+  'selection must not be deferred into a callback that can race with typing',
+);
 // Checked against the code rather than the whole file: the comment above it
 // names autoFocusField to explain why it is not used, and matching prose is
 // how a test starts failing for being right.

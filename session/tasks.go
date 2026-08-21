@@ -166,7 +166,7 @@ func (tm *TaskManager) Load() error {
 func (tm *TaskManager) loadLocked() error {
 	filePath := tm.getTaskFilePath()
 
-	data, err := os.ReadFile(filePath)
+	data, err := readFileAtMost(filePath, maxCanonicalStorageBytes)
 	if err != nil {
 		if os.IsNotExist(err) {
 			// Initialize empty store
@@ -240,7 +240,7 @@ func (tm *TaskManager) saveLocked() error {
 		return fmt.Errorf("failed to close tasks file: %w", err)
 	}
 	if tm.expectedRevisionSet {
-		current, readErr := os.ReadFile(filePath)
+		current, readErr := readFileAtMost(filePath, maxCanonicalStorageBytes)
 		switch {
 		case readErr == nil && !tm.expectedRevisionExists:
 			return ErrTaskStoreConflict
@@ -264,7 +264,7 @@ func (tm *TaskManager) saveLocked() error {
 // is essential: the in-memory store may predate another app instance's save.
 func (tm *TaskManager) mutateLocked(action func() error) error {
 	return withCrossProcessFileLock(tm.getTaskFilePath()+".lock", func() error {
-		before, readErr := os.ReadFile(tm.getTaskFilePath())
+		before, readErr := readFileAtMost(tm.getTaskFilePath(), maxCanonicalStorageBytes)
 		if readErr != nil && !os.IsNotExist(readErr) {
 			return readErr
 		}

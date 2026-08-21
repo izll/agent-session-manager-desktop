@@ -24,6 +24,7 @@
   import * as App from '../../../../wailsjs/go/main/App';
   import { t } from '../../i18n';
   import Toast from '../common/Toast.svelte';
+  import { afterUnsavedChanges } from '../../stores/unsavedChanges';
 
   const dispatch = createEventDispatcher();
 
@@ -91,18 +92,38 @@
 
   function swapSplitTargets() {
     if (!markedSession || !$selectedSessionId) return;
-    const primarySessionId = $selectedSessionId;
-    const primaryWindowIdx = $selectedWindowIdx ?? 0;
-    const secondarySessionId = markedSession.id;
-    const secondaryWindowIdx = markedWindowIdx;
-    selectSession(secondarySessionId);
-    selectWindow(secondaryWindowIdx);
-    void saveSettings({
-      splitView: true,
-      markedSessionId: primarySessionId,
-      markedWindowIdx: primaryWindowIdx
+    const target = {
+      projectId: $activeProjectId,
+      primarySessionId: $selectedSessionId,
+      primaryWindowIdx: $selectedWindowIdx ?? 0,
+      secondarySessionId: markedSession.id,
+      secondaryWindowIdx: markedWindowIdx,
+    };
+    // A view owning an unsaved buffer (notably FileBrowser) must approve the
+    // navigation before either half of the split is changed. Previously the
+    // selection and pinned target were swapped first; cancelling FileBrowser's
+    // later prompt restored only the selection and left both panes pointing at
+    // the old primary session.
+    afterUnsavedChanges(() => {
+      // Confirmations are asynchronous. Do not apply an approved swap to a
+      // replacement project, selection or split target that appeared while a
+      // modal was open.
+      if ($activeProjectId !== target.projectId ||
+          !$settings.splitView ||
+          $selectedSessionId !== target.primarySessionId ||
+          ($selectedWindowIdx ?? 0) !== target.primaryWindowIdx ||
+          $settings.markedSessionId !== target.secondarySessionId ||
+          ($settings.markedWindowIdx ?? 0) !== target.secondaryWindowIdx ||
+          !$sessions.some(session => session.id === target.secondarySessionId)) return;
+      selectSession(target.secondarySessionId);
+      selectWindow(target.secondaryWindowIdx);
+      void saveSettings({
+        splitView: true,
+        markedSessionId: target.primarySessionId,
+        markedWindowIdx: target.primaryWindowIdx
+      });
+      focusedTerminalPane = 'primary';
     });
-    focusedTerminalPane = 'primary';
   }
 
   function handleSetView(e: Event) {

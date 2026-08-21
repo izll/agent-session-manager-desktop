@@ -2,6 +2,7 @@
   import { onMount, onDestroy, createEventDispatcher } from 'svelte';
   import { sessions, selectedSessionId, selectedWindowIdx, loadSessions } from '../../stores/sessions';
   import { settings } from '../../stores/settings';
+  import { activeProjectId } from '../../stores/projects';
   import { get } from 'svelte/store';
   import { EventsOn } from '../../../../wailsjs/runtime/runtime';
   import { LogFrontend, SetTabFontSize } from '../../../../wailsjs/go/main/App';
@@ -50,17 +51,25 @@
   function handleFontSizeGesture(e: CustomEvent<{ size: number }>) {
     const sid = currentTargetSessionId();
     if (!sid || !e.detail) return;
+    const projectId = get(activeProjectId);
     const widx = currentTargetWindowIdx();
     const size = e.detail.size;
     // A wheel gesture fires many events; only the size it settles on matters.
     if (fontSizeSaveTimer) clearTimeout(fontSizeSaveTimer);
     fontSizeSaveTimer = setTimeout(() => {
       fontSizeSaveTimer = null;
-      void SetTabFontSize(sid, widx, size)
+      // The backend's active project is process-global and may have changed
+      // while this gesture was being debounced. The frontend check avoids a
+      // needless call; expectedProjectId makes the backend mutation itself
+      // fail closed if selection changes in the gap after this check.
+      if (get(activeProjectId) !== projectId) return;
+      void SetTabFontSize(sid, widx, size, projectId)
         // Refresh the session list so anything reading the stored size — the
         // tab menu's reset entry, for one — sees that this tab now has its
         // own. Without it the menu stays greyed out until the next reload.
-        .then(() => loadSessions())
+        .then(() => {
+          if (get(activeProjectId) === projectId) return loadSessions();
+        })
         .catch((err) => {
           LogFrontend(`SetTabFontSize failed session=${sid} win=${widx}: ${err}`);
         });
@@ -77,6 +86,7 @@
   ) {
     const sid = target?.sessionId ?? currentTargetSessionId();
     if (!sid) return;
+    const projectId = get(activeProjectId);
     const widx = target?.windowIdx ?? currentTargetWindowIdx();
     // Only touch the live pane if it is the one being reset; the stored value
     // still has to be cleared either way.
@@ -96,7 +106,8 @@
     }
     if (!persist) return;
     try {
-      await SetTabFontSize(sid, widx, 0);
+      await SetTabFontSize(sid, widx, 0, projectId);
+      if (get(activeProjectId) !== projectId) return;
       await loadSessions();
     } catch (err) {
       LogFrontend(`reset font size failed session=${sid} win=${widx}: ${err}`);

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy, createEventDispatcher } from 'svelte';
   import { claimMenu, releaseMenu } from '../../utils/openMenu';
-  import { autoFocusField } from '../../utils/dialogActions';
+  import { autoFocusDialog, autoFocusField } from '../../utils/dialogActions';
   import { get } from 'svelte/store';
   import { selectedSessionId } from '../../stores/sessions';
   import { settings } from '../../stores/settings';
@@ -137,6 +137,13 @@
 
   // Dependency modal
   let showDependencyModal = false;
+
+  function closeModalOnEscape(event: KeyboardEvent, close: () => void) {
+    if (event.key !== 'Escape') return;
+    event.preventDefault();
+    event.stopPropagation();
+    close();
+  }
   let dependencyTaskId = '';
   let newDependencyId = '';
 
@@ -1388,7 +1395,7 @@
 
 <!-- PRD Modal -->
 {#if showPRDModal}
-  <div class="dialog-overlay" use:autoFocusField on:click={() => showPRDModal = false}>
+  <div class="dialog-overlay" use:autoFocusField role="dialog" aria-modal="true" tabindex="-1" on:keydown={(e) => closeModalOnEscape(e, () => showPRDModal = false)} on:click={() => showPRDModal = false}>
     <div class="dialog-content large" on:click|stopPropagation>
       <div class="dialog-header">
         <h2>{$t('tasks.parsePRDTitle')}</h2>
@@ -1423,7 +1430,7 @@
 
 <!-- Add Task Modal -->
 {#if showAddTaskModal}
-  <div class="dialog-overlay" use:autoFocusField on:click={() => showAddTaskModal = false}>
+  <div class="dialog-overlay" use:autoFocusField role="dialog" aria-modal="true" tabindex="-1" on:keydown={(e) => closeModalOnEscape(e, () => showAddTaskModal = false)} on:click={() => showAddTaskModal = false}>
     <div class="dialog-content large" on:click|stopPropagation on:focusin={handleDialogFocusIn}>
       <div class="dialog-header">
         <h2>{$t('tasks.addNewTask')}</h2>
@@ -1542,7 +1549,7 @@
 
 <!-- Complexity Modal -->
 {#if showComplexityModal}
-  <div class="dialog-overlay" on:click={() => showComplexityModal = false}>
+  <div class="dialog-overlay" use:autoFocusDialog role="dialog" aria-modal="true" tabindex="-1" on:keydown={(e) => closeModalOnEscape(e, () => showComplexityModal = false)} on:click={() => showComplexityModal = false}>
     <div class="dialog-content large" on:click|stopPropagation>
       <div class="dialog-header">
         <h2>{$t('tasks.complexityAnalysis')}</h2>
@@ -1560,7 +1567,7 @@
 
 <!-- Edit Task Modal -->
 {#if showEditTaskModal}
-  <div class="dialog-overlay" use:autoFocusField on:click={() => showEditTaskModal = false}>
+  <div class="dialog-overlay" use:autoFocusField role="dialog" aria-modal="true" tabindex="-1" on:keydown={(e) => closeModalOnEscape(e, () => showEditTaskModal = false)} on:click={() => showEditTaskModal = false}>
     <div class="dialog-content large" on:click|stopPropagation on:focusin={handleDialogFocusIn}>
       <div class="dialog-header">
         <h2>{$t('tasks.editTask')}</h2>
@@ -1647,7 +1654,7 @@
 
 <!-- Add Subtask Modal -->
 {#if showAddSubtaskModal}
-  <div class="dialog-overlay" use:autoFocusField on:click={() => showAddSubtaskModal = false}>
+  <div class="dialog-overlay" use:autoFocusField role="dialog" aria-modal="true" tabindex="-1" on:keydown={(e) => closeModalOnEscape(e, () => showAddSubtaskModal = false)} on:click={() => showAddSubtaskModal = false}>
     <div class="dialog-content large" on:click|stopPropagation on:focusin={handleDialogFocusIn}>
       <div class="dialog-header">
         <!-- Named, not numbered: the id is an internal handle, and the task's
@@ -1698,7 +1705,7 @@
 
 <!-- Dependency Modal -->
 {#if showDependencyModal}
-  <div class="dialog-overlay" on:click={() => showDependencyModal = false}>
+  <div class="dialog-overlay" use:autoFocusDialog role="dialog" aria-modal="true" tabindex="-1" on:keydown={(e) => closeModalOnEscape(e, () => showDependencyModal = false)} on:click={() => showDependencyModal = false}>
     <div class="dialog-content dependency-dialog" on:click|stopPropagation>
       <div class="dialog-header">
         <!-- Named, not numbered. The id is an internal handle and tells the

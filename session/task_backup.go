@@ -231,7 +231,7 @@ func (s *Storage) RestoreTaskBackup(id string) error {
 
 	s.mu.Lock()
 	path := filepath.Join(s.taskBackupDirLocked(), id)
-	raw, err := os.ReadFile(path)
+	raw, err := readFileAtMost(path, maxCanonicalStorageBytes)
 	s.mu.Unlock()
 	if err != nil {
 		return err

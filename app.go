@@ -747,6 +747,22 @@ func (a *App) beginProjectMutation() (func(), error) {
 	}, nil
 }
 
+// beginExpectedProjectMutation additionally pins a frontend-captured project
+// identity. This is needed by delayed UI writes: session IDs are not globally
+// unique, so a debounce started in one project must not land in another one
+// after SelectProject changes the Storage target.
+func (a *App) beginExpectedProjectMutation(expectedProjectID string) (func(), error) {
+	done, err := a.beginProjectMutation()
+	if err != nil {
+		return nil, err
+	}
+	if activeProjectID := a.storage.GetActiveProjectID(); activeProjectID != expectedProjectID {
+		done()
+		return nil, fmt.Errorf("active project changed: expected %q, got %q", expectedProjectID, activeProjectID)
+	}
+	return done, nil
+}
+
 func (a *App) beginTerminalAttach() (func(), bool) {
 	a.projectMu.RLock()
 	if !a.projectLocked {
@@ -1629,10 +1645,10 @@ func getClaudeSessionIDFromTmuxWindowContext(ctx context.Context, tmuxSession st
 				// that isn't a safe ID shape so a hostile agent can't smuggle
 				// shell metacharacters into a later respawn-pane command.
 				if !session.IsSafeResumeID(candidate) {
-					log.Printf("[getClaudeSessionIDFromTmux] PID %s %s value rejected (unsafe shape): %q", pidStr, arg, candidate)
+					log.Printf("[getClaudeSessionIDFromTmux] PID %s %s value rejected (unsafe shape)", pidStr, arg)
 					continue
 				}
-				log.Printf("[getClaudeSessionIDFromTmux] found session ID from PID %s (flag %s): %s", pidStr, arg, candidate)
+				log.Printf("[getClaudeSessionIDFromTmux] found a session ID from PID %s (flag %s)", pidStr, arg)
 				return candidate
 			}
 		}
@@ -3823,11 +3839,10 @@ func (a *App) InstallMultiplexer() (string, error) {
 // SetLastWindowIndex remembers which tab was open, so the session reopens
 // where the user left it. Best-effort: a failure here must never block
 // switching sessions, so callers may ignore the error.
-func (a *App) SetLastWindowIndex(sessionID string, windowIdx int) error {
-	done, err := a.beginProjectMutation()
+func (a *App) SetLastWindowIndex(sessionID string, windowIdx int, expectedProjectID string) error {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
-		// A read-only instance simply doesn't record it.
-		return nil
+		return err
 	}
 	defer done()
 	if windowIdx < 0 {
@@ -3917,8 +3932,8 @@ func (a *App) setTabBarState(sessionID string, windowIdx, state int, viewBar boo
 
 // SetTabFontSize overrides the terminal font size for one tab. A size of 0
 // clears the override so the tab follows the global setting again.
-func (a *App) SetTabFontSize(sessionID string, windowIdx int, size int) error {
-	done, err := a.beginProjectMutation()
+func (a *App) SetTabFontSize(sessionID string, windowIdx int, size int, expectedProjectID string) error {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return err
 	}

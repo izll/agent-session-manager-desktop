@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -14,6 +15,27 @@ import (
 	"sync/atomic"
 	"time"
 )
+
+const (
+	maxCanonicalStorageBytes = 64 << 20
+	maxProjectCatalogBytes   = 8 << 20
+)
+
+func readFileAtMost(path string, limit int64) ([]byte, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	data, err := io.ReadAll(io.LimitReader(file, limit+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(data)) > limit {
+		return nil, fmt.Errorf("%s exceeds the %d-byte limit", filepath.Base(path), limit)
+	}
+	return data, nil
+}
 
 type Storage struct {
 	mu                 sync.Mutex
@@ -681,7 +703,7 @@ func (s *Storage) LoadProjects() (*ProjectsData, error) {
 
 func (s *Storage) loadProjectsLocked() (*ProjectsData, error) {
 	projectsFile := filepath.Join(s.configDir, "projects.json")
-	data, err := os.ReadFile(projectsFile)
+	data, err := readFileAtMost(projectsFile, maxProjectCatalogBytes)
 	if os.IsNotExist(err) {
 		return &ProjectsData{Projects: []*Project{}}, nil
 	}
@@ -696,6 +718,19 @@ func (s *Storage) loadProjectsLocked() (*ProjectsData, error) {
 
 	if projectsData.Projects == nil {
 		projectsData.Projects = []*Project{}
+	}
+	seenIDs := make(map[string]struct{}, len(projectsData.Projects))
+	for index, project := range projectsData.Projects {
+		if project == nil {
+			return nil, fmt.Errorf("failed to validate projects file: project %d is null", index)
+		}
+		if !validProjectID(project.ID) || project.ID == "" {
+			return nil, fmt.Errorf("failed to validate projects file: project %d has an invalid ID", index)
+		}
+		if _, duplicate := seenIDs[project.ID]; duplicate {
+			return nil, fmt.Errorf("failed to validate projects file: duplicate project ID %q", project.ID)
+		}
+		seenIDs[project.ID] = struct{}{}
 	}
 
 	return &projectsData, nil
@@ -1166,7 +1201,7 @@ func (s *Storage) loadAllWithSettingsLocked() ([]*Instance, []*Group, *Settings,
 }
 
 func (s *Storage) loadStorageDataLocked() (*StorageData, error) {
-	data, err := os.ReadFile(s.configPath)
+	data, err := readFileAtMost(s.configPath, maxCanonicalStorageBytes)
 	if os.IsNotExist(err) {
 		return &StorageData{
 			SchemaVersion: recoverySchemaVersion,
@@ -1217,8 +1252,74 @@ func (s *Storage) loadStorageDataLocked() (*StorageData, error) {
 			storageData.SchemaVersion, recoverySchemaVersion,
 		)
 	}
+	if err := validateCanonicalStorageSafety(&storageData); err != nil {
+		return nil, fmt.Errorf("failed to validate config file: %w", err)
+	}
 
 	return &storageData, nil
+}
+
+// validateCanonicalStorageSafety rejects shapes that otherwise turn a
+// recoverable corrupt file into a process panic or an ambiguous destructive
+// mutation. It is intentionally narrower than restore validation: older
+// stores may contain duplicate display names or followed-window metadata that
+// the runtime knows how to repair, but nil objects and duplicate identities
+// can never be addressed safely.
+func validateCanonicalStorageSafety(data *StorageData) error {
+	instanceIDs := make(map[string]struct{}, len(data.Instances))
+	for index, instance := range data.Instances {
+		if instance == nil {
+			return fmt.Errorf("instance %d is null", index)
+		}
+		if strings.TrimSpace(instance.ID) == "" {
+			return fmt.Errorf("instance %d has an empty ID", index)
+		}
+		if _, duplicate := instanceIDs[instance.ID]; duplicate {
+			return fmt.Errorf("duplicate instance ID %q", instance.ID)
+		}
+		instanceIDs[instance.ID] = struct{}{}
+	}
+
+	groupIDs := make(map[string]struct{}, len(data.Groups))
+	for index, group := range data.Groups {
+		if group == nil {
+			return fmt.Errorf("group %d is null", index)
+		}
+		if strings.TrimSpace(group.ID) == "" {
+			return fmt.Errorf("group %d has an empty ID", index)
+		}
+		if _, duplicate := groupIDs[group.ID]; duplicate {
+			return fmt.Errorf("duplicate group ID %q", group.ID)
+		}
+		groupIDs[group.ID] = struct{}{}
+	}
+
+	trashIDs := make(map[string]struct{}, len(data.Trash))
+	for index, entry := range data.Trash {
+		if entry == nil {
+			return fmt.Errorf("trash entry %d is null", index)
+		}
+		if strings.TrimSpace(entry.ID) == "" {
+			return fmt.Errorf("trash entry %d has an empty ID", index)
+		}
+		if _, duplicate := trashIDs[entry.ID]; duplicate {
+			return fmt.Errorf("duplicate trash ID %q", entry.ID)
+		}
+		trashIDs[entry.ID] = struct{}{}
+		switch entry.Kind {
+		case "session":
+			if entry.Session == nil {
+				return fmt.Errorf("trash session %q has no session payload", entry.ID)
+			}
+		case "tab":
+			if entry.Tab == nil || strings.TrimSpace(entry.ParentSessionID) == "" {
+				return fmt.Errorf("trash tab %q has no tab payload or parent", entry.ID)
+			}
+		default:
+			return fmt.Errorf("trash entry %q has unknown kind %q", entry.ID, entry.Kind)
+		}
+	}
+	return nil
 }
 
 func (s *Storage) Save(instances []*Instance) error {

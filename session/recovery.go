@@ -368,7 +368,7 @@ func (s *Storage) RestoreBackup(id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	raw, err := os.ReadFile(filepath.Join(s.backupDirLocked(), id))
+	raw, err := readFileAtMost(filepath.Join(s.backupDirLocked(), id), maxCanonicalStorageBytes)
 	if err != nil {
 		return err
 	}

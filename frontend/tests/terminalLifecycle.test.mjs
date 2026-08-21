@@ -93,6 +93,10 @@ const taskPanel = readFileSync(new URL('src/lib/components/MainPanel/TaskPanel.s
 assert.match(terminal, /stillViewingStoppedSession[\s\S]*?if \(stillViewingStoppedSession\) pool\.hideAll\(\)/);
 assert.match(terminal, /const targetWindowIdx = currentTargetWindowIdx\(\)[\s\S]*?currentTargetWindowIdx\(\) !== targetWindowIdx/);
 assert.match(terminal, /resetFontSizeForCurrentTab\(e\.detail, focusOwner\)/);
+assert.match(terminal, /const projectId = get\(activeProjectId\)[\s\S]*?if \(get\(activeProjectId\) !== projectId\) return;[\s\S]*?SetTabFontSize\(sid, widx, size, projectId\)/,
+  'a debounced font-size save must remain pinned to the project where the gesture occurred');
+assert.match(terminal, /SetTabFontSize\(sid, widx, 0, projectId\)[\s\S]*?get\(activeProjectId\) !== projectId/,
+  'font-size reset and its refresh must remain pinned to one project');
 assert.match(tabBar, /if \(!bufferText\.trim\(\) \|\| bufferBusy\) return/);
 assert.match(tabBar, /const widx = get\(selectedWindowIdx\)[\s\S]*?SendPromptToWindow\(sid, widx, submitted\)/);
 assert.match(tabBar, /const queued = previous[\s\S]*?SetBufferText\(submitted\)/,
@@ -103,6 +107,12 @@ assert.match(tabBar, /SendPromptToWindow\(sid, widx, submitted\)[\s\S]*?bufferTe
   'a committed prompt must stop being sendable before fallible buffer cleanup');
 assert.match(tabBar, /if \(!componentMounted\) return;[\s\S]*?EventsOn\('dictation:state'/,
   'a late initial settings read must not register listeners after teardown');
+assert.match(tabBar, /await App\.SetExtraArgs\([\s\S]*?target === extraArgsTarget && target\.generation === extraArgsGeneration[\s\S]*?showExtraArgsEditor = false/,
+  'a late extra-args save must not close a replacement editor');
+assert.match(tabBar, /showExtraArgsEditor\}[\s\S]*?class="dialog-overlay" use:autoFocusDialog/,
+  'the tab extra-args modal must keep keyboard focus inside the editor');
+assert.match(tabBar, /const generation = \+\+renameGeneration[\s\S]*?await renameTab\([\s\S]*?target === renameTarget && target\.generation === renameGeneration[\s\S]*?renamingTabIndex = null/,
+  'a late tab rename must not close a replacement rename draft');
 assert.match(tabBar, /onDestroy\(\(\) => \{[\s\S]*?removeEventListener\('mousemove', onDragMove\)[\s\S]*?removeEventListener\('mousemove', onResizeMove\)/);
 assert.match(quickOpen, /await App\.InvalidateSessionFileIndex\(targetSessionId\)[\s\S]*?await load\(\)/);
 assert.match(browser, /await App\.InvalidateSessionFileIndex\(sessionId\)[\s\S]*?await loadDir\('', true\)[\s\S]*?for \(const path of open\)/);

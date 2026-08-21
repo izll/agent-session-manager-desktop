@@ -610,8 +610,8 @@ export function SetGroupColor(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['SetGroupColor'](arg1, arg2, arg3, arg4);
 }
 
-export function SetLastWindowIndex(arg1, arg2) {
-  return window['go']['main']['App']['SetLastWindowIndex'](arg1, arg2);
+export function SetLastWindowIndex(arg1, arg2, arg3) {
+  return window['go']['main']['App']['SetLastWindowIndex'](arg1, arg2, arg3);
 }
 
 export function SetQuickJump(arg1) {
@@ -634,8 +634,8 @@ export function SetTabColor(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['SetTabColor'](arg1, arg2, arg3, arg4);
 }
 
-export function SetTabFontSize(arg1, arg2, arg3) {
-  return window['go']['main']['App']['SetTabFontSize'](arg1, arg2, arg3);
+export function SetTabFontSize(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['SetTabFontSize'](arg1, arg2, arg3, arg4);
 }
 
 export function SetTabNotes(arg1, arg2, arg3) {

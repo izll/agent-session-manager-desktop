@@ -81,6 +81,69 @@ func TestProjectMutationsAreSerialized(t *testing.T) {
 	}
 }
 
+func TestSetTabFontSizeRejectsStaleProjectTarget(t *testing.T) {
+	storage := guardedTestStorage(t)
+	inst := &session.Instance{
+		ID:               "same-session-id",
+		Name:             "target",
+		Path:             t.TempDir(),
+		Status:           session.StatusStopped,
+		TerminalFontSize: 12,
+	}
+	if err := storage.AddInstance(inst); err != nil {
+		t.Fatal(err)
+	}
+	app := &App{storage: storage, projectLocked: true}
+
+	if err := app.SetTabFontSize(inst.ID, inst.GetMainWindowIndex(), 18, "old-project"); err == nil || !strings.Contains(err.Error(), "active project changed") {
+		t.Fatalf("stale project write error = %v, want active-project refusal", err)
+	}
+	stored, err := storage.GetInstance(inst.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored.TerminalFontSize != 12 {
+		t.Fatalf("stale project write changed font size to %d", stored.TerminalFontSize)
+	}
+
+	if err := app.SetTabFontSize(inst.ID, inst.GetMainWindowIndex(), 18, ""); err != nil {
+		t.Fatalf("current project write failed: %v", err)
+	}
+	stored, err = storage.GetInstance(inst.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored.TerminalFontSize != 18 {
+		t.Fatalf("current project write left font size at %d", stored.TerminalFontSize)
+	}
+}
+
+func TestSetLastWindowIndexRejectsStaleProjectTarget(t *testing.T) {
+	storage := guardedTestStorage(t)
+	inst := &session.Instance{
+		ID:              "same-session-id",
+		Name:            "target",
+		Path:            t.TempDir(),
+		Status:          session.StatusStopped,
+		LastWindowIndex: 1,
+	}
+	if err := storage.AddInstance(inst); err != nil {
+		t.Fatal(err)
+	}
+	app := &App{storage: storage, projectLocked: true}
+
+	if err := app.SetLastWindowIndex(inst.ID, 7, "old-project"); err == nil || !strings.Contains(err.Error(), "active project changed") {
+		t.Fatalf("stale project write error = %v, want active-project refusal", err)
+	}
+	stored, err := storage.GetInstance(inst.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored.LastWindowIndex != 1 {
+		t.Fatalf("stale project write changed last window to %d", stored.LastWindowIndex)
+	}
+}
+
 func TestSelectProjectRejectsUnknownIDAndRestoresPreviousOwnership(t *testing.T) {
 	storage := guardedTestStorage(t)
 	if err := storage.LockProject(""); err != nil {

@@ -3,12 +3,33 @@ package dictation
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
 )
+
+const maxDictationConfigBytes = 4 << 20
+
+var legacyMigrationMu sync.Mutex
+
+func readDictationConfigFile(path string) ([]byte, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	data, err := io.ReadAll(io.LimitReader(file, maxDictationConfigBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(data) > maxDictationConfigBytes {
+		return nil, fmt.Errorf("dictation config %s exceeds the size limit", filepath.Base(path))
+	}
+	return data, nil
+}
 
 // Package-level variables for voice level monitoring (used by UI)
 var (
@@ -230,7 +251,7 @@ func NewAppService() *AppService {
 		go func() {
 			// Check recording mode
 			popupCallback := app.popupDictateCallback()
-			if app.settings.RecordingMode == "popup" && popupCallback != nil {
+			if app.popupRecordingMode() && popupCallback != nil {
 				// Popup mode: delegate to popup handler
 				popupCallback()
 			} else {
@@ -277,6 +298,12 @@ func NewAppService() *AppService {
 	}
 
 	return app
+}
+
+func (a *AppService) popupRecordingMode() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.settings.RecordingMode == "popup"
 }
 
 // SetStateChangeCallback sets the callback for state changes
@@ -413,7 +440,9 @@ func getConfigDir() (string, error) {
 
 	configDir := filepath.Join(homeDir, ".config", "agent-session-manager-desktop", "dictation")
 
-	migrateLegacyDictationConfig(homeDir, configDir)
+	if err := migrateLegacyDictationConfig(homeDir, configDir); err != nil {
+		return "", fmt.Errorf("migrate legacy dictation config: %w", err)
+	}
 
 	// Create directory if it doesn't exist
 	err = os.MkdirAll(configDir, 0755)
@@ -424,40 +453,112 @@ func getConfigDir() (string, error) {
 	return configDir, nil
 }
 
-// migrateLegacyDictationConfig moves the old ~/.config/ai-dictate/ contents to
-// the new location once. No-op if the new dir already exists or the old one
-// doesn't. Best-effort: failures are ignored (the app falls back to defaults).
-func migrateLegacyDictationConfig(homeDir, newDir string) {
+// migrateLegacyDictationConfig copies the old ~/.config/ai-dictate/ contents
+// into the new location. The migration is deliberately idempotent: the
+// directory itself is not a completion marker because a crash can leave it
+// only partly populated. Existing destination files always win, so a later
+// startup cannot overwrite settings the user changed after migration.
+func migrateLegacyDictationConfig(homeDir, newDir string) error {
+	return migrateLegacyDictationConfigWithWriter(homeDir, newDir, atomicWriteConfigFile)
+}
+
+func migrateLegacyDictationConfigWithWriter(homeDir, newDir string, writeFile func(string, []byte, os.FileMode) error) error {
 	legacyDir := filepath.Join(homeDir, ".config", "ai-dictate")
 	if legacyDir == newDir {
-		return
+		return nil
 	}
-	// Only migrate if the new dir doesn't exist yet but the legacy one does.
-	if _, err := os.Stat(newDir); err == nil {
-		return // already migrated / new config present
+	completionPath := filepath.Join(newDir, ".migration.complete")
+	if info, err := os.Lstat(completionPath); err == nil && info.Mode().IsRegular() {
+		return nil
 	}
 	entries, err := os.ReadDir(legacyDir)
 	if err != nil {
-		return // no legacy config to migrate
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
 	}
 	if err := os.MkdirAll(newDir, 0755); err != nil {
-		return
+		return err
 	}
+
+	// Coordinate separate application processes. The in-process mutex avoids
+	// platform lock semantics that may not serialize two descriptors owned by
+	// the same process.
+	legacyMigrationMu.Lock()
+	defer legacyMigrationMu.Unlock()
+	lock, err := os.OpenFile(filepath.Join(newDir, ".migration.lock"), os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		return err
+	}
+	defer lock.Close()
+	if err := lockConfigFile(lock); err != nil {
+		return err
+	}
+	defer unlockConfigFile(lock)
+	if info, err := os.Lstat(completionPath); err == nil && info.Mode().IsRegular() {
+		return nil
+	}
+
 	for _, e := range entries {
-		if e.IsDir() {
+		// Never follow a legacy symlink. Only regular files are configuration
+		// payloads; devices and sockets must not be read during startup either.
+		if !e.Type().IsRegular() {
 			continue
 		}
-		data, err := os.ReadFile(filepath.Join(legacyDir, e.Name()))
-		if err != nil {
+		destination := filepath.Join(newDir, e.Name())
+		if _, err := os.Lstat(destination); err == nil {
 			continue
+		} else if !os.IsNotExist(err) {
+			return err
+		}
+		source := filepath.Join(legacyDir, e.Name())
+		info, err := os.Lstat(source)
+		if err != nil {
+			return err
+		}
+		if !info.Mode().IsRegular() {
+			continue
+		}
+		// Re-check the opened object against Lstat. If the name was swapped to
+		// a symlink (or another inode) between the checks, do not copy bytes
+		// from the substituted target.
+		file, err := os.Open(source)
+		if err != nil {
+			return err
+		}
+		openedInfo, statErr := file.Stat()
+		if statErr != nil || !openedInfo.Mode().IsRegular() || !os.SameFile(info, openedInfo) {
+			_ = file.Close()
+			if statErr != nil {
+				return statErr
+			}
+			return fmt.Errorf("legacy config changed while reading: %s", e.Name())
+		}
+		if openedInfo.Size() > maxDictationConfigBytes {
+			_ = file.Close()
+			return fmt.Errorf("legacy config is too large: %s", e.Name())
+		}
+		data := make([]byte, openedInfo.Size())
+		if _, err := io.ReadFull(file, data); err != nil {
+			_ = file.Close()
+			return err
+		}
+		if err := file.Close(); err != nil {
+			return err
 		}
 		// Preserve 0600 for settings (it may hold an API key); others 0644.
 		mode := os.FileMode(0644)
 		if e.Name() == "settings.json" {
 			mode = 0600
 		}
-		_ = os.WriteFile(filepath.Join(newDir, e.Name()), data, mode)
+		if err := writeFile(destination, data, mode); err != nil {
+			return err
+		}
 	}
+	// Publish completion only after every payload exists. Future config-lock
+	// actions can then call getConfigDir without re-entering migration locks.
+	return atomicWriteConfigFile(completionPath, []byte("complete\n"), 0o600)
 }
 
 // getConfigPath returns the path for a config file (settings.json, etc.)
@@ -477,7 +578,7 @@ func (a *AppService) LoadSettings() error {
 		return nil // Use default settings
 	}
 
-	data, err := os.ReadFile(settingsPath)
+	data, err := readDictationConfigFile(settingsPath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil // Use default settings
@@ -597,7 +698,7 @@ func copyDefaultConfigFiles() error {
 		}
 
 		// Read from current directory (bundled with app)
-		sourceData, err := os.ReadFile(filename)
+		sourceData, err := readDictationConfigFile(filename)
 		if err != nil {
 			// File doesn't exist in app directory, skip
 			debugLog("⚠️ Default file not found: %s (will create on save)\n", filename)
@@ -622,7 +723,7 @@ func (a *AppService) LoadTranslations() (Translation, error) {
 	// languages.json stays in program directory (read-only)
 	translationsPath := filepath.Join(".", "languages.json")
 
-	data, err := os.ReadFile(translationsPath)
+	data, err := readDictationConfigFile(translationsPath)
 	if err != nil {
 		return nil, err
 	}
@@ -644,7 +745,7 @@ func (a *AppService) LoadPunctuationCommands() (PunctuationCommands, error) {
 		punctuationPath = filepath.Join(".", "punctuation_commands.json")
 	}
 
-	data, err := os.ReadFile(punctuationPath)
+	data, err := readDictationConfigFile(punctuationPath)
 	if err != nil {
 		return PunctuationCommands{}, nil // Return empty if not found
 	}
@@ -678,7 +779,7 @@ func (a *AppService) LoadSpeechContext() (SpeechContext, error) {
 		return SpeechContext{}, nil
 	}
 
-	data, err := os.ReadFile(contextPath)
+	data, err := readDictationConfigFile(contextPath)
 	if err != nil {
 		return SpeechContext{}, nil // Return empty if not found
 	}
@@ -726,7 +827,7 @@ func (a *AppService) LoadDeleteCommands() (DeleteCommands, error) {
 		}, nil
 	}
 
-	data, err := os.ReadFile(deleteCommandsPath)
+	data, err := readDictationConfigFile(deleteCommandsPath)
 	if err != nil {
 		// Return default commands if file not found
 		if os.IsNotExist(err) {
@@ -790,7 +891,7 @@ func (a *AppService) loadUsageStats() (*UsageStats, error) {
 		return &UsageStats{}, nil
 	}
 
-	data, err := os.ReadFile(statsPath)
+	data, err := readDictationConfigFile(statsPath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return &UsageStats{}, nil

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"asmgr-desktop/updater"
 	"context"
 	"embed"
 	_ "embed"
@@ -24,6 +25,13 @@ var assets embed.FS
 var icon []byte
 
 func main() {
+	// pkexec re-enters the package-owned executable in a deliberately tiny
+	// helper mode. Handle it before Wails or any desktop/runtime setup: its only
+	// job is to stage and verify one package behind the privilege boundary.
+	if handled, exitCode := updater.HandlePrivilegedPackageInstall(os.Args); handled {
+		os.Exit(exitCode)
+	}
+
 	// When started as the GPU probe (see gbmEGLWorks) do nothing but that
 	// check, then exit — this must come before any other setup.
 	if os.Getenv(gpuProbeEnv) != "" {

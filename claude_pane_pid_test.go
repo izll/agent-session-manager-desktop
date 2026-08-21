@@ -36,4 +36,7 @@ func TestClaudeDetectionInspectsThePaneProcess(t *testing.T) {
 			"agent directly, so that pid IS the agent; searching only its " +
 			"children finds the MCP servers and never the agent itself")
 	}
+	if strings.Contains(body, `unsafe shape): %q`) || strings.Contains(body, `(flag %s): %s`) {
+		t.Error("Claude resume detection must not persist process-provided session values in logs")
+	}
 }

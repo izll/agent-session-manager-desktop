@@ -24,6 +24,7 @@
   import { EventsOn, EventsOff } from '../../../../wailsjs/runtime/runtime';
   import type { session } from '../../../../wailsjs/go/models';
   import { afterUnsavedChanges } from '../../stores/unsavedChanges';
+  import { autoFocusDialog } from '../../utils/dialogActions';
 
   interface TabColorTarget {
     Index: number;
@@ -896,7 +897,8 @@
 
   // Tab rename state
   let renamingTabIndex: number | null = null;
-  let renameTarget: { sessionId: string; windowIdx: number } | null = null;
+  let renameTarget: { sessionId: string; windowIdx: number; generation: number } | null = null;
+  let renameGeneration = 0;
   let tabRenameValue = '';
   let tabRenameInput: HTMLInputElement;
 
@@ -1275,17 +1277,28 @@
 
   async function saveExtraArgs() {
     const target = extraArgsTarget;
-    if (target && target.generation === extraArgsGeneration && $selectedSessionId === target.sessionId) {
-      try {
-        await App.SetExtraArgs(target.sessionId, target.windowIdx, extraArgsValue.trim());
-      } catch (e) {
+    if (!target || target.generation !== extraArgsGeneration || $selectedSessionId !== target.sessionId) return;
+    const submitted = extraArgsValue.trim();
+    try {
+      await App.SetExtraArgs(target.sessionId, target.windowIdx, submitted);
+    } catch (e) {
+      // Cancelling and reopening the editor while this request is pending
+      // creates a different operation. A late error from the old save must not
+      // overwrite that replacement cycle's UI.
+      if (target === extraArgsTarget && target.generation === extraArgsGeneration) {
         console.error('Failed to save extra args:', e);
         errorMessage = `Failed to save extra args: ${e}`;
         showErrorToast = true;
       }
+    } finally {
+      // Never close a newer editor. The old implementation did this
+      // unconditionally after await, discarding whatever had been typed after
+      // an Escape/reopen sequence.
+      if (target === extraArgsTarget && target.generation === extraArgsGeneration) {
+        showExtraArgsEditor = false;
+        extraArgsTarget = null;
+      }
     }
-    showExtraArgsEditor = false;
-    extraArgsTarget = null;
   }
 
   function cancelExtraArgs() {
@@ -1330,35 +1343,41 @@
 
   async function startTabRename(index: number, currentName: string) {
     if (!$selectedSessionId) return;
-    renameTarget = { sessionId: $selectedSessionId, windowIdx: index };
+    const generation = ++renameGeneration;
+    renameTarget = { sessionId: $selectedSessionId, windowIdx: index, generation };
     renamingTabIndex = index;
     tabRenameValue = currentName;
     await tick();
+    if (generation !== renameGeneration || renameTarget?.generation !== generation) return;
     tabRenameInput?.focus();
     tabRenameInput?.select();
   }
 
   async function confirmTabRename() {
     const target = renameTarget;
-    if (!target || renamingTabIndex === null || target.windowIdx !== renamingTabIndex) return;
+    if (!target || target.generation !== renameGeneration || renamingTabIndex === null || target.windowIdx !== renamingTabIndex) return;
     const trimmed = tabRenameValue.trim();
     if (trimmed && $selectedSessionId === target.sessionId) {
       const win = windows.find(w => w.Index === target.windowIdx);
       if (win && trimmed !== win.Name) {
         await renameTab(target.sessionId, target.windowIdx, trimmed);
         // Update local windows list
-        if ($selectedSessionId === target.sessionId) {
+        if (target === renameTarget && target.generation === renameGeneration &&
+            $selectedSessionId === target.sessionId) {
           windows = windows.map(w =>
             w.Index === target.windowIdx ? { ...w, Name: trimmed } : w
           );
         }
       }
     }
-    renamingTabIndex = null;
-    renameTarget = null;
+    if (target === renameTarget && target.generation === renameGeneration) {
+      renamingTabIndex = null;
+      renameTarget = null;
+    }
   }
 
   function cancelTabRename() {
+    renameGeneration++;
     renamingTabIndex = null;
     renameTarget = null;
   }
@@ -2035,7 +2054,7 @@
 />
 
 {#if showExtraArgsEditor}
-  <div class="dialog-overlay" on:click|self={cancelExtraArgs} on:keydown={handleExtraArgsKeydown} role="dialog" aria-modal="true">
+  <div class="dialog-overlay" use:autoFocusDialog on:click|self={cancelExtraArgs} on:keydown={handleExtraArgsKeydown} role="dialog" aria-modal="true" tabindex="-1">
     <div class="extra-args-dialog">
       <div class="extra-args-header">
         <h3>{$t('tabBar.extraArgsTitle')}</h3>

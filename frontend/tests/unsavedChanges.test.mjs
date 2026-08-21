@@ -138,4 +138,25 @@ const { registerUnsavedGuard, afterUnsavedChanges } = await import(js);
   unregisterB();
 }
 
+// Split-pane swapping is navigation too. A cancelled editor confirmation must
+// leave both the selected and pinned targets untouched; mutating either before
+// the shared guard resolves used to collapse the split into two copies of A.
+{
+  const layout = { selected: 'session-a', pinned: 'session-b' };
+  let cancelPrompt;
+  const unregister = registerUnsavedGuard({
+    isDirty: () => true,
+    requestDiscard: (_next, cancel) => { cancelPrompt = cancel; },
+  });
+
+  afterUnsavedChanges(() => {
+    [layout.selected, layout.pinned] = [layout.pinned, layout.selected];
+  });
+  assert.deepEqual(layout, { selected: 'session-a', pinned: 'session-b' });
+  cancelPrompt();
+  assert.deepEqual(layout, { selected: 'session-a', pinned: 'session-b' });
+
+  unregister();
+}
+
 console.log('unsavedChanges: ok');

@@ -4,7 +4,7 @@
   import { selectedSessionId, selectWindow, loadSessions } from '../../stores/sessions';
   import * as App from '../../../../wailsjs/go/main/App';
   import { t } from '../../i18n';
-  import { dialogEnterBelongsToControl } from '../../utils/dialogActions';
+  import { autoFocusDialog, dialogEnterBelongsToControl } from '../../utils/dialogActions';
 
   /**
    * Open a terminal tab in one keystroke.
@@ -25,7 +25,7 @@
   const DEFAULT_NAME = 'Terminal';
 
   let name = DEFAULT_NAME;
-  let inputEl: HTMLInputElement | null = null;
+  let selectSuggestedName = false;
   let isSubmitting = false;
   let error = '';
   let operationGeneration = 0;
@@ -39,27 +39,17 @@
       name = DEFAULT_NAME;
       error = '';
       isSubmitting = false;
-      focusAndSelect();
+      selectSuggestedName = true;
     }
     lastShow = show;
   }
 
-  /**
-   * Focus the field with the whole name selected.
-   *
-   * Not the shared autoFocusField action: that deliberately puts the cursor at
-   * the end and selects nothing, because the dialogs using it open on text the
-   * user came to amend, where select-all means one keystroke wipes it. Here the
-   * text is a suggestion — keeping it costs Enter, replacing it costs typing,
-   * and a selection is what makes both true at once.
-   */
-  function focusAndSelect() {
-    // Two frames: one for Svelte to create the input, one for it to be in the
-    // document and focusable.
-    requestAnimationFrame(() => requestAnimationFrame(() => {
-      inputEl?.focus();
-      inputEl?.select();
-    }));
+  function handleNameFocus(event: FocusEvent) {
+    if (!selectSuggestedName) return;
+    selectSuggestedName = false;
+    // Select the suggestion as part of the first focus itself. A later frame
+    // could otherwise select a replacement draft after typing has started.
+    (event.currentTarget as HTMLInputElement).select();
   }
 
   function close() {
@@ -126,6 +116,7 @@
   <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
   <div
     class="dialog-overlay"
+    use:autoFocusDialog
     on:click|self={close}
     on:keydown={handleKeydown}
     role="dialog"
@@ -135,10 +126,10 @@
       <h2>{$t('quickTerminal.title')}</h2>
 
       <input
-        bind:this={inputEl}
         bind:value={name}
         placeholder={DEFAULT_NAME}
         disabled={isSubmitting}
+        on:focus={handleNameFocus}
       />
 
       {#if error}

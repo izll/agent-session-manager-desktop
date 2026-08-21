@@ -493,37 +493,46 @@ func downloadVerifiedAsset(version, filename, tempPattern string) (path string, 
 }
 
 func downloadVerifiedAssetContext(ctx context.Context, version, filename, tempPattern string) (path string, err error) {
+	path, _, err = downloadVerifiedAssetContextWithChecksum(ctx, version, filename, tempPattern)
+	return path, err
+}
+
+// downloadVerifiedAssetContextWithChecksum returns the checksum obtained over
+// HTTPS alongside the verified file. The package-update privilege boundary
+// needs this original value: hashing the user-writable temporary file again
+// immediately before pkexec would merely trust an attacker's replacement.
+func downloadVerifiedAssetContextWithChecksum(ctx context.Context, version, filename, tempPattern string) (path, trustedChecksum string, err error) {
 	if err := validateReleaseVersion(version); err != nil {
-		return "", err
+		return "", "", err
 	}
 	url := releaseURL(version, filename)
 	expected, err := readChecksumContext(ctx, url, filename)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return "", fmt.Errorf("download request failed: %w", err)
+		return "", "", fmt.Errorf("download request failed: %w", err)
 	}
 	resp, err := downloadClient.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("download failed: %w", err)
+		return "", "", fmt.Errorf("download failed: %w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("download failed: HTTP %d", resp.StatusCode)
+		return "", "", fmt.Errorf("download failed: HTTP %d", resp.StatusCode)
 	}
 	if resp.ContentLength > DownloadLimit {
-		return "", fmt.Errorf("download is too large: %d bytes", resp.ContentLength)
+		return "", "", fmt.Errorf("download is too large: %d bytes", resp.ContentLength)
 	}
 
 	downloadDir, err := secureUpdateDownloadDir()
 	if err != nil {
-		return "", fmt.Errorf("failed to create secure download directory: %w", err)
+		return "", "", fmt.Errorf("failed to create secure download directory: %w", err)
 	}
 	out, err := os.CreateTemp(downloadDir, tempPattern)
 	if err != nil {
-		return "", fmt.Errorf("failed to create secure temporary file: %w", err)
+		return "", "", fmt.Errorf("failed to create secure temporary file: %w", err)
 	}
 	path = out.Name()
 	defer func() {
@@ -538,19 +547,19 @@ func downloadVerifiedAssetContext(ctx context.Context, version, filename, tempPa
 	hash := sha256.New()
 	n, err := io.Copy(io.MultiWriter(out, hash), io.LimitReader(resp.Body, DownloadLimit+1))
 	if err != nil {
-		return "", fmt.Errorf("failed to save download: %w", err)
+		return "", "", fmt.Errorf("failed to save download: %w", err)
 	}
 	if n > DownloadLimit {
-		return "", fmt.Errorf("download exceeds %d byte limit", DownloadLimit)
+		return "", "", fmt.Errorf("download exceeds %d byte limit", DownloadLimit)
 	}
 	actual := hex.EncodeToString(hash.Sum(nil))
 	if actual != expected {
-		return "", fmt.Errorf("checksum mismatch: got %s, expected %s", actual, expected)
+		return "", "", fmt.Errorf("checksum mismatch: got %s, expected %s", actual, expected)
 	}
 	if err := out.Sync(); err != nil {
-		return "", fmt.Errorf("failed to sync download: %w", err)
+		return "", "", fmt.Errorf("failed to sync download: %w", err)
 	}
-	return path, nil
+	return path, expected, nil
 }
 
 func packageArch() string {
@@ -1224,6 +1233,32 @@ func withInstallTryLock(action func() error) (bool, error) {
 	return withCrossProcessFileTryLock(filepath.Join(dir, installLockFile), action)
 }
 
+// withInstallLockContext waits for the updater transaction lock without
+// making application shutdown wait behind another instance. The blocking lock
+// remains appropriate once a mutation has begun; callers use this helper only
+// while their work is still safe to cancel.
+func withInstallLockContext(ctx context.Context, action func() error) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	ticker := time.NewTicker(50 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		locked, err := withInstallTryLock(action)
+		if err != nil {
+			return err
+		}
+		if locked {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+		}
+	}
+}
+
 func recordStaleUpdatePath(stalePath string) {
 	recordUpdatePath(staleUpdateFile, stalePath)
 }
@@ -1550,61 +1585,70 @@ func installPackageUpdate(ctx context.Context, version string, critical func(fun
 			BinaryName, version, manualInstallHint(version))
 	}
 
-	pkgPath, install, err := downloadPackageForContext(ctx, version)
+	pkgPath, packageKind, trustedChecksum, err := downloadPackageForContext(ctx, version)
 	if err != nil {
 		return err
 	}
 	defer os.Remove(pkgPath)
-
-	args := append(install, pkgPath)
-	return withInstallLock(func() error {
-		// The package type was selected before the download. Confirm under the
-		// mutation lock that this executable is still package-owned before asking
-		// for elevation and changing system files.
-		if !IsPackageManaged() {
-			return fmt.Errorf("installation type changed while the update was downloading; retry the update")
-		}
-		return critical(func() error {
-			out, err := runPackageCommand(packageInstallTimeout, pkexec, args...)
-			if err != nil {
-				msg := strings.TrimSpace(string(out))
-				// 126/127 are pkexec's own codes for "dismissed" and "not authorised".
-				var exitErr *exec.ExitError
-				if errors.As(err, &exitErr) && (exitErr.ExitCode() == 126 || exitErr.ExitCode() == 127) {
-					return fmt.Errorf("the update was not authorised")
-				}
-				if msg == "" {
-					msg = err.Error()
-				}
-				return fmt.Errorf("package installation failed: %s", msg)
+	execPath, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("cannot locate the package-owned updater executable: %w", err)
+	}
+	if resolved, resolveErr := filepath.EvalSymlinks(execPath); resolveErr == nil {
+		execPath = resolved
+	}
+	args := privilegedPackageHelperArgs(execPath, pkgPath, trustedChecksum, packageKind)
+	out, err := runPrivilegedPackageInstall(ctx, pkexec, args, func(action func() error) error {
+		// Authentication and root-owned staging are preparation, not mutation.
+		// Acquire the global lock only after the helper is verified and ready, and
+		// keep lock waiting cancellable so shutdown cannot hang behind another
+		// application instance. The lock is retained across the critical package
+		// manager transaction itself.
+		return withInstallLockContext(ctx, func() error {
+			// The package type was selected before the download. Confirm at the
+			// mutation boundary that this executable is still package-owned.
+			if !IsPackageManaged() {
+				return fmt.Errorf("installation type changed while the update was downloading; retry the update")
 			}
-			return nil
+			return critical(action)
 		})
 	})
+	if err != nil {
+		msg := strings.TrimSpace(string(out))
+		// 126/127 are pkexec's own codes for "dismissed" and "not authorised".
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) && (exitErr.ExitCode() == 126 || exitErr.ExitCode() == 127) {
+			return fmt.Errorf("the update was not authorised")
+		}
+		if msg == "" {
+			msg = err.Error()
+		}
+		return fmt.Errorf("package installation failed: %s", msg)
+	}
+	return nil
 }
 
 // downloadPackageFor fetches the package matching this installation and
 // returns it with the command needed to install it.
-func downloadPackageFor(version string) (path string, installCmd []string, err error) {
+func downloadPackageFor(version string) (path, packageKind, trustedChecksum string, err error) {
 	return downloadPackageForContext(context.Background(), version)
 }
 
-func downloadPackageForContext(ctx context.Context, version string) (path string, installCmd []string, err error) {
+func downloadPackageForContext(ctx context.Context, version string) (path, packageKind, trustedChecksum string, err error) {
 	if isDpkgInstall() {
 		filename := fmt.Sprintf("%s_%s_linux_%s.deb", BinaryName, strings.TrimPrefix(version, "v"), packageArch())
-		p, derr := downloadVerifiedAssetContext(ctx, version, filename, BinaryName+"-*.deb")
+		p, checksum, derr := downloadVerifiedAssetContextWithChecksum(ctx, version, filename, BinaryName+"-*.deb")
 		if derr != nil {
-			return "", nil, derr
+			return "", "", "", derr
 		}
-		// --force-confold keeps any config the user edited.
-		return p, []string{"dpkg", "-i", "--force-confold"}, nil
+		return p, "deb", checksum, nil
 	}
 	filename := fmt.Sprintf("%s_%s_linux_%s.rpm", BinaryName, strings.TrimPrefix(version, "v"), packageArch())
-	p, rerr := downloadVerifiedAssetContext(ctx, version, filename, BinaryName+"-*.rpm")
+	p, checksum, rerr := downloadVerifiedAssetContextWithChecksum(ctx, version, filename, BinaryName+"-*.rpm")
 	if rerr != nil {
-		return "", nil, rerr
+		return "", "", "", rerr
 	}
-	return p, []string{"rpm", "-U", "--replacepkgs"}, nil
+	return p, "rpm", checksum, nil
 }
 
 // isDpkgInstall reports whether dpkg owns this executable.

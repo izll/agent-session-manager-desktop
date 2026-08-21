@@ -231,11 +231,14 @@ func TestDownloadVerifiedAsset(t *testing.T) {
 	downloadClient = &http.Client{Timeout: time.Second}
 	defer func() { downloadBaseURL, downloadClient = oldBase, oldClient }()
 
-	path, err := downloadVerifiedAsset("v1.2.3", filename, "asmgr-test-*.deb")
+	path, trustedChecksum, err := downloadVerifiedAssetContextWithChecksum(context.Background(), "v1.2.3", filename, "asmgr-test-*.deb")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer os.Remove(path)
+	if want := fmt.Sprintf("%x", sum); trustedChecksum != want {
+		t.Fatalf("trusted checksum = %q, want %q", trustedChecksum, want)
+	}
 	got, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
@@ -1051,6 +1054,29 @@ func TestInstallLockSerializesIndependentProcesses(t *testing.T) {
 	}
 	if _, err := os.Stat(acquired); err != nil {
 		t.Fatalf("contender never acquired install lock: %v", err)
+	}
+}
+
+func TestInstallLockContextIsCancellableWhileContended(t *testing.T) {
+	installMu.Lock()
+	defer installMu.Unlock()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	result := make(chan error, 1)
+	go func() {
+		result <- withInstallLockContext(ctx, func() error {
+			t.Error("contended cancellable lock unexpectedly ran the action")
+			return nil
+		})
+	}()
+	cancel()
+	select {
+	case err := <-result:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("cancelled lock wait returned %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("cancelled install lock wait did not return")
 	}
 }
 

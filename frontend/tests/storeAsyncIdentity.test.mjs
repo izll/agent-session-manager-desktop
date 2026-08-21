@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { build } from 'esbuild';
 
 const root = new URL('../', import.meta.url);
+const sessionsSource = readFileSync(new URL('src/lib/stores/sessions.ts', root), 'utf8');
 const originalConsoleError = console.error;
 console.error = () => {};
 
@@ -12,6 +13,9 @@ function deferred() {
   const promise = new Promise((res, rej) => { resolve = res; reject = rej; });
   return { promise, resolve, reject };
 }
+
+assert.match(sessionsSource, /function persistLastWindow[\s\S]*?const projectId = get\(activeProjectId\)[\s\S]*?SetLastWindowIndex\(id, idx, projectId\)/,
+  'fire-and-forget tab memory must be pinned to its captured backend project');
 
 async function eventually(predicate) {
   for (let i = 0; i < 100; i++) {

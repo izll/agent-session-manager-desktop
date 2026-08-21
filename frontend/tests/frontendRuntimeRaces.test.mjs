@@ -382,6 +382,14 @@ assert.match(confirmDialog, /e\.key === 'Enter' && !dialogEnterBelongsToControl\
 assert.doesNotMatch(quickTerminalDialog, /<input[\s\S]*?on:keydown=/,
   'QuickTerminal input and overlay must not both submit the same Enter');
 assert.match(quickTerminalDialog, /if \(isSubmitting\) return/);
+assert.match(quickTerminalDialog, /class="dialog-overlay"[\s\S]*?use:autoFocusDialog/,
+  'QuickTerminal must trap keyboard focus inside its modal');
+assert.match(quickTerminalDialog, /on:focus=\{handleNameFocus\}/,
+  'QuickTerminal must select its suggested name as part of the first focus');
+assert.doesNotMatch(quickTerminalDialog, /focusAndSelect/,
+  'QuickTerminal must not leave a delayed focus callback that can select a newer draft');
+assert.match(dialogActions, /if \(node\.contains\(document\.activeElement\)\) return;/,
+  'deferred dialog autofocus must not move focus or selection after user interaction');
 assert.match(newTabDialog, /<form on:submit\|preventDefault=\{handleSubmit\}>/);
 assert.doesNotMatch(newTabDialog, /e\.key === 'Enter'/,
   'NewTab native form submit must be the sole Enter path');
@@ -404,10 +412,21 @@ assert.match(newSessionDialog, /selectedPath && show && generation === operation
 
 assert.match(mainPanel, /onDestroy\(\(\) => \{[\s\S]*?activeSplitterCleanup\?\.\(\)/,
   'unmounting MainPanel mid-drag must release window listeners');
+const splitSwap = mainPanel.match(/function swapSplitTargets\(\) \{[\s\S]*?\n  \}/)?.[0] ?? '';
+assert.match(splitSwap, /afterUnsavedChanges\(\(\) => \{/,
+  'split swapping must wait for every unsaved editor before navigation');
+assert.ok(splitSwap.indexOf('afterUnsavedChanges') < splitSwap.indexOf('selectSession('),
+  'split swapping must not mutate the selected session before discard approval');
+assert.match(splitSwap, /\$activeProjectId !== target\.projectId[\s\S]*?\$selectedSessionId !== target\.primarySessionId[\s\S]*?\$settings\.markedSessionId !== target\.secondarySessionId/,
+  'a delayed split confirmation must revalidate its complete project and pane identity');
 assert.match(sideBySideDiff, /onDestroy\(\(\) => activeSplitCleanup\?\.\(\)\)/,
   'unmounting a side-by-side diff mid-drag must release document listeners');
 
 const statusColumn = taskPanel.match(/\.meta-column\.status-badge \{[\s\S]*?\n  \}/)?.[0] ?? '';
+assert.match(taskPanel, /function closeModalOnEscape[\s\S]*?event\.key !== 'Escape'/,
+  'TaskPanel modals must offer a keyboard close path');
+assert.equal((taskPanel.match(/role="dialog" aria-modal="true" tabindex="-1"/g) || []).length, 6,
+  'every TaskPanel overlay must expose modal semantics and focus containment');
 assert.match(statusColumn, /white-space: nowrap/);
 const priorityColumn = taskPanel.match(/\.meta-column\.priority-badge \{[\s\S]*?\n  \}/)?.[0] ?? '';
 assert.match(priorityColumn, /white-space: nowrap/);

@@ -1,14 +1,5 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
-  import GlobalSearchDialog from '../../src/lib/components/Dialogs/GlobalSearchDialog.svelte';
-  import CommandPickerDialog from '../../src/lib/components/Dialogs/CommandPickerDialog.svelte';
-  import GitHistoryDialog from '../../src/lib/components/Dialogs/GitHistoryDialog.svelte';
-  import QuickJumpDialog from '../../src/lib/components/Dialogs/QuickJumpDialog.svelte';
-  import QuickTerminalDialog from '../../src/lib/components/Dialogs/QuickTerminalDialog.svelte';
-  import SchemeImportDialog from '../../src/lib/components/Dialogs/SchemeImportDialog.svelte';
-  import AllTasks from '../../src/lib/components/Dashboard/AllTasks.svelte';
-  import RecoveryCenterDialog from '../../src/lib/components/Dialogs/RecoveryCenterDialog.svelte';
-  import UpdateDialog from '../../src/lib/components/Dialogs/UpdateDialog.svelte';
 
   export let mode: 'global' | 'command' | 'history' | 'quickjump' | 'quickterminal' | 'scheme' | 'alltasks' | 'recovery' | 'update' = 'global';
   export let onFixtureReady: () => void = () => {};
@@ -24,16 +15,33 @@
   let commandSession = 'session-a';
   let commandWindow = 3;
   let historyPath = '/repo-a';
+  let FixtureComponent: any = null;
 
   onMount(() => {
-    // Signal readiness from the component lifecycle, after Svelte has flushed
-    // the initial dialog DOM. mount() returning only proves that the fixture
-    // module evaluated; under a cold parallel Vite start those are distinct
-    // milestones.
-    void tick().then(() => {
-      requestAnimationFrame(onFixtureReady);
-    });
+    void loadFixture();
   });
+
+  async function loadFixture() {
+    // Import only the component exercised by this page. The former fixture
+    // statically imported nine large dialogs, so eight cold Vite requests all
+    // transformed the entire graph and some pages remained at the HTML shell
+    // for 15+ seconds. Per-mode imports make readiness describe the component,
+    // not contention in an unrelated fixture dependency.
+    switch (mode) {
+      case 'command': FixtureComponent = (await import('../../src/lib/components/Dialogs/CommandPickerDialog.svelte')).default; break;
+      case 'history': FixtureComponent = (await import('../../src/lib/components/Dialogs/GitHistoryDialog.svelte')).default; break;
+      case 'quickjump': FixtureComponent = (await import('../../src/lib/components/Dialogs/QuickJumpDialog.svelte')).default; break;
+      case 'quickterminal': FixtureComponent = (await import('../../src/lib/components/Dialogs/QuickTerminalDialog.svelte')).default; break;
+      case 'scheme': FixtureComponent = (await import('../../src/lib/components/Dialogs/SchemeImportDialog.svelte')).default; break;
+      case 'alltasks': FixtureComponent = (await import('../../src/lib/components/Dashboard/AllTasks.svelte')).default; break;
+      case 'recovery': FixtureComponent = (await import('../../src/lib/components/Dialogs/RecoveryCenterDialog.svelte')).default; break;
+      case 'update': FixtureComponent = (await import('../../src/lib/components/Dialogs/UpdateDialog.svelte')).default; break;
+      default: FixtureComponent = (await import('../../src/lib/components/Dialogs/GlobalSearchDialog.svelte')).default;
+    }
+    // The dynamic component itself is part of the next Svelte flush.
+    await tick();
+    onFixtureReady();
+  }
 </script>
 
 <button id="change-command-target" on:click={() => { commandSession = 'session-b'; commandWindow = 9; }}>
@@ -46,18 +54,24 @@
 <button id="reopen-history" on:click={() => { showHistory = true; }}>reopen history</button>
 <button id="reopen-quickterminal" on:click={() => { showQuickTerminal = true; }}>reopen quick terminal</button>
 
-<GlobalSearchDialog bind:show={showGlobal} />
-<CommandPickerDialog bind:show={showCommand} sessionId={commandSession} windowIdx={commandWindow} />
-<GitHistoryDialog
-  bind:show={showHistory}
-  projectId="project-a"
-  sessionId="session-a"
-  windowIdx={3}
-  path={historyPath}
-/>
-<QuickJumpDialog bind:show={showQuickJump} />
-<QuickTerminalDialog bind:show={showQuickTerminal} sessionId="session-a" />
-<SchemeImportDialog bind:show={showSchemeImport} />
-<RecoveryCenterDialog bind:show={showRecovery} />
-<UpdateDialog bind:show={showUpdate} />
-{#if mode === 'alltasks'}<AllTasks />{/if}
+{#if FixtureComponent}
+  {#if mode === 'command'}
+    <svelte:component this={FixtureComponent} bind:show={showCommand} sessionId={commandSession} windowIdx={commandWindow} />
+  {:else if mode === 'history'}
+    <svelte:component this={FixtureComponent} bind:show={showHistory} projectId="project-a" sessionId="session-a" windowIdx={3} path={historyPath} />
+  {:else if mode === 'quickjump'}
+    <svelte:component this={FixtureComponent} bind:show={showQuickJump} />
+  {:else if mode === 'quickterminal'}
+    <svelte:component this={FixtureComponent} bind:show={showQuickTerminal} sessionId="session-a" />
+  {:else if mode === 'scheme'}
+    <svelte:component this={FixtureComponent} bind:show={showSchemeImport} />
+  {:else if mode === 'recovery'}
+    <svelte:component this={FixtureComponent} bind:show={showRecovery} />
+  {:else if mode === 'update'}
+    <svelte:component this={FixtureComponent} bind:show={showUpdate} />
+  {:else if mode === 'alltasks'}
+    <svelte:component this={FixtureComponent} />
+  {:else}
+    <svelte:component this={FixtureComponent} bind:show={showGlobal} />
+  {/if}
+{/if}

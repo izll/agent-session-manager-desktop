@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -18,6 +19,24 @@ import (
 var ErrTaskMasterConflict = errors.New("tasks.json changed during update")
 
 var taskMasterPathLocks sync.Map // canonical path -> *sync.Mutex
+
+const maxTaskMasterFileBytes = 64 << 20
+
+func readTaskMasterFile(path string) ([]byte, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	data, err := io.ReadAll(io.LimitReader(file, maxTaskMasterFileBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(data) > maxTaskMasterFileBytes {
+		return nil, fmt.Errorf("tasks.json exceeds the %d-byte limit", maxTaskMasterFileBytes)
+	}
+	return data, nil
+}
 
 func canonicalTaskMasterPath(path string) string {
 	if absolute, err := filepath.Abs(path); err == nil {
@@ -41,7 +60,7 @@ func canonicalTaskMasterPath(path string) string {
 func MutateTaskMasterFile(path string, mutate func(root map[string]interface{}) error) error {
 	path = canonicalTaskMasterPath(path)
 	return withTaskMasterWriterLock(path, func() error {
-		before, err := os.ReadFile(path)
+		before, err := readTaskMasterFile(path)
 		if err != nil {
 			return fmt.Errorf("failed to read tasks.json: %w", err)
 		}
@@ -51,6 +70,13 @@ func MutateTaskMasterFile(path string, mutate func(root map[string]interface{}) 
 		if err := decoder.Decode(&root); err != nil {
 			return fmt.Errorf("failed to parse tasks.json: %w", err)
 		}
+		var trailing interface{}
+		if err := decoder.Decode(&trailing); err != io.EOF {
+			if err == nil {
+				return fmt.Errorf("failed to parse tasks.json: contains multiple JSON values")
+			}
+			return fmt.Errorf("failed to parse tasks.json: trailing data: %w", err)
+		}
 		if err := mutate(root); err != nil {
 			return err
 		}
@@ -59,7 +85,7 @@ func MutateTaskMasterFile(path string, mutate func(root map[string]interface{}) 
 			return fmt.Errorf("failed to serialize tasks.json: %w", err)
 		}
 
-		current, err := os.ReadFile(path)
+		current, err := readTaskMasterFile(path)
 		if err != nil {
 			return fmt.Errorf("failed to verify tasks.json revision: %w", err)
 		}

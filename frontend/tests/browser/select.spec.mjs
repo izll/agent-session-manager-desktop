@@ -26,6 +26,11 @@ async function gotoTaskPanelFixture(page, query = '') {
   await expect(page.locator('body')).toHaveAttribute('data-fixture-ready', 'true', { timeout: 15_000 });
 }
 
+async function gotoTabEditorRacesFixture(page) {
+  await page.goto('/tests/browser/tab-editor-races-fixture.html');
+  await expect(page.locator('body')).toHaveAttribute('data-fixture-ready', 'true', { timeout: 15_000 });
+}
+
 test('a real Svelte component renders, portals, focuses and reacts in Chromium', async ({ page }) => {
   const pageErrors = [];
   page.on('pageerror', (error) => pageErrors.push(error.message));
@@ -80,6 +85,50 @@ test('Enter on the focused safe confirmation button cannot trigger the destructi
   await expect(page.locator('body')).toHaveAttribute('data-confirmed', 'false');
 });
 
+test('late tab editor saves cannot close a replacement draft', async ({ page }) => {
+  await gotoTabEditorRacesFixture(page);
+  const names = page.locator('.tab-name');
+
+  await names.nth(0).dblclick();
+  let renameInput = page.locator('.tab-rename-input');
+  await renameInput.fill('delayed first rename');
+  await renameInput.press('Enter');
+  await expect.poll(() => page.evaluate(() => window.tabEditorRacesFixture.renameCalls())).toBe(1);
+  await renameInput.press('Escape');
+  await names.nth(1).dblclick();
+  renameInput = page.locator('.tab-rename-input');
+  await renameInput.fill('replacement rename draft');
+  await page.evaluate(() => window.tabEditorRacesFixture.resolveRename(0));
+  await expect(renameInput).toBeVisible();
+  await expect(renameInput).toHaveValue('replacement rename draft');
+  await renameInput.press('Escape');
+
+  await page.locator('.tab').nth(0).click({ button: 'right' });
+  await page.getByRole('button', { name: 'Edit Extra Args' }).click();
+  let argsInput = page.locator('.extra-args-input');
+  await argsInput.fill('--delayed-first');
+  await page.getByRole('button', { name: 'Save' }).click();
+  await expect.poll(() => page.evaluate(() => window.tabEditorRacesFixture.extraArgsCalls())).toBe(1);
+  await page.locator('.extra-args-dialog .close-btn').click();
+  await page.locator('.tab').nth(1).click({ button: 'right' });
+  await page.getByRole('button', { name: 'Edit Extra Args' }).click();
+  argsInput = page.locator('.extra-args-input');
+  await argsInput.fill('--replacement-draft');
+  await page.evaluate(() => window.tabEditorRacesFixture.resolveExtraArgs(0));
+  await expect(argsInput).toBeVisible();
+  await expect(argsInput).toHaveValue('--replacement-draft');
+
+  // The editor is modal: keyboard traversal must wrap inside it rather than
+  // activating a tab or control underneath the overlay.
+  const closeArgs = page.locator('.extra-args-dialog .close-btn');
+  await closeArgs.evaluate((button) => button.focus());
+  await expect(closeArgs).toBeFocused();
+  await page.keyboard.press('Shift+Tab');
+  await expect(page.locator('.extra-args-actions .btn-primary')).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(closeArgs).toBeFocused();
+});
+
 test('TaskPanel keeps metadata on one right-aligned row with optional badges', async ({ page }) => {
   const pageErrors = [];
   page.on('pageerror', (error) => pageErrors.push(error.message));
@@ -108,6 +157,16 @@ test('TaskPanel keeps metadata on one right-aligned row with optional badges', a
     expect(row.statusHeight).toBeLessThanOrEqual(20);
   }
   expect(pageErrors).toEqual([]);
+});
+
+test('TaskPanel modal focus is contained and Escape closes it', async ({ page }) => {
+  await gotoTaskPanelFixture(page);
+  await page.getByRole('button', { name: /Add Task|Feladat hozzáadása/ }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toBeVisible();
+  await expect.poll(() => dialog.evaluate((node) => node.contains(document.activeElement))).toBe(true);
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
 });
 
 test('TaskPanel keeps trailing status and priority inside a 520px combined-metadata row', async ({ page }) => {
@@ -428,6 +487,11 @@ test('QuickTerminal submits once and an old completion cannot close its replacem
   await expect(replacement).toBeVisible();
   await expect(replacement).toHaveValue('replacement draft');
   expect(await page.evaluate(() => window.dialogRacesFixture.createTabCalls().length)).toBe(1);
+
+  const create = page.getByRole('button', { name: /Create|Létrehozás/ });
+  await create.focus();
+  await page.keyboard.press('Tab');
+  await expect(replacement).toBeFocused();
 });
 
 test('GitHistory ignores a late response from the repository that was left', async ({ page }) => {

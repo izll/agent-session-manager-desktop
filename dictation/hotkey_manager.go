@@ -14,6 +14,7 @@ import (
 var (
 	globalToggleHotkeyManager *HotkeyManagerReal
 	globalHotkeyMutex         sync.Mutex
+	startHotkeyHook           = hook.Start
 )
 
 // HotkeyManagerReal manages global hotkeys using gohook
@@ -26,6 +27,8 @@ type HotkeyManagerReal struct {
 	configMutex      sync.RWMutex
 	lastTriggerTimes map[string]int64 // Map of hotkey ID to last trigger time for debouncing
 	debounceMutex    sync.Mutex
+	lifecycleMutex   sync.Mutex
+	listenerWG       sync.WaitGroup
 }
 
 // NewHotkeyManagerReal creates a new real hotkey manager (or returns existing one)
@@ -62,6 +65,8 @@ func NewHotkeyManagerReal(config HotkeyConfig, callback func(), hotkeyID string)
 
 // Enable enables the global hotkey
 func (hm *HotkeyManagerReal) Enable() error {
+	hm.lifecycleMutex.Lock()
+	defer hm.lifecycleMutex.Unlock()
 	if hm.isRunning {
 		logToFile("⚠️ Hotkey listener already running" + "\n")
 		return nil
@@ -88,7 +93,11 @@ func (hm *HotkeyManagerReal) Enable() error {
 	hm.isRunning = true
 
 	// Start listening in a goroutine
-	go hm.listenForHotkey()
+	hm.listenerWG.Add(1)
+	go func() {
+		defer hm.listenerWG.Done()
+		hm.listenForHotkey()
+	}()
 
 	debugLog("✅ Global hotkey enabled successfully\n")
 	return nil
@@ -117,6 +126,8 @@ func getSessionType() string {
 
 // Disable disables the global hotkey
 func (hm *HotkeyManagerReal) Disable() {
+	hm.lifecycleMutex.Lock()
+	defer hm.lifecycleMutex.Unlock()
 	if !hm.isRunning {
 		return
 	}
@@ -130,6 +141,9 @@ func (hm *HotkeyManagerReal) Disable() {
 	case hm.stopChan <- true:
 	default:
 	}
+	// Do not let a subsequent Enable start another global hook until this
+	// listener has consumed the stop signal and exited.
+	hm.listenerWG.Wait()
 
 	// DON'T call hook.End() - it causes crashes when restarting
 	// The listener goroutine will exit cleanly via stopChan
@@ -148,7 +162,10 @@ func (hm *HotkeyManagerReal) UpdateConfig(config HotkeyConfig, hotkeyID string) 
 
 	// The listener automatically uses the new config
 	// since it reads from hm.hotkeyConfigs with mutex protection
-	if hm.isRunning {
+	hm.lifecycleMutex.Lock()
+	running := hm.isRunning
+	hm.lifecycleMutex.Unlock()
+	if running {
 		logToFile("✅ Hotkey '%s' configuration updated immediately\n", hotkeyID)
 	}
 
@@ -159,7 +176,7 @@ func (hm *HotkeyManagerReal) UpdateConfig(config HotkeyConfig, hotkeyID string) 
 func (hm *HotkeyManagerReal) listenForHotkey() {
 	var ctrlPressed, altPressed, shiftPressed bool
 
-	evChan := hook.Start()
+	evChan := startHotkeyHook()
 
 	for {
 		select {
