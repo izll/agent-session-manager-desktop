@@ -670,7 +670,7 @@
   "settings.notifyOnWaiting": "エージェントの待機時に通知",
   "settings.notifyOnWaitingDesc": "セッションが入力待ちになったら通知を出します",
   "settings.notifyDesktop": "デスクトップ通知",
-  "settings.notifyDesktopDesc": "このマシンのシステム通知 (notify-send)",
+  "settings.notifyDesktopDesc": "このマシンのシステム通知",
   "settings.notifyNtfy": "モバイルプッシュ (ntfy)",
   "settings.notifyNtfyDesc": "ntfy トピックに POST してスマホにプッシュ通知",
   "settings.ntfyUrl": "ntfy URL",

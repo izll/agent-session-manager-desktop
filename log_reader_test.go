@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -90,13 +91,13 @@ func TestClearingTheAppLogRewindsTheWriter(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "test.log")
 
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0600)
 	if err != nil {
 		t.Fatalf("creating the log: %v", err)
 	}
 	defer f.Close()
 
-	w := &filteredLogWriter{file: f}
+	w := &filteredLogWriter{file: f, path: path}
 	if _, err := w.Write([]byte("first line\n")); err != nil {
 		t.Fatalf("writing: %v", err)
 	}
@@ -115,6 +116,55 @@ func TestClearingTheAppLogRewindsTheWriter(t *testing.T) {
 	if string(got) != "after clearing\n" {
 		t.Errorf("log = %q, want only the line written after clearing — a NUL-padded "+
 			"result means the offset was not rewound", string(got))
+	}
+}
+
+func TestLogViewerReadsOnlyABoundedTail(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "large.log")
+	if err := os.WriteFile(path, []byte("old-one\nold-two\nkeep-three\nkeep-four\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	got := readLogFileWithLimit(path, 22, 100)
+	if !got.Truncated {
+		t.Fatal("byte-truncated log was not marked truncated")
+	}
+	joined := strings.Join(got.Lines, "\n")
+	if strings.Contains(joined, "old-one") || strings.Contains(joined, "old-two") {
+		t.Fatalf("bounded reader returned old prefix: %q", joined)
+	}
+	if !strings.Contains(joined, "keep-four") {
+		t.Fatalf("bounded reader lost the newest complete line: %q", joined)
+	}
+}
+
+func TestApplicationLogCompactionKeepsTheNewestCompleteLines(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "bounded.log")
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	for i := 0; i < 20; i++ {
+		if _, err := fmt.Fprintf(f, "line-%02d-xxxxxxxx\n", i); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := compactLogFile(f, 200, 120); err != nil {
+		t.Fatalf("compactLogFile: %v", err)
+	}
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if int64(len(body)) > 120 {
+		t.Fatalf("compacted log is %d bytes, want at most 120", len(body))
+	}
+	if !strings.Contains(string(body), "line-19-xxxxxxxx") {
+		t.Fatalf("compaction lost newest line: %q", body)
+	}
+	if len(body) > 0 && strings.HasPrefix(string(body), "x") {
+		t.Fatalf("compaction retained a partial first line: %q", body)
 	}
 }
 

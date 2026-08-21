@@ -19,6 +19,8 @@
   let templates: Template[] = [];
   let loading = false;
   let error = '';
+  let loadGeneration = 0;
+  let operationGeneration = 0;
 
   // Which panel the dialog is showing. Kept as one variable rather than three
   // booleans so two panels can never be open at once.
@@ -43,6 +45,7 @@
   let uGroupId = '';
   let uAutoStart = true;
   let creating = false;
+  let saving = false;
 
   let showDelete = false;
   let deleteTarget: Template | null = null;
@@ -62,6 +65,8 @@
       void open(useTemplateId);
     } else if (!show && lastInitKey !== '') {
       lastInitKey = '';
+      operationGeneration++;
+      loadGeneration++;
       resetAll();
     }
   }
@@ -71,28 +76,36 @@
   }
 
   async function open(preselect: string) {
+    const generation = ++operationGeneration;
     mode = 'list';
     await load();
+    if (!show || generation !== operationGeneration || `open|${useTemplateId}` !== lastInitKey) return;
     if (!preselect) return;
     const found = templates.find((tpl) => tpl.id === preselect);
     if (found) startUse(found);
   }
 
   async function load() {
+    const generation = ++loadGeneration;
     loading = true;
     error = '';
     try {
-      templates = (await App.GetSessionTemplates()) || [];
+      const nextTemplates = (await App.GetSessionTemplates()) || [];
+      if (!show || generation !== loadGeneration) return;
+      templates = nextTemplates;
     } catch (e) {
+      if (!show || generation !== loadGeneration) return;
       error = String(e);
     } finally {
-      loading = false;
+      if (generation === loadGeneration) loading = false;
     }
   }
 
   function resetAll() {
     mode = 'list';
     error = '';
+    creating = false;
+    saving = false;
     useTarget = null;
     clearForm();
   }
@@ -118,11 +131,15 @@
   ];
 
   function newTemplate() {
+    operationGeneration++;
+    saving = false;
     clearForm();
     mode = 'edit';
   }
 
   function editTemplate(tpl: Template) {
+    operationGeneration++;
+    saving = false;
     editingId = tpl.id;
     fName = tpl.name;
     fDescription = tpl.description || '';
@@ -152,59 +169,83 @@
     fTabs = fTabs.map((tab, i) => (i === index ? { ...tab, agent } : tab));
   }
 
-  $: canSave = fName.trim().length > 0;
+  $: canSave = fName.trim().length > 0 && !saving;
 
   async function saveTemplate() {
     if (!canSave) return;
+    const generation = operationGeneration;
+    const targetEditingId = editingId;
+    const name = fName.trim();
+    const description = fDescription.trim();
+    const sessionName = fSessionName.trim();
+    const templatePath = fPath.trim();
+    const agent = fAgent;
+    const autoYes = fAutoYes;
+    const extraArgs = fExtraArgs.trim();
+    const tabs = fTabs.map((tab) => ({ ...tab, name: tab.name.trim() || tab.agent }));
+    saving = true;
     error = '';
     try {
       // A tab with no name would show up in the tab bar as an empty label;
       // the agent type is the obvious stand-in.
-      const tabs = fTabs.map((tab) => ({ ...tab, name: tab.name.trim() || tab.agent }));
       await App.SaveSessionTemplate(
-        editingId, fName.trim(), fDescription.trim(), fSessionName.trim(),
-        fPath.trim(), fAgent, fAutoYes, fExtraArgs.trim(), tabs
+        targetEditingId, name, description, sessionName,
+        templatePath, agent, autoYes, extraArgs, tabs
       );
+      if (!show || generation !== operationGeneration || mode !== 'edit' || editingId !== targetEditingId) return;
       mode = 'list';
       clearForm();
       await load();
     } catch (e) {
+      if (!show || generation !== operationGeneration || mode !== 'edit' || editingId !== targetEditingId) return;
       error = String(e);
+    } finally {
+      if (generation === operationGeneration) saving = false;
     }
   }
 
   async function browseTemplatePath() {
+    const generation = operationGeneration;
+    const targetEditingId = editingId;
+    const initialPath = fPath;
     try {
-      const picked = await App.BrowseDirectory(fPath || '');
-      if (picked) fPath = picked;
+      const picked = await App.BrowseDirectory(initialPath || '');
+      if (picked && show && generation === operationGeneration && mode === 'edit' &&
+          editingId === targetEditingId && fPath === initialPath) fPath = picked;
     } catch (e) {
       console.error('Browse failed:', e);
     }
   }
 
   function askDelete(tpl: Template) {
+    operationGeneration++;
     deleteTarget = tpl;
     showDelete = true;
   }
 
   async function confirmDelete() {
     const target = deleteTarget;
+    const generation = operationGeneration;
     deleteTarget = null;
     if (!target) return;
     error = '';
     try {
       await App.DeleteSessionTemplate(target.id);
+      if (!show || generation !== operationGeneration) return;
       if (editingId === target.id) {
         mode = 'list';
         clearForm();
       }
       await load();
     } catch (e) {
+      if (!show || generation !== operationGeneration) return;
       error = String(e);
     }
   }
 
   function startUse(tpl: Template) {
+    operationGeneration++;
+    creating = false;
     useTarget = tpl;
     uName = tpl.sessionName || tpl.name;
     // A template pinned to a directory pre-fills it; a reusable one starts
@@ -217,9 +258,13 @@
   }
 
   async function browseUsePath() {
+    const generation = operationGeneration;
+    const targetId = useTarget?.id;
+    const initialPath = uPath;
     try {
-      const picked = await App.BrowseDirectory(uPath || '');
-      if (picked) {
+      const picked = await App.BrowseDirectory(initialPath || '');
+      if (picked && show && generation === operationGeneration && mode === 'use' &&
+          useTarget?.id === targetId && uPath === initialPath) {
         uPath = picked;
         // The folder name is the best guess for the session name, matching
         // what the new-session dialog does.
@@ -238,37 +283,64 @@
 
   async function createFromTemplate() {
     if (!useTarget || !canCreate) return;
+    const generation = operationGeneration;
+    const target = useTarget;
+    const sessionName = uName.trim();
+    const sessionPath = uPath.trim();
+    const autoStart = uAutoStart;
     creating = true;
     error = '';
     const groupId = uGroupId;
     try {
-      const created = await App.CreateSessionFromTemplate(useTarget.id, uName.trim(), uPath.trim());
+      const created = await App.CreateSessionFromTemplate(target.id, sessionName, sessionPath);
       if (created) {
         if (groupId) await assignToGroup(created.id, groupId);
         // Starting is what actually spawns the tabs: the backend stores them
         // as followed windows and the session start recreates each one.
-        if (uAutoStart) await startSession(created.id);
+        if (autoStart) await startSession(created.id);
         else await loadSessions();
       }
+      if (!show || generation !== operationGeneration || useTarget?.id !== target.id) return;
       show = false;
     } catch (e) {
+      if (!show || generation !== operationGeneration || useTarget?.id !== target.id) return;
       error = String(e);
     } finally {
-      creating = false;
+      if (generation === operationGeneration) creating = false;
     }
   }
 
   function close() {
+    operationGeneration++;
+    loadGeneration++;
+    loading = false;
+    creating = false;
+    saving = false;
+    showDelete = false;
+    deleteTarget = null;
     show = false;
+  }
+
+  function cancelEdit() {
+    operationGeneration++;
+    saving = false;
+    mode = 'list';
+    clearForm();
+  }
+
+  function cancelUse() {
+    operationGeneration++;
+    creating = false;
+    mode = 'list';
+    useTarget = null;
   }
 
   function handleKeydown(e: KeyboardEvent) {
     if (e.key !== 'Escape') return;
     e.stopPropagation();
     if (mode !== 'list') {
-      mode = 'list';
-      clearForm();
-      useTarget = null;
+      if (mode === 'edit') cancelEdit();
+      else cancelUse();
       return;
     }
     close();
@@ -366,7 +438,7 @@
             </div>
 
             <div class="form-actions">
-              <button class="btn-secondary" on:click={() => { mode = 'list'; useTarget = null; }}>
+              <button class="btn-secondary" on:click={cancelUse}>
                 {$t('common.cancel')}
               </button>
               <button class="btn-primary" disabled={!canCreate} on:click={createFromTemplate}>
@@ -440,7 +512,7 @@
             </div>
 
             <div class="form-actions">
-              <button class="btn-secondary" on:click={() => { mode = 'list'; clearForm(); }}>
+              <button class="btn-secondary" on:click={cancelEdit}>
                 {$t('common.cancel')}
               </button>
               <button class="btn-primary" disabled={!canSave} on:click={saveTemplate}>{$t('common.save')}</button>

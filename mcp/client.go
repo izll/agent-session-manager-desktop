@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -111,10 +112,24 @@ func NewClient(projectRoot string) *Client {
 
 // Start starts the MCP server process
 func (c *Client) Start() error {
+	return c.StartContext(context.Background())
+}
+
+// StartContext starts the MCP server process and aborts every startup phase
+// when ctx is cancelled. The process remains alive after a successful return;
+// callers stop it through Stop.
+func (c *Client) StartContext(ctx context.Context) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	c.stateMu.Lock()
 	if c.running {
 		c.stateMu.Unlock()
 		return nil
+	}
+	if err := ctx.Err(); err != nil {
+		c.stateMu.Unlock()
+		return err
 	}
 	c.serverReady = make(chan struct{})
 	c.readyOnce = sync.Once{}
@@ -127,7 +142,7 @@ func (c *Client) Start() error {
 	// Uses Claude Code provider by default - no API key required
 	// The server is headless and lives as long as the app does, so on Windows
 	// its console window would sit on screen for the whole session.
-	c.cmd = session.Command("npx", "-y", taskMasterPackage)
+	c.cmd = session.CommandContext(ctx, "npx", "-y", taskMasterPackage)
 	c.cmd.Env = append(os.Environ(),
 		"TASK_MASTER_TOOLS=all",
 		"TASK_MASTER_AI_PROVIDER=claude-code",
@@ -185,6 +200,9 @@ func (c *Client) Start() error {
 		fmt.Println("MCP: server is ready, initializing...")
 	case <-processDone:
 		return fmt.Errorf("MCP server stopped before initialization")
+	case <-ctx.Done():
+		_ = c.Stop()
+		return ctx.Err()
 	case <-time.After(30 * time.Second):
 		fmt.Println("MCP: timeout waiting for server, trying to initialize anyway...")
 	}

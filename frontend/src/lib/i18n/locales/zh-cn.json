@@ -670,7 +670,7 @@
   "settings.notifyOnWaiting": "代理等待时通知",
   "settings.notifyOnWaitingDesc": "当会话开始等待你的输入时发出通知",
   "settings.notifyDesktop": "桌面通知",
-  "settings.notifyDesktopDesc": "本机系统通知 (notify-send)",
+  "settings.notifyDesktopDesc": "本机系统通知",
   "settings.notifyNtfy": "手机推送 (ntfy)",
   "settings.notifyNtfyDesc": "POST 到 ntfy 主题，让手机收到推送",
   "settings.ntfyUrl": "ntfy URL",

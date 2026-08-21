@@ -130,6 +130,25 @@ func TestDetectCodexSessionIDFromProcessTreeFailsClosedOnAmbiguity(t *testing.T)
 	}
 }
 
+func TestDetectCodexSessionIDFromPlatformOpenPaths(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	sessionsRoot := filepath.Join(tempDir, "sessions")
+	cwd := filepath.Join(tempDir, "project")
+	if err := os.MkdirAll(cwd, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	rollout := filepath.Join(sessionsRoot, "rollout.jsonl")
+	writeTestFile(t, rollout, codexMetaLine("platform-id", "", cwd, `"cli"`, "user", ""))
+	outside := filepath.Join(tempDir, "outside.jsonl")
+	writeTestFile(t, outside, codexMetaLine("wrong-id", "", cwd, `"cli"`, "user", ""))
+
+	if got := detectCodexSessionIDFromOpenPaths(sessionsRoot, cwd, []string{outside, rollout}); got != "platform-id" {
+		t.Fatalf("detectCodexSessionIDFromOpenPaths() = %q, want platform-id", got)
+	}
+}
+
 func TestCaptureCodexResumeIDs(t *testing.T) {
 	t.Parallel()
 

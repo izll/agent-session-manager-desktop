@@ -5,6 +5,7 @@
   import { get } from 'svelte/store';
   import { selectedSessionId } from '../../stores/sessions';
   import { settings } from '../../stores/settings';
+  import { activeProjectId } from '../../stores/projects';
   import Select from '../common/Select.svelte';
   import ConfirmDialog from '../Dialogs/ConfirmDialog.svelte';
   import { createFieldDictation } from '../../utils/dictationField';
@@ -68,6 +69,7 @@
   const dispatch = createEventDispatcher();
 
   let lastSessionId: string | null = null;
+  let lastTasksTarget = '';
   let taskPanelLoadGeneration = 0;
   let showPRDModal = false;
   let showAddTaskModal = false;
@@ -360,19 +362,28 @@
 
   onMount(() => {
     loadTasksIfNeeded();
+    const refresh = () => { if (active) void loadTasksIfNeeded(true); };
+    window.addEventListener('tasks:refresh', refresh);
+    return () => window.removeEventListener('tasks:refresh', refresh);
   });
 
   async function loadTasksIfNeeded(force = false) {
     const sessionId = get(selectedSessionId);
+    const projectId = get(activeProjectId);
+    const targetKey = `${projectId}:${sessionId ?? ''}`;
     if (!sessionId) {
       taskPanelLoadGeneration++;
+      lastSessionId = null;
+      lastTasksTarget = targetKey;
+      await checkTaskMasterStatus('');
       await loadTasks('');
       return;
     }
 
-    if (!force && sessionId === lastSessionId) return;
+    if (!force && targetKey === lastTasksTarget) return;
     const generation = ++taskPanelLoadGeneration;
     lastSessionId = sessionId;
+    lastTasksTarget = targetKey;
     prepareTasksSession(sessionId);
 
     // Only ask about Task Master when it is switched on. The check runs it, and
@@ -383,7 +394,8 @@
     useMCPMode.set(useTaskMaster);
     if (useTaskMaster) {
       await checkTaskMasterStatus(sessionId);
-      if (generation !== taskPanelLoadGeneration || sessionId !== get(selectedSessionId)) return;
+      if (generation !== taskPanelLoadGeneration || sessionId !== get(selectedSessionId) ||
+          projectId !== get(activeProjectId)) return;
     }
     await loadTasks(sessionId);
   }
@@ -418,7 +430,7 @@
   }
 
   // Watch for session changes
-  $: if ($selectedSessionId !== lastSessionId) {
+  $: if (`${$activeProjectId}:${$selectedSessionId ?? ''}` !== lastTasksTarget) {
     loadTasksIfNeeded();
   }
 

@@ -30,6 +30,7 @@
   let loadError = '';
   let unregisterUnsavedGuard: (() => void) | null = null;
   let pendingDiscard: (() => void) | null = null;
+  let pendingDiscardCancel: (() => void) | null = null;
 
   function hasUnsavedDrafts(): boolean {
     return [...draftsByTarget.values()].some((draft) =>
@@ -37,14 +38,32 @@
     ) || notes !== lastSaved || !!saveError;
   }
 
-  function confirmDiscardNotes() {
+  async function confirmDiscardNotes() {
     const continuation = pendingDiscard;
     pendingDiscard = null;
+    pendingDiscardCancel = null;
+    // A queued write belongs to the current backend project. Stop a debounced
+    // write and let already-started writes settle before a destructive action
+    // (especially project switching) can change that backend identity.
+    if (saveTimeout) {
+      clearTimeout(saveTimeout);
+      saveTimeout = null;
+    }
+    await Promise.all([...saveQueues.values()].map((save) => save.catch(() => undefined)));
+    for (const [key, draft] of draftsByTarget) {
+      draftsByTarget.set(key, { ...draft, text: draft.saved, saveError: '' });
+    }
+    notes = lastSaved;
+    saveError = '';
+    resetHistory();
     if (continuation) continuation();
   }
 
   function cancelDiscardNotes() {
+    const cancel = pendingDiscardCancel;
     pendingDiscard = null;
+    pendingDiscardCancel = null;
+    if (cancel) cancel();
   }
 
   function noteKey(sessionId: string, windowIdx: number): string {
@@ -282,7 +301,10 @@
   onMount(() => {
     unregisterUnsavedGuard = registerUnsavedGuard({
       isDirty: hasUnsavedDrafts,
-      requestDiscard: (continueAfterDiscard) => { pendingDiscard = continueAfterDiscard; },
+      requestDiscard: (continueAfterDiscard, cancelDiscard) => {
+        pendingDiscard = continueAfterDiscard;
+        pendingDiscardCancel = cancelDiscard ?? null;
+      },
     });
     loadNotes();
   });
@@ -291,6 +313,7 @@
     unregisterUnsavedGuard?.();
     unregisterUnsavedGuard = null;
     pendingDiscard = null;
+    pendingDiscardCancel = null;
     rememberCurrentDraft();
     // Save any pending changes
     if (saveTimeout) {

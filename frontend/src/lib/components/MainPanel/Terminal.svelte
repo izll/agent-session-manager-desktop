@@ -71,7 +71,10 @@
    * Drop this tab's own size so it follows the global setting again. The
    * pane is updated straight away; the stored value is cleared behind it.
    */
-  async function resetFontSizeForCurrentTab(target?: { sessionId: string; windowIdx: number }) {
+  async function resetFontSizeForCurrentTab(
+    target?: { sessionId: string; windowIdx: number },
+    persist = true,
+  ) {
     const sid = target?.sessionId ?? currentTargetSessionId();
     if (!sid) return;
     const widx = target?.windowIdx ?? currentTargetWindowIdx();
@@ -80,7 +83,7 @@
     const affectsVisiblePane =
       sid === currentTargetSessionId() && widx === currentTargetWindowIdx();
     // A pending Ctrl+scroll save would otherwise write the old size back.
-    if (fontSizeSaveTimer) {
+    if (affectsVisiblePane && fontSizeSaveTimer) {
       clearTimeout(fontSizeSaveTimer);
       fontSizeSaveTimer = null;
     }
@@ -91,6 +94,7 @@
       }
       pool?.applyFontSize();
     }
+    if (!persist) return;
     try {
       await SetTabFontSize(sid, widx, 0);
       await loadSessions();
@@ -103,12 +107,16 @@
   // through an event rather than reaching into this one's pool.
   function handleResetFontSizeEvent(e: CustomEvent<{ sessionId: string; windowIdx: number }>) {
     if (!e.detail) return;
-    // In split view two panes listen; only the one actually showing this tab
-    // should act, so the save isn't issued twice for the same tab.
+    // In split view both panes listen. `mine` chooses the pane whose xterm must
+    // repaint; focusOwner below chooses the one backend writer.
     const mine = e.detail.sessionId === currentTargetSessionId() &&
                  e.detail.windowIdx === currentTargetWindowIdx();
     if (!mine && !focusOwner) return;
-    void resetFontSizeForCurrentTab(e.detail);
+    // Every split pane receives this window event. The pane showing the target
+    // updates its xterm immediately, while exactly one focus owner persists the
+    // setting. When those are different panes this deliberately becomes one
+    // local-only update plus one backend-only update, not two writes.
+    void resetFontSizeForCurrentTab(e.detail, focusOwner);
   }
 
   // Get current session without reactive subscription
@@ -237,24 +245,33 @@
   // stopped session reads 'stopped' here and stays owned by the
   // status-change grace-period path.
   function scheduleReshowIfViewing(sessionId: string, windowIdx: number | null) {
+    if (currentTargetSessionId() !== sessionId) return;
+    if (windowIdx !== null && currentTargetWindowIdx() !== windowIdx) return;
+    const operationRevision = ++poolChangeGeneration;
     const attempt = (delay: number, remaining: number) => {
       schedule(async () => {
-        if (!mounted || !pool) return;
+        if (!mounted || !pool || operationRevision !== poolChangeGeneration) return;
         if (currentTargetSessionId() !== sessionId) return;
         if (windowIdx !== null && currentTargetWindowIdx() !== windowIdx) return;
         const session = get(sessions).find(s => s.id === sessionId);
         if (session?.status !== 'running') return;
+        const targetWindowIdx = currentTargetWindowIdx();
         try {
-          await pool.show(sessionId, currentTargetWindowIdx(), () => mounted && active && focusOwner && focusAllowed, themeCtxFor(sessionId, currentTargetWindowIdx()));
-          if (!mounted || currentTargetSessionId() !== sessionId) return;
+          await pool.show(sessionId, targetWindowIdx, () => mounted && active && focusOwner && focusAllowed, themeCtxFor(sessionId, targetWindowIdx));
+          if (!mounted || operationRevision !== poolChangeGeneration ||
+              currentTargetSessionId() !== sessionId ||
+              currentTargetWindowIdx() !== targetWindowIdx) return;
           isAttached = true;
           if (active && focusOwner && focusAllowed) {
             requestAnimationFrame(() => requestAnimationFrame(focusActive));
           }
-          LogFrontend(`reshow ok session=${sessionId} win=${currentTargetWindowIdx()}`);
+          LogFrontend(`reshow ok session=${sessionId} win=${targetWindowIdx}`);
         } catch (err) {
+          if (!mounted || operationRevision !== poolChangeGeneration ||
+              currentTargetSessionId() !== sessionId ||
+              currentTargetWindowIdx() !== targetWindowIdx) return;
           console.error('Re-show after pool destroy failed:', err);
-          LogFrontend(`reshow FAILED session=${sessionId} win=${currentTargetWindowIdx()} remaining=${remaining}: ${err}`);
+          LogFrontend(`reshow FAILED session=${sessionId} win=${targetWindowIdx} remaining=${remaining}: ${err}`);
           // A transient WebSocket failure right after a respawn used to leave
           // the pane black until a manual detach/attach — retry with backoff.
           if (remaining > 0) {
@@ -341,16 +358,25 @@
 
     // Initial auto-attach if session is already selected and running
     const currentId = currentTargetSessionId();
+    const initialWindowIdx = currentTargetWindowIdx();
     if (currentId) {
       const session = get(sessions).find(s => s.id === currentId);
       if (session && session.status === 'running') {
+        const operationRevision = ++poolChangeGeneration;
         schedule(async () => {
           try {
-            if (!pool) return;
-            await pool.show(currentId, currentTargetWindowIdx(), () => mounted && active && focusOwner && focusAllowed, themeCtxFor(currentId, currentTargetWindowIdx()));
-            if (!mounted || currentTargetSessionId() !== currentId) return;
+            if (!pool || operationRevision !== poolChangeGeneration ||
+                currentTargetSessionId() !== currentId ||
+                currentTargetWindowIdx() !== initialWindowIdx) return;
+            await pool.show(currentId, initialWindowIdx, () => mounted && active && focusOwner && focusAllowed, themeCtxFor(currentId, initialWindowIdx));
+            if (!mounted || operationRevision !== poolChangeGeneration ||
+                currentTargetSessionId() !== currentId ||
+                currentTargetWindowIdx() !== initialWindowIdx) return;
             isAttached = true;
           } catch (e) {
+            if (!mounted || operationRevision !== poolChangeGeneration ||
+                currentTargetSessionId() !== currentId ||
+                currentTargetWindowIdx() !== initialWindowIdx) return;
             console.error('Initial auto-attach failed:', e);
             error = String(e);
           }
@@ -383,21 +409,31 @@
   onMount(() => {
     unsubRestarted = EventsOn('session:restarted', async (sessionId: string) => {
       const currentId = currentTargetSessionId();
+      const restartWindowIdx = currentTargetWindowIdx();
       if (sessionId === currentId && pool) {
+        const operationRevision = ++poolChangeGeneration;
         // Destroy old terminal for this session
         await pool.destroy(sessionId);
+        if (!mounted || operationRevision !== poolChangeGeneration || !pool) return;
         isAttached = false;
 
         // Wait for new tmux session to be ready
         await new Promise(r => setTimeout(r, 800));
-        if (!mounted || sessionId !== currentTargetSessionId() || !pool) return;
+        if (!mounted || operationRevision !== poolChangeGeneration ||
+            sessionId !== currentTargetSessionId() ||
+            restartWindowIdx !== currentTargetWindowIdx() || !pool) return;
 
         // Create fresh terminal and show it
         try {
-          await pool.show(sessionId, currentTargetWindowIdx(), () => mounted && active && focusOwner && focusAllowed, themeCtxFor(sessionId, currentTargetWindowIdx()));
-          if (!mounted || sessionId !== currentTargetSessionId()) return;
+          await pool.show(sessionId, restartWindowIdx, () => mounted && active && focusOwner && focusAllowed, themeCtxFor(sessionId, restartWindowIdx));
+          if (!mounted || operationRevision !== poolChangeGeneration ||
+              sessionId !== currentTargetSessionId() ||
+              restartWindowIdx !== currentTargetWindowIdx()) return;
           isAttached = true;
         } catch (e) {
+          if (!mounted || operationRevision !== poolChangeGeneration ||
+              sessionId !== currentTargetSessionId() ||
+              restartWindowIdx !== currentTargetWindowIdx()) return;
           console.error('Reattach after restart failed:', e);
           error = String(e);
         }
@@ -455,9 +491,12 @@
         // Re-check: is the session still stopped?
         const currentSession = get(sessions).find(s => s.id === stoppedSessionId);
         if (currentSession && currentSession.status !== 'running' && pool) {
-          pool.hideAll();
+          const stillViewingStoppedSession = currentTargetSessionId() === stoppedSessionId;
+          if (stillViewingStoppedSession) pool.hideAll();
           await pool.destroy(stoppedSessionId);
-          isAttached = false;
+          if (stillViewingStoppedSession && currentTargetSessionId() === stoppedSessionId) {
+            isAttached = false;
+          }
         }
       }, 3000);
       // Don't destroy yet, just hide
@@ -486,6 +525,8 @@
           requestAnimationFrame(() => requestAnimationFrame(focusActive));
         }
       } catch (e) {
+        if (!mounted || generation !== poolChangeGeneration ||
+            currentTargetSessionId() !== newSessionId || currentTargetWindowIdx() !== newWindowIdx) return;
         console.error('Pool show failed:', e);
         LogFrontend(`pool show FAILED session=${newSessionId} win=${newWindowIdx}: ${e}`);
         error = String(e);
@@ -636,11 +677,16 @@
 
     error = '';
     const windowIdx = currentTargetWindowIdx();
+    const operationRevision = ++poolChangeGeneration;
     try {
       await pool.show(session.id, windowIdx, () => mounted && active && focusOwner && focusAllowed, themeCtxFor(session.id, windowIdx));
-      if (!mounted || currentTargetSessionId() !== session.id || currentTargetWindowIdx() !== windowIdx) return;
+      if (!mounted || operationRevision !== poolChangeGeneration ||
+          currentTargetSessionId() !== session.id || currentTargetWindowIdx() !== windowIdx) return;
       isAttached = true;
     } catch (e) {
+      if (!mounted || operationRevision !== poolChangeGeneration ||
+          currentTargetSessionId() !== session.id ||
+          currentTargetWindowIdx() !== windowIdx) return;
       console.error('Failed to attach:', e);
       error = String(e);
       isAttached = false;
@@ -650,10 +696,15 @@
   export async function detach() {
     if (pool) {
       const currentId = currentTargetSessionId();
+      const currentWindowIdx = currentTargetWindowIdx();
+      const operationRevision = ++poolChangeGeneration;
       if (currentId) {
         await pool.destroy(currentId);
       }
-      isAttached = false;
+      if (mounted && operationRevision === poolChangeGeneration &&
+          currentTargetSessionId() === currentId && currentTargetWindowIdx() === currentWindowIdx) {
+        isAttached = false;
+      }
     }
   }
 </script>

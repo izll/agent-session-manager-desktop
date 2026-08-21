@@ -2,8 +2,12 @@ package main
 
 import (
 	"context"
+	"os"
+	"strings"
 	"testing"
 	"time"
+
+	"asmgr-desktop/session"
 )
 
 func TestAttentionWatcherHasSingleCancellableLifecycle(t *testing.T) {
@@ -37,6 +41,70 @@ func TestAttentionWatcherHasSingleCancellableLifecycle(t *testing.T) {
 
 	// Repeated shutdown is a no-op, not a second close of the same channel.
 	a.stopAttentionWatcher()
+}
+
+func TestNtfyLogEndpointDoesNotExposeTopicOrCredentials(t *testing.T) {
+	raw := "https://alice:secret@notify.example.test/private-topic?token=top-secret#fragment"
+	got := notificationEndpointForLog(raw)
+	if got != "https://notify.example.test" {
+		t.Fatalf("redacted endpoint = %q", got)
+	}
+	for _, secret := range []string{"alice", "secret", "private-topic", "token", "top-secret", "fragment"} {
+		if strings.Contains(got, secret) {
+			t.Errorf("redacted endpoint leaked %q: %q", secret, got)
+		}
+	}
+	if got := notificationEndpointForLog("://private-topic?token=secret"); got != "<invalid endpoint>" {
+		t.Fatalf("invalid URL was logged as %q", got)
+	}
+}
+
+func TestDesktopNotificationUsesThePlatformDelivery(t *testing.T) {
+	original := desktopNotificationDeliver
+	t.Cleanup(func() { desktopNotificationDeliver = original })
+	delivered := make(chan [2]string, 1)
+	desktopNotificationDeliver = func(_ context.Context, title, body string) error {
+		delivered <- [2]string{title, body}
+		return nil
+	}
+
+	a := NewApp()
+	a.sendAttentionNotification(context.Background(), &session.Settings{NotifyDesktop: true}, "reviewer", "ready")
+	a.attentionWG.Wait()
+	select {
+	case got := <-delivered:
+		if got != [2]string{"⏳ reviewer", "ready"} {
+			t.Fatalf("desktop notification = %#v", got)
+		}
+	default:
+		t.Fatal("desktop notification did not reach the platform delivery implementation")
+	}
+}
+
+func TestNativeNotificationLifecycleSurroundsTheWatcher(t *testing.T) {
+	raw, err := os.ReadFile("app.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := string(raw)
+	startup := strings.Index(source, "func (a *App) startup(ctx context.Context)")
+	shutdown := strings.Index(source, "func (a *App) shutdown(ctx context.Context)")
+	if startup < 0 || shutdown < 0 || startup >= shutdown {
+		t.Fatal("app lifecycle methods not found")
+	}
+	startupBody := source[startup:shutdown]
+	initAt := strings.Index(startupBody, "desktopNotificationInitialize(ctx)")
+	watchAt := strings.Index(startupBody, "a.startAttentionWatcher(ctx)")
+	if initAt < 0 || watchAt < 0 || initAt > watchAt {
+		t.Fatalf("native notifications must initialize before the watcher: init=%d watcher=%d", initAt, watchAt)
+	}
+
+	shutdownBody := source[shutdown:]
+	stopAt := strings.Index(shutdownBody, "a.stopAttentionWatcher()")
+	cleanupAt := strings.Index(shutdownBody, "desktopNotificationCleanup(ctx)")
+	if stopAt < 0 || cleanupAt < 0 || stopAt > cleanupAt {
+		t.Fatalf("watcher must stop before notification cleanup: stop=%d cleanup=%d", stopAt, cleanupAt)
+	}
 }
 
 func TestAttentionTransitionsSilentlyRebaselineOnProjectSwitch(t *testing.T) {

@@ -2,12 +2,13 @@ package mcp
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
+	"path/filepath"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -18,7 +19,6 @@ const aiTimeout = 5 * time.Minute
 type TaskMaster struct {
 	client      *Client
 	projectRoot string
-	mu          sync.Mutex
 }
 
 // Task represents a Task Master task
@@ -107,9 +107,30 @@ func NewTaskMaster(projectRoot string) *TaskMaster {
 	}
 }
 
+func (tm *TaskMaster) callMutatingTool(name string, args map[string]interface{}) (*ToolCallResult, error) {
+	return tm.callMutatingToolWithTimeout(name, args, 60*time.Second)
+}
+
+func (tm *TaskMaster) callMutatingToolWithTimeout(name string, args map[string]interface{}, timeout time.Duration) (*ToolCallResult, error) {
+	var result *ToolCallResult
+	path := filepath.Join(tm.projectRoot, ".taskmaster", "tasks", "tasks.json")
+	err := withTaskMasterWriterLock(path, func() error {
+		var err error
+		result, err = tm.client.CallToolWithTimeout(name, args, timeout)
+		return err
+	})
+	return result, err
+}
+
 // Start starts the Task Master MCP server
 func (tm *TaskMaster) Start() error {
 	return tm.client.Start()
+}
+
+// StartContext is Start with cancellation for application shutdown while npx
+// or the MCP initialization handshake is still in flight.
+func (tm *TaskMaster) StartContext(ctx context.Context) error {
+	return tm.client.StartContext(ctx)
 }
 
 // Stop stops the Task Master MCP server
@@ -136,7 +157,7 @@ func (tm *TaskMaster) InitializeProject(skipInstall bool) error {
 		args["skipInstall"] = true
 	}
 
-	result, err := tm.client.CallTool("initialize_project", args)
+	result, err := tm.callMutatingTool("initialize_project", args)
 	if err != nil {
 		return err
 	}
@@ -161,7 +182,7 @@ func (tm *TaskMaster) ParsePRD(prdPath string, numTasks int, force bool) error {
 		args["force"] = true
 	}
 
-	result, err := tm.client.CallToolWithTimeout("parse_prd", args, aiTimeout)
+	result, err := tm.callMutatingToolWithTimeout("parse_prd", args, aiTimeout)
 	if err != nil {
 		return err
 	}
@@ -463,7 +484,7 @@ func (tm *TaskMaster) SetTaskStatus(taskID, status string) error {
 		"projectRoot": tm.projectRoot,
 	}
 
-	result, err := tm.client.CallTool("set_task_status", args)
+	result, err := tm.callMutatingTool("set_task_status", args)
 	if err != nil {
 		return err
 	}
@@ -491,7 +512,7 @@ func (tm *TaskMaster) AddTask(prompt string, research bool, priority string, dep
 		args["dependencies"] = dependencies
 	}
 
-	result, err := tm.client.CallToolWithTimeout("add_task", args, aiTimeout)
+	result, err := tm.callMutatingToolWithTimeout("add_task", args, aiTimeout)
 	if err != nil {
 		return nil, err
 	}
@@ -542,7 +563,7 @@ func (tm *TaskMaster) AddManualTask(title, description, details, priority string
 		args["dependencies"] = dependencies
 	}
 
-	result, err := tm.client.CallToolWithTimeout("add_task", args, aiTimeout)
+	result, err := tm.callMutatingToolWithTimeout("add_task", args, aiTimeout)
 	if err != nil {
 		return nil, err
 	}
@@ -583,7 +604,7 @@ func (tm *TaskMaster) UpdateTask(taskID, prompt string, research bool) error {
 		args["research"] = true
 	}
 
-	result, err := tm.client.CallToolWithTimeout("update_task", args, aiTimeout)
+	result, err := tm.callMutatingToolWithTimeout("update_task", args, aiTimeout)
 	if err != nil {
 		return err
 	}
@@ -603,7 +624,7 @@ func (tm *TaskMaster) UpdateSubtask(taskID, prompt string) error {
 		"projectRoot": tm.projectRoot,
 	}
 
-	result, err := tm.client.CallToolWithTimeout("update_subtask", args, aiTimeout)
+	result, err := tm.callMutatingToolWithTimeout("update_subtask", args, aiTimeout)
 	if err != nil {
 		return err
 	}
@@ -631,7 +652,7 @@ func (tm *TaskMaster) ExpandTask(taskID string, research, force bool, numSubtask
 		args["num"] = numSubtasks
 	}
 
-	result, err := tm.client.CallToolWithTimeout("expand_task", args, aiTimeout)
+	result, err := tm.callMutatingToolWithTimeout("expand_task", args, aiTimeout)
 	if err != nil {
 		return err
 	}
@@ -655,7 +676,7 @@ func (tm *TaskMaster) ExpandAllTasks(research, force bool) error {
 		args["force"] = true
 	}
 
-	result, err := tm.client.CallToolWithTimeout("expand_all", args, aiTimeout)
+	result, err := tm.callMutatingToolWithTimeout("expand_all", args, aiTimeout)
 	if err != nil {
 		return err
 	}
@@ -676,7 +697,7 @@ func (tm *TaskMaster) AnalyzeComplexity(research bool) (*ComplexityReport, error
 		args["research"] = true
 	}
 
-	result, err := tm.client.CallToolWithTimeout("analyze_project_complexity", args, aiTimeout)
+	result, err := tm.callMutatingToolWithTimeout("analyze_project_complexity", args, aiTimeout)
 	if err != nil {
 		return nil, err
 	}
@@ -727,7 +748,7 @@ func (tm *TaskMaster) AddDependency(taskID, dependsOnID string) error {
 		"projectRoot": tm.projectRoot,
 	}
 
-	result, err := tm.client.CallTool("add_dependency", args)
+	result, err := tm.callMutatingTool("add_dependency", args)
 	if err != nil {
 		return err
 	}
@@ -747,7 +768,7 @@ func (tm *TaskMaster) RemoveDependency(taskID, dependsOnID string) error {
 		"projectRoot": tm.projectRoot,
 	}
 
-	result, err := tm.client.CallTool("remove_dependency", args)
+	result, err := tm.callMutatingTool("remove_dependency", args)
 	if err != nil {
 		return err
 	}
@@ -784,7 +805,7 @@ func (tm *TaskMaster) RemoveTask(taskID string) error {
 		"projectRoot": tm.projectRoot,
 	}
 
-	result, err := tm.client.CallTool("remove_task", args)
+	result, err := tm.callMutatingTool("remove_task", args)
 	if err != nil {
 		return err
 	}
@@ -802,7 +823,7 @@ func (tm *TaskMaster) Generate() error {
 		"projectRoot": tm.projectRoot,
 	}
 
-	result, err := tm.client.CallTool("generate", args)
+	result, err := tm.callMutatingTool("generate", args)
 	if err != nil {
 		return err
 	}
@@ -825,7 +846,7 @@ func (tm *TaskMaster) AddSubtask(taskID, title, description string) (*Subtask, e
 		args["description"] = description
 	}
 
-	result, err := tm.client.CallTool("add_subtask", args)
+	result, err := tm.callMutatingTool("add_subtask", args)
 	if err != nil {
 		return nil, err
 	}
@@ -850,7 +871,7 @@ func (tm *TaskMaster) RemoveSubtask(subtaskID string) error {
 		"projectRoot": tm.projectRoot,
 	}
 
-	result, err := tm.client.CallTool("remove_subtask", args)
+	result, err := tm.callMutatingTool("remove_subtask", args)
 	if err != nil {
 		return err
 	}
@@ -869,7 +890,7 @@ func (tm *TaskMaster) ClearSubtasks(taskID string) error {
 		"projectRoot": tm.projectRoot,
 	}
 
-	result, err := tm.client.CallTool("clear_subtasks", args)
+	result, err := tm.callMutatingTool("clear_subtasks", args)
 	if err != nil {
 		return err
 	}
@@ -889,7 +910,7 @@ func (tm *TaskMaster) SetSubtaskStatus(subtaskID, status string) error {
 		"projectRoot": tm.projectRoot,
 	}
 
-	result, err := tm.client.CallTool("set_task_status", args)
+	result, err := tm.callMutatingTool("set_task_status", args)
 	if err != nil {
 		return err
 	}
@@ -934,7 +955,7 @@ func (tm *TaskMaster) UpdateTaskDirect(taskID, title, description, details, prio
 		"projectRoot": tm.projectRoot,
 	}
 
-	result, err := tm.client.CallToolWithTimeout("update_task", args, aiTimeout)
+	result, err := tm.callMutatingToolWithTimeout("update_task", args, aiTimeout)
 	if err != nil {
 		return err
 	}

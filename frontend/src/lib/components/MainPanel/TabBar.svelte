@@ -23,6 +23,7 @@
   import * as DictationService from '../../../../wailsjs/go/main/DictationService';
   import { EventsOn, EventsOff } from '../../../../wailsjs/runtime/runtime';
   import type { session } from '../../../../wailsjs/go/models';
+  import { afterUnsavedChanges } from '../../stores/unsavedChanges';
 
   interface TabColorTarget {
     Index: number;
@@ -41,10 +42,14 @@
   let streamingMode = false;
   let bufferCloseOnSend = true;
   let bufferText = '';
+  let bufferBusy = false;
+  let bufferSyncBusy = false;
+  let bufferSyncQueue: Promise<void> = Promise.resolve();
   let bufferEditor: HTMLDivElement;
   let bufferPanel: HTMLDivElement;
   let lastGoText = '';
   let syncTimeout: ReturnType<typeof setTimeout> | null = null;
+  let componentMounted = false;
 
   function onEditorInput() {
     // Read confirmed text (exclude interim span)
@@ -57,11 +62,22 @@
     if (savedInterim) appendInterimSpan(savedInterim);
     // Sync back to Go
     if (syncTimeout) clearTimeout(syncTimeout);
-    syncTimeout = setTimeout(async () => {
-      try {
-        await DictationService.SetBufferText(bufferText);
-        lastGoText = bufferText;
-      } catch (_) {}
+    syncTimeout = setTimeout(() => {
+      syncTimeout = null;
+      const submitted = bufferText;
+      // Writes can outlive the debounce that launched them. Serialize them so
+      // an older slow bridge call cannot land after a newer one and roll the
+      // dictation buffer back to text the user already changed.
+      const previous = bufferSyncQueue;
+      bufferSyncBusy = true;
+      const queued = previous.catch(() => undefined).then(async () => {
+        await DictationService.SetBufferText(submitted);
+        if (componentMounted) lastGoText = submitted;
+      });
+      bufferSyncQueue = queued;
+      void queued.catch(() => undefined).finally(() => {
+        if (bufferSyncQueue === queued) bufferSyncBusy = false;
+      });
     }, 100);
   }
 
@@ -378,6 +394,7 @@
   }
 
   onMount(async () => {
+    componentMounted = true;
     window.addEventListener('keydown', handleWindowTabKeydown, true);
     window.addEventListener('click', handleTabContextWindowClick);
     window.addEventListener('command:new-tab', handleCommandNewTab);
@@ -398,6 +415,17 @@
     } catch (e) {
       console.error('[Dictation] Failed to get settings:', e);
     }
+    // GetDictationSettings crosses the bridge. If the component was destroyed
+    // while it awaited, registering the event listeners below would happen
+    // after onDestroy had already run and they would leak permanently.
+    if (!componentMounted) return;
+
+    // Declared before subscribing: a runtime may deliver the current state
+    // synchronously from EventsOn, and that callback starts these pollers.
+    let voiceLevelPollId: ReturnType<typeof setInterval> | null = null;
+    let voiceLevelRequestPending = false;
+    let bufferTextPollId: ReturnType<typeof setInterval> | null = null;
+    let bufferTextRequestPending = false;
 
     // Listen for dictation state changes (App.svelte uses 'dictation:state')
     const unsubState = EventsOn('dictation:state', (listening: boolean) => {
@@ -430,15 +458,17 @@
     });
 
     // Poll voice level via bound method (Wails events unreliable at high frequency)
-    let voiceLevelPollId: ReturnType<typeof setInterval> | null = null;
     function startVoiceLevelPoll() {
       if (voiceLevelPollId) return;
       voiceLevelPollId = setInterval(async () => {
         if (!dictationListening) return;
         try {
+          if (voiceLevelRequestPending) return;
+          voiceLevelRequestPending = true;
           const level = await DictationService.GetVoiceLevel();
-          voiceLevel = level;
+          if (componentMounted && dictationListening) voiceLevel = level;
         } catch (_) {}
+        finally { voiceLevelRequestPending = false; }
       }, 80);
     }
     function stopVoiceLevelPoll() {
@@ -450,20 +480,20 @@
     }
 
     // Poll buffer text via bound method
-    let bufferTextPollId: ReturnType<typeof setInterval> | null = null;
-
     function startBufferTextPoll() {
       if (bufferTextPollId) return;
       bufferTextPollId = setInterval(async () => {
-        if (!dictationListening || !bufferMode) return;
+        if (!dictationListening || !bufferMode || bufferTextRequestPending || bufferSyncBusy || bufferBusy) return;
+        bufferTextRequestPending = true;
         try {
           const text = await DictationService.GetBufferText();
-          if (text !== lastGoText) {
+          if (componentMounted && dictationListening && !bufferSyncBusy && !bufferBusy && text !== lastGoText) {
             lastGoText = text;
             bufferText = text;
             updateEditorDisplay();
           }
         } catch (_) {}
+        finally { bufferTextRequestPending = false; }
       }, 150);
     }
     function stopBufferTextPoll() {
@@ -529,11 +559,22 @@
   });
 
   onDestroy(() => {
+    componentMounted = false;
     window.removeEventListener('keydown', handleWindowTabKeydown, true);
     window.removeEventListener('click', handleTabContextWindowClick);
     window.removeEventListener('command:new-tab', handleCommandNewTab);
     window.removeEventListener('resize', keepBufferOnScreen);
     stopPolling();
+    if (syncTimeout) {
+      clearTimeout(syncTimeout);
+      syncTimeout = null;
+    }
+    // A component teardown can happen mid-drag/resize, before mouseup. Remove
+    // the document listeners explicitly so they do not retain this TabBar.
+    document.removeEventListener('mousemove', onDragMove);
+    document.removeEventListener('mouseup', onDragEnd);
+    document.removeEventListener('mousemove', onResizeMove);
+    document.removeEventListener('mouseup', onResizeEnd);
     if (dictationCleanup) {
       dictationCleanup();
     }
@@ -595,25 +636,51 @@
   }
 
   async function sendBuffer() {
-    if (!bufferText.trim()) return;
+    if (!bufferText.trim() || bufferBusy) return;
+    const submitted = bufferText;
+    const sid = get(selectedSessionId);
+    const widx = get(selectedWindowIdx);
+    if (!sid) return;
+    bufferBusy = true;
     try {
+      // A debounced/in-flight editor sync must finish before ClearBuffer, or it
+      // can land afterwards and resurrect the prompt that was just sent.
+      if (syncTimeout) {
+        clearTimeout(syncTimeout);
+        syncTimeout = null;
+      }
+      await bufferSyncQueue.catch(() => undefined);
       // Use App.SendPrompt which mirrors the TUI approach:
       // 1. tmux send-keys -l (literal text)
       // 2. 50ms delay
       // 3. tmux send-keys Enter (separate key event)
       // Direct PTY write of text+\r doesn't trigger readline submit.
-      const sid = get(selectedSessionId);
-      if (sid) {
-        // Name the tab, not just the session. Targeting the session alone lets
-        // the multiplexer pick its active window, so dictated text arrived in a
-        // different tab than the one on screen — indistinguishable, from the
-        // user's side, from it never being sent.
-        await App.SendPromptToWindow(sid, get(selectedWindowIdx), bufferText);
-      }
-      await DictationService.ClearBuffer();
+      // Name and snapshot the tab as well as the text before the await. A tab
+      // switch while SendPromptToWindow is running must not redirect this send,
+      // and a second click/key path must not submit the same prompt twice.
+      await App.SendPromptToWindow(sid, widx, submitted);
+      // From here the prompt is committed. Clear the visible copy before the
+      // second bridge call: if backend cleanup fails, leaving the text in the
+      // sendable editor invites an accidental duplicate submission.
       bufferText = '';
       lastGoText = '';
       if (bufferEditor) bufferEditor.textContent = '';
+      try {
+        await DictationService.ClearBuffer();
+      } catch (clearError) {
+        // SetBufferText reaches the same storage through a simpler operation
+        // and is a useful fallback. If both fail, suppress the old backend text
+        // from the poll and surface the recovery problem, but never offer the
+        // already-sent prompt as though it were unsent.
+        lastGoText = submitted;
+        try {
+          await DictationService.SetBufferText('');
+          lastGoText = '';
+        } catch {
+          errorMessage = `Dictation buffer cleanup failed: ${clearError}`;
+          showErrorToast = true;
+        }
+      }
       // Close buffer window and stop dictation if configured
       if (bufferCloseOnSend) {
         dictationListening = false;
@@ -626,17 +693,28 @@
       }
     } catch (e) {
       console.error('[Dictation] Send buffer failed:', e);
+    } finally {
+      bufferBusy = false;
     }
   }
 
   async function clearBuffer() {
+    if (bufferBusy) return;
+    bufferBusy = true;
     try {
+      if (syncTimeout) {
+        clearTimeout(syncTimeout);
+        syncTimeout = null;
+      }
+      await bufferSyncQueue.catch(() => undefined);
       await DictationService.ClearBuffer();
       bufferText = '';
       lastGoText = '';
       if (bufferEditor) bufferEditor.textContent = '';
     } catch (e) {
       console.error('[Dictation] Clear buffer failed:', e);
+    } finally {
+      bufferBusy = false;
     }
   }
 
@@ -1227,22 +1305,27 @@
     }
   }
 
-  async function confirmDeleteTab() {
+  function confirmDeleteTab() {
     const target = deleteTabTarget;
     deleteTabTarget = null;
     if (target && $selectedSessionId === target.sessionId) {
-      try {
-        await deleteTab(target.sessionId, target.windowIdx);
-        // Force refresh window list immediately
-        if ($selectedSessionId === target.sessionId) {
-          await loadWindowsForSession(target.sessionId, currentSessionStatus, visible);
-        }
-      } catch (e) {
-        errorMessage = `Failed to delete tab: ${e}`;
-        showErrorToast = true;
-      }
+      afterUnsavedChanges(() => { void deleteCapturedTab(target); });
     }
     focusTerminal();
+  }
+
+  async function deleteCapturedTab(target: { sessionId: string; windowIdx: number }) {
+    try {
+      await deleteTab(target.sessionId, target.windowIdx);
+      // Force refresh window list immediately, but never install the result
+      // over a session selected while the discard prompt or deletion awaited.
+      if ($selectedSessionId === target.sessionId) {
+        await loadWindowsForSession(target.sessionId, currentSessionStatus, visible);
+      }
+    } catch (e) {
+      errorMessage = `Failed to delete tab: ${e}`;
+      showErrorToast = true;
+    }
   }
 
   async function startTabRename(index: number, currentName: string) {
@@ -1400,10 +1483,14 @@
     }
   }
 
-  async function confirmDelete() {
+  function confirmDelete() {
     const target = deleteSessionTarget;
     deleteSessionTarget = null;
     if (!target || $selectedSessionId !== target.sessionId) return;
+    afterUnsavedChanges(() => { void deleteCapturedSession(target); });
+  }
+
+  async function deleteCapturedSession(target: { sessionId: string; name: string }) {
     try {
       await deleteSession(target.sessionId);
     } catch (e) {
@@ -1830,7 +1917,7 @@
               <!-- svelte-ignore a11y-no-static-element-interactions -->
               <div
                 class="buffer-editor"
-                contenteditable={bufferMode ? 'true' : 'false'}
+                contenteditable={bufferMode && !bufferBusy ? 'true' : 'false'}
                 bind:this={bufferEditor}
                 on:keydown={bufferMode ? handleBufferKeydown : undefined}
                 on:keyup={bufferMode ? handleBufferKeyup : undefined}
@@ -1856,12 +1943,12 @@
                   </div>
                 </div>
                 <div class="buffer-btn-group">
-                  <button class="buffer-btn trash" on:click={clearBuffer} title={$t('tabBar.clearText')}>
+                  <button class="buffer-btn trash" on:click={clearBuffer} title={$t('tabBar.clearText')} disabled={bufferBusy}>
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                       <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
                     </svg>
                   </button>
-                  <button class="buffer-btn send" on:click={sendBuffer} title={$t('tabBar.sendToTerminal')} disabled={!bufferText.trim()}>
+                  <button class="buffer-btn send" on:click={sendBuffer} title={$t('tabBar.sendToTerminal')} disabled={!bufferText.trim() || bufferBusy}>
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                       <line x1="22" y1="2" x2="11" y2="13"/>
                       <polygon points="22 2 15 22 11 13 2 9 22 2"/>

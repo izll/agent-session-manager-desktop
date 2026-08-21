@@ -670,7 +670,7 @@
   "settings.notifyOnWaiting": "Powiadom, gdy agent oczekuje",
   "settings.notifyOnWaitingDesc": "Wyślij powiadomienie, gdy sesja zacznie oczekiwać na dane wejściowe",
   "settings.notifyDesktop": "Powiadomienie systemowe",
-  "settings.notifyDesktopDesc": "Powiadomienie systemowe na tym komputerze (notify-send)",
+  "settings.notifyDesktopDesc": "Powiadomienie systemowe na tym komputerze",
   "settings.notifyNtfy": "Push na telefon (ntfy)",
   "settings.notifyNtfyDesc": "Wyślij POST do tematu ntfy, aby otrzymać push na telefon",
   "settings.ntfyUrl": "Adres URL ntfy",

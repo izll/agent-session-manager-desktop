@@ -40,12 +40,7 @@ func canonicalTaskMasterPath(path string) string {
 // which knows about our lock file.
 func MutateTaskMasterFile(path string, mutate func(root map[string]interface{}) error) error {
 	path = canonicalTaskMasterPath(path)
-	value, _ := taskMasterPathLocks.LoadOrStore(path, &sync.Mutex{})
-	processLock := value.(*sync.Mutex)
-	processLock.Lock()
-	defer processLock.Unlock()
-
-	return withTaskMasterOSLock(path+".asmgr.lock", func() error {
+	return withTaskMasterWriterLock(path, func() error {
 		before, err := os.ReadFile(path)
 		if err != nil {
 			return fmt.Errorf("failed to read tasks.json: %w", err)
@@ -75,6 +70,34 @@ func MutateTaskMasterFile(path string, mutate func(root map[string]interface{}) 
 			return fmt.Errorf("failed to replace tasks.json: %w", err)
 		}
 		return nil
+	})
+}
+
+// withTaskMasterWriterLock is shared by direct JSON edits and every MCP tool
+// call that can write provider state. Serializing only the direct path still
+// allowed two app windows/processes to ask Task Master to overwrite the same
+// tasks.json concurrently.
+func withTaskMasterWriterLock(path string, action func() error) error {
+	path = canonicalTaskMasterPath(path)
+	value, _ := taskMasterPathLocks.LoadOrStore(path, &sync.Mutex{})
+	processLock := value.(*sync.Mutex)
+	processLock.Lock()
+	defer processLock.Unlock()
+
+	// The stable lock lives outside Task Master's provider-owned directory. In
+	// particular, initialize_project must not create .taskmaster/tasks merely by
+	// trying to acquire a lock: providers can interpret that partial tree as an
+	// already-initialized project. Keep taking the older adjacent lock once the
+	// directory exists so concurrently running app versions remain compatible.
+	projectRoot := canonicalTaskMasterPath(filepath.Dir(filepath.Dir(filepath.Dir(path))))
+	stableLock := filepath.Join(projectRoot, ".asmgr-taskmaster.lock")
+	return withTaskMasterOSLock(stableLock, func() error {
+		if info, err := os.Stat(filepath.Dir(path)); err == nil && info.IsDir() {
+			return withTaskMasterOSLock(path+".asmgr.lock", action)
+		} else if err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		return action()
 	})
 }
 

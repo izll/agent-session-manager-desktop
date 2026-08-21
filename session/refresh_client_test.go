@@ -69,9 +69,9 @@ func TestRefreshSessionClientsResolvesClientsFirst(t *testing.T) {
 	}
 	src := string(b)
 
-	start := strings.Index(src, "func RefreshSessionClients(")
+	start := strings.Index(src, "func RefreshSessionClientsContext(")
 	if start < 0 {
-		t.Fatal("RefreshSessionClients not found")
+		t.Fatal("RefreshSessionClientsContext not found")
 	}
 	body := src[start:]
 	if end := strings.Index(body, "\n}\n"); end > 0 {

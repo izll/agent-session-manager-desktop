@@ -22,9 +22,10 @@
     if (isSelecting) return;
     isSelecting = true;
     try {
-      await selectProject(id);
-      showDashboard();
-      isOpen = false;
+      if (await selectProject(id)) {
+        showDashboard();
+        isOpen = false;
+      }
     } finally {
       isSelecting = false;
     }
@@ -44,7 +45,13 @@
     try {
       const project = await createProject(newProjectName.trim());
       if (project) {
-        await selectProject(project.id);
+        if (!(await selectProject(project.id))) {
+          // Creation already succeeded. Clear the form so retrying after an
+          // unsaved-change cancellation cannot create a duplicate project.
+          newProjectName = '';
+          isCreating = false;
+          return;
+        }
         showDashboard();
       }
       newProjectName = '';

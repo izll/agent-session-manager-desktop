@@ -670,7 +670,7 @@
   "settings.notifyOnWaiting": "Avisera när en agent väntar",
   "settings.notifyOnWaitingDesc": "Skicka en avisering när en session börjar vänta på din inmatning",
   "settings.notifyDesktop": "Skrivbordsavisering",
-  "settings.notifyDesktopDesc": "Systemavisering på denna dator (notify-send)",
+  "settings.notifyDesktopDesc": "Systemavisering på denna dator",
   "settings.notifyNtfy": "Mobil push (ntfy)",
   "settings.notifyNtfyDesc": "POST till ett ntfy-ämne så att telefonen får en push",
   "settings.ntfyUrl": "ntfy-URL",

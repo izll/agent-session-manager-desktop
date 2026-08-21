@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dialog race fixture</title>
+    <style>
+      body { margin: 0; background: #09090d; color: white; }
+      .dialog-overlay { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; }
+      .dialog-content { background: #18181b; }
+      #change-command-target { position: fixed; left: 4px; top: 4px; z-index: 20000; }
+      #change-history-target { position: fixed; left: 4px; top: 40px; z-index: 20000; }
+    </style>
+  </head>
+  <body data-fixture-ready="loading">
+    <main id="fixture"></main>
+    <script type="module" src="./dialog-races-fixture.ts"></script>
+  </body>
+</html>

@@ -1,6 +1,12 @@
 package main
 
-import "testing"
+import (
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"testing"
+)
 
 // A commit message is free text: it can contain newlines, tabs, quotes and
 // anything else a person can type. Parsing the log by splitting on a character
@@ -105,5 +111,56 @@ func TestConsecutiveCommitsAreSeparated(t *testing.T) {
 	}
 	if commits[1].Subject != "second" {
 		t.Errorf("second subject = %q", commits[1].Subject)
+	}
+}
+
+func TestGitHistoryRejectsOptionLikeRevisionsBeforeGitCanWriteFiles(t *testing.T) {
+	repo := t.TempDir()
+	run := func(args ...string) string {
+		t.Helper()
+		cmd := exec.Command("git", append([]string{"-C", repo}, args...)...)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v: %v: %s", args, err, out)
+		}
+		return string(out)
+	}
+	run("init", "-q")
+	run("config", "user.name", "Test")
+	run("config", "user.email", "test@example.com")
+	if err := os.WriteFile(filepath.Join(repo, "file.txt"), []byte("content\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	run("add", "file.txt")
+	run("commit", "-qm", "initial")
+	hash := strings.TrimSpace(run("rev-parse", "HEAD"))
+	branch := strings.TrimSpace(run("rev-parse", "--abbrev-ref", "HEAD"))
+
+	victim := filepath.Join(t.TempDir(), "victim")
+	if err := os.WriteFile(victim, []byte("keep"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	attack := "--output=" + victim
+	app := &App{}
+	if _, err := app.GetGitHistory(repo, attack, 0); err == nil {
+		t.Fatal("option-like branch was accepted")
+	}
+	if _, err := app.GetGitCommitFiles(repo, attack); err == nil {
+		t.Fatal("option-like commit hash was accepted")
+	}
+	if _, err := app.GetGitCommitDiff(repo, attack, "file.txt", false); err == nil {
+		t.Fatal("option-like diff hash was accepted")
+	}
+	if got, err := os.ReadFile(victim); err != nil || string(got) != "keep" {
+		t.Fatalf("victim changed: body=%q err=%v", got, err)
+	}
+
+	// The defensive separator and hash validation must not reject a normal
+	// history/commit selected by the UI.
+	if _, err := app.GetGitCommitFiles(repo, hash); err != nil {
+		t.Fatalf("valid commit hash rejected: %v", err)
+	}
+	if page, err := app.GetGitHistory(repo, branch, 0); err != nil || len(page.Commits) != 1 {
+		t.Fatalf("valid branch rejected: commits=%d err=%v", len(page.Commits), err)
 	}
 }

@@ -21,6 +21,7 @@
   let success = '';
   /** Clock time of the last completed check, shown with the result. */
   let checkedAt = '';
+  let operationGeneration = 0;
 
   // One reactive block, not two: Svelte orders blocks by dependency, so a
   // separate `$: lastShow = show` runs BEFORE the guard that reads it and the
@@ -28,11 +29,15 @@
   // keeps the comparison against the previous value.
   let lastShow = false;
   $: {
-    if (show && !lastShow) checkForUpdate();
+    if (show && !lastShow) {
+      operationGeneration++;
+      checkForUpdate();
+    }
     lastShow = show;
   }
 
   async function checkForUpdate() {
+    const generation = ++operationGeneration;
     isChecking = true;
     error = '';
     success = '';
@@ -41,43 +46,48 @@
     // so hold it just long enough to read.
     const started = Date.now();
     try {
-      updateInfo = await App.CheckForUpdate();
+      const result = await App.CheckForUpdate();
+      const elapsed = Date.now() - started;
+      if (elapsed < 600) await new Promise(r => setTimeout(r, 600 - elapsed));
+      if (!show || generation !== operationGeneration) return;
+      updateInfo = result;
       checkedAt = new Date().toLocaleTimeString(undefined, {
-        hour: '2-digit',
-        minute: '2-digit',
+        hour: '2-digit', minute: '2-digit',
       });
-      // Keep the header in step: a manual check is the freshest answer there
-      // is, so an "up to date" result must retire the indicator too.
-      dispatch('checked', updateInfo?.available ? updateInfo.latestVersion : '');
+      dispatch('checked', result?.available ? result.latestVersion : '');
     } catch (e) {
+      if (!show || generation !== operationGeneration) return;
       error = String(e);
     } finally {
-      const elapsed = Date.now() - started;
-      if (elapsed < 600) {
-        await new Promise(r => setTimeout(r, 600 - elapsed));
-      }
-      isChecking = false;
+      if (generation === operationGeneration) isChecking = false;
     }
   }
 
   async function performUpdate() {
     if (!updateInfo?.latestVersion) return;
 
+    const targetVersion = updateInfo.latestVersion;
+    const generation = ++operationGeneration;
     isUpdating = true;
     error = '';
     try {
-      await App.PerformUpdate(updateInfo.latestVersion);
-      success = $t('update.success');
+      await App.PerformUpdate(targetVersion);
       // Installed — the header indicator has nothing left to point at.
       dispatch('installed');
+      if (!show || generation !== operationGeneration) return;
+      success = $t('update.success');
     } catch (e) {
+      if (!show || generation !== operationGeneration) return;
       error = String(e);
     } finally {
-      isUpdating = false;
+      if (generation === operationGeneration) isUpdating = false;
     }
   }
 
   function close() {
+    operationGeneration++;
+    isChecking = false;
+    isUpdating = false;
     show = false;
     updateInfo = null;
     error = '';

@@ -1,10 +1,14 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"regexp"
+	"sync"
+	"time"
 
 	"asmgr-desktop/session"
 )
@@ -29,10 +33,83 @@ type BackgroundAgentInfo struct {
 // id can be safely placed on a command line.
 var bgAgentIDRe = regexp.MustCompile(`^[0-9a-f]{6,16}$`)
 
+const (
+	backgroundAgentOutputLimit = 1 << 20
+	backgroundAgentLogTail     = 16 * 1024
+)
+
+var (
+	backgroundAgentCommandTimeout = 15 * time.Second
+	backgroundAgentCommand        = session.CommandContext
+)
+
+// boundedCommandOutput accepts every byte so the child cannot block on a full
+// pipe, but retains only a fixed amount in memory. JSON listings keep their
+// prefix and reject truncation; logs keep their newest tail.
+type boundedCommandOutput struct {
+	mu        sync.Mutex
+	data      []byte
+	limit     int
+	tail      bool
+	truncated bool
+}
+
+func (b *boundedCommandOutput) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	written := len(p)
+	if b.limit <= 0 {
+		b.truncated = b.truncated || written > 0
+		return written, nil
+	}
+	if b.tail {
+		if len(p) >= b.limit {
+			b.data = append(b.data[:0], p[len(p)-b.limit:]...)
+			b.truncated = true
+			return written, nil
+		}
+		if excess := len(b.data) + len(p) - b.limit; excess > 0 {
+			copy(b.data, b.data[excess:])
+			b.data = b.data[:len(b.data)-excess]
+			b.truncated = true
+		}
+		b.data = append(b.data, p...)
+		return written, nil
+	}
+	remaining := b.limit - len(b.data)
+	if remaining > 0 {
+		keep := len(p)
+		if keep > remaining {
+			keep = remaining
+		}
+		b.data = append(b.data, p[:keep]...)
+	}
+	if written > remaining {
+		b.truncated = true
+	}
+	return written, nil
+}
+
+func (b *boundedCommandOutput) Bytes() ([]byte, bool) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return append([]byte(nil), b.data...), b.truncated
+}
+
 // ListBackgroundAgents returns the currently live background agents.
 func (a *App) ListBackgroundAgents() []BackgroundAgentInfo {
-	out, err := session.Command("claude", "agents", "--json").Output()
+	ctx, cancel := context.WithTimeout(context.Background(), backgroundAgentCommandTimeout)
+	defer cancel()
+	output := &boundedCommandOutput{limit: backgroundAgentOutputLimit}
+	cmd := backgroundAgentCommand(ctx, "claude", "agents", "--json")
+	configureBackgroundAgentCommand(cmd)
+	cmd.Stdout = output
+	err := cmd.Run()
+	out, truncated := output.Bytes()
 	if err != nil {
+		return nil
+	}
+	if truncated {
 		return nil
 	}
 	var raw []struct {
@@ -71,13 +148,17 @@ func (a *App) GetBackgroundAgentLogs(shortID string) (string, error) {
 	if !bgAgentIDRe.MatchString(shortID) {
 		return "", fmt.Errorf("invalid agent id")
 	}
-	out, err := session.Command("claude", "logs", shortID).CombinedOutput()
+	ctx, cancel := context.WithTimeout(context.Background(), backgroundAgentCommandTimeout)
+	defer cancel()
+	output := &boundedCommandOutput{limit: backgroundAgentLogTail, tail: true}
+	cmd := backgroundAgentCommand(ctx, "claude", "logs", shortID)
+	configureBackgroundAgentCommand(cmd)
+	cmd.Stdout = output
+	cmd.Stderr = output
+	err := cmd.Run()
+	out, _ := output.Bytes()
 	if err != nil && len(out) == 0 {
-		return "", fmt.Errorf("claude logs failed: %w", err)
-	}
-	const cap = 16 * 1024
-	if len(out) > cap {
-		out = out[len(out)-cap:]
+		return "", fmt.Errorf("claude logs failed: %w", errors.Join(err, ctx.Err()))
 	}
 	return string(out), nil
 }
@@ -87,7 +168,11 @@ func (a *App) StopBackgroundAgent(shortID string) error {
 	if !bgAgentIDRe.MatchString(shortID) {
 		return fmt.Errorf("invalid agent id")
 	}
-	return session.Command("claude", "stop", shortID).Run()
+	ctx, cancel := context.WithTimeout(context.Background(), backgroundAgentCommandTimeout)
+	defer cancel()
+	cmd := backgroundAgentCommand(ctx, "claude", "stop", shortID)
+	configureBackgroundAgentCommand(cmd)
+	return cmd.Run()
 }
 
 // AttachBackgroundAgent turns a background agent into a visible asmgr
@@ -120,10 +205,12 @@ func (a *App) AttachBackgroundAgent(shortID, cwd, name, groupID string) (string,
 		}
 	}
 	if err := inst.Start(); err != nil {
-		_ = a.storage.RemoveInstance(inst.ID)
-		return inst.ID, err
+		return inst.ID, errors.Join(err, inst.Stop(), a.storage.RemoveInstance(inst.ID))
 	}
-	if err := a.storage.UpdateInstance(inst); err != nil {
+	if err := persistOrRollbackExternalMutation(
+		func() error { return a.storage.UpdateInstance(inst) },
+		func() error { return errors.Join(inst.Stop(), a.storage.RemoveInstance(inst.ID)) },
+	); err != nil {
 		return inst.ID, err
 	}
 	return inst.ID, nil
@@ -153,5 +240,8 @@ func (a *App) AttachBackgroundAgentAsTab(sessionID, shortID, name string) (int, 
 	if err != nil {
 		return -1, err
 	}
-	return idx, a.storage.UpdateInstance(inst)
+	return idx, persistOrRollbackExternalMutation(
+		func() error { return a.storage.UpdateInstance(inst) },
+		func() error { return inst.DeleteWindow(idx) },
+	)
 }

@@ -140,9 +140,29 @@
   }
 
   /** Re-walk the tree, for a user who just created the file they are looking for. */
-  function reload() {
-    void App.InvalidateSessionFileIndex(sessionId);
-    void load();
+  async function reload() {
+    const targetSessionId = sessionId;
+    const targetWindowIdx = windowIdx;
+    const targetRoot = root;
+    if (!targetSessionId || !targetRoot) return;
+    // Invalidation is asynchronous. Starting load() beside it lets the read win
+    // the race and repopulate the picker from the very cache the user asked to
+    // discard, making Reload appear to do nothing.
+    const generation = ++loadGeneration;
+    index = null;
+    loading = true;
+    error = '';
+    try {
+      await App.InvalidateSessionFileIndex(targetSessionId);
+      if (destroyed || generation !== loadGeneration || !show ||
+          targetSessionId !== sessionId || targetWindowIdx !== windowIdx || targetRoot !== root) return;
+      await load();
+    } catch (e) {
+      if (destroyed || generation !== loadGeneration || !show ||
+          targetSessionId !== sessionId || targetWindowIdx !== windowIdx || targetRoot !== root) return;
+      loading = false;
+      error = String(e);
+    }
   }
 
   // --- Filename ranking -----------------------------------------------------

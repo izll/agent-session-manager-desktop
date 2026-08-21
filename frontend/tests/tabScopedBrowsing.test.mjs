@@ -17,12 +17,12 @@ const terminal = readFileSync(
 );
 
 // A tab can be opened in its own directory, so the tree has to reload when the
-// tab changes — and every tab of one session carries the same session id, which
-// is what the old comparison used.
+// tab or project changes — every tab of one session carries the same session id,
+// and separate projects may legitimately reuse both ids.
 assert.match(
   browser,
-  /\$: browseKey = `\$\{\$selectedSessionId \?\? ''\}:\$\{\$selectedWindowIdx \?\? 0\}`/,
-  'the tree must be keyed on session AND tab',
+  /\$: browseKey = `\$\{\$activeProjectId\}:\$\{\$selectedSessionId \?\? ''\}:\$\{\$selectedWindowIdx \?\? 0\}`/,
+  'the tree must be keyed on project, session, and tab',
 );
 assert.match(
   browser,

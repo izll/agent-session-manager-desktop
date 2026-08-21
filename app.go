@@ -40,6 +40,16 @@ type App struct {
 	attentionMu       sync.Mutex
 	attentionCancel   context.CancelFunc
 	attentionWG       sync.WaitGroup
+	orphanCleanupMu   sync.Mutex
+	orphanCleanupStop context.CancelFunc
+	orphanCleanupWG   sync.WaitGroup
+	updateCheckMu     sync.Mutex
+	updateCheckStop   context.CancelFunc
+	updateCheckWG     sync.WaitGroup
+	tmuxWorkMu        sync.Mutex
+	tmuxWorkCtx       context.Context
+	tmuxWorkStop      context.CancelFunc
+	tmuxWorkWG        sync.WaitGroup
 	lastTypingSignal  int64 // unix nano timestamp of last typing signal
 	// projectLocked is true when THIS instance owns the active project's lock.
 	// otherInstancePID is the PID of the instance that owns it instead (0 if
@@ -178,6 +188,9 @@ func (a *App) startup(ctx context.Context) {
 
 	// Attention notifications (desktop/ntfy when an agent starts waiting).
 	// Backend-side so it keeps working while the window is unfocused.
+	if err := desktopNotificationInitialize(ctx); err != nil {
+		log.Printf("[notify] native desktop notification initialization failed: %v", err)
+	}
 	a.startAttentionWatcher(ctx)
 
 	// Set dictation callbacks (instance created in main.go)
@@ -209,8 +222,15 @@ func (a *App) startup(ctx context.Context) {
 		runtime.EventsEmit(ctx, "dictation:fieldDelete", count)
 	})
 
-	// Clean up orphaned GUI tmux sessions from previous runs
-	go a.cleanupOrphanedGUISessions()
+	// Clean up orphaned GUI tmux sessions from previous runs. This owns tmux
+	// processes and a project read lock, so shutdown must be able to cancel and
+	// reap it before releasing project ownership.
+	a.startOrphanCleanup(ctx)
+	// Resize/redraw maintenance is deliberately asynchronous so terminal resize
+	// events do not stall the UI. Give it an application-owned lifecycle: the
+	// workers touch tmux and retain project ownership, so shutdown must cancel
+	// and reap them before terminal/project teardown.
+	a.startTmuxMaintenance(ctx)
 
 	// Start preview polling in background
 	previewCtx, previewCancel := context.WithCancel(ctx)
@@ -226,7 +246,33 @@ func (a *App) startup(ctx context.Context) {
 	// real RemoteFiltersURL set, so this is a no-op for now.
 	filters.StartRemoteUpdater(ctx)
 
-	go a.autoCheckForUpdate(ctx)
+	a.startAutoCheckForUpdate(ctx)
+}
+
+func (a *App) startAutoCheckForUpdate(parent context.Context) {
+	a.updateCheckMu.Lock()
+	defer a.updateCheckMu.Unlock()
+	if a.updateCheckStop != nil {
+		return
+	}
+	ctx, cancel := context.WithCancel(parent)
+	a.updateCheckStop = cancel
+	a.updateCheckWG.Add(1)
+	go func() {
+		defer a.updateCheckWG.Done()
+		a.autoCheckForUpdate(ctx)
+	}()
+}
+
+func (a *App) stopAutoCheckForUpdate() {
+	a.updateCheckMu.Lock()
+	defer a.updateCheckMu.Unlock()
+	if a.updateCheckStop == nil {
+		return
+	}
+	a.updateCheckStop()
+	a.updateCheckWG.Wait()
+	a.updateCheckStop = nil
 }
 
 // autoCheckForUpdate looks for a new release shortly after launch, at most
@@ -243,12 +289,18 @@ func (a *App) autoCheckForUpdate(ctx context.Context) {
 	if !updater.ShouldCheckForUpdate() {
 		return
 	}
-	latest, err := updater.RefreshAvailableUpdate(Version)
+	latest, err := updater.RefreshAvailableUpdateContext(ctx, Version)
 	if err != nil {
+		if ctx.Err() != nil {
+			return
+		}
 		log.Printf("[update] automatic check failed: %v", err)
 		return
 	}
 	if latest == "" {
+		return
+	}
+	if ctx.Err() != nil {
 		return
 	}
 
@@ -270,8 +322,31 @@ func (a *App) shutdown(ctx context.Context) {
 	// lock or removing terminal mirrors. Both pollers capture panes and read the
 	// active project; letting either survive into teardown races the resources
 	// shutdown is about to invalidate.
+	a.stopAutoCheckForUpdate()
 	a.stopAttentionWatcher()
+	desktopNotificationCleanup(ctx)
 	a.stopPreviewPolling()
+	a.stopOrphanCleanup()
+	a.stopTmuxMaintenance()
+	// Dictation owns audio/hotkey goroutines whose callbacks can write to the
+	// terminal and emit frontend events. Drain and detach them before stopping
+	// the TerminalServer or releasing the active project's ownership.
+	if a.dictation != nil {
+		a.dictation.Shutdown()
+	}
+	if a.termServer != nil {
+		stopCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		if err := a.termServer.Stop(stopCtx); err != nil {
+			log.Printf("[terminal] shutdown did not complete cleanly: %v", err)
+		}
+		cancel()
+	}
+	// An MCP client may still be inside its npx/startup handshake while its
+	// Wails request holds the project read lock. Cancel and reap those starts
+	// before waiting for exclusive project teardown; doing this at the end made
+	// shutdown wait for the full external startup timeout (or forever if npx
+	// itself wedged).
+	stopAllTaskMasters()
 
 	a.projectMu.Lock()
 	// Persist Codex-generated conversation IDs before releasing the project
@@ -282,7 +357,9 @@ func (a *App) shutdown(ctx context.Context) {
 		a.persistActiveProjectCodexResumeIDs("shutdown")
 		// Mirrors belong to the project lock owner. Remove them before dropping
 		// ownership so the guard in cleanupAllGUISessions remains meaningful.
-		a.cleanupAllGUISessions()
+		cleanupCtx, cancel := context.WithTimeout(context.Background(), session.TmuxCommandTimeout)
+		a.cleanupAllGUISessions(cleanupCtx)
+		cancel()
 	}
 
 	// Release the project lock only if WE hold it — a second instance that
@@ -314,12 +391,6 @@ func (a *App) shutdown(ctx context.Context) {
 	}
 	a.ptyMu.Unlock()
 
-	// Shutdown dictation service
-	if a.dictation != nil {
-		a.dictation.Shutdown()
-	}
-
-	stopAllTaskMasters()
 }
 
 // stopPreviewPolling cancels and reaps the sidebar polling goroutine. It is
@@ -356,6 +427,17 @@ func stopAllTaskMasters() {
 		if len(starts) == 0 {
 			break
 		}
+		// The candidate is published before Start enters the external npx
+		// handshake. Stop closes its pipes/processDone and makes Start return
+		// promptly instead of forcing shutdown to wait out every startup phase.
+		for _, start := range starts {
+			if start.cancel != nil {
+				start.cancel()
+			}
+			if start.tm != nil {
+				_ = start.tm.Stop()
+			}
+		}
 		for _, start := range starts {
 			<-start.done
 		}
@@ -372,9 +454,67 @@ func stopAllTaskMasters() {
 	}
 }
 
+var cleanupTmuxList = func(ctx context.Context) ([]byte, error) {
+	commandCtx, cancel := context.WithTimeout(ctx, session.TmuxCommandTimeout)
+	defer cancel()
+	return session.TmuxCommandContext(commandCtx, "list-sessions", "-F", "#{session_name}").Output()
+}
+
+var cleanupTmuxKill = func(ctx context.Context, name string) error {
+	commandCtx, cancel := context.WithTimeout(ctx, session.TmuxCommandTimeout)
+	defer cancel()
+	return session.TmuxCommandContext(commandCtx, "kill-session", "-t", name).Run()
+}
+
+var resizeTerminalTmux = func(ctx context.Context, target, sessionName string) {
+	workCtx, cancel := context.WithTimeout(ctx, session.TmuxCommandTimeout)
+	defer cancel()
+	_ = session.TmuxCommandContext(workCtx, "resize-window", "-t", target, "-A").Run()
+	_ = session.RefreshSessionClientsContext(workCtx, sessionName)
+}
+
+func runBoundedTmuxCommand(ctx context.Context, args ...string) error {
+	commandCtx, cancel := context.WithTimeout(ctx, session.TmuxCommandTimeout)
+	defer cancel()
+	return session.TmuxCommandContext(commandCtx, args...).Run()
+}
+
+func (a *App) lifecycleContext() context.Context {
+	if a.ctx != nil {
+		return a.ctx
+	}
+	return context.Background()
+}
+
+func (a *App) startOrphanCleanup(parent context.Context) {
+	a.orphanCleanupMu.Lock()
+	defer a.orphanCleanupMu.Unlock()
+	if a.orphanCleanupStop != nil {
+		return
+	}
+	ctx, cancel := context.WithCancel(parent)
+	a.orphanCleanupStop = cancel
+	a.orphanCleanupWG.Add(1)
+	go func() {
+		defer a.orphanCleanupWG.Done()
+		a.cleanupOrphanedGUISessions(ctx)
+	}()
+}
+
+func (a *App) stopOrphanCleanup() {
+	a.orphanCleanupMu.Lock()
+	defer a.orphanCleanupMu.Unlock()
+	if a.orphanCleanupStop == nil {
+		return
+	}
+	a.orphanCleanupStop()
+	a.orphanCleanupWG.Wait()
+	a.orphanCleanupStop = nil
+}
+
 // cleanupOrphanedGUISessions removes GUI linked tmux sessions that belong to
 // sessions that are no longer running (e.g. from a previous app crash).
-func (a *App) cleanupOrphanedGUISessions() {
+func (a *App) cleanupOrphanedGUISessions(ctx context.Context) {
 	// Startup launches this sweep in a goroutine. Pin the active project for
 	// the whole scan so a simultaneous project switch cannot turn an ownership
 	// check for project A into a tmux cleanup based on project B's sessions.
@@ -388,7 +528,7 @@ func (a *App) cleanupOrphanedGUISessions() {
 		return
 	}
 
-	out, err := session.TmuxCommand("list-sessions", "-F", "#{session_name}").Output()
+	out, err := cleanupTmuxList(ctx)
 	if err != nil || len(out) == 0 {
 		return
 	}
@@ -422,14 +562,14 @@ func (a *App) cleanupOrphanedGUISessions() {
 		}
 		baseName := name[:idx]
 		if mine[baseName] && !running[baseName] {
-			session.TmuxCommand("kill-session", "-t", name).Run()
+			_ = cleanupTmuxKill(ctx, name)
 		}
 	}
 }
 
 // cleanupAllGUISessions removes THIS project's GUI linked tmux sessions on
 // app shutdown.
-func (a *App) cleanupAllGUISessions() {
+func (a *App) cleanupAllGUISessions(ctx context.Context) {
 	// Only the project owner sweeps, and only its OWN mirrors. Two guards:
 	//  1. a non-owner created no mirrors (attaches refused) — nothing to do;
 	//  2. even as owner, kill only mirrors whose base session is in THIS
@@ -440,7 +580,7 @@ func (a *App) cleanupAllGUISessions() {
 		return
 	}
 
-	out, err := session.TmuxCommand("list-sessions", "-F", "#{session_name}").Output()
+	out, err := cleanupTmuxList(ctx)
 	if err != nil || len(out) == 0 {
 		return
 	}
@@ -457,7 +597,7 @@ func (a *App) cleanupAllGUISessions() {
 			continue
 		}
 		if mine[name[:idx]] {
-			session.TmuxCommand("kill-session", "-t", name).Run()
+			_ = cleanupTmuxKill(ctx, name)
 		}
 	}
 }
@@ -594,6 +734,46 @@ func (a *App) beginTerminalAttach() (func(), bool) {
 	return a.projectMu.RUnlock, true
 }
 
+func (a *App) startTmuxMaintenance(parent context.Context) {
+	a.tmuxWorkMu.Lock()
+	defer a.tmuxWorkMu.Unlock()
+	if a.tmuxWorkStop != nil {
+		return
+	}
+	a.tmuxWorkCtx, a.tmuxWorkStop = context.WithCancel(parent)
+}
+
+// queueTmuxMaintenance registers an asynchronous tmux operation with the app
+// lifecycle. Registration and shutdown share tmuxWorkMu, so Wait can never
+// race a late WaitGroup.Add. The operation must observe ctx for every external
+// command it launches.
+func (a *App) queueTmuxMaintenance(work func(context.Context)) bool {
+	a.tmuxWorkMu.Lock()
+	defer a.tmuxWorkMu.Unlock()
+	if a.tmuxWorkCtx == nil || a.tmuxWorkStop == nil {
+		return false
+	}
+	ctx := a.tmuxWorkCtx
+	a.tmuxWorkWG.Add(1)
+	go func() {
+		defer a.tmuxWorkWG.Done()
+		work(ctx)
+	}()
+	return true
+}
+
+func (a *App) stopTmuxMaintenance() {
+	a.tmuxWorkMu.Lock()
+	defer a.tmuxWorkMu.Unlock()
+	if a.tmuxWorkStop == nil {
+		return
+	}
+	a.tmuxWorkStop()
+	a.tmuxWorkWG.Wait()
+	a.tmuxWorkCtx = nil
+	a.tmuxWorkStop = nil
+}
+
 func (a *App) beginProjectReadWithSideEffects() (func(), error) {
 	a.projectMu.RLock()
 	if !a.projectLocked {
@@ -683,76 +863,22 @@ func (a *App) ImportSessions(sourceProjectID string, sessionIDs []string) (int, 
 
 	// Filter to only selected sessions
 	selectedInstances := make([]*session.Instance, 0)
-	selectedGroupIDs := make(map[string]bool)
 	for _, inst := range sourceInstances {
 		for _, id := range sessionIDs {
 			if inst.ID == id {
 				selectedInstances = append(selectedInstances, inst)
-				if inst.GroupID != "" {
-					selectedGroupIDs[inst.GroupID] = true
-				}
 				break
 			}
 		}
 	}
 
-	// Get groups that are needed
-	selectedGroups := make([]*session.Group, 0)
-	for _, g := range sourceGroups {
-		if selectedGroupIDs[g.ID] {
-			selectedGroups = append(selectedGroups, g)
-		}
+	if len(selectedInstances) == 0 {
+		return 0, fmt.Errorf("none of the selected sessions were found")
 	}
-
-	// Load current project's data
-	currentInstances, currentGroups, err := a.storage.LoadAll()
-	if err != nil {
-		return 0, err
-	}
-
-	// Merge groups (avoid duplicates by name)
-	for _, g := range selectedGroups {
-		exists := false
-		var existingGroupID string
-		for _, cg := range currentGroups {
-			if cg.Name == g.Name {
-				exists = true
-				existingGroupID = cg.ID
-				break
-			}
-		}
-		if !exists {
-			currentGroups = append(currentGroups, g)
-		} else {
-			// Update instances to use existing group ID
-			for _, inst := range selectedInstances {
-				if inst.GroupID == g.ID {
-					inst.GroupID = existingGroupID
-				}
-			}
-		}
-	}
-
-	// Merge instances (check for ID conflicts)
-	existingIDs := make(map[string]bool)
-	for _, inst := range currentInstances {
-		existingIDs[inst.ID] = true
-	}
-
-	importCount := 0
-	for _, inst := range selectedInstances {
-		if !existingIDs[inst.ID] {
-			currentInstances = append(currentInstances, inst)
-			importCount++
-		}
-	}
-
-	// Save merged data
-	if err := a.storage.SaveWithGroups(currentInstances, currentGroups); err != nil {
-		return 0, err
-	}
-
-	return importCount, nil
+	// Portable conversion intentionally strips source IDs, running state and
+	// tmux metadata, while resolving group IDs to names for target-side remap.
+	bundle := session.ToPortable(selectedInstances, sourceGroups, Version)
+	return a.storage.ImportPortableSessions(bundle.Sessions, bundle.Groups)
 }
 
 // ============================================================================
@@ -910,7 +1036,7 @@ func (a *App) StartSession(id string) error {
 	// StartSession is called for NEW sessions (no resume).
 	// Clear any saved ResumeSessionID so it doesn't accidentally resume.
 	// StartWithResume("") will generate a fresh --session-id if supported.
-	log.Printf("[StartSession] id=%s agent=%s clearing old ResumeSessionID=%q", id, inst.Agent, inst.ResumeSessionID)
+	log.Printf("[StartSession] id=%s agent=%s starting a fresh conversation", id, inst.Agent)
 	inst.ResumeSessionID = ""
 
 	if err := inst.Start(); err != nil {
@@ -933,33 +1059,37 @@ func (a *App) StartSessionWithResume(id, resumeID string) error {
 	if err != nil {
 		return err
 	}
-	log.Printf("[StartSessionWithResume] id=%s agent=%s resumeID=%q", id, inst.Agent, resumeID)
-
-	// Hard reject any resume ID that isn't a safe shape, regardless of agent
-	// (ResumeIDExists only file-checks Claude/Codex and returns true for
-	// others). This stops a crafted ID from reaching the tmux command line.
-	if resumeID != "" && !session.IsSafeResumeID(resumeID) {
-		log.Printf("[StartSessionWithResume] rejected unsafe resumeID=%q — starting fresh", resumeID)
-		resumeID = ""
-		if !session.IsSafeResumeID(inst.ResumeSessionID) {
-			inst.ResumeSessionID = ""
-		}
-	}
-
-	if resumeID != "" && !session.ResumeIDExists(inst.Agent, resumeID) {
-		log.Printf("[StartSessionWithResume] resume ID %q no longer exists for agent=%s — starting fresh", resumeID, inst.Agent)
-		// Wipe persisted ID too — next start should also be clean.
-		if inst.ResumeSessionID == resumeID {
-			inst.ResumeSessionID = ""
-		}
-		resumeID = ""
+	resumeID, clearSaved := resolveResumeID(inst.Agent, resumeID, inst.ResumeSessionID, session.ResumeIDExists)
+	if clearSaved {
+		// StartWithResume falls back to the instance's stored ID when its
+		// argument is empty. Clear it as well or a rejected/missing ID still
+		// reaches the agent through that fallback.
+		inst.ResumeSessionID = ""
+		log.Printf("[StartSessionWithResume] id=%s agent=%s saved conversation unavailable; starting fresh", id, inst.Agent)
+	} else {
+		log.Printf("[StartSessionWithResume] id=%s agent=%s resume=%t", id, inst.Agent, resumeID != "")
 	}
 
 	if err := inst.StartWithResume(resumeID); err != nil {
 		return err
 	}
-	inst.ResumeSessionID = resumeID
+	// StartWithResume may generate a new conversation ID when resumeID is
+	// empty. Do not overwrite that generated identity with the empty request.
 	return a.storage.UpdateInstance(inst)
+}
+
+func resolveResumeID(agent session.AgentType, requested, stored string, exists func(session.AgentType, string) bool) (string, bool) {
+	candidate := requested
+	if candidate == "" {
+		candidate = stored
+	}
+	if candidate == "" {
+		return "", false
+	}
+	if !session.IsSafeResumeID(candidate) || !exists(agent, candidate) {
+		return "", true
+	}
+	return candidate, false
 }
 
 // StopSession stops a session
@@ -1021,7 +1151,7 @@ func (a *App) RestartTabWithResume(id string, windowIdx int, resumeId string) er
 			}
 		}
 		if !session.ResumeIDExists(tabAgent, resumeId) {
-			log.Printf("[RestartTabWithResume] resume ID %q no longer exists for agent=%s — starting fresh", resumeId, tabAgent)
+			log.Printf("[RestartTabWithResume] saved conversation unavailable for agent=%s — starting fresh", tabAgent)
 			resumeId = ""
 			// Also clear any persisted ID for this tab so future starts don't try again.
 			if windowIdx == mainWindowIdx {
@@ -1365,7 +1495,7 @@ func (a *App) toggleAutoYes(id string) error {
 			resumeID = getClaudeSessionIDFromTmux(inst.TmuxSessionName())
 		}
 
-		log.Printf("[ToggleAutoYes] session=%s resumeID=%s", id, resumeID)
+		log.Printf("[ToggleAutoYes] session=%s resume=%t", id, resumeID != "")
 
 		if err := inst.Stop(); err != nil {
 			return fmt.Errorf("failed to stop session for YOLO toggle: %w", err)
@@ -1397,9 +1527,17 @@ func getClaudeSessionIDFromTmux(tmuxSession string) string {
 // getClaudeSessionIDFromTmuxWindow extracts the --resume or --session-id from the Claude process
 // running in the given tmux session window by reading /proc/PID/cmdline.
 func getClaudeSessionIDFromTmuxWindow(tmuxSession string, windowIdx int) string {
+	return getClaudeSessionIDFromTmuxWindowContext(context.Background(), tmuxSession, windowIdx)
+}
+
+// getClaudeSessionIDFromTmuxWindowContext bounds the external process probes
+// and lets the preview poller stop before project and terminal teardown.
+func getClaudeSessionIDFromTmuxWindowContext(ctx context.Context, tmuxSession string, windowIdx int) string {
 	// Get the PID of the process in the tmux pane
 	target := fmt.Sprintf("%s:%d", tmuxSession, windowIdx)
-	out, err := session.TmuxCommand("display-message", "-t", target, "-p", "#{pane_pid}").Output()
+	commandCtx, cancel := context.WithTimeout(ctx, session.TmuxCommandTimeout)
+	out, err := session.TmuxCommandContext(commandCtx, "display-message", "-t", target, "-p", "#{pane_pid}").Output()
+	cancel()
 	if err != nil {
 		return ""
 	}
@@ -1421,7 +1559,10 @@ func getClaudeSessionIDFromTmuxWindow(tmuxSession string, windowIdx int) string 
 	// Children still matter: a tab whose command is a shell wrapper has the
 	// agent one level down.
 	pids := []string{panePID}
-	if childOut, err := session.Command("pgrep", "-P", panePID).Output(); err == nil {
+	commandCtx, cancel = context.WithTimeout(ctx, session.TmuxCommandTimeout)
+	childOut, childErr := session.CommandContext(commandCtx, "pgrep", "-P", panePID).Output()
+	cancel()
+	if childErr == nil {
 		pids = append(pids, strings.Fields(string(childOut))...)
 	}
 	candidatePIDs := pids
@@ -1619,8 +1760,7 @@ func (a *App) recordLiveConversation(inst *session.Instance, windowIdx int, live
 		if inst.ResumeSessionID == live {
 			return false
 		}
-		log.Printf("[Fork] session=%s branching the live conversation %s (stored %q)",
-			inst.ID, live, inst.ResumeSessionID)
+		log.Printf("[Fork] session=%s refreshed the live conversation ID", inst.ID)
 		inst.ResumeSessionID = live
 		return true
 	}
@@ -1632,8 +1772,7 @@ func (a *App) recordLiveConversation(inst *session.Instance, windowIdx int, live
 		if fw.ResumeSessionID == live {
 			return false
 		}
-		log.Printf("[Fork] session=%s tab %d branching the live conversation %s (stored %q)",
-			inst.ID, windowIdx, live, fw.ResumeSessionID)
+		log.Printf("[Fork] session=%s tab %d refreshed the live conversation ID", inst.ID, windowIdx)
 		fw.ResumeSessionID = live
 		return true
 	}
@@ -1866,7 +2005,13 @@ func (a *App) CreateTab(sessionID string, isAgent bool, agent string, name strin
 		}
 		newIdx = idx
 	}
-	return newIdx, a.storage.UpdateInstance(inst)
+	if err := persistOrRollbackExternalMutation(
+		func() error { return a.storage.UpdateInstance(inst) },
+		func() error { return inst.DeleteWindow(newIdx) },
+	); err != nil {
+		return -1, err
+	}
+	return newIdx, nil
 }
 
 // CloseTab closes a tab
@@ -1890,14 +2035,24 @@ func (a *App) RenameTab(sessionID string, windowIdx int, name string) error {
 	if err != nil {
 		return err
 	}
-	// Select window and rename
-	if err := inst.SelectWindow(windowIdx); err != nil {
+	oldName, err := inst.RenameWindow(windowIdx, name)
+	if err != nil {
 		return err
 	}
-	if err := inst.RenameCurrentWindow(name); err != nil {
-		return err
+	return persistOrRollbackExternalMutation(
+		func() error { return a.storage.UpdateInstance(inst) },
+		func() error {
+			_, rollbackErr := inst.RenameWindow(windowIdx, oldName)
+			return rollbackErr
+		},
+	)
+}
+
+func persistOrRollbackExternalMutation(persist, rollback func() error) error {
+	if err := persist(); err != nil {
+		return errors.Join(err, rollback())
 	}
-	return a.storage.UpdateInstance(inst)
+	return nil
 }
 
 // ReorderTab reorders a tab within a session's display order.
@@ -2068,16 +2223,15 @@ func (a *App) SetExtraArgs(sessionID string, windowIdx int, extraArgs string) er
 	if err != nil {
 		return err
 	}
-	log.Printf("[SetExtraArgs] sessionID=%s windowIdx=%d newExtraArgs=%q", sessionID, windowIdx, extraArgs)
+	log.Printf("[SetExtraArgs] sessionID=%s windowIdx=%d value_changed=true", sessionID, windowIdx)
 	if windowIdx == 0 {
 		inst.ExtraArgs = extraArgs
 		return a.storage.UpdateInstance(inst)
 	}
 	for i := range inst.FollowedWindows {
 		if inst.FollowedWindows[i].Index == windowIdx {
-			oldVal := inst.FollowedWindows[i].ExtraArgs
 			inst.FollowedWindows[i].ExtraArgs = extraArgs
-			log.Printf("[SetExtraArgs] tab %d: old=%q -> new=%q", windowIdx, oldVal, extraArgs)
+			log.Printf("[SetExtraArgs] tab %d value changed", windowIdx)
 			return a.storage.UpdateInstance(inst)
 		}
 	}
@@ -2156,6 +2310,10 @@ type SidebarUpdate struct {
 
 // GetSidebarUpdates returns activity and status line data in one call (single LoadAll)
 func (a *App) GetSidebarUpdates() SidebarUpdate {
+	return a.getSidebarUpdates(context.Background())
+}
+
+func (a *App) getSidebarUpdates(ctx context.Context) SidebarUpdate {
 	a.projectMu.RLock()
 	mayPersist := a.projectLocked
 	defer a.projectMu.RUnlock()
@@ -2167,7 +2325,7 @@ func (a *App) GetSidebarUpdates() SidebarUpdate {
 		TabStatuses:  make(map[string][]TabStatusInfo),
 	}
 
-	projectID, instances, _, err := a.storage.LoadAllWithProjectSnapshot()
+	projectID, instances, _, err := a.storage.LoadAllWithProjectSnapshotContext(ctx)
 	if err != nil {
 		return result
 	}
@@ -2183,6 +2341,9 @@ func (a *App) GetSidebarUpdates() SidebarUpdate {
 	var jobs []detectJob
 
 	for _, inst := range instances {
+		if ctx.Err() != nil {
+			return result
+		}
 		if inst.Status != session.StatusRunning {
 			continue
 		}
@@ -2191,7 +2352,7 @@ func (a *App) GetSidebarUpdates() SidebarUpdate {
 		// so that resume works correctly after app/machine restart
 		needSave := false
 		if mayPersist && inst.NeedsCodexResumeCapture() {
-			if _, err := a.storage.CaptureCodexResumeIDsForProject(projectID, inst.ID); err != nil {
+			if _, err := a.storage.CaptureCodexResumeIDsForProjectContext(ctx, projectID, inst.ID); err != nil {
 				log.Printf("[SidebarPoll] failed to capture Codex session IDs for session=%s: %v", inst.ID, err)
 			}
 		}
@@ -2201,8 +2362,8 @@ func (a *App) GetSidebarUpdates() SidebarUpdate {
 		// Detection reads Claude's own record of what each process is on, so a
 		// value that disagrees is the stale one; finding nothing changes nothing.
 		if inst.Agent == session.AgentClaude {
-			if sid := getClaudeSessionIDFromTmux(inst.TmuxSessionName()); sid != "" && sid != inst.ResumeSessionID {
-				log.Printf("[SidebarPoll] ResumeSessionID=%s (was %q) for session=%s", sid, inst.ResumeSessionID, inst.ID)
+			if sid := getClaudeSessionIDFromTmuxWindowContext(ctx, inst.TmuxSessionName(), 0); sid != "" && sid != inst.ResumeSessionID {
+				log.Printf("[SidebarPoll] refreshed conversation ID for session=%s", inst.ID)
 				inst.ResumeSessionID = sid
 				needSave = true
 			}
@@ -2212,8 +2373,8 @@ func (a *App) GetSidebarUpdates() SidebarUpdate {
 		for idx := range inst.FollowedWindows {
 			fw := &inst.FollowedWindows[idx]
 			if fw.Agent == session.AgentClaude {
-				if sid := getClaudeSessionIDFromTmuxWindow(inst.TmuxSessionName(), fw.Index); sid != "" && sid != fw.ResumeSessionID {
-					log.Printf("[SidebarPoll] Claude sessionID=%s (was %q) for tab=%s/%d", sid, fw.ResumeSessionID, inst.ID, fw.Index)
+				if sid := getClaudeSessionIDFromTmuxWindowContext(ctx, inst.TmuxSessionName(), fw.Index); sid != "" && sid != fw.ResumeSessionID {
+					log.Printf("[SidebarPoll] refreshed Claude conversation ID for tab=%s/%d", inst.ID, fw.Index)
 					fw.ResumeSessionID = sid
 					needSave = true
 				}
@@ -2238,7 +2399,7 @@ func (a *App) GetSidebarUpdates() SidebarUpdate {
 				inst.ResumeSessionID = sid
 				geminiExcludeIDs = append(geminiExcludeIDs, sid)
 				needSave = true
-				log.Printf("[SidebarPoll] auto-detected Gemini sessionID=%s for session=%s", sid, inst.ID)
+				log.Printf("[SidebarPoll] auto-detected Gemini conversation ID for session=%s", inst.ID)
 			}
 		}
 
@@ -2250,7 +2411,7 @@ func (a *App) GetSidebarUpdates() SidebarUpdate {
 					fw.ResumeSessionID = sid
 					geminiExcludeIDs = append(geminiExcludeIDs, sid)
 					needSave = true
-					log.Printf("[SidebarPoll] auto-detected Gemini sessionID=%s for tab=%s/%d", sid, inst.ID, fw.Index)
+					log.Printf("[SidebarPoll] auto-detected Gemini conversation ID for tab=%s/%d", inst.ID, fw.Index)
 				}
 			}
 		}
@@ -2314,9 +2475,9 @@ func (a *App) GetSidebarUpdates() SidebarUpdate {
 			bestWindowIdx := 0
 
 			for wi, w := range windows {
-				activity, activityValid := inst.DetectActivityForWindowWithValidity(w.idx)
+				activity, activityValid := inst.DetectActivityForWindowWithValidityContext(ctx, w.idx)
 				validActivityWindows[w.idx] = activityValid
-				info := inst.GetStatusInfoForWindow(w.idx, w.agent)
+				info := inst.GetStatusInfoForWindowContext(ctx, w.idx, w.agent)
 
 				actStr := "idle"
 				switch activity {
@@ -2341,7 +2502,7 @@ func (a *App) GetSidebarUpdates() SidebarUpdate {
 					Activity:       actStr,
 					StatusLine:     line,
 					SpinnerText:    info.SpinnerText,
-					Yolo:           inst.DetectYoloForWindow(w.idx),
+					Yolo:           inst.DetectYoloForWindowContext(ctx, w.idx),
 					HideStatusLine: w.hideLine,
 				})
 
@@ -2436,7 +2597,7 @@ func (a *App) startPreviewPolling(ctx context.Context) {
 				continue
 			}
 
-			data := a.GetSidebarUpdates()
+			data := a.getSidebarUpdates(ctx)
 			// Drop a completed snapshot if the user switched projects while
 			// tmux captures were running. The snapshot itself carries the ID
 			// captured atomically with its instance list, so A→B→A is safe.
@@ -2606,7 +2767,12 @@ func (a *App) ResizeTerminal(ptyID string, cols, rows int) error {
 	if err != nil {
 		return err
 	}
-	defer done()
+	releaseProject := true
+	defer func() {
+		if releaseProject {
+			done()
+		}
+	}()
 	a.ptyMu.RLock()
 	ps, exists := a.ptys[ptyID]
 	a.ptyMu.RUnlock()
@@ -2630,12 +2796,15 @@ func (a *App) ResizeTerminal(ptyID string, cols, rows int) error {
 	if ps.session != nil {
 		sessionName := ps.session.TmuxSessionName()
 		target := fmt.Sprintf("%s:%d", sessionName, ps.windowID)
-		go func() {
-			// Resize the specific window to fit the largest client
-			session.TmuxCommand("resize-window", "-t", target, "-A").Run()
-			// Also refresh all clients
-			session.RefreshSessionClients(sessionName)
-		}()
+		if a.queueTmuxMaintenance(func(ctx context.Context) {
+			// Keep the active project's read/mutation ownership until every tmux
+			// side effect finishes. A project switch must not let this late resize
+			// target a session it no longer owns.
+			defer done()
+			resizeTerminalTmux(ctx, target, sessionName)
+		}) {
+			releaseProject = false
+		}
 	}
 
 	return nil
@@ -2673,9 +2842,11 @@ func (a *App) RefreshWindow(sessionID string, windowIdx int) error {
 	// Always sent here, unlike the automatic path: the button exists precisely
 	// for when the pane looks wrong, so suppressing it would defeat the only
 	// manual recovery there is. Pressing it twice is the user's choice.
-	_ = session.TmuxCommand("send-keys", "-t", target, "C-l").Run()
-	_ = session.TmuxCommand("resize-window", "-t", target, "-A").Run()
-	_ = session.RefreshSessionClients(sessionName)
+	ctx, cancel := context.WithTimeout(a.lifecycleContext(), session.TmuxCommandTimeout)
+	defer cancel()
+	_ = runBoundedTmuxCommand(ctx, "send-keys", "-t", target, "C-l")
+	_ = runBoundedTmuxCommand(ctx, "resize-window", "-t", target, "-A")
+	_ = session.RefreshSessionClientsContext(ctx, sessionName)
 
 	return nil
 }
@@ -2706,8 +2877,10 @@ func (a *App) RedrawWindow(sessionID string, windowIdx int) error {
 	sessionName := inst.TmuxSessionName()
 	target := fmt.Sprintf("%s:%d", sessionName, windowIdx)
 
-	_ = session.TmuxCommand("resize-window", "-t", target, "-A").Run()
-	_ = session.RefreshSessionClients(sessionName)
+	ctx, cancel := context.WithTimeout(a.lifecycleContext(), session.TmuxCommandTimeout)
+	defer cancel()
+	_ = runBoundedTmuxCommand(ctx, "resize-window", "-t", target, "-A")
+	_ = session.RefreshSessionClientsContext(ctx, sessionName)
 
 	return nil
 }
@@ -3803,7 +3976,11 @@ func (a *App) LogFrontend(msg string) {
 func (a *App) CheckForUpdate() (*UpdateInfo, error) {
 	current := Version
 	started := time.Now()
-	latest, err := updater.RefreshAvailableUpdate(current)
+	ctx := a.ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	latest, err := updater.RefreshAvailableUpdateContext(ctx, current)
 	if err != nil {
 		log.Printf("[update] check failed in %s: %v", time.Since(started).Round(time.Millisecond), err)
 		return nil, err
@@ -4466,9 +4643,10 @@ var taskMasterCache = make(map[string]*mcp.TaskMaster)
 var taskMasterMu sync.RWMutex
 
 type taskMasterStart struct {
-	done chan struct{}
-	tm   *mcp.TaskMaster
-	err  error
+	done   chan struct{}
+	cancel context.CancelFunc
+	tm     *mcp.TaskMaster
+	err    error
 }
 
 var taskMasterStarts = make(map[string]*taskMasterStart)
@@ -4546,7 +4724,10 @@ func (a *App) getTaskMasterMCP(sessionID string) (*mcp.TaskMaster, error) {
 		}
 		stale := taskMasterCache[projectPath]
 		delete(taskMasterCache, projectPath)
-		starting = &taskMasterStart{done: make(chan struct{})}
+		startCtx, cancelStart := context.WithCancel(context.Background())
+		starting = &taskMasterStart{done: make(chan struct{}), cancel: cancelStart}
+		candidate := mcp.NewTaskMaster(projectPath)
+		starting.tm = candidate
 		taskMasterStarts[projectPath] = starting
 		taskMasterMu.Unlock()
 
@@ -4555,14 +4736,13 @@ func (a *App) getTaskMasterMCP(sessionID string) (*mcp.TaskMaster, error) {
 		if stale != nil {
 			_ = stale.Stop()
 		}
-		candidate := mcp.NewTaskMaster(projectPath)
-		startErr := candidate.Start()
+		startErr := candidate.StartContext(startCtx)
 		if startErr != nil {
+			cancelStart()
 			startErr = fmt.Errorf("failed to start Task Master: %w", startErr)
 		}
 
 		taskMasterMu.Lock()
-		starting.tm = candidate
 		starting.err = startErr
 		if startErr == nil {
 			taskMasterCache[projectPath] = candidate

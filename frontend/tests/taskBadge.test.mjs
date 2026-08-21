@@ -42,6 +42,11 @@ assert.match(
 // Subscribing fires immediately with the current value; that first call is
 // already covered by the refresh at the top of the watcher.
 assert.match(alerts, /if \(first\)/, 'the immediate first callback should be skipped');
+assert.match(
+  alerts,
+  /const generation = \+\+refreshGeneration;[\s\S]*?generation !== refreshGeneration/,
+  'an older full-project scan must not overwrite a newer task count',
+);
 
 // Cleanup has to undo both halves, or a closed window keeps reading files.
 const watcher = alerts.match(/export function watchOpenCount[\s\S]*?\n}/);

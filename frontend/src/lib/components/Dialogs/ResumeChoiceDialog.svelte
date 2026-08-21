@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { autoFocusDialog } from '../../utils/dialogActions';
+  import { autoFocusDialog, dialogEnterBelongsToControl } from '../../utils/dialogActions';
   import { createEventDispatcher } from 'svelte';
   import type { Session } from '../../stores/sessions';
   import { t } from '../../i18n';
@@ -29,7 +29,7 @@
     } else if (e.key === 'ArrowDown' || e.key === 'j') {
       e.preventDefault();
       cursor = Math.min(maxCursor, cursor + 1);
-    } else if (e.key === 'Enter') {
+    } else if (e.key === 'Enter' && !dialogEnterBelongsToControl(e)) {
       e.preventDefault();
       handleSelect();
     } else if (e.key === '1') {
@@ -107,6 +107,7 @@
             class="btn-option tabs {cursor === 0 ? 'active' : ''}"
             on:click={handleRestartWithTabs}
             on:mouseenter={() => cursor = 0}
+            on:focus={() => cursor = 0}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
@@ -123,6 +124,7 @@
             class="btn-option new {cursor === 1 ? 'active' : ''}"
             on:click={handleNewSession}
             on:mouseenter={() => cursor = 1}
+            on:focus={() => cursor = 1}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M12 5v14M5 12h14"/>
@@ -138,6 +140,7 @@
             class="btn-option continue {cursor === 2 ? 'active' : ''}"
             on:click={handleContinueExisting}
             on:mouseenter={() => cursor = 2}
+            on:focus={() => cursor = 2}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/>
@@ -153,6 +156,7 @@
             class="btn-option new {cursor === 0 ? 'active' : ''}"
             on:click={handleNewSession}
             on:mouseenter={() => cursor = 0}
+            on:focus={() => cursor = 0}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M12 5v14M5 12h14"/>
@@ -168,6 +172,7 @@
             class="btn-option continue {cursor === 1 ? 'active' : ''}"
             on:click={handleContinueExisting}
             on:mouseenter={() => cursor = 1}
+            on:focus={() => cursor = 1}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/>

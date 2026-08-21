@@ -12,7 +12,37 @@ const undoToast = read('lib/components/common/UndoToast.svelte');
 const app = read('App.svelte');
 const tabBar = read('lib/components/MainPanel/TabBar.svelte');
 const newTabDialog = read('lib/components/Dialogs/NewTabDialog.svelte');
+const newSessionDialog = read('lib/components/Dialogs/NewSessionDialog.svelte');
 const quickTerminalDialog = read('lib/components/Dialogs/QuickTerminalDialog.svelte');
+const confirmDialog = read('lib/components/Dialogs/ConfirmDialog.svelte');
+const newGroupDialog = read('lib/components/Dialogs/NewGroupDialog.svelte');
+const forkDialog = read('lib/components/Dialogs/ForkDialog.svelte');
+const logDialog = read('lib/components/Dialogs/LogDialog.svelte');
+const sessionFileDialog = read('lib/components/Dialogs/SessionFileDialog.svelte');
+const updateDialog = read('lib/components/Dialogs/UpdateDialog.svelte');
+const mainPanel = read('lib/components/MainPanel/MainPanel.svelte');
+const sideBySideDiff = read('lib/components/MainPanel/SideBySideDiff.svelte');
+const sessionItem = read('lib/components/Sidebar/SessionItem.svelte');
+const projectSelector = read('lib/components/Sidebar/ProjectSelector.svelte');
+const commandPalette = read('lib/components/Dialogs/CommandPalette.svelte');
+const sessionStore = read('lib/stores/sessions.ts');
+const projectStore = read('lib/stores/projects.ts');
+const settingsStore = read('lib/stores/settings.ts');
+const sidebarPolling = read('lib/stores/sidebarPolling.ts');
+const dialogActions = read('lib/utils/dialogActions.ts');
+const importDialog = read('lib/components/Dialogs/ImportDialog.svelte');
+const globalSearch = read('lib/components/Dialogs/GlobalSearchDialog.svelte');
+const commandPicker = read('lib/components/Dialogs/CommandPickerDialog.svelte');
+const resumePicker = read('lib/components/Dialogs/ResumeSessionPickerDialog.svelte');
+const gitHistory = read('lib/components/Dialogs/GitHistoryDialog.svelte');
+const bgAgents = read('lib/components/Dialogs/BgAgentsDialog.svelte');
+const recovery = read('lib/components/Dialogs/RecoveryCenterDialog.svelte');
+const allTasks = read('lib/components/Dashboard/AllTasks.svelte');
+const settingsDialog = read('lib/components/Dialogs/SettingsDialog.svelte');
+const sessionTemplates = read('lib/components/Dialogs/SessionTemplateDialog.svelte');
+const saveAsTemplate = read('lib/components/Dialogs/SaveAsTemplateDialog.svelte');
+const commandManager = read('lib/components/Dialogs/CommandManagerDialog.svelte');
+const i18n = read('lib/i18n/index.ts');
 
 // A target reset must be held behind the same unsaved-change guard as a file
 // click. resetForSession itself must not erase the action that shows the prompt.
@@ -79,11 +109,14 @@ assert.ok(
 assert.match(tasks, /rememberProvider\(sessionId, requestedMCP, 'local'\)/);
 assert.match(tasks, /if \(providerFor\(sessionId\) === 'mcp'\)/);
 const removeTask = tasks.match(/export async function removeTask[\s\S]*?\n\}/)?.[0] ?? '';
-assert.match(removeTask, /isActiveTasksSession\(sessionId\)/);
+assert.match(removeTask, /captureActiveTasksTarget\(sessionId\)/);
+assert.match(removeTask, /activeTasksTargetIsCurrent\(target\)/);
 assert.match(tasks, /async function reloadTasksIfActive/);
 assert.match(tasks, /const localMutationQueues = new Map/);
 const localEdit = tasks.match(/async function editTaskLocally[\s\S]*?\n\}/)?.[0] ?? '';
-assert.match(localEdit, /const previous = localMutationQueues\.get\(sessionId\)/);
+assert.match(localEdit, /const queueKey = target \? `\$\{target\.generation\}\\x1f\$\{sessionId\}` : sessionId/);
+assert.match(localEdit, /activeTasksTargetIsCurrent\(target\)/,
+  'a queued local read-modify-write must fail closed after its project/session context is invalidated');
 assert.match(localEdit, /await App\.GetTasks\(sessionId\)/,
   'each queued local mutation must read a fresh backend snapshot');
 
@@ -149,7 +182,8 @@ assert.match(confirmRevert, /await action\.run\(\);[\s\S]*?!isCurrentTarget\(act
 // selection is allowed to change while the modal or a prerequisite await is
 // open, so reading the live store in the confirm handler is destructive.
 assert.match(app, /let pendingDeleteTarget:/);
-assert.match(app, /await deleteSession\(target\.id\)/);
+assert.match(app, /afterUnsavedChanges\(\(\) => \{ void deleteSession\(target\.id\); \}\)/,
+  'session deletion must wait for every active unsaved editor');
 assert.match(app, /let pendingStopTarget: SessionDialogTarget/);
 assert.match(app, /await stopSession\(target\.sessionId\)/);
 assert.match(app, /await stopTab\(target\.sessionId, target\.windowIdx\)/);
@@ -162,9 +196,10 @@ assert.match(app, /const path = await resolveGitHistoryPath\(session, winIdx\);[
 assert.match(app, /pendingResumeSession &&[\s\S]*?showResumeSessionPicker = false;[\s\S]*?handleResumeCancel\(\)/,
   'resume dialogs must close when their captured session/tab is no longer selected');
 assert.match(tabBar, /let deleteSessionTarget:/);
-assert.match(tabBar, /await deleteSession\(target\.sessionId\)/);
+assert.match(tabBar, /afterUnsavedChanges\(\(\) => \{ void deleteCapturedSession\(target\); \}\)/);
 assert.match(tabBar, /let deleteTabTarget:/);
 assert.match(tabBar, /await deleteTab\(target\.sessionId, target\.windowIdx\)/);
+assert.match(tabBar, /afterUnsavedChanges\(\(\) => \{ void deleteCapturedTab\(target\); \}\)/);
 assert.match(tabBar, /let extraArgsTarget:/);
 assert.match(tabBar, /App\.SetExtraArgs\(target\.sessionId, target\.windowIdx/);
 assert.match(tabBar, /let renameTarget:/);
@@ -176,8 +211,160 @@ assert.match(tabBar, /sessionId=\{newTabSessionId\}/);
 assert.match(tabBar, /sessionId=\{quickTerminalSessionId\}/);
 assert.match(newTabDialog, /App\.CreateTab\(targetSessionId/);
 assert.match(newTabDialog, /get\(selectedSessionId\) === targetSessionId/);
+assert.match(newSessionDialog, /const generation = \+\+resumeLookupGeneration/);
+assert.match(newSessionDialog, /clearTimeout\(pathDebounceTimer\)/,
+  'closing or replacing the new-session target must cancel its resume debounce');
+assert.match(newSessionDialog, /generation !== resumeLookupGeneration \|\| path !== searchPath \|\| selectedAgent !== agent/,
+  'resume candidates must belong to the open/path/agent that requested them');
 assert.match(quickTerminalDialog, /App\.CreateTab\(targetSessionId/);
 assert.match(quickTerminalDialog, /get\(selectedSessionId\) === targetSessionId/);
+
+assert.match(sessionItem, /<ConfirmDialog[\s\S]*?on:confirm=\{confirmDelete\}/,
+  'the sidebar delete affordance must not delete a session on its first click');
+assert.match(sessionItem, /afterUnsavedChanges\(\(\) => \{ void deleteSession\(target\.id\); \}\)/);
+
+// Project switches invalidate both list reads and mutation continuations. A
+// repeated A -> B -> A sequence is why a request counter is required in
+// addition to comparing session ids.
+assert.match(sessionStore, /export function invalidateSessionProject\(\)/);
+assert.match(sessionStore, /const generation = \+\+sessionsLoadGeneration/);
+assert.match(sessionStore, /!projectTargetIsCurrent\(target\) \|\| generation !== sessionsLoadGeneration/);
+assert.match(projectStore, /sessionStore\.invalidateSessionProject\(\);[\s\S]*?App\.SelectProject\(id\)/,
+  'old-project requests must be invalidated before the backend identity changes');
+assert.match(sessionStore, /sessionTabMemory\.clear\(\);[\s\S]*?selectedSessionId\.set\(null\)/,
+  'project invalidation must clear selection and same-id tab memory without persisting through the new backend');
+assert.match(projectStore, /afterUnsavedChanges\([\s\S]*?selectProjectNow\(id\)[\s\S]*?resolve\(false\)/,
+  'a project switch must remain outside the backend queue until every dirty editor approves');
+assert.match(projectSelector, /if \(await selectProject\(id\)\) \{[\s\S]*?showDashboard\(\)/,
+  'cancelling the project switch must not navigate away from the editor');
+assert.match(projectSelector, /if \(!\(await selectProject\(project\.id\)\)\) \{[\s\S]*?newProjectName = '';[\s\S]*?isCreating = false/,
+  'a created project must not be duplicated when its initial switch is cancelled');
+assert.match(commandPalette, /if \(await selectProject\(project\.id\)\) showDashboard\(\)/,
+  'palette project cancellation must not navigate away from the editor');
+assert.match(projectStore, /catch \(e\)[\s\S]*?App\.GetActiveProjectID\(\)[\s\S]*?sessionStore\.loadSessions\(\)/,
+  'a failed project selection must reload the still-active backend project after invalidation');
+assert.match(projectStore, /dismissUndo\(\);[\s\S]*?App\.SelectProject\(id\)/,
+  'a project-scoped task undo must not survive into a project with colliding session/task ids');
+for (const mutation of ['renameSession', 'toggleFavorite', 'setSessionColor', 'assignToGroup', 'deleteSession']) {
+  const start = sessionStore.indexOf(`export async function ${mutation}`);
+  const next = sessionStore.indexOf('\nexport ', start + 1);
+  const body = start >= 0 ? sessionStore.slice(start, next > start ? next : undefined) : '';
+  assert.match(body, /const target = projectTarget\(\)/, `${mutation} must capture project identity`);
+  assert.match(body, /projectTargetIsCurrent\(target\)/, `${mutation} must reject stale completion`);
+}
+
+assert.match(settingsStore, /const revision = \+\+settingsRevision/);
+assert.match(settingsStore, /await loadSettings\(revision\)/);
+assert.match(settingsStore, /expectedRevision !== undefined && expectedRevision !== settingsRevision/,
+  'a recovery read for a failed save must not overwrite a newer optimistic edit');
+
+// Long-lived dialogs must invalidate async results when their target changes
+// or they close; several are mounted once by App and only toggle `show`.
+assert.match(importDialog, /const generation = \+\+requestGeneration/);
+assert.match(importDialog, /selectedProjectId !== projectId/,
+  'a late import-source response must not replace the newly selected project');
+assert.match(globalSearch, /function clearQuery\(\)[\s\S]*?handleQueryChange\(\)/,
+  'clearing search must use the same request invalidation as typing');
+assert.match(commandPicker, /targetSessionId = sessionId;[\s\S]*?targetWindowIdx = windowIdx/);
+assert.match(commandPicker, /if \(running \|\| !targetSessionId\) return/,
+  'a command must have one captured target and one in-flight execution');
+assert.match(commandPicker, /sessionId !== targetSessionId \|\| windowIdx !== targetWindowIdx\)\) close\(\)/,
+  'a command picker must close when its captured tab is no longer selected');
+assert.match(resumePicker, /generation !== loadGeneration \|\| key !== lastLoadKey/);
+assert.match(gitHistory, /repositoryGeneration/);
+assert.match(gitHistory, /generation !== historyGeneration \|\| branch !== targetBranch/);
+assert.match(gitHistory, /generation !== commitGeneration \|\| selectedHash !== hash/);
+assert.match(gitHistory, /generation !== diffGeneration \|\| selectedHash !== hash \|\| selectedPath !== file/);
+assert.match(bgAgents, /if \(!attachFor \|\| attaching\) return/);
+assert.match(bgAgents, /generation !== logsGeneration \|\| logsFor !== agent\.id/);
+assert.match(recovery, /guardUnsaved: true/);
+assert.match(recovery, /afterUnsavedChanges\(\(\) => \{ void execute\(\); \}\)/,
+  'backup restore must wait for dirty editors before replacing project state');
+assert.match(recovery, /window\.dispatchEvent\(new CustomEvent\('tasks:refresh'\)\)/,
+  'restoring task files must invalidate already-mounted task views');
+assert.match(taskPanel, /const refresh = \(\) => \{ if \(active\) void loadTasksIfNeeded\(true\); \}/);
+assert.match(taskPanel, /addEventListener\('tasks:refresh', refresh\)/);
+assert.match(recovery, /action\.projectId !== \$activeProjectId/,
+  'a portalled confirmation must not run against a replacement active project');
+assert.match(allTasks, /task\.projectId !== \$activeProjectId[\s\S]*?await selectProject\(task\.projectId\)/,
+  'an all-project task jump must switch the backend project before selecting its session id');
+assert.match(allTasks, /const key = `\$\{task\.projectId\}:\$\{task\.sessionId \|\| task\.projectPath\}`/,
+  'task groups must not merge project-scoped session ids');
+assert.match(settingsDialog, /else if \(!show && previousShow\) \{[\s\S]*?showApiKey = false/,
+  'a revealed API key must be covered when the persistently mounted dialog closes');
+assert.match(settingsDialog, /dictationLoadGeneration\+\+;[\s\S]*?cancelAudioTest\(\)/,
+  'closing settings must invalidate delayed device reads and audio countdowns');
+assert.match(settingsDialog, /if \(!show \|\| generation !== audioTestGeneration\) return/,
+  'a closed audio-test countdown must not start microphone playback later');
+assert.match(settingsStore, /export function invalidateSettingsContext/);
+assert.match(settingsStore, /context !== settingsContextGeneration \|\| generation !== settingsLoadGeneration/,
+  'settings reads must belong to the project context that started them');
+assert.match(projectStore, /settingsStore\.invalidateSettingsContext\(\)/,
+  'project switching must invalidate settings reads and queued snapshots');
+assert.match(projectStore, /generation !== lockLoadGeneration \|\| projectId !== get\(activeProjectId\)/,
+  'a lock response must belong to the project whose mutation controls it gates');
+assert.match(app, /await flushSettingsSaves\(\);[\s\S]*?Quit\(\)/,
+  'shutdown must drain settings snapshots before tearing down Wails');
+assert.match(app, /appMounted = false;[\s\S]*?stopSidebarPolling\(\)/,
+  'unmount must invalidate async startup before tearing down its listeners');
+assert.match(sidebarPolling, /export function invalidateSidebarProject[\s\S]*?activities\.set\(\{\}\)[\s\S]*?tabStatuses\.set\(\{\}\)/,
+  'project switches must clear both sidebar payloads and their equality cache');
+assert.match(sessionStore, /invalidateSidebarProject\(\)/);
+assert.match(dialogActions, /cancelAnimationFrame\(frame\)[\s\S]*?removeEventListener\('keydown', trapTab\)/,
+  'dialog focus actions must release delayed focus and keyboard traps');
+assert.match(gitHistory, /activeDocumentDragCleanup\?\.\(\);[\s\S]*?invalidateRequests\(\)/,
+  'closing history must remove document drag listeners before hiding');
+assert.match(settingsDialog, /const generation = \+\+languageChangeGeneration;[\s\S]*?generation !== languageChangeGeneration/,
+  'a slow earlier translation load must not win over the last language choice');
+assert.match(i18n, /const generation = \+\+translationLoadGeneration;[\s\S]*?generation !== translationLoadGeneration/,
+  'late dynamic locale chunks must not replace the most recently selected language');
+assert.match(settingsDialog, /const save = dictationSaveQueue[\s\S]*?SetDictationSettings\(snapshot\)/,
+  'whole-object dictation settings writes must be serialized');
+assert.match(sessionTemplates, /fName\.trim\(\)\.length > 0 && !saving/);
+assert.match(sessionTemplates, /generation !== operationGeneration \|\| mode !== 'edit' \|\| editingId !== targetEditingId/,
+  'a late template save must not close a replacement editor');
+assert.match(sessionTemplates, /picked && show && generation === operationGeneration && mode === 'edit'/,
+  'a native directory picker must belong to the template editor that opened it');
+assert.match(sessionTemplates, /await App\.DeleteSessionTemplate\(target\.id\);[\s\S]*?generation !== operationGeneration/,
+  'a completed template delete must not mutate a replacement manager cycle');
+assert.match(saveAsTemplate, /session\?\.id !== targetSessionId/,
+  'save-as-template completion must belong to the captured session');
+assert.match(commandManager, /let savingCommand = false/);
+assert.match(commandManager, /let savingGroup = false/);
+assert.match(commandManager, /generation !== operationGeneration \|\| !editing \|\| editingId !== targetId/,
+  'a late command save must not close a replacement editor');
+
+// Enter bubbles out of native buttons. The safe button in a destructive
+// confirmation must retain its native action, and single-field/form dialogs
+// must not submit once at the field and again at the overlay/form.
+assert.match(confirmDialog, /e\.key === 'Enter' && !dialogEnterBelongsToControl\(e\)/);
+assert.doesNotMatch(quickTerminalDialog, /<input[\s\S]*?on:keydown=/,
+  'QuickTerminal input and overlay must not both submit the same Enter');
+assert.match(quickTerminalDialog, /if \(isSubmitting\) return/);
+assert.match(newTabDialog, /<form on:submit\|preventDefault=\{handleSubmit\}>/);
+assert.doesNotMatch(newTabDialog, /e\.key === 'Enter'/,
+  'NewTab native form submit must be the sole Enter path');
+assert.match(newTabDialog, /dir && show && generation === operationGeneration && sessionId === targetSessionId/,
+  'a native tab work-directory picker must not overwrite a replacement session form');
+assert.match(forkDialog, /<form on:submit\|preventDefault=\{handleSubmit\}>/);
+assert.doesNotMatch(forkDialog, /e\.key === 'Enter'/,
+  'Fork native form submit must be the sole Enter path');
+for (const [name, source] of [
+  ['NewGroup', newGroupDialog], ['QuickTerminal', quickTerminalDialog],
+  ['Fork', forkDialog], ['Log', logDialog], ['SessionFile', sessionFileDialog],
+  ['Update', updateDialog], ['NewSession', newSessionDialog],
+]) {
+  assert.match(source, /operationGeneration|loadGeneration|requestGeneration/,
+    `${name} must identify close/reopen async operations`);
+}
+assert.match(newSessionDialog, /const resumeId = selectedResumeId/);
+assert.match(newSessionDialog, /selectedPath && show && generation === operationGeneration && path === initialPath/,
+  'a native session directory picker must not overwrite a replacement form');
+
+assert.match(mainPanel, /onDestroy\(\(\) => \{[\s\S]*?activeSplitterCleanup\?\.\(\)/,
+  'unmounting MainPanel mid-drag must release window listeners');
+assert.match(sideBySideDiff, /onDestroy\(\(\) => activeSplitCleanup\?\.\(\)\)/,
+  'unmounting a side-by-side diff mid-drag must release document listeners');
 
 const statusColumn = taskPanel.match(/\.meta-column\.status-badge \{[\s\S]*?\n  \}/)?.[0] ?? '';
 assert.match(statusColumn, /white-space: nowrap/);

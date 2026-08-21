@@ -4,6 +4,7 @@ package session
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"log"
@@ -39,6 +40,9 @@ type controlModeStream struct {
 	closeOnce  sync.Once
 	closeErr   error
 	closedFlag atomic.Bool
+	ctx        context.Context
+	cancel     context.CancelFunc
+	bgWG       sync.WaitGroup
 
 	// closed is shut when Close runs, so background helpers stop with the
 	// stream instead of outliving it.
@@ -163,7 +167,7 @@ func (c *controlModeStream) sendKeys(p []byte) {
 		// Bounded: a send-keys that never returns would block every later
 		// keystroke behind it — a terminal that accepts focus and clicks while
 		// silently swallowing everything typed into it.
-		cmd, cancel := TmuxCommandTimed(args...)
+		cmd, cancel := c.timedCommand(args...)
 		out, err := cmd.CombinedOutput()
 		cancel()
 		if err != nil {
@@ -187,6 +191,9 @@ func (c *controlModeStream) sendKeys(p []byte) {
 func (c *controlModeStream) Close() error {
 	c.closeOnce.Do(func() {
 		c.closedFlag.Store(true)
+		if c.cancel != nil {
+			c.cancel()
+		}
 		close(c.closed)
 		c.writeMu.Lock()
 		c.closeErr = c.in.Close()
@@ -194,8 +201,26 @@ func (c *controlModeStream) Close() error {
 		if c.stop != nil {
 			c.stop()
 		}
+		c.bgWG.Wait()
 	})
 	return c.closeErr
+}
+
+func (c *controlModeStream) timedCommand(args ...string) (*exec.Cmd, context.CancelFunc) {
+	parent := c.ctx
+	if parent == nil {
+		parent = context.Background()
+	}
+	ctx, cancel := context.WithTimeout(parent, TmuxCommandTimeout)
+	return TmuxCommandContext(ctx, args...), cancel
+}
+
+func (c *controlModeStream) startBackground(run func()) {
+	c.bgWG.Add(1)
+	go func() {
+		defer c.bgWG.Done()
+		run()
+	}()
 }
 
 // StartTerminal attaches in control mode.
@@ -232,7 +257,8 @@ func StartTerminal(cmd *exec.Cmd) (TerminalStream, error) {
 		return nil, err
 	}
 
-	pane := resolveActivePane(target)
+	probeCtx, probeCancel := context.WithTimeout(context.Background(), TmuxCommandTimeout)
+	pane := resolveActivePaneContext(probeCtx, target)
 	reader := newControlModeReader(stdout)
 
 	// Forward only this pane's output. A control-mode client is sent %output for
@@ -243,11 +269,15 @@ func StartTerminal(cmd *exec.Cmd) (TerminalStream, error) {
 	// session-qualified target used for send-keys ($61:0.0), so it is resolved
 	// separately. If it cannot be resolved the filter stays off: showing another
 	// pane's output is bad, showing nothing at all is worse.
-	if id := panePrimaryID(pane); id != "" {
+	if id := panePrimaryIDContext(probeCtx, pane); id != "" {
 		reader.setPaneFilter(id)
 	}
+	probeCancel()
+	streamCtx, streamCancel := context.WithCancel(context.Background())
 
 	stream := &controlModeStream{
+		ctx:          streamCtx,
+		cancel:       streamCancel,
 		closed:       make(chan struct{}),
 		keys:         make(chan []byte, 256),
 		recheckSize:  make(chan struct{}, 1),
@@ -260,22 +290,22 @@ func StartTerminal(cmd *exec.Cmd) (TerminalStream, error) {
 
 	// One goroutine owns keystroke delivery, so order is preserved without the
 	// caller waiting for a process to finish. See Write.
-	go stream.deliverKeys()
+	stream.startBackground(stream.deliverKeys)
 
 	// Control mode sends no repaint on attach; the size the frontend sends
 	// straight after is what produces the opening frame. See primePaneSize.
-	go primePaneSize(pane)
+	stream.startBackground(func() { primePaneSize(stream, pane) })
 
 	// Keep the pane matched to its window for as long as this terminal lives.
-	go watchPaneSize(stream, pane)
+	stream.startBackground(func() { watchPaneSize(stream, pane) })
 
 	return stream, nil
 }
 
 // paneSize reports the pane's current dimensions.
 func paneSize(pane string) (cols, rows int, ok bool) {
-	out, err := TmuxCommand("display-message", "-p", "-t", pane,
-		"#{pane_width} #{pane_height}").Output()
+	out, err := tmuxOutputContext(context.Background(), "display-message", "-p", "-t", pane,
+		"#{pane_width} #{pane_height}")
 	if err != nil {
 		return 0, 0, false
 	}
@@ -291,10 +321,14 @@ func paneSize(pane string) (cols, rows int, ok bool) {
 // before then paints a blank screen — after which control mode sends nothing
 // until the next change, leaving the terminal empty indefinitely.
 func paneHasContent(pane string) bool {
+	return paneHasContentContext(context.Background(), pane)
+}
+
+func paneHasContentContext(ctx context.Context, pane string) bool {
 	if pane == "" {
 		return false
 	}
-	out, err := TmuxCommand("capture-pane", "-p", "-t", pane).Output()
+	out, err := tmuxOutputContext(ctx, "capture-pane", "-p", "-t", pane)
 	if err != nil {
 		return false
 	}
@@ -350,7 +384,7 @@ func SetTerminalSize(s TerminalStream, cols, rows int) error {
 	// can genuinely drift from its window, but watchPaneSize already corrects
 	// that on its own timer, off the interactive path.
 	if c.pane != "" {
-		cmd, cancel := TmuxCommandTimed("resize-pane", "-t", c.pane,
+		cmd, cancel := c.timedCommand("resize-pane", "-t", c.pane,
 			"-x", fmt.Sprintf("%d", cols), "-y", fmt.Sprintf("%d", rows))
 		_ = cmd.Run()
 		cancel()
@@ -438,6 +472,10 @@ func attachTargetOf(cmd *exec.Cmd) string {
 // The lookup is best-effort: on failure the caller falls back to the attach
 // target itself, which the multiplexer resolves to that session's active pane.
 func resolveActivePane(target string) string {
+	return resolveActivePaneContext(context.Background(), target)
+}
+
+func resolveActivePaneContext(ctx context.Context, target string) string {
 	if target == "" {
 		return ""
 	}
@@ -446,8 +484,8 @@ func resolveActivePane(target string) string {
 	// caller's window with whichever one is ACTIVE, and opening a tab changes
 	// that — which is how input for one tab ended up addressed to another.
 	if strings.Contains(target, ":") {
-		out, err := TmuxCommand("display-message", "-p", "-t", target,
-			"#{pane_index}").Output()
+		out, err := tmuxOutputContext(ctx, "display-message", "-p", "-t", target,
+			"#{pane_index}")
 		if err != nil {
 			return target
 		}
@@ -459,8 +497,8 @@ func resolveActivePane(target string) string {
 
 	// window_index.pane_index are per-session coordinates; prefixed with the
 	// session they cannot collide with an identically-numbered pane elsewhere.
-	out, err := TmuxCommand("display-message", "-p", "-t", target,
-		"#{window_index}.#{pane_index}").Output()
+	out, err := tmuxOutputContext(ctx, "display-message", "-p", "-t", target,
+		"#{window_index}.#{pane_index}")
 	if err != nil {
 		return target
 	}
@@ -472,14 +510,24 @@ func resolveActivePane(target string) string {
 
 // panePrimaryID returns a pane's %-prefixed id, the form used in %output lines.
 func panePrimaryID(pane string) string {
+	return panePrimaryIDContext(context.Background(), pane)
+}
+
+func panePrimaryIDContext(ctx context.Context, pane string) string {
 	if pane == "" {
 		return ""
 	}
-	out, err := TmuxCommand("display-message", "-p", "-t", pane, "#{pane_id}").Output()
+	out, err := tmuxOutputContext(ctx, "display-message", "-p", "-t", pane, "#{pane_id}")
 	if err != nil {
 		return ""
 	}
 	return strings.TrimSpace(string(out))
+}
+
+func tmuxOutputContext(parent context.Context, args ...string) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(parent, TmuxCommandTimeout)
+	defer cancel()
+	return TmuxCommandContext(ctx, args...).Output()
 }
 
 // selectWindow points this client at a window, so commands scoped to "the
@@ -528,14 +576,20 @@ func (c *controlModeStream) selectWindow(target string) {
 // It waits for the pane to have drawn something: a tab opened moments ago is
 // still starting its agent, and sizing a pane with nothing in it achieves
 // nothing.
-func primePaneSize(pane string) {
+func primePaneSize(s *controlModeStream, pane string) {
 	const attempts = 24
 	for i := 0; i < attempts; i++ {
-		if paneHasContent(pane) {
-			_ = reconcilePaneSize(pane)
+		if paneHasContentContext(s.ctx, pane) {
+			_ = reconcilePaneSizeContext(s.ctx, pane)
 			return
 		}
-		time.Sleep(250 * time.Millisecond)
+		timer := time.NewTimer(250 * time.Millisecond)
+		select {
+		case <-timer.C:
+		case <-s.ctx.Done():
+			timer.Stop()
+			return
+		}
 	}
 }
 
@@ -551,11 +605,15 @@ func primePaneSize(pane string) {
 // frontend only sends a size when ITS size changes, and after a window resize
 // the pane is the thing that is stale, not the client.
 func reconcilePaneSize(pane string) bool {
+	return reconcilePaneSizeContext(context.Background(), pane)
+}
+
+func reconcilePaneSizeContext(ctx context.Context, pane string) bool {
 	if pane == "" {
 		return false
 	}
-	out, err := TmuxCommand("display-message", "-p", "-t", pane,
-		"#{window_width} #{window_height} #{pane_width} #{pane_height}").Output()
+	out, err := tmuxOutputContext(ctx, "display-message", "-p", "-t", pane,
+		"#{window_width} #{window_height} #{pane_width} #{pane_height}")
 	if err != nil {
 		return false
 	}
@@ -566,7 +624,8 @@ func reconcilePaneSize(pane string) bool {
 	if wc <= 1 || wr <= 1 || (wc == pc && wr == pr) {
 		return false
 	}
-	cmd, cancel := TmuxCommandTimed("resize-pane", "-t", pane,
+	commandCtx, cancel := context.WithTimeout(ctx, TmuxCommandTimeout)
+	cmd := TmuxCommandContext(commandCtx, "resize-pane", "-t", pane,
 		"-x", fmt.Sprintf("%d", wc), "-y", fmt.Sprintf("%d", wr))
 	err = cmd.Run()
 	cancel()
@@ -613,7 +672,7 @@ func watchPaneSize(s *controlModeStream, pane string) {
 	next := firstCheck
 	for {
 		select {
-		case <-s.closed:
+		case <-s.ctx.Done():
 			return
 		case <-s.recheckSize:
 			// Drain anything that arrived while we were waiting, so a burst of
@@ -622,6 +681,8 @@ func watchPaneSize(s *controlModeStream, pane string) {
 				select {
 				case <-s.recheckSize:
 					continue
+				case <-s.ctx.Done():
+					return
 				case <-time.After(afterResize):
 				}
 				break
@@ -643,7 +704,7 @@ func watchPaneSize(s *controlModeStream, pane string) {
 		// the middle of anything. On the Unix path the equivalent keystroke,
 		// sent after a resize, is what cleared Codex's /resume list and put a
 		// stray "/clear" into Claude Code's composer.
-		reconcilePaneSize(pane)
+		reconcilePaneSizeContext(s.ctx, pane)
 	}
 }
 

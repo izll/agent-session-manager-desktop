@@ -11,7 +11,8 @@
   import { GetAllTasks } from '../../../../wailsjs/go/main/App';
   import { t } from '../../i18n';
   import { deadlineState } from '../../utils/taskDueDate';
-  import { selectSession } from '../../stores/sessions';
+  import { selectSession, sessions } from '../../stores/sessions';
+  import { activeProjectId, selectProject } from '../../stores/projects';
   import { showSessionView, goBack } from '../../stores/navigation';
   import Select from '../common/Select.svelte';
   import { isGradient, getGradientCSS } from '../../utils/rowColors';
@@ -39,24 +40,34 @@
   let loading = true;
   let error = '';
   let selected: OverviewTask | null = null;
+  let loadGeneration = 0;
 
   let projectFilter = 'all';
   let statusFilter = 'open';
 
   async function load() {
+    const generation = ++loadGeneration;
     loading = true;
     error = '';
     try {
-      tasks = (await GetAllTasks()) || [];
+      const nextTasks = (await GetAllTasks()) || [];
+      if (generation !== loadGeneration) return;
+      tasks = nextTasks;
     } catch (e) {
+      if (generation !== loadGeneration) return;
       error = String(e);
       tasks = [];
     } finally {
-      loading = false;
+      if (generation === loadGeneration) loading = false;
     }
   }
 
-  onMount(load);
+  onMount(() => {
+    void load();
+    const refresh = () => { void load(); };
+    window.addEventListener('tasks:refresh', refresh);
+    return () => window.removeEventListener('tasks:refresh', refresh);
+  });
 
   // The default project comes back with an empty name: its label is a
   // translated string, so the backend cannot supply it without picking a
@@ -104,7 +115,10 @@
       // Group on the session when there is one, otherwise on the directory —
       // two sessions in one directory share a task file, and splitting them
       // would show the same task twice under different headings.
-      const key = task.sessionId || task.projectPath;
+      // Session ids and paths are only unique inside a project. Imported or
+      // restored projects commonly reuse them, and merging those groups makes
+      // the jump button target whichever project's task happened to come first.
+      const key = `${task.projectId}:${task.sessionId || task.projectPath}`;
       let group = byKey.get(key);
       if (!group) {
         group = {
@@ -197,7 +211,22 @@
   /** Open the session the task belongs to, and leave this view for it. */
   async function jumpToSession(task: OverviewTask) {
     if (!task.sessionId) return;
-    await selectSession(task.sessionId);
+    try {
+      if (task.projectId !== $activeProjectId) {
+        const switched = await selectProject(task.projectId);
+        if (!switched) return;
+      }
+      // A task may outlive the session association returned by the overview.
+      // Fail closed instead of selecting an id in the wrong/new project.
+      if (!$sessions.some((session) => session.id === task.sessionId)) {
+        error = `Session ${task.sessionName || task.sessionId} is no longer available.`;
+        return;
+      }
+      selectSession(task.sessionId);
+    } catch (e) {
+      error = String(e);
+      return;
+    }
     showSessionView();
   }
 </script>

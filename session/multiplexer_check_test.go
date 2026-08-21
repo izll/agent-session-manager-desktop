@@ -1,6 +1,7 @@
 package session
 
 import (
+	"fmt"
 	"runtime"
 	"strings"
 	"testing"
@@ -82,8 +83,10 @@ func TestTheLookupCacheExpires(t *testing.T) {
 // result.
 func TestChangingTheBinaryIsNoticed(t *testing.T) {
 	original := TmuxBinary()
+	originalProbe := multiplexerProbe
 	t.Cleanup(func() {
 		SetTmuxBinary(original)
+		multiplexerProbe = originalProbe
 		ResetMultiplexerCheckCache()
 	})
 
@@ -94,10 +97,70 @@ func TestChangingTheBinaryIsNoticed(t *testing.T) {
 	}
 
 	// A binary that certainly exists on every platform this builds for.
+	multiplexerProbe = func(string) (string, error) { return "test multiplexer 1.0", nil }
 	SetTmuxBinary(existingBinaryForTest())
 	if err := CheckMultiplexer(); err != nil {
 		t.Errorf("after pointing at a binary that exists: %v — the previous "+
 			"answer was reused", err)
+	}
+}
+
+func TestAnExecutableThatCannotRunIsUnavailable(t *testing.T) {
+	original := TmuxBinary()
+	originalLookPath := multiplexerLookPath
+	originalProbe := multiplexerProbe
+	t.Cleanup(func() {
+		SetTmuxBinary(original)
+		multiplexerLookPath = originalLookPath
+		multiplexerProbe = originalProbe
+		ResetMultiplexerCheckCache()
+	})
+
+	SetTmuxBinary("broken-psmux")
+	multiplexerLookPath = func(string) (string, error) { return "/fake/broken-psmux", nil }
+	multiplexerProbe = func(string) (string, error) { return "", fmt.Errorf("bad executable format") }
+	ResetMultiplexerCheckCache()
+
+	err := CheckMultiplexer()
+	if err == nil {
+		t.Fatal("an executable that cannot start was reported as available")
+	}
+	if MultiplexerAvailable() {
+		t.Fatal("MultiplexerAvailable is true for an executable that cannot start")
+	}
+	if !strings.Contains(err.Error(), "cannot be started") || !strings.Contains(err.Error(), "bad executable format") {
+		t.Fatalf("unhelpful probe error: %v", err)
+	}
+}
+
+func TestMultiplexerVersionUsesTheBoundedCachedProbe(t *testing.T) {
+	original := TmuxBinary()
+	originalLookPath := multiplexerLookPath
+	originalProbe := multiplexerProbe
+	t.Cleanup(func() {
+		SetTmuxBinary(original)
+		multiplexerLookPath = originalLookPath
+		multiplexerProbe = originalProbe
+		ResetMultiplexerCheckCache()
+	})
+
+	SetTmuxBinary("test-multiplexer")
+	multiplexerLookPath = func(string) (string, error) { return "/fake/test-multiplexer", nil }
+	probes := 0
+	multiplexerProbe = func(string) (string, error) {
+		probes++
+		return "test multiplexer 2.3", nil
+	}
+	ResetMultiplexerCheckCache()
+
+	if err := CheckMultiplexer(); err != nil {
+		t.Fatalf("CheckMultiplexer: %v", err)
+	}
+	if got := MultiplexerVersion(); got != "test multiplexer 2.3" {
+		t.Fatalf("MultiplexerVersion = %q", got)
+	}
+	if probes != 1 {
+		t.Fatalf("version probe ran %d times, want one cached bounded probe", probes)
 	}
 }
 

@@ -670,7 +670,7 @@
   "settings.notifyOnWaiting": "Ajan beklerken bildir",
   "settings.notifyOnWaitingDesc": "Bir oturum girdinizi beklemeye başladığında bildirim gönder",
   "settings.notifyDesktop": "Masaüstü bildirimi",
-  "settings.notifyDesktopDesc": "Bu makinede sistem bildirimi (notify-send)",
+  "settings.notifyDesktopDesc": "Bu makinede sistem bildirimi",
   "settings.notifyNtfy": "Mobil push (ntfy)",
   "settings.notifyNtfyDesc": "Telefonunuza push gelmesi için bir ntfy konusuna POST gönder",
   "settings.ntfyUrl": "ntfy URL",

@@ -35,22 +35,28 @@ let fallback: Record<string, string> = enLocale as Record<string, string>;
 // Internal trigger to force re-derive after async load
 const _tick = writable(0);
 
+let translationLoadGeneration = 0;
+
 export async function loadTranslations(lang: string) {
+  const generation = ++translationLoadGeneration;
+  let nextTranslations = fallback;
   // Load requested locale
   if (lang === 'en') {
-    translations = fallback;
+    nextTranslations = fallback;
   } else if (localeModules[lang]) {
     try {
       const mod = await localeModules[lang]();
-      translations = mod.default;
+      nextTranslations = mod.default;
     } catch (e) {
       console.error(`Failed to load locale ${lang}:`, e);
-      translations = fallback;
+      nextTranslations = fallback;
     }
-  } else {
-    translations = fallback;
   }
 
+  // Dynamic locale chunks can finish in a different order than they were
+  // selected. Only the last requested language may update the global UI.
+  if (generation !== translationLoadGeneration) return;
+  translations = nextTranslations;
   locale.set(lang);
   _tick.update(n => n + 1);
 }

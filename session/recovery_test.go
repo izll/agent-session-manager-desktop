@@ -1,6 +1,8 @@
 package session
 
 import (
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -271,5 +273,105 @@ func TestTrashTabOnStoppedSessionStillReportsMissingTab(t *testing.T) {
 	}
 	if len(trash) != 1 {
 		t.Fatalf("trash entries = %d, want 1", len(trash))
+	}
+}
+
+func TestPersistTrashTabDoesNotDeleteWindowWhenSaveFails(t *testing.T) {
+	storage := newRecoveryTestStorage(t)
+	storage.configPath = filepath.Join(t.TempDir(), "missing", "sessions.json")
+	data := &StorageData{SchemaVersion: recoverySchemaVersion}
+	deleted := false
+
+	err := storage.persistTrashThenApply(data, data, func() error {
+		deleted = true
+		return nil
+	})
+	if err == nil {
+		t.Fatal("expected persistence failure")
+	}
+	if deleted {
+		t.Fatal("live window was deleted before trash metadata became durable")
+	}
+}
+
+func TestPersistTrashTabRollsBackMetadataWhenWindowDeleteFails(t *testing.T) {
+	storage := newRecoveryTestStorage(t)
+	original := &StorageData{
+		SchemaVersion: recoverySchemaVersion,
+		Revision:      1,
+		Instances:     []*Instance{{ID: "session-1", Name: "before"}},
+	}
+	updated := &StorageData{
+		SchemaVersion: recoverySchemaVersion,
+		Revision:      2,
+		Trash:         []*TrashEntry{{ID: "trash-1", Kind: "tab"}},
+	}
+	deleteErr := fmt.Errorf("injected tmux failure")
+
+	err := storage.persistTrashThenApply(updated, original, func() error { return deleteErr })
+	if !errors.Is(err, deleteErr) {
+		t.Fatalf("error = %v, want injected delete failure", err)
+	}
+	data, err := storage.loadStorageDataLocked()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if data.Revision != original.Revision || len(data.Instances) != 1 || data.Instances[0].Name != "before" || len(data.Trash) != 0 {
+		t.Fatalf("metadata was not rolled back: %#v", data)
+	}
+}
+
+func TestRestoreBackupRejectsStructurallyCorruptSnapshotsBeforeWrite(t *testing.T) {
+	cases := map[string]string{
+		"null instance": `{"schema_version":1,"instances":[null]}`,
+		"duplicate instance ID": `{"schema_version":1,"instances":[` +
+			`{"id":"same","name":"one"},{"id":"same","name":"two"}]}`,
+		"missing group": `{"schema_version":1,"groups":[],"instances":[` +
+			`{"id":"one","name":"one","group_id":"missing"}]}`,
+		"null trash payload": `{"schema_version":1,"instances":[],"trash":[` +
+			`{"id":"trash","kind":"session","session":null}]}`,
+	}
+	for name, body := range cases {
+		t.Run(name, func(t *testing.T) {
+			storage := newRecoveryTestStorage(t)
+			original := &Instance{ID: "original", Name: "Original", Status: StatusStopped}
+			if err := storage.SaveAll([]*Instance{original}, nil, DefaultSettings()); err != nil {
+				t.Fatal(err)
+			}
+			before, err := os.ReadFile(storage.configPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			backupDir := storage.backupDirLocked()
+			if err := os.MkdirAll(backupDir, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			const backupID = "corrupt-restore.json"
+			if err := os.WriteFile(filepath.Join(backupDir, backupID), []byte(body), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			entriesBefore, err := os.ReadDir(backupDir)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if err := storage.RestoreBackup(backupID); err == nil {
+				t.Fatal("structurally corrupt backup was accepted")
+			}
+			after, err := os.ReadFile(storage.configPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(after) != string(before) {
+				t.Fatal("corrupt restore changed canonical storage")
+			}
+			entriesAfter, err := os.ReadDir(backupDir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(entriesAfter) != len(entriesBefore) {
+				t.Fatal("corrupt restore created a safety backup before validation")
+			}
+		})
 	}
 }

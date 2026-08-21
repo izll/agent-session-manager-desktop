@@ -3,11 +3,11 @@
 package session
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"os/exec"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -31,6 +31,43 @@ import (
 // against the registry — this one is published from github.com/psmux, which is
 // the project itself.
 const wingetPackageID = "marlocarlo.psmux"
+
+const (
+	multiplexerInstallOutputLimit = 1 << 20
+	multiplexerInstallWaitDelay   = 2 * time.Second
+)
+
+type boundedInstallOutput struct {
+	mu        sync.Mutex
+	data      []byte
+	truncated bool
+}
+
+func (w *boundedInstallOutput) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	remaining := multiplexerInstallOutputLimit - len(w.data)
+	if remaining > 0 {
+		if remaining > len(p) {
+			remaining = len(p)
+		}
+		w.data = append(w.data, p[:remaining]...)
+	}
+	if remaining < len(p) {
+		w.truncated = true
+	}
+	return len(p), nil
+}
+
+func (w *boundedInstallOutput) String() string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	result := string(w.data)
+	if w.truncated {
+		result += "\n[output truncated]"
+	}
+	return result
+}
 
 // InstallMultiplexerSupported reports whether this platform can install it.
 func InstallMultiplexerSupported() bool {
@@ -69,8 +106,11 @@ func InstallMultiplexer() (output string, err error) {
 		"--disable-interactivity",
 	)
 	HideConsoleWindow(cmd)
+	// A detached installer process may inherit winget's output descriptors.
+	// Bound the post-cancellation pipe wait as well as winget itself.
+	cmd.WaitDelay = multiplexerInstallWaitDelay
 
-	var buf bytes.Buffer
+	var buf boundedInstallOutput
 	cmd.Stdout = &buf
 	cmd.Stderr = &buf
 	runErr := cmd.Run()

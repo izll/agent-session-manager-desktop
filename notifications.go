@@ -6,12 +6,17 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"os/exec"
-	goruntime "runtime"
+	"net/url"
 	"strings"
 	"time"
 
 	"asmgr-desktop/session"
+)
+
+var (
+	desktopNotificationInitialize = platformInitializeDesktopNotifications
+	desktopNotificationCleanup    = platformCleanupDesktopNotifications
+	desktopNotificationDeliver    = platformDeliverDesktopNotification
 )
 
 type attentionTransitionState struct {
@@ -83,7 +88,7 @@ func (a *App) startAttentionWatcher(parent context.Context) {
 			// the whole tick instead of combining one project's settings/names with
 			// another project's activities.
 			settingsProjectID := a.storage.GetActiveProjectID()
-			_, _, settings, err := a.storage.LoadAllWithSettings()
+			_, _, settings, err := a.storage.LoadAllWithSettingsContext(ctx)
 			if err != nil || a.storage.GetActiveProjectID() != settingsProjectID ||
 				settings == nil || !settings.NotifyOnWaiting {
 				// Feature off: drop state so re-enabling starts with a
@@ -92,8 +97,8 @@ func (a *App) startAttentionWatcher(parent context.Context) {
 				continue
 			}
 
-			upd := a.GetSidebarUpdates()
-			namesProjectID, instances, _, namesErr := a.storage.LoadAllWithProjectSnapshot()
+			upd := a.getSidebarUpdates(ctx)
+			namesProjectID, instances, _, namesErr := a.storage.LoadAllWithProjectSnapshotContext(ctx)
 			if namesErr != nil || upd.projectID == "" ||
 				upd.projectID != settingsProjectID || namesProjectID != settingsProjectID ||
 				a.storage.GetActiveProjectID() != settingsProjectID {
@@ -153,17 +158,7 @@ func (a *App) sendAttentionNotification(ctx context.Context, settings *session.S
 		a.attentionWG.Add(1)
 		go func() {
 			defer a.attentionWG.Done()
-			var cmd *exec.Cmd
-			switch goruntime.GOOS {
-			case "linux":
-				cmd = session.CommandContext(ctx, "notify-send", "-a", "ASMGR Desktop", "-u", "normal", title, body)
-			case "darwin":
-				script := fmt.Sprintf("display notification %q with title %q", body, title)
-				cmd = session.CommandContext(ctx, "osascript", "-e", script)
-			default:
-				return
-			}
-			if err := cmd.Run(); err != nil && ctx.Err() == nil {
+			if err := desktopNotificationDeliver(ctx, title, body); err != nil && ctx.Err() == nil {
 				log.Printf("[notify] desktop notification failed: %v", err)
 			}
 		}()
@@ -171,6 +166,7 @@ func (a *App) sendAttentionNotification(ctx context.Context, settings *session.S
 
 	if settings.NotifyNtfy && settings.NtfyURL != "" {
 		url := settings.NtfyURL
+		logEndpoint := notificationEndpointForLog(url)
 		a.attentionWG.Add(1)
 		go func() {
 			defer a.attentionWG.Done()
@@ -180,7 +176,10 @@ func (a *App) sendAttentionNotification(ctx context.Context, settings *session.S
 			msg := fmt.Sprintf("%s – %s", title, body)
 			req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, strings.NewReader(msg))
 			if err != nil {
-				log.Printf("[notify] ntfy request build failed: %v", err)
+				// Topic paths, query parameters and URL credentials are often the
+				// only secret protecting a push topic. Never copy the raw URL (or a
+				// url.Error that embeds it) into the user-visible application log.
+				log.Printf("[notify] ntfy request for %s is invalid", logEndpoint)
 				return
 			}
 			req.Header.Set("Tags", "hourglass_flowing_sand")
@@ -189,7 +188,7 @@ func (a *App) sendAttentionNotification(ctx context.Context, settings *session.S
 				if ctx.Err() != nil {
 					return
 				}
-				log.Printf("[notify] ntfy push failed: %v", err)
+				log.Printf("[notify] ntfy push to %s failed", logEndpoint)
 				return
 			}
 			defer resp.Body.Close()
@@ -200,10 +199,22 @@ func (a *App) sendAttentionNotification(ctx context.Context, settings *session.S
 			// nothing anywhere to say why — and the log is the one place a user
 			// can be pointed at.
 			if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-				detail, _ := io.ReadAll(io.LimitReader(resp.Body, 256))
-				log.Printf("[notify] ntfy refused the push: %s %s: %s",
-					resp.Status, url, strings.TrimSpace(string(detail)))
+				// The response body is remote-controlled and may echo a protected
+				// topic or credential. The status and redacted origin are enough to
+				// diagnose authorization/not-found/server failures without leaking it.
+				_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 256))
+				log.Printf("[notify] ntfy at %s refused the push: %s",
+					logEndpoint, resp.Status)
 			}
 		}()
 	}
+}
+
+func notificationEndpointForLog(raw string) string {
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return "<invalid endpoint>"
+	}
+	// URL.Host deliberately excludes User, Path, RawQuery and Fragment.
+	return parsed.Scheme + "://" + parsed.Host
 }

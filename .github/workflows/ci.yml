@@ -18,8 +18,8 @@ jobs:
     name: Frontend type-check and build
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '22'
           cache: npm
@@ -43,8 +43,8 @@ jobs:
     name: Go test and vet
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: go.mod
           cache: true
@@ -60,7 +60,7 @@ jobs:
       # Go package will not even load without it. The release workflow already
       # builds the frontend first for this reason; this job did not, so it could
       # never have passed.
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '22'
           cache: npm
@@ -71,39 +71,87 @@ jobs:
         working-directory: frontend
       - run: xvfb-run -a go test -race ./...
       - run: go vet ./...
+      # The separate frontend and Go builds above do not validate their bridge:
+      # stale generated bindings can type-check while calling a Go method that
+      # no longer exists. Run the real Wails generator/package path on every PR,
+      # with the same CLI and WebKitGTK tag used for Ubuntu releases.
+      - name: Install Wails CLI
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.14.0
+      - name: Build Wails application and bindings
+        run: xvfb-run -a "$(go env GOPATH)/bin/wails" build -tags webkit2_41 -clean
+      # Vite transpiles TypeScript but does not type-check it. The check above
+      # ran against the bindings present in the checkout; repeat it after Wails
+      # regeneration so a changed Go method signature cannot pass CI and fail
+      # only when the frontend calls it at runtime.
+      - name: Type-check regenerated Wails bindings
+        run: npm run check --prefix frontend
 
   # The Go suite had never run on macOS, and the first time it did it found a
   # real bug: /tmp there is a symlink to /private/tmp, so a path comparison that
   # resolved only one side silently dropped every match. Cheap insurance against
   # the next platform assumption.
   go-test-macos:
-    name: Go test (macOS)
+    name: Go test (macOS, full app)
     runs-on: macos-14
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: go.mod
           cache: true
       - name: Install native build dependencies
         run: brew install portaudio
-      # Only the packages that build without a display. The Wails app itself is
-      # covered by the release workflow, which builds the full bundle.
-      - run: go test ./session/ ./updater/
-      - run: go vet ./session/ ./updater/
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      # main.go embeds frontend/dist, so native root-package compilation needs
+      # the same frontend preparation as the release build.
+      - run: npm ci --prefix frontend
+      - run: npm run build --prefix frontend
+      - run: go test ./...
+      - run: go vet ./...
 
   # Windows has a different terminal transport, process checks and file-lock
   # implementation, and its multiplexer default is psmux rather than tmux.
   # Compiling the release catches type errors but does not execute any of those
   # build-tagged tests, so keep them in the ordinary PR gate as well.
   go-test-windows:
-    name: Go test (Windows)
+    name: Go test (Windows, full app)
     runs-on: windows-2022
+    defaults:
+      run:
+        shell: msys2 {0}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      # The root package imports PortAudio and WebRTC VAD through CGO. Use the
+      # exact UCRT64 toolchain the Windows release uses, otherwise CI can only
+      # test platform-neutral subpackages and misses every Windows App/Wails
+      # lifecycle implementation.
+      - uses: msys2/setup-msys2@66cd2cce69caa17b53920067426061ca1de3a884 # v2
+        with:
+          msystem: UCRT64
+          update: true
+          path-type: inherit
+          install: >-
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-pkgconf
+            mingw-w64-ucrt-x86_64-portaudio
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: go.mod
           cache: true
-      - run: go test ./session/ ./updater/
-      - run: go vet ./session/ ./updater/
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci --prefix frontend
+      - run: npm run build --prefix frontend
+      - run: go test ./...
+        env:
+          CGO_ENABLED: '1'
+      - run: go vet ./...
+        env:
+          CGO_ENABLED: '1'

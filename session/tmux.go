@@ -71,10 +71,18 @@ func TmuxCommandContext(ctx context.Context, args ...string) *exec.Cmd {
 // multiplexer to resolve a single name is what cannot be trusted, so this
 // lists every session and compares names itself.
 func SessionIDFor(name string) string {
+	return SessionIDForContext(context.Background(), name)
+}
+
+// SessionIDForContext is SessionIDFor with cancellation for terminal attach
+// handlers that must not outlive application shutdown.
+func SessionIDForContext(ctx context.Context, name string) string {
 	if name == "" {
 		return ""
 	}
-	out, err := TmuxCommand("list-sessions", "-F", "#{session_id} #{session_name}").Output()
+	commandCtx, cancel := context.WithTimeout(ctx, TmuxCommandTimeout)
+	defer cancel()
+	out, err := TmuxCommandContext(commandCtx, "list-sessions", "-F", "#{session_id} #{session_name}").Output()
 	if err != nil {
 		return ""
 	}
@@ -132,13 +140,21 @@ const TmuxCommandTimeout = 10 * time.Second
 // number refreshed, which is 0 when nothing is attached — a legitimate case,
 // not an error.
 func RefreshSessionClients(sessionName string) int {
+	return RefreshSessionClientsContext(context.Background(), sessionName)
+}
+
+// RefreshSessionClientsContext is RefreshSessionClients with cancellation for
+// terminal connection pumps that must drain during application shutdown.
+func RefreshSessionClientsContext(ctx context.Context, sessionName string) int {
 	// Clients sit on the per-tab mirror sessions, not on the base session that
 	// owns the panes — listing only the base finds nothing to refresh and the
 	// redraw is lost. Mirrors are named "<base>_gui_<n>_<stamp>", so ask for
 	// every client on the server and keep the ones belonging to this session
 	// or any of its mirrors.
-	out, err := TmuxCommand("list-clients", "-a",
+	commandCtx, cancel := context.WithTimeout(ctx, TmuxCommandTimeout)
+	out, err := TmuxCommandContext(commandCtx, "list-clients", "-a",
 		"-F", "#{client_name}\t#{client_session}").Output()
+	cancel()
 	if err != nil {
 		return 0
 	}
@@ -151,7 +167,10 @@ func RefreshSessionClients(sessionName string) int {
 		if clientSession != sessionName && !strings.HasPrefix(clientSession, sessionName+"_gui_") {
 			continue
 		}
-		if err := TmuxCommand("refresh-client", "-t", name).Run(); err == nil {
+		commandCtx, cancel := context.WithTimeout(ctx, TmuxCommandTimeout)
+		err := TmuxCommandContext(commandCtx, "refresh-client", "-t", name).Run()
+		cancel()
+		if err == nil {
 			refreshed++
 		}
 	}

@@ -670,7 +670,7 @@
   "settings.notifyOnWaiting": "แจ้งเตือนเมื่อ agent กำลังรอ",
   "settings.notifyOnWaitingDesc": "ส่งการแจ้งเตือนเมื่อเซสชันเริ่มรอข้อมูลจากคุณ",
   "settings.notifyDesktop": "การแจ้งเตือนบนเดสก์ท็อป",
-  "settings.notifyDesktopDesc": "การแจ้งเตือนของระบบบนเครื่องนี้ (notify-send)",
+  "settings.notifyDesktopDesc": "การแจ้งเตือนของระบบบนเครื่องนี้",
   "settings.notifyNtfy": "พุชมือถือ (ntfy)",
   "settings.notifyNtfyDesc": "POST ไปยัง topic ของ ntfy เพื่อให้มือถือได้รับพุช",
   "settings.ntfyUrl": "ntfy URL",

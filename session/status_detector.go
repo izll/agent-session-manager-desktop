@@ -1,6 +1,7 @@
 package session
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"strings"
@@ -178,11 +179,17 @@ func (i *Instance) DetectActivityForWindow(windowIdx int) SessionActivity {
 // a failed tmux probe. Callers collecting statistics must not turn capture
 // errors into idle time.
 func (i *Instance) DetectActivityForWindowWithValidity(windowIdx int) (SessionActivity, bool) {
-	if !i.IsAlive() {
+	return i.DetectActivityForWindowWithValidityContext(context.Background(), windowIdx)
+}
+
+// DetectActivityForWindowWithValidityContext is the cancellable form used by
+// lifecycle-owned polling work.
+func (i *Instance) DetectActivityForWindowWithValidityContext(ctx context.Context, windowIdx int) (SessionActivity, bool) {
+	if !i.IsAliveContext(ctx) {
 		return ActivityIdle, false
 	}
 
-	target := i.GetCaptureTarget(windowIdx)
+	target := i.GetCaptureTargetContext(ctx, windowIdx)
 
 	// Determine agent type for this window
 	agent := i.Agent
@@ -203,7 +210,9 @@ func (i *Instance) DetectActivityForWindowWithValidity(windowIdx int) (SessionAc
 		return ActivityIdle, true
 	}
 
-	cmd := TmuxCommand("capture-pane", "-t", target, "-p", "-S", "-50")
+	commandCtx, cancel := context.WithTimeout(ctx, TmuxCommandTimeout)
+	defer cancel()
+	cmd := TmuxCommandContext(commandCtx, "capture-pane", "-t", target, "-p", "-S", "-50")
 	output, err := cmd.Output()
 	if err != nil {
 		return ActivityIdle, false
@@ -215,12 +224,12 @@ func (i *Instance) DetectActivityForWindowWithValidity(windowIdx int) (SessionAc
 	var activity SessionActivity
 	// Claude uses separator-based waiting detection
 	if agent == AgentClaude {
-		activity = detectClaudeActivity(lines, patterns, target)
+		activity = detectClaudeActivityContext(ctx, lines, patterns, target)
 	} else if agent == AgentCodex {
 		activity = detectCodexActivity(lines, patterns)
 	} else {
 		// All other agents use generic detection
-		activity = detectGenericActivity(lines, patterns, target)
+		activity = detectGenericActivityContext(ctx, lines, patterns, target)
 	}
 
 	// Apply busy grace period: if we detected busy, update the timestamp.
@@ -297,7 +306,13 @@ func (i *Instance) DetectAggregatedActivity() SessionActivity {
 // Claude, not just the stored launch flag.
 // Returns false for non-Claude agents (only Claude has this status line).
 func (i *Instance) DetectYoloForWindow(windowIdx int) bool {
-	if !i.IsAlive() {
+	return i.DetectYoloForWindowContext(context.Background(), windowIdx)
+}
+
+// DetectYoloForWindowContext is the cancellable form used by the preview
+// poller.
+func (i *Instance) DetectYoloForWindowContext(ctx context.Context, windowIdx int) bool {
+	if !i.IsAliveContext(ctx) {
 		return false
 	}
 	agent := i.Agent
@@ -323,7 +338,9 @@ func (i *Instance) DetectYoloForWindow(windowIdx int) bool {
 	// the mode line scrolled out of it during work, so the YOLO badge flickered
 	// off whenever the tab was busy. Capture more rows so it stays in view. Still
 	// cheap (one capture per tab per poll).
-	out, err := TmuxCommand("capture-pane", "-t", target, "-p", "-S", "-16").Output()
+	commandCtx, cancel := context.WithTimeout(ctx, TmuxCommandTimeout)
+	defer cancel()
+	out, err := TmuxCommandContext(commandCtx, "capture-pane", "-t", target, "-p", "-S", "-16").Output()
 	if err != nil {
 		return cachedYolo(target)
 	}
@@ -358,6 +375,10 @@ func cachedYolo(target string) bool {
 // detectClaudeActivity uses Claude Code's UI structure for waiting detection,
 // and spinner animation + extended thinking check for busy detection.
 func detectClaudeActivity(lines []string, patterns AgentPatterns, target string) SessionActivity {
+	return detectClaudeActivityContext(context.Background(), lines, patterns, target)
+}
+
+func detectClaudeActivityContext(ctx context.Context, lines []string, patterns AgentPatterns, target string) SessionActivity {
 	// --- Waiting detection: uses separator structure to avoid scrollback false positives ---
 	waiting := checkClaudeWaiting(lines, patterns)
 	if waiting {
@@ -385,7 +406,7 @@ func detectClaudeActivity(lines []string, patterns AgentPatterns, target string)
 	}
 
 	// --- Busy detection 3: braille spinner animation - SLOW, needs 2 captures ---
-	if isSpinnerAnimating(lines, patterns.Spinners, 20, target) {
+	if isSpinnerAnimatingContext(ctx, lines, patterns.Spinners, 20, target) {
 		debugf("[StatusDebug] %s → BUSY (spinner)", target)
 		return ActivityBusy
 	}
@@ -568,6 +589,10 @@ func detectCodexActivity(lines []string, patterns AgentPatterns) SessionActivity
 // detectGenericActivity checks last lines for waiting patterns,
 // then checks for spinner animation for busy detection.
 func detectGenericActivity(lines []string, patterns AgentPatterns, target string) SessionActivity {
+	return detectGenericActivityContext(context.Background(), lines, patterns, target)
+}
+
+func detectGenericActivityContext(ctx context.Context, lines []string, patterns AgentPatterns, target string) SessionActivity {
 	// Check for waiting patterns in last N non-empty lines
 	nonEmptyCount := 0
 	for j := len(lines) - 1; j >= 0 && nonEmptyCount < 15; j-- {
@@ -585,7 +610,7 @@ func detectGenericActivity(lines []string, patterns AgentPatterns, target string
 	}
 
 	// Check for spinner animation = busy
-	if isSpinnerAnimating(lines, patterns.Spinners, 15, target) {
+	if isSpinnerAnimatingContext(ctx, lines, patterns.Spinners, 15, target) {
 		return ActivityBusy
 	}
 
@@ -615,15 +640,27 @@ func findSpinnerLine(lines []string, spinners []string, maxLines int) string {
 // the pane twice with a short delay. If the spinner line changed between
 // captures, it's a real active spinner (not a stale one in scrollback).
 func isSpinnerAnimating(lines []string, spinners []string, maxLines int, target string) bool {
+	return isSpinnerAnimatingContext(context.Background(), lines, spinners, maxLines, target)
+}
+
+func isSpinnerAnimatingContext(ctx context.Context, lines []string, spinners []string, maxLines int, target string) bool {
 	spinnerLine1 := findSpinnerLine(lines, spinners, maxLines)
 	if spinnerLine1 == "" {
 		return false
 	}
 
 	// Spinner found - wait briefly and re-capture to verify animation
-	time.Sleep(60 * time.Millisecond)
+	timer := time.NewTimer(60 * time.Millisecond)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+	case <-ctx.Done():
+		return false
+	}
 
-	cmd := TmuxCommand("capture-pane", "-t", target, "-p", "-S", "-50")
+	commandCtx, cancel := context.WithTimeout(ctx, TmuxCommandTimeout)
+	defer cancel()
+	cmd := TmuxCommandContext(commandCtx, "capture-pane", "-t", target, "-p", "-S", "-50")
 	output, err := cmd.Output()
 	if err != nil {
 		return false

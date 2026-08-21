@@ -13,6 +13,7 @@ import { GetAllTasks } from '../../../wailsjs/go/main/App';
  * was plenty left to do, and say nothing.
  */
 export const openTaskCount = writable(0);
+let refreshGeneration = 0;
 
 /**
  * Recount the open tasks.
@@ -21,8 +22,10 @@ export const openTaskCount = writable(0);
  * read error should not quietly report that there is nothing left to do.
  */
 export async function refreshOpenCount(): Promise<void> {
+  const generation = ++refreshGeneration;
   try {
     const tasks = (await GetAllTasks()) || [];
+    if (generation !== refreshGeneration) return;
     openTaskCount.set(tasks.filter((task: { status?: string }) => task.status !== 'done').length);
   } catch {
     // Left as-is on purpose; see above.

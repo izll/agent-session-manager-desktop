@@ -670,7 +670,7 @@
   "settings.notifyOnWaiting": "Уведомлять, когда агент ожидает",
   "settings.notifyOnWaitingDesc": "Отправлять уведомление, когда сессия начинает ждать вашего ввода",
   "settings.notifyDesktop": "Уведомление на рабочем столе",
-  "settings.notifyDesktopDesc": "Системное уведомление на этом компьютере (notify-send)",
+  "settings.notifyDesktopDesc": "Системное уведомление на этом компьютере",
   "settings.notifyNtfy": "Push на телефон (ntfy)",
   "settings.notifyNtfyDesc": "POST-запрос в тему ntfy, чтобы телефон получил push",
   "settings.ntfyUrl": "URL ntfy",

@@ -79,6 +79,9 @@ func (a *App) GetGitHistory(path, branch string, skip int) (GitHistoryPage, erro
 	if strings.TrimSpace(path) == "" {
 		return page, fmt.Errorf("no directory to read history from")
 	}
+	if err := validateGitRefArgument(branch); err != nil {
+		return page, err
+	}
 	if skip < 0 {
 		skip = 0
 	}
@@ -108,9 +111,10 @@ func (a *App) GetGitHistory(path, branch string, skip int) (GitHistoryPage, erro
 			"%D" + gitFieldSep + "%P" + gitFieldSep + "%b" + gitRecordSep,
 	}
 	if strings.TrimSpace(branch) != "" {
-		// -- separates a revision from a path, so a branch sharing a name with
-		// a file cannot be read as one.
-		args = append(args, branch, "--")
+		// --end-of-options is required before an untrusted revision. A plain
+		// trailing -- only separates revisions from paths; it does not stop a
+		// branch such as "--output=/tmp/file" being parsed as a Git option.
+		args = append(args, "--end-of-options", branch, "--")
 	}
 
 	output, err := runDashboardGit(ctx, path, args...)
@@ -202,6 +206,9 @@ func (a *App) GetGitCommitFiles(path, hash string) ([]session.DiffFileSummary, e
 	if strings.TrimSpace(path) == "" || strings.TrimSpace(hash) == "" {
 		return nil, fmt.Errorf("no commit to read")
 	}
+	if err := validateGitCommitHash(hash); err != nil {
+		return nil, err
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), gitHistoryTimeout)
 	defer cancel()
@@ -212,7 +219,8 @@ func (a *App) GetGitCommitFiles(path, hash string) ([]session.DiffFileSummary, e
 	// -z keeps paths intact: a filename can contain anything, and git quotes
 	// the awkward ones unless the output is NUL-separated.
 	output, err := runDashboardGit(ctx, path,
-		"show", "--numstat", "-z", "--format=", "-m", "--first-parent", hash)
+		"show", "--numstat", "-z", "--format=", "-m", "--first-parent",
+		"--end-of-options", hash, "--")
 	if ctx.Err() != nil {
 		return nil, fmt.Errorf("reading the commit took too long")
 	}
@@ -237,6 +245,9 @@ func (a *App) GetGitCommitDiff(path, hash, file string, wholeFile bool) (*sessio
 	if strings.TrimSpace(path) == "" || strings.TrimSpace(hash) == "" {
 		return nil, fmt.Errorf("no commit to read")
 	}
+	if err := validateGitCommitHash(hash); err != nil {
+		return nil, err
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), gitHistoryTimeout)
 	defer cancel()
@@ -247,7 +258,7 @@ func (a *App) GetGitCommitDiff(path, hash, file string, wholeFile bool) (*sessio
 		// it — there is no "whole file" flag.
 		args = append(args, "-U100000")
 	}
-	args = append(args, hash)
+	args = append(args, "--end-of-options", hash)
 	if strings.TrimSpace(file) != "" {
 		args = append(args, "--", file)
 	}
@@ -265,4 +276,28 @@ func (a *App) GetGitCommitDiff(path, hash, file string, wholeFile bool) (*sessio
 		return nil, nil
 	}
 	return &files[0], nil
+}
+
+func validateGitRefArgument(ref string) error {
+	if ref == "" {
+		return nil
+	}
+	if ref != strings.TrimSpace(ref) || strings.HasPrefix(ref, "-") || strings.IndexFunc(ref, func(r rune) bool {
+		return r < 0x20 || r == 0x7f
+	}) >= 0 {
+		return fmt.Errorf("invalid Git branch")
+	}
+	return nil
+}
+
+func validateGitCommitHash(hash string) error {
+	if len(hash) < 4 || len(hash) > 64 {
+		return fmt.Errorf("invalid Git commit hash")
+	}
+	for _, r := range hash {
+		if !((r >= '0' && r <= '9') || (r >= 'a' && r <= 'f') || (r >= 'A' && r <= 'F')) {
+			return fmt.Errorf("invalid Git commit hash")
+		}
+	}
+	return nil
 }

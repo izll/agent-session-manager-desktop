@@ -12,10 +12,11 @@
    * of commits, and reading them all to show the twenty on screen would make
    * opening this a visible pause.
    */
-  import { createEventDispatcher, tick } from 'svelte';
+  import { createEventDispatcher, onDestroy, tick } from 'svelte';
   import * as App from '../../../../wailsjs/go/main/App';
   import type { main, session } from '../../../../wailsjs/go/models';
   import { t } from '../../i18n';
+  import { autoFocusDialog } from '../../utils/dialogActions';
   import { buildFileTree, flattenTree, type TreeRow } from '../../utils/fileTree';
   import { highlightLine } from '../../utils/highlightLine';
   import { cachedLanguage, loadLanguage } from '../../utils/codemirror';
@@ -46,6 +47,10 @@
   let diff: session.DiffFile | null = null;
   let filesLoading = false;
   let diffLoading = false;
+  let repositoryGeneration = 0;
+  let historyGeneration = 0;
+  let commitGeneration = 0;
+  let diffGeneration = 0;
 
   let listEl: HTMLDivElement | null = null;
   let collapsed = new Set<string>();
@@ -98,6 +103,20 @@
 
   let dialogEl: HTMLDivElement | null = null;
   let resizingDialog = false;
+  let activeDocumentDragCleanup: (() => void) | null = null;
+
+  function beginDocumentDrag(move: (event: MouseEvent) => void, finished: () => void = () => {}) {
+    activeDocumentDragCleanup?.();
+    const end = () => {
+      document.removeEventListener('mousemove', move);
+      document.removeEventListener('mouseup', end);
+      if (activeDocumentDragCleanup === end) activeDocumentDragCleanup = null;
+      finished();
+    };
+    activeDocumentDragCleanup = end;
+    document.addEventListener('mousemove', move);
+    document.addEventListener('mouseup', end);
+  }
 
   /**
    * Drag the bottom-right corner to size the dialog.
@@ -138,13 +157,7 @@
       dialogWidth = Math.min(maxW, Math.max(MIN_DIALOG_WIDTH, startW + (ev.clientX - startX) * 2));
       dialogHeight = Math.min(maxH, Math.max(MIN_DIALOG_HEIGHT, startH + (ev.clientY - startY) * 2));
     };
-    const end = () => {
-      resizingDialog = false;
-      document.removeEventListener('mousemove', move);
-      document.removeEventListener('mouseup', end);
-    };
-    document.addEventListener('mousemove', move);
-    document.addEventListener('mouseup', end);
+    beginDocumentDrag(move, () => { resizingDialog = false; });
   }
 
   /** Double-click the corner to get the default size back. */
@@ -186,12 +199,7 @@
       else if (which === 'commit') commitWidth = next;
       else treeWidth = next;
     };
-    const end = () => {
-      document.removeEventListener('mousemove', move);
-      document.removeEventListener('mouseup', end);
-    };
-    document.addEventListener('mousemove', move);
-    document.addEventListener('mouseup', end);
+    beginDocumentDrag(move);
   }
 
   /**
@@ -219,12 +227,7 @@
       const most = Math.max(MIN_MESSAGE_HEIGHT, window.innerHeight - 320);
       messageHeight = Math.min(most, Math.max(MIN_MESSAGE_HEIGHT, startH + ev.clientY - startY));
     };
-    const end = () => {
-      document.removeEventListener('mousemove', move);
-      document.removeEventListener('mouseup', end);
-    };
-    document.addEventListener('mousemove', move);
-    document.addEventListener('mouseup', end);
+    beginDocumentDrag(move);
   }
 
   /** Double-click resets it, which is quicker than dragging back by eye. */
@@ -241,13 +244,31 @@
   let openedPath = '';
   $: if (show && path && path !== openedPath) {
     openedPath = path;
-    void open();
+    void open(path);
   }
   // Forget it on close, so reopening on the same session loads afresh rather
   // than showing whatever was left from last time.
-  $: if (!show) openedPath = '';
+  $: if (!show && openedPath) {
+    openedPath = '';
+    invalidateRequests();
+  }
 
-  async function open() {
+  function invalidateRequests() {
+    repositoryGeneration++;
+    historyGeneration++;
+    commitGeneration++;
+    diffGeneration++;
+    loading = false;
+    loadingMore = false;
+    filesLoading = false;
+    diffLoading = false;
+  }
+
+  async function open(targetPath: string) {
+    const repository = ++repositoryGeneration;
+    historyGeneration++;
+    commitGeneration++;
+    diffGeneration++;
     error = '';
     // Everything below belongs to the repository being left. The branch matters
     // most: it is passed to GetGitHistory, and carrying a branch name from the
@@ -260,22 +281,33 @@
     files = [];
     selectedPath = '';
     diff = null;
-    await Promise.all([loadBranches(), loadHistory(true)]);
+    await Promise.all([
+      loadBranches(targetPath, repository),
+      loadHistory(true, targetPath, repository),
+    ]);
   }
 
-  async function loadBranches() {
+  async function loadBranches(targetPath: string, repository: number) {
     try {
-      const list = await App.ListGitBranches(path);
-      branches = list?.branches ?? [];
-      currentBranch = branches.find((b) => b.current)?.name ?? '';
+      const list = await App.ListGitBranches(targetPath);
+      if (!show || path !== targetPath || repository !== repositoryGeneration) return;
+      const nextBranches = list?.branches ?? [];
+      branches = nextBranches;
+      currentBranch = nextBranches.find((b) => b.current)?.name ?? '';
     } catch (e) {
+      if (!show || path !== targetPath || repository !== repositoryGeneration) return;
       console.error('Reading the branch list failed:', e);
       branches = [];
     }
   }
 
-  async function loadHistory(reset: boolean) {
+  async function loadHistory(reset: boolean, targetPath = path, repository = repositoryGeneration) {
+    const generation = ++historyGeneration;
+    const targetBranch = branch;
+    const skip = reset ? 0 : nextSkip;
     if (reset) {
+      commitGeneration++;
+      diffGeneration++;
       loading = true;
       commits = [];
       nextSkip = 0;
@@ -288,7 +320,9 @@
     }
 
     try {
-      const page = await App.GetGitHistory(path, branch, reset ? 0 : nextSkip);
+      const page = await App.GetGitHistory(targetPath, targetBranch, skip);
+      if (!show || path !== targetPath || repository !== repositoryGeneration ||
+          generation !== historyGeneration || branch !== targetBranch) return;
       if (!page?.repository) {
         error = $t('history.notARepository');
         commits = [];
@@ -298,12 +332,16 @@
       commits = reset ? (page.commits ?? []) : [...commits, ...(page.commits ?? [])];
       hasMore = page.hasMore;
       nextSkip = page.skip;
-      if (reset && commits.length > 0) void selectCommit(commits[0].hash);
+      if (reset && commits.length > 0) void selectCommit(commits[0].hash, targetPath, repository);
     } catch (e: any) {
+      if (!show || path !== targetPath || repository !== repositoryGeneration ||
+          generation !== historyGeneration || branch !== targetBranch) return;
       error = String(e?.message ?? e);
     } finally {
-      loading = false;
-      loadingMore = false;
+      if (generation === historyGeneration) {
+        loading = false;
+        loadingMore = false;
+      }
     }
   }
 
@@ -317,35 +355,60 @@
 
   async function changeBranch(name: string) {
     branch = name;
-    await loadHistory(true);
+    await loadHistory(true, path, repositoryGeneration);
   }
 
-  async function selectCommit(hash: string) {
+  async function selectCommit(hash: string, targetPath = path, repository = repositoryGeneration): Promise<boolean> {
+    const generation = ++commitGeneration;
+    diffGeneration++;
     selectedHash = hash;
     files = [];
     diff = null;
     selectedPath = '';
     filesLoading = true;
     try {
-      files = (await App.GetGitCommitFiles(path, hash)) ?? [];
-      if (files.length > 0) void selectFile(files[0].path);
+      const nextFiles = (await App.GetGitCommitFiles(targetPath, hash)) ?? [];
+      if (!show || path !== targetPath || repository !== repositoryGeneration ||
+          generation !== commitGeneration || selectedHash !== hash) return false;
+      files = nextFiles;
+      if (nextFiles.length > 0) void selectFile(nextFiles[0].path, targetPath, repository, hash);
+      return true;
     } catch (e) {
+      if (!show || path !== targetPath || repository !== repositoryGeneration ||
+          generation !== commitGeneration || selectedHash !== hash) return false;
       console.error('Reading the commit failed:', e);
+      return false;
     } finally {
-      filesLoading = false;
+      if (generation === commitGeneration) filesLoading = false;
     }
   }
 
-  async function selectFile(file: string) {
+  async function selectFile(
+    file: string,
+    targetPath = path,
+    repository = repositoryGeneration,
+    hash = selectedHash,
+  ): Promise<boolean> {
+    const generation = ++diffGeneration;
+    const targetWholeFile = wholeFile;
     selectedPath = file;
     diffLoading = true;
     try {
-      diff = await App.GetGitCommitDiff(path, selectedHash, file, wholeFile);
+      const nextDiff = await App.GetGitCommitDiff(targetPath, hash, file, targetWholeFile);
+      if (!show || path !== targetPath || repository !== repositoryGeneration ||
+          generation !== diffGeneration || selectedHash !== hash || selectedPath !== file ||
+          wholeFile !== targetWholeFile) return false;
+      diff = nextDiff;
+      return true;
     } catch (e) {
+      if (!show || path !== targetPath || repository !== repositoryGeneration ||
+          generation !== diffGeneration || selectedHash !== hash || selectedPath !== file ||
+          wholeFile !== targetWholeFile) return false;
       console.error('Reading the diff failed:', e);
       diff = null;
+      return false;
     } finally {
-      diffLoading = false;
+      if (generation === diffGeneration) diffLoading = false;
     }
   }
 
@@ -585,7 +648,7 @@
     // Claim the path for this step, so the reset below cannot fire against it
     // and undo the landing set at the end.
     changeCursorFor = order[next];
-    await selectFile(order[next]);
+    if (!await selectFile(order[next])) return;
     // selectFile reset the cursor; wait for the new file's changes to be
     // worked out before landing on one.
     await tick();
@@ -713,9 +776,13 @@
   }
 
   function close() {
+    activeDocumentDragCleanup?.();
+    invalidateRequests();
     show = false;
     dispatch('close');
   }
+
+  onDestroy(() => activeDocumentDragCleanup?.());
 
   /**
    * Handled on the window rather than on the overlay.
@@ -725,7 +792,9 @@
    * the one shortcut a user assumes works.
    */
   function onWindowKeydown(e: KeyboardEvent) {
-    if (!show) return;
+    // Keys from inside the overlay have already passed through onKeydown while
+    // bubbling. Do not step twice now that the dialog deliberately owns focus.
+    if (!show || e.defaultPrevented) return;
     onKeydown(e);
   }
 
@@ -763,7 +832,7 @@
 {#if show}
   <!-- svelte-ignore a11y-click-events-have-key-events -->
   <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
-  <div class="dialog-overlay" on:click|self={close} on:keydown={onKeydown} role="dialog" tabindex="-1">
+  <div class="dialog-overlay" use:autoFocusDialog on:click|self={close} on:keydown={onKeydown} role="dialog" aria-modal="true" tabindex="-1">
     <div
       class="dialog-content history-dialog"
       class:maximised

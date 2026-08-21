@@ -97,7 +97,8 @@ left off.
 - **Attention inbox** — the ⏳ dropdown of every tab waiting on input, with
   one-click replies, no tab switching.
 - **Desktop + mobile notifications** — get told the instant an agent starts
-  waiting, via `notify-send` and/or an ntfy topic on your phone. Fully opt-in.
+  waiting, via the platform's system notification and/or an ntfy topic on your
+  phone. Fully opt-in.
 - **Live status everywhere** — busy / waiting / idle dots and status lines in
   the sidebar and on the tab headers, read straight from the panes; hide a
   chatty tab's status line per-tab when you don't want the noise.

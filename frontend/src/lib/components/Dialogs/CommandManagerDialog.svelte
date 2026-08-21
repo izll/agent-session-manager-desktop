@@ -14,6 +14,10 @@
   let groups: Group[] = [];
   let loading = false;
   let error = '';
+  let loadGeneration = 0;
+  let operationGeneration = 0;
+  let savingCommand = false;
+  let savingGroup = false;
 
   // Command editor state. `editingId === ''` means "new command".
   let editing = false;
@@ -38,21 +42,28 @@
   let lastShow = false;
   $: {
     if (show && !lastShow) void load();
-    if (!show && lastShow) resetAll();
+    if (!show && lastShow) {
+      operationGeneration++;
+      loadGeneration++;
+      resetAll();
+    }
     lastShow = show;
   }
 
   async function load() {
+    const generation = ++loadGeneration;
     loading = true;
     error = '';
     try {
       const lib = await App.GetCommands();
+      if (!show || generation !== loadGeneration) return;
       commands = (lib?.commands || []) as Cmd[];
       groups = (lib?.groups || []) as Group[];
     } catch (e) {
+      if (!show || generation !== loadGeneration) return;
       error = String(e);
     } finally {
-      loading = false;
+      if (generation === loadGeneration) loading = false;
     }
   }
 
@@ -60,6 +71,8 @@
     editing = false;
     editingGroup = false;
     error = '';
+    savingCommand = false;
+    savingGroup = false;
     clearForm();
   }
 
@@ -119,12 +132,16 @@
   }
 
   function newCommand(groupId = '') {
+    operationGeneration++;
+    savingCommand = false;
     clearForm();
     fGroupId = groupId;
     editing = true;
   }
 
   function editCommand(c: Cmd) {
+    operationGeneration++;
+    savingCommand = false;
     editingId = c.id;
     fName = c.name;
     fCommand = c.command;
@@ -134,25 +151,32 @@
     editing = true;
   }
 
-  $: canSave = fName.trim().length > 0 && fCommand.trim().length > 0;
+  $: canSave = fName.trim().length > 0 && fCommand.trim().length > 0 && !savingCommand;
 
   async function saveCommand() {
     if (!canSave) return;
+    const generation = operationGeneration;
+    const targetId = editingId;
+    const submitted = {
+      name: fName.trim(), command: fCommand, description: fDescription.trim(),
+      groupId: fGroupId, sendEnter: fSendEnter,
+    };
+    savingCommand = true;
     error = '';
     try {
       await App.SaveCommand(
-        editingId,
-        fName.trim(),
-        fCommand,
-        fDescription.trim(),
-        fGroupId,
-        fSendEnter
+        targetId, submitted.name, submitted.command, submitted.description,
+        submitted.groupId, submitted.sendEnter
       );
+      if (!show || generation !== operationGeneration || !editing || editingId !== targetId) return;
       editing = false;
       clearForm();
       await load();
     } catch (e) {
+      if (!show || generation !== operationGeneration || !editing || editingId !== targetId) return;
       error = String(e);
+    } finally {
+      if (generation === operationGeneration) savingCommand = false;
     }
   }
 
@@ -165,42 +189,56 @@
     const target = deleteCmdTarget;
     deleteCmdTarget = null;
     if (!target) return;
+    const generation = ++operationGeneration;
     error = '';
     try {
       await App.DeleteCommand(target.id);
-      if (editingId === target.id) {
+      if (show && generation === operationGeneration && editingId === target.id) {
         editing = false;
         clearForm();
       }
       await load();
     } catch (e) {
+      if (!show || generation !== operationGeneration) return;
       error = String(e);
     }
   }
 
   function newGroup() {
+    operationGeneration++;
+    savingGroup = false;
     editingGroupId = '';
     gName = '';
     editingGroup = true;
   }
 
   function editGroup(g: Group) {
+    operationGeneration++;
+    savingGroup = false;
     editingGroupId = g.id;
     gName = g.name;
     editingGroup = true;
   }
 
   async function saveGroup() {
-    if (!gName.trim()) return;
+    if (!gName.trim() || savingGroup) return;
+    const generation = operationGeneration;
+    const targetId = editingGroupId;
+    const name = gName.trim();
+    savingGroup = true;
     error = '';
     try {
-      await App.SaveCommandGroup(editingGroupId, gName.trim());
+      await App.SaveCommandGroup(targetId, name);
+      if (!show || generation !== operationGeneration || !editingGroup || editingGroupId !== targetId) return;
       editingGroup = false;
       gName = '';
       editingGroupId = '';
       await load();
     } catch (e) {
+      if (!show || generation !== operationGeneration || !editingGroup || editingGroupId !== targetId) return;
       error = String(e);
+    } finally {
+      if (generation === operationGeneration) savingGroup = false;
     }
   }
 
@@ -213,18 +251,38 @@
     const target = deleteGroupTarget;
     deleteGroupTarget = null;
     if (!target) return;
+    const generation = ++operationGeneration;
     error = '';
     try {
       await App.DeleteCommandGroup(target.id);
-      if (fGroupId === target.id) fGroupId = '';
+      if (show && generation === operationGeneration && fGroupId === target.id) fGroupId = '';
       await load();
     } catch (e) {
+      if (!show || generation !== operationGeneration) return;
       error = String(e);
     }
   }
 
   function close() {
+    operationGeneration++;
+    loadGeneration++;
+    loading = false;
+    savingCommand = false;
+    savingGroup = false;
     show = false;
+  }
+
+  function cancelCommandEdit() {
+    operationGeneration++;
+    savingCommand = false;
+    editing = false;
+    clearForm();
+  }
+
+  function cancelGroupEdit() {
+    operationGeneration++;
+    savingGroup = false;
+    editingGroup = false;
   }
 
   // This dialog can be opened from the picker, so a bubbling Escape would
@@ -233,12 +291,11 @@
     if (e.key !== 'Escape') return;
     e.stopPropagation();
     if (editing) {
-      editing = false;
-      clearForm();
+      cancelCommandEdit();
       return;
     }
     if (editingGroup) {
-      editingGroup = false;
+      cancelGroupEdit();
       return;
     }
     close();
@@ -329,7 +386,7 @@
             </label>
 
             <div class="form-actions">
-              <button class="btn-secondary" on:click={() => { editing = false; clearForm(); }}>
+              <button class="btn-secondary" on:click={cancelCommandEdit} disabled={savingCommand}>
                 {$t('common.cancel')}
               </button>
               <button class="btn-primary" disabled={!canSave} on:click={saveCommand}>
@@ -347,8 +404,8 @@
               <input use:focusInput bind:value={gName} placeholder={$t('commands.groupNamePlaceholder')} />
             </label>
             <div class="form-actions">
-              <button class="btn-secondary" on:click={() => (editingGroup = false)}>{$t('common.cancel')}</button>
-              <button class="btn-primary" disabled={!gName.trim()} on:click={saveGroup}>{$t('common.save')}</button>
+              <button class="btn-secondary" on:click={cancelGroupEdit} disabled={savingGroup}>{$t('common.cancel')}</button>
+              <button class="btn-primary" disabled={!gName.trim() || savingGroup} on:click={saveGroup}>{$t('common.save')}</button>
             </div>
           </div>
         {:else if loading}

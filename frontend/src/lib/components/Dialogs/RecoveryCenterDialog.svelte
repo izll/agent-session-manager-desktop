@@ -1,10 +1,13 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
   import * as App from '../../../../wailsjs/go/main/App';
-  import { loadSessions, selectSession, selectWindow } from '../../stores/sessions';
-  import { loadSettings, settings } from '../../stores/settings';
+  import { loadSessions, selectSession, selectWindow, invalidateSessionProject } from '../../stores/sessions';
+  import { flushSettingsSaves, invalidateSettingsContext, loadSettings, settings } from '../../stores/settings';
+  import { activeProjectId } from '../../stores/projects';
+  import { afterUnsavedChanges } from '../../stores/unsavedChanges';
   import { t } from '../../i18n';
   import ConfirmDialog from './ConfirmDialog.svelte';
+  import { autoFocusDialog } from '../../utils/dialogActions';
 
   export let show = false;
   const dispatch = createEventDispatcher();
@@ -34,7 +37,13 @@
   let showConfirm = false;
   let confirmTitle = '';
   let confirmMessage = '';
-  let pendingAction: (() => Promise<void>) | null = null;
+  type PendingAction = {
+    projectId: string;
+    guardUnsaved: boolean;
+    run: () => Promise<void>;
+  };
+  let pendingAction: PendingAction | null = null;
+  let loadGeneration = 0;
 
   // State the policy that's actually in force, so the trash list doesn't imply
   // entries live forever. 0 is unset and means the backend default; a negative
@@ -47,11 +56,16 @@
   $: if (show && !loadedForOpen) {
     loadedForOpen = true;
     void loadRecoveryData();
-  } else if (!show) {
+  } else if (!show && loadedForOpen) {
     loadedForOpen = false;
+    loadGeneration++;
+    loading = false;
+    showConfirm = false;
+    pendingAction = null;
   }
 
   async function loadRecoveryData() {
+    const generation = ++loadGeneration;
     loading = true;
     error = '';
     try {
@@ -62,17 +76,23 @@
         // rest of the dialog should still work against one.
         App.GetTaskBackups().catch(() => [])
       ]);
+      if (!show || generation !== loadGeneration) return;
       trash = (trashResult || []) as TrashItem[];
       backups = (backupResult || []) as BackupItem[];
       taskBackups = (taskResult || []) as BackupItem[];
     } catch (e) {
+      if (!show || generation !== loadGeneration) return;
       error = String(e);
     } finally {
-      loading = false;
+      if (generation === loadGeneration) loading = false;
     }
   }
 
   function close() {
+    loadGeneration++;
+    loading = false;
+    showConfirm = false;
+    pendingAction = null;
     show = false;
     dispatch('close');
   }
@@ -96,9 +116,13 @@
   function requestPermanentDelete(item: TrashItem) {
     confirmTitle = $t('recovery.permanentDeleteTitle');
     confirmMessage = $t('recovery.permanentDeleteMessage', { name: item.name });
-    pendingAction = async () => {
-      await App.PermanentlyDeleteTrashItem(item.id);
-      await loadRecoveryData();
+    pendingAction = {
+      projectId: $activeProjectId,
+      guardUnsaved: false,
+      run: async () => {
+        await App.PermanentlyDeleteTrashItem(item.id);
+        await loadRecoveryData();
+      },
     };
     showConfirm = true;
   }
@@ -106,9 +130,13 @@
   function requestEmptyTrash() {
     confirmTitle = $t('recovery.emptyTrashTitle');
     confirmMessage = $t('recovery.emptyTrashMessage');
-    pendingAction = async () => {
-      await App.EmptyTrash();
-      await loadRecoveryData();
+    pendingAction = {
+      projectId: $activeProjectId,
+      guardUnsaved: false,
+      run: async () => {
+        await App.EmptyTrash();
+        await loadRecoveryData();
+      },
     };
     showConfirm = true;
   }
@@ -126,12 +154,17 @@
   function requestRestoreTaskBackup(item: BackupItem) {
     confirmTitle = $t('recovery.restoreTaskBackupTitle');
     confirmMessage = $t('recovery.restoreTaskBackupMessage', { time: formatDate(item.createdAt) });
-    pendingAction = async () => {
-      await App.RestoreTaskBackup(item.id);
-      // Only the task files changed, so the session list and settings are left
-      // alone — reloading them would be work for nothing.
-      await loadRecoveryData();
-      dispatch('restored');
+    pendingAction = {
+      projectId: $activeProjectId,
+      guardUnsaved: true,
+      run: async () => {
+        await App.RestoreTaskBackup(item.id);
+        // Only the task files changed, so the session list and settings are left
+        // alone — reloading them would be work for nothing.
+        window.dispatchEvent(new CustomEvent('tasks:refresh'));
+        await loadRecoveryData();
+        dispatch('restored');
+      },
     };
     showConfirm = true;
   }
@@ -139,26 +172,44 @@
   function requestRestoreBackup(item: BackupItem) {
     confirmTitle = $t('recovery.restoreBackupTitle');
     confirmMessage = $t('recovery.restoreBackupMessage', { time: formatDate(item.createdAt) });
-    pendingAction = async () => {
-      await App.RestoreBackup(item.id);
-      selectSession(null);
-      await Promise.all([loadSessions(), loadSettings()]);
-      await loadRecoveryData();
-      dispatch('restored');
+    pendingAction = {
+      projectId: $activeProjectId,
+      guardUnsaved: true,
+      run: async () => {
+        // A settings write started just before opening Recovery must not land
+        // after the backup has replaced the settings file.
+        await flushSettingsSaves();
+        invalidateSettingsContext();
+        await App.RestoreBackup(item.id);
+        // The restored store replaces every session identity. Invalidate old
+        // async continuations before exposing any of the replacement data.
+        invalidateSessionProject();
+        await Promise.all([loadSessions(), loadSettings()]);
+        await loadRecoveryData();
+        dispatch('restored');
+      },
     };
     showConfirm = true;
   }
 
-  async function runConfirmedAction() {
+  function runConfirmedAction() {
     const action = pendingAction;
     pendingAction = null;
     if (!action) return;
-    error = '';
-    try {
-      await action();
-    } catch (e) {
-      error = String(e);
-    }
+    const execute = async () => {
+      if (!show || action.projectId !== $activeProjectId) {
+        error = 'The active project changed; the recovery action was cancelled.';
+        return;
+      }
+      error = '';
+      try {
+        await action.run();
+      } catch (e) {
+        error = String(e);
+      }
+    };
+    if (action.guardUnsaved) afterUnsavedChanges(() => { void execute(); });
+    else void execute();
   }
 
   function formatDate(value: string): string {
@@ -178,7 +229,7 @@
 </script>
 
 {#if show}
-  <div class="dialog-overlay" on:click|self={close} on:keydown={handleKeydown} role="dialog" aria-modal="true">
+  <div class="dialog-overlay" use:autoFocusDialog on:click|self={close} on:keydown={handleKeydown} role="dialog" aria-modal="true">
     <div class="dialog-content recovery-dialog">
       <div class="dialog-header">
         <div>

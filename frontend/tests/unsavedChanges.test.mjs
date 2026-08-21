@@ -47,15 +47,48 @@ const { registerUnsavedGuard, afterUnsavedChanges } = await import(js);
   unregisterB();
 }
 
+// The registry must be checked again after every confirmation. A different
+// editor can become dirty while the first editor's modal is open.
+{
+  const prompts = [];
+  let bDirty = false;
+  let acted = false;
+  const unregisterA = registerUnsavedGuard({
+    isDirty: () => true,
+    requestDiscard: (next) => prompts.push(['a', next]),
+  });
+  const unregisterB = registerUnsavedGuard({
+    isDirty: () => bDirty,
+    requestDiscard: (next) => prompts.push(['b', next]),
+  });
+
+  afterUnsavedChanges(() => { acted = true; });
+  assert.equal(prompts[0][0], 'a');
+  bDirty = true;
+  prompts.shift()[1]();
+  assert.equal(prompts[0][0], 'b');
+  assert.equal(acted, false);
+  prompts.shift()[1]();
+  assert.equal(acted, true);
+
+  unregisterA();
+  unregisterB();
+}
+
 // Cancelling is fail-closed: an editor simply withholds its continuation, so
 // quit/navigation never reaches the destructive action.
 {
   let acted = false;
+  let cancelled = false;
+  let cancelPrompt;
   const unregister = registerUnsavedGuard({
     isDirty: () => true,
-    requestDiscard: () => {},
+    requestDiscard: (_next, cancel) => { cancelPrompt = cancel; },
   });
-  afterUnsavedChanges(() => { acted = true; });
+  afterUnsavedChanges(() => { acted = true; }, () => { cancelled = true; });
+  assert.equal(acted, false);
+  cancelPrompt();
+  assert.equal(cancelled, true);
   assert.equal(acted, false);
   unregister();
 }

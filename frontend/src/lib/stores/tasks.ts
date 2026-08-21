@@ -99,6 +99,7 @@ let activeTasksSessionId = '';
 let activeStatusSessionId = '';
 let tasksLoadGeneration = 0;
 let statusLoadGeneration = 0;
+let tasksContextGeneration = 0;
 export type TaskProvider = 'mcp' | 'local';
 const effectiveProviderBySession = new Map<string, { requestedMCP: boolean; provider: TaskProvider }>();
 
@@ -118,8 +119,22 @@ function isActiveTasksSession(sessionId: string): boolean {
   return sessionId === activeTasksSessionId;
 }
 
+type ActiveTasksTarget = { sessionId: string; generation: number };
+
+function captureActiveTasksTarget(sessionId: string): ActiveTasksTarget | null {
+  return isActiveTasksSession(sessionId)
+    ? { sessionId, generation: tasksContextGeneration }
+    : null;
+}
+
+function activeTasksTargetIsCurrent(target: ActiveTasksTarget | null): boolean {
+  return !!target && target.sessionId === activeTasksSessionId &&
+    target.generation === tasksContextGeneration;
+}
+
 /** Claim the visible list for a new session before any provider probe awaits. */
 export function prepareTasksSession(sessionId: string): void {
+  tasksContextGeneration++;
   activeTasksSessionId = sessionId;
   tasksLoadGeneration++;
   tasks.set([]);
@@ -470,6 +485,7 @@ export async function setTaskStatus(sessionId: string, taskId: string, status: T
   if (!sessionId) throw new Error('session is required');
 
   const provider = requestedProvider ?? providerFor(sessionId);
+  const target = captureActiveTasksTarget(sessionId);
 
   try {
     if (provider === 'mcp') {
@@ -478,14 +494,14 @@ export async function setTaskStatus(sessionId: string, taskId: string, status: T
       await App.MoveTask(sessionId, taskId, status);
     }
 
-    if (sessionId === activeTasksSessionId) {
+    if (activeTasksTargetIsCurrent(target)) {
       tasks.update(t => t.map(task =>
         task.id === taskId ? { ...task, status } : task
       ));
     }
     return provider;
   } catch (e) {
-    if (isActiveTasksSession(sessionId)) taskError.set(String(e));
+    if (activeTasksTargetIsCurrent(target)) taskError.set(String(e));
     throw e;
   }
 }
@@ -685,6 +701,7 @@ export async function removeTask(sessionId: string, taskId: string, requestedPro
   if (!sessionId || !taskId) throw new Error('session and task are required');
 
   const provider = requestedProvider ?? providerFor(sessionId);
+  const target = captureActiveTasksTarget(sessionId);
 
   try {
     if (provider === 'mcp') {
@@ -692,13 +709,13 @@ export async function removeTask(sessionId: string, taskId: string, requestedPro
     } else {
       await App.DeleteTask(sessionId, taskId);
     }
-    if (isActiveTasksSession(sessionId)) tasks.update(t => t.filter(task => task.id !== taskId));
-    if (isActiveTasksSession(sessionId) && get(selectedTaskId) === taskId) {
+    if (activeTasksTargetIsCurrent(target)) tasks.update(t => t.filter(task => task.id !== taskId));
+    if (activeTasksTargetIsCurrent(target) && get(selectedTaskId) === taskId) {
       selectedTaskId.set(null);
     }
     return provider;
   } catch (e) {
-    if (isActiveTasksSession(sessionId)) taskError.set(String(e));
+    if (activeTasksTargetIsCurrent(target)) taskError.set(String(e));
     throw e;
   }
 }
@@ -791,18 +808,29 @@ async function editTaskLocally(
   // them per session and read inside the queue: two rapid checkbox/add clicks
   // must see the result of the operation immediately before them, not the same
   // stale Svelte-store snapshot and then overwrite one another.
-  const previous = localMutationQueues.get(sessionId) ?? Promise.resolve();
+  const target = captureActiveTasksTarget(sessionId);
+  const queueKey = target ? `${target.generation}\x1f${sessionId}` : sessionId;
+  const previous = localMutationQueues.get(queueKey) ?? Promise.resolve();
   const queued = previous.catch(() => undefined).then(async () => {
+    // A queued RMW starts its backend reads only when the previous item has
+    // settled. By then a project switch may have reused this session id; do
+    // not read and rewrite the replacement project's task array.
+    if (target && !activeTasksTargetIsCurrent(target)) {
+      throw new Error('task target changed before the queued mutation started');
+    }
     const source = ((await App.GetTasks(sessionId)) || []).map(normalizeTask);
+    if (target && !activeTasksTargetIsCurrent(target)) {
+      throw new Error('task target changed while the queued mutation was reading');
+    }
     const task = source.find((t) => String(t.id) === String(taskId));
     if (!task) throw new Error(`no such task: ${taskId}`);
     await App.UpdateTask(sessionId, String(taskId), change(task) as Record<string, any>);
   });
-  localMutationQueues.set(sessionId, queued);
+  localMutationQueues.set(queueKey, queued);
   try {
     await queued;
   } finally {
-    if (localMutationQueues.get(sessionId) === queued) localMutationQueues.delete(sessionId);
+    if (localMutationQueues.get(queueKey) === queued) localMutationQueues.delete(queueKey);
   }
 }
 

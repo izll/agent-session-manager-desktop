@@ -214,6 +214,9 @@ func (i *Instance) RevertFile(path string, baseRef string) error {
 	if err := i.validateRepoPath(path); err != nil {
 		return err
 	}
+	if err := validateBaseCommitRef(baseRef); err != nil {
+		return err
+	}
 
 	if i.isUntracked(path) {
 		// All git queries above run in gitDir(), which is BrowseRoot for a
@@ -230,6 +233,9 @@ func (i *Instance) RevertFile(path string, baseRef string) error {
 	if ref == "" {
 		ref = "HEAD"
 	}
+	// checkout does not support --end-of-options on all Git versions. The ref
+	// is nevertheless safe because validateBaseCommitRef only admits a hash
+	// (or the literal HEAD selected above), and -- still protects the path.
 	cmd, cancel := GitCommandTimed("-C", i.gitDir(), "checkout", ref, "--", path)
 	defer cancel()
 	if out, err := cmd.CombinedOutput(); err != nil {
@@ -309,6 +315,9 @@ type DiffFileSummary struct {
 // diffFileSummaries lists the changed files and their line counts, without
 // reading any file's contents.
 func (i *Instance) diffFileSummaries(baseRef string) ([]DiffFileSummary, error) {
+	if err := validateBaseCommitRef(baseRef); err != nil {
+		return nil, err
+	}
 	gitEnv, cleanup, err := i.diffIndexEnv()
 	if err != nil {
 		return nil, err
@@ -317,7 +326,7 @@ func (i *Instance) diffFileSummaries(baseRef string) ([]DiffFileSummary, error) 
 
 	args := []string{"-C", i.gitDir(), "--no-pager", "diff", "--numstat", "-z", "--find-renames"}
 	if baseRef != "" {
-		args = append(args, baseRef)
+		args = append(args, "--end-of-options", baseRef)
 	}
 	cmd, cancel := GitCommandTimed(args...)
 	defer cancel()
@@ -334,7 +343,7 @@ func (i *Instance) diffFileSummaries(baseRef string) ([]DiffFileSummary, error) 
 	// side that knows — A, M, D, R — so the two are read together.
 	statusArgs := []string{"-C", i.gitDir(), "--no-pager", "diff", "--name-status", "-z", "--find-renames"}
 	if baseRef != "" {
-		statusArgs = append(statusArgs, baseRef)
+		statusArgs = append(statusArgs, "--end-of-options", baseRef)
 	}
 	statusCmd, cancelStatus := GitCommandTimed(statusArgs...)
 	defer cancelStatus()
@@ -467,6 +476,9 @@ func (i *Instance) diffForFile(baseRef, path string, contextLines int) (*DiffFil
 	if path == "" {
 		return nil, fmt.Errorf("no file given")
 	}
+	if err := validateBaseCommitRef(baseRef); err != nil {
+		return nil, err
+	}
 	gitEnv, cleanup, err := i.diffIndexEnv()
 	if err != nil {
 		return nil, err
@@ -482,7 +494,7 @@ func (i *Instance) diffForFile(baseRef, path string, contextLines int) (*DiffFil
 		args = append(args, fmt.Sprintf("-U%d", contextLines))
 	}
 	if baseRef != "" {
-		args = append(args, baseRef)
+		args = append(args, "--end-of-options", baseRef)
 	}
 	// "--" keeps a path that looks like a revision from being read as one.
 	args = append(args, "--", path)
@@ -502,6 +514,24 @@ func (i *Instance) diffForFile(baseRef, path string, contextLines int) (*DiffFil
 		return nil, nil
 	}
 	return &parsed[0], nil
+}
+
+// BaseCommitSHA is produced by `git rev-parse HEAD`, so only an object hash is
+// valid here. Backups and hand-edited/corrupt storage are still input: a value
+// beginning with -- must not become a Git option such as --output=<path>.
+func validateBaseCommitRef(ref string) error {
+	if ref == "" {
+		return nil
+	}
+	if len(ref) < 4 || len(ref) > 64 {
+		return fmt.Errorf("invalid base commit hash")
+	}
+	for _, r := range ref {
+		if !((r >= '0' && r <= '9') || (r >= 'a' && r <= 'f') || (r >= 'A' && r <= 'F')) {
+			return fmt.Errorf("invalid base commit hash")
+		}
+	}
+	return nil
 }
 
 // GetSessionDiffFileList lists files changed since the session started.

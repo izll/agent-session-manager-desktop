@@ -15,6 +15,18 @@ let lastStatusLinesJSON = '';
 let lastSpinnerTextsJSON = '';
 let lastTabStatusesJSON = '';
 
+/** Drop project-scoped payload and its equality cache before target changes. */
+export function invalidateSidebarProject() {
+  lastActivitiesJSON = '';
+  lastStatusLinesJSON = '';
+  lastSpinnerTextsJSON = '';
+  lastTabStatusesJSON = '';
+  activities.set({});
+  statusLines.set({});
+  spinnerTexts.set({});
+  tabStatuses.set({});
+}
+
 function handleUpdate(data: any) {
   if (!data) return;
 

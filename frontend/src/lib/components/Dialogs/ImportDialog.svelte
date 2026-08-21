@@ -34,6 +34,7 @@
   let isImporting = false;
   let error = '';
   let successMessage = '';
+  let requestGeneration = 0;
 
   let lastShow = false;
   // Assign lastShow inside the same block: a separate `$: lastShow = show`
@@ -46,6 +47,7 @@
   }
 
   async function loadProjects() {
+    const generation = ++requestGeneration;
     isLoading = true;
     error = '';
     successMessage = '';
@@ -58,19 +60,23 @@
         App.GetProjects(),
         App.GetActiveProjectID()
       ]);
+      if (!show || generation !== requestGeneration) return;
       currentProjectId = currentId;
       // Filter out current project
       projects = (projectList as Project[]).filter(p => p.id !== currentId);
     } catch (e) {
+      if (!show || generation !== requestGeneration) return;
       error = String(e);
     } finally {
-      isLoading = false;
+      if (generation === requestGeneration) isLoading = false;
     }
   }
 
   async function loadProjectSessions(projectId: string) {
+    const generation = ++requestGeneration;
     if (!projectId) {
       sessions = [];
+      isLoading = false;
       return;
     }
 
@@ -79,12 +85,15 @@
     selectedSessionIds = new Set();
 
     try {
-      sessions = await App.GetProjectSessions(projectId) as SessionInfo[];
+      const result = await App.GetProjectSessions(projectId) as SessionInfo[];
+      if (!show || generation !== requestGeneration || selectedProjectId !== projectId) return;
+      sessions = result;
     } catch (e) {
+      if (!show || generation !== requestGeneration || selectedProjectId !== projectId) return;
       error = String(e);
       sessions = [];
     } finally {
-      isLoading = false;
+      if (generation === requestGeneration) isLoading = false;
     }
   }
 
@@ -112,25 +121,37 @@
   }
 
   async function handleImport() {
-    if (selectedSessionIds.size === 0) return;
+    if (selectedSessionIds.size === 0 || isImporting) return;
+
+    const sourceProjectId = selectedProjectId;
+    const sessionIds = Array.from(selectedSessionIds);
+    const generation = ++requestGeneration;
 
     isImporting = true;
     error = '';
 
     try {
-      const count = await App.ImportSessions(selectedProjectId, Array.from(selectedSessionIds));
+      const count = await App.ImportSessions(sourceProjectId, sessionIds);
+      // The import itself is durable even if the dialog was closed. Always
+      // refresh the active project, but never write its result into a reopened
+      // dialog for another source project.
+      await loadSessions();
+      if (!show || generation !== requestGeneration || selectedProjectId !== sourceProjectId) return;
       successMessage = `Successfully imported ${count} session${count !== 1 ? 's' : ''}!`;
-      await loadSessions(); // Refresh session list
       selectedSessionIds = new Set();
     } catch (e) {
+      if (!show || generation !== requestGeneration || selectedProjectId !== sourceProjectId) return;
       error = String(e);
     } finally {
-      isImporting = false;
+      if (generation === requestGeneration) isImporting = false;
     }
   }
 
   function close() {
+    requestGeneration++;
     show = false;
+    isLoading = false;
+    isImporting = false;
     error = '';
     successMessage = '';
     selectedProjectId = '';
@@ -195,7 +216,7 @@
               { value: '', label: $t('import.selectProject') },
               ...projects.map(p => ({ value: p.id, label: p.name + (p.isLocked ? ' (in use)' : '') }))
             ]}
-            on:change={(e) => { selectedProjectId = e.detail; handleProjectChange(); }}
+            on:change={(e) => { if (!isImporting) { selectedProjectId = e.detail; handleProjectChange(); } }}
           />
         </div>
 

@@ -12,6 +12,7 @@
   let loading = false;
   let error = '';
   let importedCount = 0;
+  let requestGeneration = 0;
 
   // Opening the picker is the first thing that happens, so the dialog only
   // appears once there is something to show.
@@ -25,10 +26,12 @@
   $: allSelected = !!file && selected.size === file.sessions.length && file.sessions.length > 0;
 
   async function pickFile() {
+    const generation = ++requestGeneration;
     reset();
     loading = true;
     try {
       const info = await App.ReadSessionFile();
+      if (!show || generation !== requestGeneration) return;
       if (!info) {
         // Cancelled in the file picker — nothing to show.
         show = false;
@@ -39,9 +42,10 @@
       // usual case is importing all of it.
       selected = new Set(info.sessions.map(s => s.name));
     } catch (e) {
+      if (!show || generation !== requestGeneration) return;
       error = String(e);
     } finally {
-      loading = false;
+      if (generation === requestGeneration) loading = false;
     }
   }
 
@@ -57,15 +61,21 @@
 
   async function doImport() {
     if (!file || selected.size === 0) return;
+    const targetPath = file.path;
+    const targetSelection = [...selected];
+    const generation = ++requestGeneration;
     loading = true;
     error = '';
     try {
-      importedCount = await App.ImportSessionFile(file.path, [...selected]);
+      const count = await App.ImportSessionFile(targetPath, targetSelection);
       await loadSessions();
+      if (!show || generation !== requestGeneration || file?.path !== targetPath) return;
+      importedCount = count;
     } catch (e) {
+      if (!show || generation !== requestGeneration || file?.path !== targetPath) return;
       error = String(e);
     } finally {
-      loading = false;
+      if (generation === requestGeneration) loading = false;
     }
   }
 
@@ -77,6 +87,8 @@
   }
 
   function close() {
+    requestGeneration++;
+    loading = false;
     show = false;
     reset();
   }

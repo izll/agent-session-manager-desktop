@@ -31,6 +31,14 @@ const (
 	BinaryLimit   = 256 << 20 // 256 MiB uncompressed executable limit.
 	BundleLimit   = 1 << 30   // 1 GiB cumulative uncompressed app-bundle limit.
 	BundleEntries = 100000    // refuse archives designed to exhaust inode space.
+	// Package-manager probes and installs run behind a UI binding. Keep a
+	// broken helper or package script from blocking that binding forever, and
+	// cap captured output so a noisy script cannot exhaust the process memory.
+	packageProbeTimeout   = 10 * time.Second
+	packageInstallTimeout = 15 * time.Minute
+	packageCommandWait    = 2 * time.Second
+	packageOutputLimit    = 1 << 20
+	stageCleanupAge       = 24 * time.Hour
 
 	// Automatic checks are throttled to once a day, matching the TUI version.
 	CheckInterval = 24 * time.Hour
@@ -42,6 +50,9 @@ const (
 	staleUpdateFile     = "stale_update_files.json"
 	failedUpdateFile    = "failed_update_backups.json"
 	installLockFile     = "update-install.lock"
+	updateDownloadDir   = "updates"
+	updateStageMarker   = ".asmgr-updater-stage"
+	updateStageOwner    = "asmgr-desktop updater stage v1\n"
 )
 
 var windowsRuntimeDLLs = []string{
@@ -51,6 +62,12 @@ var windowsRuntimeDLLs = []string{
 	"libwinpthread-1.dll",
 }
 
+// The executable links PortAudio dynamically on every supported Windows
+// release build. Other MinGW runtime DLLs vary with the toolchain and are
+// installed when present, but this one is never optional: accepting an archive
+// without it produces an update that succeeds and then cannot start.
+var requiredWindowsRuntimeDLLs = []string{"libportaudio.dll"}
+
 var (
 	apiBaseURL      = "https://api.github.com"
 	downloadBaseURL = "https://github.com"
@@ -58,6 +75,58 @@ var (
 	downloadClient  = &http.Client{Timeout: 5 * time.Minute}
 	installMu       sync.Mutex
 )
+
+type boundedCommandOutput struct {
+	mu        sync.Mutex
+	data      []byte
+	limit     int
+	truncated bool
+}
+
+func (w *boundedCommandOutput) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	remaining := w.limit - len(w.data)
+	if remaining > 0 {
+		if remaining > len(p) {
+			remaining = len(p)
+		}
+		w.data = append(w.data, p[:remaining]...)
+	}
+	if remaining < len(p) {
+		w.truncated = true
+	}
+	return len(p), nil
+}
+
+func (w *boundedCommandOutput) Bytes() []byte {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	out := append([]byte(nil), w.data...)
+	if w.truncated {
+		out = append(out, []byte("\n[output truncated]")...)
+	}
+	return out
+}
+
+func runPackageCommand(timeout time.Duration, name string, args ...string) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, name, args...)
+	configurePackageCommand(cmd)
+	// If a helper deliberately detaches from the process group but keeps an
+	// inherited output descriptor open, Cmd.Wait would otherwise still wait for
+	// that descriptor after the deadline and direct-process cancellation.
+	cmd.WaitDelay = packageCommandWait
+	output := &boundedCommandOutput{limit: packageOutputLimit}
+	cmd.Stdout = output
+	cmd.Stderr = output
+	err := cmd.Run()
+	if ctx.Err() != nil {
+		return output.Bytes(), fmt.Errorf("%s timed out after %s: %w", filepath.Base(name), timeout, ctx.Err())
+	}
+	return output.Bytes(), err
+}
 
 // ExpectedMacTeamID is embedded by the signed macOS release build. It pins
 // automatic updates to this publisher rather than accepting any application
@@ -192,8 +261,18 @@ func isNewerVersion(candidate, current string) bool {
 // Transport and response errors are returned so callers do not mistake a
 // failed check for a successful "up to date" result.
 func CheckForUpdate(currentVersion string) (string, error) {
+	return CheckForUpdateContext(context.Background(), currentVersion)
+}
+
+// CheckForUpdateContext is CheckForUpdate with caller-owned cancellation for
+// startup checks that must not outlive application shutdown.
+func CheckForUpdateContext(ctx context.Context, currentVersion string) (string, error) {
 	url := fmt.Sprintf("%s/repos/%s/%s/releases/latest", apiBaseURL, RepoOwner, RepoName)
-	resp, err := checkClient.Get(url)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return "", fmt.Errorf("update check request failed: %w", err)
+	}
+	resp, err := checkClient.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("update check failed: %w", err)
 	}
@@ -225,7 +304,13 @@ func CheckForUpdate(currentVersion string) (string, error) {
 // successful response. A transient GitHub/network failure therefore preserves
 // both a previously advertised update and the ability to retry immediately.
 func RefreshAvailableUpdate(currentVersion string) (string, error) {
-	latest, err := CheckForUpdate(currentVersion)
+	return RefreshAvailableUpdateContext(context.Background(), currentVersion)
+}
+
+// RefreshAvailableUpdateContext is RefreshAvailableUpdate with caller-owned
+// cancellation. State is persisted only after the check completes normally.
+func RefreshAvailableUpdateContext(ctx context.Context, currentVersion string) (string, error) {
+	latest, err := CheckForUpdateContext(ctx, currentVersion)
 	if err != nil {
 		return "", err
 	}
@@ -416,7 +501,11 @@ func downloadVerifiedAsset(version, filename, tempPattern string) (path string, 
 		return "", fmt.Errorf("download is too large: %d bytes", resp.ContentLength)
 	}
 
-	out, err := os.CreateTemp("", tempPattern)
+	downloadDir, err := secureUpdateDownloadDir()
+	if err != nil {
+		return "", fmt.Errorf("failed to create secure download directory: %w", err)
+	}
+	out, err := os.CreateTemp(downloadDir, tempPattern)
 	if err != nil {
 		return "", fmt.Errorf("failed to create secure temporary file: %w", err)
 	}
@@ -483,13 +572,14 @@ func IsPackageManaged() bool {
 		return false
 	}
 	if _, err := exec.LookPath("dpkg-query"); err == nil {
-		output, queryErr := exec.Command("dpkg-query", "--search", execPath).Output()
+		output, queryErr := runPackageCommand(packageProbeTimeout, "dpkg-query", "--search", execPath)
 		if queryErr == nil && strings.HasPrefix(strings.TrimSpace(string(output)), BinaryName+":") {
 			return true
 		}
 	}
 	if _, err := exec.LookPath("rpm"); err == nil {
-		return exec.Command("rpm", "-qf", execPath).Run() == nil
+		_, err := runPackageCommand(packageProbeTimeout, "rpm", "-qf", execPath)
+		return err == nil
 	}
 	return false
 }
@@ -631,7 +721,7 @@ func installBundleUpdate(version string) error {
 	// a rename rather than a copy, and /Applications stays untouched until the
 	// new bundle is complete on disk.
 	parent := filepath.Dir(bundle)
-	stageDir, err := os.MkdirTemp(parent, "."+BinaryName+"-update-*")
+	stageDir, err := createUpdateStageDir(parent, "."+BinaryName+"-update-*")
 	if err != nil {
 		return fmt.Errorf("cannot stage update beside the application: %w", err)
 	}
@@ -958,6 +1048,7 @@ func CleanStaleUpdateFiles() {
 	// final install currently owns the lock, that install records anything it
 	// leaves behind and the next launch will retry cleanup.
 	_, _ = withInstallTryLock(func() error {
+		cleanStaleUpdateDownloads()
 		execPath, err := os.Executable()
 		if err != nil {
 			return nil
@@ -966,16 +1057,63 @@ func CleanStaleUpdateFiles() {
 		if err != nil {
 			return nil
 		}
-		cleanStaleUpdateFilesIn(filepath.Dir(execPath))
-		_ = os.Remove(execPath + ".old")
-
-		bundle := bundleRootFor(execPath)
-		if bundle != "" {
-			_ = os.RemoveAll(bundle + ".old")
-		}
-		cleanRecordedUpdateFiles(execPath, bundle)
+		cleanStaleUpdateFilesFor(execPath)
 		return nil
 	})
+}
+
+func secureUpdateDownloadDir() (string, error) {
+	dir := configDir()
+	if dir == "" {
+		return "", fmt.Errorf("cannot locate updater state directory")
+	}
+	dir = filepath.Join(dir, updateDownloadDir)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return "", err
+	}
+	if err := os.Chmod(dir, 0o700); err != nil {
+		return "", err
+	}
+	return dir, nil
+}
+
+func cleanStaleUpdateDownloads() {
+	base := configDir()
+	if base == "" {
+		return
+	}
+	dir := filepath.Join(base, updateDownloadDir)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	for _, entry := range entries {
+		name := entry.Name()
+		if !strings.HasPrefix(name, BinaryName+"-") ||
+			(!strings.HasSuffix(name, ".deb") && !strings.HasSuffix(name, ".rpm") &&
+				!strings.HasSuffix(name, ".tar.gz")) {
+			continue
+		}
+		path := filepath.Join(dir, name)
+		info, err := os.Lstat(path)
+		if err != nil || !info.Mode().IsRegular() || time.Since(info.ModTime()) < stageCleanupAge {
+			continue
+		}
+		_ = os.Remove(path)
+	}
+}
+
+func cleanStaleUpdateFilesFor(execPath string) {
+	cleanStaleUpdateFilesIn(filepath.Dir(execPath))
+	cleanMarkedUpdateStagesIn(filepath.Dir(execPath))
+	_ = os.Remove(execPath + ".old")
+
+	bundle := bundleRootFor(execPath)
+	if bundle != "" {
+		cleanMarkedUpdateStagesIn(filepath.Dir(bundle))
+		_ = os.RemoveAll(bundle + ".old")
+	}
+	cleanRecordedUpdateFiles(execPath, bundle)
 }
 
 // cleanStaleUpdateFilesIn removes the exact legacy names produced by older
@@ -987,6 +1125,62 @@ func cleanStaleUpdateFilesIn(dir string) {
 	}
 	for _, name := range names {
 		_ = os.RemoveAll(filepath.Join(dir, name))
+	}
+}
+
+func createUpdateStageDir(parent, pattern string) (string, error) {
+	dir, err := os.MkdirTemp(parent, pattern)
+	if err != nil {
+		return "", err
+	}
+	if err := os.WriteFile(filepath.Join(dir, updateStageMarker), []byte(updateStageOwner), 0o600); err != nil {
+		_ = os.RemoveAll(dir)
+		return "", err
+	}
+	return dir, nil
+}
+
+// cleanMarkedUpdateStagesIn recovers staging space after a crash or power
+// loss. A name prefix alone is not ownership proof in directories such as
+// /Applications or ~/bin, so only a real directory carrying our exact marker
+// is eligible for removal.
+func cleanMarkedUpdateStagesIn(dir string) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	for _, entry := range entries {
+		name := entry.Name()
+		if !strings.HasPrefix(name, "."+BinaryName+"-update-") &&
+			!strings.HasPrefix(name, "."+BinaryName+"-dll-stage-") {
+			continue
+		}
+		stagePath := filepath.Join(dir, name)
+		info, err := os.Lstat(stagePath)
+		if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+			continue
+		}
+		markerPath := filepath.Join(stagePath, updateStageMarker)
+		markerInfo, err := os.Lstat(markerPath)
+		if err != nil || !markerInfo.Mode().IsRegular() || markerInfo.Mode()&os.ModeSymlink != 0 {
+			continue
+		}
+		// Downloading and extraction deliberately happen outside the install
+		// lock, so another live instance may own a fresh stage directory.
+		// A stage is only abandoned after a generous age threshold.
+		if age := time.Since(markerInfo.ModTime()); age < stageCleanupAge {
+			continue
+		}
+		marker, err := os.Open(markerPath)
+		if err != nil {
+			continue
+		}
+		data, readErr := io.ReadAll(io.LimitReader(marker, int64(len(updateStageOwner)+1)))
+		closeErr := marker.Close()
+		if readErr != nil || closeErr != nil || string(data) != updateStageOwner {
+			continue
+		}
+		_ = os.RemoveAll(stagePath)
 	}
 }
 
@@ -1058,7 +1252,10 @@ func writeStaleUpdateManifest(manifest string, paths []string) {
 		err = closeErr
 	}
 	if err == nil {
-		_ = os.Rename(tmpPath, manifest)
+		// os.Rename cannot replace an existing file on Windows. The manifest is
+		// normally updated, not created: every additional rollback directory and
+		// every partial-cleanup retry must replace the previous JSON atomically.
+		_ = replaceUpdateManifestFile(tmpPath, manifest)
 	}
 }
 
@@ -1133,7 +1330,7 @@ func stageSidecarDLLsWithLimits(archivePath, destDir string, limits archiveLimit
 		return nil, nil, fmt.Errorf("failed to decompress: %w", err)
 	}
 	defer gz.Close()
-	stageDir, err := os.MkdirTemp(destDir, "."+BinaryName+"-dll-stage-*")
+	stageDir, err := createUpdateStageDir(destDir, "."+BinaryName+"-dll-stage-*")
 	if err != nil {
 		return nil, nil, fmt.Errorf("cannot stage runtime libraries: %w", err)
 	}
@@ -1208,6 +1405,19 @@ func updateSidecarDLLs(archivePath, destDir string) error {
 	}
 	defer cleanup()
 	return installTransaction(files)
+}
+
+func validateRequiredSidecarDLLs(files []stagedInstall, required []string) error {
+	present := make(map[string]bool, len(files))
+	for _, file := range files {
+		present[strings.ToLower(filepath.Base(file.target))] = true
+	}
+	for _, name := range required {
+		if !present[strings.ToLower(name)] {
+			return fmt.Errorf("update archive is missing required runtime library %q", name)
+		}
+	}
+	return nil
 }
 
 type installedStep struct {
@@ -1336,12 +1546,12 @@ func installPackageUpdate(version string) error {
 		if !IsPackageManaged() {
 			return fmt.Errorf("installation type changed while the update was downloading; retry the update")
 		}
-		cmd := exec.Command(pkexec, args...)
-		out, err := cmd.CombinedOutput()
+		out, err := runPackageCommand(packageInstallTimeout, pkexec, args...)
 		if err != nil {
 			msg := strings.TrimSpace(string(out))
 			// 126/127 are pkexec's own codes for "dismissed" and "not authorised".
-			if code := cmd.ProcessState.ExitCode(); code == 126 || code == 127 {
+			var exitErr *exec.ExitError
+			if errors.As(err, &exitErr) && (exitErr.ExitCode() == 126 || exitErr.ExitCode() == 127) {
 				return fmt.Errorf("the update was not authorised")
 			}
 			if msg == "" {
@@ -1383,7 +1593,7 @@ func isDpkgInstall() bool {
 	if _, lerr := exec.LookPath("dpkg-query"); lerr != nil {
 		return false
 	}
-	out, qerr := exec.Command("dpkg-query", "--search", execPath).Output()
+	out, qerr := runPackageCommand(packageProbeTimeout, "dpkg-query", "--search", execPath)
 	return qerr == nil && strings.HasPrefix(strings.TrimSpace(string(out)), BinaryName+":")
 }
 
@@ -1440,12 +1650,16 @@ func downloadAndInstall(version string) error {
 	}
 	defer os.Remove(archivePath)
 
-	staged, err := os.CreateTemp(filepath.Dir(execPath), "."+BinaryName+"-update-*")
+	stageDir, err := createUpdateStageDir(filepath.Dir(execPath), "."+BinaryName+"-update-*")
 	if err != nil {
 		return fmt.Errorf("cannot create update beside executable: %w", err)
 	}
-	stagedPath := staged.Name()
-	defer os.Remove(stagedPath)
+	defer os.RemoveAll(stageDir)
+	stagedPath := filepath.Join(stageDir, filepath.Base(execPath))
+	staged, err := os.OpenFile(stagedPath, os.O_CREATE|os.O_EXCL|os.O_RDWR, 0o600)
+	if err != nil {
+		return fmt.Errorf("cannot create staged executable: %w", err)
+	}
 	if err := staged.Chmod(0755); err != nil {
 		_ = staged.Close()
 		return fmt.Errorf("cannot mark staged executable as runnable: %w", err)
@@ -1475,6 +1689,10 @@ func downloadAndInstall(version string) error {
 	if runtime.GOOS == "windows" {
 		files, cleanupSidecars, err = stageSidecarDLLs(archivePath, filepath.Dir(execPath))
 		if err != nil {
+			return err
+		}
+		if err := validateRequiredSidecarDLLs(files, requiredWindowsRuntimeDLLs); err != nil {
+			cleanupSidecars()
 			return err
 		}
 	}

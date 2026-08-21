@@ -14,7 +14,7 @@
    * insertion, and moves on at the far end. That waiting is the behaviour, and
    * it is what IntelliJ does.
    */
-  import { createEventDispatcher, onMount, tick } from 'svelte';
+  import { createEventDispatcher, onDestroy, onMount, tick } from 'svelte';
   import { t } from '../../i18n';
   import {
     buildSideBySide,
@@ -72,9 +72,11 @@
 
   let sbsEl: HTMLDivElement | null = null;
   let resizing = false;
+  let activeSplitCleanup: (() => void) | null = null;
 
   function startSplitDrag(e: MouseEvent) {
     if (!sbsEl) return;
+    activeSplitCleanup?.();
     e.preventDefault();
     resizing = true;
 
@@ -96,10 +98,14 @@
       resizing = false;
       document.removeEventListener('mousemove', move);
       document.removeEventListener('mouseup', end);
+      if (activeSplitCleanup === end) activeSplitCleanup = null;
     };
+    activeSplitCleanup = end;
     document.addEventListener('mousemove', move);
     document.addEventListener('mouseup', end);
   }
+
+  onDestroy(() => activeSplitCleanup?.());
 
   /** Double-click restores the even split, which is quicker than dragging back
    *  by eye to something that only looks level. */

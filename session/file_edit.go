@@ -3,6 +3,7 @@ package session
 import (
 	"bytes"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -342,7 +343,11 @@ func (i *Instance) SaveFileForEdit(rel, text string, shape FileShape, version st
 
 	// Permissions come from the file as it is NOW, not from the read: a chmod
 	// between open and save is a change the user made deliberately.
-	if err := writeFileAtomic(abs, data, info.Mode().Perm()); err != nil {
+	if err := writeFileAtomicChecked(abs, data, info.Mode().Perm(), version, overwrite); err != nil {
+		var conflict *SaveConflictError
+		if errors.As(err, &conflict) {
+			return nil, conflict
+		}
 		return nil, fmt.Errorf("could not save %s: %w", displayPath(rel), err)
 	}
 
@@ -409,17 +414,56 @@ func readCapped(path string) ([]byte, error) {
 // would reintroduce exactly the partial-write window this avoids. It is removed
 // on every failure path, so no stray file is left behind.
 func writeFileAtomic(path string, data []byte, mode os.FileMode) error {
-	dir := filepath.Dir(path)
-	tmp, err := os.CreateTemp(dir, "."+filepath.Base(path)+".asmgr-*")
+	tmpPath, err := stageFileAtomic(path, data, mode)
 	if err != nil {
 		return err
 	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		os.Remove(tmpPath)
+		return err
+	}
+	return nil
+}
+
+// writeFileAtomicChecked stages the complete replacement first, then repeats
+// the optimistic version check immediately before publishing it. Building and
+// syncing a large temp file can take long enough for an agent to update the
+// target after the first check in SaveFileForEdit; without this second check
+// that newer content was silently overwritten even with overwrite=false.
+func writeFileAtomicChecked(path string, data []byte, mode os.FileMode, expectedVersion string, overwrite bool) error {
+	tmpPath, err := stageFileAtomic(path, data, mode)
+	if err != nil {
+		return err
+	}
+	defer os.Remove(tmpPath)
+	return replaceStagedFileChecked(tmpPath, path, expectedVersion, overwrite)
+}
+
+func replaceStagedFileChecked(tmpPath, path, expectedVersion string, overwrite bool) error {
+	if !overwrite {
+		current, err := readCapped(path)
+		if os.IsNotExist(err) {
+			return &SaveConflictError{Kind: "deleted"}
+		}
+		if err != nil || len(current) > MaxBrowseFileBytes || IsBinaryContent(current) || fileVersion(current) != expectedVersion {
+			return &SaveConflictError{Kind: "modified"}
+		}
+	}
+	return os.Rename(tmpPath, path)
+}
+
+func stageFileAtomic(path string, data []byte, mode os.FileMode) (string, error) {
+	dir := filepath.Dir(path)
+	tmp, err := os.CreateTemp(dir, "."+filepath.Base(path)+".asmgr-*")
+	if err != nil {
+		return "", err
+	}
 	tmpPath := tmp.Name()
 
-	cleanup := func(cause error) error {
+	cleanup := func(cause error) (string, error) {
 		tmp.Close()
 		os.Remove(tmpPath)
-		return cause
+		return "", cause
 	}
 
 	if _, err := tmp.Write(data); err != nil {
@@ -432,18 +476,14 @@ func writeFileAtomic(path string, data []byte, mode os.FileMode) error {
 	}
 	if err := tmp.Close(); err != nil {
 		os.Remove(tmpPath)
-		return err
+		return "", err
 	}
 	// CreateTemp always makes 0600; restore the original bits before the file
 	// becomes visible under its real name, so the window where a script is
 	// unexecutable never exists.
 	if err := os.Chmod(tmpPath, mode); err != nil {
 		os.Remove(tmpPath)
-		return err
+		return "", err
 	}
-	if err := os.Rename(tmpPath, path); err != nil {
-		os.Remove(tmpPath)
-		return err
-	}
-	return nil
+	return tmpPath, nil
 }

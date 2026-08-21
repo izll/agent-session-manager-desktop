@@ -7,12 +7,15 @@
   import AgentIcon from '../common/AgentIcon.svelte';
   import SessionColorDialog from '../Dialogs/SessionColorDialog.svelte';
   import SaveAsTemplateDialog from '../Dialogs/SaveAsTemplateDialog.svelte';
+  import ConfirmDialog from '../Dialogs/ConfirmDialog.svelte';
   import type { Session } from '../../stores/sessions';
   import { selectSession, selectedSessionId, renameSession, deleteSession, toggleFavorite } from '../../stores/sessions';
   import { settings } from '../../stores/settings';
   import { t } from '../../i18n';
   import { focusTerminal } from '../../utils/focus';
   import type { TabStatusInfo } from '../../stores/statusLines';
+  import { afterUnsavedChanges } from '../../stores/unsavedChanges';
+  import { UnfinishedTasksForSession } from '../../../../wailsjs/go/main/App';
   import {
     getGradientCSS,
     getNameStyle,
@@ -41,6 +44,10 @@
   let showContextMenu = false;
   let contextMenuX = 0;
   let contextMenuY = 0;
+  let showDeleteConfirm = false;
+  let deleteTarget: { id: string; name: string; generation: number } | null = null;
+  let deleteGeneration = 0;
+  let pendingTasks: { title: string }[] = [];
 
   // Inline rename state
   let isRenaming = false;
@@ -138,7 +145,31 @@
 
   async function handleDelete() {
     closeContextMenu();
-    await deleteSession(session.id);
+    const generation = ++deleteGeneration;
+    const target = { id: session.id, name: session.name, generation };
+    deleteTarget = target;
+    try {
+      const tasks = await UnfinishedTasksForSession(target.id);
+      if (deleteTarget?.generation !== generation) return;
+      pendingTasks = tasks || [];
+    } catch {
+      if (deleteTarget?.generation !== generation) return;
+      pendingTasks = [];
+    }
+    showDeleteConfirm = true;
+  }
+
+  function confirmDelete() {
+    const target = deleteTarget;
+    deleteTarget = null;
+    if (!target || target.generation !== deleteGeneration) return;
+    afterUnsavedChanges(() => { void deleteSession(target.id); });
+  }
+
+  function cancelDelete() {
+    deleteGeneration++;
+    deleteTarget = null;
+    pendingTasks = [];
   }
 
   async function handleToggleFavorite() {
@@ -411,6 +442,21 @@
 
 <SessionColorDialog bind:show={showColorDialog} {session} />
 <SaveAsTemplateDialog bind:show={showSaveAsTemplate} {session} />
+<ConfirmDialog
+  bind:show={showDeleteConfirm}
+  title={$t('confirm.deleteSession')}
+  message={pendingTasks.length
+    ? $t('confirm.deleteSessionMessage', { name: deleteTarget?.name || '' }) + '\n\n' +
+      $t('confirm.deleteSessionTasks', { count: String(pendingTasks.length) }) + '\n' +
+      pendingTasks.slice(0, 5).map((task) => '• ' + task.title).join('\n') +
+      (pendingTasks.length > 5 ? '\n…' : '')
+    : $t('confirm.deleteSessionMessage', { name: deleteTarget?.name || '' })}
+  confirmText={$t('confirm.deleteConfirm')}
+  cancelText={$t('common.cancel')}
+  variant="danger"
+  on:confirm={confirmDelete}
+  on:cancel={cancelDelete}
+/>
 
 <style>
   /* ORIGINAL SESSION ITEM STYLES (for restoring later):

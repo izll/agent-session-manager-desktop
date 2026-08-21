@@ -1,6 +1,6 @@
 <script lang="ts">
   import { autoFocusDialog } from '../../utils/dialogActions';
-  import { createEventDispatcher } from 'svelte';
+  import { createEventDispatcher, onDestroy } from 'svelte';
   import { agents, loadAgents } from '../../stores/agents';
   import { sessions, groups, selectedSession, createSession, startSession, assignToGroup } from '../../stores/sessions';
   import { get } from 'svelte/store';
@@ -22,6 +22,20 @@
   let selectedGroupId = '';
   let groupInitialized = false;
   let extraArgs = '';
+  let operationGeneration = 0;
+  let previousShow = false;
+
+  // This dialog is mounted once and may be closed/reopened while a native
+  // directory picker or backend mutation is still pending. Treat every open
+  // cycle as a distinct operation target so a completion from the old form
+  // cannot write into or close its replacement.
+  $: {
+    if (show !== previousShow) {
+      previousShow = show;
+      operationGeneration++;
+      if (!show) isSubmitting = false;
+    }
+  }
 
   // Resume session selection
   interface ResumeSession {
@@ -67,16 +81,30 @@
   }
 
   // Debounced path change handler
-  let pathDebounceTimer: ReturnType<typeof setTimeout>;
-  $: if (path && selectedAgent) {
-    clearTimeout(pathDebounceTimer);
-    pathDebounceTimer = setTimeout(() => loadAvailableSessions(path, selectedAgent), 500);
-  } else {
-    availableSessions = [];
-    selectedResumeId = '';
+  let pathDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+  let resumeLookupGeneration = 0;
+  let scheduledResumeKey = '';
+  $: {
+    const key = show ? `${path}\u0000${selectedAgent}` : '';
+    if (key !== scheduledResumeKey) {
+      scheduledResumeKey = key;
+      const generation = ++resumeLookupGeneration;
+      if (pathDebounceTimer) { clearTimeout(pathDebounceTimer); pathDebounceTimer = null; }
+      isLoadingSessions = false;
+      availableSessions = [];
+      selectedResumeId = '';
+      if (show && path.trim() && selectedAgent) {
+        const searchPath = path;
+        const agent = selectedAgent;
+        pathDebounceTimer = setTimeout(() => {
+          pathDebounceTimer = null;
+          void loadAvailableSessions(searchPath, agent, generation);
+        }, 500);
+      }
+    }
   }
 
-  async function loadAvailableSessions(searchPath: string, agent: string) {
+  async function loadAvailableSessions(searchPath: string, agent: string, generation: number) {
     if (!searchPath.trim()) {
       availableSessions = [];
       return;
@@ -92,14 +120,23 @@
     isLoadingSessions = true;
     try {
       const result = await App.GetResumeSessions(agent, searchPath.trim());
+      if (!show || generation !== resumeLookupGeneration || path !== searchPath || selectedAgent !== agent) return;
       availableSessions = result || [];
     } catch (e) {
+      if (!show || generation !== resumeLookupGeneration || path !== searchPath || selectedAgent !== agent) return;
       console.error('Failed to load sessions:', e);
       availableSessions = [];
     } finally {
-      isLoadingSessions = false;
+      if (show && generation === resumeLookupGeneration && path === searchPath && selectedAgent === agent) {
+        isLoadingSessions = false;
+      }
     }
   }
+
+  onDestroy(() => {
+    resumeLookupGeneration++;
+    if (pathDebounceTimer) clearTimeout(pathDebounceTimer);
+  });
 
   function checkSessionConflict(resumeId: string): string | null {
     if (!resumeId) return null;
@@ -141,6 +178,8 @@
   }
 
   function close() {
+    operationGeneration++;
+    isSubmitting = false;
     show = false;
     resetForm();
     dispatch('close');
@@ -179,6 +218,14 @@
       }
     }
 
+    const generation = operationGeneration;
+    const sessionName = name.trim();
+    const sessionPath = path.trim();
+    const agent = selectedAgent;
+    const shouldAutoStart = autoStart;
+    const resumeId = selectedResumeId;
+    const automaticYes = autoYes;
+    const args = extraArgs.trim();
     isSubmitting = true;
     error = '';
 
@@ -187,26 +234,28 @@
     const groupId = selectedGroupId;
 
     try {
-      const session = await createSession(name.trim(), path.trim(), selectedAgent, autoYes, extraArgs.trim());
+      const session = await createSession(sessionName, sessionPath, agent, automaticYes, args);
       if (session) {
         if (groupId) {
           await assignToGroup(session.id, groupId);
         }
         // If resuming, start with resume ID
-        if (selectedResumeId && autoStart) {
-          await App.StartSessionWithResume(session.id, selectedResumeId);
+        if (resumeId && shouldAutoStart) {
+          await App.StartSessionWithResume(session.id, resumeId);
           // Reload sessions to update store
           const { loadSessions } = await import('../../stores/sessions');
           await loadSessions();
-        } else if (autoStart) {
+        } else if (shouldAutoStart) {
           await startSession(session.id);
         }
       }
+      if (!show || generation !== operationGeneration) return;
       close();
     } catch (e) {
+      if (!show || generation !== operationGeneration) return;
       error = String(e);
     } finally {
-      isSubmitting = false;
+      if (generation === operationGeneration) isSubmitting = false;
     }
   }
 
@@ -228,9 +277,11 @@
   }
 
   async function browsePath() {
+    const generation = operationGeneration;
+    const initialPath = path;
     try {
-      const selectedPath = await App.BrowseDirectory(path || '');
-      if (selectedPath) {
+      const selectedPath = await App.BrowseDirectory(initialPath || '');
+      if (selectedPath && show && generation === operationGeneration && path === initialPath) {
         path = selectedPath;
       }
     } catch (e) {

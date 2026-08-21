@@ -80,6 +80,8 @@ export class TerminalPool {
   /** Frame handle for fitActive()'s wait for the container to stop resizing. */
   private fitFrame: number | undefined;
   private connecting = new Map<string, Promise<void>>();
+  /** The currently armed device-pixel-ratio watcher, released on dispose. */
+  private pixelRatioWatch: { mql: MediaQueryList; onChange: () => void } | null = null;
   private terminalOptions: Partial<Terminal['options']>;
   /**
    * Told whether the visible pane is waiting for its redraw, so the view can
@@ -111,12 +113,14 @@ export class TerminalPool {
       const mql = window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`);
       const onChange = () => {
         mql.removeEventListener('change', onChange);
+        if (this.pixelRatioWatch?.mql === mql) this.pixelRatioWatch = null;
         if (this.disposed) return;
         for (const entry of this.entries.values()) {
           clearGlyphCache(entry.terminalInstance.terminal);
         }
         arm(); // the ratio moved, so watch for the next change from here
       };
+      this.pixelRatioWatch = { mql, onChange };
       mql.addEventListener('change', onChange);
     };
     try { arm(); } catch (e) { logPoolError('pool: watching pixel ratio failed', e); }
@@ -495,16 +499,20 @@ export class TerminalPool {
     // Cancels the give-up timer too, so a torn-down tab cannot fire a spinner
     // update at a pane that is no longer there.
     clearAwaitingRedraw(entry.terminalInstance);
+    lastRedrawAt.delete(entry.key);
     detachFromSession(entry.terminalInstance).catch(e => logPoolError('pool teardown: detach failed', e));
     try { entry.terminalInstance.cleanup(); } catch (e) { logPoolError('pool teardown: cleanup failed (linkifier race?)', e); }
     try { entry.containerEl.remove(); } catch (e) { logPoolError('pool teardown: container remove failed', e); }
   }
 
   async destroyWindow(sessionId: string, windowIdx: number): Promise<void> {
-    this.showGeneration++;
     const key = this.makeKey(sessionId, windowIdx);
     const entry = this.entries.get(key);
     if (!entry) return;
+    // An unrelated, hidden tab can be cleaned up while the visible one is
+    // connecting. Invalidating the global show generation in that case makes
+    // the visible show() return before applyVisibility(), leaving it black.
+    if (this.activeKey === key) this.showGeneration++;
     this.entries.delete(key);
     if (this.activeKey === key) {
       this.activeKey = null;
@@ -513,7 +521,10 @@ export class TerminalPool {
   }
 
   async destroy(sessionId: string): Promise<void> {
-    this.showGeneration++;
+    // See destroyWindow: only a destroy that owns the intended/visible target
+    // may cancel its in-flight show. A delayed cleanup for another session must
+    // not cancel the tab the user switched to in the meantime.
+    if (this.activeKey?.startsWith(sessionId + ':')) this.showGeneration++;
     // Detach map state synchronously first (see note above), then tear down.
     const doomed: PoolEntry[] = [];
     for (const [key, entry] of this.entries) {
@@ -664,6 +675,10 @@ export class TerminalPool {
 
   async dispose(): Promise<void> {
     this.disposed = true;
+    if (this.pixelRatioWatch) {
+      this.pixelRatioWatch.mql.removeEventListener('change', this.pixelRatioWatch.onChange);
+      this.pixelRatioWatch = null;
+    }
     // A queued fit would otherwise run against a torn-down entry.
     if (this.fitFrame !== undefined) {
       cancelAnimationFrame(this.fitFrame);

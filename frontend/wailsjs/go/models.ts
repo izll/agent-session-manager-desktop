@@ -1669,6 +1669,7 @@ export namespace main {
 	}
 
 }
+
 export namespace session {
 
 	export class BrowseEntry {

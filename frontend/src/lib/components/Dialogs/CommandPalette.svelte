@@ -82,16 +82,29 @@
   // makes that re-entry settle instead of looping.
   let templates: main.SessionTemplateInfo[] = [];
   let templatesLoadedWhileOpen = false;
+  let templateLoadGeneration = 0;
   $: {
     if (show) {
       if (!templatesLoadedWhileOpen) {
         templatesLoadedWhileOpen = true;
+        const generation = ++templateLoadGeneration;
+        const projectId = $activeProjectId;
         void GetSessionTemplates()
-          .then((list) => { templates = list || []; })
-          .catch(() => { templates = []; });
+          .then((list) => {
+            if (show && generation === templateLoadGeneration && projectId === $activeProjectId) {
+              templates = list || [];
+            }
+          })
+          .catch(() => {
+            if (show && generation === templateLoadGeneration && projectId === $activeProjectId) {
+              templates = [];
+            }
+          });
       }
-    } else {
+    } else if (templatesLoadedWhileOpen) {
       templatesLoadedWhileOpen = false;
+      templateLoadGeneration++;
+      templates = [];
     }
   }
 
@@ -236,8 +249,7 @@
         keywords: `project ${project.name}`,
         icon: '◆',
         action: async () => {
-          await selectProject(project.id);
-          showDashboard();
+          if (await selectProject(project.id)) showDashboard();
         }
       });
     }

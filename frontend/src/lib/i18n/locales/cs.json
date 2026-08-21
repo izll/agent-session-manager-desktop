@@ -670,7 +670,7 @@
   "settings.notifyOnWaiting": "Upozornit, když agent čeká",
   "settings.notifyOnWaitingDesc": "Odeslat oznámení, když relace začne čekat na váš vstup",
   "settings.notifyDesktop": "Oznámení na ploše",
-  "settings.notifyDesktopDesc": "Systémové oznámení na tomto počítači (notify-send)",
+  "settings.notifyDesktopDesc": "Systémové oznámení na tomto počítači",
   "settings.notifyNtfy": "Push do mobilu (ntfy)",
   "settings.notifyNtfyDesc": "POST na téma ntfy, aby telefon dostal push",
   "settings.ntfyUrl": "URL ntfy",

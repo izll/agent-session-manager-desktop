@@ -19,9 +19,11 @@
   import * as App from '../../../../wailsjs/go/main/App';
   import { t } from '../../i18n';
   import { sessions } from '../../stores/sessions';
+  import { activeProjectId } from '../../stores/projects';
   import { getGradientCSS, getNameStyle, getContrastColor, isGradient } from '../../utils/rowColors';
   import { activities } from '../../stores/activities';
   import { tabStatuses } from '../../stores/statusLines';
+  import { autoFocusDialog } from '../../utils/dialogActions';
 
   export let show = false;
 
@@ -38,17 +40,37 @@
   let dragOverIndex: number | null = null;
   let cursor = 0;
   let listEl: HTMLDivElement | null = null;
+  let loadGeneration = 0;
+  let mutationPending = false;
 
   /** Only the first nine get a number: there is no key 10, and a badge that
    *  names a key nothing answers to is worse than no badge. */
   const NUMBERED = 9;
 
-  $: if (show) load();
+  // Both the open cycle and the active project own the list. A slow read from
+  // an earlier project/open must not overwrite a newly reopened dialog.
+  let loadedFor = '';
+  $: {
+    const key = `${show}|${$activeProjectId}`;
+    if (key !== loadedFor) {
+      loadedFor = key;
+      loadGeneration++;
+      if (show) void load();
+      else {
+        editingIndex = null;
+      }
+    }
+  }
 
   async function load(options: { keepCursor?: number } = {}) {
+    const generation = ++loadGeneration;
+    const projectId = $activeProjectId;
     try {
-      entries = (await App.GetQuickJump()) ?? [];
+      const result = (await App.GetQuickJump()) ?? [];
+      if (!show || generation !== loadGeneration || projectId !== $activeProjectId) return;
+      entries = result;
     } catch (e) {
+      if (!show || generation !== loadGeneration || projectId !== $activeProjectId) return;
       console.error('Quick jump list failed to load:', e);
       entries = [];
     }
@@ -56,6 +78,7 @@
     // opening the window starts at the top.
     cursor = Math.min(options.keepCursor ?? 0, Math.max(0, entries.length - 1));
     await tick();
+    if (!show || generation !== loadGeneration || projectId !== $activeProjectId) return;
     listEl?.focus();
   }
 
@@ -181,11 +204,13 @@
    */
   let editingIndex: number | null = null;
   let editingText = '';
+  let editingProjectId = '';
 
   async function startEditing(index: number) {
     const target = entries[index];
     if (!target) return;
     editingIndex = index;
+    editingProjectId = $activeProjectId;
     // Starts from what the row shows, which for an entry with no name of its
     // own is the name it is displayed under — an empty field would make the
     // user retype something already on screen.
@@ -199,7 +224,7 @@
     if (index === null) return;
     const target = entries[index];
     editingIndex = null;
-    if (!target) return;
+    if (!target || editingProjectId !== $activeProjectId) return;
     try {
       // A name that matches the suggestion is stored as no name at all, so the
       // entry keeps following its session and tab: pin it and renaming the
@@ -291,26 +316,33 @@
   }
 
   async function remove(index: number) {
+    if (mutationPending) return;
     const target = entries[index];
     if (!target) return;
+    mutationPending = true;
     try {
       // Keep the cursor where the eye is rather than sending it home.
       await App.RemoveQuickJump(target.sessionId, target.windowIdx);
       await load({ keepCursor: index });
     } catch (e) {
       console.error('Removing the entry failed:', e);
+    } finally {
+      mutationPending = false;
     }
   }
 
   /** Moving is how a number gets assigned, so it is a first-class action here
    *  rather than something buried in a context menu. */
   async function move(from: number, to: number) {
-    if (to < 0 || to >= entries.length) return;
+    if (mutationPending || to < 0 || to >= entries.length) return;
+    mutationPending = true;
     try {
       await App.MoveQuickJump(from, to);
       await load({ keepCursor: to });
     } catch (e) {
       console.error('Reordering failed:', e);
+    } finally {
+      mutationPending = false;
     }
   }
 
@@ -422,7 +454,7 @@
 
 {#if show}
   <!-- svelte-ignore a11y-click-events-have-key-events -->
-  <div class="dialog-overlay" on:click|self={close}>
+  <div class="dialog-overlay" use:autoFocusDialog on:click|self={close} on:keydown={onKeydown} role="dialog" aria-modal="true">
     <div class="dialog-content jump-dialog">
       <div class="dialog-header">
         <h2>{$t('quickJump.title')}</h2>
@@ -440,7 +472,6 @@
         role="listbox"
         tabindex="0"
         bind:this={listEl}
-        on:keydown={onKeydown}
       >
         {#if resolved.length === 0}
           <p class="empty">{$t('quickJump.empty')}</p>

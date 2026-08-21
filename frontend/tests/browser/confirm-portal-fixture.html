@@ -1,7 +1,9 @@
 <!doctype html>
 <html>
   <head><meta charset="UTF-8" /><title>Confirm portal fixture</title></head>
-  <body>
+  <body data-confirmed="false" data-cancelled="false">
+    <button id="dialog-trigger">Open confirmation</button>
+    <button id="background-action">Background action</button>
     <div id="hidden-owner" style="display:none"><div id="fixture"></div></div>
     <script type="module" src="./confirm-portal-fixture.ts"></script>
   </body>

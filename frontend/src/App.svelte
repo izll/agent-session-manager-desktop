@@ -41,7 +41,7 @@
   import { loadProjects, otherInstancePID, refreshLockStatus } from './lib/stores/projects';
   import { appView, goBack, showTasksView } from './lib/stores/navigation';
   import { openTaskCount, watchOpenCount, refreshOpenCount } from './lib/stores/taskAlerts';
-  import { loadSettings, settings } from './lib/stores/settings';
+  import { flushSettingsSaves, loadSettings, settings } from './lib/stores/settings';
   import GitBranchBadge from './lib/components/common/GitBranchBadge.svelte';
   import { agents, loadAgents } from './lib/stores/agents';
   import { startSidebarPolling, stopSidebarPolling } from './lib/stores/sidebarPolling';
@@ -701,11 +701,14 @@
   // comes from reading every project's task file, which the backend has no
   // reason to watch continuously.
   let stopOpenTaskWatch: (() => void) | null = null;
+  let appMounted = false;
 
   onMount(async () => {
+    appMounted = true;
     stopOpenTaskWatch = watchOpenCount();
 
     GetMultiplexerStatus().then((s) => {
+      if (!appMounted) return;
       missingMultiplexer = s?.available === false
         ? { name: s.name, hint: s.hint || '', canInstall: !!s.canInstall }
         : null;
@@ -715,8 +718,20 @@
     // only ever notifies — a dot on the update button, not a popup that
     // interrupts what the user is doing.
     EventsOn('update:available', (info: { version: string; current: string }) => {
+      if (!appMounted) return;
       availableUpdate = info?.version || '';
     });
+
+    // Install DOM listeners synchronously with mount. If PendingUpdate is slow
+    // the app must still have shortcuts, and onDestroy can now always remove
+    // exactly the listeners that this mount installed.
+    window.addEventListener('keydown', handleKeydown, true);
+    window.addEventListener('terminal-nav', handleTerminalNav as EventListener);
+    window.addEventListener('quickjump:add', handleQuickJumpAdd as EventListener);
+    window.addEventListener('git:show-history', handleShowGitHistory);
+    window.addEventListener('command:start-selected', handleCommandStart);
+    window.addEventListener('command:stop-selected', handleCommandStop);
+    window.addEventListener('command:templates', handleCommandTemplates as EventListener);
 
     // Show an update found by an earlier run straight away. The daily throttle
     // means today's launch may not check at all, and a pending update should
@@ -726,26 +741,24 @@
     } catch {
       // Not worth surfacing: the background check will notice it again.
     }
+    if (!appMounted) return;
 
-    // Capture phase so the terminal (xterm) can't swallow Ctrl+Shift combos.
-    window.addEventListener('keydown', handleKeydown, true);
-    window.addEventListener('terminal-nav', handleTerminalNav as EventListener);
-    window.addEventListener('quickjump:add', handleQuickJumpAdd as EventListener);
-    window.addEventListener('git:show-history', handleShowGitHistory);
-    window.addEventListener('command:start-selected', handleCommandStart);
-    window.addEventListener('command:stop-selected', handleCommandStop);
-    window.addEventListener('command:templates', handleCommandTemplates as EventListener);
-
+    // The active project is the identity of every session/settings read. Load
+    // it first so the concurrent reads below cannot be attributed to the
+    // empty startup placeholder while the backend already serves a project.
+    await loadProjects();
+    if (!appMounted) return;
     await Promise.all([
-      loadProjects(),
       loadSessions(),
       loadSettings(),
       loadAgents()
     ]);
+    if (!appMounted) return;
 
     // Load i18n translations from saved language setting
     const currentSettings = get(settings);
     await loadTranslations(currentSettings.language || 'en');
+    if (!appMounted) return;
 
     // Reopen the session that was selected when the app last closed, and with
     // it the tab that session remembers. Validated against the list that
@@ -758,10 +771,12 @@
 
     // Check dev mode
     try { devMode = await IsDevMode(); } catch(_) {}
+    if (!appMounted) return;
 
     // Detect a second instance holding this project's lock (store-backed so
     // it updates on project switches too).
     await refreshLockStatus();
+    if (!appMounted) return;
 
     // Start combined sidebar polling (activities + status lines)
     startSidebarPolling();
@@ -771,6 +786,8 @@
   });
 
   onDestroy(() => {
+    appMounted = false;
+    if (isResizing) stopResize();
     stopOpenTaskWatch?.();
     window.removeEventListener('keydown', handleKeydown, true);
     window.removeEventListener('terminal-nav', handleTerminalNav as EventListener);
@@ -794,9 +811,11 @@
   async function initDictation() {
     try {
       const settings = await DictationService.GetDictationSettings();
+      if (!appMounted) return;
       dictationEnabled = settings.enabled;
       if (dictationEnabled) {
         await DictationService.Initialize();
+        if (!appMounted) return;
       }
       // Listen for state changes
       EventsOn('dictation:state', (listening: boolean) => {
@@ -887,11 +906,11 @@
     showDeleteConfirm = true;
   }
 
-  async function confirmDelete() {
+  function confirmDelete() {
     const target = pendingDeleteTarget;
     if (!target || target.generation !== deleteRequestGeneration) return;
     pendingDeleteTarget = null;
-    await deleteSession(target.id);
+    afterUnsavedChanges(() => { void deleteSession(target.id); });
   }
 
   function cancelDelete() {
@@ -931,6 +950,9 @@
     // Then two frames, so the painted overlay is on screen before Quit() takes
     // the main thread for the length of the teardown.
     await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    // Settings writes are queued whole-object snapshots. Let the queue reach
+    // disk before the Wails runtime tears down, or a last toggle can vanish.
+    await flushSettingsSaves();
     Quit();
   }
 

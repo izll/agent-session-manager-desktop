@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -166,7 +167,7 @@ func TestOrphanCleanupPinsActiveProjectBeforeOwnershipCheck(t *testing.T) {
 	app.projectMu.Lock()
 	done := make(chan struct{})
 	go func() {
-		app.cleanupOrphanedGUISessions()
+		app.cleanupOrphanedGUISessions(context.Background())
 		close(done)
 	}()
 	select {

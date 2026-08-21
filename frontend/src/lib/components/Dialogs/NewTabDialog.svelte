@@ -21,6 +21,17 @@
   let isSubmitting = false;
   let error = '';
   let userTouchedName = false;
+  let operationGeneration = 0;
+  let lastTargetKey = '';
+
+  $: {
+    const key = show ? sessionId : '';
+    if (key !== lastTargetKey) {
+      operationGeneration++;
+      lastTargetKey = key;
+      if (show) isSubmitting = false;
+    }
+  }
 
   $: sessionPath = $sessions.find(s => s.id === sessionId)?.path || '';
 
@@ -30,13 +41,19 @@
   }
 
   async function browseWorkDir() {
+    const generation = operationGeneration;
+    const targetSessionId = sessionId;
+    const initialWorkDir = workDir;
     try {
-      const dir = await App.BrowseDirectory(workDir || sessionPath);
-      if (dir) workDir = dir;
+      const dir = await App.BrowseDirectory(initialWorkDir || sessionPath);
+      if (dir && show && generation === operationGeneration && sessionId === targetSessionId &&
+          workDir === initialWorkDir) workDir = dir;
     } catch { /* cancelled */ }
   }
 
   function close() {
+    operationGeneration++;
+    isSubmitting = false;
     show = false;
     resetForm();
     dispatch('close');
@@ -53,6 +70,7 @@
   }
 
   async function handleSubmit() {
+    if (isSubmitting) return;
     if (!name.trim()) {
       error = $t('newTab.nameRequired');
       return;
@@ -64,14 +82,23 @@
       return;
     }
 
+    const generation = operationGeneration;
+    const submitted = {
+      isAgent: tabType === 'agent',
+      agent: tabType === 'agent' ? selectedAgent : 'terminal',
+      name: name.trim(),
+      extraArgs: extraArgs.trim(),
+      workDir: workDir.trim(),
+      type: tabType,
+    };
     isSubmitting = true;
     error = '';
 
     try {
-      const isAgent = tabType === 'agent';
-      const agent = isAgent ? selectedAgent : 'terminal';
-      const newIdx = await App.CreateTab(targetSessionId, isAgent, agent, name.trim(), extraArgs.trim(), workDir.trim());
+      const newIdx = await App.CreateTab(targetSessionId, submitted.isAgent, submitted.agent,
+        submitted.name, submitted.extraArgs, submitted.workDir);
       await loadSessions();
+      if (!show || generation !== operationGeneration || sessionId !== targetSessionId) return;
       close();
       // Switch to the freshly created tab and put the keyboard focus into
       // its terminal (the window-change triggers the pool to attach; the
@@ -81,19 +108,18 @@
         requestAnimationFrame(() =>
           window.dispatchEvent(new CustomEvent('terminal:focus')));
       }
-      dispatch('created', { name: name.trim(), type: tabType, agent });
+      dispatch('created', { name: submitted.name, type: submitted.type, agent: submitted.agent });
     } catch (e) {
+      if (!show || generation !== operationGeneration || sessionId !== targetSessionId) return;
       error = String(e);
     } finally {
-      isSubmitting = false;
+      if (generation === operationGeneration) isSubmitting = false;
     }
   }
 
   function handleKeydown(e: KeyboardEvent) {
     if (e.key === 'Escape') {
       close();
-    } else if (e.key === 'Enter' && !e.shiftKey) {
-      handleSubmit();
     }
   }
 

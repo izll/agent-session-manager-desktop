@@ -670,7 +670,7 @@
   "settings.notifyOnWaiting": "에이전트 대기 시 알림",
   "settings.notifyOnWaitingDesc": "세션이 입력을 기다리기 시작하면 알림을 보냅니다",
   "settings.notifyDesktop": "데스크톱 알림",
-  "settings.notifyDesktopDesc": "이 컴퓨터의 시스템 알림 (notify-send)",
+  "settings.notifyDesktopDesc": "이 컴퓨터의 시스템 알림",
   "settings.notifyNtfy": "모바일 푸시 (ntfy)",
   "settings.notifyNtfyDesc": "ntfy 토픽으로 POST하여 휴대폰에 푸시 전송",
   "settings.ntfyUrl": "ntfy URL",

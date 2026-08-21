@@ -2,6 +2,8 @@ package mcp
 
 import (
 	"bytes"
+	"context"
+	"errors"
 	"io"
 	"runtime"
 	"strings"
@@ -9,6 +11,18 @@ import (
 	"testing"
 	"time"
 )
+
+func TestStartContextAlreadyCancelledDoesNotStartProcess(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	client := NewClient("")
+	if err := client.StartContext(ctx); !errors.Is(err, context.Canceled) {
+		t.Fatalf("StartContext() error = %v, want context.Canceled", err)
+	}
+	if client.IsRunning() {
+		t.Fatal("cancelled client start marked the process running")
+	}
+}
 
 type blockingWriteCloser struct {
 	started chan struct{}

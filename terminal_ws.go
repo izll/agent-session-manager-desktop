@@ -1,9 +1,11 @@
 package main
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -73,9 +75,29 @@ func checkTerminalOrigin(r *http.Request) bool {
 // of asking for a repaint it cannot get right.
 
 // mirrorWindowIndexes lists the window indexes present in a mirror session.
-func mirrorWindowIndexes(sessionName string) []int {
-	out, err := session.TmuxCommand("list-windows", "-t", sessionName,
-		"-F", "#{window_index}").Output()
+func terminalTmuxCommand(ctx context.Context, args ...string) (*exec.Cmd, context.CancelFunc) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	commandCtx, cancel := context.WithTimeout(ctx, session.TmuxCommandTimeout)
+	return session.TmuxCommandContext(commandCtx, args...), cancel
+}
+
+func terminalTmuxRun(ctx context.Context, args ...string) error {
+	cmd, cancel := terminalTmuxCommand(ctx, args...)
+	defer cancel()
+	return cmd.Run()
+}
+
+func terminalTmuxOutput(ctx context.Context, args ...string) ([]byte, error) {
+	cmd, cancel := terminalTmuxCommand(ctx, args...)
+	defer cancel()
+	return cmd.Output()
+}
+
+func mirrorWindowIndexes(ctx context.Context, sessionName string) []int {
+	out, err := terminalTmuxOutput(ctx, "list-windows", "-t", sessionName,
+		"-F", "#{window_index}")
 	if err != nil {
 		return nil
 	}
@@ -95,9 +117,9 @@ func mirrorWindowIndexes(sessionName string) []int {
 // in both sessions — because the INDEX is not preserved: tmux honours the one
 // we asked for, psmux picks the next free one. Returns false when the id cannot
 // be established, so the caller can leave the mirror alone rather than guess.
-func linkedWindowIndex(mirror, base string, baseIdx int) (int, bool) {
-	wantOut, err := session.TmuxCommand("display-message", "-p", "-t",
-		fmt.Sprintf("%s:%d", base, baseIdx), "#{window_id}").Output()
+func linkedWindowIndex(ctx context.Context, mirror, base string, baseIdx int) (int, bool) {
+	wantOut, err := terminalTmuxOutput(ctx, "display-message", "-p", "-t",
+		fmt.Sprintf("%s:%d", base, baseIdx), "#{window_id}")
 	if err != nil {
 		return 0, false
 	}
@@ -106,8 +128,8 @@ func linkedWindowIndex(mirror, base string, baseIdx int) (int, bool) {
 		return 0, false
 	}
 
-	listOut, err := session.TmuxCommand("list-windows", "-t", mirror,
-		"-F", "#{window_index} #{window_id}").Output()
+	listOut, err := terminalTmuxOutput(ctx, "list-windows", "-t", mirror,
+		"-F", "#{window_index} #{window_id}")
 	if err != nil {
 		return 0, false
 	}
@@ -135,6 +157,14 @@ type TerminalServer struct {
 	// session and created its terminal attach. Returning only a bool would leave
 	// a check/use window where SelectProject could switch Storage in between.
 	beginAttach func() (release func(), allowed bool)
+	server      *http.Server
+	listener    net.Listener
+	serveDone   chan struct{}
+	stopping    bool
+	connWG      sync.WaitGroup
+	handlerWG   sync.WaitGroup
+	lifecycle   context.Context
+	cancel      context.CancelFunc
 }
 
 type termConn struct {
@@ -203,6 +233,20 @@ func (tc *termConn) writeBinary(data []byte) error {
 }
 
 func (tc *termConn) handleOutputWriteError(err error) bool {
+	if err == nil {
+		return false
+	}
+	tc.closeTransport()
+	return true
+}
+
+// handleInputWriteError gives a failed terminal write the same lifecycle as a
+// failed websocket write. In particular, controlModeStream.Write on Windows
+// runs psmux send-keys separately from the websocket: that command can fail
+// while the socket itself remains healthy. Leaving it open makes every later
+// keystroke disappear into a connection that can no longer reach the pane;
+// closing the transport lets the frontend reconnect or show the disconnect.
+func (tc *termConn) handleInputWriteError(err error) bool {
 	if err == nil {
 		return false
 	}
@@ -403,11 +447,14 @@ func NewTerminalServer(storage *session.Storage, port int) *TerminalServer {
 		// run with an empty (always-accept) token.
 		b = []byte(fmt.Sprintf("fallback-%d", time.Now().UnixNano()))
 	}
+	lifecycle, cancel := context.WithCancel(context.Background())
 	return &TerminalServer{
 		storage:   storage,
 		port:      port,
 		authToken: hex.EncodeToString(b),
 		conns:     make(map[string]*termConn),
+		lifecycle: lifecycle,
+		cancel:    cancel,
 	}
 }
 
@@ -426,8 +473,6 @@ func (ts *TerminalServer) AuthToken() string {
 // pane blank with no obvious cause. The actually-bound port is stored back
 // in ts.port so GetPort() (exposed to the frontend) returns the right value.
 func (ts *TerminalServer) Start() error {
-	http.HandleFunc("/terminal", ts.handleTerminal)
-
 	const maxAttempts = 20
 	requested := ts.port
 	var ln net.Listener
@@ -451,6 +496,21 @@ func (ts *TerminalServer) Start() error {
 			requested, requested+maxAttempts-1, lastErr)
 	}
 
+	mux := http.NewServeMux()
+	mux.HandleFunc("/terminal", ts.handleTerminal)
+	server := &http.Server{Handler: mux}
+	serveDone := make(chan struct{})
+	ts.mu.Lock()
+	if ts.server != nil || ts.stopping {
+		ts.mu.Unlock()
+		_ = ln.Close()
+		return fmt.Errorf("terminal server is already started or stopping")
+	}
+	ts.server = server
+	ts.listener = ln
+	ts.serveDone = serveDone
+	ts.mu.Unlock()
+
 	if ts.port != requested {
 		log.Printf("Terminal WebSocket server bound to fallback port %d (preferred %d was busy)", ts.port, requested)
 	} else {
@@ -458,7 +518,8 @@ func (ts *TerminalServer) Start() error {
 	}
 
 	go func() {
-		if err := http.Serve(ln, nil); err != nil {
+		defer close(serveDone)
+		if err := server.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) && !errors.Is(err, net.ErrClosed) {
 			log.Printf("Terminal server error: %v", err)
 		}
 	}()
@@ -466,8 +527,90 @@ func (ts *TerminalServer) Start() error {
 	return nil
 }
 
+// Stop closes the listener, every active WebSocket/terminal stream and all of
+// their pumps. It is called before project-lock and mirror teardown: otherwise
+// a connection accepted during shutdown can recreate or keep using resources
+// after their owner has released them.
+func (ts *TerminalServer) Stop(ctx context.Context) error {
+	ts.mu.Lock()
+	ts.stopping = true
+	if ts.cancel != nil {
+		ts.cancel()
+	}
+	server := ts.server
+	listener := ts.listener
+	serveDone := ts.serveDone
+	conns := make([]*termConn, 0, len(ts.conns))
+	for _, tc := range ts.conns {
+		conns = append(conns, tc)
+	}
+	ts.mu.Unlock()
+
+	for _, tc := range conns {
+		tc.closeTransport()
+	}
+
+	var stopErr error
+	if server != nil {
+		if err := server.Shutdown(ctx); err != nil {
+			stopErr = err
+			_ = server.Close()
+		}
+	} else if listener != nil {
+		if err := listener.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
+			stopErr = err
+		}
+	}
+
+	connectionsDone := make(chan struct{})
+	go func() {
+		ts.connWG.Wait()
+		close(connectionsDone)
+	}()
+	select {
+	case <-connectionsDone:
+	case <-ctx.Done():
+		stopErr = errors.Join(stopErr, ctx.Err())
+	}
+	handlersDone := make(chan struct{})
+	go func() {
+		ts.handlerWG.Wait()
+		close(handlersDone)
+	}()
+	select {
+	case <-handlersDone:
+	case <-ctx.Done():
+		stopErr = errors.Join(stopErr, ctx.Err())
+	}
+	if serveDone != nil {
+		select {
+		case <-serveDone:
+		case <-ctx.Done():
+			stopErr = errors.Join(stopErr, ctx.Err())
+		}
+	}
+	return stopErr
+}
+
+func (ts *TerminalServer) beginHandler() (context.Context, func(), bool) {
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+	if ts.stopping || ts.lifecycle == nil {
+		return nil, nil, false
+	}
+	ts.handlerWG.Add(1)
+	return ts.lifecycle, ts.handlerWG.Done, true
+}
+
 // handleTerminal handles WebSocket connections
 func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request) {
+	handlerCtx, handlerDone, allowed := ts.beginHandler()
+	if !allowed {
+		http.Error(w, "terminal server is stopping", http.StatusServiceUnavailable)
+		return
+	}
+	defer handlerDone()
+
 	sessionID := r.URL.Query().Get("session")
 	windowIdx := r.URL.Query().Get("window")
 
@@ -541,11 +684,17 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 	// all three attempts in well under a second.
 	running := false
 	for attempt := 0; attempt < 3; attempt++ {
-		if err := session.TmuxCommand("has-session", "-t", tmuxSession).Run(); err == nil {
+		if err := terminalTmuxRun(handlerCtx, "has-session", "-t", tmuxSession); err == nil {
 			running = true
 			break
 		}
-		time.Sleep(150 * time.Millisecond)
+		delay := time.NewTimer(150 * time.Millisecond)
+		select {
+		case <-delay.C:
+		case <-handlerCtx.Done():
+			delay.Stop()
+			return
+		}
 	}
 	if !running {
 		http.Error(w, "session not running", http.StatusNotFound)
@@ -561,6 +710,12 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 		log.Printf("WebSocket upgrade error: %v", err)
 		return
 	}
+	connectionOwned := false
+	defer func() {
+		if !connectionOwned {
+			_ = ws.Close()
+		}
+	}()
 
 	linkedName := fmt.Sprintf("%s_gui_%d_%d", tmuxSession, winIdx, time.Now().UnixMilli())
 
@@ -594,8 +749,7 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 		attachTarget = tmuxSession
 	} else {
 		// Empty placeholder session (its own throwaway window 0).
-		createCmd := session.TmuxCommand("new-session", "-d", "-s", linkedName, "-x", "221", "-y", "44")
-		if err := createCmd.Run(); err != nil {
+		if err := terminalTmuxRun(handlerCtx, "new-session", "-d", "-s", linkedName, "-x", "221", "-y", "44"); err != nil {
 			log.Printf("Failed to create mirror session %s: %v, falling back to direct attach", linkedName, err)
 			attachTarget = tmuxSession
 		} else {
@@ -608,7 +762,7 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 			// only the few thousand lines xterm holds. Seen on a machine whose
 			// global default is `mouse off`, where the base sessions were set
 			// explicitly and the mirrors inherited the default.
-			session.TmuxCommand("set-option", "-t", linkedName, "mouse", "on").Run()
+			_ = terminalTmuxRun(handlerCtx, "set-option", "-t", linkedName, "mouse", "on")
 		}
 	}
 
@@ -616,17 +770,17 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 		// Link the target window from the base into this session at the same
 		// index (-k replaces our placeholder if it collides). Same window
 		// object → the agent keeps running; only THIS window is in the mirror.
-		linkErr := session.TmuxCommand("link-window", "-k",
+		linkErr := terminalTmuxRun(handlerCtx, "link-window", "-k",
 			"-s", fmt.Sprintf("%s:%d", tmuxSession, winIdx),
-			"-t", fmt.Sprintf("%s:%d", linkedName, winIdx)).Run()
+			"-t", fmt.Sprintf("%s:%d", linkedName, winIdx))
 		if linkErr != nil {
 			// Link failed — clean up and fall back to grouped behaviour so the
 			// tab still works (just without the isolation win).
 			log.Printf("link-window failed for %s win %d: %v, falling back to grouped", tmuxSession, winIdx, linkErr)
-			session.TmuxCommand("kill-session", "-t", linkedName).Run()
-			session.TmuxCommand("new-session", "-d", "-s", linkedName, "-t", tmuxSession).Run()
+			_ = terminalTmuxRun(handlerCtx, "kill-session", "-t", linkedName)
+			_ = terminalTmuxRun(handlerCtx, "new-session", "-d", "-s", linkedName, "-t", tmuxSession)
 			// Same reason as above: a session created here needs the mouse too.
-			session.TmuxCommand("set-option", "-t", linkedName, "mouse", "on").Run()
+			_ = terminalTmuxRun(handlerCtx, "set-option", "-t", linkedName, "mouse", "on")
 		} else {
 			// Leave the mirror holding exactly the linked window.
 			//
@@ -640,10 +794,10 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 			// actually ended up and drop everything else. If it cannot be
 			// found, nothing is removed — an over-full mirror still works,
 			// while killing the wrong window would take the agent with it.
-			if linked, ok := linkedWindowIndex(linkedName, tmuxSession, winIdx); ok {
-				for _, idx := range mirrorWindowIndexes(linkedName) {
+			if linked, ok := linkedWindowIndex(handlerCtx, linkedName, tmuxSession, winIdx); ok {
+				for _, idx := range mirrorWindowIndexes(handlerCtx, linkedName) {
 					if idx != linked {
-						session.TmuxCommand("kill-window", "-t", fmt.Sprintf("%s:%d", linkedName, idx)).Run()
+						_ = terminalTmuxRun(handlerCtx, "kill-window", "-t", fmt.Sprintf("%s:%d", linkedName, idx))
 					}
 				}
 				winIdx = linked
@@ -664,22 +818,21 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 	// windows, manual or not). The frontend therefore also re-announces the
 	// active tab's size on every switch; this option stops the churn, that
 	// keeps the visible tab correct.
-	session.TmuxCommand("set-option", "-t", attachTarget, "window-size", "manual").Run()
-	session.TmuxCommand("set-window-option", "-t", attachTarget, "aggressive-resize", "off").Run()
+	_ = terminalTmuxRun(handlerCtx, "set-option", "-t", attachTarget, "window-size", "manual")
+	_ = terminalTmuxRun(handlerCtx, "set-window-option", "-t", attachTarget, "aggressive-resize", "off")
 
 	// Hide tmux status bar in the session (the desktop app has its own UI)
-	session.TmuxCommand("set-option", "-t", attachTarget, "status", "off").Run()
+	_ = terminalTmuxRun(handlerCtx, "set-option", "-t", attachTarget, "status", "off")
 
 	// Let focus reach the agent. Without it Claude Code prints a notice into its
 	// own UI — "tmux focus-events off · add 'set -g focus-events on' to
 	// ~/.tmux.conf and reattach" — which lands in the middle of its frame and
 	// reads as a rendering fault. Set globally because it is a server option;
 	// psmux accepts it, verified before relying on it.
-	session.TmuxCommand("set-option", "-g", "focus-events", "on").Run()
+	_ = terminalTmuxRun(handlerCtx, "set-option", "-g", "focus-events", "on")
 
 	// Select the target window in the session
-	selectCmd := session.TmuxCommand("select-window", "-t", fmt.Sprintf("%s:%d", attachTarget, winIdx))
-	selectCmd.Run()
+	_ = terminalTmuxRun(handlerCtx, "select-window", "-t", fmt.Sprintf("%s:%d", attachTarget, winIdx))
 
 	// Attach to the session, by id rather than by name.
 	//
@@ -703,7 +856,7 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 	// every line wrapped in the wrong place until the user pressed Refresh.
 	attachedToOwnMirror := attachTarget == linkedName
 
-	if id := session.SessionIDFor(attachTarget); id != "" && id != attachTarget {
+	if id := session.SessionIDForContext(handlerCtx, attachTarget); id != "" && id != attachTarget {
 		log.Printf("[ws] attaching by id %s (%s)", id, attachTarget)
 		attachTarget = id
 	}
@@ -717,7 +870,7 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 	// active window as 3, so input meant for tab 0 was addressed to tab 3's
 	// coordinates and simply vanished.
 	windowTarget := fmt.Sprintf("%s:%d", attachTarget, winIdx)
-	cmd := session.TmuxCommand("attach-session", "-t", windowTarget)
+	cmd := session.TmuxCommandContext(handlerCtx, "attach-session", "-t", windowTarget)
 	// Force a sane TERM. When the app is launched from a desktop menu / KRunner
 	// instead of a shell, it inherits TERM=dumb (or empty), and tmux refuses to
 	// attach with "open terminal failed: terminal does not support clear".
@@ -739,10 +892,12 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 	if err != nil {
 		// Clean up linked session on error (only if it was created)
 		if attachedToOwnMirror {
-			session.TmuxCommand("kill-session", "-t", linkedName).Run()
+			_ = terminalTmuxRun(context.Background(), "kill-session", "-t", linkedName)
 		}
-		ws.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf("Error: %v", err)))
-		ws.Close()
+		if handlerCtx.Err() == nil {
+			_ = ws.SetWriteDeadline(time.Now().Add(terminalWSWriteTimeout))
+			_ = ws.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf("Error: %v", err)))
+		}
 		return
 	}
 	// The session lookup and terminal creation are now tied to the same pinned
@@ -759,12 +914,32 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 	}
 
 	ts.mu.Lock()
+	if ts.stopping {
+		ts.mu.Unlock()
+		// Stop won before this attach reached registration. It cannot be put in
+		// the connection map now (Stop has already snapshotted it), so release it
+		// synchronously instead of leaving an untracked multiplexer child behind.
+		tc.closeTransport()
+		if cmd.Process != nil {
+			_ = cmd.Process.Kill()
+		}
+		_ = cmd.Wait()
+		if attachedToOwnMirror {
+			_ = terminalTmuxRun(context.Background(), "kill-session", "-t", linkedName)
+		}
+		return
+	}
 	// Close existing connection if any
 	if old, exists := ts.conns[connID]; exists {
 		old.closeTransport()
 	}
 	ts.conns[connID] = tc
+	// Output pump, its blocking PTY reader, and input/cleanup pump. Add all
+	// three before releasing the lifecycle mutex so Stop cannot begin Wait while
+	// a connection is still about to register one of its goroutines.
+	ts.connWG.Add(3)
 	ts.mu.Unlock()
+	connectionOwned = true
 	log.Printf("[ws] attach session=%s win=%d target=%s", sessionID, winIdx, attachTarget)
 	writeTerminalOutput := tc.writeBinary
 
@@ -773,6 +948,7 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 	// causes WebKit to use 100% CPU due to excessive rendering.
 	// We batch PTY output and flush at ~120fps max.
 	go func() {
+		defer ts.connWG.Done()
 		buf := make([]byte, 32768)
 		var pendingData []byte
 		// ~33 fps — more than enough for a terminal UI. Higher tick rates
@@ -790,6 +966,7 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 		// would block this goroutine (and its buffer) forever — a leak that
 		// accumulates across reconnects.
 		go func() {
+			defer ts.connWG.Done()
 			for {
 				n, err := ptmx.Read(buf)
 				if n > 0 {
@@ -902,6 +1079,7 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 
 	// Read from WebSocket, write to PTY
 	go func() {
+		defer ts.connWG.Done()
 		defer func() {
 			ts.mu.Lock()
 			// Only remove the map entry if it still points at THIS conn. A
@@ -924,7 +1102,7 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 
 			// Clean up the linked tmux session (only if it was created)
 			if attachedToOwnMirror {
-				session.TmuxCommand("kill-session", "-t", linkedName).Run()
+				_ = terminalTmuxRun(context.Background(), "kill-session", "-t", linkedName)
 			}
 			// A redraw waiting for this tab has nowhere to go now.
 			log.Printf("[ws] detach session=%s win=%d target=%s", sessionID, winIdx, attachTarget)
@@ -957,6 +1135,8 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 				if _, werr := ptmx.Write(data); werr != nil {
 					log.Printf("[ws] input write failed session=%s win=%d (%d bytes): %v",
 						sessionID, winIdx, len(data), werr)
+					tc.handleInputWriteError(werr)
+					return
 				} else if session.DebugLogging {
 					log.Printf("[ws] input session=%s win=%d %d bytes", sessionID, winIdx, len(data))
 				}
@@ -1008,11 +1188,11 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 						// resize would leave the terminal stuck at its opening
 						// size for the whole run.
 						if attachedToOwnMirror || !session.MirrorSupported() {
-							session.TmuxCommand("resize-window", "-t",
+							_ = terminalTmuxRun(handlerCtx, "resize-window", "-t",
 								fmt.Sprintf("%s:%d", attachTarget, winIdx),
 								"-x", fmt.Sprintf("%d", cols),
-								"-y", fmt.Sprintf("%d", rows)).Run()
-							session.RefreshSessionClients(attachTarget)
+								"-y", fmt.Sprintf("%d", rows))
+							session.RefreshSessionClientsContext(handlerCtx, attachTarget)
 							// No Ctrl-L here. resize-window signals the program, and a
 							// TUI lays itself out again in response — the keystroke
 							// only ever covered the gap while returning tabs kept a
@@ -1075,7 +1255,7 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 								// server to resend what it already has, so there
 								// is nothing here to protect a shared session
 								// from, unlike the resize above.
-								session.RefreshSessionClients(attachTarget)
+								session.RefreshSessionClientsContext(handlerCtx, attachTarget)
 								// Logged unconditionally, unlike the ordinary
 								// replay above: this is the path where a tab
 								// comes back to a screen rebuilt by repaint
@@ -1095,7 +1275,12 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 					if ts.typingSignal != nil {
 						atomic.StoreInt64(ts.typingSignal, time.Now().UnixNano())
 					}
-					ptmx.Write(data)
+					if _, werr := ptmx.Write(data); werr != nil {
+						log.Printf("[ws] binary input write failed session=%s win=%d (%d bytes): %v",
+							sessionID, winIdx, len(data), werr)
+						tc.handleInputWriteError(werr)
+						return
+					}
 				}
 			}
 		}

@@ -89,6 +89,15 @@ func TestAnUnknownWindowFallsBackToTheSession(t *testing.T) {
 	}
 }
 
+func TestForkRejectsAStaleUnknownWindowInsteadOfBranchingMain(t *testing.T) {
+	t.Parallel()
+
+	inst := &Instance{Agent: AgentClaude, ResumeSessionID: "main"}
+	if _, err := inst.ForkSession(99); err == nil {
+		t.Fatal("stale window index silently forked the main conversation")
+	}
+}
+
 // Fork refuses a non-Claude window rather than branching something it cannot.
 func TestForkRefusesANonClaudeWindow(t *testing.T) {
 	t.Parallel()

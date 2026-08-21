@@ -30,7 +30,7 @@ jobs:
       tag: ${{ steps.ver.outputs.tag }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
 
@@ -80,12 +80,12 @@ jobs:
           echo "num=${TAG#v}" >> "$GITHUB_OUTPUT"
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: go.mod
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '22'
 
@@ -193,7 +193,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Create / update GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           draft: true
           prerelease: ${{ contains(steps.ver.outputs.tag, '-') }}
@@ -223,7 +223,7 @@ jobs:
     runs-on: macos-14
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
 
@@ -245,12 +245,12 @@ jobs:
           echo "num=${TAG#v}" >> "$GITHUB_OUTPUT"
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: go.mod
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '22'
 
@@ -406,7 +406,7 @@ jobs:
           ls -la *.tar.gz *.sha256
 
       - name: Upload to GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           draft: true
           prerelease: ${{ contains(steps.ver.outputs.tag, '-') }}
@@ -436,14 +436,14 @@ jobs:
         shell: msys2 {0}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
 
       # Go and Node are installed on the Windows PATH below; path-type 'inherit'
       # makes the MSYS2 shell see the full Windows PATH so `go`/`npx` are found.
       - name: Setup MSYS2 (gcc + portaudio)
-        uses: msys2/setup-msys2@v2
+        uses: msys2/setup-msys2@66cd2cce69caa17b53920067426061ca1de3a884 # v2
         with:
           msystem: UCRT64
           update: true
@@ -454,12 +454,12 @@ jobs:
             mingw-w64-ucrt-x86_64-portaudio
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: go.mod
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '22'
 
@@ -581,7 +581,7 @@ jobs:
           echo "Installer carries the executable and every runtime DLL"
 
       - name: Upload to GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           draft: true
           prerelease: ${{ contains(steps.ver.outputs.tag, '-') }}

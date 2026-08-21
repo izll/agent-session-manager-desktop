@@ -2,6 +2,7 @@ package session
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"log"
 	"os"
@@ -171,6 +172,7 @@ type Instance struct {
 	BaseCommitSHA     string           `json:"base_commit_sha,omitempty"`     // Git HEAD commit at session start (for diff)
 	Favorite          bool             `json:"favorite,omitempty"`            // Whether session is marked as favorite
 	MainWindowStopped bool             `json:"main_window_stopped,omitempty"` // Main window (0) is stopped but session still running
+	MainWindowName    string           `json:"main_window_name,omitempty"`    // User-defined main tmux tab name
 
 	// gitDir is where git commands for this instance run.
 	//
@@ -252,6 +254,9 @@ func (i *Instance) GetAgentConfig() AgentConfig {
 
 // WindowName returns the display name for the main tmux window (agent type)
 func (i *Instance) WindowName() string {
+	if i.MainWindowName != "" {
+		return i.MainWindowName
+	}
 	agent := i.Agent
 	if agent == "" {
 		agent = AgentClaude
@@ -360,6 +365,12 @@ const captureTargetCacheTTL = 2 * time.Second
 // It prefers an attached GUI session (created by the WebSocket terminal) because those
 // have the up-to-date pane content. Falls back to the base session if no GUI session is found.
 func (i *Instance) GetCaptureTarget(windowIdx int) string {
+	return i.GetCaptureTargetContext(context.Background(), windowIdx)
+}
+
+// GetCaptureTargetContext is GetCaptureTarget with cancellation for background
+// pollers. Every multiplexer probe also has the package-wide command timeout.
+func (i *Instance) GetCaptureTargetContext(ctx context.Context, windowIdx int) string {
 	baseName := i.TmuxSessionName()
 	cacheKey := fmt.Sprintf("%s:%d", baseName, windowIdx)
 
@@ -375,7 +386,9 @@ func (i *Instance) GetCaptureTarget(windowIdx int) string {
 
 	// List tmux sessions matching the GUI pattern for this window
 	prefix := fmt.Sprintf("%s_gui_%d_", baseName, windowIdx)
-	cmd := TmuxCommand("list-sessions", "-F", "#{session_name} #{session_attached}")
+	commandCtx, cancel := context.WithTimeout(ctx, TmuxCommandTimeout)
+	defer cancel()
+	cmd := TmuxCommandContext(commandCtx, "list-sessions", "-F", "#{session_name} #{session_attached}")
 	output, err := cmd.Output()
 	if err != nil {
 		captureTargetCache.Store(cacheKey, captureTargetEntry{target: baseTarget, expires: time.Now().Add(captureTargetCacheTTL)})
@@ -483,7 +496,18 @@ func (i *Instance) StartWithResume(resumeID string) error {
 	unlock := lockSessionStart(i.TmuxSessionName())
 	defer unlock()
 
-	log.Printf("[StartWithResume] session=%s agent=%s resumeID=%q saved_ResumeSessionID=%q", i.ID, i.Agent, resumeID, i.ResumeSessionID)
+	log.Printf("[StartWithResume] session=%s agent=%s requested_resume=%t saved_resume=%t", i.ID, i.Agent, resumeID != "", i.ResumeSessionID != "")
+	effectiveResumeID := resumeID
+	if effectiveResumeID == "" {
+		effectiveResumeID = i.ResumeSessionID
+	}
+	if effectiveResumeID != "" && !ResumeIDExists(i.Agent, effectiveResumeID) {
+		// An empty argument normally falls back to ResumeSessionID below. Clear
+		// both so corrupt or stale persisted input cannot bypass validation.
+		log.Printf("[StartWithResume] saved conversation unavailable; starting fresh for session=%s", i.ID)
+		resumeID = ""
+		i.ResumeSessionID = ""
+	}
 
 	// If the conversation is currently held by a Claude background agent
 	// (Ctrl+B / --bg), `claude --resume` would refuse to start — free it
@@ -631,7 +655,7 @@ func (i *Instance) StartWithResume(resumeID string) error {
 		// The binary is named from TmuxBinary rather than written in: on Windows it
 		// is psmux, and a log that always said "tmux" sent debugging down the
 		// wrong path entirely.
-		log.Printf("[StartWithResume] final argv: %s new-session -d -s %s -c %s -- %v", TmuxBinary(), sessionName, i.Path, argv)
+		log.Printf("[StartWithResume] launching session=%s agent=%s argc=%d", sessionName, i.Agent, len(argv))
 		tmuxArgs := append([]string{"new-session", "-d", "-s", sessionName, "-c", i.Path}, argv...)
 		cmd := TmuxCommand(tmuxArgs...)
 		// Pin a sane TERM for the session's child processes. Launched from a
@@ -781,7 +805,13 @@ func parseTmuxWindowIndex(output []byte) (int, error) {
 }
 
 func tmuxWindowExists(sessionName string, windowIdx int) bool {
-	output, err := TmuxCommand("list-windows", "-t", sessionName, "-F", "#{window_index}").Output()
+	return tmuxWindowExistsContext(context.Background(), sessionName, windowIdx)
+}
+
+func tmuxWindowExistsContext(ctx context.Context, sessionName string, windowIdx int) bool {
+	commandCtx, cancel := context.WithTimeout(ctx, TmuxCommandTimeout)
+	defer cancel()
+	output, err := TmuxCommandContext(commandCtx, "list-windows", "-t", sessionName, "-F", "#{window_index}").Output()
 	if err != nil {
 		return false
 	}
@@ -817,16 +847,15 @@ func (i *Instance) restoreFollowedWindows() {
 		if tabDir == "" {
 			tabDir = i.Path
 		}
-		if fw.Agent == AgentClaude && resumeID != "" {
-			ReleaseClaudeBackgroundAgent(resumeID)
-		}
-
 		// Drop the saved resume ID if it no longer exists on disk so the
 		// tab boots fresh instead of dying with "No conversation found".
 		if resumeID != "" && !ResumeIDExists(fw.Agent, resumeID) {
-			log.Printf("[restoreFollowedWindows] resume ID %q gone for agent=%s tab=%q — starting fresh", resumeID, fw.Agent, fw.Name)
+			log.Printf("[restoreFollowedWindows] saved conversation unavailable for agent=%s tab=%q — starting fresh", fw.Agent, fw.Name)
 			resumeID = ""
 			fw.ResumeSessionID = ""
+		}
+		if fw.Agent == AgentClaude && resumeID != "" {
+			ReleaseClaudeBackgroundAgent(resumeID)
 		}
 
 		if fw.Stopped {
@@ -870,7 +899,7 @@ func (i *Instance) restoreFollowedWindows() {
 					} else if resumeID == "" && config.SupportsSessionID && config.SessionIDFlag != "" {
 						resumeID = uuid.New().String()
 						args = append(args, config.SessionIDFlag, resumeID)
-						log.Printf("[restoreFollowedWindows] generated session-id=%s for tab %q agent=%s", resumeID, fw.Name, fw.Agent)
+						log.Printf("[restoreFollowedWindows] generated a conversation ID for tab %q agent=%s", fw.Name, fw.Agent)
 					}
 				}
 				argv = buildAgentArgv(config.Command, args, fw.ExtraArgs)
@@ -1110,7 +1139,7 @@ func (i *Instance) StopWindow(windowIdx int) error {
 
 // RestartWindow restarts a stopped window (dead pane) by respawning the agent process.
 func (i *Instance) RestartWindowWithResume(windowIdx int, resumeID string) error {
-	log.Printf("[RestartWindow] session=%s windowIdx=%d resumeID=%q saved_ResumeSessionID=%q agent=%s", i.ID, windowIdx, resumeID, i.ResumeSessionID, i.Agent)
+	log.Printf("[RestartWindow] session=%s windowIdx=%d requested_resume=%t saved_resume=%t agent=%s", i.ID, windowIdx, resumeID != "", i.ResumeSessionID != "", i.Agent)
 
 	if i.Status != StatusRunning {
 		return fmt.Errorf("instance not running")
@@ -1159,6 +1188,11 @@ func (i *Instance) RestartWindowWithResume(windowIdx int, resumeID string) error
 		if resumeID == "" {
 			resumeID = i.ResumeSessionID
 		}
+		if resumeID != "" && !ResumeIDExists(i.Agent, resumeID) {
+			log.Printf("[RestartWindow] saved main conversation unavailable; starting fresh for session=%s", i.ID)
+			resumeID = ""
+			i.ResumeSessionID = ""
+		}
 		if i.Agent == AgentClaude && resumeID != "" {
 			ReleaseClaudeBackgroundAgent(resumeID)
 		}
@@ -1194,11 +1228,11 @@ func (i *Instance) RestartWindowWithResume(windowIdx int, resumeID string) error
 				newID := uuid.New().String()
 				args = append(args, config.SessionIDFlag, newID)
 				i.ResumeSessionID = newID
-				log.Printf("[RestartWindow] generated new session-id=%s for main window of session=%s", newID, i.ID)
+				log.Printf("[RestartWindow] generated a new conversation ID for main window of session=%s", i.ID)
 			}
 		}
 		argv := buildAgentArgv(config.Command, args, i.ExtraArgs)
-		log.Printf("[RestartWindow] win0 instance.ExtraArgs=%q final argv: %v", i.ExtraArgs, argv)
+		log.Printf("[RestartWindow] launching main window session=%s agent=%s argc=%d", i.ID, i.Agent, len(argv))
 		tmuxArgs := append([]string{"respawn-pane", "-k", "-t", target}, argv...)
 		if err := TmuxCommand(tmuxArgs...).Run(); err != nil {
 			return fmt.Errorf("failed to restart main window: %w", err)
@@ -1216,13 +1250,13 @@ func (i *Instance) RestartWindowWithResume(windowIdx int, resumeID string) error
 	if fwSliceIdx < 0 {
 		log.Printf("[RestartWindow] window %d not found in followedWindows (count=%d)", windowIdx, len(i.FollowedWindows))
 		for _, w := range i.FollowedWindows {
-			log.Printf("[RestartWindow]   fw: index=%d agent=%s name=%q resumeID=%q stopped=%v", w.Index, w.Agent, w.Name, w.ResumeSessionID, w.Stopped)
+			log.Printf("[RestartWindow]   fw: index=%d agent=%s name=%q has_resume=%t stopped=%v", w.Index, w.Agent, w.Name, w.ResumeSessionID != "", w.Stopped)
 		}
 		return fmt.Errorf("window %d not found in followed windows", windowIdx)
 	}
 	fw := &i.FollowedWindows[fwSliceIdx]
 
-	log.Printf("[RestartWindow] found fw: index=%d agent=%s name=%q resumeID=%q stopped=%v extraArgs=%q", fw.Index, fw.Agent, fw.Name, fw.ResumeSessionID, fw.Stopped, fw.ExtraArgs)
+	log.Printf("[RestartWindow] found fw: index=%d agent=%s name=%q has_resume=%t stopped=%v", fw.Index, fw.Agent, fw.Name, fw.ResumeSessionID != "", fw.Stopped)
 
 	var argv []string
 	if fw.Agent == AgentTerminal {
@@ -1242,6 +1276,11 @@ func (i *Instance) RestartWindowWithResume(windowIdx int, resumeID string) error
 		tabResumeID := resumeID
 		if tabResumeID == "" {
 			tabResumeID = fw.ResumeSessionID
+		}
+		if tabResumeID != "" && !ResumeIDExists(fw.Agent, tabResumeID) {
+			log.Printf("[RestartWindow] saved tab conversation unavailable; starting fresh for session=%s window=%d", i.ID, windowIdx)
+			tabResumeID = ""
+			fw.ResumeSessionID = ""
 		}
 		if fw.Agent == AgentClaude && tabResumeID != "" {
 			ReleaseClaudeBackgroundAgent(tabResumeID)
@@ -1272,7 +1311,7 @@ func (i *Instance) RestartWindowWithResume(windowIdx int, resumeID string) error
 				newID := uuid.New().String()
 				args = append(args, config.SessionIDFlag, newID)
 				fw.ResumeSessionID = newID
-				log.Printf("[RestartWindow] generated new session-id=%s for tab %s/%d", newID, i.ID, fw.Index)
+				log.Printf("[RestartWindow] generated a new conversation ID for tab %s/%d", i.ID, fw.Index)
 			}
 		}
 		argv = buildAgentArgv(config.Command, args, fw.ExtraArgs)
@@ -1283,7 +1322,7 @@ func (i *Instance) RestartWindowWithResume(windowIdx int, resumeID string) error
 	if len(argv) == 0 {
 		argv = []string{defaultShell()}
 	}
-	log.Printf("[RestartWindow] followed win final argv: tmux respawn-pane -k -t %s -- %v", target, argv)
+	log.Printf("[RestartWindow] launching followed window target=%s agent=%s argc=%d", target, fw.Agent, len(argv))
 	tmuxArgs := []string{"respawn-pane", "-k"}
 	// A terminal tab restarts where it was left; an agent tab keeps whatever
 	// directory it was configured with, since that is part of what identifies
@@ -1372,6 +1411,24 @@ func selectFollowedWindowForRestart(windows []FollowedWindow, windowIdx int) (sl
 // DeleteWindow removes a followed window. If the session is running and the
 // window is not already stopped, it kills the tmux window first.
 func (i *Instance) DeleteWindow(windowIdx int) error {
+	if err := i.validateWindowDeletion(windowIdx); err != nil {
+		return err
+	}
+
+	// Capture before kill-window removes the process that owns the rollout FD.
+	i.CaptureCodexResumeIDs()
+
+	if err := i.deleteLiveWindow(windowIdx); err != nil {
+		return err
+	}
+	i.removeWindowMetadata(windowIdx)
+	return nil
+}
+
+// validateWindowDeletion performs the checks that must happen before a
+// durable metadata update. TrashTab uses this separately so it can persist the
+// recoverable trash snapshot before killing the real tmux window.
+func (i *Instance) validateWindowDeletion(windowIdx int) error {
 	mainWindowIdx := 0
 	if i.Status == StatusRunning {
 		var ok bool
@@ -1383,11 +1440,10 @@ func (i *Instance) DeleteWindow(windowIdx int) error {
 	if windowIdx == mainWindowIdx {
 		return fmt.Errorf("cannot delete main agent window")
 	}
+	return nil
+}
 
-	// Capture before kill-window removes the process that owns the rollout FD.
-	i.CaptureCodexResumeIDs()
-
-	// Kill the tmux window if session is running
+func (i *Instance) deleteLiveWindow(windowIdx int) error {
 	if i.Status == StatusRunning {
 		sessionName := i.TmuxSessionName()
 		target := fmt.Sprintf("%s:%d", sessionName, windowIdx)
@@ -1407,7 +1463,10 @@ func (i *Instance) DeleteWindow(windowIdx int) error {
 			}
 		}
 	}
+	return nil
+}
 
+func (i *Instance) removeWindowMetadata(windowIdx int) {
 	// A tmux index identifies exactly one real window. Remove every matching
 	// descriptor so older duplicate-index corruption cannot leave phantom tabs
 	// behind after the real window is deleted.
@@ -1421,8 +1480,6 @@ func (i *Instance) DeleteWindow(windowIdx int) error {
 
 	// Clear TabOrder since window indices changed
 	i.TabOrder = nil
-
-	return nil
 }
 
 // CloseWindow closes a tmux window by index and removes it from FollowedWindows
@@ -1551,15 +1608,41 @@ func (i *Instance) PrevWindow() error {
 	return cmd.Run()
 }
 
-// RenameCurrentWindow renames the current tmux window
-func (i *Instance) RenameCurrentWindow(name string) error {
+// RenameWindow renames exactly one window and updates its persisted descriptor.
+// Selecting a window and then renaming the session's current window are two
+// separate commands; another attached client can change the selection between
+// them and make the rename land on the wrong tab.
+func (i *Instance) RenameWindow(index int, name string) (string, error) {
 	if i.Status != StatusRunning {
-		return fmt.Errorf("instance not running")
+		return "", fmt.Errorf("instance not running")
 	}
 
 	sessionName := i.TmuxSessionName()
-	cmd := TmuxCommand("rename-window", "-t", sessionName, name)
-	return cmd.Run()
+	target := fmt.Sprintf("%s:%d", sessionName, index)
+	oldName := i.WindowName()
+	followedIndex := -1
+	for idx := range i.FollowedWindows {
+		if i.FollowedWindows[idx].Index == index {
+			followedIndex = idx
+			oldName = i.FollowedWindows[idx].Name
+			break
+		}
+	}
+	if followedIndex < 0 {
+		mainIndex, ok := i.getMainWindowIndex()
+		if !ok || index != mainIndex {
+			return "", fmt.Errorf("tmux window %s is not a tracked tab", target)
+		}
+	}
+	if err := TmuxCommand("rename-window", "-t", target, name).Run(); err != nil {
+		return "", err
+	}
+	if followedIndex < 0 {
+		i.MainWindowName = name
+		return oldName, nil
+	}
+	i.FollowedWindows[followedIndex].Name = name
+	return oldName, nil
 }
 
 // WindowInfo contains information about a tmux window
@@ -1885,6 +1968,19 @@ func (i *Instance) NewAgentWindow(name string, agent AgentType, customCmd string
  * a name the user had chosen for the tab in front of them.
  */
 func (i *Instance) ForkSession(windowIdx int) (string, error) {
+	mainWindowIdx := i.GetMainWindowIndex()
+	if windowIdx != mainWindowIdx {
+		found := false
+		for _, window := range i.FollowedWindows {
+			if window.Index == windowIdx {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return "", fmt.Errorf("window %d not found", windowIdx)
+		}
+	}
 	agent, sessionID := i.conversationInWindow(windowIdx)
 	config, ok := AgentConfigs[agent]
 	if !ok || config.ForkFlag == "" {
@@ -1893,8 +1989,8 @@ func (i *Instance) ForkSession(windowIdx int) (string, error) {
 	if sessionID == "" {
 		return "", fmt.Errorf("no session ID to fork - session may not have started yet")
 	}
-	log.Printf("[Fork] session=%s window=%d agent=%s branching from %s",
-		i.ID, windowIdx, agent, sessionID)
+	log.Printf("[Fork] session=%s window=%d agent=%s branching saved conversation",
+		i.ID, windowIdx, agent)
 	return sessionID, nil
 }
 
@@ -2034,8 +2130,16 @@ func (i *Instance) NewForkedTab(name string, sessionID string) (int, error) {
 }
 
 func (i *Instance) IsAlive() bool {
+	return i.IsAliveContext(context.Background())
+}
+
+// IsAliveContext bounds the multiplexer health probe and lets lifecycle-owned
+// background work stop promptly during shutdown.
+func (i *Instance) IsAliveContext(ctx context.Context) bool {
 	sessionName := i.TmuxSessionName()
-	cmd := TmuxCommand("has-session", "-t", sessionName)
+	commandCtx, cancel := context.WithTimeout(ctx, TmuxCommandTimeout)
+	defer cancel()
+	cmd := TmuxCommandContext(commandCtx, "has-session", "-t", sessionName)
 	return cmd.Run() == nil
 }
 
@@ -2226,8 +2330,14 @@ func (i *Instance) GetStatusInfo() StatusInfo {
 
 // GetStatusInfoForWindow captures a specific tmux window and extracts both statusLine and spinnerText.
 func (i *Instance) GetStatusInfoForWindow(windowIdx int, agent AgentType) StatusInfo {
+	return i.GetStatusInfoForWindowContext(context.Background(), windowIdx, agent)
+}
+
+// GetStatusInfoForWindowContext is the cancellable form used by the preview
+// poller, which shutdown must be able to reap before project teardown.
+func (i *Instance) GetStatusInfoForWindowContext(ctx context.Context, windowIdx int, agent AgentType) StatusInfo {
 	result := StatusInfo{}
-	if !i.IsAlive() {
+	if !i.IsAliveContext(ctx) {
 		result.StatusLine = "stopped"
 		return result
 	}
@@ -2240,8 +2350,10 @@ func (i *Instance) GetStatusInfoForWindow(windowIdx int, agent AgentType) Status
 		return result
 	}
 
-	target := i.GetCaptureTarget(windowIdx)
-	cmd := TmuxCommand("capture-pane", "-t", target, "-p", "-e", "-J", "-S", "-50")
+	target := i.GetCaptureTargetContext(ctx, windowIdx)
+	commandCtx, cancel := context.WithTimeout(ctx, TmuxCommandTimeout)
+	defer cancel()
+	cmd := TmuxCommandContext(commandCtx, "capture-pane", "-t", target, "-p", "-e", "-J", "-S", "-50")
 	output, err := cmd.Output()
 	if err != nil {
 		result.StatusLine = "..."
@@ -2478,11 +2590,19 @@ func (i *Instance) SendPromptToWindow(text string, windowIdx int) error {
 
 // IsMainWindowDead checks if the main window (0) pane is dead in tmux
 func (i *Instance) IsMainWindowDead() bool {
-	if !i.IsAlive() {
+	return i.IsMainWindowDeadContext(context.Background())
+}
+
+// IsMainWindowDeadContext bounds both health probes; a wedged multiplexer must
+// not hold storage refresh or a caller indefinitely.
+func (i *Instance) IsMainWindowDeadContext(ctx context.Context) bool {
+	if !i.IsAliveContext(ctx) {
 		return false
 	}
 	target := fmt.Sprintf("%s:0", i.TmuxSessionName())
-	cmd := TmuxCommand("list-panes", "-t", target, "-F", "#{pane_dead}")
+	commandCtx, cancel := context.WithTimeout(ctx, TmuxCommandTimeout)
+	defer cancel()
+	cmd := TmuxCommandContext(commandCtx, "list-panes", "-t", target, "-F", "#{pane_dead}")
 	output, err := cmd.Output()
 	if err != nil {
 		return false
@@ -2491,7 +2611,13 @@ func (i *Instance) IsMainWindowDead() bool {
 }
 
 func (i *Instance) UpdateStatus() {
-	if i.IsAlive() {
+	i.UpdateStatusContext(context.Background())
+}
+
+// UpdateStatusContext is the cancellable form used by background storage
+// snapshots.
+func (i *Instance) UpdateStatusContext(ctx context.Context) {
+	if i.IsAliveContext(ctx) {
 		i.Status = StatusRunning
 	} else {
 		i.Status = StatusStopped
@@ -2569,6 +2695,10 @@ func (i *Instance) diffIndexEnv() ([]string, func(), error) {
 
 func (i *Instance) getDiff(baseRef string) *DiffStats {
 	stats := &DiffStats{}
+	if err := validateBaseCommitRef(baseRef); err != nil {
+		stats.Error = err
+		return stats
+	}
 
 	gitEnv, cleanup, err := i.diffIndexEnv()
 	if err != nil {
@@ -2579,7 +2709,7 @@ func (i *Instance) getDiff(baseRef string) *DiffStats {
 
 	args := []string{"-C", i.gitDir(), "--no-pager", "diff"}
 	if baseRef != "" {
-		args = append(args, baseRef)
+		args = append(args, "--end-of-options", baseRef)
 	}
 
 	cmd, cancelDiff := GitCommandTimed(args...)

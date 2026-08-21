@@ -255,11 +255,11 @@ func (d *DictationService) Initialize() error {
 	})
 
 	// Set buffer handler callback
-	d.bufferHandler.onTextChange = func(text string) {
+	d.setBufferTextChangeCallback(func(text string) {
 		if callback := d.bufferTextCallback(); callback != nil {
 			callback(text)
 		}
-	}
+	})
 
 	// Apply handler based on buffer mode setting
 	settings := d.app.GetSettings()
@@ -305,11 +305,11 @@ func (d *DictationService) ToggleDictation() (bool, error) {
 		})
 
 		// Set buffer handler callback
-		d.bufferHandler.onTextChange = func(text string) {
+		d.setBufferTextChangeCallback(func(text string) {
 			if callback := d.bufferTextCallback(); callback != nil {
 				callback(text)
 			}
-		}
+		})
 
 		// Apply handler based on current target and buffer mode setting
 		fmt.Printf("[Dictation] ToggleDictation auto-init: currentTarget=%q\n", d.currentTarget)
@@ -510,11 +510,54 @@ func (d *DictationService) Shutdown() {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
+	// Detach every runtime-facing sink before stopping audio. Recognizer and
+	// hotkey callbacks may still arrive while AppService drains its goroutines;
+	// they must not emit Wails events or write through a TerminalServer that the
+	// application is about to stop.
+	d.clearRuntimeBindingsLocked()
 	if d.app != nil {
+		d.app.SetStateChangeCallback(nil)
+		d.app.SetErrorCallback(nil)
+		d.app.SetVoiceLevelCallback(nil)
+		d.app.SetInterimTextCallback(nil)
+		d.app.SetKeyboardPopupHandler(nil)
 		d.app.Shutdown()
 		d.app = nil
 	}
 	d.initialized = false
+}
+
+func (d *DictationService) clearRuntimeBindingsLocked() {
+	d.callbacksMu.Lock()
+	d.onStateChange = nil
+	d.onText = nil
+	d.onError = nil
+	d.onVoiceLevel = nil
+	d.onInterimText = nil
+	d.onBufferText = nil
+	d.callbacksMu.Unlock()
+
+	d.voiceMu.Lock()
+	d.currentVoiceLevel = 0
+	d.voiceMu.Unlock()
+
+	d.ptyHandler.mu.Lock()
+	d.ptyHandler.termServer = nil
+	d.ptyHandler.sessionID = ""
+	d.ptyHandler.windowIdx = 0
+	d.ptyHandler.mu.Unlock()
+
+	d.setBufferTextChangeCallback(nil)
+	d.fieldHandler.mu.Lock()
+	d.fieldHandler.onAppendText = nil
+	d.fieldHandler.onDeleteChars = nil
+	d.fieldHandler.mu.Unlock()
+}
+
+func (d *DictationService) setBufferTextChangeCallback(callback func(string)) {
+	d.bufferHandler.mu.Lock()
+	d.bufferHandler.onTextChange = callback
+	d.bufferHandler.mu.Unlock()
 }
 
 // SetStateChangeCallback sets the callback for state changes

@@ -670,7 +670,7 @@
   "settings.notifyOnWaiting": "Melden wanneer een agent wacht",
   "settings.notifyOnWaitingDesc": "Een melding sturen wanneer een sessie op jouw invoer gaat wachten",
   "settings.notifyDesktop": "Bureaubladmelding",
-  "settings.notifyDesktopDesc": "Systeemmelding op deze machine (notify-send)",
+  "settings.notifyDesktopDesc": "Systeemmelding op deze machine",
   "settings.notifyNtfy": "Mobiele push (ntfy)",
   "settings.notifyNtfyDesc": "POST naar een ntfy-topic zodat je telefoon een push krijgt",
   "settings.ntfyUrl": "ntfy-URL",

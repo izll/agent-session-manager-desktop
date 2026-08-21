@@ -5,6 +5,7 @@
   import { focusTerminal } from '../../utils/focus';
   import Select from '../common/Select.svelte';
   import { t } from '../../i18n';
+  import { autoFocusDialog } from '../../utils/dialogActions';
 
   export let show = false;
 
@@ -25,6 +26,10 @@
   let logsText = '';
   let error = '';
   let pollTimer: ReturnType<typeof setInterval> | null = null;
+  let refreshGeneration = 0;
+  let logsGeneration = 0;
+  let attachGeneration = 0;
+  let attaching = false;
 
   $: if (show) startPolling(); else stopPolling();
 
@@ -36,6 +41,11 @@
 
   function stopPolling() {
     if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+    refreshGeneration++;
+    logsGeneration++;
+    attachGeneration++;
+    loading = false;
+    attaching = false;
     logsFor = null;
     logsText = '';
     error = '';
@@ -46,14 +56,18 @@
   onDestroy(stopPolling);
 
   async function refresh() {
+    const generation = ++refreshGeneration;
     loading = agents.length === 0;
     try {
-      agents = ((await App.ListBackgroundAgents()) || []) as BgAgent[];
+      const nextAgents = ((await App.ListBackgroundAgents()) || []) as BgAgent[];
+      if (!show || generation !== refreshGeneration) return;
+      agents = nextAgents;
       error = '';
     } catch (e) {
+      if (!show || generation !== refreshGeneration) return;
       error = String(e);
     } finally {
-      loading = false;
+      if (generation === refreshGeneration) loading = false;
     }
   }
 
@@ -84,12 +98,16 @@
 
   async function toggleLogs(agent: BgAgent) {
     attachFor = null;
+    const generation = ++logsGeneration;
     if (logsFor === agent.id) { logsFor = null; logsText = ''; return; }
     logsFor = agent.id;
     logsText = '…';
     try {
-      logsText = await App.GetBackgroundAgentLogs(agent.id);
+      const text = await App.GetBackgroundAgentLogs(agent.id);
+      if (!show || generation !== logsGeneration || logsFor !== agent.id) return;
+      logsText = text;
     } catch (e) {
+      if (!show || generation !== logsGeneration || logsFor !== agent.id) return;
       logsText = String(e);
     }
   }
@@ -142,25 +160,35 @@
   }
 
   async function confirmAttach() {
-    if (!attachFor) return;
+    if (!attachFor || attaching) return;
     const agent = attachFor;
+    const mode = attachMode;
+    const targetSessionId = attachSessionId;
+    const targetGroupId = attachGroupId;
+    const generation = ++attachGeneration;
+    attaching = true;
     try {
-      if (attachMode === 'tab' && attachSessionId) {
-        const winIdx = await App.AttachBackgroundAgentAsTab(attachSessionId, agent.id, agent.name);
+      if (mode === 'tab' && targetSessionId) {
+        const winIdx = await App.AttachBackgroundAgentAsTab(targetSessionId, agent.id, agent.name);
         await loadSessions();
+        if (!show || generation !== attachGeneration || attachFor?.id !== agent.id) return;
         close();
-        selectSession(attachSessionId);
+        selectSession(targetSessionId);
         if (typeof winIdx === 'number' && winIdx >= 0) selectWindow(winIdx);
       } else {
-        const sessionId = await App.AttachBackgroundAgent(agent.id, agent.cwd, agent.name, attachGroupId);
+        const sessionId = await App.AttachBackgroundAgent(agent.id, agent.cwd, agent.name, targetGroupId);
         await loadSessions();
+        if (!show || generation !== attachGeneration || attachFor?.id !== agent.id) return;
         close();
         selectSession(sessionId);
       }
       attachFor = null;
       requestAnimationFrame(() => requestAnimationFrame(focusTerminal));
     } catch (e) {
+      if (!show || generation !== attachGeneration || attachFor?.id !== agent.id) return;
       error = String(e);
+    } finally {
+      if (generation === attachGeneration) attaching = false;
     }
   }
 
@@ -172,7 +200,7 @@
 <svelte:window on:keydown={show ? handleKeydown : undefined} />
 
 {#if show}
-  <div class="dialog-overlay" on:click={close}>
+  <div class="dialog-overlay" use:autoFocusDialog on:click={close} role="dialog" aria-modal="true">
     <div class="dialog-content" on:click|stopPropagation>
       <div class="dialog-header">
         <h2>{$t('bgAgents.title')}{#if agents.length > 0} <span class="agent-count">{agents.length}</span>{/if}</h2>
@@ -278,7 +306,7 @@
                 <div class="attach-buttons">
                   <button class="cancel" on:click={() => attachFor = null}>{$t('bgAgents.cancel')}</button>
                   <button class="confirm" on:click={confirmAttach}
-                    disabled={attachMode === 'tab' && attachFiltered.length === 0}>
+                    disabled={attaching || (attachMode === 'tab' && attachFiltered.length === 0)}>
                     {$t('bgAgents.attach')}
                   </button>
                 </div>

@@ -3,6 +3,7 @@
   import { pendingFileJump, clearFileJump } from '../../stores/fileJump';
   import { registerUnsavedGuard } from '../../stores/unsavedChanges';
   import { selectedSessionId, selectedWindowIdx, selectSession, selectWindow } from '../../stores/sessions';
+  import { activeProjectId } from '../../stores/projects';
   import { get } from 'svelte/store';
   import * as App from '../../../../wailsjs/go/main/App';
   import type { session } from '../../../../wailsjs/go/models';
@@ -307,11 +308,11 @@
     window.addEventListener('keydown', handleWindowKeydown, true);
     unregisterUnsavedGuard = registerUnsavedGuard({
       isDirty: () => modified,
-      requestDiscard: (continueAfterDiscard) => {
+      requestDiscard: (continueAfterDiscard, cancelDiscard) => {
         guardUnsaved(() => {
           if (editing) leaveEditMode();
           continueAfterDiscard();
-        });
+        }, cancelDiscard ?? null);
       },
     });
   });
@@ -945,7 +946,10 @@
   // its own, so switching between tabs of one session changes which tree
   // belongs on screen — and this block used to compare session ids alone, which
   // are identical across those tabs.
-  $: browseKey = `${$selectedSessionId ?? ''}:${$selectedWindowIdx ?? 0}`;
+  // Project identity is part of the tab. Project A and B may both contain
+  // session "1" / window 0; sharing their remembered path would open A's last
+  // file automatically in B and reuse its scroll position.
+  $: browseKey = `${$activeProjectId}:${$selectedSessionId ?? ''}:${$selectedWindowIdx ?? 0}`;
 
   $: if (active && browseKey !== loadedBrowseKey) {
     requestBrowseTarget(browseKey, $selectedSessionId, $selectedWindowIdx ?? 0);
@@ -1030,21 +1034,40 @@
     if (!sessionId) return;
     // A refresh re-reads the open file, which would silently replace the
     // buffer, so it is guarded like any other way of losing the edits.
-    guardUnsaved(() => {
+    guardUnsaved(() => { void refreshCurrentTree(sessionId); });
+  }
+
+  async function refreshCurrentTree(sessionId: string) {
+    if (sessionId !== get(selectedSessionId) || loadedBrowseKey !== browseKey) return;
+    const targetKey = loadedBrowseKey;
+    try {
       if (editing) leaveEditModeQuietly();
       // The quick-open index is a snapshot of the same tree, so a refresh has
       // to drop it too or the picker keeps offering files that are gone.
-      void App.InvalidateSessionFileIndex(sessionId);
+      await App.InvalidateSessionFileIndex(sessionId);
+      if (destroyed || targetKey !== loadedBrowseKey || sessionId !== get(selectedSessionId)) return;
       // Re-fetch everything the user had open, so a refresh shows the current
       // state of the tree rather than silently keeping stale listings.
       const open = Array.from(expanded);
       treeGeneration++;
+      const generation = treeGeneration;
       dirs = {};
       dirErrors = {};
       loadingDirs = new Set<string>();
-      for (const path of open) void loadDir(path, true);
+      rootAbsPath = '';
+      // Bootstrap the canonical root first. Subdirectory calls are fail-closed
+      // against that root; firing them beside the root request would send the
+      // previous cwd and could combine old subtrees with the new root listing.
+      await loadDir('', true);
+      if (destroyed || generation !== treeGeneration || targetKey !== loadedBrowseKey) return;
+      if (!rootAbsPath) return;
+      for (const path of open) {
+        if (path) void loadDir(path, true);
+      }
       if (selectedPath) void loadFile(selectedPath);
-    });
+    } catch (e) {
+      if (!destroyed && targetKey === loadedBrowseKey) rootError = String(e);
+    }
   }
 
   // --- Tree assembly --------------------------------------------------------

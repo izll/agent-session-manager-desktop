@@ -205,3 +205,47 @@ func TestActivityStatsSecondRecorderIsReadOnly(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestActivityStatsReadDoesNotClaimAnotherProjectsWriterLock(t *testing.T) {
+	dir := t.TempDir()
+	reader := &ActivityStatsRecorder{dir: dir, stores: make(map[string]*activityProjectStore), live: make(map[string]*liveActivityState)}
+	writer := &ActivityStatsRecorder{dir: dir, stores: make(map[string]*activityProjectStore), live: make(map[string]*liveActivityState)}
+	now := time.Date(2026, 7, 17, 10, 0, 0, 0, time.Local)
+
+	_ = reader.Statistics("other-project", 7, now)
+	if reader.stores["other-project"].writer {
+		t.Fatal("a read-only dashboard query claimed the project's writer lock")
+	}
+
+	writer.Observe("other-project", now, []activityObservation{testObservation("busy")})
+	if !writer.stores["other-project"].writer {
+		t.Fatal("the actual observer could not claim the writer lock after a read-only query")
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := reader.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestFreshMalformedStatsWriterLockIsNotReclaimedDuringInitialization(t *testing.T) {
+	lockPath := filepath.Join(t.TempDir(), "stats.json.writer-lock")
+	if err := os.Mkdir(lockPath, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(lockPath, "pid"), nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if staleStatsWriterLock(lockPath) {
+		t.Fatal("fresh empty pid file was reclaimed during its initialization window")
+	}
+
+	old := time.Now().Add(-3 * time.Minute)
+	if err := os.Chtimes(lockPath, old, old); err != nil {
+		t.Fatal(err)
+	}
+	if !staleStatsWriterLock(lockPath) {
+		t.Fatal("old malformed writer lock was not reclaimable")
+	}
+}

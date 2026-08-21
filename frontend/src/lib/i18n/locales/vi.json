@@ -670,7 +670,7 @@
   "settings.notifyOnWaiting": "Thông báo khi agent đang chờ",
   "settings.notifyOnWaitingDesc": "Gửi thông báo khi một phiên bắt đầu chờ bạn nhập liệu",
   "settings.notifyDesktop": "Thông báo trên máy tính",
-  "settings.notifyDesktopDesc": "Thông báo hệ thống trên máy này (notify-send)",
+  "settings.notifyDesktopDesc": "Thông báo hệ thống trên máy này",
   "settings.notifyNtfy": "Đẩy lên điện thoại (ntfy)",
   "settings.notifyNtfyDesc": "POST tới một topic ntfy để điện thoại nhận thông báo đẩy",
   "settings.ntfyUrl": "URL ntfy",

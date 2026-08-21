@@ -18,12 +18,15 @@
   /** Which group a forked SESSION lands in. A forked tab has no say: it stays
    *  inside the session it was branched from. */
   let selectedGroupId = '';
+  let operationGeneration = 0;
 
   // Generate default name only when dialog transitions from hidden to shown
   // Assign lastShow inside the same block: a separate `$: lastShow = show`
   // is ordered BEFORE this guard, so the "just opened" test never passes.
   $: {
     if (show && !lastShow) {
+      operationGeneration++;
+      isSubmitting = false;
       name = `Fork ${new Date().toLocaleTimeString()}`;
       // Defaults to where the original lives, which is what a fork inherited
       // silently before. Offered rather than assumed: a branch is often an
@@ -34,6 +37,8 @@
   }
 
   function close() {
+    operationGeneration++;
+    isSubmitting = false;
     show = false;
     resetForm();
     dispatch('close');
@@ -47,6 +52,7 @@
   }
 
   async function handleSubmit() {
+    if (isSubmitting) return;
     if (!name.trim()) {
       error = $t('fork.nameRequired');
       return;
@@ -58,6 +64,14 @@
       return;
     }
 
+    const generation = operationGeneration;
+    const submitted = {
+      windowIdx: get(selectedWindowIdx) ?? 0,
+      name: name.trim(),
+      mode: forkMode,
+      groupId: selectedGroupId,
+      inheritedGroup: get(sessions).find(s => s.id === sessionId)?.groupId || '',
+    };
     isSubmitting = true;
     error = '';
 
@@ -65,21 +79,24 @@
       // Branch the conversation in THIS tab. Without the window index the
       // backend read the session's main window, so forking from a second Claude
       // tab produced a branch of a different conversation.
-      const result = await App.ForkSession(sessionId, $selectedWindowIdx ?? 0);
+      const result = await App.ForkSession(sessionId, submitted.windowIdx);
+      if (!show || generation !== operationGeneration || get(selectedSessionId) !== sessionId) return;
       if (!result || !result.sessionId) {
         throw new Error('Fork failed - no session ID returned');
       }
 
-      if (forkMode === 'tab') {
-        const newIdx = await App.ForkToNewTab(sessionId, name.trim(), result.sessionId);
+      if (submitted.mode === 'tab') {
+        const newIdx = await App.ForkToNewTab(sessionId, submitted.name, result.sessionId);
         await loadSessions();
+        if (!show || generation !== operationGeneration || get(selectedSessionId) !== sessionId) return;
         // Switch to the branch. It was created and then left for the user to
         // find, which is half a feature.
         selectWindow(newIdx);
         close();
-        dispatch('forked', { sessionId, windowIdx: newIdx, name: name.trim() });
+        dispatch('forked', { sessionId, windowIdx: newIdx, name: submitted.name });
       } else {
-        const newSession = await App.ForkToNewSession(sessionId, name.trim(), result.sessionId);
+        const newSession = await App.ForkToNewSession(sessionId, submitted.name, result.sessionId);
+        if (!show || generation !== operationGeneration || get(selectedSessionId) !== sessionId) return;
         if (!newSession) {
           // Closing silently here would look like it had worked.
           throw new Error('Fork failed - no session was created');
@@ -88,12 +105,12 @@
         // where the user chose otherwise, so the common case makes no extra
         // call — and "no group" is a real choice, which is why this compares
         // against the original rather than testing for a non-empty value.
-        const inheritedGroup = get(sessions).find(s => s.id === sessionId)?.groupId || '';
-        if (selectedGroupId !== inheritedGroup) {
-          await assignToGroup(newSession.id, selectedGroupId);
+        if (submitted.groupId !== submitted.inheritedGroup) {
+          await assignToGroup(newSession.id, submitted.groupId);
         }
 
         await loadSessions();
+        if (!show || generation !== operationGeneration || get(selectedSessionId) !== sessionId) return;
         // Switch to the branch, as the new-tab case does. Created and then left
         // for the user to find, a fork to a new session looked like nothing had
         // happened at all: the dialog closed, the view stayed where it was, and
@@ -105,20 +122,19 @@
         // One event per fork, and its sessionId is always this app's session
         // id. It used to fire twice for a new session, the second time carrying
         // the Claude conversation id under the same field name.
-        dispatch('forked', { sessionId: newSession.id, name: name.trim(), isNewSession: true });
+        dispatch('forked', { sessionId: newSession.id, name: submitted.name, isNewSession: true });
       }
     } catch (e) {
+      if (!show || generation !== operationGeneration || get(selectedSessionId) !== sessionId) return;
       error = String(e);
     } finally {
-      isSubmitting = false;
+      if (generation === operationGeneration) isSubmitting = false;
     }
   }
 
   function handleKeydown(e: KeyboardEvent) {
     if (e.key === 'Escape') {
       close();
-    } else if (e.key === 'Enter' && !e.shiftKey) {
-      handleSubmit();
     }
   }
 </script>

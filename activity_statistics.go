@@ -166,14 +166,17 @@ func newActivityProjectStore(path string, now time.Time) *activityProjectStore {
 	}
 }
 
-func (r *ActivityStatsRecorder) storeLocked(projectID string, now time.Time) *activityProjectStore {
+func (r *ActivityStatsRecorder) storeLocked(projectID string, now time.Time, claimWriter bool) *activityProjectStore {
 	if store := r.stores[projectID]; store != nil {
 		return store
 	}
 
 	path := filepath.Join(r.dir, statsProjectFilename(projectID))
 	store := newActivityProjectStore(path, now)
-	store.writer, store.lockPath = acquireStatsWriter(path)
+	store.lockPath = path + ".writer-lock"
+	if claimWriter {
+		store.writer, store.lockPath = acquireStatsWriter(path)
+	}
 	r.loadStoreLocked(store, now)
 	r.stores[projectID] = store
 	r.pruneLocked(store, now)
@@ -238,7 +241,13 @@ func staleStatsWriterLock(lockPath string) bool {
 	}
 	pid, err := strconv.Atoi(strings.TrimSpace(string(raw)))
 	if err != nil || pid <= 0 {
-		return true
+		// os.WriteFile creates the pid file before filling it. A competing
+		// process can observe that short empty/partial state; reclaiming it
+		// immediately would let both processes become writers. Only malformed
+		// locks old enough that initialization cannot still be in progress are
+		// stale.
+		info, statErr := os.Stat(lockPath)
+		return statErr == nil && time.Since(info.ModTime()) > 2*time.Minute
 	}
 	return !statsProcessRunning(pid)
 }
@@ -280,7 +289,7 @@ func (r *ActivityStatsRecorder) Observe(projectID string, now time.Time, observa
 		return
 	}
 
-	store := r.storeLocked(projectID, now)
+	store := r.storeLocked(projectID, now, true)
 	if !store.writer {
 		store.writer, store.lockPath = acquireStatsWriter(store.path)
 		if !store.writer {
@@ -475,7 +484,7 @@ func (r *ActivityStatsRecorder) Close() error {
 			gap := now.Sub(state.lastObservedAt)
 			if gap > 0 && gap <= activityStatsMaxGap {
 				projectID := strings.SplitN(key, "\x1f", 2)[0]
-				store := r.storeLocked(projectID, now)
+				store := r.storeLocked(projectID, now, true)
 				if store.writer {
 					r.addDurationLocked(store, state.observation, state.lastObservedAt, now, state.activity)
 				}
@@ -511,7 +520,10 @@ func (r *ActivityStatsRecorder) Statistics(projectID string, days int, now time.
 	default:
 		days = 7
 	}
-	store := r.storeLocked(projectID, now)
+	// Statistics is a read path. Claiming the writer lock here lets an app
+	// merely viewing another project's dashboard prevent that project's owner
+	// from recording observations until the viewer exits.
+	store := r.storeLocked(projectID, now, false)
 	if !store.writer {
 		// A different application instance owns this project's writer lock.
 		// Reload its most recent atomic snapshot for a read-only dashboard.

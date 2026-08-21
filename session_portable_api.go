@@ -186,56 +186,18 @@ func (a *App) ImportSessionFile(path string, names []string) (int, error) {
 		wanted[n] = true
 	}
 
-	instances, groups, err := a.storage.LoadAll()
-	if err != nil {
-		return 0, err
-	}
-
-	// Groups travel by name: match an existing one, otherwise create it.
-	groupIDByName := make(map[string]string, len(groups))
-	for _, g := range groups {
-		groupIDByName[g.Name] = g.ID
-	}
-	for _, pg := range bundle.Groups {
-		if _, ok := groupIDByName[pg.Name]; ok {
-			continue
-		}
-		ng := &session.Group{
-			ID:           fmt.Sprintf("grp_%d", time.Now().UnixNano()),
-			Name:         pg.Name,
-			Color:        pg.Color,
-			BgColor:      pg.BgColor,
-			FullRowColor: pg.FullRowColor,
-		}
-		groups = append(groups, ng)
-		groupIDByName[pg.Name] = ng.ID
-		// Nanosecond timestamps are the existing ID scheme; make sure two
-		// groups created in the same loop can't share one.
-		time.Sleep(time.Nanosecond)
-	}
-
-	// A name already in use would be confusing in the list, so imported
-	// duplicates are suffixed rather than silently merged.
-	taken := make(map[string]bool, len(instances))
-	for _, inst := range instances {
-		taken[inst.Name] = true
-	}
-
-	added := 0
+	selected := make([]session.PortableSession, 0, len(bundle.Sessions))
 	for _, ps := range bundle.Sessions {
 		if len(wanted) > 0 && !wanted[ps.Name] {
 			continue
 		}
-		ps.Name = uniqueSessionName(ps.Name, taken)
-		taken[ps.Name] = true
-		instances = append(instances, ps.FromPortable(groupIDByName[ps.GroupName]))
-		added++
+		selected = append(selected, ps)
 	}
-	if added == 0 {
+	if len(selected) == 0 {
 		return 0, fmt.Errorf("none of the selected sessions were found in the file")
 	}
-
-	if err := a.storage.SaveWithGroups(instances, groups); err != nil {
+	added, err := a.storage.ImportPortableSessions(selected, bundle.Groups)
+	if err != nil {
 		return 0, err
 	}
 	log.Printf("[export] imported %d sessions from %s", added, path)

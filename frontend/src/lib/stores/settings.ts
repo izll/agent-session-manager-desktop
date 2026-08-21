@@ -148,10 +148,23 @@ export const settings = writable<Settings>({
 });
 
 let saveQueue: Promise<void> = Promise.resolve();
+let settingsRevision = 0;
+let settingsContextGeneration = 0;
+let settingsLoadGeneration = 0;
 
-export async function loadSettings() {
+/** Invalidate reads/writes captured under the backend's previous project. */
+export function invalidateSettingsContext() {
+  settingsContextGeneration++;
+  settingsLoadGeneration++;
+}
+
+export async function loadSettings(expectedRevision?: number) {
+  const context = settingsContextGeneration;
+  const generation = ++settingsLoadGeneration;
   try {
     const data = await App.GetSettings();
+    if (context !== settingsContextGeneration || generation !== settingsLoadGeneration) return;
+    if (expectedRevision !== undefined && expectedRevision !== settingsRevision) return;
     if (data) {
       const loaded = data as Settings;
       // An unset renderer must fall back to the per-platform default rather
@@ -170,6 +183,8 @@ export async function loadSettings() {
 }
 
 export async function saveSettings(newSettings: Partial<Settings>) {
+  const revision = ++settingsRevision;
+  const context = settingsContextGeneration;
   let updated!: Settings;
   settings.update(s => {
     updated = { ...s, ...newSettings };
@@ -177,7 +192,11 @@ export async function saveSettings(newSettings: Partial<Settings>) {
   });
   const save = saveQueue
     .catch(() => {})
-    .then(() => App.SaveSettings(updated as any));
+    // A queued snapshot from the project that was left must never be written
+    // through the backend's new implicit project target.
+    .then(() => context === settingsContextGeneration
+      ? App.SaveSettings(updated as any)
+      : undefined);
   saveQueue = save;
   try {
     await save;
@@ -187,10 +206,20 @@ export async function saveSettings(newSettings: Partial<Settings>) {
     // looks like the app undoing the user's change by itself — worse than the
     // failure, because it reads as the app being broken rather than the save.
     reportError(`Could not save settings: ${e}`);
-    await loadSettings();
+    // A newer optimistic edit either has a queued save or has already won.
+    // Its UI must not be overwritten by a recovery read started for this
+    // failed, older save; loadSettings checks again after its own await.
+    await loadSettings(revision);
   }
 }
 
 export async function flushSettingsSaves() {
-  await saveQueue.catch(() => {});
+  // A save can be appended while the currently observed promise is settling.
+  // Drain until the tail stays stable, which is what project switch and quit
+  // need before changing/destroying the backend target.
+  while (true) {
+    const pending = saveQueue;
+    await pending.catch(() => {});
+    if (pending === saveQueue) return;
+  }
 }

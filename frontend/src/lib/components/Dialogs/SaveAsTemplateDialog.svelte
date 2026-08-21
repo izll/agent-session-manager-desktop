@@ -21,6 +21,7 @@
   let saving = false;
   let saved = false;
   let error = '';
+  let operationGeneration = 0;
 
   // One guard block with the tracking variable assigned inside it: splitting
   // this in two would let the "opened just now" test race against its own
@@ -29,6 +30,7 @@
   $: {
     const key = show && session ? `${session.id}` : '';
     if (key && key !== lastInitKey) {
+      operationGeneration++;
       lastInitKey = key;
       name = session!.name;
       // Reusable by default: an arrangement worth saving is usually worth
@@ -38,7 +40,8 @@
       saving = false;
       saved = false;
       error = '';
-    } else if (!show) {
+    } else if (!show && lastInitKey) {
+      operationGeneration++;
       lastInitKey = '';
     }
   }
@@ -49,20 +52,28 @@
 
   async function save() {
     if (!session || !canSave) return;
+    const generation = operationGeneration;
+    const targetSessionId = session.id;
+    const templateName = name.trim();
+    const includePath = keepPath;
     saving = true;
     error = '';
     try {
-      await App.SaveSessionAsTemplate(session.id, name.trim(), keepPath);
+      await App.SaveSessionAsTemplate(targetSessionId, templateName, includePath);
+      if (!show || generation !== operationGeneration || session?.id !== targetSessionId) return;
       saved = true;
       close();
     } catch (e) {
+      if (!show || generation !== operationGeneration || session?.id !== targetSessionId) return;
       error = String(e);
     } finally {
-      saving = false;
+      if (generation === operationGeneration) saving = false;
     }
   }
 
   function close() {
+    operationGeneration++;
+    saving = false;
     show = false;
     dispatch('close', { saved });
   }

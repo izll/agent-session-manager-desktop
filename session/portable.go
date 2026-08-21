@@ -57,6 +57,7 @@ type PortableSession struct {
 	TerminalTheme      string        `json:"terminal_theme,omitempty"`
 	TabTextColor       string        `json:"tab_text_color,omitempty"`
 	TabBackgroundColor string        `json:"tab_background_color,omitempty"`
+	MainWindowName     string        `json:"main_window_name,omitempty"`
 	GroupName          string        `json:"group_name,omitempty"` // by name, not ID: IDs are per-install
 	Tabs               []PortableTab `json:"tabs,omitempty"`
 }
@@ -109,6 +110,7 @@ func ToPortable(instances []*Instance, groups []*Group, appVersion string) *Port
 			TerminalTheme:      inst.TerminalTheme,
 			TabTextColor:       inst.TabTextColor,
 			TabBackgroundColor: inst.TabBackgroundColor,
+			MainWindowName:     inst.MainWindowName,
 		}
 		if name, ok := groupNameByID[inst.GroupID]; ok && name != "" {
 			ps.GroupName = name
@@ -214,6 +216,7 @@ func (p PortableSession) FromPortable(groupID string) *Instance {
 		TerminalTheme:      p.TerminalTheme,
 		TabTextColor:       p.TabTextColor,
 		TabBackgroundColor: p.TabBackgroundColor,
+		MainWindowName:     p.MainWindowName,
 		GroupID:            groupID,
 	}
 	// Tab indices are assigned fresh: the exporting machine's tmux window
@@ -235,4 +238,100 @@ func (p PortableSession) FromPortable(groupID string) *Instance {
 		})
 	}
 	return inst
+}
+
+// ImportPortableSessions adds configuration snapshots to the active project as
+// fresh, stopped instances in one storage transaction. Reusing a source ID
+// would make two projects address the same tmux session, so identity and every
+// runtime field are deliberately regenerated through FromPortable.
+func (s *Storage) ImportPortableSessions(sessions []PortableSession, portableGroups []PortableGroup) (int, error) {
+	if len(sessions) == 0 {
+		return 0, fmt.Errorf("there are no sessions to import")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	data, err := s.loadStorageDataLocked()
+	if err != nil {
+		return 0, err
+	}
+	takenNames := make(map[string]bool, len(data.Instances)+len(sessions))
+	takenIDs := make(map[string]bool, len(data.Instances)+len(sessions))
+	for _, instance := range data.Instances {
+		if instance == nil {
+			return 0, fmt.Errorf("active storage contains a null session")
+		}
+		takenNames[instance.Name] = true
+		takenIDs[instance.ID] = true
+	}
+
+	groupByName := make(map[string]string, len(data.Groups))
+	groupIDs := make(map[string]bool, len(data.Groups))
+	for _, group := range data.Groups {
+		if group == nil {
+			return 0, fmt.Errorf("active storage contains a null group")
+		}
+		groupByName[group.Name] = group.ID
+		groupIDs[group.ID] = true
+	}
+	portableGroupByName := make(map[string]PortableGroup, len(portableGroups))
+	for _, group := range portableGroups {
+		if strings.TrimSpace(group.Name) != "" {
+			portableGroupByName[group.Name] = group
+		}
+	}
+
+	ensureGroup := func(name string) string {
+		if name == "" {
+			return ""
+		}
+		if id := groupByName[name]; id != "" {
+			return id
+		}
+		id := fmt.Sprintf("grp_%d", time.Now().UnixNano())
+		for groupIDs[id] {
+			id = fmt.Sprintf("grp_%d", time.Now().UnixNano())
+		}
+		metadata := portableGroupByName[name]
+		data.Groups = append(data.Groups, &Group{
+			ID: id, Name: name, Color: metadata.Color,
+			BgColor: metadata.BgColor, FullRowColor: metadata.FullRowColor,
+		})
+		groupByName[name] = id
+		groupIDs[id] = true
+		return id
+	}
+
+	for _, portable := range sessions {
+		portable.Name = uniquePortableSessionName(portable.Name, takenNames)
+		takenNames[portable.Name] = true
+		instance := portable.FromPortable(ensureGroup(portable.GroupName))
+		for takenIDs[instance.ID] {
+			instance.ID = generateID(instance.Name, instance.Agent)
+		}
+		takenIDs[instance.ID] = true
+		data.Instances = append(data.Instances, instance)
+	}
+	data.SchemaVersion = recoverySchemaVersion
+	data.Revision++
+	if err := s.writeStorageDataLocked(data, true); err != nil {
+		return 0, err
+	}
+	return len(sessions), nil
+}
+
+func uniquePortableSessionName(base string, taken map[string]bool) string {
+	name := strings.TrimSpace(base)
+	if name == "" {
+		name = "Imported session"
+	}
+	if !taken[name] {
+		return name
+	}
+	for suffix := 2; ; suffix++ {
+		candidate := fmt.Sprintf("%s (%d)", name, suffix)
+		if !taken[candidate] {
+			return candidate
+		}
+	}
 }

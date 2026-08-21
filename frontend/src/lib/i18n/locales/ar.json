@@ -670,7 +670,7 @@
   "settings.notifyOnWaiting": "إشعار عند انتظار الوكيل",
   "settings.notifyOnWaitingDesc": "إرسال إشعار عندما تبدأ جلسة بانتظار إدخالك",
   "settings.notifyDesktop": "إشعار سطح المكتب",
-  "settings.notifyDesktopDesc": "إشعار نظام على هذا الجهاز (notify-send)",
+  "settings.notifyDesktopDesc": "إشعار نظام على هذا الجهاز",
   "settings.notifyNtfy": "إشعار الهاتف (ntfy)",
   "settings.notifyNtfyDesc": "إرسال POST إلى موضوع ntfy ليصل إشعار إلى هاتفك",
   "settings.ntfyUrl": "رابط ntfy",

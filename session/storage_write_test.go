@@ -388,6 +388,52 @@ func TestSetActiveProjectRejectsUnknownProjectWithoutCreatingDirectory(t *testin
 	}
 }
 
+func TestLoadAllForProjectRejectsUnknownProjectWithoutCreatingDirectory(t *testing.T) {
+	storage := newTestStorage(t)
+	unknownID := "missing-project"
+	if _, _, err := storage.LoadAllForProject(unknownID); err == nil || !strings.Contains(err.Error(), "not found") {
+		t.Fatalf("LoadAllForProject error = %v, want not found", err)
+	}
+	if _, err := os.Stat(filepath.Join(storage.configDir, "projects", unknownID)); !os.IsNotExist(err) {
+		t.Fatalf("unknown project read created a ghost directory: %v", err)
+	}
+}
+
+func TestTemporaryProjectReaderBlocksConcurrentDeletion(t *testing.T) {
+	storage := newTestStorage(t)
+	project, err := storage.AddProject("reader handshake")
+	if err != nil {
+		t.Fatal(err)
+	}
+	readerEntered := make(chan struct{})
+	releaseReader := make(chan struct{})
+	done := make(chan error, 1)
+	go func() {
+		done <- storage.withTemporaryProjectReader(project.ID, func() error {
+			close(readerEntered)
+			<-releaseReader
+			return nil
+		})
+	}()
+	<-readerEntered
+
+	deleter := &Storage{configDir: storage.configDir}
+	finish, err := deleter.beginProjectDeletion(project.ID)
+	if finish != nil {
+		finish()
+	}
+	var locked *ErrProjectLocked
+	if !errors.As(err, &locked) || locked.PID != os.Getpid() {
+		close(releaseReader)
+		<-done
+		t.Fatalf("deletion entered while a temporary reader was active: %v", err)
+	}
+	close(releaseReader)
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestRemoveProjectRejectsProjectLockedByAnotherProcess(t *testing.T) {
 	storage := newTestStorage(t)
 	project, err := storage.AddProject("locked")

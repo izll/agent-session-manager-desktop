@@ -16,6 +16,7 @@
   // having opened it.
   import { taskStats } from '../../stores/tasks';
   import { settings, saveSettings } from '../../stores/settings';
+  import { activeProjectId } from '../../stores/projects';
   import { gitBranch, refreshGitBranch, revalidateGitBranch } from '../../stores/gitBranch';
   import GitBranchBadge from '../common/GitBranchBadge.svelte';
   import { get } from 'svelte/store';
@@ -35,7 +36,7 @@
   let activeView: ViewName = 'terminal';
   let terminalAttached = false;
   let showForkDialog = false;
-  let localNotesCache: Record<string, string> = {}; // sessionId:windowIdx -> notes
+  let localNotesCache: Record<string, string> = {}; // project:sessionId:windowIdx -> notes
   let terminalComponent: Terminal;
   let fullDiffActive = false;
   let focusedTerminalPane: 'primary' | 'secondary' = 'primary';
@@ -191,6 +192,7 @@
     diffAboveHeight = $settings.diffAboveHeight;
   }
   let draggingSplitter = false;
+  let activeSplitterCleanup: (() => void) | null = null;
 
   function toggleDiffAbove() {
     if (!currentSession?.isGitRepo) return;
@@ -199,6 +201,7 @@
   }
 
   function startSplitterDrag(event: MouseEvent) {
+    activeSplitterCleanup?.();
     event.preventDefault();
     draggingSplitter = true;
     const stackTop = (event.currentTarget as HTMLElement)
@@ -211,12 +214,17 @@
       const ceiling = Math.max(DIFF_ABOVE_MIN, stackHeight - BELOW_MIN);
       diffAboveHeight = Math.min(Math.max(wanted, DIFF_ABOVE_MIN), ceiling);
     };
-    const onUp = () => {
+    const cleanup = () => {
       draggingSplitter = false;
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
+      if (activeSplitterCleanup === cleanup) activeSplitterCleanup = null;
+    };
+    const onUp = () => {
+      cleanup();
       void saveSettings({ diffAboveHeight });
     };
+    activeSplitterCleanup = cleanup;
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
   }
@@ -235,7 +243,10 @@
   }
 
   onMount(() => window.addEventListener('main-panel:set-view', handleSetView));
-  onDestroy(() => window.removeEventListener('main-panel:set-view', handleSetView));
+  onDestroy(() => {
+    window.removeEventListener('main-panel:set-view', handleSetView);
+    activeSplitterCleanup?.();
+  });
 
   // Regaining focus is when the directory and the branch are most likely to
   // have changed behind our back — the user just switched away to a terminal
@@ -447,7 +458,7 @@
   // Get current tab's notes (with local cache for immediate updates)
   $: currentTabNotes = (() => {
     if (!currentSession) return '';
-    const cacheKey = `${currentSession.id}:${$selectedWindowIdx}`;
+    const cacheKey = `${$activeProjectId}:${currentSession.id}:${$selectedWindowIdx}`;
     if (localNotesCache[cacheKey] !== undefined) {
       return localNotesCache[cacheKey];
     }
@@ -458,7 +469,7 @@
 
   function handleNotesChange(e: CustomEvent<{ sessionId: string, windowIdx: number, notes: string }>) {
     const { sessionId, windowIdx, notes } = e.detail;
-    localNotesCache[`${sessionId}:${windowIdx}`] = notes;
+    localNotesCache[`${$activeProjectId}:${sessionId}:${windowIdx}`] = notes;
     localNotesCache = localNotesCache; // Trigger reactivity
   }
 

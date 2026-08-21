@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"os"
@@ -12,9 +13,8 @@ import (
 )
 
 // setupLogging wires the standard logger so that:
-//   - EVERYTHING goes to a rotating-ish log file
-//     (~/.config/agent-session-manager-desktop/asmgr-desktop.log, truncated
-//     on each launch so it never grows unbounded), and
+//   - EVERYTHING goes to a size-bounded log file
+//     (~/.config/agent-session-manager-desktop/asmgr-desktop.log), and
 //   - the terminal/stderr only sees lines whose prefix is in the
 //     consoleAllowPrefixes set. This keeps the high-volume sidebar/status
 //     spam out of the console while still letting targeted debug lines
@@ -27,16 +27,31 @@ func setupLogging() *os.File {
 	if logPath == "" {
 		return nil
 	}
-	_ = os.MkdirAll(filepath.Dir(logPath), 0755)
+	dir := filepath.Dir(logPath)
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		return nil
+	}
+	// Tighten directories/files created by older versions. The log can include
+	// session names, filesystem paths, terminal diagnostics and dictation/API
+	// failures, none of which should be readable by other local users.
+	if err := os.Chmod(dir, 0700); err != nil {
+		return nil
+	}
 
-	// Truncate on launch — we only care about the current run, and an
-	// always-appending file would balloon given how chatty the poller is.
-	f, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+	// Multiple GUI instances are supported for different projects. O_APPEND
+	// plus the cross-process writer lock prevents their independent file offsets
+	// from overwriting one another. Rotation below keeps history bounded.
+	f, err := os.OpenFile(logPath, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0600)
 	if err != nil {
+		return nil
+	}
+	if err := f.Chmod(0600); err != nil {
+		_ = f.Close()
 		return nil
 	}
 
 	logOut.file = f
+	logOut.path = logPath
 	// Default visible everywhere; the dev build flips it via -tags devmode
 	// if desired. Keep stderr quiet by default so the console is usable.
 	return f
@@ -77,26 +92,24 @@ var consoleAllowPrefixes = []string{
 type filteredLogWriter struct {
 	mu   sync.Mutex
 	file *os.File
+	path string
 }
 
 // truncate empties the file this writer owns and rewinds it.
 //
-// Both halves are needed. The file is opened without O_APPEND, so the process
-// keeps its own offset: truncating without seeking would leave the next write
-// landing where it left off, padding the start of the file with NUL bytes and
-// making the log look corrupt. Under the lock because writes come from every
-// goroutine that logs.
+// Under both the process mutex and the filesystem lock because writes can come
+// from every goroutine and from another GUI instance.
 func (w *filteredLogWriter) truncate() error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if w.file == nil {
 		return nil
 	}
-	if err := w.file.Truncate(0); err != nil {
-		return err
+	action := func() error { return w.file.Truncate(0) }
+	if w.path == "" {
+		return action()
 	}
-	_, err := w.file.Seek(0, io.SeekStart)
-	return err
+	return withLogFileLock(w.path+".lock", action)
 }
 
 var logOut = &filteredLogWriter{}
@@ -105,7 +118,17 @@ func (w *filteredLogWriter) Write(p []byte) (int, error) {
 	// Always persist the full line to the file.
 	w.mu.Lock()
 	if w.file != nil {
-		_, _ = w.file.Write(p)
+		write := func() error {
+			if _, err := w.file.Write(p); err != nil {
+				return err
+			}
+			return compactLogFile(w.file, maxLogFileBytes, retainedLogBytes)
+		}
+		if w.path == "" {
+			_ = write()
+		} else {
+			_ = withLogFileLock(w.path+".lock", write)
+		}
 	}
 	w.mu.Unlock()
 
@@ -152,6 +175,47 @@ type AppLog struct {
 // it, and the beginning of a long log is poll chatter from hours ago.
 const maxLogLines = 20000
 
+const (
+	// The writer keeps the file below this ceiling even during a weeks-long
+	// session; the lower retained size gives it room to grow before the next
+	// compaction. Both values are deliberately byte limits, so one pathological
+	// line cannot bypass a line-count-only cap.
+	maxLogFileBytes  = int64(32 << 20)
+	retainedLogBytes = int64(16 << 20)
+	maxLogReadBytes  = int64(16 << 20)
+)
+
+func compactLogFile(file *os.File, maximum, retain int64) error {
+	info, err := file.Stat()
+	if err != nil || info.Size() <= maximum {
+		return err
+	}
+	if retain <= 0 || retain >= maximum {
+		return fmt.Errorf("invalid log retention limits")
+	}
+	start := info.Size() - retain
+	buf := make([]byte, retain)
+	n, err := file.ReadAt(buf, start)
+	if err != nil && err != io.EOF {
+		return err
+	}
+	buf = buf[:n]
+	// Begin on a complete line, not the middle of a potentially sensitive or
+	// misleading diagnostic record.
+	if newline := bytes.IndexByte(buf, '\n'); newline >= 0 {
+		buf = buf[newline+1:]
+	} else {
+		buf = nil
+	}
+	if err := file.Truncate(0); err != nil {
+		return err
+	}
+	if len(buf) != 0 {
+		_, err = file.Write(buf) // O_APPEND writes at the new end after truncate.
+	}
+	return err
+}
+
 // ReadAppLog returns the end of the current run's log.
 func ReadAppLog() AppLog {
 	return readLogFile(defaultLogPath())
@@ -173,18 +237,49 @@ func ReadLogAt(key string) AppLog {
 }
 
 func readLogFile(path string) AppLog {
+	return readLogFileWithLimit(path, maxLogReadBytes, maxLogLines)
+}
+
+func readLogFileWithLimit(path string, maxBytes int64, maxLines int) AppLog {
 	result := AppLog{Path: path}
 	if path == "" {
 		result.Missing = true
 		return result
 	}
 
-	data, err := os.ReadFile(path)
+	f, err := os.Open(path)
 	if err != nil {
 		// A missing file is the ordinary case before anything has been logged,
 		// not an error worth showing as one.
 		result.Missing = true
 		return result
+	}
+	defer f.Close()
+	info, err := f.Stat()
+	if err != nil {
+		result.Missing = true
+		return result
+	}
+	start := int64(0)
+	if info.Size() > maxBytes {
+		start = info.Size() - maxBytes
+		result.Truncated = true
+	}
+	if _, err := f.Seek(start, io.SeekStart); err != nil {
+		result.Missing = true
+		return result
+	}
+	data, err := io.ReadAll(io.LimitReader(f, maxBytes+1))
+	if err != nil {
+		result.Missing = true
+		return result
+	}
+	if start > 0 {
+		if newline := bytes.IndexByte(data, '\n'); newline >= 0 {
+			data = data[newline+1:]
+		} else {
+			data = nil
+		}
 	}
 
 	lines := strings.Split(strings.TrimRight(string(data), "\n"), "\n")
@@ -192,8 +287,8 @@ func readLogFile(path string) AppLog {
 	if len(lines) == 1 && lines[0] == "" {
 		lines = nil
 	}
-	if len(lines) > maxLogLines {
-		lines = lines[len(lines)-maxLogLines:]
+	if len(lines) > maxLines {
+		lines = lines[len(lines)-maxLines:]
 		result.Truncated = true
 	}
 	result.Lines = lines
@@ -229,14 +324,18 @@ func ClearLog(key string) error {
 	if key != "dictation" && logOut.file != nil {
 		return logOut.truncate()
 	}
+	if key == "dictation" {
+		return dictation.ClearLog()
+	}
 
-	// The dictation log is opened with O_APPEND, so its own handle always
-	// writes at the end and truncating the path from here is safe.
-	//
 	// O_TRUNC on an existing file, created if absent so clearing a log that has
 	// not been written yet is not an error.
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
 	if err != nil {
+		return err
+	}
+	if err := f.Chmod(0600); err != nil {
+		_ = f.Close()
 		return err
 	}
 	return f.Close()

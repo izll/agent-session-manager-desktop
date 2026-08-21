@@ -1,7 +1,9 @@
 package dictation
 
 import (
+	"bytes"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -23,6 +25,11 @@ var logMutex sync.Mutex
 var logBuffer []string
 var bufferingMode bool = true // Start in buffering mode
 
+const (
+	dictationMaxLogBytes      = int64(16 << 20)
+	dictationRetainedLogBytes = int64(8 << 20)
+)
+
 // InitLogging initializes the logging system (opens file, but stays in buffer mode)
 // If clearLog is true, the log file is cleared on startup, otherwise it appends
 func InitLogging(clearLog bool) error {
@@ -32,20 +39,29 @@ func InitLogging(clearLog bool) error {
 	}
 
 	logPath := filepath.Join(configDir, "ai-dictate.log")
-
-	// Choose file flags based on clearLog parameter
-	var flags int
-	if clearLog {
-		flags = os.O_CREATE | os.O_WRONLY | os.O_TRUNC
-		fmt.Printf("🗑️  Clearing log file\n")
-	} else {
-		flags = os.O_CREATE | os.O_WRONLY | os.O_APPEND
+	if err := os.Chmod(configDir, 0700); err != nil {
+		return fmt.Errorf("failed to secure config directory: %w", err)
 	}
 
-	// Open log file
-	logFile, err = os.OpenFile(logPath, flags, 0644)
+	if clearLog {
+		fmt.Printf("🗑️  Clearing log file\n")
+	}
+
+	// O_APPEND plus a filesystem lock lets multiple GUI instances keep one
+	// diagnostic log without overwriting each other's independent offsets.
+	opened, err := os.OpenFile(logPath, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0600)
 	if err != nil {
 		return fmt.Errorf("failed to open log file: %w", err)
+	}
+	if err := opened.Chmod(0600); err != nil {
+		_ = opened.Close()
+		return fmt.Errorf("failed to secure log file: %w", err)
+	}
+	if clearLog {
+		if err := withDictationLogLock(configDir, func() error { return opened.Truncate(0) }); err != nil {
+			_ = opened.Close()
+			return fmt.Errorf("failed to clear log file: %w", err)
+		}
 	}
 
 	// Add startup marker to buffer (will be written when settings load)
@@ -58,6 +74,10 @@ func InitLogging(clearLog bool) error {
 	}
 
 	logMutex.Lock()
+	if logFile != nil {
+		_ = logFile.Close()
+	}
+	logFile = opened
 	logBuffer = append(logBuffer, startupMsg)
 	logMutex.Unlock()
 
@@ -80,7 +100,7 @@ func ApplyLoggingSettings(enableLogging, enableDebug bool) {
 		// Flush buffer to file
 		if logFile != nil {
 			for _, msg := range logBuffer {
-				logFile.WriteString(msg)
+				writeDictationLogLocked(msg)
 			}
 			fmt.Printf("✅ Logging enabled - %d buffered messages written to file\n", len(logBuffer))
 		}
@@ -92,7 +112,7 @@ func ApplyLoggingSettings(enableLogging, enableDebug bool) {
 		kept := 0
 		for _, msg := range logBuffer {
 			if strings.Contains(msg, "[ERROR]") {
-				logFile.WriteString(msg)
+				writeDictationLogLocked(msg)
 				kept++
 			}
 		}
@@ -106,10 +126,12 @@ func ApplyLoggingSettings(enableLogging, enableDebug bool) {
 
 // CloseLogging closes the log file
 func CloseLogging() {
+	logMutex.Lock()
+	defer logMutex.Unlock()
 	if logFile != nil {
 		if loggingEnabled {
 			timestamp := time.Now().Format("2006-01-02 15:04:05")
-			logFile.WriteString(fmt.Sprintf("=== AI Dictate Stopped: %s ===\n\n", timestamp))
+			writeDictationLogLocked(fmt.Sprintf("=== AI Dictate Stopped: %s ===\n\n", timestamp))
 		}
 		logFile.Close()
 		logFile = nil
@@ -130,7 +152,7 @@ func logToFile(format string, args ...interface{}) {
 		logBuffer = append(logBuffer, logMessage)
 	} else if loggingEnabled && logFile != nil {
 		// Logging enabled - write to file
-		logFile.WriteString(logMessage)
+		writeDictationLogLocked(logMessage)
 	}
 	// If logging disabled and not buffering - do nothing (discard)
 }
@@ -156,7 +178,7 @@ func logError(format string, args ...interface{}) {
 	if bufferingMode {
 		logBuffer = append(logBuffer, logMessage)
 	} else if logFile != nil {
-		logFile.WriteString(logMessage)
+		writeDictationLogLocked(logMessage)
 	}
 }
 
@@ -179,7 +201,7 @@ func debugLog(format string, args ...interface{}) {
 		logBuffer = append(logBuffer, logMessage)
 	} else if loggingEnabled && logFile != nil {
 		// Logging enabled - write to file
-		logFile.WriteString(logMessage)
+		writeDictationLogLocked(logMessage)
 	}
 }
 
@@ -200,4 +222,88 @@ func LogPath() (string, error) {
 		return "", err
 	}
 	return filepath.Join(configDir, "ai-dictate.log"), nil
+}
+
+// ClearLog truncates the dictation log under the same process and filesystem
+// locks used by writers. Truncating it by path from the outer application used
+// to race another app instance and could discard a concurrent diagnostic.
+func ClearLog() error {
+	configDir, err := getConfigDir()
+	if err != nil {
+		return err
+	}
+	path := filepath.Join(configDir, "ai-dictate.log")
+	logMutex.Lock()
+	defer logMutex.Unlock()
+	return withDictationLogLock(configDir, func() error {
+		if logFile != nil {
+			return logFile.Truncate(0)
+		}
+		file, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
+		if err != nil {
+			return err
+		}
+		if err := file.Chmod(0600); err != nil {
+			_ = file.Close()
+			return err
+		}
+		return file.Close()
+	})
+}
+
+// Caller holds logMutex.
+func writeDictationLogLocked(message string) {
+	if logFile == nil {
+		return
+	}
+	configDir := filepath.Dir(logFile.Name())
+	_ = withDictationLogLock(configDir, func() error {
+		if _, err := logFile.WriteString(message); err != nil {
+			return err
+		}
+		return compactDictationLogLocked(logFile, dictationMaxLogBytes, dictationRetainedLogBytes)
+	})
+}
+
+func withDictationLogLock(configDir string, action func() error) error {
+	lock, err := os.OpenFile(filepath.Join(configDir, ".log.lock"), os.O_CREATE|os.O_RDWR, 0600)
+	if err != nil {
+		return err
+	}
+	defer lock.Close()
+	_ = lock.Chmod(0600)
+	if err := lockConfigFile(lock); err != nil {
+		return err
+	}
+	defer unlockConfigFile(lock)
+	return action()
+}
+
+func compactDictationLogLocked(file *os.File, maximum, retain int64) error {
+	info, err := file.Stat()
+	if err != nil || info.Size() <= maximum {
+		return err
+	}
+	if retain <= 0 || retain >= maximum {
+		return fmt.Errorf("invalid dictation log retention limits")
+	}
+	start := info.Size() - retain
+	buf := make([]byte, retain)
+	n, err := file.ReadAt(buf, start)
+	if err != nil && err != io.EOF {
+		return err
+	}
+	buf = buf[:n]
+	if newline := bytes.IndexByte(buf, '\n'); newline >= 0 {
+		buf = buf[newline+1:]
+	} else {
+		buf = nil
+	}
+	if err := file.Truncate(0); err != nil {
+		return err
+	}
+	if len(buf) != 0 {
+		_, err = file.Write(buf)
+	}
+	return err
 }

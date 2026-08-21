@@ -1,6 +1,7 @@
 package session
 
 import (
+	"context"
 	"fmt"
 	"os/exec"
 	"runtime"
@@ -49,10 +50,32 @@ var multiplexerLookup struct {
 	sync.Mutex
 	binary  string
 	err     error
+	version string
 	checked time.Time
 }
 
 const multiplexerLookupTTL = 5 * time.Second
+const multiplexerProbeTimeout = 5 * time.Second
+
+var multiplexerLookPath = exec.LookPath
+var multiplexerProbe = probeMultiplexerVersion
+
+func probeMultiplexerVersion(binary string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), multiplexerProbeTimeout)
+	defer cancel()
+	out, err := CommandContext(ctx, binary, "-V").CombinedOutput()
+	if ctx.Err() == context.DeadlineExceeded {
+		return "", fmt.Errorf("version check timed out after %s", multiplexerProbeTimeout)
+	}
+	if err != nil {
+		return "", err
+	}
+	version := strings.TrimSpace(string(out))
+	if version == "" {
+		return "", fmt.Errorf("version check returned no output")
+	}
+	return version, nil
+}
 
 // CheckMultiplexer reports whether the terminal multiplexer is available,
 // naming it and how to install it when it is not.
@@ -67,16 +90,22 @@ func CheckMultiplexer() error {
 	}
 
 	var err error
-	if _, lookErr := exec.LookPath(binary); lookErr != nil {
+	var version string
+	resolved, lookErr := multiplexerLookPath(binary)
+	if lookErr != nil {
 		// The message carries the install line because this reaches the user as
 		// a dialog with no other context: "psmux not found" alone leaves them to
 		// discover what psmux is and where it comes from.
 		err = fmt.Errorf("%s is required but was not found. Install it with: %s",
 			binary, MultiplexerInstallHint())
+	} else if version, err = multiplexerProbe(resolved); err != nil {
+		err = fmt.Errorf("%s was found but cannot be started: %w. Reinstall it with: %s",
+			binary, err, MultiplexerInstallHint())
 	}
 
 	multiplexerLookup.binary = binary
 	multiplexerLookup.err = err
+	multiplexerLookup.version = version
 	multiplexerLookup.checked = time.Now()
 	return err
 }
@@ -98,15 +127,16 @@ func ResetMultiplexerCheckCache() {
 	multiplexerLookup.Lock()
 	defer multiplexerLookup.Unlock()
 	multiplexerLookup.checked = time.Time{}
+	multiplexerLookup.version = ""
 }
 
 // MultiplexerVersion returns what the multiplexer reports about itself, for
 // diagnostics. Empty when it cannot be run.
 func MultiplexerVersion() string {
-	cmd := TmuxCommand("-V")
-	out, err := cmd.Output()
-	if err != nil {
+	if CheckMultiplexer() != nil {
 		return ""
 	}
-	return strings.TrimSpace(string(out))
+	multiplexerLookup.Lock()
+	defer multiplexerLookup.Unlock()
+	return multiplexerLookup.version
 }

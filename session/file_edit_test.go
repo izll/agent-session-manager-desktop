@@ -657,3 +657,36 @@ func TestSaveThroughInTreeSymlinkWritesTheTarget(t *testing.T) {
 		t.Error("the symlink was replaced by a regular file")
 	}
 }
+
+func TestStagedEditRechecksVersionImmediatelyBeforeReplace(t *testing.T) {
+	root := t.TempDir()
+	target := filepath.Join(root, "f.txt")
+	original := []byte("opened version\n")
+	if err := os.WriteFile(target, original, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	staged, err := stageFileAtomic(target, []byte("editor version\n"), 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Remove(staged) })
+	// Simulate an agent write after the editor's initial version check but
+	// while its replacement was being staged and synced.
+	if err := os.WriteFile(target, []byte("agent newer version\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	err = replaceStagedFileChecked(staged, target, fileVersion(original), false)
+	var conflict *SaveConflictError
+	if !errors.As(err, &conflict) || conflict.Kind != "modified" {
+		t.Fatalf("replace error = %v, want modified conflict", err)
+	}
+	got, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "agent newer version\n" {
+		t.Fatalf("newer agent content was overwritten: %q", got)
+	}
+}

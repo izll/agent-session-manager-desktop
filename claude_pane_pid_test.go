@@ -24,9 +24,9 @@ func TestClaudeDetectionInspectsThePaneProcess(t *testing.T) {
 	}
 	src := string(b)
 
-	start := strings.Index(src, "func getClaudeSessionIDFromTmuxWindow(")
+	start := strings.Index(src, "func getClaudeSessionIDFromTmuxWindowContext(")
 	if start < 0 {
-		t.Fatal("getClaudeSessionIDFromTmuxWindow not found; if it was renamed, update this test")
+		t.Fatal("getClaudeSessionIDFromTmuxWindowContext not found; if it was renamed, update this test")
 	}
 	body := src[start : start+strings.Index(src[start:], "\n}\n")]
 

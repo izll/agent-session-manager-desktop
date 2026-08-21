@@ -18,6 +18,10 @@
   let groups: Group[] = [];
   let loading = false;
   let error = '';
+  let running = false;
+  let operationGeneration = 0;
+  let targetSessionId = '';
+  let targetWindowIdx = 0;
 
   let query = '';
   let selectedIdx = 0;
@@ -41,17 +45,27 @@
     lastShow = show;
   }
 
+  // A command can be destructive. If keyboard navigation changes the active
+  // tab behind the modal, close instead of silently offering the old target.
+  $: if (show && targetSessionId &&
+         (sessionId !== targetSessionId || windowIdx !== targetWindowIdx)) close();
+
   async function open() {
+    const generation = ++operationGeneration;
     reset();
+    targetSessionId = sessionId;
+    targetWindowIdx = windowIdx;
     loading = true;
     try {
       const lib = await App.GetCommands();
+      if (!show || generation !== operationGeneration) return;
       commands = (lib?.commands || []) as Cmd[];
       groups = (lib?.groups || []) as Group[];
     } catch (e) {
+      if (!show || generation !== operationGeneration) return;
       error = String(e);
     } finally {
-      loading = false;
+      if (generation === operationGeneration) loading = false;
     }
   }
 
@@ -63,6 +77,7 @@
     values = {};
     valueInputs = [];
     error = '';
+    running = false;
   }
 
   $: groupNames = new Map(groups.map(g => [g.id, g.name]));
@@ -129,7 +144,7 @@
   }
 
   function pick(c: Cmd) {
-    if (!sessionId) return;
+    if (!targetSessionId || running) return;
     const ph = c.placeholders || [];
     if (ph.length === 0) {
       void run(c, {});
@@ -146,13 +161,23 @@
   }
 
   async function run(c: Cmd, vals: Record<string, string>) {
+    if (running || !targetSessionId) return;
+    const generation = operationGeneration;
+    const targetSession = targetSessionId;
+    const targetWindow = targetWindowIdx;
+    const submittedValues = { ...vals };
+    running = true;
     error = '';
     try {
-      await App.RunCommand(c.id, sessionId, windowIdx, vals);
-      show = false;
+      await App.RunCommand(c.id, targetSession, targetWindow, submittedValues);
+      if (!show || generation !== operationGeneration) return;
+      close();
     } catch (e) {
+      if (!show || generation !== operationGeneration) return;
       error = String(e);
       pending = null;
+    } finally {
+      if (generation === operationGeneration) running = false;
     }
   }
 
@@ -162,6 +187,10 @@
 
   /** Enter walks to the next field, and submits from the last one. */
   function handleValueKey(e: KeyboardEvent, i: number) {
+    if (running) {
+      e.preventDefault();
+      return;
+    }
     if (e.key === 'Escape') {
       e.stopPropagation();
       pending = null;
@@ -200,7 +229,7 @@
         pending = null;
         return;
       }
-      show = false;
+      close();
       return;
     }
     if (pending) return; // the value form owns the keyboard while it's up
@@ -231,8 +260,15 @@
   }
 
   function openManager() {
-    show = false;
+    close();
     onOpenManager?.();
+  }
+
+  function close() {
+    operationGeneration++;
+    loading = false;
+    running = false;
+    show = false;
   }
 </script>
 
@@ -242,16 +278,16 @@
     tabindex="-1"
     role="dialog"
     aria-modal="true"
-    on:click|self={() => (show = false)}
+    on:click|self={close}
     on:keydown={handleKeydown}
   >
     <div class="dialog-content picker">
       <div class="dialog-header">
         <h2>{$t('commands.pickerTitle')}</h2>
-        <button class="close-btn" on:click={() => (show = false)}>×</button>
+        <button class="close-btn" on:click={close}>×</button>
       </div>
 
-      {#if !sessionId}
+      {#if !targetSessionId}
         <div class="dialog-body">
           <div class="state warn">{$t('commands.noSession')}</div>
         </div>
@@ -271,6 +307,7 @@
                   bind:value={values[p.name]}
                   placeholder={p.default || p.name}
                   on:keydown={(e) => handleValueKey(e, i)}
+                  disabled={running}
                 />
               </label>
             {/each}
@@ -285,8 +322,8 @@
         </div>
 
         <div class="dialog-footer">
-          <button class="btn-secondary" on:click={() => (pending = null)}>{$t('common.cancel')}</button>
-          <button class="btn-primary" on:click={submitValues}>{$t('commands.run')}</button>
+          <button class="btn-secondary" on:click={() => (pending = null)} disabled={running}>{$t('common.cancel')}</button>
+          <button class="btn-primary" on:click={submitValues} disabled={running}>{$t('commands.run')}</button>
         </div>
       {:else}
         <div class="search-wrap">

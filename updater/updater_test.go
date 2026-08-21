@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
@@ -104,6 +105,41 @@ func TestRefreshAvailableUpdatePreservesStateOnHTTPFailure(t *testing.T) {
 	}
 	if !ShouldCheckForUpdate() {
 		t.Fatal("failed check wrote a throttle timestamp and suppressed an immediate retry")
+	}
+}
+
+func TestCheckForUpdateContextCancelsInFlightRequest(t *testing.T) {
+	started := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		close(started)
+		<-r.Context().Done()
+	}))
+	defer server.Close()
+
+	oldBase, oldClient := apiBaseURL, checkClient
+	apiBaseURL = server.URL
+	checkClient = server.Client()
+	defer func() { apiBaseURL, checkClient = oldBase, oldClient }()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	result := make(chan error, 1)
+	go func() {
+		_, err := CheckForUpdateContext(ctx, "1.0.0")
+		result <- err
+	}()
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("update request did not start")
+	}
+	cancel()
+	select {
+	case err := <-result:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("cancelled update request returned %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("update request survived context cancellation")
 	}
 }
 
@@ -532,6 +568,116 @@ func TestCleanStaleUpdateFilesKeepsUnrelatedOldDirectory(t *testing.T) {
 	}
 }
 
+func TestCleanMarkedUpdateStagesRequiresOwnershipMarker(t *testing.T) {
+	dir := t.TempDir()
+	owned, err := createUpdateStageDir(dir, "."+BinaryName+"-update-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	active, err := createUpdateStageDir(dir, "."+BinaryName+"-update-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-stageCleanupAge - time.Hour)
+	if err := os.Chtimes(filepath.Join(owned, updateStageMarker), old, old); err != nil {
+		t.Fatal(err)
+	}
+	unmarked, err := os.MkdirTemp(dir, "."+BinaryName+"-update-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	wrongMarker, err := os.MkdirTemp(dir, "."+BinaryName+"-dll-stage-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(wrongMarker, updateStageMarker), []byte("not ours\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	unrelated, err := createUpdateStageDir(dir, ".another-app-update-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cleanMarkedUpdateStagesIn(dir)
+	if _, err := os.Stat(owned); !os.IsNotExist(err) {
+		t.Fatalf("owned staging directory was not removed: %v", err)
+	}
+	for _, path := range []string{active, unmarked, wrongMarker, unrelated} {
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("unowned directory %q was removed: %v", path, err)
+		}
+	}
+}
+
+func TestCleanStaleUpdateDownloadsKeepsFreshAndUnrelatedFiles(t *testing.T) {
+	withTempHome(t)
+	dir, err := secureUpdateDownloadDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldDownload := filepath.Join(dir, BinaryName+"-old.tar.gz")
+	freshDownload := filepath.Join(dir, BinaryName+"-fresh.deb")
+	unrelated := filepath.Join(dir, "important.tar.gz")
+	for _, path := range []string{oldDownload, freshDownload, unrelated} {
+		if err := os.WriteFile(path, []byte("asset"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	old := time.Now().Add(-stageCleanupAge - time.Hour)
+	for _, path := range []string{oldDownload, unrelated} {
+		if err := os.Chtimes(path, old, old); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	cleanStaleUpdateDownloads()
+	if _, err := os.Stat(oldDownload); !os.IsNotExist(err) {
+		t.Fatalf("old updater download was not removed: %v", err)
+	}
+	for _, path := range []string{freshDownload, unrelated} {
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("fresh or unrelated file %q was removed: %v", path, err)
+		}
+	}
+	info, err := os.Stat(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0o700 {
+		t.Fatalf("download directory permissions = %v", info.Mode().Perm())
+	}
+}
+
+func TestBundleCleanupChecksApplicationParentAndExecutableDirectory(t *testing.T) {
+	withTempHome(t)
+	root := t.TempDir()
+	bundle := filepath.Join(root, "Agent Session Manager.app")
+	execDir := filepath.Join(bundle, "Contents", "MacOS")
+	if err := os.MkdirAll(execDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	execPath := filepath.Join(execDir, BinaryName)
+	stages := make([]string, 0, 2)
+	for _, parent := range []string{root, execDir} {
+		stage, err := createUpdateStageDir(parent, "."+BinaryName+"-update-*")
+		if err != nil {
+			t.Fatal(err)
+		}
+		old := time.Now().Add(-stageCleanupAge - time.Hour)
+		if err := os.Chtimes(filepath.Join(stage, updateStageMarker), old, old); err != nil {
+			t.Fatal(err)
+		}
+		stages = append(stages, stage)
+	}
+
+	cleanStaleUpdateFilesFor(execPath)
+	for _, stage := range stages {
+		if _, err := os.Stat(stage); !os.IsNotExist(err) {
+			t.Fatalf("stale stage %q was not removed: %v", stage, err)
+		}
+	}
+}
+
 func TestStageSidecarDLLsRejectsCaseInsensitiveDuplicateBasenames(t *testing.T) {
 	archive := buildArchive(t, map[string]string{
 		"one/Foo.dll": "first",
@@ -561,6 +707,25 @@ func TestStageSidecarDLLsEnforcesCumulativeLimits(t *testing.T) {
 			cleanup()
 		}
 		t.Fatal("archives above the entry limit must be rejected")
+	}
+}
+
+func TestValidateRequiredSidecarDLLsRejectsArchiveWithoutPortAudio(t *testing.T) {
+	dir := t.TempDir()
+	files := []stagedInstall{{
+		target: filepath.Join(dir, "libgcc_s_seh-1.dll"),
+		staged: filepath.Join(dir, ".staged-libgcc"),
+	}}
+	if err := validateRequiredSidecarDLLs(files, requiredWindowsRuntimeDLLs); err == nil ||
+		!strings.Contains(err.Error(), "libportaudio.dll") {
+		t.Fatalf("missing PortAudio validation error = %v", err)
+	}
+	files = append(files, stagedInstall{
+		target: filepath.Join(dir, "LIBPORTAUDIO.DLL"),
+		staged: filepath.Join(dir, ".staged-portaudio"),
+	})
+	if err := validateRequiredSidecarDLLs(files, requiredWindowsRuntimeDLLs); err != nil {
+		t.Fatalf("case-insensitive required DLL match failed: %v", err)
 	}
 }
 
@@ -729,6 +894,26 @@ func TestRecordedCleanupRefusesUnownedManifestPath(t *testing.T) {
 	}
 }
 
+func TestRecordedUpdateManifestAccumulatesPaths(t *testing.T) {
+	withTempHome(t)
+	first := filepath.Join(t.TempDir(), "."+BinaryName+"-update-rollback-first")
+	second := filepath.Join(t.TempDir(), "."+BinaryName+"-update-rollback-second")
+	recordStaleUpdatePath(first)
+	recordStaleUpdatePath(second)
+
+	raw, err := os.ReadFile(filepath.Join(configDir(), staleUpdateFile))
+	if err != nil {
+		t.Fatalf("read manifest: %v", err)
+	}
+	var paths []string
+	if err := json.Unmarshal(raw, &paths); err != nil {
+		t.Fatalf("decode manifest: %v", err)
+	}
+	if !reflect.DeepEqual(paths, []string{first, second}) {
+		t.Fatalf("manifest paths = %#v, want both recorded paths", paths)
+	}
+}
+
 func TestInstallLockSerializesIndependentProcesses(t *testing.T) {
 	if role := os.Getenv("ASMGR_UPDATE_LOCK_HELPER"); role != "" {
 		err := withInstallLock(func() error {
@@ -838,6 +1023,52 @@ func TestPackageManagedIsLinuxOnly(t *testing.T) {
 	}
 	if IsPackageManaged() {
 		t.Fatal("IsPackageManaged must be false off Linux, or the update would try to shell out to a package manager")
+	}
+}
+
+func TestPackageCommandHasTimeAndOutputBounds(t *testing.T) {
+	if helper := os.Getenv("ASMGR_PACKAGE_COMMAND_HELPER"); helper != "" {
+		switch helper {
+		case "sleep":
+			if runtime.GOOS == "linux" {
+				_ = os.Setenv("ASMGR_PACKAGE_COMMAND_HELPER", "grandchild")
+				child := exec.Command(os.Args[0], "-test.run=^TestPackageCommandHasTimeAndOutputBounds$")
+				child.Stdout = os.Stdout
+				child.Stderr = os.Stderr
+				if err := child.Start(); err != nil {
+					os.Exit(2)
+				}
+			}
+			time.Sleep(5 * time.Second)
+		case "grandchild":
+			time.Sleep(5 * time.Second)
+		case "spam":
+			_, _ = os.Stdout.Write(bytes.Repeat([]byte("x"), packageOutputLimit+4096))
+		}
+		return
+	}
+
+	t.Setenv("ASMGR_PACKAGE_COMMAND_HELPER", "sleep")
+	started := time.Now()
+	_, err := runPackageCommand(50*time.Millisecond, os.Args[0], "-test.run=^TestPackageCommandHasTimeAndOutputBounds$")
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("timed command returned %v, want context deadline exceeded", err)
+	}
+	if elapsed := time.Since(started); elapsed > 2*time.Second {
+		t.Fatalf("timed command took %v after its deadline", elapsed)
+	}
+
+	t.Setenv("ASMGR_PACKAGE_COMMAND_HELPER", "spam")
+	out, err := runPackageCommand(10*time.Second, os.Args[0], "-test.run=^TestPackageCommandHasTimeAndOutputBounds$")
+	if err != nil {
+		t.Fatalf("bounded-output helper failed: %v", err)
+	}
+	marker := []byte("\n[output truncated]")
+	if len(out) != packageOutputLimit+len(marker) {
+		t.Fatalf("captured %d bytes, want the %d-byte limit plus marker", len(out), packageOutputLimit)
+	}
+	if !bytes.HasSuffix(out, marker) {
+		t.Fatal("truncated command output did not include the truncation marker")
 	}
 }
 

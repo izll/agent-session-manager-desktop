@@ -2,6 +2,7 @@ package session
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -22,11 +23,19 @@ type codexSessionDetector func(tmuxSession string, windowIdx int, expectedCWD st
 // open instead. This remains unambiguous even when several tabs use the same
 // working directory.
 func DetectCodexSessionIDFromTmux(tmuxSession string, windowIdx int, expectedCWD string) string {
-	if !tmuxWindowExists(tmuxSession, windowIdx) {
+	return DetectCodexSessionIDFromTmuxContext(context.Background(), tmuxSession, windowIdx, expectedCWD)
+}
+
+// DetectCodexSessionIDFromTmuxContext is cancellable so periodic detection
+// cannot retain the storage lock across application shutdown.
+func DetectCodexSessionIDFromTmuxContext(ctx context.Context, tmuxSession string, windowIdx int, expectedCWD string) string {
+	if !tmuxWindowExistsContext(ctx, tmuxSession, windowIdx) {
 		return ""
 	}
 	target := fmt.Sprintf("%s:%d", tmuxSession, windowIdx)
-	out, err := TmuxCommand("display-message", "-p", "-t", target, "#{pane_pid}").Output()
+	commandCtx, cancel := context.WithTimeout(ctx, TmuxCommandTimeout)
+	defer cancel()
+	out, err := TmuxCommandContext(commandCtx, "display-message", "-p", "-t", target, "#{pane_pid}").Output()
 	if err != nil {
 		return ""
 	}
@@ -39,12 +48,52 @@ func DetectCodexSessionIDFromTmux(tmuxSession string, windowIdx int, expectedCWD
 	if err != nil {
 		return ""
 	}
-	return detectCodexSessionIDFromProcessTree(
-		"/proc",
-		sessionsRoot,
-		panePID,
-		expectedCWD,
-	)
+	return detectCodexSessionIDFromLiveProcessTree(ctx, sessionsRoot, panePID, expectedCWD)
+}
+
+// detectCodexSessionIDFromOpenPaths applies the same containment, format and
+// ambiguity checks to platform-specific process open-file discovery.
+func detectCodexSessionIDFromOpenPaths(sessionsRoot, expectedCWD string, paths []string) string {
+	sessionsRoot, err := filepath.Abs(sessionsRoot)
+	if err != nil {
+		return ""
+	}
+	if evaluated, evalErr := filepath.EvalSymlinks(sessionsRoot); evalErr == nil {
+		sessionsRoot = evaluated
+	}
+
+	candidates := make(map[string]struct{})
+	for _, path := range paths {
+		if !filepath.IsAbs(path) || strings.HasSuffix(path, " (deleted)") {
+			continue
+		}
+		path, err = filepath.Abs(path)
+		if err != nil || filepath.Ext(path) != ".jsonl" {
+			continue
+		}
+		if resolved, evalErr := filepath.EvalSymlinks(path); evalErr == nil {
+			path = resolved
+		}
+		if !pathInsideDirectory(sessionsRoot, path) {
+			continue
+		}
+		f, err := os.Open(path)
+		if err != nil {
+			continue
+		}
+		sessionID := parseCodexRootSessionMeta(f, expectedCWD)
+		_ = f.Close()
+		if sessionID != "" {
+			candidates[sessionID] = struct{}{}
+		}
+	}
+	if len(candidates) != 1 {
+		return ""
+	}
+	for sessionID := range candidates {
+		return sessionID
+	}
+	return ""
 }
 
 func detectCodexSessionIDFromProcessTree(procRoot, sessionsRoot string, rootPID int, expectedCWD string) string {
@@ -264,11 +313,9 @@ func (i *Instance) captureCodexResumeIDsAtMainWindow(detect codexSessionDetector
 		if mainWindowOK {
 			if sessionID := detect(sessionName, mainWindowIdx, i.Path); sessionID != "" &&
 				sessionID != i.ResumeSessionID {
-				previous := i.ResumeSessionID
 				i.ResumeSessionID = sessionID
 				changed = true
-				log.Printf("[CodexResume] captured sessionID=%s (was %q) for session=%s",
-					sessionID, previous, i.ID)
+				log.Printf("[CodexResume] refreshed conversation ID for session=%s", i.ID)
 			}
 		}
 	}
@@ -284,11 +331,9 @@ func (i *Instance) captureCodexResumeIDsAtMainWindow(detect codexSessionDetector
 		}
 		if sessionID := detect(sessionName, window.Index, workDir); sessionID != "" &&
 			sessionID != window.ResumeSessionID {
-			previous := window.ResumeSessionID
 			window.ResumeSessionID = sessionID
 			changed = true
-			log.Printf("[CodexResume] captured sessionID=%s (was %q) for tab=%s/%d",
-				sessionID, previous, i.ID, window.Index)
+			log.Printf("[CodexResume] refreshed conversation ID for tab=%s/%d", i.ID, window.Index)
 		}
 	}
 

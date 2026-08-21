@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { autoFocusDialog } from '../../utils/dialogActions';
+  import { autoFocusDialog, dialogEnterBelongsToControl } from '../../utils/dialogActions';
   import { createEventDispatcher } from 'svelte';
   import { t } from '../../i18n';
 
@@ -31,7 +31,7 @@
   function handleKeydown(e: KeyboardEvent) {
     if (e.key === 'Escape') {
       handleCancel();
-    } else if (e.key === 'Enter') {
+    } else if (e.key === 'Enter' && !dialogEnterBelongsToControl(e)) {
       handleStartSession();
     }
   }

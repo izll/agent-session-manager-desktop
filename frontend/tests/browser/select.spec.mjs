@@ -1,5 +1,23 @@
 import { test, expect } from '@playwright/test';
 
+async function gotoNotesFixture(page) {
+  await page.goto('/tests/browser/notes-fixture.html');
+  // A cold eight-worker Vite run measured near three seconds and the
+  // integration run crossed the generic five-second locator budget. Wait on
+  // the fixture's explicit post-mount signal so startup load is not confused
+  // with a missing textarea or a Notes regression.
+  await expect(page.locator('body')).toHaveAttribute('data-fixture-ready', 'true', { timeout: 15_000 });
+}
+
+async function gotoDialogRacesFixture(page, mode) {
+  await page.goto(`/tests/browser/dialog-races-fixture.html?mode=${mode}`);
+  // The marker is emitted by the fixture component's onMount callback after
+  // its initial Svelte DOM flush. Eight concurrent cold Chromium pages took
+  // 1.69s locally; 15s leaves CI/shared-run headroom without confusing Vite
+  // startup with a missing dialog (the generic assertion budget is only 5s).
+  await expect(page.locator('body')).toHaveAttribute('data-fixture-ready', 'true', { timeout: 15_000 });
+}
+
 test('a real Svelte component renders, portals, focuses and reacts in Chromium', async ({ page }) => {
   const pageErrors = [];
   page.on('pageerror', (error) => pageErrors.push(error.message));
@@ -24,6 +42,34 @@ test('ConfirmDialog remains visible when its owning view is hidden', async ({ pa
   await expect(dialog).toBeVisible();
   expect(await dialog.evaluate((node) => node.parentElement === document.body)).toBe(true);
   await expect(page.getByRole('button', { name: 'Keep editing' })).toBeVisible();
+});
+
+test('modal focus stays trapped and returns to its opener after close', async ({ page }) => {
+  await page.goto('/tests/browser/confirm-portal-fixture.html');
+  const dialog = page.getByRole('dialog');
+  const keepEditing = dialog.getByRole('button', { name: 'Keep editing' });
+  const discard = dialog.getByRole('button', { name: 'Discard' });
+  await expect(keepEditing).toBeFocused();
+
+  await page.keyboard.press('Shift+Tab');
+  await expect(discard).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(keepEditing).toBeFocused();
+  await expect(page.getByRole('button', { name: 'Background action' })).not.toBeFocused();
+
+  await keepEditing.click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Open confirmation' })).toBeFocused();
+});
+
+test('Enter on the focused safe confirmation button cannot trigger the destructive action', async ({ page }) => {
+  await page.goto('/tests/browser/confirm-portal-fixture.html');
+  const keepEditing = page.getByRole('button', { name: 'Keep editing' });
+  await expect(keepEditing).toBeFocused();
+  await keepEditing.press('Enter');
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.locator('body')).toHaveAttribute('data-cancelled', 'true');
+  await expect(page.locator('body')).toHaveAttribute('data-confirmed', 'false');
 });
 
 test('TaskPanel keeps metadata on one right-aligned row with optional badges', async ({ page }) => {
@@ -158,7 +204,7 @@ test('TaskPanel does not offer AI-only actions after MCP falls back to local tas
 test('Notes preserves a per-target draft after save failure and fails closed on load failure', async ({ page }) => {
   const pageErrors = [];
   page.on('pageerror', (error) => pageErrors.push(error.message));
-  await page.goto('/tests/browser/notes-fixture.html');
+  await gotoNotesFixture(page);
 
   const textarea = page.locator('.notes-textarea');
   await expect(textarea).toHaveValue('saved A', { timeout: 15000 });
@@ -179,7 +225,7 @@ test('Notes preserves a per-target draft after save failure and fails closed on 
 });
 
 test('Notes blocks a destructive action for a failed background draft', async ({ page }) => {
-  await page.goto('/tests/browser/notes-fixture.html');
+  await gotoNotesFixture(page);
   const textarea = page.locator('.notes-textarea');
   await expect(textarea).toHaveValue('saved A', { timeout: 15000 });
   await textarea.fill('draft A survives quit');
@@ -197,4 +243,148 @@ test('Notes blocks a destructive action for a failed background draft', async ({
   await page.evaluate(() => window.notesFixture.attemptDestructive());
   await page.getByRole('button', { name: /Discard changes|Módosítások elvetése/ }).click();
   await expect(page.locator('body')).toHaveAttribute('data-destructive', 'true');
+});
+
+test('project switching is cancelled or delayed until a Notes draft is discarded', async ({ page }) => {
+  await gotoNotesFixture(page);
+  const textarea = page.locator('textarea');
+  await expect(textarea).toHaveValue('saved A');
+  await textarea.fill('project-scoped draft');
+
+  await page.evaluate(() => window.notesFixture.switchProject('project-b'));
+  let dialog = page.getByRole('dialog');
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole('button', { name: /Keep editing|Szerkesztés folytatása/ }).click();
+  expect(await page.evaluate(() => window.notesFixture.selectedProject())).toBe('');
+  await expect(textarea).toHaveValue('project-scoped draft');
+
+  await page.evaluate(() => window.notesFixture.switchProject('project-b'));
+  dialog = page.getByRole('dialog');
+  await dialog.getByRole('button', { name: /Discard changes|Módosítások elvetése/ }).click();
+  await expect.poll(() => page.evaluate(() => window.notesFixture.selectedProject())).toBe('project-b');
+  expect(await page.evaluate(() => window.notesFixture.stored('notes-a'))).toBe('saved A');
+});
+
+test('sidebar session deletion requires confirmation and waits for unsaved editors', async ({ page }) => {
+  await page.goto('/tests/browser/session-delete-fixture.html');
+  await page.locator('.session-item').click({ button: 'right' });
+  await page.getByRole('button', { name: 'Delete', exact: true }).click();
+
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText('unfinished fixture task');
+  expect(await page.evaluate(() => window.sessionDeleteFixture.deleted())).toEqual([]);
+
+  await dialog.getByRole('button', { name: /^Delete$/ }).click();
+  await expect.poll(() => page.evaluate(() => window.sessionDeleteFixture.hasPendingDiscard())).toBe(true);
+  expect(await page.evaluate(() => window.sessionDeleteFixture.deleted())).toEqual([]);
+
+  await page.evaluate(() => window.sessionDeleteFixture.approveDiscard());
+  await expect.poll(() => page.evaluate(() => window.sessionDeleteFixture.deleted())).toEqual(['delete-target']);
+});
+
+test('clearing GlobalSearch invalidates an in-flight result and clears its spinner', async ({ page }) => {
+  await gotoDialogRacesFixture(page, 'global');
+  const input = page.locator('.search-input');
+  await input.fill('old query');
+  await expect.poll(() => page.evaluate(() => window.dialogRacesFixture.searchCalls().length)).toBe(1);
+  await page.locator('.clear-btn').click();
+  await page.evaluate(() => window.dialogRacesFixture.resolveSearch([{
+    agent: 'codex', content: 'stale result', sessionFile: 'old', sessionId: 'old', score: 1,
+  }]));
+  await expect(input).toHaveValue('');
+  await expect(page.getByText('stale result')).toHaveCount(0);
+  await expect(page.locator('.loading-state')).toHaveCount(0);
+});
+
+test('CommandPicker snapshots its target and suppresses duplicate execution', async ({ page }) => {
+  await gotoDialogRacesFixture(page, 'command');
+  const row = page.locator('.cmd-row').filter({ hasText: 'Fixture command' });
+  await expect(row).toBeVisible();
+  await row.dblclick();
+  await expect.poll(() => page.evaluate(() => window.dialogRacesFixture.runCalls().length)).toBe(1);
+  expect(await page.evaluate(() => window.dialogRacesFixture.runCalls()[0].slice(0, 3)))
+    .toEqual(['command-1', 'session-a', 3]);
+  await page.evaluate(() => window.dialogRacesFixture.resolveRun());
+});
+
+test('CommandPicker closes when its captured session or tab changes', async ({ page }) => {
+  await gotoDialogRacesFixture(page, 'command');
+  await expect(page.locator('.cmd-row').filter({ hasText: 'Fixture command' })).toBeVisible();
+  await page.locator('#change-command-target').click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  expect(await page.evaluate(() => window.dialogRacesFixture.runCalls())).toEqual([]);
+});
+
+test('QuickJump ignores a late response from an earlier open cycle', async ({ page }) => {
+  await gotoDialogRacesFixture(page, 'quickjump');
+  await expect.poll(() => page.evaluate(() => window.dialogRacesFixture.quickJumpCalls())).toBe(1);
+
+  await page.getByRole('button', { name: /Close|Bezárás/ }).click();
+  await page.locator('#reopen-quickjump').evaluate((button) => button.click());
+  await expect.poll(() => page.evaluate(() => window.dialogRacesFixture.quickJumpCalls())).toBe(2);
+
+  await page.evaluate(() => window.dialogRacesFixture.resolveQuickJump(1, 'new-session', 'new list'));
+  await expect(page.getByText('new list')).toBeVisible();
+  await page.evaluate(() => window.dialogRacesFixture.resolveQuickJump(0, 'old-session', 'stale list'));
+  await expect(page.getByText('new list')).toBeVisible();
+  await expect(page.getByText('stale list')).toHaveCount(0);
+});
+
+test('QuickJump owns focus and Escape while its initial backend read is pending', async ({ page }) => {
+  await gotoDialogRacesFixture(page, 'quickjump');
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toBeVisible();
+  await expect.poll(() => dialog.evaluate((node) => node.contains(document.activeElement))).toBe(true);
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
+});
+
+test('QuickTerminal submits once and an old completion cannot close its replacement', async ({ page }) => {
+  await gotoDialogRacesFixture(page, 'quickterminal');
+  const input = page.getByRole('dialog').locator('input');
+  await expect(input).toBeFocused();
+  await input.fill('first terminal');
+  await input.press('Enter');
+  await expect.poll(() => page.evaluate(() => window.dialogRacesFixture.createTabCalls().length)).toBe(1);
+
+  await page.getByRole('button', { name: /Cancel|Mégse/ }).click();
+  await page.locator('#reopen-quickterminal').click();
+  const replacement = page.getByRole('dialog').locator('input');
+  await replacement.fill('replacement draft');
+  await page.evaluate(() => window.dialogRacesFixture.resolveCreateTab(0, 4));
+
+  await expect(replacement).toBeVisible();
+  await expect(replacement).toHaveValue('replacement draft');
+  expect(await page.evaluate(() => window.dialogRacesFixture.createTabCalls().length)).toBe(1);
+});
+
+test('GitHistory ignores a late response from the repository that was left', async ({ page }) => {
+  await gotoDialogRacesFixture(page, 'history');
+  await expect.poll(() => page.evaluate(() => window.dialogRacesFixture.historyCalls())).toContain('/repo-a');
+  await page.locator('#change-history-target').click();
+  await expect.poll(() => page.evaluate(() => window.dialogRacesFixture.historyCalls())).toContain('/repo-b');
+  await page.evaluate(() => window.dialogRacesFixture.resolveHistory('/repo-b', 'NEW REPOSITORY COMMIT'));
+  await expect(page.locator('.commit-subject').filter({ hasText: 'NEW REPOSITORY COMMIT' })).toBeVisible();
+  await page.evaluate(() => window.dialogRacesFixture.resolveHistory('/repo-a', 'STALE REPOSITORY COMMIT'));
+  await expect(page.locator('.commit-subject').filter({ hasText: 'NEW REPOSITORY COMMIT' })).toBeVisible();
+  await expect(page.locator('.commit-subject').filter({ hasText: 'STALE REPOSITORY COMMIT' })).toHaveCount(0);
+});
+
+test('closing GitHistory cancels an active document drag listener', async ({ page }) => {
+  await gotoDialogRacesFixture(page, 'history');
+  const dialog = page.locator('.history-dialog');
+  const initialWidth = (await dialog.boundingBox()).width;
+  const handle = await page.locator('.dialog-resizer').boundingBox();
+  await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2);
+  await page.mouse.down();
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
+  await page.mouse.move(handle.x + 120, handle.y + 80);
+  await page.mouse.up();
+
+  await page.locator('#reopen-history').click();
+  await expect(dialog).toBeVisible();
+  const reopenedWidth = (await dialog.boundingBox()).width;
+  expect(Math.abs(reopenedWidth - initialWidth)).toBeLessThanOrEqual(2);
 });

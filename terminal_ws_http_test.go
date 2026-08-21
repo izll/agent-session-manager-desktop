@@ -26,7 +26,8 @@ func TestTerminalRejectsMissingTmuxSessionBeforeWebSocketUpgrade(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ts := &TerminalServer{storage: storage, authToken: "test-token"}
+	ts := NewTerminalServer(storage, 0)
+	ts.authToken = "test-token"
 	server := httptest.NewServer(http.HandlerFunc(ts.handleTerminal))
 	defer server.Close()
 	endpoint := "ws" + strings.TrimPrefix(server.URL, "http") + "/?" + url.Values{

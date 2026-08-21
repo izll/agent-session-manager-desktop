@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { autoFocusDialog } from '../../utils/dialogActions';
+  import { autoFocusDialog, dialogEnterBelongsToControl } from '../../utils/dialogActions';
   import { createEventDispatcher } from 'svelte';
   import { createGroup } from '../../stores/sessions';
   import { t } from '../../i18n';
@@ -12,19 +12,24 @@
   let loading = false;
   let error = '';
   let lastShow = false;
+  let operationGeneration = 0;
 
   // Reset form only when dialog transitions from hidden to shown
   // Assign lastShow inside the same block: a separate `$: lastShow = show`
   // is ordered BEFORE this guard, so the fields were never reset on open.
   $: {
     if (show && !lastShow) {
+      operationGeneration++;
       groupName = '';
       error = '';
+      loading = false;
     }
     lastShow = show;
   }
 
   function close() {
+    operationGeneration++;
+    loading = false;
     show = false;
     dispatch('close');
   }
@@ -32,25 +37,29 @@
   function handleKeydown(e: KeyboardEvent) {
     if (e.key === 'Escape') {
       close();
-    } else if (e.key === 'Enter' && groupName.trim()) {
+    } else if (e.key === 'Enter' && groupName.trim() && !dialogEnterBelongsToControl(e)) {
       handleCreate();
     }
   }
 
   async function handleCreate() {
-    if (!groupName.trim()) return;
+    if (!groupName.trim() || loading) return;
 
+    const generation = operationGeneration;
+    const submittedName = groupName.trim();
     loading = true;
     error = '';
 
     try {
-      await createGroup(groupName.trim());
+      await createGroup(submittedName);
+      if (!show || generation !== operationGeneration) return;
       close();
     } catch (e) {
+      if (!show || generation !== operationGeneration) return;
       error = String(e);
     }
 
-    loading = false;
+    if (generation === operationGeneration) loading = false;
   }
 </script>
 

@@ -670,7 +670,7 @@
   "settings.notifyOnWaiting": "Benachrichtigen, wenn ein Agent wartet",
   "settings.notifyOnWaitingDesc": "Benachrichtigung auslösen, wenn eine Sitzung auf deine Eingabe wartet",
   "settings.notifyDesktop": "Desktop-Benachrichtigung",
-  "settings.notifyDesktopDesc": "Systembenachrichtigung auf diesem Rechner (notify-send)",
+  "settings.notifyDesktopDesc": "Systembenachrichtigung auf diesem Rechner",
   "settings.notifyNtfy": "Mobile Push (ntfy)",
   "settings.notifyNtfyDesc": "POST an ein ntfy-Topic, damit dein Handy eine Push erhält",
   "settings.ntfyUrl": "ntfy-URL",

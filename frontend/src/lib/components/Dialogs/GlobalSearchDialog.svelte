@@ -61,10 +61,16 @@
 
     if (!query.trim()) {
       results = [];
+      error = '';
       return;
     }
 
     searchTimeout = setTimeout(doSearch, 300);
+  }
+
+  function clearQuery() {
+    query = '';
+    handleQueryChange();
   }
 
   async function doSearch() {
@@ -269,7 +275,7 @@
             class="search-input"
           />
           {#if query}
-            <button class="clear-btn" on:click={() => { query = ''; results = []; }}>
+            <button class="clear-btn" on:click={clearQuery}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <line x1="18" y1="6" x2="6" y2="18"/>
                 <line x1="6" y1="6" x2="18" y2="18"/>

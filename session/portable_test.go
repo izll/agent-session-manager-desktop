@@ -2,6 +2,7 @@ package session
 
 import (
 	"bytes"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -170,5 +171,55 @@ func TestToPortableRecordsExportTime(t *testing.T) {
 	}
 	if time.Since(b.ExportedAt) > time.Minute {
 		t.Errorf("export time looks wrong: %v", b.ExportedAt)
+	}
+}
+
+func TestImportPortableSessionsCreatesFreshStoppedIdentityAndRemapsGroups(t *testing.T) {
+	dir := t.TempDir()
+	storage := &Storage{configDir: dir, configPath: filepath.Join(dir, "sessions.json")}
+	existing := &Instance{ID: "source-id", Name: "alpha", Status: StatusStopped}
+	existingGroup := &Group{ID: "source-group", Name: "Other"}
+	if err := storage.SaveAll([]*Instance{existing}, []*Group{existingGroup}, DefaultSettings()); err != nil {
+		t.Fatal(err)
+	}
+
+	portable := PortableSession{
+		Name: "alpha", Path: "/tmp/source", Agent: AgentClaude, GroupName: "Work",
+		Tabs: []PortableTab{{Name: "terminal", Agent: AgentTerminal}},
+	}
+	count, err := storage.ImportPortableSessions([]PortableSession{portable}, []PortableGroup{{
+		Name: "Work", Color: "#123456",
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count != 1 {
+		t.Fatalf("count = %d, want 1", count)
+	}
+	instances, groups, err := storage.LoadAll()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(instances) != 2 {
+		t.Fatalf("instances = %d, want 2", len(instances))
+	}
+	imported := instances[1]
+	if imported.ID == "" || imported.ID == "source-id" {
+		t.Fatalf("import reused source identity: %q", imported.ID)
+	}
+	if imported.Name != "alpha (2)" || imported.Status != StatusStopped {
+		t.Fatalf("imported runtime/config state = %+v", imported)
+	}
+	if imported.ResumeSessionID != "" || imported.BaseCommitSHA != "" {
+		t.Fatalf("runtime state survived import: %+v", imported)
+	}
+	if len(imported.FollowedWindows) != 1 || imported.FollowedWindows[0].Index != 1 {
+		t.Fatalf("tab identity was not regenerated: %+v", imported.FollowedWindows)
+	}
+	if imported.GroupID == "" || imported.GroupID == existingGroup.ID {
+		t.Fatalf("group ID was not remapped around target collision: %q", imported.GroupID)
+	}
+	if len(groups) != 2 || groups[1].Name != "Work" || groups[1].ID != imported.GroupID {
+		t.Fatalf("unexpected imported groups: %+v", groups)
 	}
 }

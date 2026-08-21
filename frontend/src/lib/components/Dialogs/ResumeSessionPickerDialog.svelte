@@ -29,6 +29,7 @@
   let cursor = 0; // 0 = new session, 1+ = existing sessions
   let error = '';
   let lastLoadKey = '';
+  let loadGeneration = 0;
 
   // Load sessions once per dialog open for a given (session, agent override)
   // pair. The override is part of the key so a Codex tab and a Claude main
@@ -39,15 +40,18 @@
       : '';
     if (key && key !== lastLoadKey) {
       lastLoadKey = key;
-      loadSessions();
+      loadSessions(key);
     } else if (!show) {
       lastLoadKey = '';
+      loadGeneration++;
+      isLoadingSessions = false;
     }
   }
 
-  async function loadSessions() {
+  async function loadSessions(key: string) {
     if (!session) return;
 
+    const generation = ++loadGeneration;
     const agent = agentOverride || session.agent;
     const path = pathOverride || session.path;
 
@@ -55,13 +59,15 @@
     error = '';
     try {
       const result = await App.GetResumeSessions(agent, path);
+      if (!show || generation !== loadGeneration || key !== lastLoadKey) return;
       availableSessions = result || [];
       cursor = 0;
     } catch (e) {
+      if (!show || generation !== loadGeneration || key !== lastLoadKey) return;
       error = String(e);
       availableSessions = [];
     } finally {
-      isLoadingSessions = false;
+      if (generation === loadGeneration) isLoadingSessions = false;
     }
   }
 

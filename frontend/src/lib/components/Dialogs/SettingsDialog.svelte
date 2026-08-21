@@ -1,6 +1,6 @@
 <script lang="ts">
   import { autoFocusDialog } from '../../utils/dialogActions';
-  import { createEventDispatcher } from 'svelte';
+  import { createEventDispatcher, onDestroy } from 'svelte';
   import { settings, saveSettings } from '../../stores/settings';
   import * as DictationService from '../../../../wailsjs/go/main/DictationService';
   import * as App from '../../../../wailsjs/go/main/App';
@@ -42,9 +42,12 @@
     { value: 'sv', label: 'Svenska' },
   ];
 
+  let languageChangeGeneration = 0;
   async function changeLanguage(lang: string) {
+    const generation = ++languageChangeGeneration;
     await loadTranslations(lang);
-    saveSettings({ language: lang });
+    if (generation !== languageChangeGeneration) return;
+    void saveSettings({ language: lang });
   }
 
   // --- Terminal palettes -------------------------------------------------
@@ -184,23 +187,23 @@
 
   // Tab state
   let activeTab: 'general' | 'terminal' | 'shortcuts' | 'agents' | 'dictation' | 'maintenance' = 'general';
-  /**
-   * Whether the API key is currently readable.
-   *
-   * Component state, so it resets on its own: the dialog is wrapped in
-   * {#if show}, which tears it down on close, and the next visit starts
-   * covered. A key left revealed by a previous visit is not something to
-   * inherit.
-   */
+  /** Whether the API key is currently readable. */
   let showApiKey = false;
+  // App keeps this component mounted and only toggles its `show` prop. Cover
+  // the secret whenever the dialog is hidden, including parent-driven closes.
+  let previousShow = false;
   let dictationProblems: string[] = [];
+  let dictationLoadGeneration = 0;
 
   // Asked for once when settings open: the answer is fixed at startup, so
   // polling it would be re-reading a constant.
-  async function loadDictationProblems() {
+  async function loadDictationProblems(generation: number) {
     try {
-      dictationProblems = (await DictationService.GetDictationProblems()) ?? [];
+      const next = (await DictationService.GetDictationProblems()) ?? [];
+      if (!show || generation !== dictationLoadGeneration) return;
+      dictationProblems = next;
     } catch {
+      if (!show || generation !== dictationLoadGeneration) return;
       dictationProblems = [];
     }
   }
@@ -212,11 +215,16 @@
   let patternsVersion = 0;
   let refreshingPatterns = false;
   let patternsMessage = '';
+  let patternLoadGeneration = 0;
 
   async function loadPatternsVersion() {
+    const generation = ++patternLoadGeneration;
     try {
-      patternsVersion = await App.DetectionPatternsVersion();
+      const next = await App.DetectionPatternsVersion();
+      if (!show || generation !== patternLoadGeneration) return;
+      patternsVersion = next;
     } catch {
+      if (!show || generation !== patternLoadGeneration) return;
       patternsVersion = 0;
     }
   }
@@ -247,6 +255,19 @@
   let loading = true;
   let audioTestStatus: 'idle' | 'recording' | 'playing' | 'done' | 'error' = 'idle';
   let audioTestMessage = '';
+  let audioTestGeneration = 0;
+  let audioResetTimer: ReturnType<typeof setTimeout> | null = null;
+  let dictationSaveQueue: Promise<void> = Promise.resolve();
+
+  $: if (show && !previousShow) {
+    previousShow = true;
+  } else if (!show && previousShow) {
+    previousShow = false;
+    showApiKey = false;
+    dictationLoadGeneration++;
+    patternLoadGeneration++;
+    cancelAudioTest();
+  }
 
   // Punctuation commands for current language
   let punctuationCommands: Record<string, string> = {};
@@ -304,8 +325,9 @@
   $: if (show && patternsVersion === 0) void loadPatternsVersion();
 
   $: if (show && dictationSettings === null) {
-    loadDictationSettings();
-    void loadDictationProblems();
+    const generation = ++dictationLoadGeneration;
+    void loadDictationSettings(generation);
+    void loadDictationProblems(generation);
   }
 
   // Update commands when language changes
@@ -313,7 +335,7 @@
     loadCommandsForLanguage(dictationSettings.language);
   }
 
-  async function loadDictationSettings() {
+  async function loadDictationSettings(generation: number) {
     loading = true;
     try {
       const [settings, langs, devices] = await Promise.all([
@@ -321,13 +343,15 @@
         DictationService.GetAvailableLanguages(),
         DictationService.GetInputDevices()
       ]);
+      if (!show || generation !== dictationLoadGeneration) return;
       dictationSettings = settings;
       languages = langs.map((l: Record<string, string>) => ({ code: l.code, name: l.name }));
       inputDevices = devices || [];
     } catch (e) {
+      if (!show || generation !== dictationLoadGeneration) return;
       console.error('Failed to load dictation settings:', e);
     }
-    loading = false;
+    if (show && generation === dictationLoadGeneration) loading = false;
   }
 
   function loadCommandsForLanguage(lang: string) {
@@ -338,6 +362,8 @@
   async function runAudioTest() {
     if (audioTestStatus !== 'idle' && audioTestStatus !== 'done' && audioTestStatus !== 'error') return;
 
+    const generation = ++audioTestGeneration;
+    if (audioResetTimer) { clearTimeout(audioResetTimer); audioResetTimer = null; }
     audioTestStatus = 'recording';
     audioTestMessage = $t('settings.audioTestRecordingStart');
 
@@ -346,36 +372,64 @@
       for (let i = 5; i > 0; i--) {
         audioTestMessage = $t('settings.audioTestRecording', { seconds: i });
         await new Promise(r => setTimeout(r, 1000));
+        if (!show || generation !== audioTestGeneration) return;
       }
 
       audioTestStatus = 'playing';
       audioTestMessage = $t('settings.audioTestPlaying');
 
       await DictationService.AudioTest();
+      if (!show || generation !== audioTestGeneration) return;
 
       audioTestStatus = 'done';
       audioTestMessage = $t('settings.audioTestDone');
 
       // Reset after 3 seconds
-      setTimeout(() => {
+      audioResetTimer = setTimeout(() => {
+        if (generation !== audioTestGeneration) return;
+        audioResetTimer = null;
         audioTestStatus = 'idle';
         audioTestMessage = '';
       }, 3000);
     } catch (e) {
+      if (!show || generation !== audioTestGeneration) return;
       audioTestStatus = 'error';
       audioTestMessage = $t('settings.audioTestError', { error: String(e) });
 
-      setTimeout(() => {
+      audioResetTimer = setTimeout(() => {
+        if (generation !== audioTestGeneration) return;
+        audioResetTimer = null;
         audioTestStatus = 'idle';
         audioTestMessage = '';
       }, 5000);
     }
   }
 
+  function cancelAudioTest() {
+    audioTestGeneration++;
+    if (audioResetTimer) { clearTimeout(audioResetTimer); audioResetTimer = null; }
+    audioTestStatus = 'idle';
+    audioTestMessage = '';
+  }
+
+  onDestroy(() => {
+    dictationLoadGeneration++;
+    patternLoadGeneration++;
+    cancelAudioTest();
+  });
+
   async function saveDictationSettings() {
     if (!dictationSettings) return;
+    const snapshot = JSON.stringify(dictationSettings);
+    // DictationService writes the whole settings object. Serialize snapshots
+    // so an older, slower write cannot land after a newer toggle and restore
+    // the previous values.
+    const save = dictationSaveQueue
+      .catch(() => {})
+      .then(() => DictationService.SetDictationSettings(snapshot));
+    dictationSaveQueue = save;
     try {
-      await DictationService.SetDictationSettings(JSON.stringify(dictationSettings));
+      await save;
     } catch (e) {
       console.error('Failed to save dictation settings:', e);
     }

@@ -28,13 +28,13 @@ assert.match(
 assert.match(dialog, /openedPath = path;/, 'the guard must record which path was opened');
 assert.match(
   dialog,
-  /\$: if \(!show\) openedPath = '';/,
+  /\$: if \(!show && openedPath\) \{[\s\S]*?openedPath = '';/,
   'closing must clear the guard, or reopening the same session shows stale history',
 );
 
 // Everything below belongs to the repository being left. The branch is the one
 // that actually breaks the query; the rest merely lingers on screen.
-const openBody = dialog.match(/async function open\(\) \{[\s\S]*?await Promise\.all/);
+const openBody = dialog.match(/async function open\(targetPath: string\) \{[\s\S]*?await Promise\.all/);
 assert.ok(openBody, 'open() should still exist');
 for (const field of ['branch', 'branches', 'currentBranch', 'commits', 'selectedHash', 'files', 'selectedPath', 'diff']) {
   assert.match(

@@ -95,7 +95,7 @@ assert.match(
 // truthiness test would silently ignore.
 assert.match(
   sessionBranch,
-  /if \(selectedGroupId !== inheritedGroup\)/,
+  /if \(submitted\.groupId !== submitted\.inheritedGroup\)/,
   'moving to no group at all must be honoured, not treated as "unset"',
 );
 

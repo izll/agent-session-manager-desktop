@@ -1,8 +1,10 @@
 package dictation
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -64,6 +66,49 @@ func TestErrorsAreLoggedWithLoggingOff(t *testing.T) {
 	}
 	if strings.Contains(body, "chatty trace line") {
 		t.Error("verbose line was written even though logging is off")
+	}
+}
+
+func TestDictationLogIsPrivateAndSizeBounded(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(dir, ".config"))
+	resetLoggingState(t)
+
+	if err := InitLogging(true); err != nil {
+		t.Fatalf("InitLogging: %v", err)
+	}
+	path, err := LogPath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if runtime.GOOS != "windows" {
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := info.Mode().Perm(); got != 0600 {
+			t.Fatalf("dictation log mode = %04o, want 0600", got)
+		}
+	}
+
+	logMutex.Lock()
+	for i := 0; i < 30; i++ {
+		_, _ = fmt.Fprintf(logFile, "line-%02d-xxxxxxxx\n", i)
+	}
+	if err := compactDictationLogLocked(logFile, 250, 120); err != nil {
+		logMutex.Unlock()
+		t.Fatalf("compact dictation log: %v", err)
+	}
+	_ = logFile.Sync()
+	logMutex.Unlock()
+
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(body) > 120 || !strings.Contains(string(body), "line-29-xxxxxxxx") {
+		t.Fatalf("dictation log was not capped at newest lines: len=%d body=%q", len(body), body)
 	}
 }
 

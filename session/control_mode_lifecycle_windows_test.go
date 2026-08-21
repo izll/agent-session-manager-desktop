@@ -3,6 +3,7 @@
 package session
 
 import (
+	"context"
 	"errors"
 	"io"
 	"testing"
@@ -28,5 +29,33 @@ func TestClosedControlModeStreamRejectsAndDoesNotQueueInput(t *testing.T) {
 	}
 	if got := len(stream.keys); got != 0 {
 		t.Fatalf("closed stream queued %d input batches", got)
+	}
+}
+
+func TestControlModeCloseCancelsAndWaitsForBackgroundWork(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	stream := &controlModeStream{
+		ctx:         ctx,
+		cancel:      cancel,
+		in:          discardWriteCloser{},
+		closed:      make(chan struct{}),
+		keys:        make(chan []byte, 1),
+		recheckSize: make(chan struct{}, 1),
+	}
+	finished := make(chan struct{})
+	stream.startBackground(func() {
+		defer close(finished)
+		// An empty pane never becomes ready and used to keep its six-second
+		// startup loop alive after the WebSocket/stream had already closed.
+		primePaneSize(stream, "")
+	})
+
+	if err := stream.Close(); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-finished:
+	default:
+		t.Fatal("Close returned before the background pane primer stopped")
 	}
 }

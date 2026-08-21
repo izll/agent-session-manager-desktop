@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -378,6 +379,9 @@ func (s *Storage) RestoreBackup(id string) error {
 	if restored.SchemaVersion > recoverySchemaVersion {
 		return fmt.Errorf("backup schema is newer than this application")
 	}
+	if err := validateRestoredStorage(&restored); err != nil {
+		return fmt.Errorf("invalid backup structure: %w", err)
+	}
 	current, err := s.loadStorageDataLocked()
 	if err != nil {
 		return err
@@ -403,6 +407,98 @@ func (s *Storage) RestoreBackup(id string) error {
 		restored.Trash = []*TrashEntry{}
 	}
 	return s.writeStorageDataLocked(&restored, true)
+}
+
+func validateRestoredStorage(data *StorageData) error {
+	groupIDs := make(map[string]struct{}, len(data.Groups))
+	groupNames := make(map[string]struct{}, len(data.Groups))
+	for i, group := range data.Groups {
+		if group == nil {
+			return fmt.Errorf("group %d is null", i)
+		}
+		if strings.TrimSpace(group.ID) == "" || strings.TrimSpace(group.Name) == "" {
+			return fmt.Errorf("group %d has an empty ID or name", i)
+		}
+		if _, exists := groupIDs[group.ID]; exists {
+			return fmt.Errorf("duplicate group ID %q", group.ID)
+		}
+		if _, exists := groupNames[group.Name]; exists {
+			return fmt.Errorf("duplicate group name %q", group.Name)
+		}
+		groupIDs[group.ID] = struct{}{}
+		groupNames[group.Name] = struct{}{}
+	}
+
+	instanceIDs := make(map[string]struct{}, len(data.Instances))
+	instanceNames := make(map[string]struct{}, len(data.Instances))
+	for i, instance := range data.Instances {
+		if err := validateRestoredInstance(instance, fmt.Sprintf("instance %d", i)); err != nil {
+			return err
+		}
+		if _, exists := instanceIDs[instance.ID]; exists {
+			return fmt.Errorf("duplicate instance ID %q", instance.ID)
+		}
+		if _, exists := instanceNames[instance.Name]; exists {
+			return fmt.Errorf("duplicate instance name %q", instance.Name)
+		}
+		if instance.GroupID != "" {
+			if _, exists := groupIDs[instance.GroupID]; !exists {
+				return fmt.Errorf("instance %q references missing group %q", instance.ID, instance.GroupID)
+			}
+		}
+		instanceIDs[instance.ID] = struct{}{}
+		instanceNames[instance.Name] = struct{}{}
+	}
+
+	trashIDs := make(map[string]struct{}, len(data.Trash))
+	for i, entry := range data.Trash {
+		if entry == nil {
+			return fmt.Errorf("trash entry %d is null", i)
+		}
+		if strings.TrimSpace(entry.ID) == "" {
+			return fmt.Errorf("trash entry %d has an empty ID", i)
+		}
+		if _, exists := trashIDs[entry.ID]; exists {
+			return fmt.Errorf("duplicate trash ID %q", entry.ID)
+		}
+		trashIDs[entry.ID] = struct{}{}
+		switch entry.Kind {
+		case "session":
+			if err := validateRestoredInstance(entry.Session, fmt.Sprintf("trash session %q", entry.ID)); err != nil {
+				return err
+			}
+		case "tab":
+			if entry.Tab == nil || strings.TrimSpace(entry.ParentSessionID) == "" {
+				return fmt.Errorf("trash tab %q has no tab payload or parent", entry.ID)
+			}
+			if entry.Tab.Index < 0 {
+				return fmt.Errorf("trash tab %q has a negative window index", entry.ID)
+			}
+		default:
+			return fmt.Errorf("trash entry %q has unknown kind %q", entry.ID, entry.Kind)
+		}
+	}
+	return nil
+}
+
+func validateRestoredInstance(instance *Instance, label string) error {
+	if instance == nil {
+		return fmt.Errorf("%s is null", label)
+	}
+	if strings.TrimSpace(instance.ID) == "" || strings.TrimSpace(instance.Name) == "" {
+		return fmt.Errorf("%s has an empty ID or name", label)
+	}
+	windowIndices := make(map[int]struct{}, len(instance.FollowedWindows))
+	for _, window := range instance.FollowedWindows {
+		if window.Index < 0 {
+			return fmt.Errorf("%s has a negative window index", label)
+		}
+		if _, exists := windowIndices[window.Index]; exists {
+			return fmt.Errorf("%s has duplicate window index %d", label, window.Index)
+		}
+		windowIndices[window.Index] = struct{}{}
+	}
+	return nil
 }
 
 func (s *Storage) ListTrash() ([]*TrashEntry, error) {
@@ -435,15 +531,22 @@ func (s *Storage) TrashInstance(id string) error {
 		return fmt.Errorf("instance not found")
 	}
 	instance := data.Instances[index]
+	originalData, err := cloneStorageData(data)
+	if err != nil {
+		return fmt.Errorf("failed to snapshot storage before deleting session: %w", err)
+	}
 	// Include generated Codex IDs in both the automatic pre-delete backup and
 	// the trash snapshot.
 	instance.CaptureCodexResumeIDs()
 	if err := s.createAutomaticBackupLocked(data); err != nil {
 		return fmt.Errorf("failed to create pre-delete backup: %w", err)
 	}
-	if err := instance.Stop(); err != nil {
-		return err
-	}
+	// Keep a separate live descriptor for the irreversible tmux operation. The
+	// stored/trash copy must already say "stopped" when it is published, while
+	// Stop needs the original running status in order to kill the real session.
+	liveInstance := *instance
+	liveInstance.FollowedWindows = append([]FollowedWindow(nil), instance.FollowedWindows...)
+	liveInstance.TabOrder = append([]int(nil), instance.TabOrder...)
 	instance.Status = StatusStopped
 	instance.MainWindowStopped = false
 	data.Trash = append(data.Trash, &TrashEntry{
@@ -458,7 +561,7 @@ func (s *Storage) TrashInstance(id string) error {
 	data.Trash, _ = pruneTrash(data.Trash, time.Now().UTC(), trashRetentionDays(data.Settings))
 	data.SchemaVersion = recoverySchemaVersion
 	data.Revision++
-	return s.writeStorageDataLocked(data, true)
+	return s.persistTrashThenApply(data, originalData, liveInstance.Stop)
 }
 
 func (s *Storage) TrashTab(sessionID string, windowIdx int) error {
@@ -506,6 +609,13 @@ func (s *Storage) TrashTab(sessionID string, windowIdx int) error {
 		log.Printf("[TrashTab] closed untracked window %d of session %s", windowIdx, parent.ID)
 		return nil
 	}
+	if err := parent.validateWindowDeletion(windowIdx); err != nil {
+		return err
+	}
+	originalData, err := cloneStorageData(data)
+	if err != nil {
+		return fmt.Errorf("failed to snapshot storage before deleting tab: %w", err)
+	}
 	// Snapshot the Codex conversation ID while the tab process is still alive,
 	// otherwise restoring this trash item would start a different conversation.
 	parent.CaptureCodexResumeIDs()
@@ -518,9 +628,7 @@ func (s *Storage) TrashTab(sessionID string, windowIdx int) error {
 	if err := s.createAutomaticBackupLocked(data); err != nil {
 		return fmt.Errorf("failed to create pre-delete backup: %w", err)
 	}
-	if err := parent.DeleteWindow(windowIdx); err != nil {
-		return err
-	}
+	parent.removeWindowMetadata(windowIdx)
 	data.Trash = append(data.Trash, &TrashEntry{
 		ID:                uuid.NewString(),
 		Kind:              "tab",
@@ -535,7 +643,39 @@ func (s *Storage) TrashTab(sessionID string, windowIdx int) error {
 	data.Trash, _ = pruneTrash(data.Trash, time.Now().UTC(), trashRetentionDays(data.Settings))
 	data.SchemaVersion = recoverySchemaVersion
 	data.Revision++
-	return s.writeStorageDataLocked(data, true)
+	return s.persistTrashThenApply(data, originalData, func() error {
+		return parent.deleteLiveWindow(windowIdx)
+	})
+}
+
+func cloneStorageData(data *StorageData) (*StorageData, error) {
+	raw, err := json.Marshal(data)
+	if err != nil {
+		return nil, err
+	}
+	var clone StorageData
+	if err := json.Unmarshal(raw, &clone); err != nil {
+		return nil, err
+	}
+	return &clone, nil
+}
+
+// persistTrashThenApply makes the recoverable state durable before an
+// irreversible tmux operation. If the external operation fails, restore the
+// exact pre-operation metadata; if that rollback also fails, retain both errors
+// so callers know recovery needs attention.
+func (s *Storage) persistTrashThenApply(data, originalData *StorageData, action func() error) error {
+	if err := s.writeStorageDataLocked(data, true); err != nil {
+		return err
+	}
+	if err := action(); err != nil {
+		rollbackErr := s.writeStorageDataLocked(originalData, false)
+		if rollbackErr != nil {
+			return errors.Join(err, fmt.Errorf("failed to roll back trash metadata: %w", rollbackErr))
+		}
+		return err
+	}
+	return nil
 }
 
 func (s *Storage) RestoreTrashItem(id string) (*RestoreResult, error) {

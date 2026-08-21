@@ -38,6 +38,7 @@ type AppService struct {
 
 	// Auto-stop on silence
 	lastSpeechTime     int64 // Unix timestamp in seconds
+	silenceMu          sync.Mutex
 	silenceCheckActive bool
 	silenceMonitorDone chan bool
 
@@ -504,13 +505,6 @@ func (a *AppService) LoadSettings() error {
 
 // SaveSettings saves settings to file
 func (a *AppService) SaveSettings(settings Settings) error {
-	a.mu.Lock()
-	oldMode := a.settings.Mode // Save BEFORE updating settings
-	wasListening := a.isListening
-	newMode := settings.Mode // Get new mode from incoming settings
-	a.settings = &settings
-	a.mu.Unlock()
-
 	settingsPath, err := getConfigPath("settings.json")
 	if err != nil {
 		return fmt.Errorf("failed to get config path: %w", err)
@@ -521,15 +515,25 @@ func (a *AppService) SaveSettings(settings Settings) error {
 		return err
 	}
 
-	// 0600: settings.json holds the Google API key — keep it readable only by
-	// the owner, not world-readable.
-	err = os.WriteFile(settingsPath, data, 0600)
-	if err != nil {
+	var oldMode string
+	var wasListening bool
+	if err := withDictationConfigLock(func() error {
+		// 0600: settings.json holds the Google API key — keep it readable only
+		// by the owner. Publish atomically before changing the live settings so
+		// a failed save cannot leave memory and disk disagreeing.
+		if err := atomicWriteConfigFile(settingsPath, data, 0o600); err != nil {
+			return err
+		}
+		a.mu.Lock()
+		oldMode = a.settings.Mode
+		wasListening = a.isListening
+		a.settings = &settings
+		a.mu.Unlock()
+		return nil
+	}); err != nil {
 		return fmt.Errorf("failed to write settings: %w", err)
 	}
-	if err := os.Chmod(settingsPath, 0600); err != nil {
-		return fmt.Errorf("failed to secure settings permissions: %w", err)
-	}
+	newMode := settings.Mode
 
 	logToFile("✅ Settings saved to: %s\n", settingsPath)
 
@@ -537,9 +541,13 @@ func (a *AppService) SaveSettings(settings Settings) error {
 	// Startup deliberately skips it while dictation is off (it triggers the
 	// macOS Accessibility prompt), so this is what makes the hotkey work
 	// without restarting the app. Enable() returns early if already running.
-	if settings.Enabled && a.hotkeyManager != nil {
-		if err := a.hotkeyManager.Enable(); err != nil {
-			logToFile("Warning: Failed to enable hotkey: %v\n", err)
+	if a.hotkeyManager != nil {
+		if settings.Enabled {
+			if err := a.hotkeyManager.Enable(); err != nil {
+				logToFile("Warning: Failed to enable hotkey: %v\n", err)
+			}
+		} else {
+			a.hotkeyManager.Disable()
 		}
 	}
 
@@ -658,7 +666,9 @@ func (a *AppService) SavePunctuationCommands(commands PunctuationCommands) error
 		return err
 	}
 
-	return os.WriteFile(punctuationPath, data, 0644)
+	return withDictationConfigLock(func() error {
+		return atomicWriteConfigFile(punctuationPath, data, 0o644)
+	})
 }
 
 // LoadSpeechContext loads speech context phrases from file
@@ -690,7 +700,9 @@ func (a *AppService) SaveSpeechContext(context SpeechContext) error {
 		return err
 	}
 
-	return os.WriteFile(contextPath, data, 0644)
+	return withDictationConfigLock(func() error {
+		return atomicWriteConfigFile(contextPath, data, 0o644)
+	})
 }
 
 // LoadDeleteCommands loads delete commands from file
@@ -754,14 +766,22 @@ func (a *AppService) SaveDeleteCommands(commands DeleteCommands) error {
 		return err
 	}
 
-	return os.WriteFile(deleteCommandsPath, data, 0644)
+	return withDictationConfigLock(func() error {
+		return atomicWriteConfigFile(deleteCommandsPath, data, 0o644)
+	})
 }
 
 // LoadUsageStats loads API usage statistics
 func (a *AppService) LoadUsageStats() (*UsageStats, error) {
 	a.usageMu.Lock()
 	defer a.usageMu.Unlock()
-	return a.loadUsageStats()
+	var stats *UsageStats
+	err := withDictationConfigLock(func() error {
+		var err error
+		stats, err = a.loadUsageStats()
+		return err
+	})
+	return stats, err
 }
 
 func (a *AppService) loadUsageStats() (*UsageStats, error) {
@@ -787,7 +807,7 @@ func (a *AppService) loadUsageStats() (*UsageStats, error) {
 func (a *AppService) SaveUsageStats(stats UsageStats) error {
 	a.usageMu.Lock()
 	defer a.usageMu.Unlock()
-	return a.saveUsageStats(stats)
+	return withDictationConfigLock(func() error { return a.saveUsageStats(stats) })
 }
 
 func (a *AppService) saveUsageStats(stats UsageStats) error {
@@ -801,7 +821,7 @@ func (a *AppService) saveUsageStats(stats UsageStats) error {
 		return err
 	}
 
-	return os.WriteFile(statsPath, data, 0644)
+	return atomicWriteConfigFile(statsPath, data, 0o644)
 }
 
 // AddUsage performs the usage-stat read/modify/write as one synchronized
@@ -810,13 +830,15 @@ func (a *AppService) AddUsage(requests int, audioSeconds float64) error {
 	a.usageMu.Lock()
 	defer a.usageMu.Unlock()
 
-	stats, err := a.loadUsageStats()
-	if err != nil {
-		return err
-	}
-	stats.TotalRequests += requests
-	stats.TotalAudioSeconds += audioSeconds
-	return a.saveUsageStats(*stats)
+	return withDictationConfigLock(func() error {
+		stats, err := a.loadUsageStats()
+		if err != nil {
+			return err
+		}
+		stats.TotalRequests += requests
+		stats.TotalAudioSeconds += audioSeconds
+		return a.saveUsageStats(*stats)
+	})
 }
 
 // ToggleListening starts or stops speech recognition
@@ -1034,6 +1056,7 @@ func (a *AppService) ForceProcessAudio() {
 	a.mu.Lock()
 	isListening := a.isListening
 	mode := a.settings.Mode
+	recognizer := a.speechRecognizer
 	a.mu.Unlock()
 
 	// Only works if we're listening and in free/api mode (batch modes)
@@ -1050,8 +1073,8 @@ func (a *AppService) ForceProcessAudio() {
 	logToFile("⚡ ForceProcessAudio: Forcing immediate audio processing (Ctrl+Alt+S)\n")
 
 	// Tell the speech recognizer to process the current audio immediately
-	if a.speechRecognizer != nil {
-		a.speechRecognizer.ForceProcess()
+	if recognizer != nil {
+		recognizer.ForceProcess()
 	}
 }
 
@@ -1065,6 +1088,8 @@ func (a *AppService) Shutdown() {
 		logToFile("Stopping speech recognizer..." + "\n")
 		a.speechRecognizer.Stop()
 	}
+	a.isListening = false
+	a.stopSilenceMonitor()
 
 	// Restore audio output if muted
 	if a.audioMuteManager != nil {
@@ -1123,20 +1148,26 @@ func (a *AppService) UpdateLastSpeechTime() {
 
 // startSilenceMonitor starts the silence monitoring goroutine
 func (a *AppService) startSilenceMonitor() {
+	done := make(chan bool)
+	a.silenceMu.Lock()
+	if a.silenceMonitorDone != nil {
+		close(a.silenceMonitorDone)
+	}
 	a.silenceCheckActive = true
+	a.silenceMonitorDone = done
+	a.silenceMu.Unlock()
 	a.lastSpeechTime = time.Now().Unix()
-	a.silenceMonitorDone = make(chan bool)
 
 	timeout := a.settings.SilenceTimeoutSeconds
 	logToFile("🔔 Auto-stop enabled (%d sec silence timeout)\n", timeout)
 
-	go func() {
+	go func(done <-chan bool) {
 		ticker := time.NewTicker(500 * time.Millisecond)
 		defer ticker.Stop()
 
 		for {
 			select {
-			case <-a.silenceMonitorDone:
+			case <-done:
 				logToFile("Silence monitor stopped" + "\n")
 				return
 			case <-ticker.C:
@@ -1165,11 +1196,13 @@ func (a *AppService) startSilenceMonitor() {
 				}
 			}
 		}
-	}()
+	}(done)
 }
 
 // stopSilenceMonitor stops the silence monitoring goroutine
 func (a *AppService) stopSilenceMonitor() {
+	a.silenceMu.Lock()
+	defer a.silenceMu.Unlock()
 	if a.silenceCheckActive {
 		a.silenceCheckActive = false
 		if a.silenceMonitorDone != nil {

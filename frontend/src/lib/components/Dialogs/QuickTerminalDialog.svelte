@@ -4,6 +4,7 @@
   import { selectedSessionId, selectWindow, loadSessions } from '../../stores/sessions';
   import * as App from '../../../../wailsjs/go/main/App';
   import { t } from '../../i18n';
+  import { dialogEnterBelongsToControl } from '../../utils/dialogActions';
 
   /**
    * Open a terminal tab in one keystroke.
@@ -27,13 +28,20 @@
   let inputEl: HTMLInputElement | null = null;
   let isSubmitting = false;
   let error = '';
+  let operationGeneration = 0;
+  let lastShow = false;
 
   // Fresh every time it opens: a name left over from last time is not a
   // starting point, it is something to delete first.
-  $: if (show) {
-    name = DEFAULT_NAME;
-    error = '';
-    focusAndSelect();
+  $: {
+    if (show && !lastShow) {
+      operationGeneration++;
+      name = DEFAULT_NAME;
+      error = '';
+      isSubmitting = false;
+      focusAndSelect();
+    }
+    lastShow = show;
   }
 
   /**
@@ -55,6 +63,7 @@
   }
 
   function close() {
+    operationGeneration++;
     show = false;
     isSubmitting = false;
     dispatch('close');
@@ -62,6 +71,7 @@
 
   async function handleSubmit() {
     const trimmed = name.trim();
+    if (isSubmitting) return;
     if (!trimmed) {
       error = $t('newTab.nameRequired');
       return;
@@ -73,14 +83,17 @@
       return;
     }
 
+    const generation = operationGeneration;
+    const submittedName = trimmed;
     isSubmitting = true;
     error = '';
 
     try {
       // A terminal, with no agent, no extra arguments and the session's own
       // working directory — the defaults the full dialog would have offered.
-      const newIdx = await App.CreateTab(targetSessionId, false, 'terminal', trimmed, '', '');
+      const newIdx = await App.CreateTab(targetSessionId, false, 'terminal', submittedName, '', '');
       await loadSessions();
+      if (!show || generation !== operationGeneration || sessionId !== targetSessionId) return;
       close();
       // Switch to it and put the keyboard in it, so the tab is ready to type
       // in rather than merely created.
@@ -89,8 +102,9 @@
         requestAnimationFrame(() =>
           window.dispatchEvent(new CustomEvent('terminal:focus')));
       }
-      dispatch('created', { name: trimmed });
+      dispatch('created', { name: submittedName });
     } catch (e) {
+      if (!show || generation !== operationGeneration || sessionId !== targetSessionId) return;
       error = String(e);
       isSubmitting = false;
     }
@@ -100,7 +114,7 @@
     if (e.key === 'Escape') {
       e.stopPropagation();
       close();
-    } else if (e.key === 'Enter' && !e.shiftKey) {
+    } else if (e.key === 'Enter' && !e.shiftKey && !dialogEnterBelongsToControl(e)) {
       e.preventDefault();
       handleSubmit();
     }
@@ -125,7 +139,6 @@
         bind:value={name}
         placeholder={DEFAULT_NAME}
         disabled={isSubmitting}
-        on:keydown={handleKeydown}
       />
 
       {#if error}

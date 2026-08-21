@@ -42,7 +42,7 @@ assert.doesNotMatch(dialogCode, /use:autoFocusField/, 'that action puts the curs
 // whole point was one keystroke.
 assert.match(
   dialog,
-  /e\.key === 'Enter'[^}]*handleSubmit\(\)/s,
+  /e\.key === 'Enter'[\s\S]*?handleSubmit\(\)/,
   'Enter must create the tab',
 );
 
@@ -58,7 +58,7 @@ assert.match(
 // A terminal, not an agent, with the session's own defaults.
 assert.match(
   dialog,
-  /App\.CreateTab\(targetSessionId, false, 'terminal', trimmed, '', ''\)/,
+  /App\.CreateTab\(targetSessionId, false, 'terminal', submittedName, '', ''\)/,
   'it must create a plain terminal tab with no extra arguments',
 );
 

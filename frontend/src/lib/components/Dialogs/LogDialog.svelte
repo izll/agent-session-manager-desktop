@@ -29,6 +29,7 @@
    *  96% of the lines in a real log — measured at 68,000 in an hour. */
   let hideNoise = true;
   let body: HTMLPreElement | null = null;
+  let loadGeneration = 0;
 
   const NOISE = ['[WaitDebug]', '[StatusDebug]'];
 
@@ -50,16 +51,22 @@
   $: if (!show) loadedFor = '';
 
   async function load() {
+    const targetSource = source;
+    const generation = ++loadGeneration;
     loading = true;
     try {
-      log = await App.GetLog(source);
+      const nextLog = await App.GetLog(targetSource);
+      if (!show || generation !== loadGeneration || source !== targetSource) return;
+      log = nextLog;
       await tick();
+      if (!show || generation !== loadGeneration || source !== targetSource) return;
       // The end is what explains whatever went wrong.
       if (body) body.scrollTop = body.scrollHeight;
     } catch (e) {
+      if (!show || generation !== loadGeneration || source !== targetSource) return;
       log = { path: '', lines: [String(e)], truncated: false, missing: false };
     } finally {
-      loading = false;
+      if (generation === loadGeneration && source === targetSource) loading = false;
     }
   }
 
@@ -79,6 +86,8 @@
   }
 
   function close() {
+    loadGeneration++;
+    loading = false;
     show = false;
     dispatch('close');
   }
@@ -92,10 +101,14 @@
 
   async function clearLog() {
     confirmClear = false;
+    const targetSource = source;
+    const generation = ++loadGeneration;
     try {
-      await App.ClearLog(source);
+      await App.ClearLog(targetSource);
+      if (!show || generation !== loadGeneration || source !== targetSource) return;
       await load();
     } catch (e) {
+      if (!show || generation !== loadGeneration || source !== targetSource) return;
       log = { path: log?.path ?? '', lines: [String(e)], truncated: false, missing: false };
     }
   }

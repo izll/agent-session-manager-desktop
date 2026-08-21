@@ -17,6 +17,7 @@ require (
 	github.com/moutend/go-wca v0.3.0
 	github.com/robotn/gohook v0.42.3
 	github.com/sahilm/fuzzy v0.1.1
+	github.com/shirou/gopsutil/v4 v4.25.10
 	github.com/wailsapp/wails/v2 v2.14.0
 	golang.org/x/sys v0.46.0
 	google.golang.org/api v0.264.0
@@ -62,7 +63,6 @@ require (
 	github.com/robotn/xgb v0.10.0 // indirect
 	github.com/robotn/xgbutil v0.10.0 // indirect
 	github.com/samber/lo v1.49.1 // indirect
-	github.com/shirou/gopsutil/v4 v4.25.10 // indirect
 	github.com/tailscale/win v0.0.0-20250627215312-f4da2b8ee071 // indirect
 	github.com/tklauser/go-sysconf v0.3.16 // indirect
 	github.com/tklauser/numcpus v0.11.0 // indirect

@@ -80,6 +80,63 @@ func TestMutateTaskMasterFileSerializesAliasesInProcess(t *testing.T) {
 	}
 }
 
+func TestProviderWriterAndDirectMutationShareLock(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "tasks.json")
+	if err := os.WriteFile(path, []byte(`{"master":{"tasks":[]}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	providerEntered := make(chan struct{})
+	releaseProvider := make(chan struct{})
+	providerDone := make(chan error, 1)
+	go func() {
+		providerDone <- withTaskMasterWriterLock(path, func() error {
+			close(providerEntered)
+			<-releaseProvider
+			return nil
+		})
+	}()
+	<-providerEntered
+
+	directEntered := make(chan struct{})
+	directDone := make(chan error, 1)
+	go func() {
+		directDone <- MutateTaskMasterFile(path, func(root map[string]interface{}) error {
+			close(directEntered)
+			return nil
+		})
+	}()
+	select {
+	case <-directEntered:
+		t.Fatal("direct mutation entered while provider writer held the common lock")
+	case <-time.After(30 * time.Millisecond):
+	}
+	close(releaseProvider)
+	if err := <-providerDone; err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-directEntered:
+	case <-time.After(time.Second):
+		t.Fatal("direct mutation did not enter after provider writer released the lock")
+	}
+	if err := <-directDone; err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestWriterLockDoesNotCreateProviderTreeBeforeInitialize(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, ".taskmaster", "tasks", "tasks.json")
+	if err := withTaskMasterWriterLock(path, func() error {
+		if _, err := os.Stat(filepath.Join(root, ".taskmaster")); !os.IsNotExist(err) {
+			return errors.New("writer lock created provider-owned .taskmaster tree")
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestMutateTaskMasterFileSerializesProcesses(t *testing.T) {
 	if role := os.Getenv("ASMGR_TASKMASTER_LOCK_HELPER"); role != "" {
 		runTaskMasterLockHelper(t, role)

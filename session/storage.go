@@ -1,14 +1,17 @@
 package session
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -23,6 +26,8 @@ type Storage struct {
 	legacyLockPathHeld string // Compatibility lock visible to pre-migration app versions
 	readLockPath       string // Read-only viewer claim that blocks concurrent deletion
 }
+
+var temporaryProjectReaderSequence atomic.Uint64
 
 // Group represents a session group for organizing sessions
 type Group struct {
@@ -529,6 +534,31 @@ func (s *Storage) lockProjectReader(projectID string) error {
 	return nil
 }
 
+// withTemporaryProjectReader prevents project deletion while one explicit
+// cross-project snapshot is being read. Unlike lockProjectReader it does not
+// replace the application's active-project ownership; the claim exists only
+// for the duration of action.
+func (s *Storage) withTemporaryProjectReader(projectID string, action func() error) error {
+	if projectID == "" {
+		return action()
+	}
+	if deleting, pid := projectLockOwner(s.projectDeletionLockPath(projectID)); deleting {
+		return &ErrProjectDeleting{PID: pid}
+	}
+	path := filepath.Join(
+		s.projectReaderDir(projectID),
+		fmt.Sprintf("%d-%d-%d.lock", os.Getpid(), time.Now().UnixNano(), temporaryProjectReaderSequence.Add(1)),
+	)
+	if err := claimPIDLockPath(path); err != nil {
+		return fmt.Errorf("failed to register temporary project reader: %w", err)
+	}
+	defer removeProjectLockIfOwned(path, os.Getpid())
+	if deleting, pid := projectLockOwner(s.projectDeletionLockPath(projectID)); deleting {
+		return &ErrProjectDeleting{PID: pid}
+	}
+	return action()
+}
+
 func claimPIDLockPath(path string) error {
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -916,80 +946,130 @@ func (s *Storage) GetProject(id string) (*Project, error) {
 
 // ImportDefaultSessions moves sessions from default storage to a project
 func (s *Storage) ImportDefaultSessions(projectID string) (int, error) {
+	return s.importDefaultSessions(projectID, s.saveAllLocked)
+}
+
+func (s *Storage) importDefaultSessions(projectID string, save func([]*Instance, []*Group, *Settings) error) (int, error) {
 	if !validProjectID(projectID) || projectID == "" {
 		return 0, fmt.Errorf("invalid project ID")
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// Save current project
 	originalProject := s.projectID
+	defer func() { _ = s.setActiveProjectLocked(originalProject) }()
 
 	// Load default sessions
 	s.projectID = ""
 	s.configPath = filepath.Join(s.configDir, "sessions.json")
-	defaultInstances, defaultGroups, _, err := s.loadAllWithSettingsLocked()
+	defaultInstances, defaultGroups, defaultSettings, err := s.loadAllWithSettingsLocked()
 	if err != nil {
-		s.setActiveProjectLocked(originalProject)
 		return 0, err
 	}
 
 	if len(defaultInstances) == 0 {
-		s.setActiveProjectLocked(originalProject)
 		return 0, nil
 	}
 
 	// Switch to target project
 	if err := s.setActiveProjectLocked(projectID); err != nil {
-		s.setActiveProjectLocked(originalProject)
 		return 0, err
 	}
 
 	// Load project's existing sessions
 	projectInstances, projectGroups, projectSettings, err := s.loadAllWithSettingsLocked()
 	if err != nil {
-		s.setActiveProjectLocked(originalProject)
 		return 0, err
 	}
+	originalTarget, err := cloneStorageData(&StorageData{
+		Instances: projectInstances, Groups: projectGroups, Settings: projectSettings,
+	})
+	if err != nil {
+		return 0, fmt.Errorf("failed to snapshot target before import: %w", err)
+	}
+	source, err := cloneStorageData(&StorageData{Instances: defaultInstances, Groups: defaultGroups})
+	if err != nil {
+		return 0, fmt.Errorf("failed to snapshot default sessions: %w", err)
+	}
 
-	// Merge sessions and groups
-	projectInstances = append(projectInstances, defaultInstances...)
-	for _, g := range defaultGroups {
-		// Check if group with same name exists
-		exists := false
-		for _, pg := range projectGroups {
-			if pg.Name == g.Name {
-				exists = true
-				// Update instance group IDs to point to existing group
-				for _, inst := range defaultInstances {
-					if inst.GroupID == g.ID {
-						inst.GroupID = pg.ID
-					}
-				}
-				break
+	groupByName := make(map[string]string, len(projectGroups))
+	usedGroupIDs := make(map[string]bool, len(projectGroups))
+	for _, group := range projectGroups {
+		if group == nil {
+			return 0, fmt.Errorf("target contains a null group")
+		}
+		groupByName[group.Name] = group.ID
+		usedGroupIDs[group.ID] = true
+	}
+	groupRemap := make(map[string]string, len(source.Groups))
+	targetChanged := false
+	for _, group := range source.Groups {
+		if group == nil {
+			return 0, fmt.Errorf("default storage contains a null group")
+		}
+		sourceID := group.ID
+		if sourceID == "" || strings.TrimSpace(group.Name) == "" {
+			return 0, fmt.Errorf("default storage contains a group with an empty ID or name")
+		}
+		if existingID := groupByName[group.Name]; existingID != "" {
+			groupRemap[sourceID] = existingID
+			continue
+		}
+		newID := group.ID
+		for newID == "" || usedGroupIDs[newID] {
+			newID = fmt.Sprintf("grp_%d", time.Now().UnixNano())
+		}
+		group.ID = newID
+		groupRemap[sourceID] = newID
+		projectGroups = append(projectGroups, group)
+		groupByName[group.Name] = newID
+		usedGroupIDs[newID] = true
+		targetChanged = true
+	}
+
+	existingByID := make(map[string]*Instance, len(projectInstances))
+	for _, instance := range projectInstances {
+		if instance == nil {
+			return 0, fmt.Errorf("target contains a null session")
+		}
+		existingByID[instance.ID] = instance
+	}
+	for _, instance := range source.Instances {
+		if instance == nil {
+			return 0, fmt.Errorf("default storage contains a null session")
+		}
+		if remapped, ok := groupRemap[instance.GroupID]; ok {
+			instance.GroupID = remapped
+		}
+		if existing := existingByID[instance.ID]; existing != nil {
+			if !reflect.DeepEqual(existing, instance) {
+				return 0, fmt.Errorf("target already contains a different session with ID %q", instance.ID)
 			}
+			continue // retry after a target-only partial commit
 		}
-		if !exists {
-			projectGroups = append(projectGroups, g)
+		projectInstances = append(projectInstances, instance)
+		existingByID[instance.ID] = instance
+		targetChanged = true
+	}
+
+	if targetChanged {
+		if err := save(projectInstances, projectGroups, projectSettings); err != nil {
+			return 0, err
 		}
 	}
 
-	// Save merged data to project
-	if err := s.saveAllLocked(projectInstances, projectGroups, projectSettings); err != nil {
-		s.setActiveProjectLocked(originalProject)
-		return 0, err
-	}
-
-	// Clear default sessions
+	// Clear only what was moved. Settings are preferences of the default
+	// project, not session payload, and must survive this migration.
 	s.projectID = ""
 	s.configPath = filepath.Join(s.configDir, "sessions.json")
-	if err := s.saveAllLocked([]*Instance{}, []*Group{}, &Settings{}); err != nil {
-		s.setActiveProjectLocked(originalProject)
-		return len(defaultInstances), err
+	if err := save([]*Instance{}, []*Group{}, defaultSettings); err != nil {
+		if !targetChanged {
+			return len(defaultInstances), err
+		}
+		_ = s.setActiveProjectLocked(projectID)
+		rollbackErr := save(originalTarget.Instances, originalTarget.Groups, originalTarget.Settings)
+		return len(defaultInstances), errors.Join(err, rollbackErr)
 	}
-
-	// Restore original project
-	s.setActiveProjectLocked(originalProject)
 
 	return len(defaultInstances), nil
 }
@@ -999,6 +1079,10 @@ func (s *Storage) ImportDefaultSessions(projectID string) (int, error) {
 // points after the lock is released so the per-instance `tmux has-session`
 // subprocesses don't serialize the storage mutex.
 func refreshInstanceStatuses(instances []*Instance) {
+	refreshInstanceStatusesContext(context.Background(), instances)
+}
+
+func refreshInstanceStatusesContext(ctx context.Context, instances []*Instance) {
 	if len(instances) == 0 {
 		return
 	}
@@ -1007,7 +1091,7 @@ func refreshInstanceStatuses(instances []*Instance) {
 		wg.Add(1)
 		go func(in *Instance) {
 			defer wg.Done()
-			in.UpdateStatus()
+			in.UpdateStatusContext(ctx)
 		}(inst)
 	}
 	wg.Wait()
@@ -1038,23 +1122,35 @@ func (s *Storage) LoadAll() ([]*Instance, []*Group, error) {
 // data. Callers doing expensive work can attach the captured ID to their result
 // without an active-project ABA race.
 func (s *Storage) LoadAllWithProjectSnapshot() (string, []*Instance, []*Group, error) {
+	return s.LoadAllWithProjectSnapshotContext(context.Background())
+}
+
+// LoadAllWithProjectSnapshotContext lets lifecycle-owned readers cancel the
+// concurrent tmux status probes after the persisted snapshot is loaded.
+func (s *Storage) LoadAllWithProjectSnapshotContext(ctx context.Context) (string, []*Instance, []*Group, error) {
 	s.mu.Lock()
 	projectID := s.projectID
 	instances, groups, _, err := s.loadAllWithSettingsLocked()
 	s.mu.Unlock()
 	if err == nil {
-		refreshInstanceStatuses(instances)
+		refreshInstanceStatusesContext(ctx, instances)
 	}
 	return projectID, instances, groups, err
 }
 
 // LoadAllWithSettings loads instances, groups, and settings
 func (s *Storage) LoadAllWithSettings() ([]*Instance, []*Group, *Settings, error) {
+	return s.LoadAllWithSettingsContext(context.Background())
+}
+
+// LoadAllWithSettingsContext is the cancellable form for lifecycle-owned
+// readers that also need refreshed runtime statuses.
+func (s *Storage) LoadAllWithSettingsContext(ctx context.Context) ([]*Instance, []*Group, *Settings, error) {
 	s.mu.Lock()
 	instances, groups, settings, err := s.loadAllWithSettingsLocked()
 	s.mu.Unlock()
 	if err == nil {
-		refreshInstanceStatuses(instances)
+		refreshInstanceStatusesContext(ctx, instances)
 	}
 	return instances, groups, settings, err
 }
@@ -1393,10 +1489,18 @@ func (s *Storage) MergeResumeSessionIDsForProject(projectID string, detected *In
 // snapshot from assigning an old process ID after a rapid stop/start or a
 // deleted tmux index being reused by a newly created tab.
 func (s *Storage) CaptureCodexResumeIDsForProject(projectID, instanceID string) (bool, error) {
+	return s.CaptureCodexResumeIDsForProjectContext(context.Background(), projectID, instanceID)
+}
+
+// CaptureCodexResumeIDsForProjectContext cancels the live tmux detector while
+// retaining the same locked reload/merge transaction.
+func (s *Storage) CaptureCodexResumeIDsForProjectContext(ctx context.Context, projectID, instanceID string) (bool, error) {
 	return s.captureCodexResumeIDsForProject(
 		projectID,
 		instanceID,
-		DetectCodexSessionIDFromTmux,
+		func(tmuxSession string, windowIdx int, expectedCWD string) string {
+			return DetectCodexSessionIDFromTmuxContext(ctx, tmuxSession, windowIdx, expectedCWD)
+		},
 		func(instance *Instance) (int, bool) { return instance.getMainWindowIndex() },
 	)
 }
@@ -1739,17 +1843,35 @@ func (s *Storage) SetGroupColors(id, color, bgColor string, fullRow bool) error 
 // LoadAllForProject temporarily switches to a different project, loads its data, and switches back.
 // This is atomic with respect to other storage operations.
 func (s *Storage) LoadAllForProject(projectID string) ([]*Instance, []*Group, error) {
+	if !validProjectID(projectID) {
+		return nil, nil, fmt.Errorf("invalid project ID")
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	originalProject := s.projectID
-	if err := s.setActiveProjectLocked(projectID); err != nil {
-		return nil, nil, err
-	}
-	instances, groups, _, err := s.loadAllWithSettingsLocked()
-	s.setActiveProjectLocked(originalProject)
-	if err != nil {
-		return nil, nil, err
-	}
-	return instances, groups, nil
+	var instances []*Instance
+	var groups []*Group
+	err := s.withTemporaryProjectReader(projectID, func() error {
+		// Check the catalog after publishing the reader claim. A deletion that
+		// already committed is rejected without creating its directory; a
+		// deletion that starts now sees the claim and must wait/fail.
+		if err := s.requireProjectExists(projectID); err != nil {
+			return err
+		}
+		originalProject, originalPath := s.projectID, s.configPath
+		defer func() {
+			s.projectID = originalProject
+			s.configPath = originalPath
+		}()
+		s.projectID = projectID
+		if projectID == "" {
+			s.configPath = filepath.Join(s.configDir, "sessions.json")
+		} else {
+			s.configPath = filepath.Join(s.configDir, "projects", projectID, "sessions.json")
+		}
+		var loadErr error
+		instances, groups, _, loadErr = s.loadAllWithSettingsLocked()
+		return loadErr
+	})
+	return instances, groups, err
 }
