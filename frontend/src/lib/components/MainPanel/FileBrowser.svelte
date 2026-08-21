@@ -389,7 +389,10 @@
     const sessionId = get(selectedSessionId);
     if (!sessionId) return false;
     const windowIdx = get(selectedWindowIdx) ?? 0;
-    const targetKey = `${sessionId}:${windowIdx}`;
+    // `browseKey` includes the project. Session ids are only unique inside a
+    // project, so rebuilding the old session:window key here made every file
+    // response look stale after the project-aware guard was introduced.
+    const targetKey = browseKey;
     const generation = ++fileGeneration;
     const expectedRoot = rootAbsPath;
     if (!expectedRoot) return false;

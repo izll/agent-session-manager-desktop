@@ -129,6 +129,7 @@
   let showFileImportDialog = false;
   /** Export failures are rare but must not vanish silently. */
   let exportError = '';
+  let exportErrorProjectId = '';
   let showSettingsDialog = false;
   let showLogDialog = false;
   let showQuickJump = false;
@@ -883,12 +884,22 @@
   // dialog is where the user picks the file, so there is nothing to configure
   // here first.
   async function exportSessions() {
+    const projectId = $activeProjectId;
     showSettingsDialog = false;
+    exportError = '';
+    exportErrorProjectId = '';
     try {
-      await ExportSessions([]);
+      await ExportSessions([], projectId);
     } catch (e) {
+      if (projectId !== $activeProjectId) return;
       exportError = String(e);
+      exportErrorProjectId = projectId;
     }
+  }
+
+  $: if (exportError && exportErrorProjectId !== $activeProjectId) {
+    exportError = '';
+    exportErrorProjectId = '';
   }
 
   function handleNewSession() {

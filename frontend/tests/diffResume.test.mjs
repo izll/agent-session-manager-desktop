@@ -166,7 +166,7 @@ assert.doesNotMatch(
 );
 assert.match(
   diff,
-  /if \(noteListKey\(sessionId, nextKey, windowIdx, mode, root\)\)/,
+  /if \(noteListKey\(sessionId, nextKey, windowIdx, mode, root, projectId\)\)/,
   'the comparison must be made against state that survives the component',
 );
 assert.doesNotMatch(

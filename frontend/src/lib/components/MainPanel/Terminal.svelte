@@ -479,22 +479,40 @@
 
   // Track last known status for detecting changes
   let lastKnownStatus: string | undefined = undefined;
+  let lastProjectId = '';
   let lastSessionId: string | null = null;
   let lastWindowIdx: number = 0;
   let stopGraceTimer: ReturnType<typeof setTimeout> | null = null;
   let poolChangeGeneration = 0;
 
   // Handle session/window/status changes via pool show/destroy
-  async function handlePoolChange(newSessionId: string | null, newWindowIdx: number, newStatus?: string) {
+  async function handlePoolChange(newSessionId: string | null, newWindowIdx: number, newStatus: string | undefined, projectId: string) {
     if (!pool) return;
     const generation = ++poolChangeGeneration;
-    const projectId = get(activeProjectId);
+    if (projectId !== get(activeProjectId)) return;
 
+    const projectChanged = !!lastProjectId && lastProjectId !== projectId;
     const statusChanged = lastKnownStatus !== newStatus;
-    const sessionJustStopped = statusChanged && newStatus !== 'running' && lastKnownStatus === 'running';
-    const sessionJustStarted = statusChanged && newStatus === 'running' && lastKnownStatus !== 'running';
+    const sessionJustStopped = !projectChanged && statusChanged && newStatus !== 'running' && lastKnownStatus === 'running';
+    const sessionJustStarted = !projectChanged && statusChanged && newStatus === 'running' && lastKnownStatus !== 'running';
     const sessionChanged = lastSessionId !== newSessionId;
     const windowChanged = lastWindowIdx !== newWindowIdx;
+
+    // Project switches can reuse the exact same session/window/status tuple.
+    // Tear down A's sockets before showing B: keeping the old keyed entries
+    // leaves rejected reconnect timers and dead xterms resident forever, and
+    // without projectChanged in the show condition B is never attached at all.
+    if (projectChanged) {
+      if (stopGraceTimer) {
+        clearTimeout(stopGraceTimer);
+        stopGraceTimer = null;
+      }
+      pool.hideAll();
+      isAttached = false;
+      await pool.destroyAll();
+      if (!mounted || generation !== poolChangeGeneration || !pool ||
+          projectId !== get(activeProjectId)) return;
+    }
 
     // If status came back to running, cancel any pending stop grace timer
     if (sessionJustStarted && stopGraceTimer) {
@@ -503,6 +521,7 @@
     }
 
     lastKnownStatus = newStatus;
+    lastProjectId = projectId;
     lastSessionId = newSessionId;
     lastWindowIdx = newWindowIdx;
 
@@ -529,7 +548,7 @@
     }
 
     // Session is running → show (creates if needed)
-    if (newSessionId && newStatus === 'running' && (sessionChanged || windowChanged || sessionJustStarted)) {
+    if (newSessionId && newStatus === 'running' && (projectChanged || sessionChanged || windowChanged || sessionJustStarted)) {
       // Small delay when session just started to let tmux initialize
       if (sessionJustStarted) {
         await new Promise(r => setTimeout(r, 500));
@@ -590,7 +609,7 @@
   }
 
   // Watch for session, window, or status changes
-  $: handlePoolChange(targetSessionId, targetWindowIdx, currentSessionStatus);
+  $: handlePoolChange(targetSessionId, targetWindowIdx, currentSessionStatus, $activeProjectId);
 
   // Apply a renderer change (canvas/webgl/dom) from Settings immediately:
   // update the factory default for new terminals AND recreate the currently

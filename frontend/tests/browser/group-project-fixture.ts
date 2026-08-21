@@ -6,11 +6,13 @@ import { sessions, groups, type Group, type Session } from '../../src/lib/stores
 const stopCalls: string[] = [];
 const assignCalls: unknown[][] = [];
 let resolveFirstStop: (() => void) | null = null;
+let rejectSecondStop = false;
 
 const backend = new Proxy({
   StopSession: (id: string) => {
     stopCalls.push(id);
     if (stopCalls.length === 1) return new Promise<void>((resolve) => { resolveFirstStop = resolve; });
+    if (stopCalls.length === 2 && rejectSecondStop) return Promise.reject(new Error('fixture stop refused'));
     return Promise.resolve();
   },
   GetSessions: async () => [],
@@ -52,6 +54,7 @@ groups.set([group]);
     resolveFirstStop = null;
     resolve?.();
   },
+  rejectSecondStop: () => { rejectSecondStop = true; },
   staleSessionDrop: async () => {
     const source = document.querySelector<HTMLElement>('.session-item');
     const target = document.querySelector<HTMLElement>('.group-header');

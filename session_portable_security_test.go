@@ -3,10 +3,20 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"asmgr-desktop/session"
 )
+
+func TestExportSessionsRejectsStaleProjectBeforeOpeningDialog(t *testing.T) {
+	storage := guardedTestStorage(t)
+	app := &App{storage: storage, projectLocked: true}
+
+	if _, err := app.ExportSessions(nil, "stale-project"); err == nil || !strings.Contains(err.Error(), "active project changed") {
+		t.Fatalf("stale export error = %v, want active-project refusal", err)
+	}
+}
 
 func TestPortableImportUsesValidatedServerSnapshotToken(t *testing.T) {
 	storage := guardedTestStorage(t)

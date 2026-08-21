@@ -35,10 +35,10 @@ const places = new Map<string, FileState>();
  */
 const SEP = '\x1f';
 
-function key(sessionId: string, windowIdx: number, path: string, mode: string, root: string): string {
+function key(projectId: string, sessionId: string, windowIdx: number, path: string, mode: string, root: string): string {
   // The mode is part of the key: the whole-file and hunks-only views lay the
   // same file out differently, so an offset from one means nothing in the other.
-  return `${sessionId}${SEP}${windowIdx}${SEP}${mode}${SEP}${root}${SEP}${path}`;
+  return `${projectId}${SEP}${sessionId}${SEP}${windowIdx}${SEP}${mode}${SEP}${root}${SEP}${path}`;
 }
 
 /** Remember where a file was left. */
@@ -49,9 +49,10 @@ export function rememberPlace(
   state: FileState,
   windowIdx = 0,
   root = '',
+  projectId = '',
 ): void {
   if (!sessionId || !path) return;
-  places.set(key(sessionId, windowIdx, path, mode, root), state);
+  places.set(key(projectId, sessionId, windowIdx, path, mode, root), state);
 }
 
 /** Where a file was left, or null if it has not been open. */
@@ -61,29 +62,30 @@ export function recallPlace(
   mode: string,
   windowIdx = 0,
   root = '',
+  projectId = '',
 ): FileState | null {
   if (!sessionId || !path) return null;
-  return places.get(key(sessionId, windowIdx, path, mode, root)) ?? null;
+  return places.get(key(projectId, sessionId, windowIdx, path, mode, root)) ?? null;
 }
 
 /** Forget one tab's places without disturbing another repository in the session. */
 export function forgetTarget(sessionId: string, windowIdx: number): void {
   if (!sessionId) return;
-  const prefix = `${sessionId}${SEP}${windowIdx}${SEP}`;
   for (const at of [...places.keys()]) {
-    if (at.startsWith(prefix)) places.delete(at);
+    const parts = at.split(SEP);
+    if (parts[1] === sessionId && Number(parts[2]) === windowIdx) places.delete(at);
   }
 }
 
 /** Forget one repository root in a tab, retaining positions for another root
  * that the same terminal tab may have visited with `cd`. */
-function forgetRootTarget(sessionId: string, windowIdx: number, root: string): void {
+function forgetRootTarget(projectId: string, sessionId: string, windowIdx: number, root: string): void {
   if (!sessionId) return;
-  const prefix = `${sessionId}${SEP}${windowIdx}${SEP}`;
+  const prefix = `${projectId}${SEP}${sessionId}${SEP}${windowIdx}${SEP}`;
   for (const at of [...places.keys()]) {
     if (!at.startsWith(prefix)) continue;
     const parts = at.split(SEP);
-    if (parts[3] === root) places.delete(at);
+    if (parts[4] === root) places.delete(at);
   }
 }
 
@@ -96,9 +98,8 @@ function forgetRootTarget(sessionId: string, windowIdx: number, root: string): v
  */
 export function forgetSession(sessionId: string): void {
   if (!sessionId) return;
-  const prefix = `${sessionId}${SEP}`;
   for (const at of [...places.keys()]) {
-    if (at.startsWith(prefix)) places.delete(at);
+    if (at.split(SEP)[1] === sessionId) places.delete(at);
   }
 }
 
@@ -121,12 +122,12 @@ const listKeys = new Map<string, string>();
  * The caller drops its caches on a change; the places go with them, since an
  * offset into a file that has been rewritten means nothing.
  */
-export function noteListKey(sessionId: string, listKey: string, windowIdx = 0, mode = 'session', root = ''): boolean {
+export function noteListKey(sessionId: string, listKey: string, windowIdx = 0, mode = 'session', root = '', projectId = ''): boolean {
   if (!sessionId) return false;
-  const target = `${sessionId}${SEP}${windowIdx}${SEP}${mode}${SEP}${root}`;
+  const target = `${projectId}${SEP}${sessionId}${SEP}${windowIdx}${SEP}${mode}${SEP}${root}`;
   const changed = listKeys.get(target) !== listKey;
   listKeys.set(target, listKey);
-  if (changed) forgetRootTarget(sessionId, windowIdx, root);
+  if (changed) forgetRootTarget(projectId, sessionId, windowIdx, root);
   return changed;
 }
 

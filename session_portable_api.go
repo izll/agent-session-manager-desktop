@@ -48,7 +48,12 @@ type portableImportSnapshot struct {
 
 // ExportSessions writes the chosen sessions to a file the user picks. An empty
 // sessionIDs list exports every session in the current project.
-func (a *App) ExportSessions(sessionIDs []string) (string, error) {
+func (a *App) ExportSessions(sessionIDs []string, expectedProjectID string) (string, error) {
+	release, err := a.beginExpectedProjectReadWithSideEffects(expectedProjectID)
+	if err != nil {
+		return "", err
+	}
+	defer release()
 	instances, groups, err := a.storage.LoadAll()
 	if err != nil {
 		return "", err

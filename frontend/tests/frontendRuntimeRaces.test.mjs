@@ -23,6 +23,7 @@ const updateDialog = read('lib/components/Dialogs/UpdateDialog.svelte');
 const schemeImport = read('lib/components/Dialogs/SchemeImportDialog.svelte');
 const mainPanel = read('lib/components/MainPanel/MainPanel.svelte');
 const sideBySideDiff = read('lib/components/MainPanel/SideBySideDiff.svelte');
+const preview = read('lib/components/MainPanel/Preview.svelte');
 const sessionItem = read('lib/components/Sidebar/SessionItem.svelte');
 const groupItem = read('lib/components/Sidebar/GroupItem.svelte');
 const sessionColor = read('lib/components/Dialogs/SessionColorDialog.svelte');
@@ -91,6 +92,18 @@ assert.ok(initAt >= 0 && jumpAt > initAt, 'target initialization must precede pe
 // cache; a mode change explicitly drops local contents.
 assert.match(diff, /requestedKey = `\$\{projectId\}:\$\{sessionId \|\| ''\}:\$\{windowIdx\}:\$\{mode\}`/);
 assert.match(diff, /currentDiffKey = `\$\{\$activeProjectId\}:\$\{\$selectedSessionId \|\| ''\}:\$\{\$selectedWindowIdx \?\? 0\}:\$\{diffMode\}`/);
+assert.match(diff, /const targetKey = currentDiffKey;[\s\S]*?loadedDiffKey !== targetKey/,
+  'selected diff files must use the same project-aware identity as the list');
+assert.match(diff, /cacheKey !== failedFileKey[\s\S]*?failedFileKey = key/,
+  'a transient selected-file failure must be retried by the next diff refresh');
+assert.match(diff, /const generation = \+\+loadGeneration;[\s\S]*?failedFileKey = ''/,
+  'refresh must clear the transient selected-file failure guard');
+assert.match(diff, /diffLastFile\?\.\[`\$\{projectId\}:\$\{sessionId\}:\$\{tabIdx\(\)\}:\$\{diffMode\}`\][\s\S]*?diffLastFile\?\.\[`\$\{sessionId\}:/,
+  'persisted diff selection must prefer the project-aware key and retain a legacy fallback');
+assert.match(browser, /const targetKey = browseKey;[\s\S]*?targetKey !== browseKey/,
+  'selected browser files must use the same project-aware identity as the tree');
+assert.match(preview, /const targetKey = sessionId \? `\$\{projectId\}\\x1f\$\{sessionId\}`[\s\S]*?projectId === get\(activeProjectId\)/,
+  'live preview responses must be isolated by project as well as session id');
 assert.match(diff, /cacheKey = selectedPath[\s\S]*?`\$\{currentDiffKey\}:\$\{loadedRoot\}:/);
 assert.match(diff, /function handleModeChange[\s\S]*?fileCache = \{\}/);
 assert.match(diff, /windowIdx !== tabIdx\(\)/, 'late file/list responses must be target-checked');

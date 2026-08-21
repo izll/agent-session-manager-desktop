@@ -139,20 +139,31 @@ func (c *controlModeStream) deliverKeys() {
 				}
 				break
 			}
-			c.sendKeys(p)
+			if err := c.sendKeys(p); err != nil {
+				log.Printf("[control] %v", err)
+				// Write already acknowledged this queued batch to the websocket
+				// pump, so there is no synchronous caller left to receive the
+				// failure. Mark the stream closed immediately, then finish Close
+				// outside this bgWG member: calling Close here would wait for the
+				// current delivery goroutine and deadlock itself.
+				if !c.closedFlag.Swap(true) {
+					go func() { _ = c.Close() }()
+				}
+				return
+			}
 		}
 	}
 }
 
 // sendKeys delivers one batch to the pane.
-func (c *controlModeStream) sendKeys(p []byte) {
+func (c *controlModeStream) sendKeys(p []byte) error {
 	c.writeMu.Lock()
 	defer c.writeMu.Unlock()
 	// Close sets this before waiting for writeMu. Therefore a delivery that was
 	// queued earlier but acquires the mutex after Close began cannot send into a
 	// pane the user has already detached from.
 	if c.closedFlag.Load() {
-		return
+		return nil
 	}
 	target := c.pane
 	if target == "" {
@@ -162,7 +173,7 @@ func (c *controlModeStream) sendKeys(p []byte) {
 	// name, so a payload containing CR splits around it (see keystrokeCommands).
 	for _, args := range keystrokeCommands(target, p) {
 		if c.closedFlag.Load() {
-			return
+			return nil
 		}
 		// Bounded: a send-keys that never returns would block every later
 		// keystroke behind it — a terminal that accepts focus and clicks while
@@ -171,15 +182,11 @@ func (c *controlModeStream) sendKeys(p []byte) {
 		out, err := cmd.CombinedOutput()
 		cancel()
 		if err != nil {
-			// Logged unconditionally, not behind --debug: input vanishing with
-			// no trace is exactly the failure that took days to find once, and
-			// the caller can no longer see this error — Write returns as soon
-			// as the batch is queued.
-			log.Printf("[control] send-keys failed for %s: %v (%s)",
+			return fmt.Errorf("send-keys failed for %s: %v (%s)",
 				target, err, strings.TrimSpace(string(out)))
-			return
 		}
 	}
+	return nil
 }
 
 // Close shuts the client down in the order the protocol expects: closing stdin

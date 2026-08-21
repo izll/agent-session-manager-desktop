@@ -39,6 +39,19 @@ type closeCountingTerminalStream struct {
 	closes atomic.Int32
 }
 
+type failingTerminalStream struct {
+	closes atomic.Int32
+}
+
+func (s *failingTerminalStream) Read([]byte) (int, error) { return 0, io.EOF }
+func (s *failingTerminalStream) Write([]byte) (int, error) {
+	return 0, errors.New("injected terminal write failure")
+}
+func (s *failingTerminalStream) Close() error {
+	s.closes.Add(1)
+	return nil
+}
+
 type blockingCloseTerminalStream struct {
 	started chan struct{}
 	release chan struct{}
@@ -126,6 +139,45 @@ func TestInputWriteErrorClosesTerminalTransportExactlyOnce(t *testing.T) {
 	}
 	if tc.handleInputWriteError(nil) {
 		t.Fatal("nil input write error was treated as a failure")
+	}
+}
+
+func TestDirectTerminalInputFailureClosesConnection(t *testing.T) {
+	tests := []struct {
+		name  string
+		write func(*TerminalServer) error
+	}{
+		{
+			name: "dictation",
+			write: func(ts *TerminalServer) error {
+				return ts.WriteToTerminal("session", 2, "hello")
+			},
+		},
+		{
+			name: "backspace",
+			write: func(ts *TerminalServer) error {
+				return ts.SendBackspace("session", 2, 1)
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			stream := &failingTerminalStream{}
+			tc := &termConn{ptmx: stream, done: make(chan struct{})}
+			ts := &TerminalServer{conns: map[string]*termConn{"session-2": tc}}
+
+			if err := test.write(ts); err == nil {
+				t.Fatal("direct terminal write unexpectedly succeeded")
+			}
+			select {
+			case <-tc.done:
+			default:
+				t.Fatal("direct terminal write failure left the connection alive")
+			}
+			if got := stream.closes.Load(); got != 1 {
+				t.Fatalf("terminal stream close count = %d, want 1", got)
+			}
+		})
 	}
 }
 

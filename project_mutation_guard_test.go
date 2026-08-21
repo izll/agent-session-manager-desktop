@@ -82,6 +82,56 @@ func TestProjectMutationsAreSerialized(t *testing.T) {
 	}
 }
 
+func TestSelectProjectCancelsReadersBeforeWaitingForProjectWriteLock(t *testing.T) {
+	storage := guardedTestStorage(t)
+	next, err := storage.AddProject("next")
+	if err != nil {
+		t.Fatal(err)
+	}
+	app := &App{storage: storage, projectLocked: true}
+	releaseReader, err := app.beginProjectReadWithSideEffects()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	drainStarted := make(chan struct{})
+	allowDrain := make(chan struct{})
+	originalDrain := projectSwitchDrainTaskMasters
+	projectSwitchDrainTaskMasters = func() {
+		close(drainStarted)
+		<-allowDrain
+		releaseReader()
+	}
+	t.Cleanup(func() { projectSwitchDrainTaskMasters = originalDrain })
+
+	switched := make(chan error, 1)
+	go func() { switched <- app.SelectProject(next.ID) }()
+	select {
+	case <-drainStarted:
+	case <-time.After(time.Second):
+		close(allowDrain)
+		t.Fatal("project switch waited for the read lock before starting provider cancellation")
+	}
+	if release, err := app.beginProjectReadWithSideEffects(); err == nil {
+		release()
+		close(allowDrain)
+		t.Fatal("a new provider operation entered after project switch intent")
+	} else if !strings.Contains(err.Error(), "project switch") {
+		close(allowDrain)
+		t.Fatalf("new provider operation error = %v, want project-switch refusal", err)
+	}
+	close(allowDrain)
+	select {
+	case err := <-switched:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("project switch did not finish after provider cancellation")
+	}
+	storage.UnlockProject()
+}
+
 func TestSetTabFontSizeRejectsStaleProjectTarget(t *testing.T) {
 	storage := guardedTestStorage(t)
 	inst := &session.Instance{
@@ -208,6 +258,84 @@ func TestTaskMasterProviderReadRejectsStaleProjectTarget(t *testing.T) {
 	if len(taskMasterStarts) != 0 || len(taskMasterCache) != 0 {
 		t.Fatalf("stale provider read started a process: starts=%d cache=%d", len(taskMasterStarts), len(taskMasterCache))
 	}
+}
+
+func TestLegacyPTYRejectsActiveProjectMismatch(t *testing.T) {
+	storage := guardedTestStorage(t)
+	stream := &closeCountingTerminalStream{}
+	app := NewApp()
+	app.storage = storage
+	app.projectLocked = true
+	app.ptys["same-session-0"] = &ptySession{
+		ptmx: stream, session: &session.Instance{ID: "same-session"},
+		windowID: 0, projectID: "old-project",
+	}
+
+	if err := app.SendInput("same-session-0", "do not send", ""); err == nil || !strings.Contains(err.Error(), "ptyProjectChanged") {
+		t.Fatalf("stale PTY input error = %v, want project mismatch", err)
+	}
+	if err := app.ResizeTerminal("same-session-0", 120, 40, ""); err == nil || !strings.Contains(err.Error(), "ptyProjectChanged") {
+		t.Fatalf("stale PTY resize error = %v, want project mismatch", err)
+	}
+}
+
+func TestLegacyPTYLateReaderCannotDetachReplacement(t *testing.T) {
+	app := NewApp()
+	oldStream := &closeCountingTerminalStream{}
+	replacement := &closeCountingTerminalStream{}
+	app.ptys["same-session-0"] = &ptySession{ptmx: replacement, projectID: "new-project"}
+
+	if err := app.detachSessionIfCurrent("same-session-0", oldStream); err != nil {
+		t.Fatal(err)
+	}
+	app.ptyMu.RLock()
+	current := app.ptys["same-session-0"]
+	app.ptyMu.RUnlock()
+	if current == nil || current.ptmx != replacement {
+		t.Fatal("late reader detached the replacement PTY")
+	}
+	if replacement.closes.Load() != 0 {
+		t.Fatal("late reader closed the replacement PTY")
+	}
+}
+
+func TestLegacyPTYDrainBlocksProjectSwitchUntilClosed(t *testing.T) {
+	storage := guardedTestStorage(t)
+	project, err := storage.AddProject("next")
+	if err != nil {
+		t.Fatal(err)
+	}
+	stream := &blockingCloseTerminalStream{started: make(chan struct{}), release: make(chan struct{})}
+	app := NewApp()
+	app.storage = storage
+	app.projectLocked = true
+	app.ptys["old-0"] = &ptySession{ptmx: stream, projectID: ""}
+
+	switched := make(chan error, 1)
+	go func() { switched <- app.SelectProject(project.ID) }()
+	select {
+	case <-stream.started:
+	case <-time.After(time.Second):
+		t.Fatal("project switch did not start legacy PTY cleanup")
+	}
+	if active := storage.GetActiveProjectID(); active != "" {
+		t.Fatalf("active project changed before legacy PTY closed: %q", active)
+	}
+	select {
+	case err := <-switched:
+		t.Fatalf("project switch returned before PTY close: %v", err)
+	case <-time.After(30 * time.Millisecond):
+	}
+	close(stream.release)
+	select {
+	case err := <-switched:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("project switch remained blocked after legacy PTY closed")
+	}
+	storage.UnlockProject()
 }
 
 func TestSelectProjectRejectsUnknownIDAndRestoresPreviousOwnership(t *testing.T) {

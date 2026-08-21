@@ -111,6 +111,31 @@ func TestCIRegeneratesBindingsThroughPinnedWailsBuild(t *testing.T) {
 	}
 }
 
+func TestReleaseFailsOnRegeneratedBindingDrift(t *testing.T) {
+	raw, err := os.ReadFile(".github/workflows/release.yml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	workflow := string(raw)
+	linuxStart := strings.Index(workflow, "  release:\n")
+	macStart := strings.Index(workflow, "  release-macos:\n")
+	if linuxStart < 0 || macStart < 0 || linuxStart >= macStart {
+		t.Fatal("Linux release job is missing or out of order")
+	}
+	linuxJob := workflow[linuxStart:macStart]
+	buildAt := strings.Index(linuxJob, "wails build -tags webkit2_41 -clean")
+	checkAt := strings.LastIndex(linuxJob, "npm run check --prefix frontend")
+	normalizeAt := strings.Index(linuxJob, "perl -0pi -e")
+	modeAt := strings.Index(linuxJob, "find frontend/wailsjs -type f -exec chmod 0644 {} +")
+	diffAt := strings.Index(linuxJob, "git diff --exit-code -- frontend/wailsjs")
+	if buildAt < 0 || checkAt < buildAt {
+		t.Fatal("release must type-check after Wails regenerates the bindings")
+	}
+	if normalizeAt < checkAt || modeAt < normalizeAt || diffAt < modeAt {
+		t.Fatal("release must normalize and fail on binding drift after regenerated-binding type-checking")
+	}
+}
+
 func TestWindowsCrossBuildVerifiesDownloadedNativeDependency(t *testing.T) {
 	raw, err := os.ReadFile("scripts/build-windows.sh")
 	if err != nil {

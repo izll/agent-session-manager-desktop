@@ -47,6 +47,15 @@ const place = (scrollTop, currentHunk = 2, markedHunk = 2) => ({ scrollTop, curr
   assert.equal(recallPlace('s2', 'shared.ts', 'whole').scrollTop, 900);
 }
 
+// Session ids are only unique inside a project. Even when both projects point
+// at the same canonical checkout, their UI history must remain independent.
+{
+  rememberPlace('same', 'shared.ts', 'whole', place(111), 0, '/repo', 'project-a');
+  rememberPlace('same', 'shared.ts', 'whole', place(999), 0, '/repo', 'project-b');
+  assert.equal(recallPlace('same', 'shared.ts', 'whole', 0, '/repo', 'project-a').scrollTop, 111);
+  assert.equal(recallPlace('same', 'shared.ts', 'whole', 0, '/repo', 'project-b').scrollTop, 999);
+}
+
 // The three renderers lay the same file out differently — the columns pair
 // lines up, the whole-file view holds every line, the hunk list only the
 // changes — so an offset from one means nothing in another.

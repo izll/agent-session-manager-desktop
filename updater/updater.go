@@ -459,11 +459,15 @@ func readChecksum(url, filename string) (string, error) {
 }
 
 func readChecksumContext(ctx context.Context, url, filename string) (string, error) {
+	return readChecksumContextWithClient(ctx, downloadClient, url, filename)
+}
+
+func readChecksumContextWithClient(ctx context.Context, client *http.Client, url, filename string) (string, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url+".sha256", nil)
 	if err != nil {
 		return "", fmt.Errorf("checksum request failed: %w", err)
 	}
-	resp, err := downloadClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("checksum download failed: %w", err)
 	}

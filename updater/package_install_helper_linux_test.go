@@ -8,6 +8,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -82,10 +84,125 @@ func TestPrivilegedPackageHelperRejectsUnconstrainedReleaseBeforeNetwork(t *test
 	}
 }
 
+func TestOfficialReleaseURLPolicyIsFailClosed(t *testing.T) {
+	allowed := []string{
+		"https://github.com/asmgr/releases/download/v1.2.3/checksum",
+		"https://objects.githubusercontent.com/github-production-release-asset/checksum",
+		"https://release-assets.githubusercontent.com/github-production-release-asset/checksum",
+		"https://github-releases.githubusercontent.com/checksum",
+		"https://github.com:443/asmgr/checksum",
+	}
+	for _, rawURL := range allowed {
+		u, err := url.Parse(rawURL)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := validateOfficialReleaseURL(u); err != nil {
+			t.Errorf("validateOfficialReleaseURL(%q) = %v", rawURL, err)
+		}
+	}
+
+	rejected := []string{
+		"http://github.com/asmgr/checksum",
+		"https://github.com.evil.example/asmgr/checksum",
+		"https://raw.githubusercontent.com/attacker/checksum",
+		"https://user:password@github.com/asmgr/checksum",
+		"https://github.com:444/asmgr/checksum",
+	}
+	for _, rawURL := range rejected {
+		u, err := url.Parse(rawURL)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := validateOfficialReleaseURL(u); err == nil {
+			t.Errorf("validateOfficialReleaseURL(%q) accepted an untrusted URL", rawURL)
+		}
+	}
+}
+
+func TestOfficialReleaseRedirectPolicyIsFailClosed(t *testing.T) {
+	client, err := newOfficialReleaseClient()
+	if err != nil {
+		t.Fatal(err)
+	}
+	allowed, _ := http.NewRequest(http.MethodGet, "https://release-assets.githubusercontent.com/asset", nil)
+	if err := client.CheckRedirect(allowed, []*http.Request{{}}); err != nil {
+		t.Fatalf("allowed release redirect was rejected: %v", err)
+	}
+	untrusted, _ := http.NewRequest(http.MethodGet, "https://example.com/asset", nil)
+	if err := client.CheckRedirect(untrusted, []*http.Request{{}}); err == nil {
+		t.Fatal("release redirect escaped the trusted host set")
+	}
+	tooMany := make([]*http.Request, 5)
+	if err := client.CheckRedirect(allowed, tooMany); err == nil {
+		t.Fatal("release client accepted too many redirects")
+	}
+}
+
+func TestOfficialReleaseClientIgnoresCallerCAOverrides(t *testing.T) {
+	attackerDir := t.TempDir()
+	t.Setenv("SSL_CERT_FILE", filepath.Join(attackerDir, "attacker.pem"))
+	t.Setenv("SSL_CERT_DIR", filepath.Join(attackerDir, "attacker-certs"))
+	client, err := newOfficialReleaseClient()
+	if err != nil {
+		t.Fatal(err)
+	}
+	transport, ok := client.Transport.(*http.Transport)
+	if !ok || transport.TLSClientConfig == nil || transport.TLSClientConfig.RootCAs == nil {
+		t.Fatalf("official client does not use an explicit system CA pool: %#v", client.Transport)
+	}
+	if len(transport.TLSClientConfig.RootCAs.Subjects()) == 0 {
+		t.Fatal("caller CA overrides replaced the official client's system CA pool")
+	}
+	if got := os.Getenv("SSL_CERT_FILE"); got != filepath.Join(attackerDir, "attacker.pem") {
+		t.Fatalf("SSL_CERT_FILE was not restored: %q", got)
+	}
+	if got := os.Getenv("SSL_CERT_DIR"); got != filepath.Join(attackerDir, "attacker-certs") {
+		t.Fatalf("SSL_CERT_DIR was not restored: %q", got)
+	}
+}
+
 func TestPrivilegedPackageCommandInheritsOuterProcessGroup(t *testing.T) {
-	cmd := newPrivilegedPackageCommand("dpkg", "--version")
+	cmd := newPrivilegedPackageCommand(privilegedDpkgPath, "--version")
 	if cmd.SysProcAttr != nil {
 		t.Fatalf("privileged package command creates a detached process group: %#v", cmd.SysProcAttr)
+	}
+}
+
+func TestPrivilegedPackageManagerIgnoresCallerPath(t *testing.T) {
+	attackerBin := t.TempDir()
+	for _, name := range []string{"dpkg", "rpm"} {
+		if err := os.WriteFile(filepath.Join(attackerBin, name), []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("PATH", attackerBin)
+	t.Setenv("RPM_CONFIGDIR", attackerBin)
+	t.Setenv("DPKG_ADMINDIR", attackerBin)
+
+	tests := []struct {
+		kind string
+		want string
+	}{
+		{kind: "deb", want: privilegedDpkgPath},
+		{kind: "rpm", want: privilegedRPMPath},
+	}
+	for _, test := range tests {
+		name, args, err := privilegedPackageManagerCommand(test.kind, "/var/tmp/update")
+		if err != nil {
+			t.Fatal(err)
+		}
+		cmd := newPrivilegedPackageCommand(name, args...)
+		if cmd.Path != test.want {
+			t.Fatalf("%s helper resolved package manager through caller PATH: got %q, want %q", test.kind, cmd.Path, test.want)
+		}
+		wantEnv := []string{"HOME=/root", "LANG=C", "LC_ALL=C", "PATH=" + privilegedExecPath}
+		if !reflect.DeepEqual(cmd.Env, wantEnv) {
+			t.Fatalf("%s helper inherited caller-controlled environment: %#v", test.kind, cmd.Env)
+		}
+	}
+	if _, _, err := privilegedPackageManagerCommand("script", "/var/tmp/update"); err == nil {
+		t.Fatal("unsupported package kind selected a privileged command")
 	}
 }
 

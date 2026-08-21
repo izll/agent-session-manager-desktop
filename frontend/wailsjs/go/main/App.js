@@ -126,8 +126,8 @@ export function EmptyTrash(arg1) {
   return window['go']['main']['App']['EmptyTrash'](arg1);
 }
 
-export function ExportSessions(arg1) {
-  return window['go']['main']['App']['ExportSessions'](arg1);
+export function ExportSessions(arg1, arg2) {
+  return window['go']['main']['App']['ExportSessions'](arg1, arg2);
 }
 
 export function FetchOnlineSchemes(arg1) {

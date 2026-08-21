@@ -523,6 +523,18 @@ test('group bulk actions cannot be started twice while the first session is pend
   await expect.poll(() => page.evaluate(() => window.groupProjectFixture.stopCalls())).toEqual(['session-1', 'session-2']);
 });
 
+test('group bulk actions report partial backend failure after continuing the batch', async ({ page }) => {
+  await gotoGroupProjectFixture(page);
+  await page.evaluate(() => window.groupProjectFixture.rejectSecondStop());
+  await page.locator('.group-header').click({ button: 'right' });
+  await page.getByRole('button', { name: /Stop all|Összes leállítása/ }).click();
+  await expect.poll(() => page.evaluate(() => window.groupProjectFixture.stopCalls())).toEqual(['session-1']);
+  await page.evaluate(() => window.groupProjectFixture.resolveFirstStop());
+
+  await expect.poll(() => page.evaluate(() => window.groupProjectFixture.stopCalls())).toEqual(['session-1', 'session-2']);
+  await expect(page.getByRole('alert')).toContainText('Second: Error: fixture stop refused');
+});
+
 test('a native session drag payload cannot mutate a replacement project', async ({ page }) => {
   await gotoGroupProjectFixture(page);
   await page.evaluate(() => window.groupProjectFixture.staleSessionDrop());
@@ -804,4 +816,25 @@ test('closing GitHistory cancels an active document drag listener', async ({ pag
   await expect(dialog).toBeVisible();
   const reopenedWidth = (await dialog.boundingBox()).width;
   expect(Math.abs(reopenedWidth - initialWidth)).toBeLessThanOrEqual(2);
+});
+
+test('project-aware FileBrowser and Diff guards accept their current file responses', async ({ page }) => {
+  await page.goto('/tests/browser/project-content-fixture.html');
+  // This fixture is the first browser entry that compiles both CodeMirror's
+  // language graph and the full diff renderer. A measured cold transform is
+  // ~17 s on the test host; wait for its explicit post-mount signal rather
+  // than treating compilation as a missing component.
+  await expect(page.locator('body')).toHaveAttribute('data-fixture-ready', 'true', { timeout: 30_000 });
+
+  const browser = page.locator('#browser');
+  await browser.locator('.file-row', { hasText: 'browser.txt' }).click();
+  await expect.poll(() => page.evaluate(() => window.projectContentFixture.browserReads())).toBe(1);
+  await expect(browser.locator('.cm-content')).toContainText('browser content marker');
+
+  const diff = page.locator('#diff');
+  await expect.poll(() => page.evaluate(() => window.projectContentFixture.diffReads())).toBe(1);
+  await expect(diff.locator('.revert-error')).toContainText('fixture diff read refused');
+  await diff.locator('.refresh-btn').click();
+  await expect.poll(() => page.evaluate(() => window.projectContentFixture.diffReads())).toBe(2);
+  await expect(diff.locator('.diff-lines')).toContainText('diff content marker');
 });

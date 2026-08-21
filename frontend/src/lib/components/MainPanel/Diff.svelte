@@ -78,6 +78,7 @@
   // The selected file's hunks, fetched on demand and kept for as long as the
   // list is unchanged — reopening a file already looked at should be instant.
   let fileCache: Record<string, session.DiffFile | null> = {};
+  let failedFileKey = '';
   let loadingFile = false;
   let loading = false;
   let error = '';
@@ -266,6 +267,10 @@
     const windowIdx = tabIdx();
     const mode = diffMode;
     const generation = ++loadGeneration;
+    // A manual refresh or the normal poll is also the retry path for a
+    // transient selected-file failure. Keep the failed key out of fileCache so
+    // a backend refusal cannot poison this file for the component's lifetime.
+    failedFileKey = '';
     const requestedKey = `${projectId}:${sessionId || ''}:${windowIdx}:${mode}`;
     if (!sessionId) {
       diff = null;
@@ -337,7 +342,7 @@
       //
       // The places are forgotten with it: the files changed underneath, so the
       // cached contents are stale, and so is any offset into them.
-      if (noteListKey(sessionId, nextKey, windowIdx, mode, root)) {
+      if (noteListKey(sessionId, nextKey, windowIdx, mode, root, projectId)) {
         resetCopyState();
         fileCache = {};
       }
@@ -379,7 +384,7 @@
     const sessionId = get(selectedSessionId);
     if (!sessionId) return;
     const current = get(settings).diffLastFile ?? {};
-    const target = `${sessionId}:${tabIdx()}:${diffMode}`;
+    const target = `${get(activeProjectId)}:${sessionId}:${tabIdx()}:${diffMode}`;
     if (current[target] === path) return;
     void saveSettings({ diffLastFile: { ...current, [target]: path } });
   }
@@ -396,8 +401,13 @@
 
     // Back to what was open before the tab switch, if it is still in the diff.
     const sessionId = get(selectedSessionId);
+    const projectId = get(activeProjectId);
     const remembered = sessionId
-      ? get(settings).diffLastFile?.[`${sessionId}:${tabIdx()}:${diffMode}`] ??
+      ? get(settings).diffLastFile?.[`${projectId}:${sessionId}:${tabIdx()}:${diffMode}`] ??
+        // Backward-compatible read of settings written before project identity
+        // became part of this UI-state key. The next selection writes the new
+        // form, so legacy state migrates without a destructive settings reset.
+        get(settings).diffLastFile?.[`${sessionId}:${tabIdx()}:${diffMode}`] ??
         get(settings).diffLastFile?.[sessionId]
       : null;
     selectedPath = remembered && files.some(f => f.path === remembered)
@@ -827,14 +837,17 @@
     : '';
   $: selectedFile = cacheKey ? fileCache[cacheKey] ?? null : null;
   // Fetch the hunks the first time a file is opened.
-  $: if (selectedPath && cacheKey && !(cacheKey in fileCache)) void loadSelectedFile(selectedPath);
+  $: if (selectedPath && cacheKey && !(cacheKey in fileCache) && cacheKey !== failedFileKey) void loadSelectedFile(selectedPath);
 
   async function loadSelectedFile(path: string) {
     const sessionId = get(selectedSessionId);
     const windowIdx = tabIdx();
     const mode = diffMode;
     const whole = wholeFileView;
-    const targetKey = `${sessionId || ''}:${windowIdx}:${mode}`;
+    // Keep the same full identity used by loadDiff/currentDiffKey. Recreating
+    // the pre-project session:window:mode key here causes the early guard below
+    // to reject every selected-file load.
+    const targetKey = currentDiffKey;
     const expectedRoot = loadedRoot;
     const key = `${targetKey}:${expectedRoot}:${whole ? 'whole' : 'hunks'}:${path}`;
     if (!sessionId || !expectedRoot || loadedDiffKey !== targetKey) return;
@@ -848,11 +861,14 @@
       if (path !== selectedPath || mode !== diffMode || whole !== wholeFileView ||
           sessionId !== get(selectedSessionId) || windowIdx !== tabIdx() || expectedRoot !== loadedRoot) return;
       fileCache = { ...fileCache, [key]: loaded };
+      failedFileKey = '';
+      error = '';
     } catch (e) {
       if (path !== selectedPath || targetKey !== currentDiffKey || whole !== wholeFileView || expectedRoot !== loadedRoot) return;
-      // Cached as null: a file that fails to load should not be retried on
-      // every reactive pass.
-      fileCache = { ...fileCache, [key]: null };
+      // Suppress the reactive immediate retry, but do not put a permanent null
+      // in the cache. The next refresh/poll clears failedFileKey and tries the
+      // same selected file again.
+      failedFileKey = key;
       error = String(e);
     } finally {
       if (path === selectedPath && targetKey === currentDiffKey && whole === wholeFileView && expectedRoot === loadedRoot) loadingFile = false;
@@ -1371,7 +1387,7 @@
     const fresh = lastOffsetFor === offsetOwner(selectedPath, viewMode);
     const scrollTop = currentScrollOffset() || (fresh ? lastOffset : 0);
 
-    rememberPlace(sessionId, selectedPath, viewMode, { scrollTop, currentHunk, markedHunk }, tabIdx(), loadedRoot);
+    rememberPlace(sessionId, selectedPath, viewMode, { scrollTop, currentHunk, markedHunk }, tabIdx(), loadedRoot, get(activeProjectId));
   }
 
   /**
@@ -1383,7 +1399,7 @@
   async function restorePlace(path: string, mode: string) {
     const sessionId = get(selectedSessionId);
     if (!sessionId) return;
-    const place = recallPlace(sessionId, path, mode, tabIdx(), loadedRoot);
+    const place = recallPlace(sessionId, path, mode, tabIdx(), loadedRoot, get(activeProjectId));
     if (!place) return;
 
     currentHunk = place.currentHunk;

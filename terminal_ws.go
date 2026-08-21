@@ -477,6 +477,7 @@ func (ts *TerminalServer) WriteToTerminal(sessionID string, windowIdx int, data 
 	}
 
 	_, err := tc.writeInput([]byte(data))
+	tc.handleInputWriteError(err)
 	return err
 }
 
@@ -502,6 +503,7 @@ func (ts *TerminalServer) SendBackspace(sessionID string, windowIdx int, count i
 	}
 
 	_, err := tc.writeInput(bs)
+	tc.handleInputWriteError(err)
 	return err
 }
 

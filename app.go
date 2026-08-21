@@ -34,8 +34,11 @@ type App struct {
 	portableImportIDs   []string
 	ptys                map[string]*ptySession
 	ptyMu               sync.RWMutex
+	ptyDrainDone        chan struct{}
 	projectMu           sync.RWMutex
 	projectMutationMu   sync.Mutex
+	projectGateMu       sync.Mutex
+	projectSwitching    bool
 	termServer          *TerminalServer
 	dictation           *DictationService
 	activityStats       *ActivityStatsRecorder
@@ -88,11 +91,12 @@ func (t *eventThrottle) allow(now time.Time) bool {
 type ptySession struct {
 	// ptmx is a PTY master on Unix and a pipe pair on Windows — see
 	// session.StartTerminal. Only Read/Write/Close are used on it.
-	ptmx     session.TerminalStream
-	cmd      *exec.Cmd
-	session  *session.Instance
-	windowID int
-	cancel   context.CancelFunc
+	ptmx      session.TerminalStream
+	cmd       *exec.Cmd
+	session   *session.Instance
+	windowID  int
+	projectID string
+	cancel    context.CancelFunc
 }
 
 // NewApp creates a new App application struct
@@ -349,6 +353,11 @@ func (a *App) shutdown(ctx context.Context) {
 	if a.dictation != nil {
 		a.dictation.Shutdown()
 	}
+	legacyPTYCtx, cancelLegacyPTY := context.WithTimeout(context.Background(), 10*time.Second)
+	if err := a.closeAllLegacyPTYs(legacyPTYCtx); err != nil {
+		log.Printf("[terminal] legacy PTY shutdown did not complete cleanly: %v", err)
+	}
+	cancelLegacyPTY()
 	if a.termServer != nil {
 		stopCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		if err := a.termServer.Stop(stopCtx); err != nil {
@@ -389,22 +398,6 @@ func (a *App) shutdown(ctx context.Context) {
 			log.Printf("[statistics] failed to flush: %v", err)
 		}
 	}
-
-	// Close all PTY sessions
-	a.ptyMu.Lock()
-	for id, ps := range a.ptys {
-		if ps.cancel != nil {
-			ps.cancel()
-		}
-		if ps.ptmx != nil {
-			ps.ptmx.Close()
-		}
-		if ps.cmd != nil && ps.cmd.Process != nil {
-			_ = ps.cmd.Wait()
-		}
-		delete(a.ptys, id)
-	}
-	a.ptyMu.Unlock()
 
 }
 
@@ -483,6 +476,13 @@ func drainTaskMasters(keepStartsBlocked bool) {
 	for _, tm := range taskMasters {
 		_ = tm.Stop()
 	}
+}
+
+// projectSwitchDrainTaskMasters is a seam for verifying the project-switch
+// lock ordering. It must run before projectMu is taken for writing so it can
+// cancel provider calls that still own a project read lock.
+var projectSwitchDrainTaskMasters = func() {
+	drainTaskMasters(false)
 }
 
 var cleanupTmuxList = func(ctx context.Context) ([]byte, error) {
@@ -668,17 +668,35 @@ func (a *App) GetProjects() ([]ProjectInfo, error) {
 // already open elsewhere, the switch still happens (so the user can view it)
 // but this instance stays unlocked and terminal attaches remain disabled.
 func (a *App) SelectProject(id string) error {
-	a.projectMu.Lock()
-	defer a.projectMu.Unlock()
+	if err := a.beginProjectSwitch(); err != nil {
+		return err
+	}
+	defer a.endProjectSwitch()
+
 	oldID := a.storage.GetActiveProjectID()
 	if id == oldID {
 		return nil
 	}
+	// Provider RPCs intentionally retain a project read lock for their whole
+	// external side effect. Cancel and reap them before waiting for the writer
+	// lock; doing this after Lock would make project switching wait for the very
+	// RPCs it is meant to interrupt. The switch-intent gate above prevents a new
+	// provider call from entering after this drain.
+	projectSwitchDrainTaskMasters()
+
+	a.projectMu.Lock()
+	defer a.projectMu.Unlock()
 	// Once the active project changes, its running sessions are no longer part
 	// of sidebar polling. Capture their Codex IDs while we still own that
 	// project's lock and before switching storage to the new project.
 	if a.projectLocked {
 		a.persistActiveProjectCodexResumeIDs("project switch")
+	}
+	legacyDrainCtx, cancelLegacyDrain := context.WithTimeout(a.lifecycleContext(), 10*time.Second)
+	legacyDrainErr := a.closeAllLegacyPTYs(legacyDrainCtx)
+	cancelLegacyDrain()
+	if legacyDrainErr != nil {
+		return fmt.Errorf("cannot close legacy terminals for the current project: %w", legacyDrainErr)
 	}
 	// Terminal connections are owned by the same per-project lock as their
 	// mirror sessions. Drain them before LockProjectForUse releases that lock;
@@ -693,11 +711,6 @@ func (a *App) SelectProject(id string) error {
 			return fmt.Errorf("cannot close terminals for the current project: %w", drainErr)
 		}
 	}
-	// MCP clients are scoped to working directories, but the cache is global.
-	// Reap the old project's providers while the project write lock excludes
-	// every TaskMaster call; otherwise visiting projects over a long app run
-	// leaves one npx process, response readers and pipes alive per path.
-	drainTaskMasters(false)
 	clearProjectScopedCaches()
 	// Close the attach/mutation gate before changing the Storage's active
 	// project. Otherwise a connection can observe the old true value but load a
@@ -795,7 +808,10 @@ func (a *App) beginProjectMutation() (func(), error) {
 	// load/change/save sequence or a tmux side effect followed by persistence.
 	// Letting two such operations overlap loses fields from the older snapshot.
 	a.projectMutationMu.Lock()
-	a.projectMu.RLock()
+	if err := a.lockProjectOperationRead(); err != nil {
+		a.projectMutationMu.Unlock()
+		return nil, err
+	}
 	if !a.projectLocked {
 		a.projectMu.RUnlock()
 		a.projectMutationMu.Unlock()
@@ -805,6 +821,37 @@ func (a *App) beginProjectMutation() (func(), error) {
 		a.projectMu.RUnlock()
 		a.projectMutationMu.Unlock()
 	}, nil
+}
+
+// lockProjectOperationRead closes the small gap between checking the switch
+// intent and acquiring projectMu. Holding projectGateMu through RLock means a
+// switch either observes this operation as an existing reader and cancels it,
+// or announces its intent first and the operation is refused.
+func (a *App) lockProjectOperationRead() error {
+	a.projectGateMu.Lock()
+	if a.projectSwitching {
+		a.projectGateMu.Unlock()
+		return fmt.Errorf("project switch in progress")
+	}
+	a.projectMu.RLock()
+	a.projectGateMu.Unlock()
+	return nil
+}
+
+func (a *App) beginProjectSwitch() error {
+	a.projectGateMu.Lock()
+	defer a.projectGateMu.Unlock()
+	if a.projectSwitching {
+		return fmt.Errorf("project switch already in progress")
+	}
+	a.projectSwitching = true
+	return nil
+}
+
+func (a *App) endProjectSwitch() {
+	a.projectGateMu.Lock()
+	a.projectSwitching = false
+	a.projectGateMu.Unlock()
 }
 
 // beginExpectedProjectMutation additionally pins a frontend-captured project
@@ -824,7 +871,9 @@ func (a *App) beginExpectedProjectMutation(expectedProjectID string) (func(), er
 }
 
 func (a *App) beginTerminalAttach(expectedProjectID string) (func(), bool) {
-	a.projectMu.RLock()
+	if err := a.lockProjectOperationRead(); err != nil {
+		return nil, false
+	}
 	if !a.projectLocked || a.storage == nil || a.storage.GetActiveProjectID() != expectedProjectID {
 		a.projectMu.RUnlock()
 		return nil, false
@@ -873,7 +922,9 @@ func (a *App) stopTmuxMaintenance() {
 }
 
 func (a *App) beginProjectReadWithSideEffects() (func(), error) {
-	a.projectMu.RLock()
+	if err := a.lockProjectOperationRead(); err != nil {
+		return nil, err
+	}
 	if !a.projectLocked {
 		a.projectMu.RUnlock()
 		return nil, fmt.Errorf("project is read-only in this application instance")
@@ -2798,8 +2849,11 @@ func (a *App) AttachSession(id string, windowIdx int, expectedProjectID string) 
 	// process is registered prevents two concurrent attaches from leaking one
 	// of two tmux children under the same map key.
 	a.ptyMu.Lock()
-	if _, exists := a.ptys[ptyID]; exists {
+	if existing, exists := a.ptys[ptyID]; exists {
 		a.ptyMu.Unlock()
+		if existing.projectID != expectedProjectID {
+			return "", fmt.Errorf("error.ptyProjectChanged")
+		}
 		return ptyID, nil
 	}
 
@@ -2818,11 +2872,12 @@ func (a *App) AttachSession(id string, windowIdx int, expectedProjectID string) 
 	}
 
 	ps := &ptySession{
-		ptmx:     ptmx,
-		cmd:      cmd,
-		session:  inst,
-		windowID: windowIdx,
-		cancel:   cancel,
+		ptmx:      ptmx,
+		cmd:       cmd,
+		session:   inst,
+		windowID:  windowIdx,
+		projectID: expectedProjectID,
+		cancel:    cancel,
 	}
 
 	a.ptys[ptyID] = ps
@@ -2853,18 +2908,90 @@ func (a *App) readPTY(ptyID string, ptmx session.TerminalStream) {
 		}
 	}
 	// Cleanup
-	a.DetachSession(ptyID)
+	a.detachSessionIfCurrent(ptyID, ptmx)
+}
+
+// closeAllLegacyPTYs drains the older Wails PTY transport before active
+// project ownership moves. These processes are not managed by TerminalServer,
+// so closing only WebSocket connections left an attach to project A alive
+// after project B became active. Snapshot-and-delete also makes readPTY's
+// eventual DetachSession idempotent.
+func (a *App) closeAllLegacyPTYs(ctx context.Context) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	for {
+		a.ptyMu.Lock()
+		if pending := a.ptyDrainDone; pending != nil {
+			a.ptyMu.Unlock()
+			select {
+			case <-pending:
+				continue
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		}
+		connections := make([]*ptySession, 0, len(a.ptys))
+		for id, ps := range a.ptys {
+			connections = append(connections, ps)
+			delete(a.ptys, id)
+		}
+		if len(connections) == 0 {
+			a.ptyMu.Unlock()
+			return nil
+		}
+		done := make(chan struct{})
+		a.ptyDrainDone = done
+		a.ptyMu.Unlock()
+
+		go func() {
+			for _, ps := range connections {
+				if ps.cancel != nil {
+					ps.cancel()
+				}
+				if ps.ptmx != nil {
+					_ = ps.ptmx.Close()
+				}
+				if ps.cmd != nil && ps.cmd.Process != nil {
+					_ = ps.cmd.Wait()
+				}
+			}
+			a.ptyMu.Lock()
+			if a.ptyDrainDone == done {
+				a.ptyDrainDone = nil
+			}
+			close(done)
+			a.ptyMu.Unlock()
+		}()
+
+		select {
+		case <-done:
+			return nil
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
 }
 
 // DetachSession detaches from a session terminal
 func (a *App) DetachSession(ptyID string) error {
-	a.ptyMu.Lock()
-	defer a.ptyMu.Unlock()
+	return a.detachSessionIfCurrent(ptyID, nil)
+}
 
+// detachSessionIfCurrent lets a reader clean up only the stream it was
+// created for. A project switch removes legacy PTYs from the map before their
+// reader goroutines necessarily observe Close; without this identity check a
+// late reader from project A could detach a newly registered, same-ID PTY from
+// project B.
+func (a *App) detachSessionIfCurrent(ptyID string, expected session.TerminalStream) error {
+	a.ptyMu.Lock()
 	ps, exists := a.ptys[ptyID]
-	if !exists {
+	if !exists || (expected != nil && ps.ptmx != expected) {
+		a.ptyMu.Unlock()
 		return nil
 	}
+	delete(a.ptys, ptyID)
+	a.ptyMu.Unlock()
 
 	if ps.cancel != nil {
 		ps.cancel()
@@ -2876,7 +3003,6 @@ func (a *App) DetachSession(ptyID string) error {
 	if ps.cmd != nil && ps.cmd.Process != nil {
 		go func(c *exec.Cmd) { _ = c.Wait() }(ps.cmd)
 	}
-	delete(a.ptys, ptyID)
 
 	runtime.EventsEmit(a.ctx, "pty:closed:"+ptyID, nil)
 	return nil
@@ -2895,6 +3021,9 @@ func (a *App) SendInput(ptyID string, data string, expectedProjectID string) err
 
 	if !exists || ps.ptmx == nil {
 		return fmt.Errorf("error.ptyNotFound")
+	}
+	if ps.projectID != expectedProjectID {
+		return fmt.Errorf("error.ptyProjectChanged")
 	}
 
 	_, err = ps.ptmx.Write([]byte(data))
@@ -2919,6 +3048,9 @@ func (a *App) ResizeTerminal(ptyID string, cols, rows int, expectedProjectID str
 
 	if !exists {
 		return fmt.Errorf("error.ptyNotFound")
+	}
+	if ps.projectID != expectedProjectID {
+		return fmt.Errorf("error.ptyProjectChanged")
 	}
 
 	// Resize the stream itself: the PTY ioctl on Unix, and on Windows the

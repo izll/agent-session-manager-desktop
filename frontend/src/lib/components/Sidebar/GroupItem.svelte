@@ -60,6 +60,7 @@
   let renameInput: HTMLInputElement;
   let renameTarget: { projectId: string; id: string; name: string } | null = null;
   let bulkBusy = false;
+  let bulkError = '';
   let bulkRevision = 0;
   let uiProjectId = '';
   let hasUIProject = false;
@@ -78,6 +79,7 @@
     showColorDialog = false;
     bulkRevision++;
     bulkBusy = false;
+    bulkError = '';
     isDragging = false;
     isDragOver = false;
     isGroupDragOver = false;
@@ -94,16 +96,22 @@
     showContextMenu = false;
     if (bulkBusy) return;
     bulkBusy = true;
+    bulkError = '';
     const target = { projectId: get(activeProjectId), groupId: group.id, revision: ++bulkRevision };
     const targets = [...sessions];
+    const failures: string[] = [];
     try {
       for (const s of targets) {
         if (target.revision !== bulkRevision || target.projectId !== get(activeProjectId) || target.groupId !== group.id) break;
         if (s.status === 'running') continue;
-        try { await startSession(s.id, s.resumeSessionId || undefined); } catch { /* keep going */ }
+        try { await startSession(s.id, s.resumeSessionId || undefined); }
+        catch (e) { failures.push(`${s.name}: ${String(e)}`); }
       }
     } finally {
-      if (target.revision === bulkRevision) bulkBusy = false;
+      if (target.revision === bulkRevision && target.projectId === get(activeProjectId) && target.groupId === group.id) {
+        bulkError = failures.join('\n');
+        bulkBusy = false;
+      }
     }
   }
 
@@ -114,14 +122,20 @@
     if (!window.confirm($t('group.stopAllConfirm', { n: running.length, name: group.name }))) return;
     if (bulkBusy) return;
     bulkBusy = true;
+    bulkError = '';
     const target = { projectId: get(activeProjectId), groupId: group.id, revision: ++bulkRevision };
+    const failures: string[] = [];
     try {
       for (const s of running) {
         if (target.revision !== bulkRevision || target.projectId !== get(activeProjectId) || target.groupId !== group.id) break;
-        try { await stopSession(s.id); } catch { /* keep going */ }
+        try { await stopSession(s.id); }
+        catch (e) { failures.push(`${s.name}: ${String(e)}`); }
       }
     } finally {
-      if (target.revision === bulkRevision) bulkBusy = false;
+      if (target.revision === bulkRevision && target.projectId === get(activeProjectId) && target.groupId === group.id) {
+        bulkError = failures.join('\n');
+        bulkBusy = false;
+      }
     }
   }
 
@@ -383,6 +397,13 @@
     </span>
   </button>
 
+  {#if bulkError}
+    <div class="group-bulk-error" role="alert">
+      <span>{bulkError}</span>
+      <button on:click={() => bulkError = ''} aria-label={$t('common.close')}>×</button>
+    </div>
+  {/if}
+
   {#if showContextMenu}
     <div
       class="context-menu"
@@ -498,6 +519,30 @@
   .group-header:hover {
     background: rgba(var(--accent-rgb), 0.08);
     border-color: rgba(var(--accent-rgb), 0.15);
+  }
+
+  .group-bulk-error {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 8px;
+    margin: 4px 4px 0 12px;
+    padding: 6px 8px;
+    border: 1px solid rgba(248, 113, 113, 0.35);
+    border-radius: 6px;
+    color: #fca5a5;
+    background: rgba(127, 29, 29, 0.25);
+    font-size: 11px;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+
+  .group-bulk-error button {
+    flex: 0 0 auto;
+    border: 0;
+    background: none;
+    color: inherit;
+    cursor: pointer;
   }
 
   .group-header.drag-over {

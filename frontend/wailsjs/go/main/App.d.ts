@@ -65,7 +65,7 @@ export function DiscoverLocalSchemes():Promise<Array<main.ImportedScheme>>;
 
 export function EmptyTrash(arg1:string):Promise<void>;
 
-export function ExportSessions(arg1:Array<string>):Promise<string>;
+export function ExportSessions(arg1:Array<string>,arg2:string):Promise<string>;
 
 export function FetchOnlineSchemes(arg1:Array<string>):Promise<Array<main.ImportedScheme>>;
 

@@ -120,6 +120,12 @@ assert.match(terminalPool, /catch \(err\) \{[\s\S]*?await detachFromSession\(ter
   'an attach that fails after opening its socket must roll back the transport before disposing xterm');
 assert.match(terminal, /pool\.show\(projectId, newSessionId[\s\S]*?get\(activeProjectId\) !== projectId/,
   'a completed terminal attach must be ignored after a project switch');
+assert.match(terminal, /const projectChanged = !!lastProjectId[\s\S]*?await pool\.destroyAll\(\)[\s\S]*?projectChanged \|\| sessionChanged/,
+  'same-id project switches must detach the old pool before attaching the replacement project');
+assert.match(terminal, /handlePoolChange\(targetSessionId, targetWindowIdx, currentSessionStatus, \$activeProjectId\)/,
+  'project identity must be a reactive terminal target dependency');
+assert.match(tabBar, /loadWindowsForSession\(\$selectedSessionId, currentSessionStatus, visible, \$activeProjectId\)/,
+  'same-id project switches must reload the tab list');
 assert.match(tabBar, /if \(!bufferText\.trim\(\) \|\| bufferBusy\) return/);
 assert.match(tabBar, /const widx = get\(selectedWindowIdx\)[\s\S]*?const projectId = get\(activeProjectId\)[\s\S]*?SendPromptToWindow\(sid, widx, submitted, projectId\)/);
 assert.match(tabBar, /const queued = previous[\s\S]*?SetBufferText\(submitted\)/,

@@ -308,6 +308,7 @@
 
   let windows: session.WindowInfo[] = [];
   let lastSessionId: string | null = null;
+  let lastProjectId = '';
   let pollTimeout: ReturnType<typeof setTimeout> | null = null;
   let windowsLoadGeneration = 0;
   let showNewTabDialog = false;
@@ -777,8 +778,24 @@
   }
 
   // Load windows when session changes or status changes
-  async function loadWindowsForSession(sessionId: string | null, _status?: string, panelVisible = true) {
+  async function loadWindowsForSession(
+    sessionId: string | null,
+    _status?: string,
+    panelVisible = true,
+    projectId = get(activeProjectId),
+  ) {
     const generation = ++windowsLoadGeneration;
+    if (projectId !== get(activeProjectId)) return;
+    const projectChanged = !!lastProjectId && lastProjectId !== projectId;
+    if (projectChanged) {
+      // Do not leave A's tab names visible during B's initial 300 ms tmux
+      // settle delay when both projects reuse the same session id.
+      windows = [];
+      if (pollTimeout) {
+        clearTimeout(pollTimeout);
+        pollTimeout = null;
+      }
+    }
     if (!panelVisible) {
       stopPolling();
       return;
@@ -828,20 +845,21 @@
       } else {
         windows = [mainTab];
       }
+      lastProjectId = projectId;
       lastSessionId = sessionId;
       return;
     }
 
     // Small delay when session just became running to let tmux windows initialize
-    const wasRunningBefore = lastSessionId === sessionId && windows.length > 0;
+    const wasRunningBefore = lastProjectId === projectId && lastSessionId === sessionId && windows.length > 0;
     if (!wasRunningBefore) {
       await new Promise(r => setTimeout(r, 300));
-      if (generation !== windowsLoadGeneration || sessionId !== get(selectedSessionId)) return;
+      if (generation !== windowsLoadGeneration || projectId !== get(activeProjectId) || sessionId !== get(selectedSessionId)) return;
     }
 
     try {
       const list = await App.GetWindowList(sessionId);
-      if (generation !== windowsLoadGeneration || sessionId !== get(selectedSessionId)) return;
+      if (generation !== windowsLoadGeneration || projectId !== get(activeProjectId) || sessionId !== get(selectedSessionId)) return;
       windows = sortWindowsByTabOrder(list || [], sess.tabOrder);
 
       // Start polling if not already
@@ -849,11 +867,12 @@
         startPolling();
       }
     } catch (e) {
-      if (generation !== windowsLoadGeneration || sessionId !== get(selectedSessionId)) return;
+      if (generation !== windowsLoadGeneration || projectId !== get(activeProjectId) || sessionId !== get(selectedSessionId)) return;
       console.error('Failed to load windows:', e);
       windows = [];
     }
 
+    lastProjectId = projectId;
     lastSessionId = sessionId;
   }
 
@@ -863,7 +882,7 @@
       pollTimeout = null;
       const sessionId = get(selectedSessionId);
       if (sessionId && visible) {
-        await loadWindowsForSession(sessionId, undefined, visible);
+        await loadWindowsForSession(sessionId, undefined, visible, get(activeProjectId));
       }
       if (get(selectedSessionId) && visible) startPolling();
     }, 5000); // 5 seconds to reduce CPU usage
@@ -879,7 +898,7 @@
 
   // React to session changes AND status changes
   $: currentSessionStatus = $sessions.find(s => s.id === $selectedSessionId)?.status;
-  $: loadWindowsForSession($selectedSessionId, currentSessionStatus, visible);
+  $: loadWindowsForSession($selectedSessionId, currentSessionStatus, visible, $activeProjectId);
 
   // Per-tab activity (busy/waiting/idle) for the current session, so each tab
   // header shows its own status dot — you can see at a glance WHICH tab is
@@ -1347,7 +1366,7 @@
       // Force refresh window list immediately, but never install the result
       // over a session selected while the discard prompt or deletion awaited.
       if ($selectedSessionId === target.sessionId) {
-        await loadWindowsForSession(target.sessionId, currentSessionStatus, visible);
+        await loadWindowsForSession(target.sessionId, currentSessionStatus, visible, target.projectId);
       }
     } catch (e) {
       errorMessage = `Failed to delete tab: ${e}`;

@@ -6,9 +6,13 @@ import (
 	"bufio"
 	"context"
 	"crypto/sha256"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/hex"
 	"fmt"
 	"io"
+	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -22,6 +26,12 @@ import (
 )
 
 const privilegedPackageInstallFlag = "--asmgr-verified-package-install"
+
+const (
+	privilegedDpkgPath = "/usr/bin/dpkg"
+	privilegedRPMPath  = "/usr/bin/rpm"
+	privilegedExecPath = "/usr/sbin:/usr/bin:/sbin:/bin"
+)
 
 const (
 	privilegedPackageReady = "ASMGR_PACKAGE_STAGED_AND_VERIFIED_V1"
@@ -73,7 +83,7 @@ func HandlePrivilegedPackageInstall(args []string) (handled bool, exitCode int) 
 	// the tiny checksum sidecar as root and constrain its release/asset name from
 	// compiled constants before opening the user-writable package path.
 	verifyCtx, cancel := context.WithTimeout(context.Background(), CheckTimeout)
-	err := verifyOfficialPackageChecksum(verifyCtx, args[5], args[4], args[3], readChecksumContext)
+	err := verifyOfficialPackageChecksum(verifyCtx, args[5], args[4], args[3], readOfficialChecksumContext)
 	cancel()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "package publisher verification failed: %v\n", err)
@@ -100,17 +110,8 @@ func HandlePrivilegedPackageInstall(args []string) (handled bool, exitCode int) 
 		return true, 1
 	}
 
-	var name string
-	var installArgs []string
-	switch args[4] {
-	case "deb":
-		name = "dpkg"
-		// --force-confold keeps any config the user edited.
-		installArgs = []string{"-i", "--force-confold", staged}
-	case "rpm":
-		name = "rpm"
-		installArgs = []string{"-U", "--replacepkgs", staged}
-	default:
+	name, installArgs, err := privilegedPackageManagerCommand(args[4], staged)
+	if err != nil {
 		fmt.Fprintln(os.Stderr, "unsupported package type")
 		return true, 2
 	}
@@ -127,6 +128,109 @@ func HandlePrivilegedPackageInstall(args []string) (handled bool, exitCode int) 
 }
 
 type officialChecksumReader func(context.Context, string, string) (string, error)
+
+func privilegedPackageManagerCommand(packageKind, staged string) (string, []string, error) {
+	switch packageKind {
+	case "deb":
+		// Use a fixed system path across the privilege boundary. Relying on PATH
+		// would let a customised PolicyKit environment select an unprivileged
+		// caller's replacement binary. --force-confold keeps user-edited config.
+		return privilegedDpkgPath, []string{"-i", "--force-confold", staged}, nil
+	case "rpm":
+		return privilegedRPMPath, []string{"-U", "--replacepkgs", staged}, nil
+	default:
+		return "", nil, fmt.Errorf("unsupported package type %q", packageKind)
+	}
+}
+
+var officialRootPoolMu sync.Mutex
+
+var officialReleaseHosts = map[string]bool{
+	"github.com":                            true,
+	"objects.githubusercontent.com":         true,
+	"release-assets.githubusercontent.com":  true,
+	"github-releases.githubusercontent.com": true,
+}
+
+func validateOfficialReleaseURL(u *url.URL) error {
+	if u == nil || !strings.EqualFold(u.Scheme, "https") || u.User != nil {
+		return fmt.Errorf("official release URL must use HTTPS without credentials")
+	}
+	host := strings.ToLower(u.Hostname())
+	if !officialReleaseHosts[host] || (u.Port() != "" && u.Port() != "443") {
+		return fmt.Errorf("untrusted official release host %q", u.Host)
+	}
+	return nil
+}
+
+func officialSystemCertPool() (*x509.CertPool, error) {
+	// crypto/x509 deliberately honours these environment variables on Unix.
+	// This process crossed a privilege boundary, so an unprivileged caller must
+	// not be able to replace the root helper's CA set even under a permissive or
+	// customised PolicyKit environment policy.
+	officialRootPoolMu.Lock()
+	defer officialRootPoolMu.Unlock()
+	type savedEnv struct {
+		value string
+		set   bool
+	}
+	saved := make(map[string]savedEnv, 2)
+	for _, name := range []string{"SSL_CERT_FILE", "SSL_CERT_DIR"} {
+		value, set := os.LookupEnv(name)
+		saved[name] = savedEnv{value: value, set: set}
+		if err := os.Unsetenv(name); err != nil {
+			return nil, err
+		}
+	}
+	defer func() {
+		for name, state := range saved {
+			if state.set {
+				_ = os.Setenv(name, state.value)
+			} else {
+				_ = os.Unsetenv(name)
+			}
+		}
+	}()
+	return x509.SystemCertPool()
+}
+
+func newOfficialReleaseClient() (*http.Client, error) {
+	roots, err := officialSystemCertPool()
+	if err != nil {
+		return nil, fmt.Errorf("cannot load system TLS roots: %w", err)
+	}
+	baseTransport, ok := http.DefaultTransport.(*http.Transport)
+	if !ok {
+		return nil, fmt.Errorf("unsupported default HTTP transport %T", http.DefaultTransport)
+	}
+	transport := baseTransport.Clone()
+	transport.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots}
+	return &http.Client{
+		Transport: transport,
+		Timeout:   CheckTimeout,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if len(via) >= 5 {
+				return fmt.Errorf("too many official release redirects")
+			}
+			return validateOfficialReleaseURL(req.URL)
+		},
+	}, nil
+}
+
+func readOfficialChecksumContext(ctx context.Context, rawURL, filename string) (string, error) {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return "", err
+	}
+	if err := validateOfficialReleaseURL(u); err != nil {
+		return "", err
+	}
+	client, err := newOfficialReleaseClient()
+	if err != nil {
+		return "", err
+	}
+	return readChecksumContextWithClient(ctx, client, rawURL, filename)
+}
 
 func verifyOfficialPackageChecksum(ctx context.Context, version, packageKind, suppliedChecksum string, read officialChecksumReader) error {
 	if err := validateReleaseVersion(version); err != nil {
@@ -281,7 +385,19 @@ func runPrivilegedPackageCommand(name string, args ...string) ([]byte, error) {
 }
 
 func newPrivilegedPackageCommand(name string, args ...string) *exec.Cmd {
-	return exec.Command(name, args...)
+	cmd := exec.Command(name, args...)
+	// Package managers invoke maintainer scripts and those scripts invoke system
+	// tools. An absolute dpkg/rpm path is therefore not enough: inheriting the
+	// pkexec caller's PATH (or rpm/dpkg configuration variables) would still let
+	// an unprivileged directory select a child executable across the root
+	// boundary. Supply a small deterministic environment instead.
+	cmd.Env = []string{
+		"HOME=/root",
+		"LANG=C",
+		"LC_ALL=C",
+		"PATH=" + privilegedExecPath,
+	}
+	return cmd
 }
 
 // runPrivilegedPackageInstall starts pkexec while the update is still in its

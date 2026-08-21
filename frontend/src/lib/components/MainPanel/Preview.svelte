@@ -3,6 +3,7 @@
   import { Terminal } from '@xterm/xterm';
   import { FitAddon } from '@xterm/addon-fit';
   import { selectedSessionId } from '../../stores/sessions';
+  import { activeProjectId } from '../../stores/projects';
   import { get } from 'svelte/store';
   import * as App from '../../../../wailsjs/go/main/App';
   import { t } from '../../i18n';
@@ -13,7 +14,16 @@
   let pollTimeout: ReturnType<typeof setTimeout> | null = null;
   let previewGeneration = 0;
   let lastContent = '';
-  let lastSessionId = '';
+  let lastTargetKey = '';
+  const pendingTimeouts = new Set<ReturnType<typeof setTimeout>>();
+
+  function later(fn: () => void, delay: number) {
+    const timeout = setTimeout(() => {
+      pendingTimeouts.delete(timeout);
+      fn();
+    }, delay);
+    pendingTimeouts.add(timeout);
+  }
 
   export let activity: 'idle' | 'busy' | 'waiting' = 'idle';
 
@@ -40,7 +50,7 @@
     terminal.open(containerEl);
 
     // Delay fit to ensure container is rendered
-    setTimeout(() => {
+    later(() => {
       fitAddon?.fit();
     }, 100);
 
@@ -65,25 +75,32 @@
 
   onDestroy(() => {
     stopPolling();
+    for (const timeout of pendingTimeouts) clearTimeout(timeout);
+    pendingTimeouts.clear();
     terminal?.dispose();
+    terminal = null;
+    fitAddon = null;
   });
 
-  // Handle session change
-  function handleSessionChange(sessionId: string | null) {
-    if (sessionId && sessionId !== lastSessionId) {
+  // Handle project/session change. Session ids are project-local, so comparing
+  // only the id can leave A's terminal preview visible indefinitely in B when
+  // both projects contain the same id.
+  function handleSessionChange(projectId: string, sessionId: string | null) {
+    const targetKey = sessionId ? `${projectId}\x1f${sessionId}` : '';
+    if (targetKey !== lastTargetKey) {
       previewGeneration++;
-      lastSessionId = sessionId;
+      lastTargetKey = targetKey;
       lastContent = '';
       // Reset and refit terminal on session change
       if (terminal) {
         terminal.clear();
-        setTimeout(() => fitAddon?.fit(), 50);
+        later(() => fitAddon?.fit(), 50);
       }
-      void updatePreview(true);
+      if (sessionId) void updatePreview(true);
     }
   }
 
-  $: handleSessionChange($selectedSessionId);
+  $: handleSessionChange($activeProjectId, $selectedSessionId);
 
   function startPolling() {
     if (!pollTimeout) void updatePreview(true);
@@ -98,13 +115,15 @@
   }
 
   async function updatePreview(scheduleNext = false) {
+    const projectId = get(activeProjectId);
     const sessionId = get(selectedSessionId);
     if (!sessionId || !terminal) return;
     const generation = ++previewGeneration;
 
     try {
       const data = await App.GetPreview(sessionId, 100);
-      if (generation === previewGeneration && sessionId === get(selectedSessionId) && data && terminal) {
+      if (generation === previewGeneration && projectId === get(activeProjectId) &&
+          sessionId === get(selectedSessionId) && data && terminal) {
         // Only update terminal if content actually changed
         if (data.content !== lastContent) {
           lastContent = data.content;
@@ -114,11 +133,11 @@
         activity = data.activity as 'idle' | 'busy' | 'waiting';
       }
     } catch (e) {
-      if (generation === previewGeneration && sessionId === get(selectedSessionId)) {
+      if (generation === previewGeneration && projectId === get(activeProjectId) && sessionId === get(selectedSessionId)) {
         console.error('Preview update failed:', e);
       }
     } finally {
-      if (scheduleNext && generation === previewGeneration && terminal) {
+      if (scheduleNext && generation === previewGeneration && projectId === get(activeProjectId) && terminal) {
         pollTimeout = setTimeout(() => {
           pollTimeout = null;
           void updatePreview(true);
