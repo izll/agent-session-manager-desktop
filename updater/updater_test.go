@@ -826,6 +826,70 @@ func TestInstallTransactionRollsBackEveryEarlierFile(t *testing.T) {
 	}
 }
 
+func TestSingleFileInstallNeverMovesTheOldExecutableAwayFirst(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, BinaryName)
+	staged := filepath.Join(dir, ".new-"+BinaryName)
+	if err := os.WriteFile(target, []byte("old"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(staged, []byte("new"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	renameCalls := 0
+	rename := func(old, new string) error {
+		renameCalls++
+		if old != staged || new != target {
+			t.Fatalf("atomic install rename = %q -> %q, want staged directly over target", old, new)
+		}
+		if _, err := os.Stat(target); err != nil {
+			t.Fatalf("installed executable disappeared before replacement: %v", err)
+		}
+		return os.Rename(old, new)
+	}
+	if err := installSingleFileAtomically(stagedInstall{target: target, staged: staged}, rename); err != nil {
+		t.Fatal(err)
+	}
+	if renameCalls != 1 {
+		t.Fatalf("atomic install used %d renames, want one", renameCalls)
+	}
+	if got, err := os.ReadFile(target); err != nil || string(got) != "new" {
+		t.Fatalf("installed executable = %q, %v", got, err)
+	}
+}
+
+func TestBundleRenamePublishesReplacementBeforeRetiringOldName(t *testing.T) {
+	dir := t.TempDir()
+	bundle := filepath.Join(dir, "Old.app")
+	staged := filepath.Join(dir, ".stage", "New.app")
+	target := filepath.Join(dir, "New.app")
+	if err := os.MkdirAll(bundle, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(staged, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	var calls [][2]string
+	rename := func(old, new string) error {
+		calls = append(calls, [2]string{old, new})
+		if len(calls) == 1 {
+			if old != staged || new != target {
+				t.Fatalf("first bundle rename = %q -> %q, want replacement publication", old, new)
+			}
+			if _, err := os.Stat(bundle); err != nil {
+				t.Fatalf("old bundle disappeared before replacement publication: %v", err)
+			}
+		}
+		return os.Rename(old, new)
+	}
+	if err := swapBundleWithOps(bundle, staged, target, rename, os.RemoveAll); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(target); err != nil {
+		t.Fatalf("renamed bundle was not installed: %v", err)
+	}
+}
+
 func TestInstallTransactionPreservesBackupWhenRollbackFails(t *testing.T) {
 	withTempHome(t)
 	dir := t.TempDir()

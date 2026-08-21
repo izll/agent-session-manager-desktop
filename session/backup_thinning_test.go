@@ -137,6 +137,19 @@ func TestBackupsFromTheFutureAreKept(t *testing.T) {
 	}
 }
 
+func TestBackupCeilingEvictsFutureBeforeCurrentBackup(t *testing.T) {
+	now := time.Date(2026, time.August, 22, 12, 0, 0, 0, time.UTC)
+	times := make([]time.Time, 0, backupHardCeiling+2)
+	times = append(times, now.Add(-time.Minute))
+	for index := 0; index < backupHardCeiling+1; index++ {
+		times = append(times, now.Add(time.Duration(index+1)*24*time.Hour))
+	}
+	remove := backupCeilingRemovalIndex(times[len(times)-1], len(times), now)
+	if remove == 0 || !times[remove].After(now) {
+		t.Fatalf("ceiling selected index %d (%v), want a future entry instead of current", remove, times[remove])
+	}
+}
+
 // The timestamp is read from the filename, which is how the times above are
 // obtained in the first place. A name that does not parse must not panic or
 // claim a plausible date.

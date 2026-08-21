@@ -328,6 +328,7 @@
   let extraArgsGeneration = 0;
   let showErrorToast = false;
   let errorMessage = '';
+  let errorToastRevision = 0;
 
   function handleCommandNewTab() {
     const session = get(selectedSession);
@@ -634,6 +635,7 @@
       cleanupNotesField();
       console.error('[Dictation] Toggle failed:', e);
       errorMessage = `Dictation error: ${e}`;
+      errorToastRevision++;
       showErrorToast = true;
     }
   }
@@ -683,6 +685,7 @@
           lastGoText = '';
         } catch {
           errorMessage = `Dictation buffer cleanup failed: ${clearError}`;
+          errorToastRevision++;
           showErrorToast = true;
         }
       }
@@ -1320,6 +1323,7 @@
       if (target === extraArgsTarget && target.generation === extraArgsGeneration) {
         console.error('Failed to save extra args:', e);
         errorMessage = `Failed to save extra args: ${e}`;
+        errorToastRevision++;
         showErrorToast = true;
       }
     } finally {
@@ -1370,6 +1374,7 @@
       }
     } catch (e) {
       errorMessage = `Failed to delete tab: ${e}`;
+      errorToastRevision++;
       showErrorToast = true;
     }
   }
@@ -1501,6 +1506,7 @@
       } catch (e) {
         console.error('Restart tab failed:', e);
         errorMessage = `Failed to restart tab: ${e}`;
+        errorToastRevision++;
         showErrorToast = true;
       }
     } else if ($selectedSession.status === 'running') {
@@ -1513,6 +1519,7 @@
       } catch (e) {
         console.error('Start failed:', e);
         errorMessage = `Failed to start session: ${e}`;
+        errorToastRevision++;
         showErrorToast = true;
       }
     }
@@ -1535,6 +1542,7 @@
       focusTerminal();
     } catch (e) {
       errorMessage = `Failed to refresh: ${e}`;
+      errorToastRevision++;
       showErrorToast = true;
     }
   }
@@ -1552,6 +1560,7 @@
       await deleteSession(target.sessionId);
     } catch (e) {
       errorMessage = `Failed to delete session: ${e}`;
+      errorToastRevision++;
       showErrorToast = true;
     }
   }
@@ -2120,7 +2129,7 @@
   </div>
 {/if}
 
-<Toast bind:show={showErrorToast} message={errorMessage} variant="error" duration={9000} />
+<Toast bind:show={showErrorToast} message={errorMessage} revision={errorToastRevision} variant="error" duration={9000} />
 
 <style>
   .tab-bar {

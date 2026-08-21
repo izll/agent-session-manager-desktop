@@ -135,10 +135,12 @@
   let showQuickJump = false;
   let showSessionError = false;
   let sessionErrorMessage = '';
+  let sessionErrorRevision = 0;
   // Cleared after showing, so the same failure can be reported again if it
   // recurs — a store holding the last error forever would show it only once.
   $: if ($sessionError) {
     sessionErrorMessage = $sessionError;
+    sessionErrorRevision++;
     showSessionError = true;
     sessionError.set(null);
   }
@@ -146,6 +148,7 @@
   // saves in particular, which used to reload the UI without a word.
   $: if ($appError) {
     sessionErrorMessage = $appError;
+    sessionErrorRevision++;
     showSessionError = true;
     appError.set(null);
   }
@@ -836,6 +839,7 @@
   // is what someone with no microphone sees.
   let dictationErrorMessage = '';
   let showDictationError = false;
+  let dictationErrorRevision = 0;
 
   async function initDictation() {
     try {
@@ -859,6 +863,7 @@
         dictationErrorMessage = message.startsWith('dictation.')
           ? (title.startsWith('dictation.') ? error.message : title)
           : message;
+        dictationErrorRevision++;
         showDictationError = true;
       });
     } catch (e) {
@@ -1711,13 +1716,13 @@
   />
 </main>
 
-<Toast bind:show={showDictationError} message={dictationErrorMessage} variant="error" duration={9000} />
+<Toast bind:show={showDictationError} message={dictationErrorMessage} revision={dictationErrorRevision} variant="error" duration={9000} />
 
 <!-- Every failure the sessions store records.
      It had 26 writers and no reader, so anything failing outside a component
      with its own toast — deleting from the sidebar, renaming, reordering,
      switching project — failed in silence. -->
-<Toast bind:show={showSessionError} message={sessionErrorMessage} variant="error" duration={9000} />
+<Toast bind:show={showSessionError} message={sessionErrorMessage} revision={sessionErrorRevision} variant="error" duration={9000} />
 
 <style>
 .lock-banner {

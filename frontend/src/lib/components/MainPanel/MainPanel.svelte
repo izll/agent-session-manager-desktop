@@ -519,6 +519,7 @@
   // cd-ed since — opens what the user is actually looking at.
   let folderErrorMessage = '';
   let showFolderError = false;
+  let folderErrorRevision = 0;
   async function handleOpenFolder() {
     if (!currentTabPath) return;
     try {
@@ -527,6 +528,7 @@
       const key = String(e);
       const translated = $t(key);
       folderErrorMessage = translated === key ? String(e) : translated;
+      folderErrorRevision++;
       showFolderError = true;
     }
   }
@@ -871,7 +873,7 @@
   {/if}
 </div>
 
-<Toast bind:show={showFolderError} message={folderErrorMessage} variant="error" duration={9000} />
+<Toast bind:show={showFolderError} message={folderErrorMessage} revision={folderErrorRevision} variant="error" duration={9000} />
 
 <ForkDialog bind:show={showForkDialog} />
 

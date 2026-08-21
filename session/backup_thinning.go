@@ -21,9 +21,9 @@ var backupBands = []struct {
 	// One backup is kept per bucket of this size. Zero keeps all of them.
 	bucket time.Duration
 }{
-	{within: time.Hour, bucket: 0},                 // the last hour: everything
-	{within: 24 * time.Hour, bucket: time.Hour},    // today: one an hour
-	{within: 14 * 24 * time.Hour, bucket: 24 * time.Hour}, // a fortnight: one a day
+	{within: time.Hour, bucket: 0},                            // the last hour: everything
+	{within: 24 * time.Hour, bucket: time.Hour},               // today: one an hour
+	{within: 14 * 24 * time.Hour, bucket: 24 * time.Hour},     // a fortnight: one a day
 	{within: 90 * 24 * time.Hour, bucket: 7 * 24 * time.Hour}, // a quarter: one a week
 }
 
@@ -58,7 +58,8 @@ func backupsToKeep(times []time.Time, now time.Time) map[int]bool {
 		age := now.Sub(times[index])
 		if age < 0 {
 			// A clock change can date a backup in the future; keeping it is
-			// safer than deleting something whose age cannot be judged.
+			// safer than deleting something whose age cannot be judged. The hard
+			// ceiling preferentially thins far-future entries if space is needed.
 			keep[index] = true
 			continue
 		}
@@ -98,4 +99,18 @@ func backupsToKeep(times []time.Time, now time.Time) map[int]bool {
 	}
 
 	return keep
+}
+
+// backupCeilingRemovalIndex chooses what to drop after retention still leaves
+// too many managed entries. Ordinarily that is the oldest (index zero). If a
+// clock jump or corrupt but well-formed names put entries in the future, drop
+// the farthest-future one first; otherwise those names consume the ceiling and
+// can evict the valid present-day backup that triggered pruning.
+//
+// newest is the last timestamp in an ascending filename/timestamp list.
+func backupCeilingRemovalIndex(newest time.Time, count int, now time.Time) int {
+	if count > 0 && newest.After(now) {
+		return count - 1
+	}
+	return 0
 }

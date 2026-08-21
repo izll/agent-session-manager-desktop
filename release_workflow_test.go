@@ -147,6 +147,36 @@ func TestReleaseFailsOnRegeneratedBindingDrift(t *testing.T) {
 	}
 }
 
+func TestNativeReleaseJobsExecutePlatformTestsBeforePackaging(t *testing.T) {
+	raw, err := os.ReadFile(".github/workflows/release.yml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	workflow := string(raw)
+	macStart := strings.Index(workflow, "  release-macos:\n")
+	windowsStart := strings.Index(workflow, "  release-windows:\n")
+	publishStart := strings.Index(workflow, "  publish-release:\n")
+	if macStart < 0 || windowsStart < 0 || publishStart < 0 || macStart >= windowsStart || windowsStart >= publishStart {
+		t.Fatal("native release jobs are missing or out of order")
+	}
+	jobs := []struct {
+		name        string
+		body        string
+		packageGate string
+	}{
+		{name: "macOS", body: workflow[macStart:windowsStart], packageGate: "- name: Package .tar.gz"},
+		{name: "Windows", body: workflow[windowsStart:publishStart], packageGate: "- name: Bundle UCRT64 runtime DLLs"},
+	}
+	for _, job := range jobs {
+		testAt := strings.Index(job.body, "go test ./...")
+		vetAt := strings.Index(job.body, "go vet ./...")
+		packageAt := strings.Index(job.body, job.packageGate)
+		if testAt < 0 || vetAt < testAt || packageAt < vetAt {
+			t.Errorf("%s release must run native Go test+vet before packaging", job.name)
+		}
+	}
+}
+
 func TestWindowsCrossBuildVerifiesDownloadedNativeDependency(t *testing.T) {
 	raw, err := os.ReadFile("scripts/build-windows.sh")
 	if err != nil {

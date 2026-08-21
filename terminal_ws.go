@@ -31,6 +31,8 @@ var upgrader = websocket.Upgrader{
 	CheckOrigin:     checkTerminalOrigin,
 }
 
+var terminalRandomRead = rand.Read
+
 // checkTerminalOrigin only permits the Wails webview itself. The webview
 // either sends no Origin header or one under the wails:// scheme / the
 // wails.localhost asset host. A real browser tab on any site sends an
@@ -512,10 +514,11 @@ func (ts *TerminalServer) SendBackspace(sessionID string, windowIdx int, count i
 // other local processes / visited web pages cannot guess or read it.
 func NewTerminalServer(storage *session.Storage, port int) *TerminalServer {
 	b := make([]byte, 32)
-	if _, err := rand.Read(b); err != nil {
-		// Extremely unlikely; fall back to a time-seeded value so we never
-		// run with an empty (always-accept) token.
-		b = []byte(fmt.Sprintf("fallback-%d", time.Now().UnixNano()))
+	if _, err := terminalRandomRead(b); err != nil {
+		// The token is the primary localhost WebSocket authentication boundary.
+		// A timestamp fallback is guessable, so leave it empty: Start refuses to
+		// open the listener and the ordinary startup error reaches the app log.
+		b = nil
 	}
 	lifecycle, cancel := context.WithCancel(context.Background())
 	return &TerminalServer{
@@ -543,6 +546,9 @@ func (ts *TerminalServer) AuthToken() string {
 // pane blank with no obvious cause. The actually-bound port is stored back
 // in ts.port so GetPort() (exposed to the frontend) returns the right value.
 func (ts *TerminalServer) Start() error {
+	if ts.authToken == "" {
+		return fmt.Errorf("terminal server: secure authentication token is unavailable")
+	}
 	const maxAttempts = 20
 	requested := ts.port
 	var ln net.Listener
@@ -729,6 +735,35 @@ func (ts *TerminalServer) beginHandler() (context.Context, func(), bool) {
 	}
 	ts.handlerWG.Add(1)
 	return ts.lifecycle, ts.handlerWG.Done, true
+}
+
+// registerConnection publishes a fully-started terminal and retires any prior
+// socket for the same tab. Native TerminalStream.Close can wait for a currently
+// running multiplexer command (notably psmux send-keys on Windows), so it must
+// never run while ts.mu is held: Stop and project switching need that mutex in
+// order to snapshot and signal every connection within their caller deadline.
+func (ts *TerminalServer) registerConnection(connID string, tc *termConn) (registered bool) {
+	ts.mu.Lock()
+	if ts.stopping {
+		ts.mu.Unlock()
+		return false
+	}
+	old := ts.conns[connID]
+	ts.conns[connID] = tc
+	// Output pump, its blocking terminal reader, and input/cleanup pump. Add all
+	// three before releasing the lifecycle mutex so Stop cannot begin Wait while
+	// a connection is still about to register one of its goroutines.
+	ts.connWG.Add(3)
+	ts.mu.Unlock()
+
+	if old != nil {
+		// closeTransport closes the WebSocket before the potentially blocking
+		// native stream, so the old pumps are signalled immediately. Run the rest
+		// asynchronously: they remain covered by connWG and project drains wait for
+		// them, but the server lifecycle mutex stays available to enforce deadlines.
+		go old.closeTransport()
+	}
+	return true
 }
 
 // handleTerminal handles WebSocket connections
@@ -1048,9 +1083,7 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 		done: make(chan struct{}),
 	}
 
-	ts.mu.Lock()
-	if ts.stopping {
-		ts.mu.Unlock()
+	if !ts.registerConnection(connID, tc) {
 		// Stop won before this attach reached registration. It cannot be put in
 		// the connection map now (Stop has already snapshotted it), so release it
 		// synchronously instead of leaving an untracked multiplexer child behind.
@@ -1064,16 +1097,6 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 		}
 		return
 	}
-	// Close existing connection if any
-	if old, exists := ts.conns[connID]; exists {
-		old.closeTransport()
-	}
-	ts.conns[connID] = tc
-	// Output pump, its blocking PTY reader, and input/cleanup pump. Add all
-	// three before releasing the lifecycle mutex so Stop cannot begin Wait while
-	// a connection is still about to register one of its goroutines.
-	ts.connWG.Add(3)
-	ts.mu.Unlock()
 	// Keep the project snapshot pinned through connection registration. If it
 	// were released after StartTerminal but before connWG.Add, SelectProject
 	// could snapshot an empty connection set, release the old project lock, and

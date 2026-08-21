@@ -6,18 +6,24 @@
    * should not reflow the page it happened on.
    */
   import { fly } from 'svelte/transition';
-  import { undoState, runUndo, dismissUndo } from '../../stores/undo';
+  import { undoState, runUndo, dismissUndo, type UndoAction } from '../../stores/undo';
   import { t } from '../../i18n';
 
-  let busy = false;
+  let busyAction: UndoAction | null = null;
+  let operationRevision = 0;
+  $: busy = busyAction !== null && $undoState.action === busyAction;
 
   async function undo() {
-    if (busy) return;
-    busy = true;
+    const action = $undoState.action;
+    if (!action || busyAction === action) return;
+    const revision = ++operationRevision;
+    busyAction = action;
     try {
       await runUndo();
     } finally {
-      busy = false;
+      // A newer undo can start while this one is still waiting. Its button
+      // and busy state belong to that newer action, not to this completion.
+      if (revision === operationRevision) busyAction = null;
     }
   }
 </script>

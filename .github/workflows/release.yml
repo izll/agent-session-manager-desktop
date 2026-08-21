@@ -306,6 +306,14 @@ jobs:
           find frontend/wailsjs -type f -exec chmod 0644 {} +
           git diff --exit-code -- frontend/wailsjs
 
+      # A tag push does not trigger the branch-only CI workflow. Building alone
+      # compiles Darwin files but does not execute their updater/process tests;
+      # gate the actual release job before signing and publishing native code.
+      - name: Test native macOS release code
+        run: |
+          go test ./...
+          go vet ./...
+
       - name: Bundle PortAudio runtime
         run: |
           APP="build/bin/asmgr-desktop.app"
@@ -530,6 +538,16 @@ jobs:
           node -e 'const fs=require("fs"),p="frontend/wailsjs/go/models.ts";let s=fs.readFileSync(p,"utf8");s=s.replace(/[ \t]+(?=\n)/g,"").replace(/\n+$/,"\n");fs.writeFileSync(p,s)'
           find frontend/wailsjs -type f -exec chmod 0644 {} +
           git diff --exit-code -- frontend/wailsjs
+
+      # Release tags are outside the ordinary branch CI trigger. Exercise the
+      # Windows-only psmux/process/update tests with the same UCRT CGO toolchain
+      # that produced the executable before any archive or installer is made.
+      - name: Test native Windows release code
+        env:
+          CGO_ENABLED: '1'
+        run: |
+          go test ./...
+          go vet ./...
 
       - name: Bundle UCRT64 runtime DLLs
         run: |

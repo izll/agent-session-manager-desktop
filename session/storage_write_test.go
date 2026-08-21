@@ -109,6 +109,37 @@ func TestStoreIsWrittenOwnerOnly(t *testing.T) {
 	}
 }
 
+func TestStorageHardensConfigDirectoryAndProjectCatalogPermissions(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	configDir := filepath.Join(home, ".config", "agent-session-manager-desktop")
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	storage, err := NewStorage()
+	if err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(configDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := info.Mode().Perm(); got != 0o700 {
+		t.Fatalf("upgraded config directory mode = %o, want 0700", got)
+	}
+	if _, err := storage.AddProject("private client project"); err != nil {
+		t.Fatal(err)
+	}
+	info, err = os.Stat(filepath.Join(configDir, "projects.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := info.Mode().Perm(); got != 0o600 {
+		t.Fatalf("project catalog mode = %o, want 0600", got)
+	}
+}
+
 // Written through a temp file and renamed, so an interrupted write cannot leave
 // a half-file behind. The evidence available afterwards is that no temp file
 // survives a successful save.

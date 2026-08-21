@@ -55,6 +55,41 @@ func TestBackupComparisonRejectsOversizedCandidate(t *testing.T) {
 	}
 }
 
+func TestInvalidNamedJSONCannotSuppressUsableBackup(t *testing.T) {
+	storage := newRecoveryTestStorage(t)
+	data := &StorageData{
+		SchemaVersion: recoverySchemaVersion,
+		Instances:     []*Instance{},
+		Groups:        []*Group{},
+		Settings:      &Settings{},
+		Trash:         []*TrashEntry{},
+	}
+	_, raw, err := sanitizedStorageData(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := storage.backupDirLocked()
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "zzzz.json"), raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := storage.createBackupLocked(data, true); err != nil {
+		t.Fatal(err)
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if valid := backupJSONEntries(entries); len(valid) != 1 {
+		t.Fatalf("backup success published %d usable recovery points, want one", len(valid))
+	}
+	if _, err := os.Stat(filepath.Join(dir, "zzzz.json")); err != nil {
+		t.Fatalf("unknown user file was removed during backup cleanup: %v", err)
+	}
+}
+
 func TestTrashAndRestoreSessionPreservesMetadata(t *testing.T) {
 	storage := newRecoveryTestStorage(t)
 	instance := &Instance{
@@ -375,7 +410,7 @@ func TestRestoreBackupRejectsStructurallyCorruptSnapshotsBeforeWrite(t *testing.
 			if err := os.MkdirAll(backupDir, 0o700); err != nil {
 				t.Fatal(err)
 			}
-			const backupID = "corrupt-restore.json"
+			const backupID = "20260822T120000.000000000Z-bad0c0de.json"
 			if err := os.WriteFile(filepath.Join(backupDir, backupID), []byte(body), 0o600); err != nil {
 				t.Fatal(err)
 			}
@@ -402,5 +437,23 @@ func TestRestoreBackupRejectsStructurallyCorruptSnapshotsBeforeWrite(t *testing.
 				t.Fatal("corrupt restore created a safety backup before validation")
 			}
 		})
+	}
+}
+
+func TestBackupIDRejectsWindowsDevicesAndNonGeneratedNames(t *testing.T) {
+	valid := "20260822T120000.000000000Z-deadbeef.json"
+	if !validBackupID(valid) {
+		t.Fatalf("generated backup ID %q was rejected", valid)
+	}
+	for _, id := range []string{
+		"COM1.json",
+		"CON.json",
+		"20260822T120000.000000000Z-not-hex!.json",
+		"20260822T120000.000000000Z-DEADBEEF.json",
+		"../" + valid,
+	} {
+		if validBackupID(id) {
+			t.Errorf("unsafe/non-generated backup ID %q was accepted", id)
+		}
 	}
 }

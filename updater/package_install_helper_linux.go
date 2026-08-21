@@ -165,6 +165,16 @@ var officialSystemCertFiles = []string{
 	"/etc/ssl/cert.pem",                                 // fallback used by some distributions
 }
 
+// Some supported system trust layouts keep individual roots here rather than
+// (or in addition to) a bundle. In particular this is the crypto/x509 fallback
+// for SLES, and it also carries locally installed enterprise/rotation roots on
+// distributions whose bundle regeneration is asynchronous. These paths are
+// fixed for the same privilege-boundary reason as officialSystemCertFiles.
+var officialSystemCertDirs = []string{
+	"/etc/ssl/certs",
+	"/etc/pki/tls/certs",
+}
+
 func validateOfficialReleaseURL(u *url.URL) error {
 	if u == nil || !strings.EqualFold(u.Scheme, "https") || u.User != nil {
 		return fmt.Errorf("official release URL must use HTTPS without credentials")
@@ -176,7 +186,11 @@ func validateOfficialReleaseURL(u *url.URL) error {
 	return nil
 }
 
-func loadOfficialSystemCertPool(readFile func(string) ([]byte, error)) (*x509.CertPool, error) {
+func loadOfficialSystemCertPool(
+	readFile func(string) ([]byte, error),
+	readDir func(string) ([]os.DirEntry, error),
+) (*x509.CertPool, error) {
+	pool := x509.NewCertPool()
 	var failures []string
 	for _, path := range officialSystemCertFiles {
 		bundle, err := readFile(path)
@@ -186,11 +200,31 @@ func loadOfficialSystemCertPool(readFile func(string) ([]byte, error)) (*x509.Ce
 			}
 			continue
 		}
-		pool := x509.NewCertPool()
 		if pool.AppendCertsFromPEM(bundle) {
-			return pool, nil
+			break
 		}
 		failures = append(failures, path+": no valid certificates")
+	}
+	for _, dir := range officialSystemCertDirs {
+		entries, err := readDir(dir)
+		if err != nil {
+			if !os.IsNotExist(err) {
+				failures = append(failures, fmt.Sprintf("%s: %v", dir, err))
+			}
+			continue
+		}
+		for _, entry := range entries {
+			if entry.IsDir() {
+				continue
+			}
+			certificate, err := readFile(filepath.Join(dir, entry.Name()))
+			if err == nil {
+				pool.AppendCertsFromPEM(certificate)
+			}
+		}
+	}
+	if len(pool.Subjects()) != 0 {
+		return pool, nil
 	}
 	if len(failures) != 0 {
 		return nil, fmt.Errorf("cannot load a trusted system CA bundle (%s)", strings.Join(failures, "; "))
@@ -199,7 +233,7 @@ func loadOfficialSystemCertPool(readFile func(string) ([]byte, error)) (*x509.Ce
 }
 
 func officialSystemCertPool() (*x509.CertPool, error) {
-	return loadOfficialSystemCertPool(os.ReadFile)
+	return loadOfficialSystemCertPool(os.ReadFile, os.ReadDir)
 }
 
 func newOfficialReleaseClient() (*http.Client, error) {

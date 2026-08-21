@@ -181,6 +181,9 @@ func TestOfficialSystemCertPoolNeverConsultsCallerSelectedPaths(t *testing.T) {
 			return trustedPEM, nil
 		}
 		return nil, os.ErrNotExist
+	}, func(path string) ([]os.DirEntry, error) {
+		consulted[path] = true
+		return nil, os.ErrNotExist
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -190,6 +193,40 @@ func TestOfficialSystemCertPoolNeverConsultsCallerSelectedPaths(t *testing.T) {
 	}
 	if len(pool.Subjects()) != 1 || string(pool.Subjects()[0]) != string(trusted.RawSubject) {
 		t.Fatal("fixed system CA bundle was not loaded into the official release pool")
+	}
+}
+
+func TestOfficialSystemCertPoolLoadsDirectoryOnlyTrustStore(t *testing.T) {
+	tlsServer := httptest.NewTLSServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	defer tlsServer.Close()
+	trusted := tlsServer.Certificate()
+	trustedPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: trusted.Raw})
+
+	fixtureDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(fixtureDir, "rotated.pem"), []byte("fixture"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	entries, err := os.ReadDir(fixtureDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantedPath := filepath.Join(officialSystemCertDirs[0], "rotated.pem")
+	pool, err := loadOfficialSystemCertPool(func(path string) ([]byte, error) {
+		if path == wantedPath {
+			return trustedPEM, nil
+		}
+		return nil, os.ErrNotExist
+	}, func(path string) ([]os.DirEntry, error) {
+		if path == officialSystemCertDirs[0] {
+			return entries, nil
+		}
+		return nil, os.ErrNotExist
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pool.Subjects()) != 1 || string(pool.Subjects()[0]) != string(trusted.RawSubject) {
+		t.Fatal("directory-only system trust root was not loaded")
 	}
 }
 

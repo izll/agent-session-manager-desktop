@@ -256,8 +256,14 @@ func NewStorage() (*Storage, error) {
 	}
 
 	configDir := filepath.Join(homeDir, ".config", "agent-session-manager-desktop")
-	if err := os.MkdirAll(configDir, 0755); err != nil {
+	if err := os.MkdirAll(configDir, 0700); err != nil {
 		return nil, fmt.Errorf("failed to create config directory: %w", err)
+	}
+	// Upgrade directories created by older versions as 0755. The project
+	// catalog contains user-chosen names and sessions/settings below this tree
+	// may contain secrets; another local OS account must not traverse it.
+	if err := os.Chmod(configDir, 0700); err != nil {
+		return nil, fmt.Errorf("failed to secure config directory: %w", err)
 	}
 
 	s := &Storage{
@@ -783,8 +789,14 @@ func (s *Storage) saveProjectsLocked(projectsData *ProjectsData) error {
 	}
 
 	tmp := projectsFile + ".tmp"
-	if err := os.WriteFile(tmp, data, 0644); err != nil {
+	if err := os.WriteFile(tmp, data, 0600); err != nil {
 		return fmt.Errorf("failed to write projects temp file: %w", err)
+	}
+	// WriteFile preserves the mode of a stale crash artifact. Normalize before
+	// rename so an old 0644 projects.json.tmp cannot republish project names.
+	if err := os.Chmod(tmp, 0600); err != nil {
+		_ = os.Remove(tmp)
+		return fmt.Errorf("failed to secure projects temp file: %w", err)
 	}
 	if err := os.Rename(tmp, projectsFile); err != nil {
 		os.Remove(tmp)

@@ -88,7 +88,7 @@ func TestTaskRestoreRejectsTaskDirectorySymlinkOutsideProject(t *testing.T) {
 	if err := os.MkdirAll(backupDir, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	const backupID = "20260821T130000.000000000Z-symlink.json"
+	const backupID = "20260821T130000.000000000Z-abcdef12.json"
 	if err := os.WriteFile(filepath.Join(backupDir, backupID), raw, 0o600); err != nil {
 		t.Fatal(err)
 	}

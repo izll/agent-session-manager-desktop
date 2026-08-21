@@ -124,6 +124,8 @@ assert.match(terminal, /const projectChanged = !!lastProjectId[\s\S]*?await pool
   'same-id project switches must detach the old pool before attaching the replacement project');
 assert.match(terminal, /handlePoolChange\(targetSessionId, targetWindowIdx, currentSessionStatus, \$activeProjectId\)/,
   'project identity must be a reactive terminal target dependency');
+assert.match(terminal, /EventsOn\('session:restarted',[\s\S]*?payload\.projectId !== get\(activeProjectId\)[\s\S]*?const sessionId = payload\.sessionId/,
+  'a delayed restart event must be rejected before touching a same-id replacement project pool');
 assert.match(tabBar, /loadWindowsForSession\(\$selectedSessionId, currentSessionStatus, visible, \$activeProjectId\)/,
   'same-id project switches must reload the tab list');
 assert.match(tabBar, /if \(!bufferText\.trim\(\) \|\| bufferBusy\) return/);

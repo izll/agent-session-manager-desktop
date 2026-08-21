@@ -36,6 +36,41 @@ async function gotoGroupProjectFixture(page) {
   await expect(page.locator('body')).toHaveAttribute('data-fixture-ready', 'true', { timeout: 15_000 });
 }
 
+async function gotoFeedbackFixture(page) {
+  await page.goto('/tests/browser/feedback-fixture.html');
+  await expect(page.locator('body')).toHaveAttribute('data-fixture-ready', 'true', { timeout: 15_000 });
+}
+
+test('a replacement notification receives its full visible duration', async ({ page }) => {
+  await gotoFeedbackFixture(page);
+  await page.locator('#toast-first').click();
+  await expect(page.getByRole('alert')).toContainText('First notification');
+  await page.waitForTimeout(600);
+  await page.locator('#toast-second').click();
+  await expect(page.getByRole('alert')).toContainText('Second notification');
+
+  // Past the first notification's original deadline, but comfortably inside
+  // the replacement's own 800 ms reading window.
+  await page.waitForTimeout(300);
+  await expect(page.getByRole('alert')).toContainText('Second notification');
+  await expect(page.getByRole('alert')).toHaveCount(0, { timeout: 1_000 });
+});
+
+test('an in-flight undo cannot disable a newer undo offer', async ({ page }) => {
+  await gotoFeedbackFixture(page);
+  await page.locator('#undo-first').click();
+  await page.getByRole('button', { name: /Undo 10/ }).click();
+  await expect(page.locator('#undo-calls')).toHaveText('1');
+
+  await page.locator('#undo-second').click();
+  await expect(page.getByText('Undo second action')).toBeVisible();
+  const undo = page.getByRole('button', { name: /Undo 10/ });
+  await expect(undo).toBeEnabled();
+  await undo.click();
+  await expect(page.locator('#undo-calls')).toHaveText('2');
+  await page.evaluate(() => window.dispatchEvent(new Event('feedback-resolve-undos')));
+});
+
 test('a real Svelte component renders, portals, focuses and reacts in Chromium', async ({ page }) => {
   const pageErrors = [];
   page.on('pageerror', (error) => pageErrors.push(error.message));

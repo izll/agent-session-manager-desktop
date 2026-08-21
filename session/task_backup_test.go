@@ -95,6 +95,41 @@ func TestTaskBackupsAreScopedToCreatingProject(t *testing.T) {
 	}
 }
 
+func TestTaskBackupRetentionAndNamesAreProjectScoped(t *testing.T) {
+	storage := &Storage{configDir: t.TempDir()}
+	createdAt := time.Date(2025, time.January, 2, 3, 4, 5, 6, time.UTC)
+	content := `{"tasks":[]}`
+	for _, projectID := range []string{"project-a", "project-b"} {
+		storage.projectID = projectID
+		setProjectID := projectID
+		if err := storage.writeTaskBackupSet(TaskBackupSet{
+			ProjectID: &setProjectID,
+			CreatedAt: createdAt,
+			Files:     []TaskBackup{{Path: "/same/path", Content: content}},
+		}); err != nil {
+			t.Fatalf("write backup for %s: %v", projectID, err)
+		}
+	}
+
+	entries, err := os.ReadDir(filepath.Join(storage.configDir, "backups", "tasks"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := make(map[string]bool)
+	for _, entry := range backupJSONEntries(entries) {
+		projectID, scoped, err := taskBackupProjectScope(filepath.Join(storage.configDir, "backups", "tasks", entry.Name()))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if scoped {
+			seen[projectID] = true
+		}
+	}
+	if !seen["project-a"] || !seen["project-b"] || len(seen) != 2 {
+		t.Fatalf("shared retention/collision lost a project's recovery point: %v", seen)
+	}
+}
+
 func TestRestoreTaskBackupRejectsPathOutsideActiveProject(t *testing.T) {
 	project := t.TempDir()
 	storage := taskBackupTestStorage(t, project)
@@ -118,7 +153,7 @@ func TestRestoreTaskBackupRejectsPathOutsideActiveProject(t *testing.T) {
 	if err := os.MkdirAll(backupDir, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	const backupID = "20260821T120000.000000000Z-forged.json"
+	const backupID = "20260821T120000.000000000Z-deadbeef.json"
 	if err := os.WriteFile(filepath.Join(backupDir, backupID), raw, 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -260,7 +295,7 @@ func TestRestoreTaskBackupSnapshotsExactLockedStateBeforeReplacement(t *testing.
 	if err := os.MkdirAll(backupDir, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	const backupID = "20260820T120000.000000000Z-source.json"
+	const backupID = "20260820T120000.000000000Z-11111111.json"
 	if err := os.WriteFile(filepath.Join(backupDir, backupID), raw, 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -317,7 +352,7 @@ func TestRestoreTaskBackupRejectsInvalidContentWithoutReplacingLiveFile(t *testi
 	if err := os.MkdirAll(backupDir, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	const backupID = "20260820T120000.000000000Z-corrupt.json"
+	const backupID = "20260820T120000.000000000Z-c0ffee00.json"
 	if err := os.WriteFile(filepath.Join(backupDir, backupID), raw, 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -375,7 +410,7 @@ func TestRestoreTaskBackupUndoRemovesFileCreatedByRestore(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	const sourceID = "20260820T120000.000000000Z-create.json"
+	const sourceID = "20260820T120000.000000000Z-c123abcd.json"
 	if err := os.WriteFile(filepath.Join(backupDir, sourceID), raw, 0o600); err != nil {
 		t.Fatal(err)
 	}

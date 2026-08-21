@@ -194,8 +194,17 @@ func (s *Storage) writeTaskBackupSet(set TaskBackupSet) error {
 			return err
 		}
 
-		sum := sha256.Sum256(comparable)
-		name := set.CreatedAt.Format("20060102T150405.000000000Z") + "-" + hex.EncodeToString(sum[:4]) + ".json"
+		// The directory is shared for backward compatibility with snapshots from
+		// before project scoping. Include the project identity in the filename:
+		// two projects can otherwise publish the same name when an explicit
+		// backup captures identical task files at the same timestamp, and the
+		// second rename silently replaces the first project's recovery point.
+		hashInput := make([]byte, 0, len(*set.ProjectID)+1+len(comparable))
+		hashInput = append(hashInput, (*set.ProjectID)...)
+		hashInput = append(hashInput, 0)
+		hashInput = append(hashInput, comparable...)
+		sum := sha256.Sum256(hashInput)
+		name := set.CreatedAt.Format(backupTimestampLayout) + "-" + hex.EncodeToString(sum[:4]) + ".json"
 		path := filepath.Join(dir, name)
 		tmp, err := os.CreateTemp(dir, ".task-backup-*")
 		if err != nil {
@@ -218,8 +227,58 @@ func (s *Storage) writeTaskBackupSet(set TaskBackupSet) error {
 		if err := os.Rename(tmpPath, path); err != nil {
 			return err
 		}
-		return pruneBackupDir(dir)
+		return pruneTaskBackupDir(dir, *set.ProjectID)
 	})
+}
+
+// pruneTaskBackupDir applies the normal retention bands and hard ceiling to
+// one project's modern snapshots only. Task backups historically shared one
+// directory, so using pruneBackupDir here let a busy project thin or evict a
+// quiet project's recovery history. Unscoped legacy snapshots are deliberately
+// left alone: ownership can only be inferred from the current sessions file,
+// and deleting one during another project's write would not be fail-closed.
+func pruneTaskBackupDir(dir, projectID string) error {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return err
+	}
+	type scopedBackup struct {
+		entry os.DirEntry
+		time  time.Time
+	}
+	files := make([]scopedBackup, 0, len(entries))
+	for _, entry := range backupJSONEntries(entries) {
+		storedProjectID, scoped, err := taskBackupProjectScope(filepath.Join(dir, entry.Name()))
+		if err != nil || !scoped || storedProjectID != projectID {
+			continue
+		}
+		files = append(files, scopedBackup{entry: entry, time: backupTime(entry.Name())})
+	}
+	sort.Slice(files, func(i, j int) bool { return files[i].entry.Name() < files[j].entry.Name() })
+	times := make([]time.Time, len(files))
+	for index := range files {
+		times[index] = files[index].time
+	}
+	keep := backupsToKeep(times, time.Now().UTC())
+	remaining := make([]scopedBackup, 0, len(files))
+	for index, file := range files {
+		if !keep[index] {
+			if err := os.Remove(filepath.Join(dir, file.entry.Name())); err != nil {
+				return err
+			}
+			continue
+		}
+		remaining = append(remaining, file)
+	}
+	ceilingNow := time.Now().UTC()
+	for len(remaining) > backupHardCeiling {
+		removeIndex := backupCeilingRemovalIndex(remaining[len(remaining)-1].time, len(remaining), ceilingNow)
+		if err := os.Remove(filepath.Join(dir, remaining[removeIndex].entry.Name())); err != nil {
+			return err
+		}
+		remaining = append(remaining[:removeIndex], remaining[removeIndex+1:]...)
+	}
+	return nil
 }
 
 // latestTaskBackupMatches reports whether the newest snapshot holds the same

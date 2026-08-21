@@ -295,6 +295,73 @@ func TestTerminalServerStopClosesListenerAndActiveStreams(t *testing.T) {
 	}
 }
 
+func TestTerminalServerFailsClosedWhenSecureTokenGenerationFails(t *testing.T) {
+	originalRead := terminalRandomRead
+	terminalRandomRead = func([]byte) (int, error) {
+		return 0, errors.New("entropy unavailable")
+	}
+	defer func() { terminalRandomRead = originalRead }()
+
+	ts := NewTerminalServer(nil, 0)
+	if ts.AuthToken() != "" {
+		t.Fatal("terminal server fell back to a predictable authentication token")
+	}
+	if err := ts.Start(); err == nil {
+		t.Fatal("terminal listener started without a cryptographically secure token")
+	}
+	if ts.listener != nil || ts.server != nil {
+		t.Fatal("failed-closed terminal server opened network resources")
+	}
+}
+
+func TestReconnectDoesNotHoldServerLockWhileOldNativeStreamCloses(t *testing.T) {
+	oldStream := &blockingCloseTerminalStream{
+		started: make(chan struct{}),
+		release: make(chan struct{}),
+	}
+	old := &termConn{ptmx: oldStream, done: make(chan struct{})}
+	replacement := &termConn{ptmx: &closeCountingTerminalStream{}, done: make(chan struct{})}
+	ts := NewTerminalServer(nil, 0)
+	ts.mu.Lock()
+	ts.conns["same-tab"] = old
+	ts.mu.Unlock()
+
+	if !ts.registerConnection("same-tab", replacement) {
+		t.Fatal("running terminal server refused replacement connection")
+	}
+	// No pumps are launched in this unit-level registration test; balance the
+	// production registration accounting before any later Wait.
+	ts.connWG.Done()
+	ts.connWG.Done()
+	ts.connWG.Done()
+
+	select {
+	case <-oldStream.started:
+	case <-time.After(time.Second):
+		t.Fatal("replacement did not begin retiring the previous terminal")
+	}
+
+	lockAcquired := make(chan struct{})
+	go func() {
+		ts.mu.Lock()
+		ts.mu.Unlock()
+		close(lockAcquired)
+	}()
+	select {
+	case <-lockAcquired:
+		// Expected: the native close is still blocked, but server lifecycle work
+		// can already acquire its mutex.
+	case <-time.After(200 * time.Millisecond):
+		close(oldStream.release)
+		t.Fatal("blocked old native close retained the terminal server mutex")
+	}
+
+	close(oldStream.release)
+	// A second idempotent close joins the in-flight sync.Once callback, ensuring
+	// the asynchronous retirement goroutine cannot leak past the test.
+	old.closeTransport()
+}
+
 func TestTerminalServerStopHonoursDeadlineWhenNativeStreamCloseBlocks(t *testing.T) {
 	stream := &blockingCloseTerminalStream{
 		started: make(chan struct{}),

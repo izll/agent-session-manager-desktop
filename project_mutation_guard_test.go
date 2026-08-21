@@ -192,6 +192,74 @@ func TestSidebarUpdateCarriesCapturedProjectIdentity(t *testing.T) {
 	}
 }
 
+func TestSessionRestartedEventCarriesProjectIdentity(t *testing.T) {
+	event := SessionRestartedEvent{SessionID: "shared-id", ProjectID: "project-a"}
+	raw, err := json.Marshal(event)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := string(raw); got != `{"sessionId":"shared-id","projectId":"project-a"}` {
+		t.Fatalf("restart event JSON = %s", got)
+	}
+}
+
+func TestSelectProjectAppliesTargetRuntimeSettingsAndProviderGate(t *testing.T) {
+	storage := guardedTestStorage(t)
+	target, err := storage.AddProject("runtime target")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := storage.SetActiveProject(target.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := storage.SaveSettings(&session.Settings{
+		TerminalShell:     "target-shell",
+		TerminalCopyMode:  "select",
+		TaskMasterEnabled: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := storage.SetActiveProject(""); err != nil {
+		t.Fatal(err)
+	}
+
+	originalShell := applyRuntimeTerminalShell
+	originalMouse := applyRuntimeMouseCopy
+	originalDrain := projectSwitchDrainTaskMasters
+	var appliedShell string
+	var appliedMouse bool
+	applyRuntimeTerminalShell = func(shell string) { appliedShell = shell }
+	applyRuntimeMouseCopy = func(_ context.Context, enabled bool) { appliedMouse = enabled }
+	projectSwitchDrainTaskMasters = func() {}
+	taskMasterMu.Lock()
+	originalStartsBlocked := taskMasterStartsBlocked
+	taskMasterStartsBlocked = true
+	taskMasterMu.Unlock()
+	t.Cleanup(func() {
+		applyRuntimeTerminalShell = originalShell
+		applyRuntimeMouseCopy = originalMouse
+		projectSwitchDrainTaskMasters = originalDrain
+		taskMasterMu.Lock()
+		taskMasterStartsBlocked = originalStartsBlocked
+		taskMasterMu.Unlock()
+		storage.UnlockProject()
+	})
+
+	app := &App{storage: storage, projectLocked: true}
+	if err := app.SelectProject(target.ID); err != nil {
+		t.Fatal(err)
+	}
+	if appliedShell != "target-shell" || !appliedMouse {
+		t.Fatalf("target runtime settings = shell %q mouse %v", appliedShell, appliedMouse)
+	}
+	taskMasterMu.RLock()
+	blocked := taskMasterStartsBlocked
+	taskMasterMu.RUnlock()
+	if blocked {
+		t.Fatal("enabled target project inherited the previous project's closed provider gate")
+	}
+}
+
 func TestSetTabFontSizeRejectsStaleProjectTarget(t *testing.T) {
 	storage := guardedTestStorage(t)
 	inst := &session.Instance{

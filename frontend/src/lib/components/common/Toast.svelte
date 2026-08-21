@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onDestroy } from 'svelte';
   import { fade, fly } from 'svelte/transition';
 
   export let message = '';
@@ -14,20 +14,31 @@
    */
   export let duration = 5000;
   export let show = false;
+  /** Distinguishes repeated notifications whose visible text is identical. */
+  export let revision = 0;
 
   let timeoutId: ReturnType<typeof setTimeout>;
 
-  $: if (show && duration > 0) {
+  $: {
+    // Both values are deliberate dependencies. A replacement notification
+    // must receive its full reading time even when the toast was already open;
+    // `revision` covers the common case where the same backend error repeats.
+    void message;
+    void revision;
     clearTimeout(timeoutId);
-    timeoutId = setTimeout(() => {
-      show = false;
-    }, duration);
+    if (show && duration > 0) {
+      timeoutId = setTimeout(() => {
+        show = false;
+      }, duration);
+    }
   }
 
   function close() {
     show = false;
     clearTimeout(timeoutId);
   }
+
+  onDestroy(() => clearTimeout(timeoutId));
 
   $: variantConfig = {
     error: {

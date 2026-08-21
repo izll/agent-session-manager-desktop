@@ -425,7 +425,11 @@
   // Listen for session restart events
   let unsubRestarted: (() => void) | null = null;
   onMount(() => {
-    unsubRestarted = EventsOn('session:restarted', async (sessionId: string) => {
+    unsubRestarted = EventsOn('session:restarted', async (payload: { sessionId: string; projectId: string }) => {
+      // Wails event delivery can lag behind SelectProject. Session IDs are
+      // project-local, so an A restart must never destroy B's same-id pool.
+      if (!payload || payload.projectId !== get(activeProjectId)) return;
+      const sessionId = payload.sessionId;
       const currentId = currentTargetSessionId();
       const restartWindowIdx = currentTargetWindowIdx();
       const restartProjectId = get(activeProjectId);

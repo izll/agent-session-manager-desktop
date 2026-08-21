@@ -19,10 +19,11 @@ import (
 
 const (
 	recoverySchemaVersion = 1
-	// A ceiling on the backup directory, not the retention rule.
+	backupTimestampLayout = "20060102T150405.000000000Z"
+	// A ceiling on application-managed backup entries, not the retention rule.
 	//
 	// Retention is decided by backupsToKeep, which thins by age; this only
-	// stops the directory growing without bound if a clock jump puts many
+	// stops managed history growing without bound if a clock jump puts many
 	// backups outside every band at once. Set well above what the bands can
 	// produce (roughly 24 hourly + 14 daily + 12 weekly, plus an hour's worth
 	// of unthinned ones).
@@ -178,7 +179,7 @@ func (s *Storage) createBackupLocked(data *StorageData, skipIfUnchanged bool) er
 	}
 
 	sum := sha256.Sum256(raw)
-	name := time.Now().UTC().Format("20060102T150405.000000000Z") + "-" + hex.EncodeToString(sum[:4]) + ".json"
+	name := time.Now().UTC().Format(backupTimestampLayout) + "-" + hex.EncodeToString(sum[:4]) + ".json"
 	path := filepath.Join(dir, name)
 	tmp := path + ".tmp"
 	if err := os.WriteFile(tmp, raw, 0600); err != nil {
@@ -199,7 +200,12 @@ func backupFileMatches(path string, expected []byte, limit int64) bool {
 func backupJSONEntries(entries []os.DirEntry) []os.DirEntry {
 	files := make([]os.DirEntry, 0, len(entries))
 	for _, entry := range entries {
-		if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".json") {
+		// Only names this application can restore participate in comparison,
+		// listing or retention. A stray/corrupt zzzz.json with matching bytes
+		// must not make CreateBackup report success without publishing a usable
+		// recovery point, and must not consume the hard ceiling. Leave unknown
+		// files untouched so cleanup never destroys user data it cannot classify.
+		if !entry.IsDir() && validBackupID(entry.Name()) {
 			files = append(files, entry)
 		}
 	}
@@ -241,16 +247,19 @@ func pruneBackupDir(dir string) error {
 		}
 	}
 
-	// A backstop, unchanged in spirit: whatever the thinning decides, the
-	// directory never grows past this. Only reachable if the clock misbehaves,
-	// since the bands cannot produce more entries than they have buckets.
+	// A backstop, unchanged in spirit: whatever the thinning decides, managed
+	// backup entries never grow past this. Unknown files are deliberately not
+	// counted or deleted. Only reachable if the clock misbehaves, since the
+	// bands cannot produce more entries than they have buckets.
 	remaining := backupJSONEntries(mustReadDir(dir))
 	sort.Slice(remaining, func(i, j int) bool { return remaining[i].Name() < remaining[j].Name() })
+	ceilingNow := time.Now().UTC()
 	for len(remaining) > backupHardCeiling {
-		if err := os.Remove(filepath.Join(dir, remaining[0].Name())); err != nil {
+		removeIndex := backupCeilingRemovalIndex(backupTime(remaining[len(remaining)-1].Name()), len(remaining), ceilingNow)
+		if err := os.Remove(filepath.Join(dir, remaining[removeIndex].Name())); err != nil {
 			return err
 		}
-		remaining = remaining[1:]
+		remaining = append(remaining[:removeIndex], remaining[removeIndex+1:]...)
 	}
 	return nil
 }
@@ -268,16 +277,14 @@ func mustReadDir(dir string) []os.DirEntry {
 
 // backupTime reads the timestamp a backup's name begins with.
 //
-// Names are written as "20060102T150405.000000000Z-<hash>.json". A name that
-// does not parse gets the zero time, which puts it outside every band and so
-// makes it a candidate for deletion — correct for a stray file, and it cannot
-// take a real backup with it because those all parse.
+// Names are written as "20060102T150405.000000000Z-<hash>.json". Callers use
+// backupJSONEntries first, but keep this parser total for unit-level use and
+// for defensive handling of any future internal caller.
 func backupTime(name string) time.Time {
-	const layout = "20060102T150405.000000000Z"
-	if len(name) < len(layout) {
+	if len(name) < len(backupTimestampLayout) {
 		return time.Time{}
 	}
-	parsed, err := time.Parse(layout, name[:len(layout)])
+	parsed, err := time.Parse(backupTimestampLayout, name[:len(backupTimestampLayout)])
 	if err != nil {
 		return time.Time{}
 	}
@@ -308,7 +315,7 @@ func (s *Storage) createProjectsBackupLocked(data *ProjectsData) error {
 		}
 	}
 	sum := sha256.Sum256(raw)
-	name := time.Now().UTC().Format("20060102T150405.000000000Z") + "-" + hex.EncodeToString(sum[:4]) + ".json"
+	name := time.Now().UTC().Format(backupTimestampLayout) + "-" + hex.EncodeToString(sum[:4]) + ".json"
 	path := filepath.Join(dir, name)
 	tmp := path + ".tmp"
 	if err := os.WriteFile(tmp, raw, 0600); err != nil {
@@ -364,7 +371,21 @@ func (s *Storage) ListBackups() ([]BackupInfo, error) {
 }
 
 func validBackupID(id string) bool {
-	return id != "" && filepath.Base(id) == id && strings.HasSuffix(id, ".json") && !strings.Contains(id, "..")
+	const hashLength = 8
+	wantLength := len(backupTimestampLayout) + 1 + hashLength + len(".json")
+	if len(id) != wantLength || filepath.Base(id) != id || id[len(backupTimestampLayout)] != '-' || !strings.HasSuffix(id, ".json") {
+		return false
+	}
+	if _, err := time.Parse(backupTimestampLayout, id[:len(backupTimestampLayout)]); err != nil {
+		return false
+	}
+	hash := id[len(backupTimestampLayout)+1 : len(backupTimestampLayout)+1+hashLength]
+	for _, char := range hash {
+		if (char < '0' || char > '9') && (char < 'a' || char > 'f') {
+			return false
+		}
+	}
+	return true
 }
 
 func (s *Storage) RestoreBackup(id string) error {

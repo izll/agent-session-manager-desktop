@@ -907,6 +907,16 @@ func macTeamIDFromCodesign(output []byte) string {
 }
 
 func swapBundle(bundle, staged, target string) error {
+	if target == bundle && runtime.GOOS == "darwin" {
+		// renameatx_np(RENAME_SWAP) leaves one valid bundle at the installed path
+		// before and after the single filesystem operation. The old bundle lands at
+		// staged and is removed by the caller's stage cleanup. Two ordinary renames
+		// had a crash/power-loss window with no application at bundle at all.
+		if err := atomicExchangeBundle(bundle, staged); err != nil {
+			return fmt.Errorf("cannot atomically exchange application bundles: %w", err)
+		}
+		return nil
+	}
 	return swapBundleWithOps(bundle, staged, target, os.Rename, os.RemoveAll)
 }
 
@@ -917,6 +927,32 @@ func swapBundleWithOps(bundle, staged, target string, rename func(string, string
 		return fmt.Errorf("cannot create application rollback directory: %w", err)
 	}
 	old := filepath.Join(backupDir, filepath.Base(bundle))
+	if target != bundle {
+		// A product-name migration has two distinct final paths. Publish the new,
+		// already-verified bundle first while the old application still exists;
+		// then retire the old name. A crash between these operations leaves two
+		// usable copies, never zero. The previous order moved the only installed
+		// bundle away before publishing its replacement.
+		if err := rename(staged, target); err != nil {
+			_ = removeAll(backupDir)
+			return fmt.Errorf("cannot install the renamed application: %w", err)
+		}
+		if err := rename(bundle, old); err != nil {
+			// Restore the pre-update layout. If even that fails, keep the new target:
+			// it is publisher-verified and preserves availability alongside bundle.
+			rollbackErr := rename(target, staged)
+			_ = removeAll(backupDir)
+			if rollbackErr != nil {
+				return errors.Join(fmt.Errorf("cannot move the old application aside: %w", err),
+					fmt.Errorf("cannot roll back the renamed application: %w", rollbackErr))
+			}
+			return fmt.Errorf("cannot move the old application aside: %w", err)
+		}
+		if err := removeAll(backupDir); err != nil {
+			recordStaleUpdatePath(backupDir)
+		}
+		return nil
+	}
 	if err := rename(bundle, old); err != nil {
 		_ = removeAll(backupDir)
 		return fmt.Errorf("cannot move the old application aside: %w", err)
@@ -1577,6 +1613,26 @@ func installTransactionWithRename(files []stagedInstall, rename func(string, str
 	return nil
 }
 
+// installSingleFileAtomically replaces one regular file without first moving
+// the installed target out of the way. POSIX rename-over-target is atomic: a
+// crash observer sees either the complete old executable or the complete new
+// one. This is the Linux user-local update path; Windows cannot use it because
+// its running executable and DLLs require the multi-file move-aside protocol.
+func installSingleFileAtomically(file stagedInstall, rename func(string, string) error) error {
+	stagedInfo, err := os.Lstat(file.staged)
+	if err != nil || stagedInfo.Mode()&os.ModeSymlink != 0 || !stagedInfo.Mode().IsRegular() {
+		return fmt.Errorf("staged update file %q is unavailable", filepath.Base(file.target))
+	}
+	targetInfo, err := os.Lstat(file.target)
+	if err != nil || targetInfo.Mode()&os.ModeSymlink != 0 || !targetInfo.Mode().IsRegular() {
+		return fmt.Errorf("update target %q is not a regular file", filepath.Base(file.target))
+	}
+	if err := rename(file.staged, file.target); err != nil {
+		return fmt.Errorf("cannot atomically install %s: %w", filepath.Base(file.target), err)
+	}
+	return nil
+}
+
 func replaceExecutable(execPath, stagedPath string) error {
 	return installTransaction([]stagedInstall{{target: execPath, staged: stagedPath}})
 }
@@ -1793,12 +1849,16 @@ func downloadAndInstall(ctx context.Context, version string, critical func(func(
 	// The executable is deliberately last. If any library swap fails, rollback
 	// restores every earlier DLL before the old executable is ever disturbed;
 	// if the executable swap fails, the same transaction restores all DLLs too.
-	files = append(files, stagedInstall{target: execPath, staged: stagedPath})
+	executable := stagedInstall{target: execPath, staged: stagedPath}
+	files = append(files, executable)
 	return withInstallLock(func() error {
 		// installTransaction performs its complete target/staging prevalidation
 		// before the first rename. Keeping that check inside this lock closes the
 		// gap between validation and the executable/DLL swap.
 		return critical(func() error {
+			if runtime.GOOS == "linux" {
+				return installSingleFileAtomically(executable, os.Rename)
+			}
 			return installTransaction(files)
 		})
 	})

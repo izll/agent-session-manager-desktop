@@ -14,6 +14,15 @@ func TestSelectProjectDrainsTaskMasterProvidersAndReopensGate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if err := storage.SetActiveProject(project.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := storage.SaveSettings(&session.Settings{TaskMasterEnabled: true}); err != nil {
+		t.Fatal(err)
+	}
+	if err := storage.SetActiveProject(""); err != nil {
+		t.Fatal(err)
+	}
 	if err := storage.LockProjectForUse(""); err != nil {
 		t.Fatal(err)
 	}

@@ -146,23 +146,11 @@ func (a *App) startup(ctx context.Context) {
 	}
 	a.storage = storage
 
-	// Apply the configured shell before anything can restart a pane. Left
-	// until the first settings save, a tab restarted early in the session
-	// would use the platform default instead of the chosen shell.
-	copyMode := "" // empty means the default, which is shift
-	if _, _, settings, err := storage.LoadAllWithSettings(); err == nil && settings != nil {
-		session.SetTerminalShell(settings.TerminalShell)
-		copyMode = settings.TerminalCopyMode
-	}
-
-	// Applied unconditionally, including when no settings could be loaded.
-	//
-	// tmux's own default for a drag and for a double click is to copy, and the
-	// key tables live in the server, not in this process — so skipping this
-	// leaves copying on for someone who never asked for it, and leaves a stale
-	// binding from a previous run in place. A fresh install has no settings
-	// file at all, which is exactly the case the guarded version missed.
-	session.SetMouseCopyEnabled(copyMode == "select")
+	// Apply the active project's process/tmux settings before anything can
+	// restart a pane or launch a provider. The same helper runs after every
+	// successful project switch; these settings are stored per project even
+	// though their live implementation is process/server-wide.
+	a.applyActiveProjectRuntimeSettings()
 	// Server-wide, so it also covers the mirror sessions the terminal server
 	// creates for attaching — those never go through session start-up.
 	session.ConfigureClipboardForwarding()
@@ -758,7 +746,33 @@ func (a *App) SelectProject(id string) error {
 	a.historyMu.Lock()
 	a.historyIndex = nil
 	a.historyMu.Unlock()
+	a.applyActiveProjectRuntimeSettings()
 	return nil
+}
+
+// applyActiveProjectRuntimeSettings synchronizes process/server-wide state to
+// the settings snapshot selected in Storage. A project switch changes the
+// persistence target without going through SaveSettings, so leaving this work
+// only on startup/save made shell and mouse bindings bleed across projects and
+// left Task Master's global start gate closed after disabled A -> enabled B.
+func (a *App) applyActiveProjectRuntimeSettings() {
+	ctx := a.lifecycleContext()
+	_, _, settings, err := a.storage.LoadAllWithSettingsContext(ctx)
+	if err != nil {
+		log.Printf("[settings] cannot load active project runtime settings: %v", err)
+		settings = &session.Settings{}
+	}
+	if settings == nil {
+		settings = &session.Settings{}
+	}
+	applyRuntimeTerminalShell(settings.TerminalShell)
+	applyCtx, cancel := context.WithTimeout(ctx, session.TmuxCommandTimeout)
+	applyRuntimeMouseCopy(applyCtx, settings.TerminalCopyMode == "select")
+	cancel()
+
+	taskMasterMu.Lock()
+	taskMasterStartsBlocked = !settings.TaskMasterEnabled
+	taskMasterMu.Unlock()
 }
 
 func clearProjectScopedCaches() {
@@ -1666,7 +1680,7 @@ func (a *App) CycleYoloMode(id string, windowIdx int, expectedProjectID string) 
 		return inst.SendKeysToWindow(windowIdx, "BTab") // Shift+Tab
 	}
 	// Not running / not Claude: preset via the stored flag (restarts if alive).
-	return a.toggleAutoYes(id)
+	return a.toggleAutoYes(id, expectedProjectID)
 }
 
 // ToggleAutoYes toggles YOLO mode and restarts the session if running
@@ -1676,10 +1690,10 @@ func (a *App) ToggleAutoYes(id, expectedProjectID string) error {
 		return err
 	}
 	defer done()
-	return a.toggleAutoYes(id)
+	return a.toggleAutoYes(id, expectedProjectID)
 }
 
-func (a *App) toggleAutoYes(id string) error {
+func (a *App) toggleAutoYes(id, expectedProjectID string) error {
 	inst, err := a.storage.GetInstance(id)
 	if err != nil {
 		return err
@@ -1715,11 +1729,23 @@ func (a *App) toggleAutoYes(id string) error {
 		if err := a.storage.UpdateInstance(inst); err != nil {
 			return err
 		}
-		// Notify frontend to reconnect terminal
-		runtime.EventsEmit(a.ctx, "session:restarted", id)
+		// Event delivery is asynchronous relative to SelectProject. Include the
+		// frontend-captured project identity so a delayed event from project A
+		// cannot tear down an identically named terminal already shown for B.
+		runtime.EventsEmit(a.ctx, "session:restarted", SessionRestartedEvent{
+			SessionID: id,
+			ProjectID: expectedProjectID,
+		})
 		return nil
 	}
 	return nil
+}
+
+// SessionRestartedEvent pins an asynchronous terminal reconnect request to the
+// project whose mutation produced it. Session IDs are only project-local.
+type SessionRestartedEvent struct {
+	SessionID string `json:"sessionId"`
+	ProjectID string `json:"projectId"`
 }
 
 // getClaudeSessionIDFromTmux extracts the --resume or --session-id from the Claude process
