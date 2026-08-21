@@ -100,8 +100,8 @@ func (a *App) startAttentionWatcher(parent context.Context) {
 
 			upd := a.getSidebarUpdates(ctx)
 			namesProjectID, instances, _, namesErr := a.storage.LoadAllWithProjectSnapshotContext(ctx)
-			if namesErr != nil || upd.projectID == "" ||
-				upd.projectID != settingsProjectID || namesProjectID != settingsProjectID ||
+			if namesErr != nil || !sidebarUpdateMatchesProject(upd, settingsProjectID) ||
+				namesProjectID != settingsProjectID ||
 				a.storage.GetActiveProjectID() != settingsProjectID {
 				continue
 			}
@@ -125,6 +125,13 @@ func (a *App) startAttentionWatcher(parent context.Context) {
 			}
 		}
 	}()
+}
+
+func sidebarUpdateMatchesProject(update SidebarUpdate, projectID string) bool {
+	// The default project's real ID is the empty string, so emptiness cannot be
+	// used as a missing-snapshot sentinel. Exact identity is sufficient because
+	// every backend snapshot now publishes ProjectID explicitly.
+	return update.ProjectID == projectID
 }
 
 // stopAttentionWatcher cancels and reaps the watcher and every notification it

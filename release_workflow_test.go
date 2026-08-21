@@ -119,20 +119,31 @@ func TestReleaseFailsOnRegeneratedBindingDrift(t *testing.T) {
 	workflow := string(raw)
 	linuxStart := strings.Index(workflow, "  release:\n")
 	macStart := strings.Index(workflow, "  release-macos:\n")
-	if linuxStart < 0 || macStart < 0 || linuxStart >= macStart {
-		t.Fatal("Linux release job is missing or out of order")
+	windowsStart := strings.Index(workflow, "  release-windows:\n")
+	if linuxStart < 0 || macStart < 0 || windowsStart < 0 || linuxStart >= macStart || macStart >= windowsStart {
+		t.Fatal("native release jobs are missing or out of order")
 	}
-	linuxJob := workflow[linuxStart:macStart]
-	buildAt := strings.Index(linuxJob, "wails build -tags webkit2_41 -clean")
-	checkAt := strings.LastIndex(linuxJob, "npm run check --prefix frontend")
-	normalizeAt := strings.Index(linuxJob, "perl -0pi -e")
-	modeAt := strings.Index(linuxJob, "find frontend/wailsjs -type f -exec chmod 0644 {} +")
-	diffAt := strings.Index(linuxJob, "git diff --exit-code -- frontend/wailsjs")
-	if buildAt < 0 || checkAt < buildAt {
-		t.Fatal("release must type-check after Wails regenerates the bindings")
+	jobs := []struct {
+		name  string
+		body  string
+		build string
+	}{
+		{name: "Linux", body: workflow[linuxStart:macStart], build: "wails build -tags webkit2_41 -clean"},
+		{name: "macOS", body: workflow[macStart:windowsStart], build: "wails build -platform darwin/arm64 -clean"},
+		{name: "Windows", body: workflow[windowsStart:], build: "wails build -platform windows/amd64 -clean"},
 	}
-	if normalizeAt < checkAt || modeAt < normalizeAt || diffAt < modeAt {
-		t.Fatal("release must normalize and fail on binding drift after regenerated-binding type-checking")
+	for _, job := range jobs {
+		buildAt := strings.Index(job.body, job.build)
+		checkAt := strings.LastIndex(job.body, "npm run check --prefix frontend")
+		normalizeAt := strings.Index(job.body, `node -e 'const fs=require("fs"),p="frontend/wailsjs/go/models.ts"`)
+		modeAt := strings.Index(job.body, "find frontend/wailsjs -type f -exec chmod 0644 {} +")
+		diffAt := strings.Index(job.body, "git diff --exit-code -- frontend/wailsjs")
+		if buildAt < 0 || checkAt < buildAt {
+			t.Errorf("%s release must type-check after Wails regenerates the bindings", job.name)
+		}
+		if normalizeAt < checkAt || modeAt < normalizeAt || diffAt < modeAt {
+			t.Errorf("%s release must normalize and fail on binding drift after regenerated-binding type-checking", job.name)
+		}
 	}
 }
 

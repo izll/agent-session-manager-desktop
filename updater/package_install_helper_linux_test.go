@@ -5,10 +5,12 @@ package updater
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -159,6 +161,35 @@ func TestOfficialReleaseClientIgnoresCallerCAOverrides(t *testing.T) {
 	}
 	if got := os.Getenv("SSL_CERT_DIR"); got != filepath.Join(attackerDir, "attacker-certs") {
 		t.Fatalf("SSL_CERT_DIR was not restored: %q", got)
+	}
+}
+
+func TestOfficialSystemCertPoolNeverConsultsCallerSelectedPaths(t *testing.T) {
+	tlsServer := httptest.NewTLSServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	defer tlsServer.Close()
+	trusted := tlsServer.Certificate()
+	trustedPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: trusted.Raw})
+
+	attackerFile := filepath.Join(t.TempDir(), "attacker.pem")
+	attackerDir := filepath.Join(t.TempDir(), "attacker-certs")
+	t.Setenv("SSL_CERT_FILE", attackerFile)
+	t.Setenv("SSL_CERT_DIR", attackerDir)
+	consulted := make(map[string]bool)
+	pool, err := loadOfficialSystemCertPool(func(path string) ([]byte, error) {
+		consulted[path] = true
+		if path == officialSystemCertFiles[2] {
+			return trustedPEM, nil
+		}
+		return nil, os.ErrNotExist
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if consulted[attackerFile] || consulted[attackerDir] {
+		t.Fatalf("caller-selected CA path was consulted: %#v", consulted)
+	}
+	if len(pool.Subjects()) != 1 || string(pool.Subjects()[0]) != string(trusted.RawSubject) {
+		t.Fatal("fixed system CA bundle was not loaded into the official release pool")
 	}
 }
 

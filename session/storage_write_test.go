@@ -233,6 +233,34 @@ func TestStaleLockFromADeadProcessIsNotHonoured(t *testing.T) {
 	}
 }
 
+func TestOversizedSparseProjectLockIsReclaimedWithoutUnboundedRead(t *testing.T) {
+	storage := newTestStorage(t)
+	lockPath := storage.getLockPath("")
+	if err := os.MkdirAll(filepath.Dir(lockPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	file, err := os.Create(lockPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := file.Truncate(1 << 30); err != nil {
+		_ = file.Close()
+		t.Fatal(err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := storage.LockProject(""); err != nil {
+		t.Fatalf("reclaim oversized corrupt lock: %v", err)
+	}
+	t.Cleanup(storage.UnlockProject)
+	locked, pid := storage.IsProjectLocked("")
+	if !locked || pid != os.Getpid() {
+		t.Fatalf("reclaimed lock = locked %v pid %d, want this process", locked, pid)
+	}
+}
+
 // Unlocking removes the file, or the next run inherits a lock nobody holds.
 func TestUnlockRemovesTheLockFile(t *testing.T) {
 	storage := newTestStorage(t)

@@ -253,7 +253,10 @@ func acquireStatsWriter(path string) (bool, string) {
 }
 
 func staleStatsWriterLock(lockPath string) bool {
-	raw, err := os.ReadFile(filepath.Join(lockPath, "pid"))
+	// A writer PID is only a few decimal bytes. Bound corrupt/sparse lock input
+	// so the first statistics observation cannot allocate an attacker-sized
+	// file merely while deciding whether a crashed writer is stale.
+	raw, err := readActivityStatsFile(filepath.Join(lockPath, "pid"), 64)
 	if err != nil {
 		info, statErr := os.Stat(lockPath)
 		return statErr == nil && time.Since(info.ModTime()) > 2*time.Minute

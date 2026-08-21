@@ -127,6 +127,32 @@ func TestStatsWriterLockKeepsCurrentProcessOwner(t *testing.T) {
 	}
 }
 
+func TestStatsWriterLockBoundsOversizedSparsePIDFile(t *testing.T) {
+	lockPath := filepath.Join(t.TempDir(), "stats.writer-lock")
+	if err := os.Mkdir(lockPath, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	pidPath := filepath.Join(lockPath, "pid")
+	file, err := os.Create(pidPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := file.Truncate(1 << 30); err != nil {
+		_ = file.Close()
+		t.Fatal(err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-3 * time.Minute)
+	if err := os.Chtimes(lockPath, old, old); err != nil {
+		t.Fatal(err)
+	}
+	if !staleStatsWriterLock(lockPath) {
+		t.Fatal("old oversized writer lock was not treated as stale")
+	}
+}
+
 func TestActivityStatsQuarantinesCorruptProjectFile(t *testing.T) {
 	r := newTestStatsRecorder(t)
 	path := filepath.Join(r.dir, statsProjectFilename("broken"))

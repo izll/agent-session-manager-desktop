@@ -1,6 +1,8 @@
 import { activities } from './activities';
 import { statusLines, spinnerTexts, tabStatuses } from './statusLines';
 import { EventsOn, EventsOff } from '../../../wailsjs/runtime/runtime';
+import { get } from 'svelte/store';
+import { activeProjectId } from './projects';
 
 let listening = false;
 let cancelFn: (() => void) | null = null;
@@ -29,6 +31,12 @@ export function invalidateSidebarProject() {
 
 function handleUpdate(data: any) {
   if (!data) return;
+  // Event delivery is asynchronous. The backend can finish an A-project
+  // snapshot immediately before SelectProject switches to B, then that event
+  // reaches JavaScript after B's stores have already been cleared. Session
+  // IDs are only project-local, so accepting it would paint A's live status on
+  // B's same-id cards until the next poll.
+  if (data.projectId !== get(activeProjectId)) return;
 
   const nextActivities = data.activities || {};
   const nextStatusLines = data.statusLines || {};

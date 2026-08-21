@@ -257,8 +257,24 @@ func (i *Instance) SearchFileContents(query string, caseSensitive bool, files []
 			result.FilesSkipped++
 			continue
 		}
-		data, err := os.ReadFile(abs)
+		opened, err := os.Open(abs)
 		if err != nil {
+			result.FilesSkipped++
+			continue
+		}
+		info, statErr := opened.Stat()
+		if statErr != nil || !info.Mode().IsRegular() || info.Size() > MaxSearchFileBytes {
+			_ = opened.Close()
+			result.FilesSkipped++
+			continue
+		}
+		// The index size and even the descriptor's Stat can be stale while an
+		// agent is appending. Read one byte past the cap and decide from the bytes
+		// actually consumed; never let a post-index replacement allocate without
+		// bound.
+		data, readErr := readAtMost(opened, make([]byte, 0, MaxSearchFileBytes+1), MaxSearchFileBytes+1)
+		closeErr := opened.Close()
+		if readErr != nil || closeErr != nil || len(data) > MaxSearchFileBytes {
 			result.FilesSkipped++
 			continue
 		}

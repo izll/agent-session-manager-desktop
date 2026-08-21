@@ -132,6 +132,66 @@ func TestSelectProjectCancelsReadersBeforeWaitingForProjectWriteLock(t *testing.
 	storage.UnlockProject()
 }
 
+func TestProjectShutdownPreventsLateProjectSwitchAndMutation(t *testing.T) {
+	storage := guardedTestStorage(t)
+	next, err := storage.AddProject("next")
+	if err != nil {
+		t.Fatal(err)
+	}
+	app := &App{storage: storage, projectLocked: true}
+	app.beginProjectShutdown()
+
+	switchDone := make(chan error, 1)
+	go func() { switchDone <- app.SelectProject(next.ID) }()
+	select {
+	case err := <-switchDone:
+		t.Fatalf("project switch bypassed an active shutdown transition: %v", err)
+	case <-time.After(30 * time.Millisecond):
+	}
+	app.endProjectShutdown()
+
+	select {
+	case err := <-switchDone:
+		if err == nil || !strings.Contains(err.Error(), "shutting down") {
+			t.Fatalf("post-shutdown project switch error = %v, want shutdown refusal", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("project switch did not leave the shutdown transition")
+	}
+	if active := storage.GetActiveProjectID(); active != "" {
+		t.Fatalf("post-shutdown switch changed active project to %q", active)
+	}
+	if done, err := app.beginProjectMutation(); err == nil {
+		done()
+		t.Fatal("project mutation entered after shutdown gate closed")
+	} else if !strings.Contains(err.Error(), "shutting down") {
+		t.Fatalf("post-shutdown mutation error = %v, want shutdown refusal", err)
+	}
+}
+
+func TestSidebarUpdateCarriesCapturedProjectIdentity(t *testing.T) {
+	storage := guardedTestStorage(t)
+	project, err := storage.AddProject("sidebar target")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := storage.SetActiveProject(project.ID); err != nil {
+		t.Fatal(err)
+	}
+	app := &App{storage: storage}
+	update := app.getSidebarUpdates(context.Background())
+	if update.ProjectID != project.ID {
+		t.Fatalf("sidebar project identity = %q, want %q", update.ProjectID, project.ID)
+	}
+	raw, err := json.Marshal(update)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), `"projectId":"`+project.ID+`"`) {
+		t.Fatalf("sidebar project identity was not serialized: %s", raw)
+	}
+}
+
 func TestSetTabFontSizeRejectsStaleProjectTarget(t *testing.T) {
 	storage := guardedTestStorage(t)
 	inst := &session.Instance{

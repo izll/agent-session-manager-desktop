@@ -1,6 +1,9 @@
 package session
 
 import (
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -19,7 +22,7 @@ func TestGeneratedProjectIDIsOpaqueAndSafe(t *testing.T) {
 }
 
 func TestProjectIDRejectsPathTraversal(t *testing.T) {
-	invalid := []string{".", "..", "../outside", "safe/../../outside", `safe\\outside`, "/absolute"}
+	invalid := []string{".", "..", "../outside", "safe/../../outside", `safe\\outside`, "/absolute", "project.", "CON", "con.json", "COM1", "lpt9.data"}
 	for _, id := range invalid {
 		if validProjectID(id) {
 			t.Errorf("validProjectID(%q) = true, want false", id)
@@ -31,5 +34,23 @@ func TestProjectIDRejectsPathTraversal(t *testing.T) {
 		if !validProjectID(id) {
 			t.Errorf("validProjectID(%q) = false, want true", id)
 		}
+	}
+}
+
+func TestProjectCatalogRejectsCaseAliasedPortableIDs(t *testing.T) {
+	storage := newTestStorage(t)
+	catalog := &ProjectsData{Projects: []*Project{
+		{ID: "proj_A", Name: "one"},
+		{ID: "proj_a", Name: "two"},
+	}}
+	raw, err := json.Marshal(catalog)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(storage.configDir, "projects.json"), raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := storage.LoadProjects(); err == nil || !strings.Contains(err.Error(), "duplicate project ID") {
+		t.Fatalf("case-aliased project catalog error = %v, want duplicate refusal", err)
 	}
 }

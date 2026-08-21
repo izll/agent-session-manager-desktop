@@ -19,6 +19,7 @@ import (
 const (
 	maxCanonicalStorageBytes = 64 << 20
 	maxProjectCatalogBytes   = 8 << 20
+	maxPIDLockBytes          = 64
 )
 
 func readFileAtMost(path string, limit int64) ([]byte, error) {
@@ -369,7 +370,7 @@ func validProjectID(projectID string) bool {
 	if projectID == "" {
 		return true
 	}
-	if projectID == "." || projectID == ".." || filepath.Base(projectID) != projectID {
+	if projectID == "." || projectID == ".." || filepath.Base(projectID) != projectID || strings.HasSuffix(projectID, ".") {
 		return false
 	}
 	for _, r := range projectID {
@@ -377,6 +378,23 @@ func validProjectID(projectID string) bool {
 			(r >= '0' && r <= '9') || r == '-' || r == '_' || r == '.' {
 			continue
 		}
+		return false
+	}
+	// These components are aliases for devices on Windows even with an
+	// extension (for example CON.json). Reject them on every platform so a
+	// catalog synced from Linux cannot become unusable or alias storage when it
+	// is next opened on Windows.
+	stem := projectID
+	if dot := strings.IndexByte(stem, '.'); dot >= 0 {
+		stem = stem[:dot]
+	}
+	upperStem := strings.ToUpper(stem)
+	switch upperStem {
+	case "CON", "PRN", "AUX", "NUL", "CLOCK$":
+		return false
+	}
+	if len(upperStem) == 4 && (strings.HasPrefix(upperStem, "COM") || strings.HasPrefix(upperStem, "LPT")) &&
+		upperStem[3] >= '1' && upperStem[3] <= '9' {
 		return false
 	}
 	return true
@@ -398,7 +416,10 @@ func (s *Storage) IsProjectLocked(projectID string) (bool, int) {
 }
 
 func projectLockOwner(lockPath string) (bool, int) {
-	data, err := os.ReadFile(lockPath)
+	// Lock files contain one decimal PID. Treat oversized/corrupt files as stale
+	// without reading them into memory: these paths survive crashes and are
+	// therefore untrusted startup input (a sparse lock must not OOM the app).
+	data, err := readFileAtMost(lockPath, maxPIDLockBytes)
 	if os.IsNotExist(err) {
 		return false, 0
 	}
@@ -727,10 +748,15 @@ func (s *Storage) loadProjectsLocked() (*ProjectsData, error) {
 		if !validProjectID(project.ID) || project.ID == "" {
 			return nil, fmt.Errorf("failed to validate projects file: project %d has an invalid ID", index)
 		}
-		if _, duplicate := seenIDs[project.ID]; duplicate {
+		// Windows resolves these IDs through a case-insensitive directory and
+		// lock namespace. Enforce that portable identity everywhere; otherwise a
+		// catalog copied from Linux can expose two UI projects backed by the same
+		// sessions.json.
+		portableID := strings.ToLower(project.ID)
+		if _, duplicate := seenIDs[portableID]; duplicate {
 			return nil, fmt.Errorf("failed to validate projects file: duplicate project ID %q", project.ID)
 		}
-		seenIDs[project.ID] = struct{}{}
+		seenIDs[portableID] = struct{}{}
 	}
 
 	return &projectsData, nil

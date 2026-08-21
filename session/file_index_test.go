@@ -443,6 +443,34 @@ func TestSearchFileContentsSkipsOversizedFiles(t *testing.T) {
 	}
 }
 
+func TestSearchFileContentsRechecksSizeAfterIndexSnapshot(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "growing.log")
+	if err := os.WriteFile(path, []byte("small\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	inst := &Instance{Path: root}
+	index, err := inst.BuildFileIndex(false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(index.Files) != 1 || index.Files[0].Size > MaxSearchFileBytes {
+		t.Fatalf("unexpected initial index: %+v", index.Files)
+	}
+	large := strings.Repeat("x", MaxSearchFileBytes+1) + "needle\n"
+	if err := os.WriteFile(path, []byte(large), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := inst.SearchFileContents("needle", false, index.Files)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Matches) != 0 || result.FilesSkipped != 1 {
+		t.Fatalf("post-index oversized replacement was searched: %+v", result)
+	}
+}
+
 // A minified bundle is one enormous line; previewing all of it would ship
 // hundreds of kilobytes to the UI to render eighty columns.
 func TestSearchFileContentsTrimsLongLines(t *testing.T) {

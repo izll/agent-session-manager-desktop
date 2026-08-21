@@ -37,8 +37,10 @@ type App struct {
 	ptyDrainDone        chan struct{}
 	projectMu           sync.RWMutex
 	projectMutationMu   sync.Mutex
+	projectTransitionMu sync.Mutex
 	projectGateMu       sync.Mutex
 	projectSwitching    bool
+	projectShuttingDown bool
 	termServer          *TerminalServer
 	dictation           *DictationService
 	activityStats       *ActivityStatsRecorder
@@ -336,6 +338,13 @@ func (a *App) shutdown(ctx context.Context) {
 	// other services so no new Wails update request can race this shutdown, and
 	// wait for an already-running install to finish its final swap/rollback.
 	a.stopUpdateInstall()
+
+	// A project switch transfers an OS-level ownership lock. Serialize the
+	// complete transfer with teardown and permanently close the project gate;
+	// otherwise an in-flight SelectProject can acquire a new project lock after
+	// shutdown has already released the old one.
+	a.beginProjectShutdown()
+	defer a.endProjectShutdown()
 
 	// Stop every background storage/tmux reader before releasing the project
 	// lock or removing terminal mirrors. Both pollers capture panes and read the
@@ -668,6 +677,8 @@ func (a *App) GetProjects() ([]ProjectInfo, error) {
 // already open elsewhere, the switch still happens (so the user can view it)
 // but this instance stays unlocked and terminal attaches remain disabled.
 func (a *App) SelectProject(id string) error {
+	a.projectTransitionMu.Lock()
+	defer a.projectTransitionMu.Unlock()
 	if err := a.beginProjectSwitch(); err != nil {
 		return err
 	}
@@ -829,6 +840,10 @@ func (a *App) beginProjectMutation() (func(), error) {
 // or announces its intent first and the operation is refused.
 func (a *App) lockProjectOperationRead() error {
 	a.projectGateMu.Lock()
+	if a.projectShuttingDown {
+		a.projectGateMu.Unlock()
+		return fmt.Errorf("application is shutting down")
+	}
 	if a.projectSwitching {
 		a.projectGateMu.Unlock()
 		return fmt.Errorf("project switch in progress")
@@ -841,6 +856,9 @@ func (a *App) lockProjectOperationRead() error {
 func (a *App) beginProjectSwitch() error {
 	a.projectGateMu.Lock()
 	defer a.projectGateMu.Unlock()
+	if a.projectShuttingDown {
+		return fmt.Errorf("application is shutting down")
+	}
 	if a.projectSwitching {
 		return fmt.Errorf("project switch already in progress")
 	}
@@ -852,6 +870,17 @@ func (a *App) endProjectSwitch() {
 	a.projectGateMu.Lock()
 	a.projectSwitching = false
 	a.projectGateMu.Unlock()
+}
+
+func (a *App) beginProjectShutdown() {
+	a.projectTransitionMu.Lock()
+	a.projectGateMu.Lock()
+	a.projectShuttingDown = true
+	a.projectGateMu.Unlock()
+}
+
+func (a *App) endProjectShutdown() {
+	a.projectTransitionMu.Unlock()
 }
 
 // beginExpectedProjectMutation additionally pins a frontend-captured project
@@ -2491,12 +2520,12 @@ type TabStatusInfo struct {
 
 // SidebarUpdate contains combined activity and status line data
 type SidebarUpdate struct {
+	ProjectID    string                     `json:"projectId"`
 	Activities   map[string]string          `json:"activities"`
 	StatusLines  map[string]string          `json:"statusLines"`
 	SpinnerTexts map[string]string          `json:"spinnerTexts"`
 	TabStatuses  map[string][]TabStatusInfo `json:"tabStatuses"`
 	observations []activityObservation
-	projectID    string
 }
 
 // GetSidebarUpdates returns activity and status line data in one call (single LoadAll)
@@ -2520,7 +2549,7 @@ func (a *App) getSidebarUpdates(ctx context.Context) SidebarUpdate {
 	if err != nil {
 		return result
 	}
-	result.projectID = projectID
+	result.ProjectID = projectID
 
 	// Phase 1: auto-detect + persist session IDs (sequential; touches storage).
 	// Phase 2 (below) runs the tmux capture + detection in parallel across
@@ -2792,11 +2821,11 @@ func (a *App) startPreviewPolling(ctx context.Context) {
 			// Drop a completed snapshot if the user switched projects while
 			// tmux captures were running. The snapshot itself carries the ID
 			// captured atomically with its instance list, so A→B→A is safe.
-			if data.projectID != a.storage.GetActiveProjectID() {
+			if data.ProjectID != a.storage.GetActiveProjectID() {
 				continue
 			}
 			if a.activityStats != nil {
-				a.activityStats.Observe(data.projectID, time.Now(), data.observations)
+				a.activityStats.Observe(data.ProjectID, time.Now(), data.observations)
 			}
 			if isDevMode {
 				log.Printf("[SidebarEmit] activities=%v", data.Activities)

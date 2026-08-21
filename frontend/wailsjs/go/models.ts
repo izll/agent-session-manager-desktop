@@ -1409,6 +1409,7 @@ export namespace main {
 		}
 	}
 	export class SidebarUpdate {
+	    projectId: string;
 	    activities: Record<string, string>;
 	    statusLines: Record<string, string>;
 	    spinnerTexts: Record<string, string>;
@@ -1420,6 +1421,7 @@ export namespace main {
 
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.projectId = source["projectId"];
 	        this.activities = source["activities"];
 	        this.statusLines = source["statusLines"];
 	        this.spinnerTexts = source["spinnerTexts"];

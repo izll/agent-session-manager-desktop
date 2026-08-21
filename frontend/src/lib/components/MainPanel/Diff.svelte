@@ -2295,6 +2295,10 @@
      shrink it or the drag would fight the layout. */
   .file-pane {
     flex-shrink: 0;
+    /* A width remembered on a large screen must not collapse the actual diff
+       after the window is narrowed or zoomed. The inline width remains the
+       preferred size and comes back when room is available again. */
+    max-width: calc(100% - 120px);
     display: flex;
     flex-direction: column;
     min-height: 0;

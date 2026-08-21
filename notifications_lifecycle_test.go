@@ -147,3 +147,12 @@ func TestAttentionTransitionsSilentlyRebaselineOnProjectSwitch(t *testing.T) {
 		t.Fatalf("project switch notified existing waiting sessions: %v", got)
 	}
 }
+
+func TestAttentionWatcherAcceptsDefaultProjectSidebarSnapshot(t *testing.T) {
+	if !sidebarUpdateMatchesProject(SidebarUpdate{ProjectID: ""}, "") {
+		t.Fatal("default project sidebar snapshot was treated as missing")
+	}
+	if sidebarUpdateMatchesProject(SidebarUpdate{ProjectID: "project-a"}, "project-b") {
+		t.Fatal("foreign project sidebar snapshot was accepted")
+	}
+}

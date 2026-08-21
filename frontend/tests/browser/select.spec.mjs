@@ -837,4 +837,20 @@ test('project-aware FileBrowser and Diff guards accept their current file respon
   await diff.locator('.refresh-btn').click();
   await expect.poll(() => page.evaluate(() => window.projectContentFixture.diffReads())).toBe(2);
   await expect(diff.locator('.diff-lines')).toContainText('diff content marker');
+
+  // A pane width saved on a desktop-sized window must not leave the document
+  // or diff as an unusable sliver after narrowing/zooming the main panel.
+  // Before the responsive cap both right-hand panes measured 18 px here.
+  const narrowWidths = await page.evaluate(() => {
+    const measurements = {};
+    for (const id of ['browser', 'diff']) {
+      const root = document.getElementById(id);
+      root.style.width = '300px';
+      const content = root.querySelector(id === 'browser' ? '.file-content' : '.diff-content');
+      measurements[id] = content.getBoundingClientRect().width;
+    }
+    return measurements;
+  });
+  expect(narrowWidths.browser).toBeGreaterThanOrEqual(115);
+  expect(narrowWidths.diff).toBeGreaterThanOrEqual(115);
 });

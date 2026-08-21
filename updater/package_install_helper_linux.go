@@ -143,13 +143,26 @@ func privilegedPackageManagerCommand(packageKind, staged string) (string, []stri
 	}
 }
 
-var officialRootPoolMu sync.Mutex
-
 var officialReleaseHosts = map[string]bool{
 	"github.com":                            true,
 	"objects.githubusercontent.com":         true,
 	"release-assets.githubusercontent.com":  true,
 	"github-releases.githubusercontent.com": true,
+}
+
+// Keep these paths in sync with the Linux CA bundle locations supported by
+// crypto/x509. Unlike x509.SystemCertPool, reading a fixed, root-owned bundle
+// directly cannot be redirected through an unprivileged caller's
+// SSL_CERT_FILE/SSL_CERT_DIR environment. SystemCertPool also caches its first
+// result process-wide, so temporarily unsetting those variables here would be
+// too late if another package had already initialized that cache.
+var officialSystemCertFiles = []string{
+	"/etc/ssl/certs/ca-certificates.crt",                // Debian, Ubuntu, Alpine
+	"/etc/pki/tls/certs/ca-bundle.crt",                  // Fedora, RHEL
+	"/etc/ssl/ca-bundle.pem",                            // OpenSUSE
+	"/etc/pki/tls/cacert.pem",                           // OpenELEC
+	"/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem", // CentOS, RHEL
+	"/etc/ssl/cert.pem",                                 // fallback used by some distributions
 }
 
 func validateOfficialReleaseURL(u *url.URL) error {
@@ -163,35 +176,30 @@ func validateOfficialReleaseURL(u *url.URL) error {
 	return nil
 }
 
-func officialSystemCertPool() (*x509.CertPool, error) {
-	// crypto/x509 deliberately honours these environment variables on Unix.
-	// This process crossed a privilege boundary, so an unprivileged caller must
-	// not be able to replace the root helper's CA set even under a permissive or
-	// customised PolicyKit environment policy.
-	officialRootPoolMu.Lock()
-	defer officialRootPoolMu.Unlock()
-	type savedEnv struct {
-		value string
-		set   bool
-	}
-	saved := make(map[string]savedEnv, 2)
-	for _, name := range []string{"SSL_CERT_FILE", "SSL_CERT_DIR"} {
-		value, set := os.LookupEnv(name)
-		saved[name] = savedEnv{value: value, set: set}
-		if err := os.Unsetenv(name); err != nil {
-			return nil, err
-		}
-	}
-	defer func() {
-		for name, state := range saved {
-			if state.set {
-				_ = os.Setenv(name, state.value)
-			} else {
-				_ = os.Unsetenv(name)
+func loadOfficialSystemCertPool(readFile func(string) ([]byte, error)) (*x509.CertPool, error) {
+	var failures []string
+	for _, path := range officialSystemCertFiles {
+		bundle, err := readFile(path)
+		if err != nil {
+			if !os.IsNotExist(err) {
+				failures = append(failures, fmt.Sprintf("%s: %v", path, err))
 			}
+			continue
 		}
-	}()
-	return x509.SystemCertPool()
+		pool := x509.NewCertPool()
+		if pool.AppendCertsFromPEM(bundle) {
+			return pool, nil
+		}
+		failures = append(failures, path+": no valid certificates")
+	}
+	if len(failures) != 0 {
+		return nil, fmt.Errorf("cannot load a trusted system CA bundle (%s)", strings.Join(failures, "; "))
+	}
+	return nil, fmt.Errorf("no trusted system CA bundle found")
+}
+
+func officialSystemCertPool() (*x509.CertPool, error) {
+	return loadOfficialSystemCertPool(os.ReadFile)
 }
 
 func newOfficialReleaseClient() (*http.Client, error) {

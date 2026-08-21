@@ -1640,6 +1640,10 @@
      shrink it or the drag would fight the layout. */
   .file-pane {
     flex-shrink: 0;
+    /* A saved desktop width must not consume the whole view after the window
+       is narrowed or zoomed. Keep enough room for the document pane even
+       though the inline width still remembers the user's wider layout. */
+    max-width: calc(100% - 120px);
     display: flex;
     flex-direction: column;
     min-height: 0;
