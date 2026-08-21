@@ -844,7 +844,7 @@
                     class="setting-input"
                     placeholder="https://ntfy.sh/my-topic"
                     value={$settings.ntfyUrl}
-                    on:change={(e) => saveSettings({ ntfyUrl: e.currentTarget.value.trim() })}
+                    on:input={(e) => saveSettings({ ntfyUrl: e.currentTarget.value })}
                   />
                 </div>
               {/if}

@@ -17,6 +17,7 @@ var (
 	desktopNotificationInitialize = platformInitializeDesktopNotifications
 	desktopNotificationCleanup    = platformCleanupDesktopNotifications
 	desktopNotificationDeliver    = platformDeliverDesktopNotification
+	desktopNotificationTimeout    = 5 * time.Second
 )
 
 type attentionTransitionState struct {
@@ -158,7 +159,12 @@ func (a *App) sendAttentionNotification(ctx context.Context, settings *session.S
 		a.attentionWG.Add(1)
 		go func() {
 			defer a.attentionWG.Done()
-			if err := desktopNotificationDeliver(ctx, title, body); err != nil && ctx.Err() == nil {
+			// notify-send/osascript and the Windows notification bridge are
+			// external facilities. A wedged desktop bus must not retain one child
+			// and goroutine for every later waiting transition until app shutdown.
+			deliveryCtx, cancel := context.WithTimeout(ctx, desktopNotificationTimeout)
+			defer cancel()
+			if err := desktopNotificationDeliver(deliveryCtx, title, body); err != nil && ctx.Err() == nil {
 				log.Printf("[notify] desktop notification failed: %v", err)
 			}
 		}()

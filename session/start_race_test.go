@@ -99,3 +99,24 @@ func TestRecentlyStartedIgnoresBadValue(t *testing.T) {
 		t.Fatal("a non-time value must not count as a recent start")
 	}
 }
+
+func TestMarkStartedReapsUnqueriedExpiredSessions(t *testing.T) {
+	const oldName = "asm_test_expired_deleted_session"
+	const newName = "asm_test_new_session"
+	recentStarts.Store(oldName, time.Now().Add(-startSettleWindow-time.Second))
+	recentStartsPrune.Lock()
+	recentStartsPrune.last = time.Time{}
+	recentStartsPrune.Unlock()
+	t.Cleanup(func() {
+		recentStarts.Delete(oldName)
+		recentStarts.Delete(newName)
+	})
+
+	markStarted(newName)
+	if _, ok := recentStarts.Load(oldName); ok {
+		t.Fatal("an expired start mark for a deleted session was retained")
+	}
+	if !recentlyStarted(newName) {
+		t.Fatal("pruning removed the newly published start mark")
+	}
+}

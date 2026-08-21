@@ -1,9 +1,11 @@
 import { mount } from 'svelte';
 import { get } from 'svelte/store';
 import DialogRacesFixture from './dialog-races-fixture.svelte';
-import { activeProjectId } from '../../src/lib/stores/projects';
+import { activeProjectId, projects } from '../../src/lib/stores/projects';
 import { selectedSessionId, sessions } from '../../src/lib/stores/sessions';
 import { agents } from '../../src/lib/stores/agents';
+import { settings } from '../../src/lib/stores/settings';
+import { refreshOpenCount } from '../../src/lib/stores/taskAlerts';
 
 let resolveSearch: ((value: unknown[]) => void) | null = null;
 let resolveRun: (() => void) | null = null;
@@ -24,6 +26,22 @@ let resolveCreateSession: ((value: unknown) => void) | null = null;
 const startSessionCalls: string[] = [];
 const createGroupCalls: string[] = [];
 const forkCalls: unknown[][] = [];
+const settingsSaves: unknown[] = [];
+let claudeUsageCalls = 0;
+let codexUsageCalls = 0;
+const claudeUsageResolvers: Array<(value: unknown) => void> = [];
+const delayTaskLoads = new URLSearchParams(location.search).get('delayTasks') === '1';
+let allTaskCalls = 0;
+const allTaskResolvers: Array<(value: unknown[]) => void> = [];
+const delayBgAgentLoads = new URLSearchParams(location.search).get('delayBgAgents') === '1';
+let bgAgentCalls = 0;
+const bgAgentResolvers: Array<(value: unknown[]) => void> = [];
+const overviewTasks = [{
+  id: 'task-1', title: 'Fixture dashboard task', description: '', details: '',
+  status: 'pending', priority: 'medium', projectId: 'project-a',
+  projectName: 'Project A', projectPath: '/repo-a', overdue: false,
+  dependencies: [], subtasks: [],
+}];
 
 const backend = new Proxy({
   GlobalSearch: (query: string) => {
@@ -70,12 +88,11 @@ const backend = new Proxy({
   },
   GetSessions: async () => { recoverySessionLoads++; return []; },
   GetGroups: async () => [],
-  GetAllTasks: async () => [{
-    id: 'task-1', title: 'Fixture dashboard task', description: '', details: '',
-    status: 'pending', priority: 'medium', projectId: 'project-a',
-    projectName: 'Project A', projectPath: '/repo-a', overdue: false,
-    dependencies: [], subtasks: [],
-  }],
+  GetAllTasks: () => {
+    allTaskCalls++;
+    if (!delayTaskLoads) return Promise.resolve(overviewTasks);
+    return new Promise<unknown[]>((resolve) => { allTaskResolvers.push(resolve); });
+  },
   GetAgents: async () => [{
     type: 'claude', name: 'Claude', icon: '', supportsResume: false, supportsAutoYes: true, supportsFork: false,
   }],
@@ -86,13 +103,33 @@ const backend = new Proxy({
     createGroupCalls.push(name);
     return { id: 'fixture-group', name, collapsed: false, color: '', bgColor: '', fullRowColor: false };
   },
-  ListBackgroundAgents: async () => [{
-    id: 'agent-1', sessionId: '', pid: 42, cwd: '/repo-a', name: 'Background fixture',
-    status: 'running', startedAt: Date.now(),
-  }],
+  ListBackgroundAgents: () => {
+    bgAgentCalls++;
+    const result = [{
+      id: 'agent-1', sessionId: '', pid: 42, cwd: '/repo-a', name: 'Background fixture',
+      status: 'running', startedAt: Date.now(),
+    }];
+    if (!delayBgAgentLoads) return Promise.resolve(result);
+    return new Promise<unknown[]>((resolve) => { bgAgentResolvers.push(resolve); });
+  },
   ForkSession: async (...args: unknown[]) => {
     forkCalls.push(args);
     return { sessionId: 'conversation-fork' };
+  },
+  SaveSettings: async (value: unknown) => { settingsSaves.push(structuredClone(value)); },
+  GetDictationSettings: async () => ({ enabled: false, language: 'en' }),
+  GetAvailableLanguages: async () => [],
+  GetInputDevices: async () => [],
+  GetDictationProblems: async () => [],
+  DetectionPatternsVersion: async () => 1,
+  GetProjectGitSummaries: async () => [],
+  GetClaudeUsage: () => {
+    claudeUsageCalls++;
+    return new Promise((resolve) => { claudeUsageResolvers.push(resolve); });
+  },
+  GetCodexUsage: async () => {
+    codexUsageCalls++;
+    return { available: false };
   },
 }, {
   get(target, key) {
@@ -153,12 +190,24 @@ agents.set([{ type: 'claude', name: 'Claude', icon: '', supportsResume: false, s
   createGroupCalls: () => [...createGroupCalls],
   switchProject: (projectId: string) => activeProjectId.set(projectId),
   forkCalls: () => structuredClone(forkCalls),
+  settingsSaves: () => structuredClone(settingsSaves),
+  claudeUsageCalls: () => claudeUsageCalls,
+  codexUsageCalls: () => codexUsageCalls,
+  resolveClaudeUsage: (index: number) => claudeUsageResolvers[index]?.({ available: false }),
+  allTaskCalls: () => allTaskCalls,
+  resolveAllTasks: (index: number) => allTaskResolvers[index]?.(structuredClone(overviewTasks)),
+  bgAgentCalls: () => bgAgentCalls,
+  resolveBgAgents: (index: number) => bgAgentResolvers[index]?.([{
+    id: 'agent-1', sessionId: '', pid: 42, cwd: '/repo-a', name: 'Background fixture',
+    status: 'running', startedAt: Date.now(),
+  }]),
+  triggerOpenTaskRefresh: () => { void refreshOpenCount(); },
 };
 
 const target = document.getElementById('fixture');
 if (!target) throw new Error('fixture target is missing');
 const requestedMode = new URLSearchParams(location.search).get('mode');
-const mode = requestedMode === 'palette' || requestedMode === 'command' || requestedMode === 'history' || requestedMode === 'quickjump' || requestedMode === 'quickterminal' || requestedMode === 'scheme' || requestedMode === 'alltasks' || requestedMode === 'recovery' || requestedMode === 'update' || requestedMode === 'newsession' || requestedMode === 'newgroup' || requestedMode === 'bgagents' || requestedMode === 'fork' || requestedMode === 'commandmanager' || requestedMode === 'template'
+const mode = requestedMode === 'palette' || requestedMode === 'command' || requestedMode === 'history' || requestedMode === 'quickjump' || requestedMode === 'quickterminal' || requestedMode === 'scheme' || requestedMode === 'alltasks' || requestedMode === 'taskbadge' || requestedMode === 'dashboard' || requestedMode === 'recovery' || requestedMode === 'update' || requestedMode === 'settings' || requestedMode === 'newsession' || requestedMode === 'newgroup' || requestedMode === 'bgagents' || requestedMode === 'fork' || requestedMode === 'commandmanager' || requestedMode === 'template'
   ? requestedMode : 'global';
 if (mode === 'newgroup' || mode === 'bgagents' || mode === 'fork') {
   activeProjectId.set('project-a');
@@ -171,6 +220,19 @@ if (mode === 'newgroup' || mode === 'bgagents' || mode === 'fork') {
     mainWindowIndex: 0, lastWindowIndex: 0, isGitRepo: false,
   }]);
   selectedSessionId.set('session-a');
+}
+if (mode === 'settings') {
+  settings.update((value) => ({
+    ...value,
+    notifyOnWaiting: true,
+    notifyNtfy: true,
+    ntfyUrl: 'https://ntfy.sh/old-topic',
+  }));
+}
+if (mode === 'dashboard') {
+  activeProjectId.set('project-a');
+  projects.set([{ id: 'project-a', name: 'Project A', isLocked: false }]);
+  sessions.set([]);
 }
 mount(DialogRacesFixture, {
   target,

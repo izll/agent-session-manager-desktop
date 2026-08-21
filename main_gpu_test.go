@@ -23,9 +23,27 @@ func TestGpuFallbackRespectsExplicitChoice(t *testing.T) {
 	}
 }
 
-// A probe that can't run (here: the test binary has no probe path, so it
-// never exits) must leave the rendering default alone rather than wrongly
-// declaring the GPU broken and downgrading everyone to software rendering.
+func TestGpuFallbackSkipsNonLinuxPlatforms(t *testing.T) {
+	t.Setenv("ASMGR_GPU", "")
+	t.Setenv("WEBKIT_DISABLE_DMABUF_RENDERER", "")
+
+	// A non-Linux startup must not launch a second Wails application merely to
+	// probe Linux's GBM/EGL stack.
+	applyGpuFallbackForOS("windows")
+	applyGpuFallbackForOS("darwin")
+
+	if got := os.Getenv("ASMGR_GPU"); got != "" {
+		t.Fatalf("non-Linux fallback changed ASMGR_GPU to %q", got)
+	}
+	if got := os.Getenv("WEBKIT_DISABLE_DMABUF_RENDERER"); got != "" {
+		t.Fatalf("non-Linux fallback changed WebKitGTK environment to %q", got)
+	}
+}
+
+// A probe that can't run (here: the test binary has no probe dispatch path and
+// is detected before re-execution) must leave the rendering default alone
+// rather than wrongly declaring the GPU broken and downgrading everyone to
+// software rendering.
 func TestGpuFallbackKeepsDefaultWhenProbeCannotRun(t *testing.T) {
 	t.Setenv("ASMGR_GPU", "")
 	t.Setenv("WEBKIT_DISABLE_DMABUF_RENDERER", "")

@@ -249,3 +249,78 @@ func TestStopAllTaskMastersCancelsInFlightExternalStart(t *testing.T) {
 		t.Fatal("cancelled Task Master start did not release its caller")
 	}
 }
+
+func TestStopTaskMasterCancelsItsInFlightExternalStart(t *testing.T) {
+	tmp := t.TempDir()
+	binDir := filepath.Join(tmp, "bin")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	started := filepath.Join(tmp, "npx-started")
+	script := "#!/bin/sh\necho started > '" + started + "'\nexec sleep 30\n"
+	if err := os.WriteFile(filepath.Join(binDir, "npx"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("HOME", tmp)
+
+	storage, err := session.NewStorage()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := storage.UpdateSettings(func(settings *session.Settings) { settings.TaskMasterEnabled = true }); err != nil {
+		t.Fatal(err)
+	}
+	instance, err := session.NewInstance("start-cancel-one", tmp, false, session.AgentClaude, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := storage.AddInstance(instance); err != nil {
+		t.Fatal(err)
+	}
+
+	taskMasterMu.Lock()
+	oldCache, oldStarts, oldBlocked, oldEpoch := taskMasterCache, taskMasterStarts, taskMasterStartsBlocked, taskMasterDrainEpoch
+	taskMasterCache = make(map[string]*mcp.TaskMaster)
+	taskMasterStarts = make(map[string]*taskMasterStart)
+	taskMasterStartsBlocked = false
+	taskMasterDrainEpoch = 0
+	taskMasterMu.Unlock()
+	t.Cleanup(func() {
+		stopAllTaskMasters()
+		taskMasterMu.Lock()
+		taskMasterCache, taskMasterStarts = oldCache, oldStarts
+		taskMasterStartsBlocked, taskMasterDrainEpoch = oldBlocked, oldEpoch
+		taskMasterMu.Unlock()
+	})
+
+	app := &App{storage: storage, projectLocked: true}
+	requestDone := make(chan struct{})
+	go func() {
+		defer close(requestDone)
+		_ = app.TaskMasterStatus(instance.ID)
+	}()
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		if _, err := os.Stat(started); err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("fake npx did not start")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	startedStop := time.Now()
+	if err := app.StopTaskMaster(instance.ID); err != nil {
+		t.Fatal(err)
+	}
+	if elapsed := time.Since(startedStop); elapsed > 3*time.Second {
+		t.Fatalf("StopTaskMaster waited for startup timeout: %v", elapsed)
+	}
+	select {
+	case <-requestDone:
+	case <-time.After(time.Second):
+		t.Fatal("cancelled Task Master start did not release its caller")
+	}
+}

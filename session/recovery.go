@@ -751,8 +751,9 @@ func (s *Storage) RestoreTrashItem(id string) (*RestoreResult, error) {
 			restored.Stopped = false
 			insertFollowedWindow(parent, restored, entry.OriginalPosition)
 			if err := parent.StopWindow(newIndex); err != nil {
-				_ = parent.DeleteWindow(newIndex)
-				return nil, err
+				return nil, cleanupFailedRestoreWindow(err, func() error {
+					return parent.DeleteWindow(newIndex)
+				})
 			}
 		} else {
 			parent.Status = StatusStopped
@@ -774,14 +775,27 @@ func (s *Storage) RestoreTrashItem(id string) (*RestoreResult, error) {
 		if entry.Kind == "tab" && result.WindowIdx > 0 {
 			for _, instance := range data.Instances {
 				if instance.ID == result.SessionID && instance.Status == StatusRunning {
-					_ = instance.DeleteWindow(result.WindowIdx)
-					break
+					return nil, cleanupFailedRestoreWindow(err, func() error {
+						return instance.DeleteWindow(result.WindowIdx)
+					})
 				}
 			}
 		}
 		return nil, err
 	}
 	return result, nil
+}
+
+// cleanupFailedRestoreWindow preserves both halves of a failed restore. A
+// tmux window has already been created by the time either stopping it or
+// publishing its metadata fails. Silently discarding a failed delete reports
+// a clean rollback even though an untracked live window remains and a retry
+// will create another one.
+func cleanupFailedRestoreWindow(cause error, cleanup func() error) error {
+	if cleanupErr := cleanup(); cleanupErr != nil {
+		return errors.Join(cause, fmt.Errorf("failed to remove restored window: %w", cleanupErr))
+	}
+	return cause
 }
 
 func groupExists(groups []*Group, id string) bool {

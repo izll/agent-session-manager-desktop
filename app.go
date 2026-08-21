@@ -426,7 +426,17 @@ func (a *App) stopPreviewPolling() {
 // copied out before Stop so no potentially blocking process shutdown runs while
 // the global lock is held.
 func stopAllTaskMasters() {
+	drainTaskMasters(true)
+}
+
+// drainTaskMasters cancels in-flight starts and reaps every cached provider.
+// Project switches use a temporary gate and reopen it before returning;
+// shutdown and an explicit feature disable keep it closed.
+func drainTaskMasters(keepStartsBlocked bool) {
 	taskMasterMu.Lock()
+	taskMasterDrainEpoch++
+	epoch := taskMasterDrainEpoch
+	wasBlocked := taskMasterStartsBlocked
 	// Close the registration gate before looking at in-flight starts. Without
 	// this, a caller that observed the old enabled setting could register just
 	// after the loop saw an empty map and leave a new npx child behind.
@@ -462,6 +472,12 @@ func stopAllTaskMasters() {
 	for path, tm := range taskMasterCache {
 		taskMasters = append(taskMasters, tm)
 		delete(taskMasterCache, path)
+	}
+	// A project switch may only reopen a gate that it closed itself. If a
+	// feature-disable or shutdown drain had already closed it, reopening here
+	// would allow a late TaskMaster RPC to launch npx during teardown.
+	if !keepStartsBlocked && !wasBlocked && taskMasterDrainEpoch == epoch {
+		taskMasterStartsBlocked = false
 	}
 	taskMasterMu.Unlock()
 	for _, tm := range taskMasters {
@@ -655,12 +671,21 @@ func (a *App) SelectProject(id string) error {
 	a.projectMu.Lock()
 	defer a.projectMu.Unlock()
 	oldID := a.storage.GetActiveProjectID()
+	if id == oldID {
+		return nil
+	}
 	// Once the active project changes, its running sessions are no longer part
 	// of sidebar polling. Capture their Codex IDs while we still own that
 	// project's lock and before switching storage to the new project.
 	if a.projectLocked {
 		a.persistActiveProjectCodexResumeIDs("project switch")
 	}
+	// MCP clients are scoped to working directories, but the cache is global.
+	// Reap the old project's providers while the project write lock excludes
+	// every TaskMaster call; otherwise visiting projects over a long app run
+	// leaves one npx process, response readers and pipes alive per path.
+	drainTaskMasters(false)
+	clearProjectScopedCaches()
 	// Close the attach/mutation gate before changing the Storage's active
 	// project. Otherwise a connection can observe the old true value but load a
 	// session from the newly selected, possibly foreign-owned project.
@@ -697,6 +722,28 @@ func (a *App) SelectProject(id string) error {
 	a.historyIndex = nil
 	a.historyMu.Unlock()
 	return nil
+}
+
+func clearProjectScopedCaches() {
+	taskManagerMu.Lock()
+	taskManagerCache = make(map[string]*session.TaskManager)
+	taskManagerMu.Unlock()
+
+	fileIndexMu.Lock()
+	fileIndexCache = make(map[fileIndexKey]*fileIndexCacheEntry)
+	fileIndexMu.Unlock()
+
+	gitBranchMu.Lock()
+	gitBranchCache = make(map[string]gitBranchCacheEntry)
+	gitBranchMu.Unlock()
+
+	gitBranchListMu.Lock()
+	gitBranchListCache = make(map[string]gitBranchListCacheEntry)
+	gitBranchListMu.Unlock()
+
+	tabWorkingDirMu.Lock()
+	tabWorkingDirCache = make(map[string]tabWorkingDirCacheEntry)
+	tabWorkingDirMu.Unlock()
 }
 
 func (a *App) persistActiveProjectCodexResumeIDs(reason string) {
@@ -4803,6 +4850,7 @@ type taskMasterStart struct {
 
 var taskMasterStarts = make(map[string]*taskMasterStart)
 var taskMasterStartsBlocked bool
+var taskMasterDrainEpoch uint64
 
 // taskMasterEnabled reports whether the user opted into the Task Master panel.
 // Read from storage on every call rather than cached: the setting can be
@@ -5355,6 +5403,14 @@ func (a *App) StopTaskMaster(sessionID string) error {
 			return nil
 		}
 		taskMasterMu.Unlock()
+		// "Stop" must cancel startup too. Waiting passively here left the RPC
+		// blocked through npx readiness and initialize/tools-list timeouts.
+		if starting.cancel != nil {
+			starting.cancel()
+		}
+		if starting.tm != nil {
+			_ = starting.tm.Stop()
+		}
 		<-starting.done
 	}
 }

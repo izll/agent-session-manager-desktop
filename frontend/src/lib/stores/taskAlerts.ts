@@ -14,6 +14,8 @@ import { GetAllTasks } from '../../../wailsjs/go/main/App';
  */
 export const openTaskCount = writable(0);
 let refreshGeneration = 0;
+let activeRefresh: Promise<void> | null = null;
+let refreshQueued = false;
 
 /**
  * Recount the open tasks.
@@ -21,15 +23,30 @@ let refreshGeneration = 0;
  * Failure leaves the previous count alone rather than zeroing it: a transient
  * read error should not quietly report that there is nothing left to do.
  */
-export async function refreshOpenCount(): Promise<void> {
-  const generation = ++refreshGeneration;
-  try {
-    const tasks = (await GetAllTasks()) || [];
-    if (generation !== refreshGeneration) return;
-    openTaskCount.set(tasks.filter((task: { status?: string }) => task.status !== 'done').length);
-  } catch {
-    // Left as-is on purpose; see above.
-  }
+export function refreshOpenCount(): Promise<void> {
+  refreshQueued = true;
+  if (activeRefresh) return activeRefresh;
+
+  activeRefresh = (async () => {
+    do {
+      refreshQueued = false;
+      const generation = ++refreshGeneration;
+      try {
+        const tasks = (await GetAllTasks()) || [];
+        if (generation !== refreshGeneration) continue;
+        openTaskCount.set(tasks.filter((task: { status?: string }) => task.status !== 'done').length);
+      } catch {
+        // Left as-is on purpose; see above.
+      }
+    } while (refreshQueued);
+  })().finally(() => {
+    activeRefresh = null;
+    // A caller can land after the drain's final condition but before this
+    // promise-finalizer microtask. Do not strand that last request merely
+    // because it observed the just-settled promise as still active.
+    if (refreshQueued) void refreshOpenCount();
+  });
+  return activeRefresh;
 }
 
 /** How often the count is refreshed while the app is open. */

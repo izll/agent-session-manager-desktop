@@ -1118,17 +1118,41 @@ func refreshInstanceStatuses(instances []*Instance) {
 }
 
 func refreshInstanceStatusesContext(ctx context.Context, instances []*Instance) {
+	refreshInstanceStatusesWith(ctx, instances, func(ctx context.Context, instance *Instance) {
+		instance.UpdateStatusContext(ctx)
+	})
+}
+
+const maxConcurrentStatusRefreshes = 16
+
+func refreshInstanceStatusesWith(ctx context.Context, instances []*Instance, refresh func(context.Context, *Instance)) {
 	if len(instances) == 0 {
 		return
 	}
+	workers := min(len(instances), maxConcurrentStatusRefreshes)
+	jobs := make(chan *Instance)
 	var wg sync.WaitGroup
-	for _, inst := range instances {
+	for range workers {
 		wg.Add(1)
-		go func(in *Instance) {
+		go func() {
 			defer wg.Done()
-			in.UpdateStatusContext(ctx)
-		}(inst)
+			for instance := range jobs {
+				if instance != nil {
+					refresh(ctx, instance)
+				}
+			}
+		}()
 	}
+	for _, instance := range instances {
+		select {
+		case jobs <- instance:
+		case <-ctx.Done():
+			close(jobs)
+			wg.Wait()
+			return
+		}
+	}
+	close(jobs)
 	wg.Wait()
 }
 

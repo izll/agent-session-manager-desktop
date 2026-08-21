@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"os/exec"
 	"regexp"
 	"sync"
 	"time"
@@ -42,6 +43,17 @@ var (
 	backgroundAgentCommandTimeout = 15 * time.Second
 	backgroundAgentCommand        = session.CommandContext
 )
+
+func runBackgroundAgentCommand(cmd *exec.Cmd) error {
+	err := cmd.Run()
+	// WaitDelay bounds an inherited stdout/stderr pipe after the direct Claude
+	// CLI exits. The descendant still belongs to our Unix process group, so
+	// explicitly cancel it before returning instead of leaking a detached helper.
+	if errors.Is(err, exec.ErrWaitDelay) && cmd.Cancel != nil {
+		_ = cmd.Cancel()
+	}
+	return err
+}
 
 // boundedCommandOutput accepts every byte so the child cannot block on a full
 // pipe, but retains only a fixed amount in memory. JSON listings keep their
@@ -104,7 +116,7 @@ func (a *App) ListBackgroundAgents() []BackgroundAgentInfo {
 	cmd := backgroundAgentCommand(ctx, "claude", "agents", "--json")
 	configureBackgroundAgentCommand(cmd)
 	cmd.Stdout = output
-	err := cmd.Run()
+	err := runBackgroundAgentCommand(cmd)
 	out, truncated := output.Bytes()
 	if err != nil {
 		return nil
@@ -155,7 +167,7 @@ func (a *App) GetBackgroundAgentLogs(shortID string) (string, error) {
 	configureBackgroundAgentCommand(cmd)
 	cmd.Stdout = output
 	cmd.Stderr = output
-	err := cmd.Run()
+	err := runBackgroundAgentCommand(cmd)
 	out, _ := output.Bytes()
 	if err != nil && len(out) == 0 {
 		return "", fmt.Errorf("claude logs failed: %w", errors.Join(err, ctx.Err()))
@@ -172,7 +184,7 @@ func (a *App) StopBackgroundAgent(shortID string) error {
 	defer cancel()
 	cmd := backgroundAgentCommand(ctx, "claude", "stop", shortID)
 	configureBackgroundAgentCommand(cmd)
-	return cmd.Run()
+	return runBackgroundAgentCommand(cmd)
 }
 
 // AttachBackgroundAgent turns a background agent into a visible asmgr

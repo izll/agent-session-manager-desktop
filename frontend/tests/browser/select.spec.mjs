@@ -622,6 +622,92 @@ test('Update cannot be dismissed through any close path while installation is ru
   await expect(dialog.locator('.dialog-footer .btn-secondary')).toBeEnabled();
 });
 
+test('Settings persists a focused ntfy address before Escape removes the input', async ({ page }) => {
+  await gotoDialogRacesFixture(page, 'settings');
+  const input = page.locator('input[placeholder="https://ntfy.sh/my-topic"]');
+  await expect(input).toBeVisible();
+  await input.fill('https://ntfy.sh/new-topic');
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect.poll(() => page.evaluate(() => {
+    const saves = window.dialogRacesFixture.settingsSaves();
+    return saves.at(-1)?.ntfyUrl;
+  })).toBe('https://ntfy.sh/new-topic');
+});
+
+test('dashboard usage polling is single-flight per provider', async ({ page }) => {
+  await page.clock.install();
+  await gotoDialogRacesFixture(page, 'dashboard');
+  await expect.poll(() => page.evaluate(() => window.dialogRacesFixture.claudeUsageCalls())).toBe(1);
+  await expect.poll(() => page.evaluate(() => window.dialogRacesFixture.codexUsageCalls())).toBe(1);
+
+  await page.clock.runFor(45_000);
+  expect(await page.evaluate(() => window.dialogRacesFixture.claudeUsageCalls())).toBe(1);
+  expect(await page.evaluate(() => window.dialogRacesFixture.codexUsageCalls())).toBe(4);
+
+  await page.evaluate(() => window.dialogRacesFixture.resolveClaudeUsage(0));
+  await page.clock.runFor(15_000);
+  await expect.poll(() => page.evaluate(() => window.dialogRacesFixture.claudeUsageCalls())).toBe(2);
+});
+
+test('All Tasks coalesces refresh bursts into one follow-up scan', async ({ page }) => {
+  await gotoDialogRacesFixture(page, 'alltasks&delayTasks=1');
+  await expect.poll(() => page.evaluate(() => window.dialogRacesFixture.allTaskCalls())).toBe(1);
+
+  await page.evaluate(() => {
+    window.dispatchEvent(new Event('tasks:refresh'));
+    window.dispatchEvent(new Event('tasks:refresh'));
+    window.dispatchEvent(new Event('tasks:refresh'));
+  });
+  expect(await page.evaluate(() => window.dialogRacesFixture.allTaskCalls())).toBe(1);
+
+  await page.evaluate(() => window.dialogRacesFixture.resolveAllTasks(0));
+  await expect.poll(() => page.evaluate(() => window.dialogRacesFixture.allTaskCalls())).toBe(2);
+  await page.evaluate(() => window.dialogRacesFixture.resolveAllTasks(1));
+  await expect(page.getByText('Fixture dashboard task')).toBeVisible();
+});
+
+test('the open-task badge coalesces refresh bursts while its project scan is pending', async ({ page }) => {
+  await gotoDialogRacesFixture(page, 'taskbadge&delayTasks=1');
+  await page.evaluate(() => {
+    window.dialogRacesFixture.triggerOpenTaskRefresh();
+    window.dialogRacesFixture.triggerOpenTaskRefresh();
+    window.dialogRacesFixture.triggerOpenTaskRefresh();
+  });
+  await expect.poll(() => page.evaluate(() => window.dialogRacesFixture.allTaskCalls())).toBe(1);
+
+  await page.evaluate(() => window.dialogRacesFixture.resolveAllTasks(0));
+  await expect.poll(() => page.evaluate(() => window.dialogRacesFixture.allTaskCalls())).toBe(2);
+  await page.evaluate(() => window.dialogRacesFixture.resolveAllTasks(1));
+  await page.waitForTimeout(0);
+  expect(await page.evaluate(() => window.dialogRacesFixture.allTaskCalls())).toBe(2);
+
+  // Resolve first, then queue a request behind the async drain continuation
+  // but ahead of its Promise.finally callback. That narrow ordering used to
+  // leave refreshQueued=true with no active drain to consume it.
+  await page.evaluate(() => window.dialogRacesFixture.triggerOpenTaskRefresh());
+  await expect.poll(() => page.evaluate(() => window.dialogRacesFixture.allTaskCalls())).toBe(3);
+  await page.evaluate(() => {
+    window.dialogRacesFixture.resolveAllTasks(2);
+    queueMicrotask(() => window.dialogRacesFixture.triggerOpenTaskRefresh());
+  });
+  await expect.poll(() => page.evaluate(() => window.dialogRacesFixture.allTaskCalls())).toBe(4);
+  await page.evaluate(() => window.dialogRacesFixture.resolveAllTasks(3));
+});
+
+test('background-agent polling stays single-flight while a backend read is pending', async ({ page }) => {
+  await page.clock.install();
+  await gotoDialogRacesFixture(page, 'bgagents&delayBgAgents=1');
+  await expect.poll(() => page.evaluate(() => window.dialogRacesFixture.bgAgentCalls())).toBe(1);
+
+  await page.clock.runFor(20_000);
+  expect(await page.evaluate(() => window.dialogRacesFixture.bgAgentCalls())).toBe(1);
+  await page.evaluate(() => window.dialogRacesFixture.resolveBgAgents(0));
+  await expect.poll(() => page.evaluate(() => window.dialogRacesFixture.bgAgentCalls())).toBe(2);
+  await page.evaluate(() => window.dialogRacesFixture.resolveBgAgents(1));
+  await expect(page.getByText('Background fixture')).toBeVisible();
+});
+
 test('closing GitHistory cancels an active document drag listener', async ({ page }) => {
   await gotoDialogRacesFixture(page, 'history');
   const dialog = page.locator('.history-dialog');

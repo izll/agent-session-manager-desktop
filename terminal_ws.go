@@ -197,9 +197,12 @@ type termConn struct {
 	// decision and the buffer under one lock prevents output racing an un-hide:
 	// a chunk must be either replayed before the tab becomes visible or sent as
 	// live output afterwards, never stranded in held between those two steps.
-	heldMu   sync.Mutex
-	held     []byte
-	heldOver bool
+	heldMu sync.Mutex
+	held   []byte
+	// heldStart is the oldest byte when held is a full ring after overflow.
+	// Before the first overflow it remains zero and held is an ordinary slice.
+	heldStart int
+	heldOver  bool
 }
 
 // A webview is local, so ten seconds is deliberately generous. It is still a
@@ -313,32 +316,48 @@ func (tc *termConn) holdWhileHidden(data []byte) {
 }
 
 func (tc *termConn) holdWhileHiddenLocked(data []byte) {
-	tc.held = append(tc.held, data...)
-	if len(tc.held) <= maxHeldWhileHidden {
+	if len(data) == 0 {
+		return
+	}
+	if len(tc.held) < maxHeldWhileHidden && len(data) <= maxHeldWhileHidden-len(tc.held) {
+		tc.held = append(tc.held, data...)
 		return
 	}
 
-	// Over the limit: keep the most recent bytes and drop the oldest.
-	//
-	// The earlier behaviour dropped everything and repainted, on the reasoning
-	// that replaying a prefix would show the start of what happened and then
-	// jump — which reads as corruption. That reasoning holds for a prefix. It
-	// does not hold for a suffix: a terminal stream is written in order, so
-	// starting partway through is exactly what scrolling back through any
-	// terminal shows. What was lost is off the top, which is where lost
-	// history belongs.
-	//
-	// The flag is still set, so the repaint still happens: the tail may begin
-	// mid-escape-sequence, and the repaint puts the visible screen right
-	// regardless of where the replay started.
-	// Copied into a right-sized buffer rather than resliced. Reslicing keeps
-	// the original array alive — the window moves, the memory does not — and
-	// append grows by doubling, so a tab that overflowed could sit on twice
-	// the limit in memory while reporting the limit in length. With many tabs
-	// hidden at once that difference is measured in gigabytes.
-	tail := make([]byte, maxHeldWhileHidden)
-	copy(tail, tc.held[len(tc.held)-maxHeldWhileHidden:])
-	tc.held = tail
+	// Over the limit: keep the most recent bytes and drop the oldest. Convert
+	// once to a fixed-size ring, then overwrite the discarded prefix in place.
+	// The prior implementation allocated and copied a fresh 16 MiB tail on every
+	// PTY chunk after overflow; a busy hidden agent could therefore create
+	// hundreds of megabytes of garbage per second despite the nominal cap.
+	if len(data) >= maxHeldWhileHidden {
+		if len(tc.held) != maxHeldWhileHidden || cap(tc.held) != maxHeldWhileHidden {
+			tc.held = make([]byte, maxHeldWhileHidden)
+		}
+		copy(tc.held, data[len(data)-maxHeldWhileHidden:])
+		tc.heldStart = 0
+		tc.heldOver = true
+		return
+	}
+
+	if len(tc.held) < maxHeldWhileHidden {
+		combined := make([]byte, maxHeldWhileHidden)
+		drop := len(tc.held) + len(data) - maxHeldWhileHidden
+		kept := copy(combined, tc.held[drop:])
+		copy(combined[kept:], data)
+		tc.held = combined
+		tc.heldStart = 0
+	} else {
+		// append growth may have given an exactly-full slice excess capacity.
+		// Shed it once before treating the backing store as the permanent ring.
+		if cap(tc.held) != maxHeldWhileHidden {
+			bounded := make([]byte, maxHeldWhileHidden)
+			copy(bounded, tc.held)
+			tc.held = bounded
+		}
+		first := copy(tc.held[tc.heldStart:], data)
+		copy(tc.held, data[first:])
+		tc.heldStart = (tc.heldStart + len(data)) % maxHeldWhileHidden
+	}
 	tc.heldOver = true
 }
 
@@ -388,9 +407,9 @@ func (tc *termConn) reveal(deliver func([]byte) error) (wasHidden, overflowed bo
 		return false, false, nil
 	}
 	tc.hidden = false
-	data := tc.held
+	data := tc.takeHeldOutputLocked()
 	overflowed = tc.heldOver
-	tc.held, tc.heldOver = nil, false
+	tc.heldOver = false
 	if len(data) > 0 {
 		err = deliver(data)
 	}
@@ -407,7 +426,7 @@ func (tc *termConn) reveal(deliver func([]byte) error) (wasHidden, overflowed bo
 func (tc *termConn) discardHeldWhileHidden() {
 	tc.heldMu.Lock()
 	defer tc.heldMu.Unlock()
-	tc.held, tc.heldOver = nil, false
+	tc.held, tc.heldStart, tc.heldOver = nil, 0, false
 }
 
 // takeHeldWhileHidden returns and clears what was held, and whether the limit
@@ -415,9 +434,29 @@ func (tc *termConn) discardHeldWhileHidden() {
 func (tc *termConn) takeHeldWhileHidden() (data []byte, overflowed bool) {
 	tc.heldMu.Lock()
 	defer tc.heldMu.Unlock()
-	data, overflowed = tc.held, tc.heldOver
-	tc.held, tc.heldOver = nil, false
+	data, overflowed = tc.takeHeldOutputLocked(), tc.heldOver
+	tc.heldOver = false
 	return data, overflowed
+}
+
+// takeHeldOutputLocked returns the ring in production order and releases its
+// backing storage. heldMu must be held.
+func (tc *termConn) takeHeldOutputLocked() []byte {
+	if len(tc.held) == 0 {
+		tc.heldStart = 0
+		return nil
+	}
+	if tc.heldStart == 0 {
+		data := tc.held
+		tc.held = nil
+		return data
+	}
+	data := make([]byte, len(tc.held))
+	n := copy(data, tc.held[tc.heldStart:])
+	copy(data[n:], tc.held[:tc.heldStart])
+	tc.held = nil
+	tc.heldStart = 0
+	return data
 }
 
 // WriteToTerminal writes data directly to a PTY connection (for dictation)

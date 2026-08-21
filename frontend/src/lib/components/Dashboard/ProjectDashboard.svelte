@@ -56,14 +56,35 @@
     planType?: string;
   }
   let codexUsage: CodexUsage | null = null;
+  let claudeUsageRefreshing = false;
+  let codexUsageRefreshing = false;
+  let usageGeneration = 0;
 
   async function refreshUsage() {
-    try {
-      claudeUsage = (await App.GetClaudeUsage()) as ClaudeUsage;
-    } catch { /* usage is optional decoration */ }
-    try {
-      codexUsage = (await App.GetCodexUsage()) as CodexUsage;
-    } catch { /* optional */ }
+    if (!mounted) return;
+    const generation = usageGeneration;
+    const jobs: Promise<void>[] = [];
+    if (!claudeUsageRefreshing) {
+      claudeUsageRefreshing = true;
+      jobs.push((async () => {
+        try {
+          const next = (await App.GetClaudeUsage()) as ClaudeUsage;
+          if (mounted && generation === usageGeneration) claudeUsage = next;
+        } catch { /* usage is optional decoration */ }
+        finally { claudeUsageRefreshing = false; }
+      })());
+    }
+    if (!codexUsageRefreshing) {
+      codexUsageRefreshing = true;
+      jobs.push((async () => {
+        try {
+          const next = (await App.GetCodexUsage()) as CodexUsage;
+          if (mounted && generation === usageGeneration) codexUsage = next;
+        } catch { /* optional */ }
+        finally { codexUsageRefreshing = false; }
+      })());
+    }
+    await Promise.all(jobs);
   }
 
   function formatReset(value: string): string {
@@ -199,6 +220,9 @@
   onDestroy(() => {
     mounted = false;
     loadGeneration++;
+    usageGeneration++;
+    claudeUsageRefreshing = false;
+    codexUsageRefreshing = false;
     if (refreshTimer) clearInterval(refreshTimer);
   });
 

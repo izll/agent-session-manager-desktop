@@ -99,6 +99,35 @@ func TestOverflowDoesNotStrandTheOldBuffer(t *testing.T) {
 	}
 }
 
+func TestOverflowReusesTheBoundedRingBuffer(t *testing.T) {
+	tc := &termConn{}
+	tc.holdWhileHidden(bytes.Repeat([]byte("a"), maxHeldWhileHidden))
+	tc.holdWhileHidden([]byte("first-overflow"))
+
+	tc.heldMu.Lock()
+	backing := &tc.held[0]
+	tc.heldMu.Unlock()
+	marker := []byte("LATEST-RING-MARKER")
+	for i := 0; i < 32; i++ {
+		tc.holdWhileHidden(bytes.Repeat([]byte("x"), 32<<10))
+	}
+	tc.holdWhileHidden(marker)
+
+	tc.heldMu.Lock()
+	if &tc.held[0] != backing {
+		t.Error("overflow allocated a new full-size tail instead of reusing the bounded ring")
+	}
+	if len(tc.held) != maxHeldWhileHidden || cap(tc.held) != maxHeldWhileHidden {
+		t.Errorf("ring len/cap = %d/%d, want %d/%d", len(tc.held), cap(tc.held), maxHeldWhileHidden, maxHeldWhileHidden)
+	}
+	tc.heldMu.Unlock()
+
+	held, overflowed := tc.takeHeldWhileHidden()
+	if !overflowed || !bytes.HasSuffix(held, marker) {
+		t.Fatalf("ring replay overflow=%v suffix=%q", overflowed, held[len(held)-len(marker):])
+	}
+}
+
 // Held output is only worth keeping for a tab that will come back. Once the
 // connection is closing nobody will ever ask for those bytes, and holding them
 // until the conn is collected keeps up to the full limit alive per dead tab.

@@ -81,6 +81,28 @@ func TestDesktopNotificationUsesThePlatformDelivery(t *testing.T) {
 	}
 }
 
+func TestDesktopNotificationHasIndependentDeliveryTimeout(t *testing.T) {
+	originalDeliver := desktopNotificationDeliver
+	originalTimeout := desktopNotificationTimeout
+	t.Cleanup(func() {
+		desktopNotificationDeliver = originalDeliver
+		desktopNotificationTimeout = originalTimeout
+	})
+	desktopNotificationTimeout = 30 * time.Millisecond
+	desktopNotificationDeliver = func(ctx context.Context, _, _ string) error {
+		<-ctx.Done()
+		return ctx.Err()
+	}
+
+	a := NewApp()
+	started := time.Now()
+	a.sendAttentionNotification(context.Background(), &session.Settings{NotifyDesktop: true}, "reviewer", "ready")
+	a.attentionWG.Wait()
+	if elapsed := time.Since(started); elapsed > time.Second {
+		t.Fatalf("wedged desktop notification retained its worker for %v", elapsed)
+	}
+}
+
 func TestNativeNotificationLifecycleSurroundsTheWatcher(t *testing.T) {
 	raw, err := os.ReadFile("app.go")
 	if err != nil {

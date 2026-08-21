@@ -57,6 +57,35 @@ func TestFileIndexCacheReusesTheWalk(t *testing.T) {
 	}
 }
 
+func TestFileIndexCacheReapsExpiredRoots(t *testing.T) {
+	clearFileIndexCache(t)
+	t.Cleanup(func() { clearFileIndexCache(t) })
+	expiredKey := fileIndexKey{sessionID: "old", root: "/old/root"}
+	inFlightKey := fileIndexKey{sessionID: "walking", root: "/walking/root"}
+	fileIndexMu.Lock()
+	fileIndexCache[expiredKey] = &fileIndexCacheEntry{
+		index:     &session.FileIndex{Files: []session.IndexedFile{{Path: "large.bin"}}},
+		expiresAt: time.Now().Add(-time.Second),
+	}
+	fileIndexCache[inFlightKey] = &fileIndexCacheEntry{done: make(chan struct{})}
+	fileIndexMu.Unlock()
+
+	if _, err := cachedFileIndex(fileIndexKey{sessionID: "new", root: "/new/root"}, func() (*session.FileIndex, error) {
+		return &session.FileIndex{}, nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	fileIndexMu.Lock()
+	defer fileIndexMu.Unlock()
+	if _, ok := fileIndexCache[expiredKey]; ok {
+		t.Fatal("expired index was retained after another cache access")
+	}
+	if _, ok := fileIndexCache[inFlightKey]; !ok {
+		t.Fatal("in-flight index was reaped before its waiters could finish")
+	}
+}
+
 // includeAll produces a genuinely different list, so it must not share a cache
 // slot with the default walk.
 func TestFileIndexCacheKeyedByIncludeAll(t *testing.T) {

@@ -18,7 +18,15 @@ import (
 // replacing that writer's newer snapshot.
 var ErrTaskMasterConflict = errors.New("tasks.json changed during update")
 
-var taskMasterPathLocks sync.Map // canonical path -> *sync.Mutex
+var taskMasterPathLocks = struct {
+	sync.Mutex
+	entries map[string]*taskMasterPathLock
+}{entries: make(map[string]*taskMasterPathLock)}
+
+type taskMasterPathLock struct {
+	mu   sync.Mutex
+	refs int
+}
 
 const maxTaskMasterFileBytes = 64 << 20
 
@@ -105,10 +113,24 @@ func MutateTaskMasterFile(path string, mutate func(root map[string]interface{}) 
 // tasks.json concurrently.
 func withTaskMasterWriterLock(path string, action func() error) error {
 	path = canonicalTaskMasterPath(path)
-	value, _ := taskMasterPathLocks.LoadOrStore(path, &sync.Mutex{})
-	processLock := value.(*sync.Mutex)
-	processLock.Lock()
-	defer processLock.Unlock()
+	taskMasterPathLocks.Lock()
+	processLock := taskMasterPathLocks.entries[path]
+	if processLock == nil {
+		processLock = &taskMasterPathLock{}
+		taskMasterPathLocks.entries[path] = processLock
+	}
+	processLock.refs++
+	taskMasterPathLocks.Unlock()
+	processLock.mu.Lock()
+	defer func() {
+		processLock.mu.Unlock()
+		taskMasterPathLocks.Lock()
+		processLock.refs--
+		if processLock.refs == 0 && taskMasterPathLocks.entries[path] == processLock {
+			delete(taskMasterPathLocks.entries, path)
+		}
+		taskMasterPathLocks.Unlock()
+	}()
 
 	// The stable lock lives outside Task Master's provider-owned directory. In
 	// particular, initialize_project must not create .taskmaster/tasks merely by

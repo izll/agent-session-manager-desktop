@@ -3,6 +3,7 @@ package session
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log"
 	"os/exec"
 	"time"
@@ -18,10 +19,23 @@ const claudeBackgroundOutputLimit = 1 << 20
 func timedClaudeBackgroundCommand(args ...string) (context.CancelFunc, *exec.Cmd) {
 	ctx, cancel := context.WithTimeout(context.Background(), claudeBackgroundCommandTimeout)
 	cmd := claudeBackgroundCommand(ctx, "claude", args...)
+	configureClaudeBackgroundCommand(cmd)
 	// If the direct CLI exits but a descendant inherited its output pipe,
 	// bounded WaitDelay prevents resume from hanging indefinitely.
 	cmd.WaitDelay = time.Second
 	return cancel, cmd
+}
+
+func runTimedClaudeBackgroundCommand(cmd *exec.Cmd, cancel context.CancelFunc) error {
+	err := cmd.Run()
+	// WaitDelay means the direct CLI exited but a descendant retained one of
+	// its pipes. Returning is bounded, but without this explicit group cancel
+	// that detached helper remains alive after the operation has finished.
+	if errors.Is(err, exec.ErrWaitDelay) && cmd.Cancel != nil {
+		_ = cmd.Cancel()
+	}
+	cancel()
+	return err
 }
 
 // ReleaseClaudeBackgroundAgent frees a Claude conversation that is currently
@@ -49,8 +63,7 @@ func ReleaseClaudeBackgroundAgent(resumeID string) {
 	// UUID is rejected, and the command exits 0 either way, so we verify by
 	// polling the list below instead of trusting the exit code.
 	cancel, cmd := timedClaudeBackgroundCommand("stop", shortID)
-	err := cmd.Run()
-	cancel()
+	err := runTimedClaudeBackgroundCommand(cmd, cancel)
 	if err != nil {
 		log.Printf("[bg-agent] claude stop %s failed: %v", shortID, err)
 		return
@@ -78,8 +91,7 @@ func findBackgroundAgentWithLimit(resumeID string, limit int) (string, bool) {
 	cancel, cmd := timedClaudeBackgroundCommand("agents", "--json")
 	output := &boundedGeminiOutput{limit: limit}
 	cmd.Stdout = output
-	err := cmd.Run()
-	cancel()
+	err := runTimedClaudeBackgroundCommand(cmd, cancel)
 	if err != nil || output.truncated {
 		return "", false // claude CLI missing/old — treat as free
 	}

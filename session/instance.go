@@ -354,12 +354,34 @@ func (i *Instance) TmuxSessionName() string {
 // running `tmux list-sessions` on every capture (called multiple times per poll cycle).
 var captureTargetCache sync.Map // map[string]captureTargetEntry
 
+var captureTargetCachePrune struct {
+	sync.Mutex
+	last time.Time
+}
+
 type captureTargetEntry struct {
 	target  string
 	expires time.Time
 }
 
 const captureTargetCacheTTL = 2 * time.Second
+
+func pruneCaptureTargetCache(now time.Time) {
+	captureTargetCachePrune.Lock()
+	if !captureTargetCachePrune.last.IsZero() && now.Sub(captureTargetCachePrune.last) < captureTargetCacheTTL {
+		captureTargetCachePrune.Unlock()
+		return
+	}
+	captureTargetCachePrune.last = now
+	captureTargetCachePrune.Unlock()
+	captureTargetCache.Range(func(key, value interface{}) bool {
+		entry, ok := value.(captureTargetEntry)
+		if !ok || !now.Before(entry.expires) {
+			captureTargetCache.Delete(key)
+		}
+		return true
+	})
+}
 
 // GetCaptureTarget returns the best tmux target for capture-pane for a given window.
 // It prefers an attached GUI session (created by the WebSocket terminal) because those
@@ -373,11 +395,13 @@ func (i *Instance) GetCaptureTarget(windowIdx int) string {
 func (i *Instance) GetCaptureTargetContext(ctx context.Context, windowIdx int) string {
 	baseName := i.TmuxSessionName()
 	cacheKey := fmt.Sprintf("%s:%d", baseName, windowIdx)
+	now := time.Now()
+	pruneCaptureTargetCache(now)
 
 	// Check cache first
 	if cached, ok := captureTargetCache.Load(cacheKey); ok {
 		entry := cached.(captureTargetEntry)
-		if time.Now().Before(entry.expires) {
+		if now.Before(entry.expires) {
 			return entry.target
 		}
 	}
@@ -473,13 +497,35 @@ func (i *Instance) Start() error {
 //
 // Keyed by session name rather than held on Instance, because callers can hold
 // different Instance values for the same session.
-var startLocks sync.Map // map[string]*sync.Mutex
+var startLocks = struct {
+	sync.Mutex
+	entries map[string]*sessionStartLock
+}{entries: make(map[string]*sessionStartLock)}
+
+type sessionStartLock struct {
+	mu   sync.Mutex
+	refs int
+}
 
 func lockSessionStart(name string) func() {
-	v, _ := startLocks.LoadOrStore(name, &sync.Mutex{})
-	mu := v.(*sync.Mutex)
-	mu.Lock()
-	return mu.Unlock
+	startLocks.Lock()
+	entry := startLocks.entries[name]
+	if entry == nil {
+		entry = &sessionStartLock{}
+		startLocks.entries[name] = entry
+	}
+	entry.refs++
+	startLocks.Unlock()
+	entry.mu.Lock()
+	return func() {
+		entry.mu.Unlock()
+		startLocks.Lock()
+		entry.refs--
+		if entry.refs == 0 && startLocks.entries[name] == entry {
+			delete(startLocks.entries, name)
+		}
+		startLocks.Unlock()
+	}
 }
 
 func (i *Instance) StartWithResume(resumeID string) error {
@@ -2916,6 +2962,11 @@ func soleTmuxWindowIndex(sessionName string) (int, bool) {
 // and the other does not, so the session appears frozen until one is killed.
 var recentStarts sync.Map // map[string]time.Time
 
+var recentStartsPrune struct {
+	sync.Mutex
+	last time.Time
+}
+
 // startSettleWindow is how long after a start another start should wait for
 // the session to appear instead of assuming it is absent. Comfortably longer
 // than the registration delay measured on psmux, and it only ever delays the
@@ -2923,7 +2974,28 @@ var recentStarts sync.Map // map[string]time.Time
 const startSettleWindow = 10 * time.Second
 
 func markStarted(sessionName string) {
-	recentStarts.Store(sessionName, time.Now())
+	now := time.Now()
+	pruneRecentStarts(now)
+	recentStarts.Store(sessionName, now)
+}
+
+func pruneRecentStarts(now time.Time) {
+	recentStartsPrune.Lock()
+	if !recentStartsPrune.last.IsZero() && now.Sub(recentStartsPrune.last) < startSettleWindow {
+		recentStartsPrune.Unlock()
+		return
+	}
+	recentStartsPrune.last = now
+	recentStartsPrune.Unlock()
+	recentStarts.Range(func(key, value interface{}) bool {
+		started, ok := value.(time.Time)
+		if !ok || now.Sub(started) > startSettleWindow {
+			// Do not delete a fresh replacement published after Range read the
+			// old value; losing that mark can re-open the duplicate-start race.
+			recentStarts.CompareAndDelete(key, value)
+		}
+		return true
+	})
 }
 
 func recentlyStarted(sessionName string) bool {

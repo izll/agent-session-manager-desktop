@@ -7,7 +7,7 @@
    * the panel — tasks live one file per working directory, and the panel only
    * ever sees the active session's.
    */
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import { GetAllTasks } from '../../../../wailsjs/go/main/App';
   import { t } from '../../i18n';
   import { deadlineState } from '../../utils/taskDueDate';
@@ -38,7 +38,9 @@
   };
 
   let tasks: OverviewTask[] = [];
-  let loading = true;
+  let loading = false;
+  let loadQueued = false;
+  let destroyed = false;
   let error = '';
   let selected: OverviewTask | null = null;
   let loadGeneration = 0;
@@ -58,19 +60,29 @@
   }
 
   async function load() {
+    if (loading) {
+      loadQueued = true;
+      return;
+    }
     const generation = ++loadGeneration;
     loading = true;
     error = '';
     try {
       const nextTasks = (await GetAllTasks()) || [];
-      if (generation !== loadGeneration) return;
+      if (destroyed || generation !== loadGeneration) return;
       tasks = nextTasks;
     } catch (e) {
-      if (generation !== loadGeneration) return;
+      if (destroyed || generation !== loadGeneration) return;
       error = String(e);
       tasks = [];
     } finally {
-      if (generation === loadGeneration) loading = false;
+      if (!destroyed && generation === loadGeneration) {
+        loading = false;
+        if (loadQueued) {
+          loadQueued = false;
+          void load();
+        }
+      }
     }
   }
 
@@ -79,6 +91,12 @@
     const refresh = () => { void load(); };
     window.addEventListener('tasks:refresh', refresh);
     return () => window.removeEventListener('tasks:refresh', refresh);
+  });
+
+  onDestroy(() => {
+    destroyed = true;
+    loadGeneration++;
+    loadQueued = false;
   });
 
   // The default project comes back with an empty name: its label is a
@@ -269,7 +287,7 @@
         options={statusOptions}
         on:change={(e) => (statusFilter = e.detail)}
       />
-      <button class="refresh" on:click={load} title={$t('common.refresh')} aria-label={$t('common.refresh')}>
+      <button class="refresh" on:click={load} disabled={loading} title={$t('common.refresh')} aria-label={$t('common.refresh')}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
           <path d="M21 12a9 9 0 1 1-3-6.7"/>
           <path d="M21 3v6h-6"/>

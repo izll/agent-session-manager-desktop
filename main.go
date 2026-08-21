@@ -8,6 +8,8 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"path/filepath"
+	goruntime "runtime"
 	"strings"
 	"time"
 
@@ -168,6 +170,17 @@ func main() {
 //
 // An explicit ASMGR_GPU always wins: this only fills in a default.
 func applyGpuFallback() {
+	applyGpuFallbackForOS(goruntime.GOOS)
+}
+
+func applyGpuFallbackForOS(goos string) {
+	// GBM, EGL and the WebKitGTK environment switches below are Linux-only.
+	// Re-executing a complete hidden Wails application on Windows/macOS adds a
+	// second native webview to every startup while testing a facility those
+	// platforms do not use.
+	if goos != "linux" {
+		return
+	}
 	if os.Getenv("ASMGR_GPU") != "" {
 		return // user made the call; don't second-guess it
 	}
@@ -199,6 +212,12 @@ func gbmEGLWorks() bool {
 	if err != nil {
 		return true // can't probe; leave the default alone
 	}
+	// A Go test binary does not execute this package's main function, so it has
+	// no ASMGR_GPU_PROBE dispatch path. Re-executing it would run this test suite
+	// recursively and create another probe test process at every generation.
+	if strings.HasSuffix(filepath.Base(exe), ".test") {
+		return true
+	}
 
 	// A healthy probe takes well under a second; the ceiling only exists so a
 	// wedged driver can't stall startup.
@@ -206,16 +225,28 @@ func gbmEGLWorks() bool {
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, exe)
+	configureGPUProbeCommand(cmd)
 	cmd.Env = append(os.Environ(), gpuProbeEnv+"=1")
-	err = cmd.Run()
+	err = runGPUProbeCommand(cmd)
 
 	if ctx.Err() != nil {
-		// Timed out. Under `go test` the executable is the test binary, which
-		// has no probe path and never exits — don't call that a broken GPU.
+		// A timeout is inconclusive: the desktop itself may be overloaded. Do not
+		// permanently downgrade rendering based on a probe that never answered.
 		log.Println("GPU probe timed out; leaving the rendering default alone")
 		return true
 	}
 	return err == nil
+}
+
+func runGPUProbeCommand(cmd *exec.Cmd) error {
+	err := cmd.Run()
+	// A renderer/GPU helper can survive the direct probe crashing. The process
+	// group still has the direct PID as its group id, so the custom Unix Cancel
+	// can reap that remainder even after Wait returned an exit error.
+	if err != nil && cmd.Cancel != nil {
+		_ = cmd.Cancel()
+	}
+	return err
 }
 
 // gpuProbeEnv marks the child process spawned by gbmEGLWorks.

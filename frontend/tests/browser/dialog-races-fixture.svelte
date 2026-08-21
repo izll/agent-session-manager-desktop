@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
 
-  export let mode: 'global' | 'palette' | 'command' | 'history' | 'quickjump' | 'quickterminal' | 'scheme' | 'alltasks' | 'recovery' | 'update' | 'newsession' | 'newgroup' | 'bgagents' | 'fork' | 'commandmanager' | 'template' = 'global';
+  export let mode: 'global' | 'palette' | 'command' | 'history' | 'quickjump' | 'quickterminal' | 'scheme' | 'alltasks' | 'taskbadge' | 'dashboard' | 'recovery' | 'update' | 'settings' | 'newsession' | 'newgroup' | 'bgagents' | 'fork' | 'commandmanager' | 'template' = 'global';
   export let onFixtureReady: () => void = () => {};
 
   let showGlobal = mode === 'global';
@@ -13,6 +13,7 @@
   let showSchemeImport = mode === 'scheme';
   let showRecovery = mode === 'recovery';
   let showUpdate = mode === 'update';
+  let showSettings = mode === 'settings';
   let showNewSession = mode === 'newsession';
   let showNewGroup = mode === 'newgroup';
   let showBgAgents = mode === 'bgagents';
@@ -42,8 +43,11 @@
       case 'quickterminal': FixtureComponent = (await import('../../src/lib/components/Dialogs/QuickTerminalDialog.svelte')).default; break;
       case 'scheme': FixtureComponent = (await import('../../src/lib/components/Dialogs/SchemeImportDialog.svelte')).default; break;
       case 'alltasks': FixtureComponent = (await import('../../src/lib/components/Dashboard/AllTasks.svelte')).default; break;
+      case 'taskbadge': FixtureComponent = null; break;
+      case 'dashboard': FixtureComponent = (await import('../../src/lib/components/Dashboard/ProjectDashboard.svelte')).default; break;
       case 'recovery': FixtureComponent = (await import('../../src/lib/components/Dialogs/RecoveryCenterDialog.svelte')).default; break;
       case 'update': FixtureComponent = (await import('../../src/lib/components/Dialogs/UpdateDialog.svelte')).default; break;
+      case 'settings': FixtureComponent = (await import('../../src/lib/components/Dialogs/SettingsDialog.svelte')).default; break;
       case 'newsession': FixtureComponent = (await import('../../src/lib/components/Dialogs/NewSessionDialog.svelte')).default; break;
       case 'newgroup': FixtureComponent = (await import('../../src/lib/components/Dialogs/NewGroupDialog.svelte')).default; break;
       case 'bgagents': FixtureComponent = (await import('../../src/lib/components/Dialogs/BgAgentsDialog.svelte')).default; break;
@@ -85,6 +89,8 @@
     <svelte:component this={FixtureComponent} bind:show={showRecovery} />
   {:else if mode === 'update'}
     <svelte:component this={FixtureComponent} bind:show={showUpdate} />
+  {:else if mode === 'settings'}
+    <svelte:component this={FixtureComponent} bind:show={showSettings} />
   {:else if mode === 'newsession'}
     <svelte:component this={FixtureComponent} bind:show={showNewSession} />
   {:else if mode === 'newgroup'}
@@ -98,6 +104,8 @@
   {:else if mode === 'template'}
     <svelte:component this={FixtureComponent} bind:show={showTemplate} />
   {:else if mode === 'alltasks'}
+    <svelte:component this={FixtureComponent} />
+  {:else if mode === 'dashboard'}
     <svelte:component this={FixtureComponent} />
   {:else}
     <svelte:component this={FixtureComponent} bind:show={showGlobal} />

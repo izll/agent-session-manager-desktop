@@ -41,6 +41,7 @@ const gitHistory = read('lib/components/Dialogs/GitHistoryDialog.svelte');
 const bgAgents = read('lib/components/Dialogs/BgAgentsDialog.svelte');
 const recovery = read('lib/components/Dialogs/RecoveryCenterDialog.svelte');
 const allTasks = read('lib/components/Dashboard/AllTasks.svelte');
+const projectDashboard = read('lib/components/Dashboard/ProjectDashboard.svelte');
 const settingsDialog = read('lib/components/Dialogs/SettingsDialog.svelte');
 const sessionTemplates = read('lib/components/Dialogs/SessionTemplateDialog.svelte');
 const saveAsTemplate = read('lib/components/Dialogs/SaveAsTemplateDialog.svelte');
@@ -339,12 +340,26 @@ assert.match(allTasks, /task\.projectId !== \$activeProjectId[\s\S]*?await selec
   'an all-project task jump must switch the backend project before selecting its session id');
 assert.match(allTasks, /const key = `\$\{task\.projectId\}:\$\{task\.sessionId \|\| task\.projectPath\}`/,
   'task groups must not merge project-scoped session ids');
+assert.match(allTasks, /if \(loading\) \{[\s\S]*?loadQueued = true;[\s\S]*?return;/,
+  'bursty all-task refreshes must not start overlapping all-project scans');
+assert.match(allTasks, /if \(loadQueued\) \{[\s\S]*?loadQueued = false;[\s\S]*?void load\(\)/,
+  'an event received during an all-task scan must coalesce into one follow-up reload');
+assert.match(projectDashboard, /if \(!claudeUsageRefreshing\)[\s\S]*?App\.GetClaudeUsage\(\)/,
+  'a hung Claude usage request must not accumulate on every dashboard tick');
+assert.match(projectDashboard, /if \(!codexUsageRefreshing\)[\s\S]*?App\.GetCodexUsage\(\)/,
+  'Codex usage refresh must remain independent from a hung Claude request');
+assert.match(projectDashboard, /usageGeneration\+\+;[\s\S]*?clearInterval\(refreshTimer\)/,
+  'dashboard teardown must invalidate optional usage responses and its interval');
+assert.match(bgAgents, /if \(refreshInFlight\) return refreshInFlight;[\s\S]*?while \(show && refreshQueued\)/,
+  'background-agent polling must not accumulate reads while the backend is slow');
 assert.match(settingsDialog, /else if \(!show && previousShow\) \{[\s\S]*?showApiKey = false/,
   'a revealed API key must be covered when the persistently mounted dialog closes');
 assert.match(settingsDialog, /dictationLoadGeneration\+\+;[\s\S]*?cancelAudioTest\(\)/,
   'closing settings must invalidate delayed device reads and audio countdowns');
 assert.match(settingsDialog, /if \(!show \|\| generation !== audioTestGeneration\) return/,
   'a closed audio-test countdown must not start microphone playback later');
+assert.match(settingsDialog, /value=\{\$settings\.ntfyUrl\}[\s\S]*?on:input=\{\(e\) => saveSettings\(\{ ntfyUrl: e\.currentTarget\.value \}\)\}/,
+  'the ntfy address must be persisted before Escape can remove the focused input');
 assert.match(settingsStore, /export function invalidateSettingsContext/);
 assert.match(settingsStore, /context !== settingsContextGeneration \|\| generation !== settingsLoadGeneration/,
   'settings reads must belong to the project context that started them');

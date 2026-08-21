@@ -62,9 +62,20 @@ func (a *App) SearchSessionFileIndex(id string, includeAll bool, windowIdx int, 
 // exercised without a real Storage behind it.
 func cachedFileIndex(key fileIndexKey, build func() (*session.FileIndex, error)) (*session.FileIndex, error) {
 	for {
+		now := time.Now()
 		fileIndexMu.Lock()
+		// The key includes the canonical tab root, so a long-running session
+		// that visits many directories can create many individually large
+		// indexes. TTL controls reuse, but it does not remove map entries by
+		// itself; reap completed expired indexes whenever the cache is used.
+		// In-flight walks are retained so their waiters still share the result.
+		for cachedKey, cached := range fileIndexCache {
+			if cached.done == nil && !now.Before(cached.expiresAt) {
+				delete(fileIndexCache, cachedKey)
+			}
+		}
 		entry, ok := fileIndexCache[key]
-		if ok && entry.done == nil && time.Now().Before(entry.expiresAt) {
+		if ok && entry.done == nil && now.Before(entry.expiresAt) {
 			fileIndexMu.Unlock()
 			return entry.index, nil
 		}

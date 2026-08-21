@@ -47,6 +47,16 @@ assert.match(
   /const generation = \+\+refreshGeneration;[\s\S]*?generation !== refreshGeneration/,
   'an older full-project scan must not overwrite a newer task count',
 );
+assert.match(
+  alerts,
+  /if \(activeRefresh\) return activeRefresh;[\s\S]*?do \{[\s\S]*?\} while \(refreshQueued\)/,
+  'slow full-project scans must be single-flight and coalesce a burst into one follow-up',
+);
+assert.match(
+  alerts,
+  /activeRefresh = null;[\s\S]*?if \(refreshQueued\) void refreshOpenCount\(\)/,
+  'a refresh queued immediately before the promise finalizer must not be stranded',
+);
 
 // Cleanup has to undo both halves, or a closed window keeps reading files.
 const watcher = alerts.match(/export function watchOpenCount[\s\S]*?\n}/);

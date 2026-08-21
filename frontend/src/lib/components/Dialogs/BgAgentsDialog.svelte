@@ -28,6 +28,8 @@
   let logsText = '';
   let error = '';
   let pollTimer: ReturnType<typeof setInterval> | null = null;
+  let refreshInFlight: Promise<void> | null = null;
+  let refreshQueued = false;
   let refreshGeneration = 0;
   let logsGeneration = 0;
   let attachGeneration = 0;
@@ -59,6 +61,7 @@
   function stopPolling() {
     if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
     refreshGeneration++;
+    refreshQueued = false;
     logsGeneration++;
     attachGeneration++;
     loading = false;
@@ -72,20 +75,34 @@
 
   onDestroy(stopPolling);
 
-  async function refresh() {
-    const generation = ++refreshGeneration;
-    loading = agents.length === 0;
-    try {
-      const nextAgents = ((await App.ListBackgroundAgents()) || []) as BgAgent[];
-      if (!show || generation !== refreshGeneration) return;
-      agents = nextAgents;
-      error = '';
-    } catch (e) {
-      if (!show || generation !== refreshGeneration) return;
-      error = String(e);
-    } finally {
-      if (generation === refreshGeneration) loading = false;
-    }
+  function refresh(): Promise<void> {
+    refreshQueued = true;
+    if (refreshInFlight) return refreshInFlight;
+
+    refreshInFlight = (async () => {
+      do {
+        refreshQueued = false;
+        const generation = ++refreshGeneration;
+        loading = agents.length === 0;
+        try {
+          const nextAgents = ((await App.ListBackgroundAgents()) || []) as BgAgent[];
+          if (!show || generation !== refreshGeneration) continue;
+          agents = nextAgents;
+          error = '';
+        } catch (e) {
+          if (!show || generation !== refreshGeneration) continue;
+          error = String(e);
+        } finally {
+          if (generation === refreshGeneration) loading = false;
+        }
+      } while (show && refreshQueued);
+    })().finally(() => {
+      refreshInFlight = null;
+      // A refresh can be queued in the microtask gap after the loop's final
+      // condition and before this finalizer clears the settled promise.
+      if (show && refreshQueued) void refresh();
+    });
+    return refreshInFlight;
   }
 
   $: filteredAgents = filter.trim()

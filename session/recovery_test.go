@@ -157,6 +157,22 @@ func TestTrashAndRestoreTabUsesSafeStoredIndex(t *testing.T) {
 	}
 }
 
+func TestRestoreTabReportsRollbackWindowFailure(t *testing.T) {
+	restoreErr := errors.New("failed to publish restored tab")
+	cleanupErr := errors.New("tmux window is still alive")
+	err := cleanupFailedRestoreWindow(restoreErr, func() error { return cleanupErr })
+	if !errors.Is(err, restoreErr) {
+		t.Fatalf("restore failure was lost: %v", err)
+	}
+	if !errors.Is(err, cleanupErr) {
+		t.Fatalf("window cleanup failure was lost: %v", err)
+	}
+
+	if err := cleanupFailedRestoreWindow(restoreErr, func() error { return nil }); !errors.Is(err, restoreErr) {
+		t.Fatalf("successful cleanup changed the original failure: %v", err)
+	}
+}
+
 func TestRestoreBackupPreservesCurrentSecret(t *testing.T) {
 	storage := newRecoveryTestStorage(t)
 	settings := DefaultSettings()
