@@ -5,7 +5,7 @@
     gitBranch,
     formatAheadBehind,
     listGitBranches,
-    currentGitPath,
+    currentGitTarget,
     type GitBranchEntry
   } from '../../stores/gitBranch';
   import { portal } from '../../utils/portal';
@@ -73,8 +73,12 @@
     loading = true;
     failed = false;
     try {
-      const list = await listGitBranches(currentGitPath());
-      if (generation !== listGeneration) return;
+      const target = currentGitTarget();
+      const list = await listGitBranches(target);
+      const current = currentGitTarget();
+      if (generation !== listGeneration || !target || !current ||
+          target.projectId !== current.projectId || target.sessionId !== current.sessionId ||
+          target.windowIdx !== current.windowIdx || target.root !== current.root) return;
       branches = list.branches || [];
       total = list.total;
       truncated = list.truncated;

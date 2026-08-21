@@ -150,6 +150,59 @@ async function bundleStore(entry, globalName) {
   delete globalThis.__sessionsRaceApp;
 }
 
+// Toggle endpoints return no desired value. If a concurrent refresh observes
+// the backend's new value before the toggle promise settles, blindly inverting
+// the current store at completion reverses that fresh snapshot and leaves the
+// UI disagreeing with disk. Each toggle must finish from a backend reload.
+{
+  let favorite = false;
+  let autoYes = false;
+  let collapsed = false;
+  let pendingToggle = deferred();
+  globalThis.__sessionToggleRaceApp = new Proxy({
+    GetSessions: async () => [{ id: 'session-1', name: 'one', favorite, autoYes }],
+    GetGroups: async () => [{ id: 'group-1', name: 'one', collapsed }],
+    ToggleFavorite() { favorite = !favorite; return pendingToggle.promise; },
+    ToggleAutoYes() { autoYes = !autoYes; return pendingToggle.promise; },
+    ToggleGroupCollapse() { collapsed = !collapsed; return pendingToggle.promise; },
+  }, {
+    get(target, key) {
+      if (key in target) return target[key];
+      return async () => undefined;
+    },
+  });
+  const store = await bundleStore('src/lib/stores/sessions.ts', '__sessionToggleRaceApp');
+  let visibleSessions = [];
+  let visibleGroups = [];
+  store.sessions.subscribe((value) => { visibleSessions = value; });
+  store.groups.subscribe((value) => { visibleGroups = value; });
+  await store.loadSessions();
+
+  let operation = store.toggleFavorite('session-1');
+  await store.loadSessions();
+  assert.equal(visibleSessions[0].favorite, true);
+  pendingToggle.resolve();
+  await operation;
+  assert.equal(visibleSessions[0].favorite, true);
+
+  pendingToggle = deferred();
+  operation = store.toggleAutoYes('session-1');
+  await store.loadSessions();
+  assert.equal(visibleSessions[0].autoYes, true);
+  pendingToggle.resolve();
+  await operation;
+  assert.equal(visibleSessions[0].autoYes, true);
+
+  pendingToggle = deferred();
+  operation = store.toggleGroupCollapse('group-1');
+  await store.loadSessions();
+  assert.equal(visibleGroups[0].collapsed, true);
+  pendingToggle.resolve();
+  await operation;
+  assert.equal(visibleGroups[0].collapsed, true);
+  delete globalThis.__sessionToggleRaceApp;
+}
+
 // A failed settings save may still be reading its old project's recovery
 // snapshot while the user switches projects. That late read must not replace
 // the settings already loaded for the new project.

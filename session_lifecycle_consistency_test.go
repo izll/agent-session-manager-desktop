@@ -2,6 +2,8 @@ package main
 
 import (
 	"errors"
+	"os"
+	"strings"
 	"testing"
 
 	"asmgr-desktop/session"
@@ -18,6 +20,61 @@ func TestResolveResumeIDValidatesStoredFallback(t *testing.T) {
 	}
 	if got, clear := resolveResumeID(session.AgentClaude, "unsafe id;", "valid-id", exists); got != "" || !clear {
 		t.Fatalf("unsafe request = (%q, %v), want empty and clear", got, clear)
+	}
+}
+
+func TestForkCreationPathsRollbackExternalProcessesOnPersistenceFailure(t *testing.T) {
+	source, err := os.ReadFile("app.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(source)
+	for _, marker := range []string{
+		"func (a *App) ForkToNewTab",
+		"func (a *App) ForkToNewSession",
+	} {
+		start := strings.Index(text, marker)
+		if start < 0 {
+			t.Fatalf("missing %s", marker)
+		}
+		end := strings.Index(text[start+len(marker):], "\nfunc ")
+		body := text[start:]
+		if end >= 0 {
+			body = text[start : start+len(marker)+end]
+		}
+		if !strings.Contains(body, "persistOrRollbackExternalMutation(") {
+			t.Fatalf("%s persists an external tmux mutation without rollback", marker)
+		}
+	}
+}
+
+func TestStartPathsRollbackExternalProcessesOnPersistenceFailure(t *testing.T) {
+	source, err := os.ReadFile("app.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(source)
+	for _, marker := range []string{
+		"func (a *App) StartSession(",
+		"func (a *App) StartSessionWithResume(",
+		"func (a *App) RestartTab(",
+		"func (a *App) RestartTabWithResume(",
+	} {
+		start := strings.Index(text, marker)
+		if start < 0 {
+			t.Fatalf("missing %s", marker)
+		}
+		end := strings.Index(text[start+len(marker):], "\nfunc ")
+		body := text[start:]
+		if end >= 0 {
+			body = text[start : start+len(marker)+end]
+		}
+		if !strings.Contains(body, "persistOrRollbackExternalMutation(") {
+			t.Fatalf("%s leaves a live process behind when persistence fails", marker)
+		}
+		if strings.Contains(marker, "RestartTab") && !strings.Contains(body, "RestopWindow(windowIdx)") {
+			t.Fatalf("%s must restore a dead pane without killing its tmux session", marker)
+		}
 	}
 }
 

@@ -66,14 +66,14 @@ func TestGetGitBranchCachesByPath(t *testing.T) {
 	dashboardGit(t, repo, "commit", "-m", "initial branch commit")
 
 	app := &App{}
-	first := app.GetGitBranch(repo)
+	first := app.getGitBranchAtPath(repo)
 	if first.Branch != "main" {
 		t.Fatalf("expected branch main, got %q", first.Branch)
 	}
 
 	// The cached answer must survive a rename that the cache hasn't expired for.
 	dashboardGit(t, repo, "branch", "-m", "renamed")
-	if cached := app.GetGitBranch(repo); cached.Branch != "main" {
+	if cached := app.getGitBranchAtPath(repo); cached.Branch != "main" {
 		t.Fatalf("expected the cached branch main, got %q", cached.Branch)
 	}
 
@@ -84,14 +84,14 @@ func TestGetGitBranchCachesByPath(t *testing.T) {
 	}
 	gitBranchMu.Unlock()
 
-	if refreshed := app.GetGitBranch(repo); refreshed.Branch != "renamed" {
+	if refreshed := app.getGitBranchAtPath(repo); refreshed.Branch != "renamed" {
 		t.Fatalf("expected the refreshed branch renamed, got %q", refreshed.Branch)
 	}
 }
 
 func TestGetGitBranchEmptyPath(t *testing.T) {
 	app := &App{}
-	if info := app.GetGitBranch(""); info.Repository {
+	if info := app.getGitBranchAtPath(""); info.Repository {
 		t.Fatalf("expected an empty path to be a non-repository, got %#v", info)
 	}
 }

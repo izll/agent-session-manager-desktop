@@ -24,8 +24,26 @@
   import { settings, saveSettings } from '../../stores/settings';
 
   export let show = false;
+  export let projectId = '';
+  export let sessionId = '';
+  export let windowIdx = 0;
   /** The working directory whose history this is. */
   export let path = '';
+
+  type RepositoryTarget = {
+    key: string;
+    projectId: string;
+    sessionId: string;
+    windowIdx: number;
+    root: string;
+  };
+
+  $: repositoryKey = `${projectId}\x1f${sessionId}\x1f${windowIdx}\x1f${path}`;
+  let activeRepositoryTarget: RepositoryTarget | null = null;
+
+  function targetIsCurrent(target: RepositoryTarget, repository: number): boolean {
+    return show && target.key === repositoryKey && repository === repositoryGeneration;
+  }
 
   const dispatch = createEventDispatcher();
 
@@ -241,15 +259,16 @@
   // repository has to reload the history rather than leave the previous one on
   // screen. Tracked against the path last opened, because this block also runs
   // for unrelated state and would otherwise reload on every keystroke.
-  let openedPath = '';
-  $: if (show && path && path !== openedPath) {
-    openedPath = path;
-    void open(path);
+  let openedRepositoryKey = '';
+  $: if (show && sessionId && path && repositoryKey !== openedRepositoryKey) {
+    openedRepositoryKey = repositoryKey;
+    void open({ key: repositoryKey, projectId, sessionId, windowIdx, root: path });
   }
   // Forget it on close, so reopening on the same session loads afresh rather
   // than showing whatever was left from last time.
-  $: if (!show && openedPath) {
-    openedPath = '';
+  $: if (!show && openedRepositoryKey) {
+    openedRepositoryKey = '';
+    activeRepositoryTarget = null;
     invalidateRequests();
   }
 
@@ -264,7 +283,8 @@
     diffLoading = false;
   }
 
-  async function open(targetPath: string) {
+  async function open(target: RepositoryTarget) {
+    activeRepositoryTarget = target;
     const repository = ++repositoryGeneration;
     historyGeneration++;
     commitGeneration++;
@@ -282,26 +302,31 @@
     selectedPath = '';
     diff = null;
     await Promise.all([
-      loadBranches(targetPath, repository),
-      loadHistory(true, targetPath, repository),
+      loadBranches(target, repository),
+      loadHistory(true, target, repository),
     ]);
   }
 
-  async function loadBranches(targetPath: string, repository: number) {
+  async function loadBranches(target: RepositoryTarget, repository: number) {
     try {
-      const list = await App.ListGitBranches(targetPath);
-      if (!show || path !== targetPath || repository !== repositoryGeneration) return;
+      const list = await App.ListGitBranches(target.sessionId, target.windowIdx, target.root);
+      if (!targetIsCurrent(target, repository)) return;
       const nextBranches = list?.branches ?? [];
       branches = nextBranches;
       currentBranch = nextBranches.find((b) => b.current)?.name ?? '';
     } catch (e) {
-      if (!show || path !== targetPath || repository !== repositoryGeneration) return;
+      if (!targetIsCurrent(target, repository)) return;
       console.error('Reading the branch list failed:', e);
       branches = [];
     }
   }
 
-  async function loadHistory(reset: boolean, targetPath = path, repository = repositoryGeneration) {
+  async function loadHistory(
+    reset: boolean,
+    target = activeRepositoryTarget,
+    repository = repositoryGeneration,
+  ) {
+    if (!target) return;
     const generation = ++historyGeneration;
     const targetBranch = branch;
     const skip = reset ? 0 : nextSkip;
@@ -320,8 +345,10 @@
     }
 
     try {
-      const page = await App.GetGitHistory(targetPath, targetBranch, skip);
-      if (!show || path !== targetPath || repository !== repositoryGeneration ||
+      const page = await App.GetGitHistory(
+        target.sessionId, targetBranch, skip, target.windowIdx, target.root,
+      );
+      if (!targetIsCurrent(target, repository) ||
           generation !== historyGeneration || branch !== targetBranch) return;
       if (!page?.repository) {
         error = $t('history.notARepository');
@@ -332,9 +359,9 @@
       commits = reset ? (page.commits ?? []) : [...commits, ...(page.commits ?? [])];
       hasMore = page.hasMore;
       nextSkip = page.skip;
-      if (reset && commits.length > 0) void selectCommit(commits[0].hash, targetPath, repository);
+      if (reset && commits.length > 0) void selectCommit(commits[0].hash, target, repository);
     } catch (e: any) {
-      if (!show || path !== targetPath || repository !== repositoryGeneration ||
+      if (!targetIsCurrent(target, repository) ||
           generation !== historyGeneration || branch !== targetBranch) return;
       error = String(e?.message ?? e);
     } finally {
@@ -355,10 +382,15 @@
 
   async function changeBranch(name: string) {
     branch = name;
-    await loadHistory(true, path, repositoryGeneration);
+    await loadHistory(true, activeRepositoryTarget, repositoryGeneration);
   }
 
-  async function selectCommit(hash: string, targetPath = path, repository = repositoryGeneration): Promise<boolean> {
+  async function selectCommit(
+    hash: string,
+    target = activeRepositoryTarget,
+    repository = repositoryGeneration,
+  ): Promise<boolean> {
+    if (!target) return false;
     const generation = ++commitGeneration;
     diffGeneration++;
     selectedHash = hash;
@@ -367,14 +399,16 @@
     selectedPath = '';
     filesLoading = true;
     try {
-      const nextFiles = (await App.GetGitCommitFiles(targetPath, hash)) ?? [];
-      if (!show || path !== targetPath || repository !== repositoryGeneration ||
+      const nextFiles = (await App.GetGitCommitFiles(
+        target.sessionId, hash, target.windowIdx, target.root,
+      )) ?? [];
+      if (!targetIsCurrent(target, repository) ||
           generation !== commitGeneration || selectedHash !== hash) return false;
       files = nextFiles;
-      if (nextFiles.length > 0) void selectFile(nextFiles[0].path, targetPath, repository, hash);
+      if (nextFiles.length > 0) void selectFile(nextFiles[0].path, target, repository, hash);
       return true;
     } catch (e) {
-      if (!show || path !== targetPath || repository !== repositoryGeneration ||
+      if (!targetIsCurrent(target, repository) ||
           generation !== commitGeneration || selectedHash !== hash) return false;
       console.error('Reading the commit failed:', e);
       return false;
@@ -385,23 +419,26 @@
 
   async function selectFile(
     file: string,
-    targetPath = path,
+    target = activeRepositoryTarget,
     repository = repositoryGeneration,
     hash = selectedHash,
   ): Promise<boolean> {
+    if (!target) return false;
     const generation = ++diffGeneration;
     const targetWholeFile = wholeFile;
     selectedPath = file;
     diffLoading = true;
     try {
-      const nextDiff = await App.GetGitCommitDiff(targetPath, hash, file, targetWholeFile);
-      if (!show || path !== targetPath || repository !== repositoryGeneration ||
+      const nextDiff = await App.GetGitCommitDiff(
+        target.sessionId, hash, file, targetWholeFile, target.windowIdx, target.root,
+      );
+      if (!targetIsCurrent(target, repository) ||
           generation !== diffGeneration || selectedHash !== hash || selectedPath !== file ||
           wholeFile !== targetWholeFile) return false;
       diff = nextDiff;
       return true;
     } catch (e) {
-      if (!show || path !== targetPath || repository !== repositoryGeneration ||
+      if (!targetIsCurrent(target, repository) ||
           generation !== diffGeneration || selectedHash !== hash || selectedPath !== file ||
           wholeFile !== targetWholeFile) return false;
       console.error('Reading the diff failed:', e);

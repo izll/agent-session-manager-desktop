@@ -1362,6 +1362,45 @@ func (i *Instance) RestartWindow(windowIdx int) error {
 	return i.RestartWindowWithResume(windowIdx, "")
 }
 
+// RestopWindow compensates a successful RestartWindow whose storage update
+// failed. It deliberately does not call StopWindow: for a main-only session
+// StopWindow kills the whole tmux session, while the state immediately before
+// RestartWindow was a live tmux session containing a dead main pane. Keeping
+// the window and replacing its command with an immediately exiting process
+// restores that external state without hiding a newly orphaned process.
+func (i *Instance) RestopWindow(windowIdx int) error {
+	if i.Status != StatusRunning {
+		return fmt.Errorf("instance not running")
+	}
+
+	target := fmt.Sprintf("%s:%d", i.TmuxSessionName(), windowIdx)
+	setCmd, setCancel := TmuxCommandTimed("set-option", "-w", "-t", target, "remain-on-exit", "on")
+	setErr := setCmd.Run()
+	setCancel()
+	if setErr != nil {
+		return fmt.Errorf("failed to prepare stopped window %s: %w", target, setErr)
+	}
+
+	stopCmd, stopCancel := TmuxCommandTimed("respawn-pane", "-k", "-t", target, "exit 0")
+	stopErr := stopCmd.Run()
+	stopCancel()
+	if stopErr != nil {
+		return fmt.Errorf("failed to restore stopped window %s: %w", target, stopErr)
+	}
+
+	isFollowed := false
+	for idx := range i.FollowedWindows {
+		if i.FollowedWindows[idx].Index == windowIdx {
+			i.FollowedWindows[idx].Stopped = true
+			isFollowed = true
+		}
+	}
+	if !isFollowed {
+		i.MainWindowStopped = true
+	}
+	return nil
+}
+
 func selectFollowedWindowForRestart(windows []FollowedWindow, windowIdx int) (sliceIdx int, collapseDuplicates bool, err error) {
 	var matches []int
 	for idx := range windows {

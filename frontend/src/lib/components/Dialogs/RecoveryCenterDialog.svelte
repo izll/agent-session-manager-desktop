@@ -34,16 +34,41 @@
   let loading = false;
   let error = '';
   let loadedForOpen = false;
+  let loadedProjectId = '';
   let showConfirm = false;
   let confirmTitle = '';
   let confirmMessage = '';
   type PendingAction = {
     projectId: string;
     guardUnsaved: boolean;
-    run: () => Promise<void>;
+    run: (target: RecoveryOperationTarget) => Promise<void>;
   };
   let pendingAction: PendingAction | null = null;
   let loadGeneration = 0;
+  let operationGeneration = 0;
+  let actionRunning = false;
+  let runningGeneration = 0;
+
+  type RecoveryOperationTarget = { projectId: string; generation: number };
+
+  function operationIsCurrent(target: RecoveryOperationTarget): boolean {
+    return target.generation === operationGeneration && target.projectId === $activeProjectId;
+  }
+
+  function operationUIIsCurrent(target: RecoveryOperationTarget): boolean {
+    return show && operationIsCurrent(target);
+  }
+
+  function beginOperation(target: RecoveryOperationTarget) {
+    actionRunning = true;
+    runningGeneration = target.generation;
+  }
+
+  function finishOperation(target: RecoveryOperationTarget) {
+    if (runningGeneration !== target.generation) return;
+    actionRunning = false;
+    runningGeneration = 0;
+  }
 
   // State the policy that's actually in force, so the trash list doesn't imply
   // entries live forever. 0 is unset and means the backend default; a negative
@@ -53,11 +78,20 @@
       ? $t('recovery.trashHint')
       : $t('recovery.trashRetentionHint', { days: $settings.trashRetentionDays || 30 });
 
-  $: if (show && !loadedForOpen) {
+  $: if (show && (!loadedForOpen || loadedProjectId !== $activeProjectId)) {
+    if (loadedForOpen) {
+      // A still-open Recovery dialog follows the active project. Invalidate
+      // rows, confirmations and replies that belonged to the project left.
+      operationGeneration++;
+      showConfirm = false;
+      pendingAction = null;
+    }
     loadedForOpen = true;
+    loadedProjectId = $activeProjectId;
     void loadRecoveryData();
   } else if (!show && loadedForOpen) {
     loadedForOpen = false;
+    loadedProjectId = '';
     loadGeneration++;
     loading = false;
     showConfirm = false;
@@ -66,6 +100,7 @@
 
   async function loadRecoveryData() {
     const generation = ++loadGeneration;
+    const projectId = $activeProjectId;
     loading = true;
     error = '';
     try {
@@ -76,12 +111,12 @@
         // rest of the dialog should still work against one.
         App.GetTaskBackups().catch(() => [])
       ]);
-      if (!show || generation !== loadGeneration) return;
+      if (!show || generation !== loadGeneration || projectId !== $activeProjectId) return;
       trash = (trashResult || []) as TrashItem[];
       backups = (backupResult || []) as BackupItem[];
       taskBackups = (taskResult || []) as BackupItem[];
     } catch (e) {
-      if (!show || generation !== loadGeneration) return;
+      if (!show || generation !== loadGeneration || projectId !== $activeProjectId) return;
       error = String(e);
     } finally {
       if (generation === loadGeneration) loading = false;
@@ -89,6 +124,8 @@
   }
 
   function close() {
+    if (actionRunning) return;
+    operationGeneration++;
     loadGeneration++;
     loading = false;
     showConfirm = false;
@@ -98,29 +135,38 @@
   }
 
   async function restoreTrash(item: TrashItem) {
+    if (actionRunning) return;
+    const target = { projectId: $activeProjectId, generation: ++operationGeneration };
+    beginOperation(target);
     error = '';
     try {
       const result = await App.RestoreTrashItem(item.id);
+      if (!operationIsCurrent(target)) return;
       await loadSessions();
+      if (!operationUIIsCurrent(target)) return;
       if (result?.sessionId) {
         selectSession(result.sessionId);
         selectWindow(result.windowIdx || 0);
       }
       await loadRecoveryData();
-      dispatch('restored');
+      if (operationUIIsCurrent(target)) dispatch('restored');
     } catch (e) {
-      error = String(e);
+      if (operationUIIsCurrent(target)) error = String(e);
+    } finally {
+      finishOperation(target);
     }
   }
 
   function requestPermanentDelete(item: TrashItem) {
+    if (actionRunning) return;
     confirmTitle = $t('recovery.permanentDeleteTitle');
     confirmMessage = $t('recovery.permanentDeleteMessage', { name: item.name });
     pendingAction = {
       projectId: $activeProjectId,
       guardUnsaved: false,
-      run: async () => {
+      run: async (target) => {
         await App.PermanentlyDeleteTrashItem(item.id);
+        if (!operationUIIsCurrent(target)) return;
         await loadRecoveryData();
       },
     };
@@ -128,13 +174,15 @@
   }
 
   function requestEmptyTrash() {
+    if (actionRunning) return;
     confirmTitle = $t('recovery.emptyTrashTitle');
     confirmMessage = $t('recovery.emptyTrashMessage');
     pendingAction = {
       projectId: $activeProjectId,
       guardUnsaved: false,
-      run: async () => {
+      run: async (target) => {
         await App.EmptyTrash();
+        if (!operationUIIsCurrent(target)) return;
         await loadRecoveryData();
       },
     };
@@ -142,70 +190,90 @@
   }
 
   async function createBackup() {
+    if (actionRunning) return;
+    const target = { projectId: $activeProjectId, generation: ++operationGeneration };
+    beginOperation(target);
     error = '';
     try {
       await App.CreateBackup();
+      if (!operationUIIsCurrent(target)) return;
       await loadRecoveryData();
     } catch (e) {
-      error = String(e);
+      if (operationUIIsCurrent(target)) error = String(e);
+    } finally {
+      finishOperation(target);
     }
   }
 
   function requestRestoreTaskBackup(item: BackupItem) {
+    if (actionRunning) return;
     confirmTitle = $t('recovery.restoreTaskBackupTitle');
     confirmMessage = $t('recovery.restoreTaskBackupMessage', { time: formatDate(item.createdAt) });
     pendingAction = {
       projectId: $activeProjectId,
       guardUnsaved: true,
-      run: async () => {
+      run: async (target) => {
         await App.RestoreTaskBackup(item.id);
+        if (!operationIsCurrent(target)) return;
         // Only the task files changed, so the session list and settings are left
         // alone — reloading them would be work for nothing.
         window.dispatchEvent(new CustomEvent('tasks:refresh'));
-        await loadRecoveryData();
-        dispatch('restored');
+        if (operationUIIsCurrent(target)) await loadRecoveryData();
+        if (operationUIIsCurrent(target)) dispatch('restored');
       },
     };
     showConfirm = true;
   }
 
   function requestRestoreBackup(item: BackupItem) {
+    if (actionRunning) return;
     confirmTitle = $t('recovery.restoreBackupTitle');
     confirmMessage = $t('recovery.restoreBackupMessage', { time: formatDate(item.createdAt) });
     pendingAction = {
       projectId: $activeProjectId,
       guardUnsaved: true,
-      run: async () => {
+      run: async (target) => {
         // A settings write started just before opening Recovery must not land
         // after the backup has replaced the settings file.
         await flushSettingsSaves();
+        // RestoreBackup uses the backend's implicit active project. A project
+        // switch while the flush was pending must cancel here, before the
+        // destructive call can hit the replacement project.
+        if (!operationIsCurrent(target)) return;
         invalidateSettingsContext();
         await App.RestoreBackup(item.id);
+        if (!operationIsCurrent(target)) return;
         // The restored store replaces every session identity. Invalidate old
         // async continuations before exposing any of the replacement data.
         invalidateSessionProject();
         await Promise.all([loadSessions(), loadSettings()]);
+        if (!operationUIIsCurrent(target)) return;
         await loadRecoveryData();
-        dispatch('restored');
+        if (operationUIIsCurrent(target)) dispatch('restored');
       },
     };
     showConfirm = true;
   }
 
   function runConfirmedAction() {
+    if (actionRunning) return;
     const action = pendingAction;
     pendingAction = null;
     if (!action) return;
+    const target = { projectId: action.projectId, generation: ++operationGeneration };
     const execute = async () => {
-      if (!show || action.projectId !== $activeProjectId) {
+      if (!operationUIIsCurrent(target)) {
         error = 'The active project changed; the recovery action was cancelled.';
         return;
       }
+      beginOperation(target);
       error = '';
       try {
-        await action.run();
+        await action.run(target);
       } catch (e) {
-        error = String(e);
+        if (operationUIIsCurrent(target)) error = String(e);
+      } finally {
+        finishOperation(target);
       }
     };
     if (action.guardUnsaved) afterUnsavedChanges(() => { void execute(); });
@@ -236,7 +304,7 @@
           <h2>{$t('recovery.title')}</h2>
           <p>{$t('recovery.subtitle')}</p>
         </div>
-        <button class="close-btn" on:click={close}>×</button>
+        <button class="close-btn" on:click={close} disabled={actionRunning}>×</button>
       </div>
 
       <div class="recovery-tabs" role="tablist">

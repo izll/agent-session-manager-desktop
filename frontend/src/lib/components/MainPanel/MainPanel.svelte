@@ -361,7 +361,10 @@
   // source position, so a guard assigned elsewhere could be updated first and
   // swallow the change.
   $: {
-    const target = `${$selectedSessionId || ''}:${$selectedWindowIdx ?? 0}`;
+    // Session ids can be reused after import/restore and across projects.
+    // Include project identity so a same-id tab cannot retain the old pane's
+    // cwd (and hand that stale root to git/file views) after project switch.
+    const target = `${$activeProjectId}:${$selectedSessionId || ''}:${$selectedWindowIdx ?? 0}`;
     if (target !== liveTabPathTarget) {
       liveTabPathTarget = target;
       liveTabPath = '';
@@ -377,7 +380,12 @@
   // Covers both refresh triggers at once: currentTabPath changes when the
   // session changes, when the tab changes, and when a `cd` moves the pane into
   // another repository. Off means we never ask at all.
-  $: if ($settings.gitBranchDisplay !== 'off') void refreshGitBranch(currentTabPath);
+  $: if ($settings.gitBranchDisplay !== 'off') void refreshGitBranch(
+    $activeProjectId,
+    $selectedSessionId || '',
+    $selectedWindowIdx ?? 0,
+    currentTabPath,
+  );
 
   // The bottom bar resolves the same way as the view bar: tab → the default
   // for its kind. Shared helper so the two can't drift apart.

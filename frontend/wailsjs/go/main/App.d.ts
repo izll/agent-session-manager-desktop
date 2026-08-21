@@ -105,17 +105,17 @@ export function GetFullDiffFiles(arg1:string,arg2:number,arg3:string):Promise<Ar
 
 export function GetFullDiffForFile(arg1:string,arg2:string,arg3:boolean,arg4:number,arg5:string):Promise<session.DiffFile>;
 
-export function GetGitBranch(arg1:string):Promise<main.GitBranchInfo>;
+export function GetGitBranch(arg1:string,arg2:number,arg3:string):Promise<main.GitBranchInfo>;
 
-export function GetGitCommitDiff(arg1:string,arg2:string,arg3:string,arg4:boolean):Promise<session.DiffFile>;
+export function GetGitCommitDiff(arg1:string,arg2:string,arg3:string,arg4:boolean,arg5:number,arg6:string):Promise<session.DiffFile>;
 
-export function GetGitCommitFiles(arg1:string,arg2:string):Promise<Array<session.DiffFileSummary>>;
+export function GetGitCommitFiles(arg1:string,arg2:string,arg3:number,arg4:string):Promise<Array<session.DiffFileSummary>>;
 
-export function GetGitHistory(arg1:string,arg2:string,arg3:number):Promise<main.GitHistoryPage>;
+export function GetGitHistory(arg1:string,arg2:string,arg3:number,arg4:number,arg5:string):Promise<main.GitHistoryPage>;
 
 export function GetGroups():Promise<Array<main.GroupInfo>>;
 
-export function GetHistoryPreview(arg1:main.HistoryEntryInfo):Promise<string>;
+export function GetHistoryPreview(arg1:string):Promise<string>;
 
 export function GetLastLine(arg1:string):Promise<string>;
 
@@ -201,7 +201,7 @@ export function IsDevMode():Promise<boolean>;
 
 export function ListBackgroundAgents():Promise<Array<main.BackgroundAgentInfo>>;
 
-export function ListGitBranches(arg1:string):Promise<main.GitBranchList>;
+export function ListGitBranches(arg1:string,arg2:number,arg3:string):Promise<main.GitBranchList>;
 
 export function ListOnlineSchemes():Promise<Array<main.OnlineSchemeInfo>>;
 

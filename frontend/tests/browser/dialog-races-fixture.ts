@@ -1,5 +1,8 @@
 import { mount } from 'svelte';
+import { get } from 'svelte/store';
 import DialogRacesFixture from './dialog-races-fixture.svelte';
+import { activeProjectId } from '../../src/lib/stores/projects';
+import { selectedSessionId } from '../../src/lib/stores/sessions';
 
 let resolveSearch: ((value: unknown[]) => void) | null = null;
 let resolveRun: (() => void) | null = null;
@@ -12,6 +15,10 @@ const createTabResolvers: Array<(value: number) => void> = [];
 const createTabCalls: unknown[][] = [];
 const localSchemeResolvers: Array<(value: unknown[]) => void> = [];
 const onlineSchemeResolvers: Array<(value: unknown[]) => void> = [];
+let resolveTrashRestore: ((value: unknown) => void) | null = null;
+let recoverySessionLoads = 0;
+let resolveUpdate: (() => void) | null = null;
+let updateCalls = 0;
 
 const backend = new Proxy({
   GlobalSearch: (query: string) => {
@@ -29,10 +36,12 @@ const backend = new Proxy({
     runCalls.push(args);
     return new Promise<void>((resolve) => { resolveRun = resolve; });
   },
-  ListGitBranches: async (path: string) => ({ branches: [{ name: path, current: true }] }),
-  GetGitHistory: (path: string) => {
-    historyCalls.push(path);
-    return new Promise((resolve) => { historyResolvers.set(path, resolve); });
+  ListGitBranches: async (_sessionId: string, _windowIdx: number, root: string) => ({
+    branches: [{ name: root, current: true }],
+  }),
+  GetGitHistory: (_sessionId: string, _branch: string, _skip: number, _windowIdx: number, root: string) => {
+    historyCalls.push(root);
+    return new Promise((resolve) => { historyResolvers.set(root, resolve); });
   },
   GetGitCommitFiles: async () => [],
   GetQuickJump: () => new Promise<unknown[]>((resolve) => { quickJumpResolvers.push(resolve); }),
@@ -42,7 +51,19 @@ const backend = new Proxy({
   },
   DiscoverLocalSchemes: () => new Promise<unknown[]>((resolve) => { localSchemeResolvers.push(resolve); }),
   ListOnlineSchemes: () => new Promise<unknown[]>((resolve) => { onlineSchemeResolvers.push(resolve); }),
-  GetSessions: async () => [],
+  GetTrashItems: async () => [{
+    id: 'trash-1', kind: 'session', name: 'Old project session',
+    parentSessionId: '', parentSessionName: '', deletedAt: '2026-08-20T10:00:00Z',
+  }],
+  GetBackups: async () => [],
+  GetTaskBackups: async () => [],
+  RestoreTrashItem: () => new Promise<unknown>((resolve) => { resolveTrashRestore = resolve; }),
+  CheckForUpdate: async () => ({ available: true, currentVersion: '1.0.0', latestVersion: '1.1.0' }),
+  PerformUpdate: () => {
+    updateCalls++;
+    return new Promise<void>((resolve) => { resolveUpdate = resolve; });
+  },
+  GetSessions: async () => { recoverySessionLoads++; return []; },
   GetGroups: async () => [],
   GetAllTasks: async () => [{
     id: 'task-1', title: 'Fixture dashboard task', description: '', details: '',
@@ -85,12 +106,19 @@ const backend = new Proxy({
   resolveOnlineSchemes: (index: number, name: string) => onlineSchemeResolvers[index]?.([
     { name, file: `${name}.json` },
   ]),
+  trashRestorePending: () => !!resolveTrashRestore,
+  switchRecoveryProject: (projectId: string) => activeProjectId.set(projectId),
+  resolveTrashRestore: (sessionId: string) => resolveTrashRestore?.({ sessionId, windowIdx: 0 }),
+  recoverySessionLoads: () => recoverySessionLoads,
+  selectedSession: () => get(selectedSessionId),
+  updateCalls: () => updateCalls,
+  resolveUpdate: () => resolveUpdate?.(),
 };
 
 const target = document.getElementById('fixture');
 if (!target) throw new Error('fixture target is missing');
 const requestedMode = new URLSearchParams(location.search).get('mode');
-const mode = requestedMode === 'command' || requestedMode === 'history' || requestedMode === 'quickjump' || requestedMode === 'quickterminal' || requestedMode === 'scheme' || requestedMode === 'alltasks'
+const mode = requestedMode === 'command' || requestedMode === 'history' || requestedMode === 'quickjump' || requestedMode === 'quickterminal' || requestedMode === 'scheme' || requestedMode === 'alltasks' || requestedMode === 'recovery' || requestedMode === 'update'
   ? requestedMode : 'global';
 mount(DialogRacesFixture, {
   target,

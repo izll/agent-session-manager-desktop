@@ -10,6 +10,7 @@ import (
 
 	"asmgr-desktop/session"
 
+	"github.com/google/uuid"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
@@ -34,9 +35,15 @@ type PortableSessionInfo struct {
 // PortableFileInfo describes a parsed export file.
 type PortableFileInfo struct {
 	Path       string                `json:"path"`
+	Token      string                `json:"token"`
 	ExportedAt string                `json:"exportedAt"`
 	AppVersion string                `json:"appVersion"`
 	Sessions   []PortableSessionInfo `json:"sessions"`
+}
+
+type portableImportSnapshot struct {
+	projectID string
+	bundle    *session.PortableBundle
 }
 
 // ExportSessions writes the chosen sessions to a file the user picks. An empty
@@ -129,6 +136,13 @@ func (a *App) ReadSessionFile() (*PortableFileInfo, error) {
 }
 
 func (a *App) readSessionFileAt(path string) (*PortableFileInfo, error) {
+	// Bind the validated bytes to the current project. Without this pin a stale
+	// import dialog opened in project A could finish after a switch and import
+	// its snapshot into project B.
+	a.projectMu.RLock()
+	defer a.projectMu.RUnlock()
+	projectID := a.storage.GetActiveProjectID()
+
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
@@ -140,8 +154,22 @@ func (a *App) readSessionFileAt(path string) (*PortableFileInfo, error) {
 		return nil, err
 	}
 
+	token := uuid.NewString()
+	a.portableImportMu.Lock()
+	if a.portableImports == nil {
+		a.portableImports = make(map[string]portableImportSnapshot)
+	}
+	a.portableImports[token] = portableImportSnapshot{projectID: projectID, bundle: bundle}
+	a.portableImportIDs = append(a.portableImportIDs, token)
+	for len(a.portableImportIDs) > 4 {
+		delete(a.portableImports, a.portableImportIDs[0])
+		a.portableImportIDs = a.portableImportIDs[1:]
+	}
+	a.portableImportMu.Unlock()
+
 	info := &PortableFileInfo{
 		Path:       path,
+		Token:      token,
 		AppVersion: bundle.AppVersion,
 	}
 	if !bundle.ExportedAt.IsZero() {
@@ -163,23 +191,23 @@ func (a *App) readSessionFileAt(path string) (*PortableFileInfo, error) {
 // ImportSessionFile adds the named sessions from an export file to the current
 // project. Names are used to identify them because an export has no IDs — they
 // are re-generated on import so two machines can't collide.
-func (a *App) ImportSessionFile(path string, names []string) (int, error) {
+func (a *App) ImportSessionFile(token string, names []string) (int, error) {
 	done, err := a.beginProjectMutation()
 	if err != nil {
 		return 0, err
 	}
 	defer done()
 
-	f, err := os.Open(path)
-	if err != nil {
-		return 0, err
+	a.portableImportMu.Lock()
+	snapshot, ok := a.portableImports[token]
+	a.portableImportMu.Unlock()
+	if !ok || snapshot.bundle == nil || token == "" {
+		return 0, fmt.Errorf("session import selection expired; choose the file again")
 	}
-	defer f.Close()
-
-	bundle, err := session.ReadPortable(f)
-	if err != nil {
-		return 0, err
+	if snapshot.projectID != a.storage.GetActiveProjectID() {
+		return 0, fmt.Errorf("project changed; choose the session file again")
 	}
+	bundle := snapshot.bundle
 
 	wanted := make(map[string]bool, len(names))
 	for _, n := range names {
@@ -200,7 +228,16 @@ func (a *App) ImportSessionFile(path string, names []string) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	log.Printf("[export] imported %d sessions from %s", added, path)
+	a.portableImportMu.Lock()
+	delete(a.portableImports, token)
+	for i, id := range a.portableImportIDs {
+		if id == token {
+			a.portableImportIDs = append(a.portableImportIDs[:i], a.portableImportIDs[i+1:]...)
+			break
+		}
+	}
+	a.portableImportMu.Unlock()
+	log.Printf("[export] imported %d sessions from a validated snapshot", added)
 	return added, nil
 }
 

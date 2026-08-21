@@ -48,11 +48,20 @@ var (
 	gitBranchListCache = map[string]gitBranchListCacheEntry{}
 )
 
-// ListGitBranches returns the local branches of the given working directory,
+// ListGitBranches returns branches only for a validated session/tab snapshot.
+func (a *App) ListGitBranches(sessionID string, windowIdx int, expectedRoot string) (GitBranchList, error) {
+	root, err := a.gitRootSnapshot(sessionID, windowIdx, expectedRoot)
+	if err != nil {
+		return GitBranchList{}, err
+	}
+	return a.listGitBranchesAtPath(root), nil
+}
+
+// listGitBranchesAtPath returns the local branches of the given working directory,
 // most recently committed first, cached for a few seconds. The dropdown may be
 // opened and closed repeatedly, and each open would otherwise fork a git
 // process. Non-repositories answer Repository=false and are cached too.
-func (a *App) ListGitBranches(path string) GitBranchList {
+func (a *App) listGitBranchesAtPath(path string) GitBranchList {
 	normalized := normalizedDashboardPath(path)
 	if normalized == "" {
 		return GitBranchList{Path: path, Branches: []GitBranchEntry{}}

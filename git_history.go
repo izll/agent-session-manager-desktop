@@ -74,7 +74,15 @@ type GitHistoryPage struct {
 // one — browsing history is not the same as switching to it, and a user
 // looking at what happened on a branch should not have to move the working
 // tree to do it.
-func (a *App) GetGitHistory(path, branch string, skip int) (GitHistoryPage, error) {
+func (a *App) GetGitHistory(sessionID, branch string, skip, windowIdx int, expectedRoot string) (GitHistoryPage, error) {
+	path, err := a.gitRootSnapshot(sessionID, windowIdx, expectedRoot)
+	if err != nil {
+		return GitHistoryPage{}, err
+	}
+	return getGitHistoryAtPath(path, branch, skip)
+}
+
+func getGitHistoryAtPath(path, branch string, skip int) (GitHistoryPage, error) {
 	page := GitHistoryPage{Path: path, Skip: skip}
 	if strings.TrimSpace(path) == "" {
 		return page, fmt.Errorf("no directory to read history from")
@@ -202,7 +210,15 @@ func parseGitRefs(decoration string) []string {
 }
 
 // GetGitCommitFiles lists what one commit changed, for the file tree.
-func (a *App) GetGitCommitFiles(path, hash string) ([]session.DiffFileSummary, error) {
+func (a *App) GetGitCommitFiles(sessionID, hash string, windowIdx int, expectedRoot string) ([]session.DiffFileSummary, error) {
+	path, err := a.gitRootSnapshot(sessionID, windowIdx, expectedRoot)
+	if err != nil {
+		return nil, err
+	}
+	return getGitCommitFilesAtPath(path, hash)
+}
+
+func getGitCommitFilesAtPath(path, hash string) ([]session.DiffFileSummary, error) {
 	if strings.TrimSpace(path) == "" || strings.TrimSpace(hash) == "" {
 		return nil, fmt.Errorf("no commit to read")
 	}
@@ -241,7 +257,15 @@ func (a *App) GetGitCommitFiles(path, hash string) ([]session.DiffFileSummary, e
 // either side of it: seeing three lines of context tells you what changed but
 // not what it changed within, which for a review of somebody else's commit is
 // most of the question.
-func (a *App) GetGitCommitDiff(path, hash, file string, wholeFile bool) (*session.DiffFile, error) {
+func (a *App) GetGitCommitDiff(sessionID, hash, file string, wholeFile bool, windowIdx int, expectedRoot string) (*session.DiffFile, error) {
+	path, err := a.gitRootSnapshot(sessionID, windowIdx, expectedRoot)
+	if err != nil {
+		return nil, err
+	}
+	return getGitCommitDiffAtPath(path, hash, file, wholeFile)
+}
+
+func getGitCommitDiffAtPath(path, hash, file string, wholeFile bool) (*session.DiffFile, error) {
 	if strings.TrimSpace(path) == "" || strings.TrimSpace(hash) == "" {
 		return nil, fmt.Errorf("no commit to read")
 	}

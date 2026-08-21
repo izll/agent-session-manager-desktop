@@ -1,13 +1,16 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
@@ -103,6 +106,11 @@ func (a *App) DiscoverLocalSchemes() []ImportedScheme {
 const (
 	schemeRepoAPI = "https://api.github.com/repos/mbadolato/iTerm2-Color-Schemes/contents/konsole"
 	schemeRepoRaw = "https://raw.githubusercontent.com/mbadolato/iTerm2-Color-Schemes/master/konsole/"
+
+	schemeIndexResponseLimit = 4 << 20
+	schemeDocumentLimit      = 2 << 20
+	maxOnlineSchemeFetch     = 100
+	onlineSchemeFetchTimeout = 30 * time.Second
 )
 
 // OnlineSchemeInfo is one downloadable scheme in the online browser.
@@ -112,19 +120,25 @@ type OnlineSchemeInfo struct {
 }
 
 var (
+	onlineIndexMu    sync.Mutex
 	onlineIndexCache []OnlineSchemeInfo
 	onlineIndexAt    time.Time
+	schemeAPIURL     = schemeRepoAPI
+	schemeRawURL     = schemeRepoRaw
+	schemeHTTPClient = func(timeout time.Duration) *http.Client { return &http.Client{Timeout: timeout} }
 )
 
 // ListOnlineSchemes returns the names available in the online collection,
 // cached for an hour so browsing doesn't hammer the API.
 func (a *App) ListOnlineSchemes() ([]OnlineSchemeInfo, error) {
+	onlineIndexMu.Lock()
+	defer onlineIndexMu.Unlock()
 	if len(onlineIndexCache) > 0 && time.Since(onlineIndexAt) < time.Hour {
-		return onlineIndexCache, nil
+		return append([]OnlineSchemeInfo(nil), onlineIndexCache...), nil
 	}
 
-	client := &http.Client{Timeout: 15 * time.Second}
-	req, err := http.NewRequest(http.MethodGet, schemeRepoAPI, nil)
+	client := schemeHTTPClient(15 * time.Second)
+	req, err := http.NewRequest(http.MethodGet, schemeAPIURL, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -140,11 +154,15 @@ func (a *App) ListOnlineSchemes() ([]OnlineSchemeInfo, error) {
 		return nil, fmt.Errorf("scheme collection returned %d", resp.StatusCode)
 	}
 
+	body, err := readLimitedSchemeBytes(resp.Body, schemeIndexResponseLimit)
+	if err != nil {
+		return nil, err
+	}
 	var entries []struct {
 		Name string `json:"name"`
 		Type string `json:"type"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&entries); err != nil {
+	if err := json.Unmarshal(body, &entries); err != nil {
 		return nil, err
 	}
 
@@ -162,22 +180,32 @@ func (a *App) ListOnlineSchemes() ([]OnlineSchemeInfo, error) {
 		return strings.ToLower(out[i].Name) < strings.ToLower(out[j].Name)
 	})
 
-	onlineIndexCache = out
+	onlineIndexCache = append([]OnlineSchemeInfo(nil), out...)
 	onlineIndexAt = time.Now()
-	return out, nil
+	return append([]OnlineSchemeInfo(nil), out...), nil
 }
 
 // FetchOnlineSchemes downloads and parses the named schemes.
 func (a *App) FetchOnlineSchemes(files []string) ([]ImportedScheme, error) {
-	client := &http.Client{Timeout: 20 * time.Second}
+	if len(files) > maxOnlineSchemeFetch {
+		return nil, fmt.Errorf("too many schemes requested")
+	}
+	ctx, cancel := context.WithTimeout(a.lifecycleContext(), onlineSchemeFetchTimeout)
+	defer cancel()
+	client := schemeHTTPClient(20 * time.Second)
 	var out []ImportedScheme
+	seen := make(map[string]bool, len(files))
 
 	for _, f := range files {
 		// Only ever fetch a plain file name from the known directory.
 		if f == "" || strings.ContainsAny(f, "/\\") || !strings.HasSuffix(f, ".colorscheme") {
 			continue
 		}
-		req, err := http.NewRequest(http.MethodGet, schemeRepoRaw+f, nil)
+		if seen[f] {
+			continue
+		}
+		seen[f] = true
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, schemeRawURL+f, nil)
 		if err != nil {
 			continue
 		}
@@ -190,8 +218,12 @@ func (a *App) FetchOnlineSchemes(files []string) ([]ImportedScheme, error) {
 			resp.Body.Close()
 			continue
 		}
-		s, err := parseKonsole(resp.Body, strings.TrimSuffix(f, ".colorscheme"))
+		body, readErr := readLimitedSchemeBytes(resp.Body, schemeDocumentLimit)
 		resp.Body.Close()
+		if readErr != nil {
+			continue
+		}
+		s, err := parseKonsole(strings.NewReader(string(body)), strings.TrimSuffix(f, ".colorscheme"))
 		if err != nil || s == nil {
 			continue
 		}
@@ -202,4 +234,15 @@ func (a *App) FetchOnlineSchemes(files []string) ([]ImportedScheme, error) {
 		return nil, fmt.Errorf("could not download any of the selected schemes")
 	}
 	return out, nil
+}
+
+func readLimitedSchemeBytes(r io.Reader, limit int64) ([]byte, error) {
+	body, err := io.ReadAll(io.LimitReader(r, limit+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(body)) > limit {
+		return nil, fmt.Errorf("scheme data exceeds %d bytes", limit)
+	}
+	return body, nil
 }

@@ -6,7 +6,36 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"asmgr-desktop/session"
 )
+
+func TestGitWailsAPIsRejectPathsOutsideSessionSnapshot(t *testing.T) {
+	storage := guardedTestStorage(t)
+	root := t.TempDir()
+	other := t.TempDir()
+	inst := &session.Instance{ID: "git-root", Name: "git", Path: root, Status: session.StatusStopped}
+	if err := storage.AddInstance(inst); err != nil {
+		t.Fatal(err)
+	}
+	app := &App{storage: storage}
+
+	if _, err := app.GetGitBranch(inst.ID, -1, other); err == nil {
+		t.Fatal("GetGitBranch accepted an arbitrary frontend path")
+	}
+	if _, err := app.ListGitBranches(inst.ID, -1, other); err == nil {
+		t.Fatal("ListGitBranches accepted an arbitrary frontend path")
+	}
+	if _, err := app.GetGitHistory(inst.ID, "", 0, -1, other); err == nil {
+		t.Fatal("GetGitHistory accepted an arbitrary frontend path")
+	}
+	if _, err := app.GetGitCommitFiles(inst.ID, "deadbeef", -1, other); err == nil {
+		t.Fatal("GetGitCommitFiles accepted an arbitrary frontend path")
+	}
+	if _, err := app.GetGitCommitDiff(inst.ID, "deadbeef", "file", false, -1, other); err == nil {
+		t.Fatal("GetGitCommitDiff accepted an arbitrary frontend path")
+	}
+}
 
 // A commit message is free text: it can contain newlines, tabs, quotes and
 // anything else a person can type. Parsing the log by splitting on a character
@@ -141,14 +170,13 @@ func TestGitHistoryRejectsOptionLikeRevisionsBeforeGitCanWriteFiles(t *testing.T
 		t.Fatal(err)
 	}
 	attack := "--output=" + victim
-	app := &App{}
-	if _, err := app.GetGitHistory(repo, attack, 0); err == nil {
+	if _, err := getGitHistoryAtPath(repo, attack, 0); err == nil {
 		t.Fatal("option-like branch was accepted")
 	}
-	if _, err := app.GetGitCommitFiles(repo, attack); err == nil {
+	if _, err := getGitCommitFilesAtPath(repo, attack); err == nil {
 		t.Fatal("option-like commit hash was accepted")
 	}
-	if _, err := app.GetGitCommitDiff(repo, attack, "file.txt", false); err == nil {
+	if _, err := getGitCommitDiffAtPath(repo, attack, "file.txt", false); err == nil {
 		t.Fatal("option-like diff hash was accepted")
 	}
 	if got, err := os.ReadFile(victim); err != nil || string(got) != "keep" {
@@ -157,10 +185,10 @@ func TestGitHistoryRejectsOptionLikeRevisionsBeforeGitCanWriteFiles(t *testing.T
 
 	// The defensive separator and hash validation must not reject a normal
 	// history/commit selected by the UI.
-	if _, err := app.GetGitCommitFiles(repo, hash); err != nil {
+	if _, err := getGitCommitFilesAtPath(repo, hash); err != nil {
 		t.Fatalf("valid commit hash rejected: %v", err)
 	}
-	if page, err := app.GetGitHistory(repo, branch, 0); err != nil || len(page.Commits) != 1 {
+	if page, err := getGitHistoryAtPath(repo, branch, 0); err != nil || len(page.Commits) != 1 {
 		t.Fatalf("valid branch rejected: commits=%d err=%v", len(page.Commits), err)
 	}
 }

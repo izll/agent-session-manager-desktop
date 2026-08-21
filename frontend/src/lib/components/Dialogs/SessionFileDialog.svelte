@@ -61,18 +61,20 @@
 
   async function doImport() {
     if (!file || selected.size === 0) return;
-    const targetPath = file.path;
+    const targetToken = file.token;
     const targetSelection = [...selected];
     const generation = ++requestGeneration;
     loading = true;
     error = '';
     try {
-      const count = await App.ImportSessionFile(targetPath, targetSelection);
+      // The displayed path is user-controlled metadata. Only the opaque token
+      // returned by ReadSessionFile identifies the backend-owned snapshot.
+      const count = await App.ImportSessionFile(targetToken, targetSelection);
       await loadSessions();
-      if (!show || generation !== requestGeneration || file?.path !== targetPath) return;
+      if (!show || generation !== requestGeneration || file?.token !== targetToken) return;
       importedCount = count;
     } catch (e) {
-      if (!show || generation !== requestGeneration || file?.path !== targetPath) return;
+      if (!show || generation !== requestGeneration || file?.token !== targetToken) return;
       error = String(e);
     } finally {
       if (generation === requestGeneration) loading = false;

@@ -1,6 +1,7 @@
 package session
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -23,6 +24,13 @@ const PortableFormat = "asmgr-sessions"
 
 // PortableVersion is the current layout revision.
 const PortableVersion = 1
+
+const (
+	portableFileLimit      = 16 << 20
+	portableSessionLimit   = 1000
+	portableGroupLimit     = 1000
+	portableTabsPerSession = 256
+)
 
 // PortableTab is one tab of an exported session.
 type PortableTab struct {
@@ -164,8 +172,27 @@ func WritePortable(w io.Writer, bundle *PortableBundle) error {
 
 // ReadPortable parses an exported file, rejecting anything that isn't one.
 func ReadPortable(r io.Reader) (*PortableBundle, error) {
+	data, err := io.ReadAll(io.LimitReader(r, portableFileLimit+1))
+	if err != nil {
+		return nil, fmt.Errorf("this is not a readable session file: %w", err)
+	}
+	if len(data) > portableFileLimit {
+		return nil, fmt.Errorf("this session file exceeds %d bytes", portableFileLimit)
+	}
+	// Count collection elements before decoding them into the comparatively
+	// large Go structs. A small JSON file such as [{},{},...] otherwise has a
+	// large memory-amplification factor and can exhaust the process before a
+	// post-decode length check gets a chance to reject it.
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil, fmt.Errorf("this is not a readable session file: %w", err)
+	}
+	if err := validatePortableCollectionSizes(raw); err != nil {
+		return nil, err
+	}
+
 	var bundle PortableBundle
-	if err := json.NewDecoder(r).Decode(&bundle); err != nil {
+	if err := json.Unmarshal(data, &bundle); err != nil {
 		return nil, fmt.Errorf("this is not a readable session file: %w", err)
 	}
 	if bundle.Format != PortableFormat {
@@ -178,6 +205,58 @@ func ReadPortable(r io.Reader) (*PortableBundle, error) {
 		return nil, fmt.Errorf("the file contains no sessions")
 	}
 	return &bundle, nil
+}
+
+func validatePortableCollectionSizes(raw map[string]json.RawMessage) error {
+	sessions, err := portableJSONArrayItems(raw["sessions"], portableSessionLimit, "sessions")
+	if err != nil {
+		return err
+	}
+	if len(raw["groups"]) > 0 {
+		if _, err := portableJSONArrayItems(raw["groups"], portableGroupLimit, "groups"); err != nil {
+			return err
+		}
+	}
+	for _, item := range sessions {
+		var shape struct {
+			Tabs json.RawMessage `json:"tabs"`
+		}
+		if err := json.Unmarshal(item, &shape); err != nil {
+			return fmt.Errorf("this session file contains an invalid session: %w", err)
+		}
+		if len(shape.Tabs) > 0 {
+			if _, err := portableJSONArrayItems(shape.Tabs, portableTabsPerSession, "tabs per session"); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func portableJSONArrayItems(raw json.RawMessage, limit int, label string) ([]json.RawMessage, error) {
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	token, err := decoder.Token()
+	if err != nil {
+		return nil, fmt.Errorf("this session file has invalid %s: %w", label, err)
+	}
+	if delimiter, ok := token.(json.Delim); !ok || delimiter != '[' {
+		return nil, fmt.Errorf("this session file has invalid %s", label)
+	}
+	items := make([]json.RawMessage, 0, min(limit, 16))
+	for decoder.More() {
+		if len(items) >= limit {
+			return nil, fmt.Errorf("this session file contains too many %s (maximum %d)", label, limit)
+		}
+		var item json.RawMessage
+		if err := decoder.Decode(&item); err != nil {
+			return nil, fmt.Errorf("this session file has invalid %s: %w", label, err)
+		}
+		items = append(items, item)
+	}
+	if _, err := decoder.Token(); err != nil {
+		return nil, fmt.Errorf("this session file has invalid %s: %w", label, err)
+	}
+	return items, nil
 }
 
 // PathExists reports whether a session's directory is present on this machine.

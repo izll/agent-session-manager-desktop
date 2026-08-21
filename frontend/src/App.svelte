@@ -459,6 +459,9 @@
    * Falls back to the tab's configured directory, then to the session's.
    */
   let gitHistoryPath = '';
+  let gitHistoryProjectId = '';
+  let gitHistorySessionId = '';
+  let gitHistoryWindowIdx = 0;
 
   async function resolveGitHistoryPath(session: Session, windowIdx: number): Promise<string> {
     try {
@@ -474,11 +477,15 @@
   async function handleShowGitHistory() {
     const session = get(selectedSession);
     if (!session) return;
+    const projectId = $activeProjectId;
     const windowIdx = get(selectedWindowIdx) ?? 0;
     // Resolved before showing, so the dialog never opens against the previous
     // tab's repository and then swaps under the reader.
     const path = await resolveGitHistoryPath(session, windowIdx);
-    if ($selectedSessionId !== session.id || $selectedWindowIdx !== windowIdx) return;
+    if ($activeProjectId !== projectId || $selectedSessionId !== session.id || $selectedWindowIdx !== windowIdx) return;
+    gitHistoryProjectId = projectId;
+    gitHistorySessionId = session.id;
+    gitHistoryWindowIdx = windowIdx;
     gitHistoryPath = path;
     showGitHistory = true;
   }
@@ -1636,7 +1643,13 @@
     </div>
   {/if}
 
-  <GitHistoryDialog bind:show={showGitHistory} path={gitHistoryPath} />
+  <GitHistoryDialog
+    bind:show={showGitHistory}
+    projectId={gitHistoryProjectId}
+    sessionId={gitHistorySessionId}
+    windowIdx={gitHistoryWindowIdx}
+    path={gitHistoryPath}
+  />
 
   <QuickJumpDialog
     bind:show={showQuickJump}

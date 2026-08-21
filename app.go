@@ -25,32 +25,41 @@ import (
 
 // App struct holds the application state
 type App struct {
-	ctx               context.Context
-	storage           *session.Storage
-	historyIndex      *session.HistoryIndex
-	ptys              map[string]*ptySession
-	ptyMu             sync.RWMutex
-	projectMu         sync.RWMutex
-	projectMutationMu sync.Mutex
-	termServer        *TerminalServer
-	dictation         *DictationService
-	activityStats     *ActivityStatsRecorder
-	previewCancel     context.CancelFunc
-	previewWG         sync.WaitGroup
-	attentionMu       sync.Mutex
-	attentionCancel   context.CancelFunc
-	attentionWG       sync.WaitGroup
-	orphanCleanupMu   sync.Mutex
-	orphanCleanupStop context.CancelFunc
-	orphanCleanupWG   sync.WaitGroup
-	updateCheckMu     sync.Mutex
-	updateCheckStop   context.CancelFunc
-	updateCheckWG     sync.WaitGroup
-	tmuxWorkMu        sync.Mutex
-	tmuxWorkCtx       context.Context
-	tmuxWorkStop      context.CancelFunc
-	tmuxWorkWG        sync.WaitGroup
-	lastTypingSignal  int64 // unix nano timestamp of last typing signal
+	ctx                 context.Context
+	storage             *session.Storage
+	historyIndex        *session.HistoryIndex
+	historyMu           sync.Mutex
+	portableImportMu    sync.Mutex
+	portableImports     map[string]portableImportSnapshot
+	portableImportIDs   []string
+	ptys                map[string]*ptySession
+	ptyMu               sync.RWMutex
+	projectMu           sync.RWMutex
+	projectMutationMu   sync.Mutex
+	termServer          *TerminalServer
+	dictation           *DictationService
+	activityStats       *ActivityStatsRecorder
+	previewCancel       context.CancelFunc
+	previewWG           sync.WaitGroup
+	attentionMu         sync.Mutex
+	attentionCancel     context.CancelFunc
+	attentionWG         sync.WaitGroup
+	orphanCleanupMu     sync.Mutex
+	orphanCleanupStop   context.CancelFunc
+	orphanCleanupWG     sync.WaitGroup
+	updateCheckMu       sync.Mutex
+	updateCheckStop     context.CancelFunc
+	updateCheckWG       sync.WaitGroup
+	updateInstallMu     sync.Mutex
+	updateInstallCancel context.CancelFunc
+	updateInstalling    bool
+	updateShuttingDown  bool
+	updateCriticalWG    sync.WaitGroup
+	tmuxWorkMu          sync.Mutex
+	tmuxWorkCtx         context.Context
+	tmuxWorkStop        context.CancelFunc
+	tmuxWorkWG          sync.WaitGroup
+	lastTypingSignal    int64 // unix nano timestamp of last typing signal
 	// projectLocked is true when THIS instance owns the active project's lock.
 	// otherInstancePID is the PID of the instance that owns it instead (0 if
 	// none). Terminal attaches are refused unless projectLocked, so a second
@@ -318,6 +327,12 @@ func (a *App) IsDevMode() bool {
 
 // shutdown is called when the app is closing
 func (a *App) shutdown(ctx context.Context) {
+	// Installing the replacement executable is a transaction that must not be
+	// interrupted by our own process teardown. Close the gate before stopping
+	// other services so no new Wails update request can race this shutdown, and
+	// wait for an already-running install to finish its final swap/rollback.
+	a.stopUpdateInstall()
+
 	// Stop every background storage/tmux reader before releasing the project
 	// lock or removing terminal mirrors. Both pollers capture panes and read the
 	// active project; letting either survive into teardown races the resources
@@ -674,6 +689,13 @@ func (a *App) SelectProject(id string) error {
 		a.otherInstancePID = locked.PID
 		log.Printf("[lock] switched to project %q which is open in pid %d — terminal attaches disabled", id, locked.PID)
 	}
+	// Opaque history entry IDs and portable-import snapshots are scoped to the
+	// project in which they were issued. Invalidate history after the switch;
+	// otherwise GlobalSearch/GetHistoryPreview can expose the previous
+	// project's indexed prompts until the frontend happens to initialize again.
+	a.historyMu.Lock()
+	a.historyIndex = nil
+	a.historyMu.Unlock()
 	return nil
 }
 
@@ -1042,7 +1064,10 @@ func (a *App) StartSession(id string) error {
 	if err := inst.Start(); err != nil {
 		return err
 	}
-	return a.storage.UpdateInstance(inst)
+	return persistOrRollbackExternalMutation(
+		func() error { return a.storage.UpdateInstance(inst) },
+		func() error { return inst.Stop() },
+	)
 }
 
 // StartSessionWithResume starts a session with resume.
@@ -1075,7 +1100,10 @@ func (a *App) StartSessionWithResume(id, resumeID string) error {
 	}
 	// StartWithResume may generate a new conversation ID when resumeID is
 	// empty. Do not overwrite that generated identity with the empty request.
-	return a.storage.UpdateInstance(inst)
+	return persistOrRollbackExternalMutation(
+		func() error { return a.storage.UpdateInstance(inst) },
+		func() error { return inst.Stop() },
+	)
 }
 
 func resolveResumeID(agent session.AgentType, requested, stored string, exists func(session.AgentType, string) bool) (string, bool) {
@@ -1123,7 +1151,10 @@ func (a *App) RestartTab(id string, windowIdx int) error {
 	if err := inst.RestartWindow(windowIdx); err != nil {
 		return err
 	}
-	return a.storage.UpdateInstance(inst)
+	return persistOrRollbackExternalMutation(
+		func() error { return a.storage.UpdateInstance(inst) },
+		func() error { return inst.RestopWindow(windowIdx) },
+	)
 }
 
 // RestartTabWithResume restarts a stopped tab with a specific resume session ID
@@ -1170,7 +1201,10 @@ func (a *App) RestartTabWithResume(id string, windowIdx int, resumeId string) er
 	if err := inst.RestartWindowWithResume(windowIdx, resumeId); err != nil {
 		return err
 	}
-	return a.storage.UpdateInstance(inst)
+	return persistOrRollbackExternalMutation(
+		func() error { return a.storage.UpdateInstance(inst) },
+		func() error { return inst.RestopWindow(windowIdx) },
+	)
 }
 
 // StopTab stops a specific tab (tmux window) in a session
@@ -1796,7 +1830,10 @@ func (a *App) ForkToNewTab(id, name, sessionID string) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	if err := a.storage.UpdateInstance(inst); err != nil {
+	if err := persistOrRollbackExternalMutation(
+		func() error { return a.storage.UpdateInstance(inst) },
+		func() error { return inst.DeleteWindow(newIdx) },
+	); err != nil {
 		return 0, err
 	}
 	return newIdx, nil
@@ -1859,12 +1896,25 @@ func (a *App) ForkToNewSession(id, name, sessionID string) (*SessionInfo, error)
 	// it in front of the user instead of only in the log.
 	if err := newInst.StartWithResume(""); err != nil {
 		runtime.LogWarning(a.ctx, fmt.Sprintf("Failed to auto-start forked session: %v", err))
-		if delErr := a.storage.RemoveInstance(newInst.ID); delErr != nil {
+		delErr := a.storage.RemoveInstance(newInst.ID)
+		if delErr != nil {
 			runtime.LogWarning(a.ctx, fmt.Sprintf("Failed to clean up the forked session: %v", delErr))
 		}
+		return nil, errors.Join(err, delErr)
+	}
+	if err := persistOrRollbackExternalMutation(
+		func() error { return a.storage.UpdateInstance(newInst) },
+		func() error {
+			if stopErr := newInst.Stop(); stopErr != nil {
+				// Keep the stored entry if the external process could not be
+				// stopped; hiding a live orphan would be worse than stale status.
+				return stopErr
+			}
+			return a.storage.RemoveInstance(newInst.ID)
+		},
+	); err != nil {
 		return nil, err
 	}
-	a.storage.UpdateInstance(newInst)
 
 	info := a.instanceToSessionInfo(newInst)
 	return &info, nil
@@ -3275,15 +3325,23 @@ func validateRootSnapshot(inst *session.Instance, expectedRoot, message string) 
 
 // HistoryEntryInfo represents history entry for frontend
 type HistoryEntryInfo struct {
-	Agent       string `json:"agent"`
-	Content     string `json:"content"`
-	SessionFile string `json:"sessionFile"`
-	SessionID   string `json:"sessionId"`
-	Score       int    `json:"score"`
+	ID        string `json:"id"`
+	Agent     string `json:"agent"`
+	Content   string `json:"content"`
+	SessionID string `json:"sessionId"`
+	Score     int    `json:"score"`
 }
 
 // InitHistorySearch initializes history search index
 func (a *App) InitHistorySearch() error {
+	a.projectMu.RLock()
+	defer a.projectMu.RUnlock()
+	a.historyMu.Lock()
+	defer a.historyMu.Unlock()
+	return a.initHistorySearchLocked()
+}
+
+func (a *App) initHistorySearchLocked() error {
 	instances, _, err := a.storage.LoadAll()
 	if err != nil {
 		return err
@@ -3300,36 +3358,50 @@ func (a *App) InitHistorySearch() error {
 
 // GlobalSearch searches history
 func (a *App) GlobalSearch(query string) ([]HistoryEntryInfo, error) {
+	a.projectMu.RLock()
+	defer a.projectMu.RUnlock()
+	if len(query) > 1024 {
+		return nil, fmt.Errorf("search query is too long")
+	}
+	a.historyMu.Lock()
 	if a.historyIndex == nil {
-		if err := a.InitHistorySearch(); err != nil {
+		if err := a.initHistorySearchLocked(); err != nil {
+			a.historyMu.Unlock()
 			return nil, err
 		}
 	}
+	index := a.historyIndex
+	a.historyMu.Unlock()
 
-	results := a.historyIndex.Search(query)
+	results := index.Search(query)
 	infos := make([]HistoryEntryInfo, len(results))
 	for i, r := range results {
 		infos[i] = HistoryEntryInfo{
-			Agent:       string(r.Agent),
-			Content:     r.Content,
-			SessionFile: r.SessionFile,
-			SessionID:   r.SessionID,
-			Score:       r.Score,
+			ID:        r.ID,
+			Agent:     string(r.Agent),
+			Content:   r.Snippet,
+			SessionID: r.SessionID,
+			Score:     r.Score,
 		}
 	}
 	return infos, nil
 }
 
 // GetHistoryPreview loads conversation preview
-func (a *App) GetHistoryPreview(entry HistoryEntryInfo) (string, error) {
-	// Create a HistoryEntry and load its conversation
-	he := &session.HistoryEntry{
-		Agent:       session.AgentType(entry.Agent),
-		SessionFile: entry.SessionFile,
-		SessionID:   entry.SessionID,
-		Content:     entry.Content,
+func (a *App) GetHistoryPreview(entryID string) (string, error) {
+	a.projectMu.RLock()
+	defer a.projectMu.RUnlock()
+	a.historyMu.Lock()
+	index := a.historyIndex
+	a.historyMu.Unlock()
+	if index == nil {
+		return "", fmt.Errorf("history index is not loaded")
 	}
-	messages, err := he.LoadConversation()
+	entry, ok := index.GetEntry(entryID)
+	if !ok {
+		return "", fmt.Errorf("history entry is no longer available")
+	}
+	messages, err := entry.LoadConversation()
 	if err != nil {
 		return "", err
 	}
@@ -3337,7 +3409,14 @@ func (a *App) GetHistoryPreview(entry HistoryEntryInfo) (string, error) {
 	// Format messages as string
 	var result strings.Builder
 	for _, msg := range messages {
-		result.WriteString(fmt.Sprintf("[%s]: %s\n\n", msg.Role, msg.Content))
+		if result.Len()+len(msg.Role)+len(msg.Content)+6 > 4<<20 {
+			return "", fmt.Errorf("conversation preview is too large")
+		}
+		result.WriteString("[")
+		result.WriteString(msg.Role)
+		result.WriteString("]: ")
+		result.WriteString(msg.Content)
+		result.WriteString("\n\n")
 	}
 	return result.String(), nil
 }
@@ -4015,13 +4094,67 @@ func (a *App) PendingUpdate() string {
 
 // PerformUpdate downloads and installs update
 func (a *App) PerformUpdate(version string) error {
-	if err := updater.DownloadAndInstall(version); err != nil {
+	ctx, done, err := a.beginUpdateInstall()
+	if err != nil {
+		return err
+	}
+	defer done()
+
+	if err := updater.DownloadAndInstallContext(ctx, version, a.withCriticalUpdateInstall); err != nil {
 		return err
 	}
 	// Installed: stop advertising it. The running process is still the old
 	// binary, so Version can't tell us this on its own.
 	updater.ClearAvailableUpdate()
 	return nil
+}
+
+func (a *App) beginUpdateInstall() (context.Context, func(), error) {
+	a.updateInstallMu.Lock()
+	defer a.updateInstallMu.Unlock()
+	if a.updateShuttingDown {
+		return nil, nil, fmt.Errorf("application is shutting down")
+	}
+	if a.updateInstalling {
+		return nil, nil, fmt.Errorf("an update is already in progress")
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	a.updateInstalling = true
+	a.updateInstallCancel = cancel
+	return ctx, func() {
+		cancel()
+		a.updateInstallMu.Lock()
+		a.updateInstalling = false
+		a.updateInstallCancel = nil
+		a.updateInstallMu.Unlock()
+	}, nil
+}
+
+func (a *App) withCriticalUpdateInstall(action func() error) error {
+	a.updateInstallMu.Lock()
+	if a.updateShuttingDown {
+		a.updateInstallMu.Unlock()
+		return context.Canceled
+	}
+	a.updateCriticalWG.Add(1)
+	a.updateInstallMu.Unlock()
+	defer a.updateCriticalWG.Done()
+	return action()
+
+}
+
+func (a *App) stopUpdateInstall() {
+	a.updateInstallMu.Lock()
+	a.updateShuttingDown = true
+	if a.updateInstallCancel != nil {
+		a.updateInstallCancel()
+	}
+	a.updateInstallMu.Unlock()
+	// Downloading and staging are safe to abandon and observe the cancellation
+	// above. Only a final executable/bundle/package transaction must finish
+	// before the process is allowed to exit.
+	a.updateCriticalWG.Wait()
 }
 
 // ============================================================================

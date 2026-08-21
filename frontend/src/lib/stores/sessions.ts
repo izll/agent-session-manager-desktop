@@ -388,9 +388,11 @@ export async function toggleFavorite(id: string) {
   try {
     await App.ToggleFavorite(id);
     if (!projectTargetIsCurrent(target)) return;
-    sessions.update(s => s.map(sess =>
-      sess.id === id ? { ...sess, favorite: !sess.favorite } : sess
-    ));
+    // A refresh can land after the backend has toggled but before this Wails
+    // promise resolves. Inverting that already-fresh store value would put the
+    // UI back on the old state while disk is on the new one. Re-read backend
+    // truth instead; loadSessions also drops an older overlapping refresh.
+    await loadSessions();
   } catch (e) {
     if (!projectTargetIsCurrent(target)) return;
     error.set(String(e));
@@ -403,9 +405,7 @@ export async function toggleAutoYes(id: string) {
   try {
     await App.ToggleAutoYes(id);
     if (!projectTargetIsCurrent(target)) return;
-    sessions.update(s => s.map(sess =>
-      sess.id === id ? { ...sess, autoYes: !sess.autoYes } : sess
-    ));
+    await loadSessions();
   } catch (e) {
     if (!projectTargetIsCurrent(target)) return;
     error.set(String(e));
@@ -543,9 +543,7 @@ export async function toggleGroupCollapse(id: string) {
   try {
     await App.ToggleGroupCollapse(id);
     if (!projectTargetIsCurrent(target)) return;
-    groups.update(g => g.map(group =>
-      group.id === id ? { ...group, collapsed: !group.collapsed } : group
-    ));
+    await loadSessions();
   } catch (e) {
     if (!projectTargetIsCurrent(target)) return;
     error.set(String(e));

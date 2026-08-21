@@ -729,9 +729,9 @@ export namespace main {
 	    }
 	}
 	export class HistoryEntryInfo {
+	    id: string;
 	    agent: string;
 	    content: string;
-	    sessionFile: string;
 	    sessionId: string;
 	    score: number;
 
@@ -741,9 +741,9 @@ export namespace main {
 
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
 	        this.agent = source["agent"];
 	        this.content = source["content"];
-	        this.sessionFile = source["sessionFile"];
 	        this.sessionId = source["sessionId"];
 	        this.score = source["score"];
 	    }
@@ -958,6 +958,7 @@ export namespace main {
 	}
 	export class PortableFileInfo {
 	    path: string;
+	    token: string;
 	    exportedAt: string;
 	    appVersion: string;
 	    sessions: PortableSessionInfo[];
@@ -969,6 +970,7 @@ export namespace main {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.path = source["path"];
+	        this.token = source["token"];
 	        this.exportedAt = source["exportedAt"];
 	        this.appVersion = source["appVersion"];
 	        this.sessions = this.convertValues(source["sessions"], PortableSessionInfo);

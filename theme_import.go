@@ -221,7 +221,7 @@ func parseHexish(r io.Reader, fallbackName string) (*ImportedScheme, error) {
 		"cursor": "cursor", "cursorcolor": "cursor", "cursor_bg": "cursor",
 		"selection": "selectionBackground", "selection_bg": "selectionBackground",
 		"selectionbackground": "selectionBackground",
-		"black": "black", "red": "red", "green": "green", "yellow": "yellow",
+		"black":               "black", "red": "red", "green": "green", "yellow": "yellow",
 		"blue": "blue", "magenta": "magenta", "purple": "magenta",
 		"cyan": "cyan", "white": "white",
 		"brightblack": "brightBlack", "brightred": "brightRed",
@@ -273,7 +273,12 @@ func parseHexish(r io.Reader, fallbackName string) (*ImportedScheme, error) {
 
 // parseSchemeFile picks a parser by extension, then by content.
 func parseSchemeFile(path string) (*ImportedScheme, error) {
-	data, err := os.ReadFile(path)
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	data, err := readLimitedSchemeBytes(file, schemeDocumentLimit)
 	if err != nil {
 		return nil, err
 	}

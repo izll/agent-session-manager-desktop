@@ -2,28 +2,41 @@ package session
 
 import (
 	"bufio"
+	"context"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/sahilm/fuzzy"
 )
 
+const (
+	historySessionFileLimit  = 16 << 20
+	historyPreviewLimit      = 4 << 20
+	historySearchEntryLimit  = 2 << 20
+	historyIndexContentLimit = 64 << 20
+	historyIndexEntryLimit   = 10000
+	historySearchResultLimit = 200
+)
+
 // HistoryEntry represents a single searchable history item from any agent
 type HistoryEntry struct {
 	ID          string
 	Agent       AgentType
-	Content     string    // Full conversation or command (for search)
-	Snippet     string    // Highlighted excerpt for display
-	Path        string    // Project path (if applicable)
+	Content     string // Full conversation or command (for search)
+	Snippet     string // Highlighted excerpt for display
+	Path        string // Project path (if applicable)
 	Timestamp   time.Time
 	Score       int    // Relevance score for sorting
 	SessionFile string // Full path to session file (for Claude - to load conversation)
@@ -56,7 +69,9 @@ func (e *HistoryEntry) LoadConversation() ([]ConversationMessage, error) {
 	defer file.Close()
 
 	var messages []ConversationMessage
-	scanner := bufio.NewScanner(file)
+	totalBytes := 0
+	limited := &io.LimitedReader{R: file, N: historySessionFileLimit + 1}
+	scanner := bufio.NewScanner(limited)
 	buf := make([]byte, 0, 64*1024)
 	scanner.Buffer(buf, 1024*1024)
 
@@ -78,6 +93,10 @@ func (e *HistoryEntry) LoadConversation() ([]ConversationMessage, error) {
 					ts = parsed
 				}
 			}
+			if totalBytes+len(content) > historyPreviewLimit {
+				return nil, fmt.Errorf("conversation preview exceeds %d bytes", historyPreviewLimit)
+			}
+			totalBytes += len(content)
 			messages = append(messages, ConversationMessage{
 				Role:      entry.Type,
 				Content:   content,
@@ -86,12 +105,18 @@ func (e *HistoryEntry) LoadConversation() ([]ConversationMessage, error) {
 		}
 	}
 
-	return messages, scanner.Err()
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+	if limited.N == 0 {
+		return nil, fmt.Errorf("history file exceeds %d bytes", historySessionFileLimit)
+	}
+	return messages, nil
 }
 
 // loadGeminiConversation loads conversation from a Gemini session JSON file
 func (e *HistoryEntry) loadGeminiConversation() ([]ConversationMessage, error) {
-	data, err := os.ReadFile(e.SessionFile)
+	data, err := readLimitedHistoryFile(e.SessionFile, historySessionFileLimit)
 	if err != nil {
 		return nil, err
 	}
@@ -102,6 +127,7 @@ func (e *HistoryEntry) loadGeminiConversation() ([]ConversationMessage, error) {
 	}
 
 	var messages []ConversationMessage
+	totalBytes := 0
 	for _, msg := range session.Messages {
 		// Only include user and gemini messages
 		if msg.Type != "user" && msg.Type != "gemini" {
@@ -118,6 +144,10 @@ func (e *HistoryEntry) loadGeminiConversation() ([]ConversationMessage, error) {
 			ts = parsed
 		}
 
+		if totalBytes+len(msg.Content) > historyPreviewLimit {
+			return nil, fmt.Errorf("conversation preview exceeds %d bytes", historyPreviewLimit)
+		}
+		totalBytes += len(msg.Content)
 		messages = append(messages, ConversationMessage{
 			Role:      role,
 			Content:   msg.Content,
@@ -130,9 +160,12 @@ func (e *HistoryEntry) loadGeminiConversation() ([]ConversationMessage, error) {
 
 // HistoryIndex manages the searchable history across all agents
 type HistoryIndex struct {
+	mu        sync.RWMutex
 	entries   []HistoryEntry
 	loaded    bool
 	instances []*Instance // Live instances for terminal search
+	loadBytes int
+	loadCount int
 }
 
 // NewHistoryIndex creates a new history index
@@ -145,17 +178,30 @@ func NewHistoryIndex() *HistoryIndex {
 
 // SetInstances sets the live instances for terminal search
 func (h *HistoryIndex) SetInstances(instances []*Instance) {
-	h.instances = instances
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.instances = append([]*Instance(nil), instances...)
+	h.loaded = false
 }
 
 // IsLoaded returns true if history has been loaded
 func (h *HistoryIndex) IsLoaded() bool {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
 	return h.loaded
 }
 
 // Load loads history from all available sources
 func (h *HistoryIndex) Load() error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.loadLocked()
+}
+
+func (h *HistoryIndex) loadLocked() error {
 	h.entries = make([]HistoryEntry, 0)
+	h.loadBytes = 0
+	h.loadCount = 0
 
 	// Load from each source
 	claudeEntries := h.parseClaudeHistory()
@@ -182,11 +228,24 @@ func (h *HistoryIndex) Load() error {
 	return nil
 }
 
+func (h *HistoryIndex) appendHistoryEntry(entries *[]HistoryEntry, entry HistoryEntry) bool {
+	if h.loadCount >= historyIndexEntryLimit || len(entry.Content) > historySearchEntryLimit ||
+		h.loadBytes+len(entry.Content) > historyIndexContentLimit {
+		return false
+	}
+	*entries = append(*entries, entry)
+	h.loadBytes += len(entry.Content)
+	h.loadCount++
+	return true
+}
+
 // Search searches the history index for matching entries
 // Falls back to fuzzy search if no exact matches found
 func (h *HistoryIndex) Search(query string) []HistoryEntry {
+	h.mu.Lock()
+	defer h.mu.Unlock()
 	if !h.loaded {
-		_ = h.Load()
+		_ = h.loadLocked()
 	}
 
 	// Don't search with empty query
@@ -199,7 +258,10 @@ func (h *HistoryIndex) Search(query string) []HistoryEntry {
 
 	// If no results, fall back to fuzzy search
 	if len(results) == 0 {
-		results = h.FuzzySearch(query)
+		results = h.fuzzySearchLocked(query)
+	}
+	if len(results) > historySearchResultLimit {
+		results = results[:historySearchResultLimit]
 	}
 
 	return results
@@ -247,6 +309,12 @@ func (s fuzzySource) Len() int {
 
 // FuzzySearch performs fuzzy matching with typo tolerance
 func (h *HistoryIndex) FuzzySearch(query string) []HistoryEntry {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return h.fuzzySearchLocked(query)
+}
+
+func (h *HistoryIndex) fuzzySearchLocked(query string) []HistoryEntry {
 	if len(h.entries) == 0 || query == "" {
 		return nil
 	}
@@ -268,6 +336,20 @@ func (h *HistoryIndex) FuzzySearch(query string) []HistoryEntry {
 	})
 
 	return results
+}
+
+// GetEntry returns only an entry that this index discovered from the current
+// ASMGR session set. Callers never need to trust a file path supplied back by
+// the webview to load a preview.
+func (h *HistoryIndex) GetEntry(id string) (HistoryEntry, bool) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	for _, entry := range h.entries {
+		if entry.ID == id {
+			return entry, true
+		}
+	}
+	return HistoryEntry{}, false
 }
 
 // extractSnippet extracts a relevant snippet around the query match
@@ -344,8 +426,8 @@ type claudeSessionEntry struct {
 
 // claudeContentBlock represents a content block in assistant messages
 type claudeContentBlock struct {
-	Type    string `json:"type"`
-	Text    string `json:"text,omitempty"`
+	Type     string `json:"type"`
+	Text     string `json:"text,omitempty"`
 	Thinking string `json:"thinking,omitempty"`
 }
 
@@ -433,13 +515,17 @@ func (h *HistoryIndex) parseClaudeHistory() []HistoryEntry {
 
 // parseClaudeSessionFile parses a Claude session JSONL file
 func (h *HistoryIndex) parseClaudeSessionFile(filePath string, entries *[]HistoryEntry) {
+	if len(*entries) >= historyIndexEntryLimit {
+		return
+	}
 	file, err := os.Open(filePath)
 	if err != nil {
 		return
 	}
 	defer file.Close()
 
-	scanner := bufio.NewScanner(file)
+	limited := &io.LimitedReader{R: file, N: historySessionFileLimit + 1}
+	scanner := bufio.NewScanner(limited)
 	buf := make([]byte, 0, 64*1024)
 	scanner.Buffer(buf, 1024*1024)
 
@@ -447,6 +533,9 @@ func (h *HistoryIndex) parseClaudeSessionFile(filePath string, entries *[]Histor
 	var cwd string
 
 	for scanner.Scan() {
+		if len(*entries) >= historyIndexEntryLimit {
+			break
+		}
 		var entry claudeSessionEntry
 		if err := json.Unmarshal(scanner.Bytes(), &entry); err == nil {
 			// Capture session ID from first entry
@@ -469,7 +558,7 @@ func (h *HistoryIndex) parseClaudeSessionFile(filePath string, entries *[]Histor
 						ts = parsed
 					}
 				}
-				*entries = append(*entries, HistoryEntry{
+				if !h.appendHistoryEntry(entries, HistoryEntry{
 					ID:          generateHistoryID(),
 					Agent:       AgentClaude,
 					Content:     content,
@@ -477,7 +566,9 @@ func (h *HistoryIndex) parseClaudeSessionFile(filePath string, entries *[]Histor
 					Timestamp:   ts,
 					SessionFile: filePath,
 					SessionID:   sessionID,
-				})
+				}) {
+					return
+				}
 			}
 		}
 	}
@@ -515,11 +606,15 @@ func (h *HistoryIndex) parseAiderHistory() []HistoryEntry {
 	for _, historyFile := range aiderPaths {
 		if file, err := os.Open(historyFile); err == nil {
 			defer file.Close()
-			scanner := bufio.NewScanner(file)
+			limited := &io.LimitedReader{R: file, N: historySessionFileLimit + 1}
+			scanner := bufio.NewScanner(limited)
 			buf := make([]byte, 0, 64*1024)
 			scanner.Buffer(buf, 1024*1024)
 
 			for scanner.Scan() {
+				if len(entries) >= historyIndexEntryLimit {
+					break
+				}
 				line := scanner.Text()
 				// Try JSON format first
 				var entry aiderHistoryEntry
@@ -529,14 +624,16 @@ func (h *HistoryIndex) parseAiderHistory() []HistoryEntry {
 						if len(snippet) > 100 {
 							snippet = snippet[:100] + "..."
 						}
-						entries = append(entries, HistoryEntry{
+						if !h.appendHistoryEntry(&entries, HistoryEntry{
 							ID:        generateHistoryID(),
 							Agent:     AgentAider,
 							Content:   entry.Content,
 							Snippet:   snippet,
 							Path:      aiderPath,
 							Timestamp: time.Now(), // Aider doesn't store timestamps
-						})
+						}) {
+							return entries
+						}
 					}
 				} else {
 					// Plain text format
@@ -545,14 +642,16 @@ func (h *HistoryIndex) parseAiderHistory() []HistoryEntry {
 						if len(snippet) > 100 {
 							snippet = snippet[:100] + "..."
 						}
-						entries = append(entries, HistoryEntry{
+						if !h.appendHistoryEntry(&entries, HistoryEntry{
 							ID:        generateHistoryID(),
 							Agent:     AgentAider,
 							Content:   line,
 							Snippet:   snippet,
 							Path:      aiderPath,
 							Timestamp: time.Now(),
-						})
+						}) {
+							return entries
+						}
 					}
 				}
 			}
@@ -575,14 +674,6 @@ func (h *HistoryIndex) parseOpenCodeDB() []HistoryEntry {
 			if _, err := os.Stat(localDB); err == nil {
 				dbPaths[localDB] = inst.Path
 			}
-		}
-	}
-
-	// Also check global DB (fallback)
-	if homeDir, err := os.UserHomeDir(); err == nil {
-		globalDB := filepath.Join(homeDir, ".opencode", "opencode.db")
-		if _, err := os.Stat(globalDB); err == nil {
-			dbPaths[globalDB] = ""
 		}
 	}
 
@@ -611,12 +702,12 @@ func (h *HistoryIndex) parseOpenCodeDBFile(dbPath, projectPath string) []History
 		SELECT m.parts, m.role, m.created_at, s.title
 		FROM messages m
 		LEFT JOIN sessions s ON m.session_id = s.id
-		WHERE m.role IN ('user', 'assistant')
+		WHERE m.role IN ('user', 'assistant') AND length(m.parts) <= ?
 		ORDER BY m.created_at DESC
 		LIMIT 500
 	`
 
-	rows, err := db.Query(query)
+	rows, err := db.Query(query, historySearchEntryLimit)
 	if err != nil {
 		return entries
 	}
@@ -647,14 +738,16 @@ func (h *HistoryIndex) parseOpenCodeDBFile(dbPath, projectPath string) []History
 				snippet = snippet[:100] + "..."
 			}
 
-			entries = append(entries, HistoryEntry{
+			if !h.appendHistoryEntry(&entries, HistoryEntry{
 				ID:        generateHistoryID(),
 				Agent:     AgentOpenCode,
 				Content:   content,
 				Snippet:   snippet,
 				Path:      path,
 				Timestamp: ts,
-			})
+			}) {
+				break
+			}
 		}
 	}
 
@@ -737,12 +830,20 @@ func (h *HistoryIndex) parseGeminiHistory() []HistoryEntry {
 	}
 
 	for _, projectDir := range projectDirs {
+		if len(entries) >= historyIndexEntryLimit {
+			break
+		}
 		if !projectDir.IsDir() {
 			continue
 		}
 
 		// Try to look up path from known instances (directory name is SHA256 hash)
 		projectPath := hashMap[projectDir.Name()]
+		if projectPath == "" {
+			// The Gemini store is global. Only hashed directories belonging to
+			// a current ASMGR session may enter this project-scoped index.
+			continue
+		}
 
 		chatsDir := filepath.Join(geminiDir, projectDir.Name(), "chats")
 		chatFiles, err := os.ReadDir(chatsDir)
@@ -751,12 +852,15 @@ func (h *HistoryIndex) parseGeminiHistory() []HistoryEntry {
 		}
 
 		for _, chatFile := range chatFiles {
+			if len(entries) >= historyIndexEntryLimit {
+				break
+			}
 			if !strings.HasPrefix(chatFile.Name(), "session-") || !strings.HasSuffix(chatFile.Name(), ".json") {
 				continue
 			}
 
 			sessionPath := filepath.Join(chatsDir, chatFile.Name())
-			data, err := os.ReadFile(sessionPath)
+			data, err := readLimitedHistoryFile(sessionPath, historySessionFileLimit)
 			if err != nil {
 				continue
 			}
@@ -776,11 +880,14 @@ func (h *HistoryIndex) parseGeminiHistory() []HistoryEntry {
 					continue
 				}
 
-				if msg.Type == "user" {
-					content.WriteString("User: ")
-				} else {
-					content.WriteString("Gemini: ")
+				prefix := "User: "
+				if msg.Type == "gemini" {
+					prefix = "Gemini: "
 				}
+				if content.Len()+len(prefix)+len(msg.Content)+2 > historySearchEntryLimit {
+					break
+				}
+				content.WriteString(prefix)
 				content.WriteString(msg.Content)
 				content.WriteString("\n\n")
 
@@ -809,8 +916,8 @@ func (h *HistoryIndex) parseGeminiHistory() []HistoryEntry {
 				}
 			}
 
-			entries = append(entries, HistoryEntry{
-				ID:          session.SessionID,
+			if !h.appendHistoryEntry(&entries, HistoryEntry{
+				ID:          generateHistoryID(),
 				Agent:       AgentGemini,
 				Content:     contentStr,
 				Snippet:     snippet,
@@ -818,7 +925,9 @@ func (h *HistoryIndex) parseGeminiHistory() []HistoryEntry {
 				Timestamp:   lastTimestamp,
 				SessionFile: sessionPath,
 				SessionID:   session.SessionID,
-			})
+			}) {
+				return entries
+			}
 		}
 	}
 
@@ -861,7 +970,7 @@ func (h *HistoryIndex) parseTerminalHistory() []HistoryEntry {
 			// Extract snippet (last few non-empty lines)
 			snippet := extractTerminalSnippet(output, 100)
 
-			entries = append(entries, HistoryEntry{
+			if !h.appendHistoryEntry(&entries, HistoryEntry{
 				ID:        generateHistoryID(),
 				Agent:     AgentTerminal,
 				Content:   output,
@@ -869,7 +978,9 @@ func (h *HistoryIndex) parseTerminalHistory() []HistoryEntry {
 				Path:      inst.Path,
 				Timestamp: time.Now(), // Terminal content is "live"
 				SessionID: inst.ResumeSessionID,
-			})
+			}) {
+				return entries
+			}
 		}
 	}
 
@@ -878,12 +989,52 @@ func (h *HistoryIndex) parseTerminalHistory() []HistoryEntry {
 
 // captureTerminalPane captures the scrollback buffer from a tmux pane
 func captureTerminalPane(target string, lines int) (string, error) {
-	cmd := TmuxCommand("capture-pane", "-t", target, "-p", "-S", fmt.Sprintf("-%d", lines))
-	output, err := cmd.Output()
+	ctx, cancel := context.WithTimeout(context.Background(), TmuxCommandTimeout)
+	defer cancel()
+	cmd := TmuxCommandContext(ctx, "capture-pane", "-t", target, "-p", "-S", fmt.Sprintf("-%d", lines))
+	var output limitedHistoryOutput
+	cmd.Stdout = &output
+	err := cmd.Run()
 	if err != nil {
 		return "", err
 	}
-	return string(output), nil
+	if output.truncated {
+		return "", fmt.Errorf("terminal history exceeds %d bytes", historySearchEntryLimit)
+	}
+	return string(output.data), nil
+}
+
+type limitedHistoryOutput struct {
+	data      []byte
+	truncated bool
+}
+
+func (w *limitedHistoryOutput) Write(p []byte) (int, error) {
+	remaining := historySearchEntryLimit - len(w.data)
+	if remaining > 0 {
+		keep := min(remaining, len(p))
+		w.data = append(w.data, p[:keep]...)
+	}
+	if len(p) > max(remaining, 0) {
+		w.truncated = true
+	}
+	return len(p), nil
+}
+
+func readLimitedHistoryFile(path string, limit int64) ([]byte, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	data, err := io.ReadAll(io.LimitReader(file, limit+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(data)) > limit {
+		return nil, fmt.Errorf("history file exceeds %d bytes", limit)
+	}
+	return data, nil
 }
 
 // extractTerminalSnippet extracts the last meaningful lines from terminal output
@@ -919,5 +1070,7 @@ func parseTimestamp(s string) (int64, error) {
 
 // generateHistoryID generates a simple unique ID for history entries
 func generateHistoryID() string {
-	return time.Now().Format("20060102150405.000000000")
+	return fmt.Sprintf("%s-%d", time.Now().Format("20060102150405.000000000"), atomic.AddUint64(&historyIDCounter, 1))
 }
+
+var historyIDCounter uint64

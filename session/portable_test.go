@@ -130,11 +130,48 @@ func TestReadPortableRejectsForeignFiles(t *testing.T) {
 		"newer format":   `{"format":"asmgr-sessions","version":999,"sessions":[{"name":"x"}]}`,
 		"no sessions":    `{"format":"asmgr-sessions","version":1,"sessions":[]}`,
 		"empty document": ``,
+		"trailing value": `{"format":"asmgr-sessions","version":1,"sessions":[{"name":"x"}]} {}`,
 	}
 	for name, body := range cases {
 		if _, err := ReadPortable(strings.NewReader(body)); err == nil {
 			t.Errorf("%s: accepted, want an error", name)
 		}
+	}
+}
+
+func TestReadPortableRejectsOversizedFile(t *testing.T) {
+	body := `{"format":"asmgr-sessions","version":1,"sessions":[{"name":"` +
+		strings.Repeat("x", portableFileLimit) + `"}]}`
+	if _, err := ReadPortable(strings.NewReader(body)); err == nil {
+		t.Fatal("oversized portable file was accepted")
+	}
+}
+
+func TestReadPortableRejectsCollectionMemoryAmplification(t *testing.T) {
+	var input strings.Builder
+	input.WriteString(`{"format":"asmgr-sessions","version":1,"sessions":[`)
+	for i := 0; i <= portableSessionLimit; i++ {
+		if i > 0 {
+			input.WriteByte(',')
+		}
+		input.WriteString(`{}`)
+	}
+	input.WriteString(`]}`)
+	if _, err := ReadPortable(strings.NewReader(input.String())); err == nil || !strings.Contains(err.Error(), "too many sessions") {
+		t.Fatalf("oversized session collection error = %v", err)
+	}
+
+	input.Reset()
+	input.WriteString(`{"format":"asmgr-sessions","version":1,"sessions":[{"name":"one","tabs":[`)
+	for i := 0; i <= portableTabsPerSession; i++ {
+		if i > 0 {
+			input.WriteByte(',')
+		}
+		input.WriteString(`{}`)
+	}
+	input.WriteString(`]}]}`)
+	if _, err := ReadPortable(strings.NewReader(input.String())); err == nil || !strings.Contains(err.Error(), "too many tabs") {
+		t.Fatalf("oversized tab collection error = %v", err)
 	}
 }
 

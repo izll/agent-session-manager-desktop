@@ -37,10 +37,29 @@ var (
 	gitBranchCache = map[string]gitBranchCacheEntry{}
 )
 
-// GetGitBranch returns the branch of the given working directory, cached for a
+// GetGitBranch returns the branch of the selected session/tab root. The
+// expected canonical root is mandatory: accepting a raw webview path here
+// would let this API bypass the file browser's project/root boundary.
+func (a *App) GetGitBranch(sessionID string, windowIdx int, expectedRoot string) (GitBranchInfo, error) {
+	root, err := a.gitRootSnapshot(sessionID, windowIdx, expectedRoot)
+	if err != nil {
+		return GitBranchInfo{}, err
+	}
+	return a.getGitBranchAtPath(root), nil
+}
+
+func (a *App) gitRootSnapshot(sessionID string, windowIdx int, expectedRoot string) (string, error) {
+	inst, err := a.browseInstance(sessionID, windowIdx)
+	if err != nil {
+		return "", err
+	}
+	return validateRootSnapshot(inst, expectedRoot, "the tab working directory changed; reopen Git history")
+}
+
+// getGitBranchAtPath returns the branch of the given working directory, cached for a
 // few seconds. Non-repositories answer Repository=false and are cached too, so
 // a session outside git costs one git call per TTL rather than one per render.
-func (a *App) GetGitBranch(path string) GitBranchInfo {
+func (a *App) getGitBranchAtPath(path string) GitBranchInfo {
 	normalized := normalizedDashboardPath(path)
 	if normalized == "" {
 		return GitBranchInfo{Path: path}

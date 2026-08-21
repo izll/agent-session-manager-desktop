@@ -455,7 +455,15 @@ func releaseURL(version, filename string) string {
 }
 
 func readChecksum(url, filename string) (string, error) {
-	resp, err := downloadClient.Get(url + ".sha256")
+	return readChecksumContext(context.Background(), url, filename)
+}
+
+func readChecksumContext(ctx context.Context, url, filename string) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url+".sha256", nil)
+	if err != nil {
+		return "", fmt.Errorf("checksum request failed: %w", err)
+	}
+	resp, err := downloadClient.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("checksum download failed: %w", err)
 	}
@@ -481,15 +489,23 @@ func readChecksum(url, filename string) (string, error) {
 }
 
 func downloadVerifiedAsset(version, filename, tempPattern string) (path string, err error) {
+	return downloadVerifiedAssetContext(context.Background(), version, filename, tempPattern)
+}
+
+func downloadVerifiedAssetContext(ctx context.Context, version, filename, tempPattern string) (path string, err error) {
 	if err := validateReleaseVersion(version); err != nil {
 		return "", err
 	}
 	url := releaseURL(version, filename)
-	expected, err := readChecksum(url, filename)
+	expected, err := readChecksumContext(ctx, url, filename)
 	if err != nil {
 		return "", err
 	}
-	resp, err := downloadClient.Get(url)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return "", fmt.Errorf("download request failed: %w", err)
+	}
+	resp, err := downloadClient.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("download failed: %w", err)
 	}
@@ -695,7 +711,7 @@ func findBundleIn(dir string) (string, error) {
 // The swap is two renames within the same parent, which is as close to atomic
 // as this gets: if the second fails the first is undone, so the worst case
 // leaves the previous version in place rather than no version at all.
-func installBundleUpdate(version string) error {
+func installBundleUpdate(ctx context.Context, version string, critical func(func() error) error) error {
 	execPath, err := os.Executable()
 	if err != nil {
 		return fmt.Errorf("cannot find executable path: %w", err)
@@ -711,7 +727,7 @@ func installBundleUpdate(version string) error {
 
 	arch := runtime.GOARCH
 	filename := fmt.Sprintf("%s_%s_%s_%s.tar.gz", BinaryName, strings.TrimPrefix(version, "v"), runtime.GOOS, arch)
-	archivePath, err := downloadVerifiedAsset(version, filename, BinaryName+"-*.tar.gz")
+	archivePath, err := downloadVerifiedAssetContext(ctx, version, filename, BinaryName+"-*.tar.gz")
 	if err != nil {
 		return err
 	}
@@ -767,7 +783,9 @@ func installBundleUpdate(version string) error {
 		if err := validateBundleDirectory(staged); err != nil {
 			return fmt.Errorf("staged application bundle is no longer available")
 		}
-		return swapBundle(bundle, staged, target)
+		return critical(func() error {
+			return swapBundle(bundle, staged, target)
+		})
 	})
 }
 
@@ -1525,14 +1543,14 @@ func replaceExecutable(execPath, stagedPath string) error {
 // password into; a GUI has no controlling TTY, so it asks PolicyKit instead —
 // pkexec shows the desktop's own authentication dialog. Without pkexec there
 // is no way to prompt, so the user is told what to run.
-func installPackageUpdate(version string) error {
+func installPackageUpdate(ctx context.Context, version string, critical func(func() error) error) error {
 	pkexec, err := exec.LookPath("pkexec")
 	if err != nil {
 		return fmt.Errorf("this installation is managed by the system package manager, and pkexec is not available to ask for permission; install %s %s with: sudo %s",
 			BinaryName, version, manualInstallHint(version))
 	}
 
-	pkgPath, install, err := downloadPackageFor(version)
+	pkgPath, install, err := downloadPackageForContext(ctx, version)
 	if err != nil {
 		return err
 	}
@@ -1546,35 +1564,43 @@ func installPackageUpdate(version string) error {
 		if !IsPackageManaged() {
 			return fmt.Errorf("installation type changed while the update was downloading; retry the update")
 		}
-		out, err := runPackageCommand(packageInstallTimeout, pkexec, args...)
-		if err != nil {
-			msg := strings.TrimSpace(string(out))
-			// 126/127 are pkexec's own codes for "dismissed" and "not authorised".
-			var exitErr *exec.ExitError
-			if errors.As(err, &exitErr) && (exitErr.ExitCode() == 126 || exitErr.ExitCode() == 127) {
-				return fmt.Errorf("the update was not authorised")
+		return critical(func() error {
+			out, err := runPackageCommand(packageInstallTimeout, pkexec, args...)
+			if err != nil {
+				msg := strings.TrimSpace(string(out))
+				// 126/127 are pkexec's own codes for "dismissed" and "not authorised".
+				var exitErr *exec.ExitError
+				if errors.As(err, &exitErr) && (exitErr.ExitCode() == 126 || exitErr.ExitCode() == 127) {
+					return fmt.Errorf("the update was not authorised")
+				}
+				if msg == "" {
+					msg = err.Error()
+				}
+				return fmt.Errorf("package installation failed: %s", msg)
 			}
-			if msg == "" {
-				msg = err.Error()
-			}
-			return fmt.Errorf("package installation failed: %s", msg)
-		}
-		return nil
+			return nil
+		})
 	})
 }
 
 // downloadPackageFor fetches the package matching this installation and
 // returns it with the command needed to install it.
 func downloadPackageFor(version string) (path string, installCmd []string, err error) {
+	return downloadPackageForContext(context.Background(), version)
+}
+
+func downloadPackageForContext(ctx context.Context, version string) (path string, installCmd []string, err error) {
 	if isDpkgInstall() {
-		p, derr := DownloadDeb(version)
+		filename := fmt.Sprintf("%s_%s_linux_%s.deb", BinaryName, strings.TrimPrefix(version, "v"), packageArch())
+		p, derr := downloadVerifiedAssetContext(ctx, version, filename, BinaryName+"-*.deb")
 		if derr != nil {
 			return "", nil, derr
 		}
 		// --force-confold keeps any config the user edited.
 		return p, []string{"dpkg", "-i", "--force-confold"}, nil
 	}
-	p, rerr := DownloadRpm(version)
+	filename := fmt.Sprintf("%s_%s_linux_%s.rpm", BinaryName, strings.TrimPrefix(version, "v"), packageArch())
+	p, rerr := downloadVerifiedAssetContext(ctx, version, filename, BinaryName+"-*.rpm")
 	if rerr != nil {
 		return "", nil, rerr
 	}
@@ -1610,24 +1636,38 @@ func manualInstallHint(version string) string {
 // place; a distro package is upgraded through PolicyKit (see
 // installPackageUpdate).
 func DownloadAndInstall(version string) error {
+	return DownloadAndInstallContext(context.Background(), version, nil)
+}
+
+// DownloadAndInstallContext makes network preparation caller-cancellable and
+// delegates only the final mutation to critical. The application uses that
+// boundary to cancel a download during shutdown while still waiting for an
+// executable, bundle, or package-manager transaction that has already begun.
+func DownloadAndInstallContext(ctx context.Context, version string, critical func(func() error) error) error {
 	if err := validateReleaseVersion(version); err != nil {
 		return err
 	}
-	return downloadAndInstall(version)
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if critical == nil {
+		critical = func(action func() error) error { return action() }
+	}
+	return downloadAndInstall(ctx, version, critical)
 }
 
-func downloadAndInstall(version string) error {
+func downloadAndInstall(ctx context.Context, version string, critical func(func() error) error) error {
 	// macOS ships as an .app bundle: a directory tree, so swapping the single
 	// executable inside it would leave the bundle's resources, Info.plist and
 	// code signature describing the old version. It gets replaced whole.
 	if runtime.GOOS == "darwin" {
-		return installBundleUpdate(version)
+		return installBundleUpdate(ctx, version, critical)
 	}
 	if runtime.GOOS != "linux" && runtime.GOOS != "windows" {
 		return fmt.Errorf("automatic updates are not supported on %s; download %s %s from the release page, close the app, and replace the complete application bundle", runtime.GOOS, BinaryName, version)
 	}
 	if IsPackageManaged() {
-		return installPackageUpdate(version)
+		return installPackageUpdate(ctx, version, critical)
 	}
 
 	execPath, err := os.Executable()
@@ -1644,7 +1684,7 @@ func downloadAndInstall(version string) error {
 
 	arch := runtime.GOARCH
 	filename := fmt.Sprintf("%s_%s_%s_%s.tar.gz", BinaryName, strings.TrimPrefix(version, "v"), runtime.GOOS, arch)
-	archivePath, err := downloadVerifiedAsset(version, filename, BinaryName+"-*.tar.gz")
+	archivePath, err := downloadVerifiedAssetContext(ctx, version, filename, BinaryName+"-*.tar.gz")
 	if err != nil {
 		return err
 	}
@@ -1705,6 +1745,8 @@ func downloadAndInstall(version string) error {
 		// installTransaction performs its complete target/staging prevalidation
 		// before the first rename. Keeping that check inside this lock closes the
 		// gap between validation and the executable/DLL swap.
-		return installTransaction(files)
+		return critical(func() error {
+			return installTransaction(files)
+		})
 	})
 }

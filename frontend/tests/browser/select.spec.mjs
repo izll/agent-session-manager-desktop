@@ -361,7 +361,7 @@ test('clearing GlobalSearch invalidates an in-flight result and clears its spinn
   await expect.poll(() => page.evaluate(() => window.dialogRacesFixture.searchCalls().length)).toBe(1);
   await page.locator('.clear-btn').click();
   await page.evaluate(() => window.dialogRacesFixture.resolveSearch([{
-    agent: 'codex', content: 'stale result', sessionFile: 'old', sessionId: 'old', score: 1,
+    id: 'old', agent: 'codex', content: 'stale result', sessionId: 'old', score: 1,
   }]));
   await expect(input).toHaveValue('');
   await expect(page.getByText('stale result')).toHaveCount(0);
@@ -440,6 +440,39 @@ test('GitHistory ignores a late response from the repository that was left', asy
   await page.evaluate(() => window.dialogRacesFixture.resolveHistory('/repo-a', 'STALE REPOSITORY COMMIT'));
   await expect(page.locator('.commit-subject').filter({ hasText: 'NEW REPOSITORY COMMIT' })).toBeVisible();
   await expect(page.locator('.commit-subject').filter({ hasText: 'STALE REPOSITORY COMMIT' })).toHaveCount(0);
+});
+
+test('Recovery ignores an old-project restore completion after the project changes', async ({ page }) => {
+  await gotoDialogRacesFixture(page, 'recovery');
+  const restore = page.getByRole('button', { name: /Restore|Visszaállítás/ }).first();
+  await expect(restore).toBeVisible();
+  await restore.click();
+  await expect.poll(() => page.evaluate(() => window.dialogRacesFixture.trashRestorePending())).toBe(true);
+
+  await page.evaluate(() => window.dialogRacesFixture.switchRecoveryProject('project-b'));
+  await page.evaluate(() => window.dialogRacesFixture.resolveTrashRestore('old-project-session'));
+
+  await expect.poll(() => page.evaluate(() => window.dialogRacesFixture.recoverySessionLoads())).toBe(0);
+  expect(await page.evaluate(() => window.dialogRacesFixture.selectedSession())).toBe(null);
+});
+
+test('Update cannot be dismissed through any close path while installation is running', async ({ page }) => {
+  await gotoDialogRacesFixture(page, 'update');
+  const dialog = page.getByRole('dialog');
+  const update = dialog.getByRole('button', { name: /Update Now|Frissítés most/i });
+  await expect(update).toBeVisible();
+  await update.click();
+  await expect.poll(() => page.evaluate(() => window.dialogRacesFixture.updateCalls())).toBe(1);
+
+  await page.keyboard.press('Escape');
+  await expect(dialog).toBeVisible();
+  await expect(dialog.locator('.close-btn')).toBeDisabled();
+  await expect(dialog.locator('.dialog-footer .btn-secondary')).toBeDisabled();
+  await page.locator('.dialog-overlay').dispatchEvent('click');
+  await expect(dialog).toBeVisible();
+
+  await page.evaluate(() => window.dialogRacesFixture.resolveUpdate());
+  await expect(dialog.locator('.dialog-footer .btn-secondary')).toBeEnabled();
 });
 
 test('closing GitHistory cancels an active document drag listener', async ({ page }) => {

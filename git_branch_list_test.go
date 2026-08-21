@@ -152,14 +152,14 @@ func TestListGitBranchesCachesByPath(t *testing.T) {
 	repo := gitBranchListRepo(t)
 
 	app := &App{}
-	first := app.ListGitBranches(repo)
+	first := app.listGitBranchesAtPath(repo)
 	if len(first.Branches) != 1 || first.Branches[0].Name != "main" {
 		t.Fatalf("expected the single branch main, got %#v", first.Branches)
 	}
 
 	// The cached answer must survive a branch added within the TTL.
 	dashboardGit(t, repo, "branch", "added-later")
-	if cached := app.ListGitBranches(repo); len(cached.Branches) != 1 {
+	if cached := app.listGitBranchesAtPath(repo); len(cached.Branches) != 1 {
 		t.Fatalf("expected the cached single-branch listing, got %#v", cached.Branches)
 	}
 
@@ -170,14 +170,14 @@ func TestListGitBranchesCachesByPath(t *testing.T) {
 	}
 	gitBranchListMu.Unlock()
 
-	if refreshed := app.ListGitBranches(repo); len(refreshed.Branches) != 2 {
+	if refreshed := app.listGitBranchesAtPath(repo); len(refreshed.Branches) != 2 {
 		t.Fatalf("expected the refreshed listing to have 2 branches, got %#v", refreshed.Branches)
 	}
 }
 
 func TestListGitBranchesEmptyPath(t *testing.T) {
 	app := &App{}
-	list := app.ListGitBranches("")
+	list := app.listGitBranchesAtPath("")
 	if list.Repository {
 		t.Fatalf("expected an empty path to be a non-repository, got %#v", list)
 	}

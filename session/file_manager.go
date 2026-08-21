@@ -28,17 +28,7 @@ func OpenInFileManager(dir string) error {
 		return fmt.Errorf("error.notADirectory")
 	}
 
-	var cmd *exec.Cmd
-	switch runtime.GOOS {
-	case "darwin":
-		cmd = exec.Command("open", dir)
-	case "windows":
-		// Not exec.Command("explorer", dir): explorer.exe exits non-zero even
-		// when it has opened the window, so its status cannot be trusted.
-		cmd = exec.Command("cmd", "/c", "start", "", dir)
-	default:
-		cmd = exec.Command("xdg-open", dir)
-	}
+	cmd := fileManagerCommand(runtime.GOOS, dir)
 	HideConsoleWindow(cmd)
 
 	// Start, not Run: a file manager keeps running for as long as its window is
@@ -51,4 +41,20 @@ func OpenInFileManager(dir string) error {
 	// the window is closed.
 	go func() { _ = cmd.Wait() }()
 	return nil
+}
+
+func fileManagerCommand(goos, dir string) *exec.Cmd {
+	switch goos {
+	case "darwin":
+		return exec.Command("open", dir)
+	case "windows":
+		// Never route a filesystem path through cmd.exe. Characters such as & and
+		// ^ are ordinary valid path characters to this API but shell syntax to
+		// `cmd /c start`, which turned opening a crafted directory into command
+		// execution. Start+background Wait means explorer.exe's unreliable exit
+		// status is ignored already, so the shell workaround is unnecessary.
+		return exec.Command("explorer.exe", dir)
+	default:
+		return exec.Command("xdg-open", dir)
+	}
 }

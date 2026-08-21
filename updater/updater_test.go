@@ -143,6 +143,46 @@ func TestCheckForUpdateContextCancelsInFlightRequest(t *testing.T) {
 	}
 }
 
+func TestDownloadVerifiedAssetContextCancelsInFlightRequest(t *testing.T) {
+	filename := "asmgr-desktop_1.2.3_linux_amd64.tar.gz"
+	assetStarted := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, ".sha256") {
+			fmt.Fprintf(w, "%064x  %s\n", 0, filename)
+			return
+		}
+		close(assetStarted)
+		<-r.Context().Done()
+	}))
+	defer server.Close()
+
+	oldBase, oldClient := downloadBaseURL, downloadClient
+	downloadBaseURL = server.URL
+	downloadClient = server.Client()
+	defer func() { downloadBaseURL, downloadClient = oldBase, oldClient }()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	result := make(chan error, 1)
+	go func() {
+		_, err := downloadVerifiedAssetContext(ctx, "v1.2.3", filename, "asmgr-test-*")
+		result <- err
+	}()
+	select {
+	case <-assetStarted:
+	case <-time.After(time.Second):
+		t.Fatal("asset download did not start")
+	}
+	cancel()
+	select {
+	case err := <-result:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("cancelled asset download returned %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("asset download survived context cancellation")
+	}
+}
+
 func TestRefreshAvailableUpdatePersistsSuccessfulNoUpdate(t *testing.T) {
 	withTempHome(t)
 	SaveAvailableUpdate("v2.0.0")

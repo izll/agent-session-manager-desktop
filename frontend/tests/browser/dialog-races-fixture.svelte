@@ -7,8 +7,10 @@
   import QuickTerminalDialog from '../../src/lib/components/Dialogs/QuickTerminalDialog.svelte';
   import SchemeImportDialog from '../../src/lib/components/Dialogs/SchemeImportDialog.svelte';
   import AllTasks from '../../src/lib/components/Dashboard/AllTasks.svelte';
+  import RecoveryCenterDialog from '../../src/lib/components/Dialogs/RecoveryCenterDialog.svelte';
+  import UpdateDialog from '../../src/lib/components/Dialogs/UpdateDialog.svelte';
 
-  export let mode: 'global' | 'command' | 'history' | 'quickjump' | 'quickterminal' | 'scheme' | 'alltasks' = 'global';
+  export let mode: 'global' | 'command' | 'history' | 'quickjump' | 'quickterminal' | 'scheme' | 'alltasks' | 'recovery' | 'update' = 'global';
   export let onFixtureReady: () => void = () => {};
 
   let showGlobal = mode === 'global';
@@ -17,6 +19,8 @@
   let showQuickJump = mode === 'quickjump';
   let showQuickTerminal = mode === 'quickterminal';
   let showSchemeImport = mode === 'scheme';
+  let showRecovery = mode === 'recovery';
+  let showUpdate = mode === 'update';
   let commandSession = 'session-a';
   let commandWindow = 3;
   let historyPath = '/repo-a';
@@ -44,8 +48,16 @@
 
 <GlobalSearchDialog bind:show={showGlobal} />
 <CommandPickerDialog bind:show={showCommand} sessionId={commandSession} windowIdx={commandWindow} />
-<GitHistoryDialog bind:show={showHistory} path={historyPath} />
+<GitHistoryDialog
+  bind:show={showHistory}
+  projectId="project-a"
+  sessionId="session-a"
+  windowIdx={3}
+  path={historyPath}
+/>
 <QuickJumpDialog bind:show={showQuickJump} />
 <QuickTerminalDialog bind:show={showQuickTerminal} sessionId="session-a" />
 <SchemeImportDialog bind:show={showSchemeImport} />
+<RecoveryCenterDialog bind:show={showRecovery} />
+<UpdateDialog bind:show={showUpdate} />
 {#if mode === 'alltasks'}<AllTasks />{/if}

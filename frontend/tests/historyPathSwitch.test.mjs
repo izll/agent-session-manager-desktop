@@ -18,23 +18,23 @@ const dialog = readFileSync(
 // The trigger has to see the path, not only the open flag.
 assert.match(
   dialog,
-  /\$: if \(show && path && path !== openedPath\)/,
-  'reopening must be driven by the path as well as by show',
+  /\$: if \(show && sessionId && path && repositoryKey !== openedRepositoryKey\)/,
+  'reopening must be driven by the full session/tab/root identity as well as by show',
 );
 
 // Guarded against the path last opened rather than a plain boolean: this block
 // reruns for unrelated state too, and without the comparison it would reload
 // the history on every keystroke in the dialog.
-assert.match(dialog, /openedPath = path;/, 'the guard must record which path was opened');
+assert.match(dialog, /openedRepositoryKey = repositoryKey;/, 'the guard must record which repository identity was opened');
 assert.match(
   dialog,
-  /\$: if \(!show && openedPath\) \{[\s\S]*?openedPath = '';/,
+  /\$: if \(!show && openedRepositoryKey\) \{[\s\S]*?openedRepositoryKey = '';/,
   'closing must clear the guard, or reopening the same session shows stale history',
 );
 
 // Everything below belongs to the repository being left. The branch is the one
 // that actually breaks the query; the rest merely lingers on screen.
-const openBody = dialog.match(/async function open\(targetPath: string\) \{[\s\S]*?await Promise\.all/);
+const openBody = dialog.match(/async function open\(target: RepositoryTarget\) \{[\s\S]*?await Promise\.all/);
 assert.ok(openBody, 'open() should still exist');
 for (const field of ['branch', 'branches', 'currentBranch', 'commits', 'selectedHash', 'files', 'selectedPath', 'diff']) {
   assert.match(

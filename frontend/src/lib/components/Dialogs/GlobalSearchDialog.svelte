@@ -5,9 +5,9 @@
   import { t } from '../../i18n';
 
   interface HistoryEntry {
+    id: string;
     agent: string;
     content: string;
-    sessionFile: string;
     sessionId: string;
     score: number;
   }
@@ -100,7 +100,9 @@
     preview = '';
 
     try {
-      const response = await App.GetHistoryPreview(entry);
+      // Preview by the opaque backend-issued id; never send a displayed path
+      // back as read authority.
+      const response = await App.GetHistoryPreview(entry.id);
       if (generation !== previewGeneration || selectedEntry !== entry || !show) return;
       preview = response;
     } catch (e) {

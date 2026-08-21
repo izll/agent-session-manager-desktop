@@ -3,8 +3,20 @@ package session
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 )
+
+func TestFileManagerCommandDoesNotInterpretWindowsPathAsShell(t *testing.T) {
+	path := `C:\work&start calc.exe^project`
+	cmd := fileManagerCommand("windows", path)
+	if got, want := filepath.Base(cmd.Path), "explorer.exe"; got != want {
+		t.Fatalf("Windows file manager executable = %q, want %q", got, want)
+	}
+	if got, want := cmd.Args, []string{"explorer.exe", path}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("Windows file manager args = %#v, want %#v", got, want)
+	}
+}
 
 // The path is checked before a file manager is launched, because handing one a
 // path that does not exist is not a visible failure: depending on which manager

@@ -45,6 +45,21 @@ const saveAsTemplate = read('lib/components/Dialogs/SaveAsTemplateDialog.svelte'
 const commandManager = read('lib/components/Dialogs/CommandManagerDialog.svelte');
 const i18n = read('lib/i18n/index.ts');
 
+assert.match(
+  recovery,
+  /await flushSettingsSaves\(\);[\s\S]*?if \(!operationIsCurrent\(target\)\) return;[\s\S]*?await App\.RestoreBackup/,
+  'a full backup restore must revalidate its project after settings flush and before the destructive backend call',
+);
+assert.match(
+  recovery,
+  /const result = await App\.RestoreTrashItem\(item\.id\);[\s\S]*?if \(!operationIsCurrent\(target\)\) return;[\s\S]*?await loadSessions\(\)/,
+  'a restore completion from an old project must not refresh or select into the replacement project',
+);
+assert.match(recovery, /loadedProjectId !== \$activeProjectId/,
+  'an open Recovery view must replace rows when the active project changes');
+assert.match(recovery, /projectId !== \$activeProjectId/,
+  'a late Recovery list response must not populate the replacement project');
+
 // A target reset must be held behind the same unsaved-change guard as a file
 // click. resetForSession itself must not erase the action that shows the prompt.
 const reset = browser.match(/function resetForSession\(\)[\s\S]*?\n  \}/)?.[0] ?? '';
@@ -272,6 +287,10 @@ assert.match(importDialog, /selectedProjectId !== projectId/,
   'a late import-source response must not replace the newly selected project');
 assert.match(globalSearch, /function clearQuery\(\)[\s\S]*?handleQueryChange\(\)/,
   'clearing search must use the same request invalidation as typing');
+assert.match(globalSearch, /App\.GetHistoryPreview\(entry\.id\)/,
+  'history previews must use the backend-issued opaque id, not displayed path metadata');
+assert.match(sessionFileDialog, /App\.ImportSessionFile\(targetToken, targetSelection\)/,
+  'portable imports must consume the backend snapshot token instead of reopening a displayed path');
 assert.match(commandPicker, /targetSessionId = sessionId;[\s\S]*?targetWindowIdx = windowIdx/);
 assert.match(commandPicker, /if \(running \|\| !targetSessionId\) return/,
   'a command must have one captured target and one in-flight execution');
@@ -279,6 +298,12 @@ assert.match(commandPicker, /sessionId !== targetSessionId \|\| windowIdx !== ta
   'a command picker must close when its captured tab is no longer selected');
 assert.match(resumePicker, /generation !== loadGeneration \|\| key !== lastLoadKey/);
 assert.match(gitHistory, /repositoryGeneration/);
+assert.match(gitHistory, /projectId.*?sessionId.*?windowIdx.*?path/s,
+  'git history identity must include project, session, tab and expected root');
+assert.match(gitHistory, /App\.GetGitHistory\([\s\S]*?target\.sessionId[\s\S]*?target\.windowIdx, target\.root/,
+  'git history reads must carry the captured tab and expected root to the backend');
+assert.match(mainPanel, /const target = `\$\{\$activeProjectId\}:\$\{\$selectedSessionId \|\| ''\}:\$\{\$selectedWindowIdx \?\? 0\}`/,
+  'live tab cwd identity must include the project when session ids are reused');
 assert.match(gitHistory, /generation !== historyGeneration \|\| branch !== targetBranch/);
 assert.match(gitHistory, /generation !== commitGeneration \|\| selectedHash !== hash/);
 assert.match(gitHistory, /generation !== diffGeneration \|\| selectedHash !== hash \|\| selectedPath !== file/);
@@ -291,8 +316,10 @@ assert.match(recovery, /window\.dispatchEvent\(new CustomEvent\('tasks:refresh'\
   'restoring task files must invalidate already-mounted task views');
 assert.match(taskPanel, /const refresh = \(\) => \{ if \(active\) void loadTasksIfNeeded\(true\); \}/);
 assert.match(taskPanel, /addEventListener\('tasks:refresh', refresh\)/);
-assert.match(recovery, /action\.projectId !== \$activeProjectId/,
+assert.match(recovery, /if \(!operationUIIsCurrent\(target\)\)/,
   'a portalled confirmation must not run against a replacement active project');
+assert.match(updateDialog, /function close\(\) \{[\s\S]*?if \(isUpdating\) return;/,
+  'an in-progress installation must not be dismissible while the updater owns application files');
 assert.match(allTasks, /task\.projectId !== \$activeProjectId[\s\S]*?await selectProject\(task\.projectId\)/,
   'an all-project task jump must switch the backend project before selecting its session id');
 assert.match(allTasks, /const key = `\$\{task\.projectId\}:\$\{task\.sessionId \|\| task\.projectPath\}`/,

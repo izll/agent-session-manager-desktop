@@ -64,7 +64,7 @@
   }
 
   async function performUpdate() {
-    if (!updateInfo?.latestVersion) return;
+    if (isUpdating || !updateInfo?.latestVersion) return;
 
     const targetVersion = updateInfo.latestVersion;
     const generation = ++operationGeneration;
@@ -85,6 +85,10 @@
   }
 
   function close() {
+    // PerformUpdate may be replacing multiple application files. Keep the
+    // modal visible until that operation settles so the normal app quit path
+    // cannot mistake a hidden dialog for an idle updater.
+    if (isUpdating) return;
     operationGeneration++;
     isChecking = false;
     isUpdating = false;
@@ -112,7 +116,7 @@
     <div class="dialog-content">
       <div class="dialog-header">
         <h2>{$t('update.title')}</h2>
-        <button class="close-btn" on:click={close}>
+        <button class="close-btn" on:click={close} disabled={isUpdating}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <line x1="18" y1="6" x2="6" y2="18"/>
             <line x1="6" y1="6" x2="18" y2="18"/>
@@ -205,7 +209,7 @@
             {$t('update.checkAgain')}
           </button>
         {/if}
-        <button class="btn btn-secondary" on:click={close}>
+        <button class="btn btn-secondary" on:click={close} disabled={isUpdating}>
           <!-- Nothing is in flight once a result is on screen, so "Cancel"
                would misdescribe the button. -->
           {success || updateInfo || error ? $t('update.close') : $t('update.cancel')}

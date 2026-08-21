@@ -206,20 +206,20 @@ export function GetFullDiffForFile(arg1, arg2, arg3, arg4, arg5) {
   return window['go']['main']['App']['GetFullDiffForFile'](arg1, arg2, arg3, arg4, arg5);
 }
 
-export function GetGitBranch(arg1) {
-  return window['go']['main']['App']['GetGitBranch'](arg1);
+export function GetGitBranch(arg1, arg2, arg3) {
+  return window['go']['main']['App']['GetGitBranch'](arg1, arg2, arg3);
 }
 
-export function GetGitCommitDiff(arg1, arg2, arg3, arg4) {
-  return window['go']['main']['App']['GetGitCommitDiff'](arg1, arg2, arg3, arg4);
+export function GetGitCommitDiff(arg1, arg2, arg3, arg4, arg5, arg6) {
+  return window['go']['main']['App']['GetGitCommitDiff'](arg1, arg2, arg3, arg4, arg5, arg6);
 }
 
-export function GetGitCommitFiles(arg1, arg2) {
-  return window['go']['main']['App']['GetGitCommitFiles'](arg1, arg2);
+export function GetGitCommitFiles(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['GetGitCommitFiles'](arg1, arg2, arg3, arg4);
 }
 
-export function GetGitHistory(arg1, arg2, arg3) {
-  return window['go']['main']['App']['GetGitHistory'](arg1, arg2, arg3);
+export function GetGitHistory(arg1, arg2, arg3, arg4, arg5) {
+  return window['go']['main']['App']['GetGitHistory'](arg1, arg2, arg3, arg4, arg5);
 }
 
 export function GetGroups() {
@@ -398,8 +398,8 @@ export function ListBackgroundAgents() {
   return window['go']['main']['App']['ListBackgroundAgents']();
 }
 
-export function ListGitBranches(arg1) {
-  return window['go']['main']['App']['ListGitBranches'](arg1);
+export function ListGitBranches(arg1, arg2, arg3) {
+  return window['go']['main']['App']['ListGitBranches'](arg1, arg2, arg3);
 }
 
 export function ListOnlineSchemes() {
