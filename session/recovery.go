@@ -355,11 +355,9 @@ func (s *Storage) ListBackups() ([]BackupInfo, error) {
 	if err != nil {
 		return nil, err
 	}
+	entries = backupJSONEntries(entries)
 	result := make([]BackupInfo, 0, len(entries))
 	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
-			continue
-		}
 		info, err := entry.Info()
 		if err != nil {
 			continue

@@ -963,6 +963,13 @@ export async function attachToSession(
     const flushVisible = () => {
       timerHandle = null;
       microQueued = false;
+      // A burst queued by socket A can outlive detach long enough for socket B
+      // to attach and clear the same xterm. Never let A's delayed bytes land
+      // in B's freshly-owned screen after that clear.
+      if (terminalInstance.connectionGeneration !== connectionGeneration || terminalInstance.ws !== ws) {
+        visibleQueue = [];
+        return;
+      }
       doWrite();
     };
     const scheduleFlush = () => {

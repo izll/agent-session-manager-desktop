@@ -110,6 +110,8 @@ assert.match(terminalTransport, /const connectionGeneration = \+\+terminalInstan
   'overlapping terminal attaches must not let an older socket replace the newer owner');
 assert.match(terminalTransport, /terminalInstance\.reconnectTimer = setTimeout[\s\S]*?terminalInstance\.connectionGeneration !== connectionGeneration[\s\S]*?attachToSession/,
   'a delayed reconnect must verify that its closed socket still owns the instance');
+assert.match(terminalTransport, /const flushVisible = \(\) => \{[\s\S]*?terminalInstance\.connectionGeneration !== connectionGeneration \|\| terminalInstance\.ws !== ws[\s\S]*?visibleQueue = \[\]/,
+  'a delayed output flush must not write bytes from a detached socket into its replacement terminal');
 assert.match(terminalTransport, /function detachFromSession[\s\S]*?terminalInstance\.connectionGeneration\+\+[\s\S]*?clearTimeout\(terminalInstance\.reconnectTimer\)/,
   'destroying an already-closed terminal must cancel its pending reconnect');
 assert.match(terminalTransport, /catch \(e\) \{[\s\S]*?terminalInstance\.connectionGeneration === connectionGeneration[\s\S]*?await detachFromSession\(terminalInstance\)/,

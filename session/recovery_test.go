@@ -90,6 +90,31 @@ func TestInvalidNamedJSONCannotSuppressUsableBackup(t *testing.T) {
 	}
 }
 
+func TestListBackupsPublishesOnlyRestorableIDs(t *testing.T) {
+	storage := newRecoveryTestStorage(t)
+	dir := storage.backupDirLocked()
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	valid := "20260822T120000.000000000Z-deadbeef.json"
+	for _, name := range []string{valid, "zzzz.json", "20260822T120000.000000000Z-DEADBEEF.json"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("{}"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	backups, err := storage.ListBackups()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(backups) != 1 || backups[0].ID != valid {
+		t.Fatalf("published backups = %+v, want only %q", backups, valid)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "zzzz.json")); err != nil {
+		t.Fatalf("listing removed an unknown user file: %v", err)
+	}
+}
+
 func TestTrashAndRestoreSessionPreservesMetadata(t *testing.T) {
 	storage := newRecoveryTestStorage(t)
 	instance := &Instance{

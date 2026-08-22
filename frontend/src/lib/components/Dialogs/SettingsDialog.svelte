@@ -1,7 +1,9 @@
 <script lang="ts">
   import { autoFocusDialog } from '../../utils/dialogActions';
   import { createEventDispatcher, onDestroy } from 'svelte';
+  import { get } from 'svelte/store';
   import { settings, saveSettings } from '../../stores/settings';
+  import { activeProjectId } from '../../stores/projects';
   import * as DictationService from '../../../../wailsjs/go/main/DictationService';
   import * as App from '../../../../wailsjs/go/main/App';
   import type { main } from '../../../../wailsjs/go/models';
@@ -44,10 +46,13 @@
 
   let languageChangeGeneration = 0;
   async function changeLanguage(lang: string) {
+    const projectId = get(activeProjectId);
     const generation = ++languageChangeGeneration;
     await loadTranslations(lang);
-    if (generation !== languageChangeGeneration) return;
-    void saveSettings({ language: lang });
+    // A locale chunk may finish after the dialog was closed and another
+    // project selected. Never persist A's choice into B's settings.
+    if (generation !== languageChangeGeneration || projectId !== get(activeProjectId)) return;
+    void saveSettings({ language: lang }, projectId);
   }
 
   // --- Terminal palettes -------------------------------------------------

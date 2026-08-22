@@ -41,6 +41,7 @@
 
 <button id="toast-first" on:click={() => notify('First notification')}>first notification</button>
 <button id="toast-second" on:click={() => notify('Second notification')}>second notification</button>
+<button id="toast-long" on:click={() => notify('X'.repeat(500))}>long notification</button>
 <button id="undo-first" on:click={() => offer('Undo first action')}>offer first undo</button>
 <button id="undo-second" on:click={() => offer('Undo second action')}>offer second undo</button>
 

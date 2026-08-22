@@ -391,10 +391,16 @@ assert.match(settingsDialog, /if \(!show \|\| generation !== audioTestGeneration
 assert.match(settingsDialog, /value=\{\$settings\.ntfyUrl\}[\s\S]*?on:input=\{\(e\) => saveSettings\(\{ ntfyUrl: e\.currentTarget\.value \}\)\}/,
   'the ntfy address must be persisted before Escape can remove the focused input');
 assert.match(settingsStore, /export function invalidateSettingsContext/);
+assert.match(settingsStore, /invalidateSettingsContext\(\)[\s\S]*?settings\.set\(defaultSettings\(\)\)/,
+  'a project switch must discard the old full settings snapshot before a replacement-project read can fail');
+assert.match(settingsStore, /if \(!await ensureSettingsReady\(\)[\s\S]*?expectedProjectId !== get\(activeProjectId\)\) return;/,
+  'a save after a failed project settings read must retry and fail closed before writing a placeholder snapshot');
 assert.match(settingsStore, /context !== settingsContextGeneration \|\| generation !== settingsLoadGeneration/,
   'settings reads must belong to the project context that started them');
 assert.match(projectStore, /settingsStore\.invalidateSettingsContext\(\)/,
   'project switching must invalidate settings reads and queued snapshots');
+assert.match(projectStore, /await syncProjectLanguage\(settingsStore\)/,
+  'project switching must apply the selected project language to the live translation runtime');
 assert.match(projectStore, /generation !== lockLoadGeneration \|\| projectId !== get\(activeProjectId\)/,
   'a lock response must belong to the project whose mutation controls it gates');
 assert.match(app, /await flushSettingsSaves\(\);[\s\S]*?Quit\(\)/,
@@ -410,6 +416,8 @@ assert.match(gitHistory, /activeDocumentDragCleanup\?\.\(\);[\s\S]*?invalidateRe
   'closing history must remove document drag listeners before hiding');
 assert.match(settingsDialog, /const generation = \+\+languageChangeGeneration;[\s\S]*?generation !== languageChangeGeneration/,
   'a slow earlier translation load must not win over the last language choice');
+assert.match(settingsDialog, /const projectId = get\(activeProjectId\);[\s\S]*?projectId !== get\(activeProjectId\)[\s\S]*?saveSettings\(\{ language: lang \}, projectId\)/,
+  'a delayed language choice must not be saved into a replacement project');
 assert.match(i18n, /const generation = \+\+translationLoadGeneration;[\s\S]*?generation !== translationLoadGeneration/,
   'late dynamic locale chunks must not replace the most recently selected language');
 assert.match(settingsDialog, /const save = dictationSaveQueue[\s\S]*?SetDictationSettings\(snapshot\)/,

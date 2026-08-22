@@ -332,6 +332,37 @@ jobs:
             exit 1
           fi
 
+          # The Go toolchain requires Monterey, but the bundled Homebrew dylib
+          # may have been built for the newer runner image. Advertise the actual
+          # maximum Mach-O deployment target instead of allowing Finder to offer
+          # an application whose loader will reject one of its native files.
+          macho_minimum() {
+            otool -l "$1" | awk '
+              $1 == "cmd" && $2 == "LC_BUILD_VERSION" { build = 1; legacy = 0; next }
+              build && $1 == "minos" { print $2; exit }
+              $1 == "cmd" && $2 == "LC_VERSION_MIN_MACOSX" { legacy = 1; build = 0; next }
+              legacy && $1 == "version" { print $2; exit }
+            '
+          }
+          EXE_MIN=$(macho_minimum "$EXE")
+          DYLIB_MIN=$(macho_minimum "$FRAMEWORKS/libportaudio.2.dylib")
+          if [ -z "$EXE_MIN" ] || [ -z "$DYLIB_MIN" ]; then
+            echo "Could not determine every bundled Mach-O deployment target" >&2
+            exit 1
+          fi
+          ARTIFACT_MIN=$(python3 - "$EXE_MIN" "$DYLIB_MIN" <<'PY'
+          import sys
+          def version(raw):
+              parts = [int(part) for part in raw.split('.')]
+              return tuple((parts + [0, 0, 0])[:3])
+          floor = max((12, 0, 0), *(version(raw) for raw in sys.argv[1:]))
+          print('.'.join(str(part) for part in floor))
+          PY
+          )
+          plutil -replace LSMinimumSystemVersion -string "$ARTIFACT_MIN" "$APP/Contents/Info.plist"
+          echo "MACOS_ARTIFACT_MIN_VERSION=$ARTIFACT_MIN" >> "$GITHUB_ENV"
+          echo "macOS artifact minimum: $ARTIFACT_MIN (app $EXE_MIN, PortAudio $DYLIB_MIN)"
+
       # Renamed before packaging, so the archive carries the new name and an
       # update applies it. macOS shows the bundle's DIRECTORY name in Finder and
       # Launchpad whatever CFBundleDisplayName says — verified with mdls — so
@@ -397,6 +428,11 @@ jobs:
           codesign -d --entitlements :- "$APP" > "$SIGNED_ENTITLEMENTS"
           [ "$(plutil -extract com.apple.security.device.audio-input raw -o - "$SIGNED_ENTITLEMENTS")" = "true" ]
           test -n "$(plutil -extract NSMicrophoneUsageDescription raw -o - "$APP/Contents/Info.plist")"
+          DECLARED_MIN=$(plutil -extract LSMinimumSystemVersion raw -o - "$APP/Contents/Info.plist")
+          if [ "$DECLARED_MIN" != "$MACOS_ARTIFACT_MIN_VERSION" ]; then
+            echo "Signed bundle minimum $DECLARED_MIN does not match native payload $MACOS_ARTIFACT_MIN_VERSION" >&2
+            exit 1
+          fi
           SIGNED_TEAM_ID=$(codesign -dv --verbose=4 "$APP" 2>&1 | awk -F= '/^TeamIdentifier=/ {print $2; exit}')
           if [ "$SIGNED_TEAM_ID" != "$APPLE_TEAM_ID" ]; then
             echo "Signed bundle TeamIdentifier $SIGNED_TEAM_ID does not match configured $APPLE_TEAM_ID" >&2

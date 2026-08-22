@@ -41,6 +41,11 @@ async function gotoFeedbackFixture(page) {
   await expect(page.locator('body')).toHaveAttribute('data-fixture-ready', 'true', { timeout: 15_000 });
 }
 
+async function gotoProjectSettingsFixture(page) {
+  await page.goto('/tests/browser/project-settings-fixture.html');
+  await expect(page.locator('body')).toHaveAttribute('data-fixture-ready', 'true', { timeout: 15_000 });
+}
+
 test('a replacement notification receives its full visible duration', async ({ page }) => {
   await gotoFeedbackFixture(page);
   await page.locator('#toast-first').click();
@@ -56,6 +61,31 @@ test('a replacement notification receives its full visible duration', async ({ p
   await expect(page.getByRole('alert')).toHaveCount(0, { timeout: 1_000 });
 });
 
+test('an identical repeated notification also restarts its visible duration', async ({ page }) => {
+  await gotoFeedbackFixture(page);
+  await page.locator('#toast-first').click();
+  await page.waitForTimeout(600);
+  await page.locator('#toast-first').click();
+  // The message prop is identical; only the caller's revision distinguishes
+  // this notification from the one whose deadline is about to expire.
+  await page.waitForTimeout(300);
+  await expect(page.getByRole('alert')).toContainText('First notification');
+  await expect(page.getByRole('alert')).toHaveCount(0, { timeout: 1_000 });
+});
+
+test('a long notification keeps its dismiss control inside a 300px viewport', async ({ page }) => {
+  await page.setViewportSize({ width: 300, height: 500 });
+  await gotoFeedbackFixture(page);
+  await page.locator('#toast-long').click();
+  const toast = page.getByRole('alert');
+  const close = toast.locator('.toast-close');
+  await expect(toast).toBeVisible();
+  const [toastBox, closeBox] = await Promise.all([toast.boundingBox(), close.boundingBox()]);
+  expect(toastBox.x).toBeGreaterThanOrEqual(0);
+  expect(toastBox.x + toastBox.width).toBeLessThanOrEqual(300);
+  expect(closeBox.x + closeBox.width).toBeLessThanOrEqual(300);
+});
+
 test('an in-flight undo cannot disable a newer undo offer', async ({ page }) => {
   await gotoFeedbackFixture(page);
   await page.locator('#undo-first').click();
@@ -69,6 +99,28 @@ test('an in-flight undo cannot disable a newer undo offer', async ({ page }) => 
   await undo.click();
   await expect(page.locator('#undo-calls')).toHaveText('2');
   await page.evaluate(() => window.dispatchEvent(new Event('feedback-resolve-undos')));
+});
+
+test('project switching synchronizes the loaded language with the live translation runtime', async ({ page }) => {
+  await gotoProjectSettingsFixture(page);
+  await expect(page.locator('#settings-language')).toHaveText('en');
+  await expect(page.locator('#runtime-locale')).toHaveText('en');
+
+  await page.locator('#switch-language-project').click();
+  await expect(page.locator('#settings-language')).toHaveText('hu');
+  await expect(page.locator('#runtime-locale')).toHaveText('hu');
+  await expect(page.locator('#translated-save')).toHaveText('Mentés');
+});
+
+test('a failed replacement-project settings read cannot retain the old full snapshot', async ({ page }) => {
+  await gotoProjectSettingsFixture(page);
+  await expect(page.locator('#settings-theme')).toHaveText('old-project-theme');
+
+  await page.locator('#switch-failing-settings-project').click();
+  await expect(page.locator('#settings-theme')).toHaveText('violet');
+  await expect(page.locator('#settings-language')).toHaveText('en');
+  await page.locator('#save-after-settings-failure').click();
+  await expect.poll(() => page.evaluate(() => window.projectSettingsFixture.settingsSaves().length)).toBe(0);
 });
 
 test('a real Svelte component renders, portals, focuses and reacts in Chromium', async ({ page }) => {

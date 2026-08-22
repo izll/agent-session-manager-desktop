@@ -19,6 +19,15 @@ export const otherInstancePID = writable<number>(0);
 let projectSelectionQueue: Promise<void> = Promise.resolve();
 let lockLoadGeneration = 0;
 
+async function syncProjectLanguage(settingsStore: typeof import('./settings')) {
+  // Settings live in the selected project's storage, while translations are
+  // held in a process-global runtime module. Reloading the settings store is
+  // therefore not enough: project B can say `language=hu` while every label
+  // still uses project A's English dictionary.
+  const { loadTranslations } = await import('../i18n');
+  await loadTranslations(get(settingsStore.settings).language || 'en');
+}
+
 // Refresh the single-instance lock status for the active project.
 export async function refreshLockStatus() {
   const generation = ++lockLoadGeneration;
@@ -79,6 +88,7 @@ async function selectProjectNow(id: string) {
     sessions.set([]);
     groups.set([]);
     await Promise.all([loadSessions(), settingsStore.loadSettings()]);
+    await syncProjectLanguage(settingsStore);
     // The backend moved the lock with the switch — refresh the banner.
     await refreshLockStatus();
   } catch (e) {
@@ -97,6 +107,7 @@ async function selectProjectNow(id: string) {
           settingsStore.loadSettings(),
           refreshLockStatus(),
         ]);
+        await syncProjectLanguage(settingsStore);
         // A failed switch leaves the backend on the old project. Restore its
         // selection without calling selectSession(), whose persistence side
         // effects would race the recovery and are unnecessary here.

@@ -721,9 +721,9 @@ func findBundleIn(dir string) (string, error) {
 // rejects. The archive already contains the whole .app, so the update unpacks
 // it beside the installed one and swaps the two directories.
 //
-// The swap is two renames within the same parent, which is as close to atomic
-// as this gets: if the second fails the first is undone, so the worst case
-// leaves the previous version in place rather than no version at all.
+// A same-name update uses Darwin's atomic directory exchange. A product-name
+// migration publishes and persists the verified replacement before retiring
+// the old name, so both layouts preserve at least one usable bundle on crashes.
 func installBundleUpdate(ctx context.Context, version string, critical func(func() error) error) error {
 	execPath, err := os.Executable()
 	if err != nil {
@@ -779,6 +779,11 @@ func installBundleUpdate(ctx context.Context, version string, critical func(func
 	}
 	if err := verifyStagedBundle(staged); err != nil {
 		return err
+	}
+	// Publisher verification proves the staged bytes are complete and trusted;
+	// persist their directory entries before making the bundle visible.
+	if err := syncUpdateDirectoryTree(stageDir); err != nil {
+		return fmt.Errorf("cannot persist staged application bundle: %w", err)
 	}
 
 	// Install under the archive's own name, so an update also carries the
@@ -915,12 +920,19 @@ func swapBundle(bundle, staged, target string) error {
 		if err := atomicExchangeBundle(bundle, staged); err != nil {
 			return fmt.Errorf("cannot atomically exchange application bundles: %w", err)
 		}
+		if err := syncUpdateDirectories(filepath.Dir(bundle), filepath.Dir(staged)); err != nil {
+			return fmt.Errorf("application bundle was exchanged but its directory entry could not be persisted: %w", err)
+		}
 		return nil
 	}
 	return swapBundleWithOps(bundle, staged, target, os.Rename, os.RemoveAll)
 }
 
 func swapBundleWithOps(bundle, staged, target string, rename func(string, string) error, removeAll func(string) error) error {
+	return swapBundleWithDurabilityOps(bundle, staged, target, rename, removeAll, syncUpdateDirectory)
+}
+
+func swapBundleWithDurabilityOps(bundle, staged, target string, rename func(string, string) error, removeAll func(string) error, syncDir func(string) error) error {
 	parent := filepath.Dir(bundle)
 	backupDir, err := os.MkdirTemp(parent, "."+BinaryName+"-update-rollback-*")
 	if err != nil {
@@ -937,6 +949,12 @@ func swapBundleWithOps(bundle, staged, target string, rename func(string, string
 			_ = removeAll(backupDir)
 			return fmt.Errorf("cannot install the renamed application: %w", err)
 		}
+		// Commit the replacement name while the old bundle is still present.
+		// This preserves at least one durable application across the next rename.
+		if err := syncDir(parent); err != nil {
+			recordStaleUpdatePath(backupDir)
+			return fmt.Errorf("replacement application was published but could not be persisted: %w", err)
+		}
 		if err := rename(bundle, old); err != nil {
 			// Restore the pre-update layout. If even that fails, keep the new target:
 			// it is publisher-verified and preserves availability alongside bundle.
@@ -947,6 +965,10 @@ func swapBundleWithOps(bundle, staged, target string, rename func(string, string
 					fmt.Errorf("cannot roll back the renamed application: %w", rollbackErr))
 			}
 			return fmt.Errorf("cannot move the old application aside: %w", err)
+		}
+		if err := syncUpdateDirectoriesWith(syncDir, parent, backupDir); err != nil {
+			recordStaleUpdatePath(backupDir)
+			return fmt.Errorf("application rename completed but could not be persisted: %w", err)
 		}
 		if err := removeAll(backupDir); err != nil {
 			recordStaleUpdatePath(backupDir)
@@ -1040,6 +1062,10 @@ func extractBundle(archivePath, destDir string) error {
 			if _, err := io.CopyN(f, tr, header.Size); err != nil {
 				_ = f.Close()
 				return fmt.Errorf("failed to extract %s: %w", header.Name, err)
+			}
+			if err := syncUpdateHandle(f); err != nil {
+				_ = f.Close()
+				return fmt.Errorf("failed to sync %s: %w", header.Name, err)
 			}
 			if err := f.Close(); err != nil {
 				return err
@@ -1619,6 +1645,10 @@ func installTransactionWithRename(files []stagedInstall, rename func(string, str
 // one. This is the Linux user-local update path; Windows cannot use it because
 // its running executable and DLLs require the multi-file move-aside protocol.
 func installSingleFileAtomically(file stagedInstall, rename func(string, string) error) error {
+	return installSingleFileAtomicallyWithOps(file, rename, syncUpdateDirectory)
+}
+
+func installSingleFileAtomicallyWithOps(file stagedInstall, rename func(string, string) error, syncDir func(string) error) error {
 	stagedInfo, err := os.Lstat(file.staged)
 	if err != nil || stagedInfo.Mode()&os.ModeSymlink != 0 || !stagedInfo.Mode().IsRegular() {
 		return fmt.Errorf("staged update file %q is unavailable", filepath.Base(file.target))
@@ -1629,6 +1659,28 @@ func installSingleFileAtomically(file stagedInstall, rename func(string, string)
 	}
 	if err := rename(file.staged, file.target); err != nil {
 		return fmt.Errorf("cannot atomically install %s: %w", filepath.Base(file.target), err)
+	}
+	if err := syncDir(filepath.Dir(file.target)); err != nil {
+		return fmt.Errorf("installed %s but could not persist its directory entry: %w", filepath.Base(file.target), err)
+	}
+	return nil
+}
+
+func syncUpdateDirectories(paths ...string) error {
+	return syncUpdateDirectoriesWith(syncUpdateDirectory, paths...)
+}
+
+func syncUpdateDirectoriesWith(syncDir func(string) error, paths ...string) error {
+	seen := make(map[string]bool, len(paths))
+	for _, candidate := range paths {
+		candidate = filepath.Clean(candidate)
+		if seen[candidate] {
+			continue
+		}
+		seen[candidate] = true
+		if err := syncDir(candidate); err != nil {
+			return err
+		}
 	}
 	return nil
 }

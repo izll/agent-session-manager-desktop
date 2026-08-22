@@ -129,7 +129,8 @@
        settings, while testing dictation. At 200 it sat under the log dialog
        and the select dropdowns, which use four figures. */
     z-index: 20000;
-    max-width: 400px;
+    box-sizing: border-box;
+    max-width: min(400px, calc(100vw - 40px));
   }
 
   .toast-icon {
@@ -141,9 +142,11 @@
 
   .toast-message {
     flex: 1;
+    min-width: 0;
     font-size: 13px;
     color: #e4e4e7;
     line-height: 1.4;
+    overflow-wrap: anywhere;
   }
 
   .toast-close {

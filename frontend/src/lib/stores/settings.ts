@@ -109,63 +109,77 @@ export interface Settings {
   customTerminalThemes?: Array<{ id: string; name: string; colors: Record<string, string> }>;
 }
 
-export const settings = writable<Settings>({
-  compactList: false,
-  hideStatusLines: false,
-  showAgentIcons: true,
-  hideYoloBadge: false,
-  showResumeBadge: false,
-  splitView: false,
-  markedSessionId: '',
-  lastSessionId: '',
-  restoreLastSession: false,
-  markedWindowIdx: 0,
-  language: 'en',
-  uiTheme: 'violet',
-  uiAccent: '#8b5cf6',
-  // Platform-dependent; see defaultTerminalRenderer(). A saved setting
-  // overrides this, so it only decides what a fresh install starts with.
-  terminalRenderer: defaultTerminalRenderer(),
-  terminalFontFamily: '',
-  terminalShell: '',
-  terminalCopyMode: 'shift',
-  gitBranchDisplay: 'header',
-  diffFlatFileList: false,
-  trashRetentionDays: 0,
-  taskMasterEnabled: false,
-  terminalFontSize: 0,
-  agentFontSize: 0,
-  hideViewBar: false,
-  agentHideViewBar: false,
-  hideStatusBar: false,
-  agentHideStatusBar: false,
-  notifyOnWaiting: false,
-  notifyDesktop: true,
-  notifyNtfy: false,
-  ntfyUrl: '',
-  terminalTheme: 'asmgr',
-  agentTerminalThemes: {},
-  customTerminalThemes: []
-});
+function defaultSettings(): Settings {
+  return {
+    compactList: false,
+    hideStatusLines: false,
+    showAgentIcons: true,
+    hideYoloBadge: false,
+    showResumeBadge: false,
+    splitView: false,
+    markedSessionId: '',
+    lastSessionId: '',
+    restoreLastSession: false,
+    markedWindowIdx: 0,
+    language: 'en',
+    uiTheme: 'violet',
+    uiAccent: '#8b5cf6',
+    // Platform-dependent; see defaultTerminalRenderer(). A saved setting
+    // overrides this, so it only decides what a fresh install starts with.
+    terminalRenderer: defaultTerminalRenderer(),
+    terminalFontFamily: '',
+    terminalShell: '',
+    terminalCopyMode: 'shift',
+    gitBranchDisplay: 'header',
+    diffFlatFileList: false,
+    trashRetentionDays: 0,
+    taskMasterEnabled: false,
+    terminalFontSize: 0,
+    agentFontSize: 0,
+    hideViewBar: false,
+    agentHideViewBar: false,
+    hideStatusBar: false,
+    agentHideStatusBar: false,
+    notifyOnWaiting: false,
+    notifyDesktop: true,
+    notifyNtfy: false,
+    ntfyUrl: '',
+    terminalTheme: 'asmgr',
+    agentTerminalThemes: {},
+    customTerminalThemes: [],
+  };
+}
+
+export const settings = writable<Settings>(defaultSettings());
 
 let saveQueue: Promise<void> = Promise.resolve();
 let settingsRevision = 0;
 let settingsContextGeneration = 0;
 let settingsLoadGeneration = 0;
+// The initial defaults are a valid fresh-install snapshot. Project
+// invalidation and a failed authoritative read flip this false.
+let settingsContextReady = true;
+let settingsReadyLoad: Promise<boolean> | null = null;
 
 /** Invalidate reads/writes captured under the backend's previous project. */
 export function invalidateSettingsContext() {
   settingsContextGeneration++;
   settingsLoadGeneration++;
+  settingsContextReady = false;
+  settingsReadyLoad = null;
+  // SaveSettings writes a whole snapshot. If the replacement project's read
+  // fails, retaining the old project's object would let the next single
+  // toggle overwrite every replacement-project preference with old values.
+  settings.set(defaultSettings());
 }
 
-export async function loadSettings(expectedRevision?: number) {
+export async function loadSettings(expectedRevision?: number): Promise<boolean> {
   const context = settingsContextGeneration;
   const generation = ++settingsLoadGeneration;
   try {
     const data = await App.GetSettings();
-    if (context !== settingsContextGeneration || generation !== settingsLoadGeneration) return;
-    if (expectedRevision !== undefined && expectedRevision !== settingsRevision) return;
+    if (context !== settingsContextGeneration || generation !== settingsLoadGeneration) return false;
+    if (expectedRevision !== undefined && expectedRevision !== settingsRevision) return false;
     if (data) {
       const loaded = data as Settings;
       // An unset renderer must fall back to the per-platform default rather
@@ -178,12 +192,38 @@ export async function loadSettings(expectedRevision?: number) {
       settings.set(loaded);
       void App.LogFrontend(`[settings] renderer=${loaded.terminalRenderer}`);
     }
+    settingsContextReady = true;
+    return true;
   } catch (e) {
     console.error('Failed to load settings:', e);
+    if (context === settingsContextGeneration && generation === settingsLoadGeneration) {
+      settingsContextReady = false;
+      reportError(`Could not load settings: ${e}`);
+    }
+    return false;
+  }
+}
+
+async function ensureSettingsReady(): Promise<boolean> {
+  if (settingsContextReady) return true;
+  if (settingsReadyLoad) return settingsReadyLoad;
+  const load = loadSettings();
+  settingsReadyLoad = load;
+  try {
+    return await load;
+  } finally {
+    if (settingsReadyLoad === load) settingsReadyLoad = null;
   }
 }
 
 export async function saveSettings(newSettings: Partial<Settings>, expectedProjectId = get(activeProjectId)) {
+  const requestedContext = settingsContextGeneration;
+  // After a replacement-project read failure even the defaults are only a
+  // placeholder, not an authoritative full snapshot. Retry the read once and
+  // refuse the whole-object write if it is still unavailable or the project
+  // changed while waiting.
+  if (!await ensureSettingsReady() || requestedContext !== settingsContextGeneration ||
+      expectedProjectId !== get(activeProjectId)) return;
   const revision = ++settingsRevision;
   const context = settingsContextGeneration;
   let updated!: Settings;

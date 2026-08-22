@@ -217,3 +217,53 @@ func TestMacBundlesAllowTheLoopbackTerminalTransport(t *testing.T) {
 		}
 	}
 }
+
+func TestMacBundlesDoNotAdvertiseAnUnsupportedGoRuntime(t *testing.T) {
+	goMod, err := os.ReadFile("go.mod")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Go 1.25 dropped support for macOS releases older than Monterey. Keep the
+	// bundle's install/runtime gate aligned instead of letting Finder offer an
+	// application whose Go runtime cannot start on the advertised OS.
+	if !regexp.MustCompile(`(?m)^go 1\.25(?:\.\d+)?$`).Match(goMod) {
+		t.Fatal("update this regression when changing the Go toolchain's macOS support floor")
+	}
+	minimum := regexp.MustCompile(`(?s)<key>LSMinimumSystemVersion</key>\s*<string>12\.0\.0</string>`)
+	for _, path := range []string{"build/darwin/Info.plist", "build/darwin/Info.dev.plist"} {
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !minimum.Match(raw) {
+			t.Errorf("%s advertises a macOS version unsupported by the Go 1.25 runtime", path)
+		}
+	}
+}
+
+func TestMacReleasePublishesTheActualNativeDeploymentFloor(t *testing.T) {
+	raw, err := os.ReadFile(".github/workflows/release.yml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	workflow := string(raw)
+	required := []string{
+		`macho_minimum()`,
+		`LC_BUILD_VERSION`,
+		`LC_VERSION_MIN_MACOSX`,
+		`plutil -replace LSMinimumSystemVersion -string "$ARTIFACT_MIN"`,
+		`MACOS_ARTIFACT_MIN_VERSION=$ARTIFACT_MIN`,
+		`DECLARED_MIN=$(plutil -extract LSMinimumSystemVersion`,
+		`[ "$DECLARED_MIN" != "$MACOS_ARTIFACT_MIN_VERSION" ]`,
+	}
+	for _, fragment := range required {
+		if !strings.Contains(workflow, fragment) {
+			t.Errorf("macOS release does not validate native deployment target with %q", fragment)
+		}
+	}
+	adjustAt := strings.Index(workflow, `plutil -replace LSMinimumSystemVersion -string "$ARTIFACT_MIN"`)
+	signAt := strings.Index(workflow, `- name: Sign with hardened runtime`)
+	if adjustAt < 0 || signAt < adjustAt {
+		t.Fatal("macOS deployment target must be finalized before code signing")
+	}
+}

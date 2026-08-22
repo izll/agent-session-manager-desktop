@@ -858,6 +858,39 @@ func TestSingleFileInstallNeverMovesTheOldExecutableAwayFirst(t *testing.T) {
 	}
 }
 
+func TestSingleFileInstallPersistsParentAfterAtomicRename(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, BinaryName)
+	staged := filepath.Join(dir, ".new-"+BinaryName)
+	if err := os.WriteFile(target, []byte("old"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(staged, []byte("new"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	var events []string
+	rename := func(old, new string) error {
+		events = append(events, "rename")
+		return os.Rename(old, new)
+	}
+	syncDir := func(path string) error {
+		events = append(events, "sync")
+		if path != dir {
+			t.Fatalf("synced directory = %q, want %q", path, dir)
+		}
+		if got, err := os.ReadFile(target); err != nil || string(got) != "new" {
+			t.Fatalf("directory was synced before replacement publication: got=%q err=%v", got, err)
+		}
+		return nil
+	}
+	if err := installSingleFileAtomicallyWithOps(stagedInstall{target: target, staged: staged}, rename, syncDir); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(events, []string{"rename", "sync"}) {
+		t.Fatalf("durable install order = %v, want rename then directory sync", events)
+	}
+}
+
 func TestBundleRenamePublishesReplacementBeforeRetiringOldName(t *testing.T) {
 	dir := t.TempDir()
 	bundle := filepath.Join(dir, "Old.app")
@@ -887,6 +920,46 @@ func TestBundleRenamePublishesReplacementBeforeRetiringOldName(t *testing.T) {
 	}
 	if _, err := os.Stat(target); err != nil {
 		t.Fatalf("renamed bundle was not installed: %v", err)
+	}
+}
+
+func TestBundleRenamePersistsReplacementBeforeRetiringOldName(t *testing.T) {
+	dir := t.TempDir()
+	bundle := filepath.Join(dir, "Old.app")
+	staged := filepath.Join(dir, ".stage", "New.app")
+	target := filepath.Join(dir, "New.app")
+	if err := os.MkdirAll(bundle, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(staged, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	var events []string
+	rename := func(old, new string) error {
+		switch {
+		case old == staged && new == target:
+			events = append(events, "publish")
+		case old == bundle:
+			events = append(events, "retire")
+		default:
+			t.Fatalf("unexpected rename %q -> %q", old, new)
+		}
+		return os.Rename(old, new)
+	}
+	syncDir := func(path string) error {
+		if path == dir {
+			events = append(events, "sync-parent")
+		} else {
+			events = append(events, "sync-backup")
+		}
+		return nil
+	}
+	if err := swapBundleWithDurabilityOps(bundle, staged, target, rename, os.RemoveAll, syncDir); err != nil {
+		t.Fatal(err)
+	}
+	wantPrefix := []string{"publish", "sync-parent", "retire", "sync-parent", "sync-backup"}
+	if !reflect.DeepEqual(events, wantPrefix) {
+		t.Fatalf("durable bundle migration order = %v, want %v", events, wantPrefix)
 	}
 }
 

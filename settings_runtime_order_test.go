@@ -1,6 +1,7 @@
 package main
 
 import (
+	"asmgr-desktop/session"
 	"context"
 	"os"
 	"path/filepath"
@@ -77,5 +78,32 @@ func TestSaveSettingsAppliesRuntimeOnlyAfterDurableCommit(t *testing.T) {
 	}
 	if mouseCalls.Load() != 1 || shellCalls.Load() != 1 {
 		t.Fatalf("committed settings were not applied once: mouse=%d shell=%d", mouseCalls.Load(), shellCalls.Load())
+	}
+}
+
+func TestReadOnlyProjectDoesNotRewriteSharedTmuxBindings(t *testing.T) {
+	storage := guardedTestStorage(t)
+	if err := storage.SaveSettings(&session.Settings{TerminalCopyMode: "select"}); err != nil {
+		t.Fatal(err)
+	}
+	app := &App{storage: storage, projectLocked: false}
+
+	oldMouse, oldShell := applyRuntimeMouseCopy, applyRuntimeTerminalShell
+	taskMasterMu.Lock()
+	oldTaskMasterBlocked := taskMasterStartsBlocked
+	taskMasterMu.Unlock()
+	var mouseCalls atomic.Int32
+	applyRuntimeMouseCopy = func(context.Context, bool) { mouseCalls.Add(1) }
+	applyRuntimeTerminalShell = func(string) {}
+	t.Cleanup(func() {
+		applyRuntimeMouseCopy, applyRuntimeTerminalShell = oldMouse, oldShell
+		taskMasterMu.Lock()
+		taskMasterStartsBlocked = oldTaskMasterBlocked
+		taskMasterMu.Unlock()
+	})
+
+	app.applyActiveProjectRuntimeSettings()
+	if got := mouseCalls.Load(); got != 0 {
+		t.Fatalf("read-only project changed shared tmux bindings %d time(s)", got)
 	}
 }

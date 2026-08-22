@@ -766,9 +766,16 @@ func (a *App) applyActiveProjectRuntimeSettings() {
 		settings = &session.Settings{}
 	}
 	applyRuntimeTerminalShell(settings.TerminalShell)
-	applyCtx, cancel := context.WithTimeout(ctx, session.TmuxCommandTimeout)
-	applyRuntimeMouseCopy(applyCtx, settings.TerminalCopyMode == "select")
-	cancel()
+	// Mouse bindings live in tmux's process-global key tables. A read-only
+	// viewer shares that server with the process that owns this project, but is
+	// forbidden from attaching terminals; applying the viewed project's value
+	// here would nevertheless rewrite the real owner's live terminal behavior.
+	// Only the project lock owner may mutate that shared runtime state.
+	if a.projectLocked {
+		applyCtx, cancel := context.WithTimeout(ctx, session.TmuxCommandTimeout)
+		applyRuntimeMouseCopy(applyCtx, settings.TerminalCopyMode == "select")
+		cancel()
+	}
 
 	taskMasterMu.Lock()
 	taskMasterStartsBlocked = !settings.TaskMasterEnabled
