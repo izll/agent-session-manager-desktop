@@ -57,4 +57,26 @@ assert.match(
   'an open diff must close on a tab without a repository',
 );
 
+// The view bar survives the diff being open.
+//
+// It used to be replaced by it, so nothing said where you had come from and the
+// only way back was the Diff control that had gone with the bar.
+const diffBranch = panel.match(/\{#if fullDiffActive\}[\s\S]{0,700}?\{:else\}/);
+assert.ok(diffBranch, 'the full diff should still be conditional');
+assert.doesNotMatch(
+  diffBranch[0],
+  /class="view-tabs"/,
+  'the view bar must not live inside the diff branch — it has to stay on screen',
+);
+assert.match(diffBranch[0], /<Diff active=\{visible\} initialMode="full" \/>/, 'the diff fills the area below it');
+
+// And the view underneath stays marked, so pressing Diff again visibly returns
+// somewhere rather than anywhere.
+assert.match(
+  panel,
+  /class:behind-diff=\{fullDiffActive && activeView === 'terminal'\}/,
+  'the covered view must remain marked while the diff is open',
+);
+assert.match(panel, /\.view-tab\.behind-diff \{/, 'and be styled apart from the active one');
+
 console.log('diffViewTab: ok');

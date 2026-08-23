@@ -633,12 +633,11 @@
       on:openSettings={() => dispatch('openSettings')}
     />
 
-    {#if fullDiffActive}
-      <!-- Full Diff View -->
-      <div class="flex-1 overflow-hidden content-area">
-        <Diff active={visible} initialMode="full" />
-      </div>
-    {:else}
+    <!-- The view bar stays put while the diff is open.
+         It used to be replaced by the diff, which left no sign of where you had
+         come from and no button to go back — the way out was the same Diff
+         control that was no longer on screen. Keeping the bar means the view
+         you left is still marked, and pressing Diff again returns to it. -->
       <!-- View Selector. Hidden on request to give the terminal another row;
            the tab bar keeps a button to bring it back, and the views stay
            reachable from the command palette meanwhile. -->
@@ -646,6 +645,7 @@
         <div class="view-tabs-left">
           <button
             class="view-tab {activeView === 'terminal' ? 'active' : ''}"
+            class:behind-diff={fullDiffActive && activeView === 'terminal'}
             on:click={() => selectView('terminal')}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -656,6 +656,7 @@
           </button>
           <button
             class="view-tab {activeView === 'notes' ? 'active' : ''}"
+            class:behind-diff={fullDiffActive && activeView === 'notes'}
             on:click={() => selectView('notes')}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -677,6 +678,7 @@
                the actions that shell out to npx, inside the panel. -->
           <button
             class="view-tab {activeView === 'tasks' ? 'active' : ''}"
+            class:behind-diff={fullDiffActive && activeView === 'tasks'}
             on:click={() => selectView('tasks')}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -700,6 +702,7 @@
                directory, and every session has one. -->
           <button
             class="view-tab {activeView === 'browser' ? 'active' : ''}"
+            class:behind-diff={fullDiffActive && activeView === 'browser'}
             on:click={() => selectView('browser')}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -815,6 +818,15 @@
         </div>
       </div>
 
+      {#if fullDiffActive}
+        <!-- The diff fills the area below the view bar, rather than replacing
+             the bar as well. The view you left stays marked there, and the Diff
+             button that brought you here is still on screen to take you back —
+             it was the only way back, and it used to vanish with the bar. -->
+        <div class="flex-1 overflow-hidden content-area">
+          <Diff active={visible} initialMode="full" />
+        </div>
+      {:else}
       <!-- Content Area - Keep components mounted, use CSS to show/hide -->
       <div class="content-stack" class:with-diff={diffAbove}>
         {#if diffAbove}
@@ -1077,6 +1089,16 @@
   .view-tab:disabled {
     opacity: 0.4;
     cursor: not-allowed;
+  }
+
+  /* The view the diff is covering.
+     Still marked, because that is how you can tell where pressing Diff again
+     will put you back — but flatter than the active one, so two tabs do not
+     both claim to be what is on screen. */
+  .view-tab.behind-diff {
+    background: rgba(255, 255, 255, 0.04);
+    border-color: transparent;
+    color: #9ca3af;
   }
 
   /* Column, so the diff and the view below it share the height rather than
