@@ -3474,6 +3474,22 @@ func validateDiffRoot(inst *session.Instance, expectedRoot string) (string, erro
 // that would escape the tree are rejected in session.Instance.
 //
 // Not named BrowseDirectory: that is already the native directory picker.
+// TabIsGitRepo reports whether the given tab's directory is inside a git
+// repository.
+//
+// Per tab rather than per session: a tab can be opened in a directory of its
+// own, and one session can hold tabs in a repository and outside one. The
+// session-wide IsGitRepo answers for the session path only, which is what the
+// diff button used to consult — so it offered a diff on a tab that has none,
+// and withheld it from a tab that does.
+func (a *App) TabIsGitRepo(id string, windowIdx int) bool {
+	inst, err := a.browseInstance(id, windowIdx)
+	if err != nil {
+		return false
+	}
+	return inst.IsGitRepo()
+}
+
 // browseInstance loads a session with its file browser pointed at the given
 // tab's directory.
 //

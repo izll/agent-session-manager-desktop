@@ -133,7 +133,10 @@
     // its "open diff" action still lands somewhere. Outside a git repo there
     // is no diff to open, so the request is simply ignored.
     if (view === 'diff') {
-      if (currentSession?.isGitRepo) {
+      // The tab's repository, not the session's: one session can hold tabs in
+      // different directories, and the palette should open the diff the tab
+      // actually has.
+      if (tabIsGitRepo) {
         fullDiffActive = true;
       }
       return;
@@ -224,7 +227,7 @@
   let activeSplitterCleanup: (() => void) | null = null;
 
   function toggleDiffAbove() {
-    if (!currentSession?.isGitRepo) return;
+    if (!tabIsGitRepo) return;
     diffAbove = !diffAbove;
     if (!lastViewKey) return;
   }
@@ -276,6 +279,33 @@
   // showTerminal.
   function closeFullDiff() {
     fullDiffActive = false;
+  }
+
+  /**
+   * The view bar's Diff button.
+   *
+   * A toggle rather than a plain select, because the diff covers the panel
+   * instead of sitting in the view rotation: pressing it again has to give the
+   * tab back, and the view underneath is whatever it was — closeFullDiff
+   * deliberately leaves activeView alone.
+   */
+  // Never leave the diff open on a tab that has none.
+  //
+  // Switching to a tab outside a repository would otherwise show an empty diff
+  // over it, with the button that opened it now greyed out — no way back except
+  // guessing. Guarded on the tab rather than the session, since that is what
+  // the button is guarded on.
+  $: if (fullDiffActive && !tabIsGitRepo) {
+    closeFullDiff();
+  }
+
+  function toggleFullDiff() {
+    if (!tabIsGitRepo) return;
+    if (fullDiffActive) {
+      closeFullDiff();
+      return;
+    }
+    fullDiffActive = true;
   }
 
   onMount(() => window.addEventListener('main-panel:set-view', handleSetView));
@@ -405,6 +435,41 @@
       liveTabPathTarget = target;
       liveTabPath = '';
       void refreshLiveTabPath();
+      void refreshTabIsGitRepo();
+    }
+  }
+
+  /**
+   * Whether THIS tab's directory is in a git repository.
+   *
+   * The session-wide flag answers for the session path, and one session can
+   * hold tabs in a repository and outside one — so it offered the diff on a tab
+   * that has none, and withheld it from a tab that does.
+   *
+   * Starts true so the button is not greyed out for the moment before the
+   * answer arrives: a control that flickers from disabled to enabled reads as
+   * broken, and being briefly wrong in the permissive direction costs only an
+   * empty pane if clicked in that instant.
+   */
+  let tabIsGitRepo = true;
+
+  async function refreshTabIsGitRepo() {
+    const sessionId = $selectedSessionId;
+    const windowIdx = $selectedWindowIdx ?? 0;
+    if (!sessionId) {
+      tabIsGitRepo = false;
+      return;
+    }
+    const generation = liveTabPathGeneration;
+    try {
+      const answer = await App.TabIsGitRepo(sessionId, windowIdx);
+      // A slow reply for a tab already left must not grey out the one now on
+      // screen — the same guard the directory lookup beside it uses.
+      if (generation !== liveTabPathGeneration) return;
+      tabIsGitRepo = answer;
+    } catch (e) {
+      console.error('Failed to resolve whether the tab is a git repository:', e);
+      if (generation === liveTabPathGeneration) tabIsGitRepo = false;
     }
   }
 
@@ -642,12 +707,35 @@
             </svg>
             {$t('mainPanel.browser')}
           </button>
+          <!-- Beside Files, because it answers the same question about the same
+               directory: what is in this tab, and what changed in it. It used
+               to live in the tab bar, which put it a level above the thing it
+               describes — one session can hold tabs in different directories,
+               each with its own diff.
+
+               Disabled rather than hidden outside a repository: a control that
+               disappears reads as a bug, while a greyed one with a reason says
+               what the tab is. -->
+          <button
+            class="view-tab {fullDiffActive ? 'active' : ''}"
+            disabled={!tabIsGitRepo}
+            on:click={() => toggleFullDiff()}
+            title={tabIsGitRepo ? $t('tabBar.fullDiff') : $t('history.notARepository')}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M9 3v12"/><circle cx="9" cy="18" r="3"/>
+              <circle cx="9" cy="6" r="3"/><path d="M15 21V9"/>
+              <circle cx="15" cy="6" r="3"/><path d="M15 9a6 6 0 0 1-6 6"/>
+            </svg>
+            {$t('tabBar.diffLabel')}
+          </button>
         </div>
         <div class="view-tabs-right">
           <!-- Shows the diff above the current view instead of replacing it.
-               Only where there is a diff to show; outside a repository the
-               button would open an empty pane with no way to tell why. -->
-          {#if currentSession?.isGitRepo}
+               Hidden rather than disabled, unlike the Diff button beside Files:
+               this one is an extra way to arrange a view that is already
+               reachable, so its absence takes nothing away. -->
+          {#if tabIsGitRepo}
             <button
               class="split-btn"
               class:active={diffAbove}
