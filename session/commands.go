@@ -279,22 +279,8 @@ func (s *Storage) saveCommandsLocked(lib *CommandLibrary) error {
 		return err
 	}
 	path := s.commandsPath()
-	tmp, err := os.CreateTemp(s.configDir, ".commands-*")
-	if err != nil {
-		return err
-	}
-	tmpPath := tmp.Name()
-	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
-		os.Remove(tmpPath)
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		os.Remove(tmpPath)
-		return err
-	}
-	if err := os.Rename(tmpPath, path); err != nil {
-		os.Remove(tmpPath)
+	// Through the shared helper so the write is fsynced before the rename.
+	if err := writeFileAtomic(path, data, 0600); err != nil {
 		return err
 	}
 	return nil

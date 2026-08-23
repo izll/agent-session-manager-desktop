@@ -244,22 +244,8 @@ func (s *Storage) saveTemplatesLocked(lib *TemplateLibrary) error {
 		return err
 	}
 	path := s.templatesPath()
-	tmp, err := os.CreateTemp(s.configDir, ".templates-*")
-	if err != nil {
-		return err
-	}
-	tmpPath := tmp.Name()
-	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
-		os.Remove(tmpPath)
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		os.Remove(tmpPath)
-		return err
-	}
-	if err := os.Rename(tmpPath, path); err != nil {
-		os.Remove(tmpPath)
+	// Through the shared helper so the write is fsynced before the rename.
+	if err := writeFileAtomic(path, data, 0600); err != nil {
 		return err
 	}
 	return nil

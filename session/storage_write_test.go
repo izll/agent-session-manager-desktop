@@ -615,11 +615,17 @@ func TestRemoveProjectRollsBackDataWhenCatalogSaveFails(t *testing.T) {
 	if err := os.WriteFile(marker, []byte(`{"instances":[]}`), 0600); err != nil {
 		t.Fatal(err)
 	}
-	// saveProjectsLocked writes this fixed temp path before rename. A directory
-	// there forces the catalog commit to fail after data has moved to trash.
-	if err := os.Mkdir(filepath.Join(storage.configDir, "projects.json.tmp"), 0755); err != nil {
+	// Make the catalog commit fail after the data has already moved to trash.
+	//
+	// A read-only config directory is what does it now: the write stages through
+	// CreateTemp, so it cannot be blocked by planting a file at a predictable
+	// temp name — which is what this test used to do, and which stopped working
+	// the moment the write gained its fsync and a random staging name. Testing
+	// the outcome rather than the mechanism keeps it honest either way.
+	if err := os.Chmod(storage.configDir, 0500); err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { _ = os.Chmod(storage.configDir, 0700) })
 	if err := storage.RemoveProject(project.ID); err == nil {
 		t.Fatal("deletion unexpectedly succeeded despite an unwritable catalog temp path")
 	}

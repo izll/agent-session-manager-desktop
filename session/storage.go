@@ -788,19 +788,13 @@ func (s *Storage) saveProjectsLocked(projectsData *ProjectsData) error {
 		return fmt.Errorf("failed to marshal projects: %w", err)
 	}
 
-	tmp := projectsFile + ".tmp"
-	if err := os.WriteFile(tmp, data, 0600); err != nil {
-		return fmt.Errorf("failed to write projects temp file: %w", err)
-	}
-	// WriteFile preserves the mode of a stale crash artifact. Normalize before
-	// rename so an old 0644 projects.json.tmp cannot republish project names.
-	if err := os.Chmod(tmp, 0600); err != nil {
-		_ = os.Remove(tmp)
-		return fmt.Errorf("failed to secure projects temp file: %w", err)
-	}
-	if err := os.Rename(tmp, projectsFile); err != nil {
-		os.Remove(tmp)
-		return fmt.Errorf("failed to rename projects file: %w", err)
+	// Through the shared helper for the fsync, and because it stages under a
+	// fresh CreateTemp name: the old fixed "<path>.tmp" could be a stale crash
+	// artifact whose mode WriteFile would have preserved, which is what the
+	// explicit Chmod here used to guard against. CreateTemp makes 0600 and the
+	// helper sets the final mode before the file becomes visible.
+	if err := writeFileAtomic(projectsFile, data, 0600); err != nil {
+		return fmt.Errorf("failed to write projects file: %w", err)
 	}
 	if err := s.createProjectsBackupLocked(projectsData); err != nil {
 		fmt.Fprintf(os.Stderr, "automatic projects backup failed: %v\n", err)
@@ -1463,15 +1457,18 @@ func (s *Storage) writeStorageDataLocked(storageData *StorageData, createBackup 
 		return fmt.Errorf("failed to marshal config: %w", err)
 	}
 
-	// Atomic write: write to temp file in same dir, then rename.
+	// Atomic write, through the shared helper: temp file in the same directory,
+	// fsync, rename.
+	//
+	// The fsync is why this goes through writeFileAtomic rather than
+	// WriteFile+Rename. A rename is metadata the filesystem may journal ahead of
+	// the data blocks it points at, so a power cut between the two leaves a
+	// sessions.json of the right name and the wrong length — every session gone.
+	// This file and the backups beside it are the two the user cannot retype.
+	//
 	// 0600: the config can hold an Anthropic API key — owner-only.
-	tmpPath := s.configPath + ".tmp"
-	if err := os.WriteFile(tmpPath, data, 0600); err != nil {
-		return fmt.Errorf("failed to write temp config file: %w", err)
-	}
-	if err := os.Rename(tmpPath, s.configPath); err != nil {
-		os.Remove(tmpPath)
-		return fmt.Errorf("failed to rename temp config file: %w", err)
+	if err := writeFileAtomic(s.configPath, data, 0600); err != nil {
+		return fmt.Errorf("failed to write config file: %w", err)
 	}
 
 	if createBackup {

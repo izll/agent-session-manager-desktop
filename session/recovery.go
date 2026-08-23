@@ -181,12 +181,10 @@ func (s *Storage) createBackupLocked(data *StorageData, skipIfUnchanged bool) er
 	sum := sha256.Sum256(raw)
 	name := time.Now().UTC().Format(backupTimestampLayout) + "-" + hex.EncodeToString(sum[:4]) + ".json"
 	path := filepath.Join(dir, name)
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, raw, 0600); err != nil {
-		return err
-	}
-	if err := os.Rename(tmp, path); err != nil {
-		_ = os.Remove(tmp)
+	// fsynced before the rename, like the store it is a copy of. A backup that
+	// cannot survive the crash it exists for is not a backup — and without the
+	// sync one power cut could take the live file and its newest backup at once.
+	if err := writeFileAtomic(path, raw, 0600); err != nil {
 		return err
 	}
 	return pruneBackupDir(dir)
@@ -317,12 +315,10 @@ func (s *Storage) createProjectsBackupLocked(data *ProjectsData) error {
 	sum := sha256.Sum256(raw)
 	name := time.Now().UTC().Format(backupTimestampLayout) + "-" + hex.EncodeToString(sum[:4]) + ".json"
 	path := filepath.Join(dir, name)
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, raw, 0600); err != nil {
-		return err
-	}
-	if err := os.Rename(tmp, path); err != nil {
-		_ = os.Remove(tmp)
+	// fsynced before the rename, like the store it is a copy of. A backup that
+	// cannot survive the crash it exists for is not a backup — and without the
+	// sync one power cut could take the live file and its newest backup at once.
+	if err := writeFileAtomic(path, raw, 0600); err != nil {
 		return err
 	}
 	return pruneBackupDir(dir)
