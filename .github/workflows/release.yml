@@ -465,7 +465,7 @@ jobs:
           codesign --verify --deep --strict --verbose=2 "$APP"
           spctl --assess --type execute --verbose=4 "$APP"
 
-      - name: Package .tar.gz (name matches the in-app updater)
+      - name: Package .tar.gz
         run: |
           V="${{ steps.ver.outputs.num }}"
           tar -C build/bin -czf "asmgr-desktop_${V}_darwin_arm64.tar.gz" "Agent Session Manager.app"
@@ -600,7 +600,7 @@ jobs:
             exit 1
           fi
 
-      - name: Package .tar.gz (name matches the in-app updater)
+      - name: Package portable .tar.gz
         run: |
           V="${{ steps.ver.outputs.num }}"
           (cd build/bin && tar -czf "../../asmgr-desktop_${V}_windows_amd64.tar.gz" "asmgr-desktop.exe" ./*.dll)

@@ -26,6 +26,8 @@ let resolveTrashRestore: ((value: unknown) => void) | null = null;
 let recoverySessionLoads = 0;
 let resolveUpdate: (() => void) | null = null;
 let updateCalls = 0;
+const openedURLs: string[] = [];
+const manualUpdate = new URLSearchParams(location.search).get('manualUpdate') === '1';
 let resolveCreateSession: ((value: unknown) => void) | null = null;
 const startSessionCalls: string[] = [];
 const createGroupCalls: string[] = [];
@@ -106,7 +108,12 @@ const backend = new Proxy({
   GetBackups: async () => [],
   GetTaskBackups: async () => [],
   RestoreTrashItem: () => new Promise<unknown>((resolve) => { resolveTrashRestore = resolve; }),
-  CheckForUpdate: async () => ({ available: true, currentVersion: '1.0.0', latestVersion: '1.1.0' }),
+  CheckForUpdate: async () => ({
+    available: true, currentVersion: '1.0.0', latestVersion: '1.1.0',
+    canAutoInstall: !manualUpdate,
+    manualInstallHint: manualUpdate ? 'Close ASMGR, then install the Windows setup or the complete portable EXE and DLL set.' : '',
+    manualInstallURL: manualUpdate ? 'https://github.com/izll/agent-session-manager-desktop/releases/latest' : '',
+  }),
   PerformUpdate: () => {
     updateCalls++;
     return new Promise<void>((resolve) => { resolveUpdate = resolve; });
@@ -164,7 +171,14 @@ const backend = new Proxy({
 });
 
 (window as any).go = { main: { App: backend, DictationService: backend } };
-(window as any).runtime = new Proxy({}, { get: () => (..._args: unknown[]) => () => {} });
+(window as any).runtime = new Proxy({
+  BrowserOpenURL: (url: string) => { openedURLs.push(url); },
+}, {
+  get(target, key) {
+    if (key in target) return target[key as keyof typeof target];
+    return (..._args: unknown[]) => () => {};
+  },
+});
 agents.set([{ type: 'claude', name: 'Claude', icon: '', supportsResume: false, supportsAutoYes: true, supportsFork: false }]);
 (window as any).dialogRacesFixture = {
   resolveSearch: (value: unknown[]) => resolveSearch?.(value),
@@ -202,6 +216,7 @@ agents.set([{ type: 'claude', name: 'Claude', icon: '', supportsResume: false, s
   recoverySessionLoads: () => recoverySessionLoads,
   selectedSession: () => get(selectedSessionId),
   updateCalls: () => updateCalls,
+  openedURLs: () => [...openedURLs],
   resolveUpdate: () => resolveUpdate?.(),
   createSessionPending: () => !!resolveCreateSession,
   resolveCreateSession: () => {

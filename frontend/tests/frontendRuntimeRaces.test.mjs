@@ -104,6 +104,8 @@ assert.match(browser, /const targetKey = browseKey;[\s\S]*?targetKey !== browseK
   'selected browser files must use the same project-aware identity as the tree');
 assert.match(preview, /const targetKey = sessionId \? `\$\{projectId\}\\x1f\$\{sessionId\}`[\s\S]*?projectId === get\(activeProjectId\)/,
   'live preview responses must be isolated by project as well as session id');
+assert.match(preview, /App\.GetPreview\(sessionId, 100, projectId\)/,
+  'the live preview backend read must be pinned to the captured project, not only guarded after await');
 assert.match(diff, /cacheKey = selectedPath[\s\S]*?`\$\{currentDiffKey\}:\$\{loadedRoot\}:/);
 assert.match(diff, /function handleModeChange[\s\S]*?fileCache = \{\}/);
 assert.match(diff, /windowIdx !== tabIdx\(\)/, 'late file/list responses must be target-checked');
@@ -366,6 +368,12 @@ assert.match(recovery, /if \(!operationUIIsCurrent\(target\)\)/,
   'a portalled confirmation must not run against a replacement active project');
 assert.match(updateDialog, /function close\(\) \{[\s\S]*?if \(isUpdating\) return;/,
   'an in-progress installation must not be dismissible while the updater owns application files');
+assert.match(updateDialog, /updateInfo\.canAutoInstall !== true\) return/,
+  'the updater action must fail closed when backend capability is absent or false');
+assert.match(updateDialog, /updateInfo\?\.available && updateInfo\.canAutoInstall === true && !success/,
+  'unsupported platforms must not render the automatic install action');
+assert.match(updateDialog, /manualInstallHint[\s\S]*?BrowserOpenURL/,
+  'unsupported platforms must expose the trusted manual installation route');
 assert.match(allTasks, /task\.projectId !== \$activeProjectId[\s\S]*?await selectProject\(task\.projectId\)/,
   'an all-project task jump must switch the backend project before selecting its session id');
 assert.match(allTasks, /const key = `\$\{task\.projectId\}:\$\{task\.sessionId \|\| task\.projectPath\}`/,
@@ -401,6 +409,16 @@ assert.match(projectStore, /settingsStore\.invalidateSettingsContext\(\)/,
   'project switching must invalidate settings reads and queued snapshots');
 assert.match(projectStore, /await syncProjectLanguage\(settingsStore\)/,
   'project switching must apply the selected project language to the live translation runtime');
+assert.match(mainPanel, /heightKey = `\$\{\$activeProjectId\}:\$\{storedHeight\}`[\s\S]*?diffAboveHeight = storedHeight/,
+  'project-scoped diff height must be reapplied when the live project settings snapshot changes');
+assert.match(mainPanel, /splitterProjectId = \$activeProjectId[\s\S]*?projectId !== \$activeProjectId\) return;[\s\S]*?saveSettings\(\{ diffAboveHeight \}, projectId\)/,
+  'a splitter gesture begun in an old project must not save its height into the replacement project');
+assert.match(tabBar, /geometryKey = `\$\{\$activeProjectId\}:\$\{JSON\.stringify\(\$settings\.dictationBuffer \?\? null\)\}`[\s\S]*?applyStoredBufferGeometry\(\)/,
+  'project-scoped dictation geometry must not survive into a replacement project');
+assert.match(tabBar, /if \(!stored \|\| !stored\.w \|\| !stored\.h\) \{[\s\S]*?bufferPanelX = null;[\s\S]*?bufferPanelH = null;/,
+  'a project without saved dictation geometry must restore the CSS default rather than the previous project rectangle');
+assert.match(tabBar, /geometryInteractionProjectId = \$activeProjectId[\s\S]*?projectId === \$activeProjectId\) rememberBufferGeometry\(projectId\)/,
+  'a dictation panel gesture must save only into the project where it began');
 assert.match(projectStore, /generation !== lockLoadGeneration \|\| projectId !== get\(activeProjectId\)/,
   'a lock response must belong to the project whose mutation controls it gates');
 assert.match(app, /await flushSettingsSaves\(\);[\s\S]*?Quit\(\)/,

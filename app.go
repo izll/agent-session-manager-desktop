@@ -2501,8 +2501,15 @@ type PreviewData struct {
 	Activity string `json:"activity"`
 }
 
-// GetPreview returns session preview content
-func (a *App) GetPreview(id string, lines int) (*PreviewData, error) {
+// GetPreview returns session preview content pinned to the frontend-captured
+// project. Session IDs are project-local and preview reads live tmux content,
+// so a delayed request must not cross a concurrent project switch.
+func (a *App) GetPreview(id string, lines int, expectedProjectID string) (*PreviewData, error) {
+	done, err := a.beginExpectedProjectReadWithSideEffects(expectedProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer done()
 	inst, err := a.storage.GetInstance(id)
 	if err != nil {
 		return nil, err
@@ -4025,9 +4032,12 @@ func (a *App) SaveSettings(settings SettingsInfo, expectedProjectID string) erro
 
 // UpdateInfo contains update information
 type UpdateInfo struct {
-	Available      bool   `json:"available"`
-	CurrentVersion string `json:"currentVersion"`
-	LatestVersion  string `json:"latestVersion"`
+	Available         bool   `json:"available"`
+	CurrentVersion    string `json:"currentVersion"`
+	LatestVersion     string `json:"latestVersion"`
+	CanAutoInstall    bool   `json:"canAutoInstall"`
+	ManualInstallHint string `json:"manualInstallHint"`
+	ManualInstallURL  string `json:"manualInstallURL"`
 }
 
 // GetVersion returns the current application version (for the UI/about).
@@ -4372,9 +4382,12 @@ func (a *App) CheckForUpdate() (*UpdateInfo, error) {
 	}
 
 	return &UpdateInfo{
-		Available:      latest != "",
-		CurrentVersion: current,
-		LatestVersion:  latest,
+		Available:         latest != "",
+		CurrentVersion:    current,
+		LatestVersion:     latest,
+		CanAutoInstall:    updater.AutomaticInstallSupported(),
+		ManualInstallHint: updater.ManualUpdateHint(),
+		ManualInstallURL:  updater.ReleasePageURL,
 	}, nil
 }
 

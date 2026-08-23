@@ -1659,6 +1659,9 @@ export namespace main {
 	    available: boolean;
 	    currentVersion: string;
 	    latestVersion: string;
+	    canAutoInstall: boolean;
+	    manualInstallHint: string;
+	    manualInstallURL: string;
 
 	    static createFrom(source: any = {}) {
 	        return new UpdateInfo(source);
@@ -1669,6 +1672,9 @@ export namespace main {
 	        this.available = source["available"];
 	        this.currentVersion = source["currentVersion"];
 	        this.latestVersion = source["latestVersion"];
+	        this.canAutoInstall = source["canAutoInstall"];
+	        this.manualInstallHint = source["manualInstallHint"];
+	        this.manualInstallURL = source["manualInstallURL"];
 	    }
 	}
 

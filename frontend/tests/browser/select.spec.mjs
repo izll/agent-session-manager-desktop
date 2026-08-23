@@ -46,6 +46,14 @@ async function gotoProjectSettingsFixture(page) {
   await expect(page.locator('body')).toHaveAttribute('data-fixture-ready', 'true', { timeout: 15_000 });
 }
 
+async function gotoProjectLayoutFixture(page) {
+  await page.goto('/tests/browser/project-layout-fixture.html');
+  // This fixture compiles the real MainPanel/TabBar graph. A clean npm install
+  // measured just over 15 s for the first transform; wait on its explicit
+  // post-mount signal with the same cold-start budget as the content fixture.
+  await expect(page.locator('body')).toHaveAttribute('data-fixture-ready', 'true', { timeout: 30_000 });
+}
+
 test('a replacement notification receives its full visible duration', async ({ page }) => {
   await gotoFeedbackFixture(page);
   await page.locator('#toast-first').click();
@@ -121,6 +129,49 @@ test('a failed replacement-project settings read cannot retain the old full snap
   await expect(page.locator('#settings-language')).toHaveText('en');
   await page.locator('#save-after-settings-failure').click();
   await expect.poll(() => page.evaluate(() => window.projectSettingsFixture.settingsSaves().length)).toBe(0);
+});
+
+test('project switching reapplies project-scoped diff and dictation panel geometry', async ({ page }) => {
+  const pageErrors = [];
+  page.on('pageerror', (error) => pageErrors.push(error.message));
+  await gotoProjectLayoutFixture(page);
+  await page.locator('.split-btn').filter({ hasText: /Diff/ }).click();
+  await expect(page.locator('.diff-above')).toHaveCSS('height', '180px');
+  const buffer = page.locator('.dictation-buffer');
+  await expect(buffer).toBeVisible();
+  await expect(buffer).toHaveCSS('left', '20px');
+  await expect(buffer).toHaveCSS('width', '320px');
+
+  await page.evaluate(() => window.projectLayoutFixture.switchProject());
+  await expect(page.locator('.diff-above')).toHaveCSS('height', '260px');
+  await expect(buffer).toHaveCSS('left', '110px');
+  await expect(buffer).toHaveCSS('top', '70px');
+  await expect(buffer).toHaveCSS('width', '360px');
+  await expect(buffer).toHaveCSS('height', '210px');
+  expect(pageErrors).toEqual([]);
+});
+
+test('layout gestures cannot save old-project geometry after a project switch', async ({ page }) => {
+  const pageErrors = [];
+  page.on('pageerror', (error) => pageErrors.push(error.message));
+  await gotoProjectLayoutFixture(page);
+  await page.locator('.split-btn').filter({ hasText: /Diff/ }).click();
+  const splitter = page.locator('.diff-splitter');
+  const splitterBox = await splitter.boundingBox();
+  await page.mouse.move(splitterBox.x + 10, splitterBox.y + 2);
+  await page.mouse.down();
+  await page.evaluate(() => window.projectLayoutFixture.switchProject('project-b', 260, 110));
+  await page.mouse.up();
+  await expect.poll(() => page.evaluate(() => window.projectLayoutFixture.settingsSaves().length)).toBe(0);
+
+  const header = page.locator('.buffer-header');
+  const headerBox = await header.boundingBox();
+  await page.mouse.move(headerBox.x + 20, headerBox.y + 10);
+  await page.mouse.down();
+  await page.evaluate(() => window.projectLayoutFixture.switchProject('project-c', 240, 80));
+  await page.mouse.up();
+  await expect.poll(() => page.evaluate(() => window.projectLayoutFixture.settingsSaves().length)).toBe(0);
+  expect(pageErrors).toEqual([]);
 });
 
 test('a real Svelte component renders, portals, focuses and reacts in Chromium', async ({ page }) => {
@@ -799,6 +850,19 @@ test('Update cannot be dismissed through any close path while installation is ru
 
   await page.evaluate(() => window.dialogRacesFixture.resolveUpdate());
   await expect(dialog.locator('.dialog-footer .btn-secondary')).toBeEnabled();
+});
+
+test('Update offers a manual release path without calling PerformUpdate when auto-install is unsupported', async ({ page }) => {
+  await page.goto('/tests/browser/dialog-races-fixture.html?mode=update&manualUpdate=1');
+  await expect(page.locator('body')).toHaveAttribute('data-fixture-ready', 'true', { timeout: 15_000 });
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toContainText('complete portable EXE and DLL set');
+  await expect(dialog.getByRole('button', { name: /Update Now|Frissítés most/i })).toHaveCount(0);
+  await dialog.getByRole('button', { name: /Open download page|Letöltési oldal megnyitása/i }).click();
+  await expect.poll(() => page.evaluate(() => window.dialogRacesFixture.openedURLs())).toEqual([
+    'https://github.com/izll/agent-session-manager-desktop/releases/latest',
+  ]);
+  expect(await page.evaluate(() => window.dialogRacesFixture.updateCalls())).toBe(0);
 });
 
 test('Settings persists a focused ntfy address before Escape removes the input', async ({ page }) => {

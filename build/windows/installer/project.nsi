@@ -116,13 +116,12 @@ ManifestDPIAware true
 
 Name "${INFO_PRODUCTNAME}"
 OutFile "..\..\bin\${INFO_PROJECTNAME}-${ARCH}-installer.exe" # Name of the installer's file.
-# Installed per user, under LocalAppData, rather than into Program Files.
-#
-# The app updates itself in place: it writes the new build beside the running
-# executable and swaps it. Program Files is not writable without elevation, so
-# that failed with "Access is denied" and the only way to update was to download
-# the installer by hand. Every update would otherwise need a UAC prompt, which
-# also rules out the quiet background update Linux and macOS get.
+# Installed per user, under LocalAppData, rather than into Program Files. This
+# keeps ordinary use and manual upgrades free of administrator rights. The
+# current flat EXE+DLL layout deliberately does not update itself in-process:
+# there is no atomic multi-file replacement or pre-loader crash recovery on
+# Windows. Automatic installation stays disabled until a stable launcher owns
+# versioned payload activation.
 #
 # Per-user install is what Chrome, VS Code and Discord do, for this reason. It
 # also means the installer needs no administrator rights at all.
@@ -169,7 +168,7 @@ Function .onInit
          StrCpy $R0 '"$PROGRAMFILES64\${INFO_PRODUCTNAME}\uninstall.exe"'
    ${EndIf}
    ${If} $R0 != ""
-      MessageBox MB_YESNO|MB_ICONQUESTION "An older system-wide installation was found. Remove it first? This version installs for the current user only, so it can update itself without administrator rights. Removing the old one needs administrator approval." /SD IDYES IDNO skip_old_uninstall
+      MessageBox MB_YESNO|MB_ICONQUESTION "An older system-wide installation was found. Remove it first? This version installs for the current user only. Removing the old one needs administrator approval." /SD IDYES IDNO skip_old_uninstall
       # Waited for: an uninstaller still running would delete files underneath
       # the install that follows it.
       ExecWait '$R0 /S'

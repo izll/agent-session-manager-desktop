@@ -205,14 +205,22 @@
   // can be dragged until the pane below is a sliver that cannot be dragged back.
   const BELOW_MIN = 140;
   let diffAboveHeight = DIFF_ABOVE_DEFAULT;
-  // Adopt the saved height once, when settings arrive. Not a running binding:
-  // that would fight the drag, which writes the setting on release.
-  let heightRestored = false;
-  $: if (!heightRestored && $settings.diffAboveHeight) {
-    heightRestored = true;
-    diffAboveHeight = $settings.diffAboveHeight;
-  }
   let draggingSplitter = false;
+  let splitterProjectId = '';
+  // Settings are project-scoped while this component survives project
+  // switches. Re-apply B's saved height after A -> B instead of keeping A's
+  // pixels and eventually saving them over B's preference. The key changes
+  // only when the authoritative setting/project changes, so ordinary pointer
+  // movement is never fought by the reactive block.
+  let restoredHeightKey = '';
+  $: {
+    const storedHeight = $settings.diffAboveHeight || DIFF_ABOVE_DEFAULT;
+    const heightKey = `${$activeProjectId}:${storedHeight}`;
+    if (!draggingSplitter && heightKey !== restoredHeightKey) {
+      restoredHeightKey = heightKey;
+      diffAboveHeight = storedHeight;
+    }
+  }
   let activeSplitterCleanup: (() => void) | null = null;
 
   function toggleDiffAbove() {
@@ -225,6 +233,7 @@
     activeSplitterCleanup?.();
     event.preventDefault();
     draggingSplitter = true;
+    splitterProjectId = $activeProjectId;
     const stackTop = (event.currentTarget as HTMLElement)
       .parentElement?.getBoundingClientRect().top ?? 0;
     const stackHeight = (event.currentTarget as HTMLElement)
@@ -242,8 +251,14 @@
       if (activeSplitterCleanup === cleanup) activeSplitterCleanup = null;
     };
     const onUp = () => {
+      const projectId = splitterProjectId;
+      splitterProjectId = '';
       cleanup();
-      void saveSettings({ diffAboveHeight });
+      // A project switch can complete while the pointer is held down. The
+      // pixels belong to the project where the gesture began, never whichever
+      // project happens to be active at mouseup.
+      if (projectId !== $activeProjectId) return;
+      void saveSettings({ diffAboveHeight }, projectId);
     };
     activeSplitterCleanup = cleanup;
     window.addEventListener('mousemove', onMove);

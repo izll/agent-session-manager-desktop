@@ -141,6 +141,31 @@ func TestFirstAnsweringPIDWins(t *testing.T) {
 	}
 }
 
+func TestClaudeSessionIDForPIDRejectsOversizedRegistry(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", dir)
+	sessionsDir := filepath.Join(dir, "sessions")
+	if err := os.MkdirAll(sessionsDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	pid := os.Getpid()
+	path := filepath.Join(sessionsDir, fmt.Sprintf("%d.json", pid))
+	file, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := file.Truncate(maxClaudeSessionRegistryBytes + 1); err != nil {
+		_ = file.Close()
+		t.Fatal(err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if got := ClaudeSessionIDForPID(pid); got != "" {
+		t.Fatalf("oversized registry returned session ID %q", got)
+	}
+}
+
 // CLAUDE_CONFIG_DIR moves the whole config directory. Without it a user who has
 // relocated theirs gets silent misses everywhere.
 func TestConfigDirIsHonoured(t *testing.T) {

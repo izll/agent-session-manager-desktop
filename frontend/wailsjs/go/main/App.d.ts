@@ -127,7 +127,7 @@ export function GetMultiplexerStatus():Promise<main.MultiplexerStatus>;
 
 export function GetNextTask(arg1:string):Promise<main.TaskInfo>;
 
-export function GetPreview(arg1:string,arg2:number):Promise<main.PreviewData>;
+export function GetPreview(arg1:string,arg2:number,arg3:string):Promise<main.PreviewData>;
 
 export function GetProjectActivityStatistics(arg1:string,arg2:number):Promise<main.ProjectActivityStatistics>;
 

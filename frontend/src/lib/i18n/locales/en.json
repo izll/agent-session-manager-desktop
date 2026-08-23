@@ -568,6 +568,8 @@
   "update.close": "Close",
   "update.cancel": "Cancel",
   "update.success": "Update installed successfully! Please restart the application.",
+  "update.manualInstallHint": "Automatic installation is not available on this platform. Close the app and install the downloaded release manually.",
+  "update.openDownloadPage": "Open download page",
   "stop.title": "Stop Session",
   "stop.message": "What would you like to stop for \"{name}\"?",
   "stop.currentTab": "Current Tab Only",

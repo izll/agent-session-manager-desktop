@@ -2,6 +2,7 @@
   import { autoFocusDialog } from '../../utils/dialogActions';
   import { createEventDispatcher, onMount } from 'svelte';
   import * as App from '../../../../wailsjs/go/main/App';
+  import { BrowserOpenURL } from '../../../../wailsjs/runtime/runtime';
   import { t } from '../../i18n';
 
   export let show = false;
@@ -12,6 +13,9 @@
     available: boolean;
     currentVersion: string;
     latestVersion: string;
+    canAutoInstall: boolean;
+    manualInstallHint: string;
+    manualInstallURL: string;
   }
 
   let updateInfo: UpdateInfo | null = null;
@@ -64,7 +68,10 @@
   }
 
   async function performUpdate() {
-    if (isUpdating || !updateInfo?.latestVersion) return;
+    // Missing capability data is treated as unsupported. An older backend or
+    // a platform that cannot durably replace its whole bundle must never be
+    // invited into PerformUpdate by the UI.
+    if (isUpdating || !updateInfo?.latestVersion || updateInfo.canAutoInstall !== true) return;
 
     const targetVersion = updateInfo.latestVersion;
     const generation = ++operationGeneration;
@@ -166,6 +173,16 @@
                 </svg>
                 <span>{$t('update.available')}</span>
               </div>
+              {#if updateInfo.canAutoInstall !== true}
+                <div class="manual-install" role="status">
+                  <span>{updateInfo.manualInstallHint || $t('update.manualInstallHint')}</span>
+                  {#if updateInfo.manualInstallURL}
+                    <button class="manual-link" on:click={() => BrowserOpenURL(updateInfo?.manualInstallURL || '')}>
+                      {$t('update.openDownloadPage')}
+                    </button>
+                  {/if}
+                </div>
+              {/if}
             {:else}
               <div class="up-to-date">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -183,7 +200,7 @@
       </div>
 
       <div class="dialog-footer">
-        {#if updateInfo?.available && !success}
+        {#if updateInfo?.available && updateInfo.canAutoInstall === true && !success}
           <button
             class="btn btn-primary"
             on:click={performUpdate}
@@ -245,6 +262,29 @@
     display: flex;
     flex-direction: column;
     gap: 12px;
+  }
+
+  .manual-install {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 12px 14px;
+    border: 1px solid rgba(251, 191, 36, 0.25);
+    border-radius: 8px;
+    background: rgba(251, 191, 36, 0.08);
+    color: #fcd34d;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+  }
+
+  .manual-link {
+    border: 0;
+    padding: 0;
+    background: transparent;
+    color: var(--accent-light);
+    text-decoration: underline;
+    cursor: pointer;
   }
 
   .version-row {

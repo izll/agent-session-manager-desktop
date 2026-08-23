@@ -84,7 +84,7 @@ func ListAgentSessions(projectPath string) ([]AgentSession, error) {
 	}
 
 	projectsDir := filepath.Join(homeDir, ".claude", "projects")
-	projectDirs, err := os.ReadDir(projectsDir)
+	projectDirs, err := readDirAtMost(projectsDir, maxDiscoveryDirectoryEntries)
 	if os.IsNotExist(err) {
 		return []AgentSession{}, nil
 	}
@@ -120,7 +120,7 @@ func ListAgentSessions(projectPath string) ([]AgentSession, error) {
 		}
 
 		claudeDir := filepath.Join(projectsDir, projectDir.Name())
-		entries, err := os.ReadDir(claudeDir)
+		entries, err := readDirAtMost(claudeDir, maxDiscoveryDirectoryEntries)
 		if err != nil {
 			continue
 		}
@@ -284,7 +284,7 @@ func ListAllClaudeSessions() ([]AgentSession, error) {
 	}
 
 	projectsDir := filepath.Join(homeDir, ".claude", "projects")
-	projectDirs, err := os.ReadDir(projectsDir)
+	projectDirs, err := readDirAtMost(projectsDir, maxDiscoveryDirectoryEntries)
 	if os.IsNotExist(err) {
 		return []AgentSession{}, nil
 	}
@@ -301,7 +301,7 @@ func ListAllClaudeSessions() ([]AgentSession, error) {
 		}
 
 		claudeDir := filepath.Join(projectsDir, projectDir.Name())
-		entries, err := os.ReadDir(claudeDir)
+		entries, err := readDirAtMost(claudeDir, maxDiscoveryDirectoryEntries)
 		if err != nil {
 			continue // Skip directories we can't read
 		}

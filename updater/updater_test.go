@@ -62,6 +62,33 @@ func TestParseSemverRejectsInvalidValues(t *testing.T) {
 	}
 }
 
+func TestAutomaticInstallCapabilityFailsClosedForFlatWindowsPayload(t *testing.T) {
+	if automaticInstallSupportedFor("windows", "") {
+		t.Fatal("flat Windows EXE+DLL layout must not advertise atomic automatic installation")
+	}
+	err := ensureAutomaticInstallSupported("windows", "")
+	if err == nil || !strings.Contains(err.Error(), "Windows setup executable") {
+		t.Fatalf("Windows manual-install guard = %v", err)
+	}
+	if !automaticInstallSupportedFor("linux", "") {
+		t.Fatal("Linux atomic/package update paths must remain enabled")
+	}
+	if automaticInstallSupportedFor("darwin", "") {
+		t.Fatal("unsigned Darwin build must not advertise automatic bundle replacement")
+	}
+	if !automaticInstallSupportedFor("darwin", "ABCDE12345") {
+		t.Fatal("publisher-pinned Darwin release must remain enabled")
+	}
+	criticalCalled := false
+	err = downloadAndInstallForPlatform(context.Background(), "v9.9.9", func(action func() error) error {
+		criticalCalled = true
+		return action()
+	}, "windows")
+	if err == nil || criticalCalled {
+		t.Fatalf("Windows update reached mutation preparation: err=%v critical=%v", err, criticalCalled)
+	}
+}
+
 func TestCheckForUpdateUsesSemanticVersioning(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -1091,6 +1118,103 @@ func TestRecordedUpdateManifestAccumulatesPaths(t *testing.T) {
 	}
 	if !reflect.DeepEqual(paths, []string{first, second}) {
 		t.Fatalf("manifest paths = %#v, want both recorded paths", paths)
+	}
+}
+
+func TestUpdaterStateReadsAndPathManifestsAreBounded(t *testing.T) {
+	dir := withTempHome(t)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	oversized := filepath.Join(dir, LastCheckFile)
+	file, err := os.Create(oversized)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := file.Truncate(1 << 30); err != nil {
+		_ = file.Close()
+		t.Fatal(err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readUpdateStateFile(oversized, updateScalarLimit); err == nil {
+		t.Fatal("sparse oversized updater state was accepted")
+	}
+	if !ShouldCheckForUpdate() {
+		t.Fatal("oversized timestamp suppressed update checking")
+	}
+	cache := filepath.Join(dir, AvailableUpdateFile)
+	if err := os.Rename(oversized, cache); err != nil {
+		t.Fatal(err)
+	}
+	if got := CachedAvailableUpdate("1.0.0"); got != "" {
+		t.Fatalf("oversized cached update was offered as %q", got)
+	}
+
+	tooMany := make([]string, updateManifestEntries+1)
+	for i := range tooMany {
+		tooMany[i] = fmt.Sprintf("/tmp/rollback-%d", i)
+	}
+	raw, err := json.Marshal(tooMany)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := decodeUpdatePaths(raw); err == nil {
+		t.Fatal("path manifest entry limit was not enforced")
+	}
+	if _, err := decodeUpdatePaths([]byte(`["/tmp/rollback"] {}`)); err == nil {
+		t.Fatal("trailing manifest document was accepted")
+	}
+}
+
+func TestRecordedCleanupRejectsOversizedManifestWithoutDeleting(t *testing.T) {
+	withTempHome(t)
+	installDir := t.TempDir()
+	execPath := filepath.Join(installDir, BinaryName)
+	owned := filepath.Join(installDir, "."+BinaryName+"-update-rollback-owned")
+	if err := os.MkdirAll(owned, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	manifest := filepath.Join(configDir(), staleUpdateFile)
+	if err := os.MkdirAll(filepath.Dir(manifest), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	file, err := os.Create(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := file.Truncate(updateManifestLimit + 1); err != nil {
+		_ = file.Close()
+		t.Fatal(err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	cleanRecordedUpdateFiles(execPath, "")
+	if _, err := os.Stat(owned); err != nil {
+		t.Fatalf("oversized manifest caused rollback deletion: %v", err)
+	}
+}
+
+func TestRecordUpdatePathPreservesCorruptRecoveryManifest(t *testing.T) {
+	withTempHome(t)
+	manifest := filepath.Join(configDir(), failedUpdateFile)
+	if err := os.MkdirAll(filepath.Dir(manifest), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	original := []byte(`["/only/copy/of/old-executable"] trailing`)
+	if err := os.WriteFile(manifest, original, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	recordFailedUpdatePath("/new/rollback")
+	got, err := os.ReadFile(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, original) {
+		t.Fatal("corrupt recovery manifest was overwritten and older backup reference was lost")
 	}
 }
 

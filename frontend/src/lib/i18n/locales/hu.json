@@ -559,6 +559,8 @@
   "update.close": "Bezárás",
   "update.cancel": "Mégse",
   "update.success": "A frissítés sikeresen telepítve! Kérlek indítsd újra az alkalmazást.",
+  "update.manualInstallHint": "Ezen a platformon nem érhető el automatikus telepítés. Zárd be az alkalmazást, és telepítsd manuálisan a letöltött kiadást.",
+  "update.openDownloadPage": "Letöltési oldal megnyitása",
   "stop.title": "Munkamenet leállítása",
   "stop.message": "Mit szeretnél leállítani a következőhöz: \"{name}\"?",
   "stop.currentTab": "Csak a jelenlegi fül",

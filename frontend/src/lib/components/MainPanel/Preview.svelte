@@ -121,7 +121,10 @@
     const generation = ++previewGeneration;
 
     try {
-      const data = await App.GetPreview(sessionId, 100);
+      // Pin the bridge read itself, not only the UI write below. SelectProject
+      // can change the backend target between this component's snapshot and
+      // method entry, and session ids are only unique inside a project.
+      const data = await App.GetPreview(sessionId, 100, projectId);
       if (generation === previewGeneration && projectId === get(activeProjectId) &&
           sessionId === get(selectedSessionId) && data && terminal) {
         // Only update terminal if content actually changed

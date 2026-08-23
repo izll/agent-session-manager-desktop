@@ -42,6 +42,11 @@ type claudeSessionRegistryEntry struct {
 	ProcStart string `json:"procStart"`
 }
 
+// Claude's registry entry is a small metadata object. Bound the user-owned
+// file before JSON decoding: resume detection runs on interactive lifecycle
+// paths, and a sparse/corrupt per-PID file must not allocate arbitrary memory.
+const maxClaudeSessionRegistryBytes = 64 * 1024
+
 // claudeSessionsDir returns where Claude keeps the per-process files.
 //
 // CLAUDE_CONFIG_DIR relocates the whole config directory, so it is honoured
@@ -102,7 +107,7 @@ func ClaudeSessionIDForPID(pid int) string {
 	if err != nil {
 		return ""
 	}
-	raw, err := os.ReadFile(filepath.Join(dir, fmt.Sprintf("%d.json", pid)))
+	raw, err := readFileAtMost(filepath.Join(dir, fmt.Sprintf("%d.json", pid)), maxClaudeSessionRegistryBytes)
 	if err != nil {
 		return ""
 	}

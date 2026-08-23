@@ -3,6 +3,7 @@ package updater
 import (
 	"archive/tar"
 	"bufio"
+	"bytes"
 	"compress/gzip"
 	"context"
 	"crypto/sha256"
@@ -39,6 +40,10 @@ const (
 	packageCommandWait    = 2 * time.Second
 	packageOutputLimit    = 1 << 20
 	stageCleanupAge       = 24 * time.Hour
+	updateScalarLimit     = 4 << 10
+	updateManifestLimit   = 5 << 20
+	updateManifestEntries = 128
+	updateManifestPathLen = 32 << 10
 
 	// Automatic checks are throttled to once a day, matching the TUI version.
 	CheckInterval = 24 * time.Hour
@@ -53,6 +58,7 @@ const (
 	updateDownloadDir   = "updates"
 	updateStageMarker   = ".asmgr-updater-stage"
 	updateStageOwner    = "asmgr-desktop updater stage v1\n"
+	ReleasePageURL      = "https://github.com/" + RepoOwner + "/" + RepoName + "/releases/latest"
 )
 
 var windowsRuntimeDLLs = []string{
@@ -135,6 +141,48 @@ func runPackageCommand(timeout time.Duration, name string, args ...string) ([]by
 // .app automatically; the safe fallback is a manual update.
 var ExpectedMacTeamID string
 
+func automaticInstallSupportedFor(goos, expectedMacTeamID string) bool {
+	switch goos {
+	case "linux":
+		return true
+	case "darwin":
+		return validMacTeamID(expectedMacTeamID)
+	default:
+		// In particular, a running Windows Wails executable cannot atomically
+		// replace itself and its loaded runtime DLLs. Keep update discovery, but
+		// require a manual complete-package install until a stable launcher owns
+		// versioned payload activation and pre-loader crash recovery.
+		return false
+	}
+}
+
+// AutomaticInstallSupported reports whether this build has a crash-safe update
+// path. It is deliberately false for today's flat Windows EXE+DLL layout.
+func AutomaticInstallSupported() bool {
+	return automaticInstallSupportedFor(runtime.GOOS, ExpectedMacTeamID)
+}
+
+func manualUpdateHintFor(goos string) string {
+	switch goos {
+	case "windows":
+		return "Close the application, then run the Windows setup executable or replace the complete portable EXE and DLL set from the release page."
+	case "darwin":
+		return "Close the application, then replace the complete signed application bundle from the release page."
+	default:
+		return "Close the application, then install the complete package from the release page."
+	}
+}
+
+// ManualUpdateHint is presented when automatic installation is unavailable.
+func ManualUpdateHint() string { return manualUpdateHintFor(runtime.GOOS) }
+
+func ensureAutomaticInstallSupported(goos, expectedMacTeamID string) error {
+	if automaticInstallSupportedFor(goos, expectedMacTeamID) {
+		return nil
+	}
+	return fmt.Errorf("automatic update installation is not supported on %s: %s", goos, manualUpdateHintFor(goos))
+}
+
 type GitHubRelease struct {
 	TagName string `json:"tag_name"`
 }
@@ -149,6 +197,22 @@ func configDir() string {
 	return filepath.Join(home, ".config", "agent-session-manager-desktop")
 }
 
+func readUpdateStateFile(path string, limit int64) ([]byte, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	data, err := io.ReadAll(io.LimitReader(file, limit+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(data)) > limit {
+		return nil, fmt.Errorf("updater state exceeds %d bytes", limit)
+	}
+	return data, nil
+}
+
 // ShouldCheckForUpdate reports whether enough time has passed since the last
 // automatic check. Anything unreadable or unparseable means "check" — missing
 // an update is worse than one extra request.
@@ -157,7 +221,7 @@ func ShouldCheckForUpdate() bool {
 	if dir == "" {
 		return true
 	}
-	data, err := os.ReadFile(filepath.Join(dir, LastCheckFile))
+	data, err := readUpdateStateFile(filepath.Join(dir, LastCheckFile), updateScalarLimit)
 	if err != nil {
 		return true
 	}
@@ -201,7 +265,7 @@ func CachedAvailableUpdate(currentVersion string) string {
 	if dir == "" {
 		return ""
 	}
-	data, err := os.ReadFile(filepath.Join(dir, AvailableUpdateFile))
+	data, err := readUpdateStateFile(filepath.Join(dir, AvailableUpdateFile), updateScalarLimit)
 	if err != nil {
 		return ""
 	}
@@ -225,6 +289,9 @@ func SaveAvailableUpdate(version string) {
 	}
 	if version == "" {
 		ClearAvailableUpdate()
+		return
+	}
+	if len(version) > updateScalarLimit {
 		return
 	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -1340,27 +1407,81 @@ func recordFailedUpdatePath(backupPath string) {
 
 func recordUpdatePath(manifestName, stalePath string) {
 	dir := configDir()
-	if dir == "" || stalePath == "" {
+	if dir == "" || stalePath == "" || len(stalePath) > updateManifestPathLen {
 		return
 	}
 	_ = os.MkdirAll(dir, 0o700)
 	manifest := filepath.Join(dir, manifestName)
 	var paths []string
-	if raw, err := os.ReadFile(manifest); err == nil {
-		_ = json.Unmarshal(raw, &paths)
+	raw, err := readUpdateStateFile(manifest, updateManifestLimit)
+	if err == nil {
+		paths, err = decodeUpdatePaths(raw)
+		if err != nil {
+			// Preserve a corrupt manifest for diagnosis/recovery. Replacing it
+			// with only the newest path could forget the sole copy of an older
+			// executable or bundle after a failed rollback.
+			return
+		}
+	} else if !os.IsNotExist(err) {
+		return
 	}
 	for _, existing := range paths {
 		if existing == stalePath {
 			return
 		}
 	}
+	if len(paths) >= updateManifestEntries {
+		// Refuse to turn a repeatedly failing cleanup into unbounded state. The
+		// newly-created directory is deliberately leaked rather than forgetting
+		// any older rollback location that may contain the only recoverable copy.
+		return
+	}
 	paths = append(paths, stalePath)
 	writeStaleUpdateManifest(manifest, paths)
 }
 
+func decodeUpdatePaths(raw []byte) ([]string, error) {
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	start, err := decoder.Token()
+	if err != nil || start != json.Delim('[') {
+		return nil, fmt.Errorf("invalid updater path manifest")
+	}
+	paths := make([]string, 0, 8)
+	for decoder.More() {
+		if len(paths) >= updateManifestEntries {
+			return nil, fmt.Errorf("updater path manifest has too many entries")
+		}
+		var candidate string
+		if err := decoder.Decode(&candidate); err != nil {
+			return nil, fmt.Errorf("invalid updater path manifest entry: %w", err)
+		}
+		if candidate == "" || len(candidate) > updateManifestPathLen || strings.IndexByte(candidate, 0) >= 0 {
+			return nil, fmt.Errorf("invalid updater path manifest entry")
+		}
+		paths = append(paths, candidate)
+	}
+	end, err := decoder.Token()
+	if err != nil || end != json.Delim(']') {
+		return nil, fmt.Errorf("invalid updater path manifest")
+	}
+	var trailing interface{}
+	if err := decoder.Decode(&trailing); err != io.EOF {
+		return nil, fmt.Errorf("updater path manifest contains trailing data")
+	}
+	return paths, nil
+}
+
 func writeStaleUpdateManifest(manifest string, paths []string) {
+	if len(paths) > updateManifestEntries {
+		return
+	}
+	for _, candidate := range paths {
+		if candidate == "" || len(candidate) > updateManifestPathLen || strings.IndexByte(candidate, 0) >= 0 {
+			return
+		}
+	}
 	raw, err := json.Marshal(paths)
-	if err != nil {
+	if err != nil || len(raw) > updateManifestLimit {
 		return
 	}
 	tmp, err := os.CreateTemp(filepath.Dir(manifest), ".stale-updates-*")
@@ -1389,12 +1510,12 @@ func cleanRecordedUpdateFiles(execPath, bundle string) {
 		return
 	}
 	manifest := filepath.Join(dir, staleUpdateFile)
-	raw, err := os.ReadFile(manifest)
+	raw, err := readUpdateStateFile(manifest, updateManifestLimit)
 	if err != nil {
 		return
 	}
-	var paths []string
-	if json.Unmarshal(raw, &paths) != nil {
+	paths, err := decodeUpdatePaths(raw)
+	if err != nil {
 		return
 	}
 	allowedParents := map[string]bool{filepath.Clean(filepath.Dir(execPath)): true}
@@ -1818,14 +1939,26 @@ func DownloadAndInstallContext(ctx context.Context, version string, critical fun
 }
 
 func downloadAndInstall(ctx context.Context, version string, critical func(func() error) error) error {
+	return downloadAndInstallForPlatform(ctx, version, critical, runtime.GOOS)
+}
+
+func downloadAndInstallForPlatform(ctx context.Context, version string, critical func(func() error) error, goos string) error {
+	// Fail before resolving paths, downloading, or staging anything when this
+	// platform has no crash-safe activation mechanism. The legacy Windows
+	// multi-file transaction remains covered for migration work, but must not be
+	// exposed as atomic: a power loss can occur between its EXE/DLL renames and
+	// the Wails process cannot recover before the Windows loader needs them.
+	if err := ensureAutomaticInstallSupported(goos, ExpectedMacTeamID); err != nil {
+		return err
+	}
 	// macOS ships as an .app bundle: a directory tree, so swapping the single
 	// executable inside it would leave the bundle's resources, Info.plist and
 	// code signature describing the old version. It gets replaced whole.
-	if runtime.GOOS == "darwin" {
+	if goos == "darwin" {
 		return installBundleUpdate(ctx, version, critical)
 	}
-	if runtime.GOOS != "linux" && runtime.GOOS != "windows" {
-		return fmt.Errorf("automatic updates are not supported on %s; download %s %s from the release page, close the app, and replace the complete application bundle", runtime.GOOS, BinaryName, version)
+	if goos != "linux" && goos != "windows" {
+		return fmt.Errorf("automatic updates are not supported on %s; download %s %s from the release page, close the app, and replace the complete application bundle", goos, BinaryName, version)
 	}
 	if IsPackageManaged() {
 		return installPackageUpdate(ctx, version, critical)
@@ -1844,7 +1977,7 @@ func downloadAndInstall(ctx context.Context, version string, critical func(func(
 	}
 
 	arch := runtime.GOARCH
-	filename := fmt.Sprintf("%s_%s_%s_%s.tar.gz", BinaryName, strings.TrimPrefix(version, "v"), runtime.GOOS, arch)
+	filename := fmt.Sprintf("%s_%s_%s_%s.tar.gz", BinaryName, strings.TrimPrefix(version, "v"), goos, arch)
 	archivePath, err := downloadVerifiedAssetContext(ctx, version, filename, BinaryName+"-*.tar.gz")
 	if err != nil {
 		return err
@@ -1869,7 +2002,7 @@ func downloadAndInstall(ctx context.Context, version string, critical func(func(
 	// asmgr-desktop.exe on Windows. Looking for the bare name on Windows finds
 	// nothing and fails the update.
 	entryName := BinaryName
-	if runtime.GOOS == "windows" {
+	if goos == "windows" {
 		entryName += ".exe"
 	}
 	if err := extractExecutable(archivePath, entryName, staged); err != nil {
@@ -1887,7 +2020,7 @@ func downloadAndInstall(ctx context.Context, version string, critical func(func(
 	// old executable is still in place and the update can still be abandoned.
 	files := make([]stagedInstall, 0, 5)
 	cleanupSidecars := func() {}
-	if runtime.GOOS == "windows" {
+	if goos == "windows" {
 		files, cleanupSidecars, err = stageSidecarDLLs(archivePath, filepath.Dir(execPath))
 		if err != nil {
 			return err
@@ -1908,7 +2041,7 @@ func downloadAndInstall(ctx context.Context, version string, critical func(func(
 		// before the first rename. Keeping that check inside this lock closes the
 		// gap between validation and the executable/DLL swap.
 		return critical(func() error {
-			if runtime.GOOS == "linux" {
+			if goos == "linux" {
 				return installSingleFileAtomically(executable, os.Rename)
 			}
 			return installTransaction(files)

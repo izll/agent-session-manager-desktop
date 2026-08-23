@@ -488,7 +488,7 @@ func (h *HistoryIndex) parseClaudeHistory() []HistoryEntry {
 	}
 
 	// Parse only directories matching ASMGR sessions
-	if dirs, err := os.ReadDir(projectsDir); err == nil {
+	if dirs, err := readDirAtMost(projectsDir, maxDiscoveryDirectoryEntries); err == nil {
 		for _, dir := range dirs {
 			if !dir.IsDir() {
 				continue
@@ -498,7 +498,7 @@ func (h *HistoryIndex) parseClaudeHistory() []HistoryEntry {
 				continue
 			}
 			projPath := filepath.Join(projectsDir, dir.Name())
-			if files, err := os.ReadDir(projPath); err == nil {
+			if files, err := readDirAtMost(projPath, maxDiscoveryDirectoryEntries); err == nil {
 				for _, file := range files {
 					if !strings.HasSuffix(file.Name(), ".jsonl") {
 						continue
@@ -824,7 +824,7 @@ func (h *HistoryIndex) parseGeminiHistory() []HistoryEntry {
 	hashMap := h.buildGeminiHashMap()
 
 	// Walk through all project directories
-	projectDirs, err := os.ReadDir(geminiDir)
+	projectDirs, err := readDirAtMost(geminiDir, maxDiscoveryDirectoryEntries)
 	if err != nil {
 		return entries
 	}
@@ -846,7 +846,7 @@ func (h *HistoryIndex) parseGeminiHistory() []HistoryEntry {
 		}
 
 		chatsDir := filepath.Join(geminiDir, projectDir.Name(), "chats")
-		chatFiles, err := os.ReadDir(chatsDir)
+		chatFiles, err := readDirAtMost(chatsDir, maxDiscoveryDirectoryEntries)
 		if err != nil {
 			continue
 		}

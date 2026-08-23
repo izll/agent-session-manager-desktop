@@ -67,7 +67,7 @@ assert.doesNotMatch(
 // Saving happens when a gesture ends, not while it is in flight.
 assert.match(
   body('onDragEnd'),
-  /rememberBufferGeometry\(\)/,
+  /projectId === \$activeProjectId\) rememberBufferGeometry\(projectId\)/,
   'the position should be saved when the drag ends',
 );
 assert.doesNotMatch(

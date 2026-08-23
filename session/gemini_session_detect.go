@@ -35,7 +35,7 @@ func DetectGeminiSessionID(projectPath string, excludeIDs ...string) string {
 	for _, identifier := range identifiers {
 		chatsDir := filepath.Join(homeDir, ".gemini", "tmp", identifier, "chats")
 
-		entries, err := os.ReadDir(chatsDir)
+		entries, err := readDirAtMost(chatsDir, maxDiscoveryDirectoryEntries)
 		if err != nil {
 			continue
 		}

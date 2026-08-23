@@ -996,6 +996,19 @@ func (i *Instance) restoreFollowedWindows() {
 }
 
 func (i *Instance) Stop() error {
+	ctx, cancel := context.WithTimeout(context.Background(), TmuxCommandTimeout)
+	defer cancel()
+	return i.StopContext(ctx)
+}
+
+// StopContext tears down the multiplexer session within one caller-owned
+// deadline. Stop runs while App holds the active project's mutation/read lock;
+// an unresponsive tmux must not retain that lock forever and prevent project
+// switch or application shutdown.
+func (i *Instance) StopContext(ctx context.Context) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	// Codex only exposes its generated conversation ID after the process has
 	// started. Capture it while the panes and their open rollout files still
 	// exist, before killing the tmux session.
@@ -1013,21 +1026,24 @@ func (i *Instance) Stop() error {
 
 	// Kill all linked GUI sessions first (they share the same tmux session group).
 	// Format: <sessionName>_gui_<N>_<timestamp>
-	out, _ := TmuxCommand("list-sessions", "-F", "#{session_name}").Output()
+	out, _ := TmuxCommandContext(ctx, "list-sessions", "-F", "#{session_name}").Output()
 	if out != nil {
 		prefix := sessionName + "_gui_"
 		for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
 			if strings.HasPrefix(line, prefix) {
-				TmuxCommand("kill-session", "-t", line).Run()
+				_ = TmuxCommandContext(ctx, "kill-session", "-t", line).Run()
 			}
 		}
 	}
 
 	// Kill the base tmux session
-	cmd := TmuxCommand("kill-session", "-t", sessionName)
+	cmd := TmuxCommandContext(ctx, "kill-session", "-t", sessionName)
 	if err := cmd.Run(); err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return fmt.Errorf("timed out stopping tmux session: %w", ctxErr)
+		}
 		// If the base session is already gone (killed by group cascade), that's OK
-		checkCmd := TmuxCommand("has-session", "-t", sessionName)
+		checkCmd := TmuxCommandContext(ctx, "has-session", "-t", sessionName)
 		if checkCmd.Run() == nil {
 			return fmt.Errorf("failed to kill tmux session: %w", err)
 		}
@@ -1119,6 +1135,18 @@ func (i *Instance) NewWindowWithName(name string, workDir string) (int, error) {
 // process (keeps session alive). Otherwise kills the entire tmux session.
 // For followed windows: kills the tmux window and marks the tab as stopped.
 func (i *Instance) StopWindow(windowIdx int) error {
+	ctx, cancel := context.WithTimeout(context.Background(), TmuxCommandTimeout)
+	defer cancel()
+	return i.StopWindowContext(ctx, windowIdx)
+}
+
+// StopWindowContext is the cancellable form used by lifecycle-sensitive
+// callers and regression tests. It shares one deadline across window lookup,
+// existence validation and the external stop operation.
+func (i *Instance) StopWindowContext(ctx context.Context, windowIdx int) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	// Capture before respawn-pane terminates the agent process.
 	i.CaptureCodexResumeIDs()
 
@@ -1131,11 +1159,14 @@ func (i *Instance) StopWindow(windowIdx int) error {
 	}
 
 	sessionName := i.TmuxSessionName()
-	mainWindowIdx, ok := i.getMainWindowIndex()
+	mainWindowIdx, ok := i.getMainWindowIndexContext(ctx)
 	if !ok {
 		return fmt.Errorf("cannot identify main tmux window for session %s", sessionName)
 	}
-	if !tmuxWindowExists(sessionName, windowIdx) {
+	if !tmuxWindowExistsContext(ctx, sessionName, windowIdx) {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return fmt.Errorf("timed out locating tmux window: %w", ctxErr)
+		}
 		return fmt.Errorf("tmux window %s:%d not found", sessionName, windowIdx)
 	}
 
@@ -1151,15 +1182,19 @@ func (i *Instance) StopWindow(windowIdx int) error {
 
 		if !hasActiveFollowed {
 			// No active followed windows - kill entire session
-			return i.Stop()
+			return i.StopContext(ctx)
 		}
 
 		// Has active followed windows - stop just the main agent process
 		target := fmt.Sprintf("%s:%d", sessionName, mainWindowIdx)
 		// Keep the window alive as a dead pane
-		TmuxCommand("set-option", "-w", "-t", target, "remain-on-exit", "on").Run()
+		setErr := TmuxCommandContext(ctx, "set-option", "-w", "-t", target, "remain-on-exit", "on").Run()
+		if setErr != nil {
+			return fmt.Errorf("failed to prepare main window for stop: %w", setErr)
+		}
 		// Kill the agent and replace with an immediately-exiting command
-		if err := TmuxCommand("respawn-pane", "-k", "-t", target, "exit 0").Run(); err != nil {
+		err := TmuxCommandContext(ctx, "respawn-pane", "-k", "-t", target, "exit 0").Run()
+		if err != nil {
 			return fmt.Errorf("failed to stop main window: %w", err)
 		}
 
@@ -1169,7 +1204,8 @@ func (i *Instance) StopWindow(windowIdx int) error {
 
 	// Followed window: stop the process but keep the window (dead pane)
 	target := fmt.Sprintf("%s:%d", sessionName, windowIdx)
-	if err := TmuxCommand("respawn-pane", "-k", "-t", target, "exit 0").Run(); err != nil {
+	err := TmuxCommandContext(ctx, "respawn-pane", "-k", "-t", target, "exit 0").Run()
+	if err != nil {
 		return fmt.Errorf("failed to stop window %s: %w", target, err)
 	}
 
@@ -2853,12 +2889,21 @@ func (i *Instance) GetMainWindowIndex() int {
 }
 
 func (i *Instance) getMainWindowIndex() (int, bool) {
+	ctx, cancel := context.WithTimeout(context.Background(), TmuxCommandTimeout)
+	defer cancel()
+	return i.getMainWindowIndexContext(ctx)
+}
+
+func (i *Instance) getMainWindowIndexContext(ctx context.Context) (int, bool) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	if i.Status != StatusRunning {
 		return 0, false
 	}
 
 	sessionName := i.TmuxSessionName()
-	cmd := TmuxCommand("list-windows", "-t", sessionName, "-F", "#{window_index}\t#{@asmgr_main}")
+	cmd := TmuxCommandContext(ctx, "list-windows", "-t", sessionName, "-F", "#{window_index}\t#{@asmgr_main}")
 	output, err := cmd.Output()
 	if err != nil {
 		return 0, false
@@ -2881,7 +2926,7 @@ func (i *Instance) getMainWindowIndex() (int, bool) {
 	// window that is not a followed tab", which needs no marker.
 	if PerWindowOptionsSupported() && !bytes.Contains(output, []byte("\t1")) {
 		target := fmt.Sprintf("%s:%d", sessionName, index)
-		_ = TmuxCommand("set-option", "-w", "-t", target, "@asmgr_main", "1").Run()
+		_ = TmuxCommandContext(ctx, "set-option", "-w", "-t", target, "@asmgr_main", "1").Run()
 	}
 	return index, true
 }
@@ -2936,7 +2981,9 @@ func identifyMainWindowIndex(output []byte, followedWindows []FollowedWindow) (i
 }
 
 func soleTmuxWindowIndex(sessionName string) (int, bool) {
-	output, err := TmuxCommand("list-windows", "-t", sessionName, "-F", "#{window_index}").Output()
+	cmd, cancel := TmuxCommandTimed("list-windows", "-t", sessionName, "-F", "#{window_index}")
+	defer cancel()
+	output, err := cmd.Output()
 	if err != nil {
 		return 0, false
 	}

@@ -250,8 +250,8 @@ export function GetNextTask(arg1) {
   return window['go']['main']['App']['GetNextTask'](arg1);
 }
 
-export function GetPreview(arg1, arg2) {
-  return window['go']['main']['App']['GetPreview'](arg1, arg2);
+export function GetPreview(arg1, arg2, arg3) {
+  return window['go']['main']['App']['GetPreview'](arg1, arg2, arg3);
 }
 
 export function GetProjectActivityStatistics(arg1, arg2) {

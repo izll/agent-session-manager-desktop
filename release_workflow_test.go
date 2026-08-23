@@ -205,6 +205,36 @@ func TestWindowsCrossBuildVerifiesDownloadedNativeDependency(t *testing.T) {
 	}
 }
 
+func TestWindowsReleaseDoesNotAdvertiseUnsafeInProcessUpdates(t *testing.T) {
+	workflow, err := os.ReadFile(".github/workflows/release.yml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	installer, err := os.ReadFile("build/windows/installer/project.nsi")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(workflow), "- name: Package portable .tar.gz") {
+		t.Fatal("Windows archive is not identified as a manual portable package")
+	}
+	for name, content := range map[string]string{
+		"release workflow": string(workflow),
+		"NSIS installer":   string(installer),
+	} {
+		for _, misleading := range []string{
+			"name matches the in-app updater",
+			"so it can update itself without administrator rights",
+		} {
+			if strings.Contains(content, misleading) {
+				t.Errorf("%s still advertises the disabled flat Windows updater with %q", name, misleading)
+			}
+		}
+	}
+	if !strings.Contains(string(installer), "Automatic installation stays disabled until a stable launcher") {
+		t.Fatal("NSIS packaging does not document the launcher prerequisite for automatic installation")
+	}
+}
+
 func TestMacBundlesAllowTheLoopbackTerminalTransport(t *testing.T) {
 	localATS := regexp.MustCompile(`(?s)<key>NSAppTransportSecurity</key>\s*<dict>.*?<key>NSAllowsLocalNetworking</key>\s*<true\s*/>.*?</dict>`)
 	for _, path := range []string{"build/darwin/Info.plist", "build/darwin/Info.dev.plist"} {

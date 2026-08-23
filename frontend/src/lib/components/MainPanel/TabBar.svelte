@@ -126,12 +126,14 @@
 
   // Drag state
   let isDragging = false;
+  let geometryInteractionProjectId = '';
   let dragOffsetX = 0;
   let dragOffsetY = 0;
 
   function onHeaderMousedown(e: MouseEvent) {
     if ((e.target as HTMLElement).closest('.buffer-close')) return;
     isDragging = true;
+    geometryInteractionProjectId = $activeProjectId;
     const rect = bufferPanel.getBoundingClientRect();
     dragOffsetX = e.clientX - rect.left;
     dragOffsetY = e.clientY - rect.top;
@@ -153,10 +155,12 @@
   }
 
   function onDragEnd() {
+    const projectId = geometryInteractionProjectId;
+    geometryInteractionProjectId = '';
     isDragging = false;
     document.removeEventListener('mousemove', onDragMove);
     document.removeEventListener('mouseup', onDragEnd);
-    rememberBufferGeometry();
+    if (projectId === $activeProjectId) rememberBufferGeometry(projectId);
   }
 
   // Resize state
@@ -172,6 +176,7 @@
   function onEdgeMousedown(dir: string) {
     return (e: MouseEvent) => {
       isResizing = true;
+      geometryInteractionProjectId = $activeProjectId;
       resizeDir = dir;
       const rect = bufferPanel.getBoundingClientRect();
       resizeStartX = e.clientX;
@@ -216,11 +221,13 @@
   }
 
   function onResizeEnd() {
+    const projectId = geometryInteractionProjectId;
+    geometryInteractionProjectId = '';
     isResizing = false;
     resizeDir = '';
     document.removeEventListener('mousemove', onResizeMove);
     document.removeEventListener('mouseup', onResizeEnd);
-    rememberBufferGeometry();
+    if (projectId === $activeProjectId) rememberBufferGeometry(projectId);
   }
 
   /**
@@ -256,12 +263,32 @@
 
   function applyStoredBufferGeometry() {
     const stored = $settings?.dictationBuffer;
-    if (!stored || !stored.w || !stored.h) return;
+    if (!stored || !stored.w || !stored.h) {
+      // No saved rectangle in the replacement project means the component's
+      // CSS default, not the previous project's coordinates.
+      bufferPanelX = null;
+      bufferPanelY = null;
+      bufferPanelW = null;
+      bufferPanelH = null;
+      return;
+    }
     const fitted = fitToViewport({ x: stored.x, y: stored.y, w: stored.w, h: stored.h });
     bufferPanelX = fitted.x;
     bufferPanelY = fitted.y;
     bufferPanelW = fitted.w;
     bufferPanelH = fitted.h;
+  }
+
+  // TabBar stays mounted across project changes. Track both identity and the
+  // stored rectangle so the defaults published during invalidation and the
+  // authoritative settings loaded afterwards are each applied in order.
+  let restoredBufferGeometryKey = '';
+  $: {
+    const geometryKey = `${$activeProjectId}:${JSON.stringify($settings.dictationBuffer ?? null)}`;
+    if (!isDragging && !isResizing && geometryKey !== restoredBufferGeometryKey) {
+      restoredBufferGeometryKey = geometryKey;
+      applyStoredBufferGeometry();
+    }
   }
 
   /**
@@ -285,7 +312,7 @@
 
   /** Saved after a drag or resize ends, not during: a save per mousemove would
    *  write the settings file dozens of times a second. */
-  function rememberBufferGeometry() {
+  function rememberBufferGeometry(projectId = $activeProjectId) {
     if (bufferPanelX === null || bufferPanelY === null) return;
     if (!bufferPanelW || !bufferPanelH) return;
     saveSettings({
@@ -295,7 +322,7 @@
         w: Math.round(bufferPanelW),
         h: Math.round(bufferPanelH),
       },
-    });
+    }, projectId);
   }
 
   $: bufferPanelStyle = bufferPanelX !== null
@@ -406,8 +433,6 @@
     // the app resized, a monitor unplugged — and the panel is dragged by its
     // own header, so once it is off-screen there is no way to fetch it back.
     window.addEventListener('resize', keepBufferOnScreen);
-
-    applyStoredBufferGeometry();
 
     // Get initial dictation state
     try {
