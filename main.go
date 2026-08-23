@@ -27,6 +27,12 @@ var assets embed.FS
 var icon []byte
 
 func main() {
+	// The helper refuses to install anything that is not newer than this, and
+	// takes the value from here rather than from its arguments: pkexec re-enters
+	// this same executable, so the compiled-in version is the one thing a caller
+	// cannot choose.
+	updater.RunningVersion = Version
+
 	// pkexec re-enters the package-owned executable in a deliberately tiny
 	// helper mode. Handle it before Wails or any desktop/runtime setup: its only
 	// job is to stage and verify one package behind the privilege boundary.

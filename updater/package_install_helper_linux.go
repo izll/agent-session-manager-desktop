@@ -274,9 +274,33 @@ func readOfficialChecksumContext(ctx context.Context, rawURL, filename string) (
 	return readChecksumContextWithClient(ctx, client, rawURL, filename)
 }
 
+// RunningVersion is the version compiled into this binary, set by main at
+// start-up.
+//
+// The helper needs it to refuse a downgrade, and cannot take the caller's word
+// for it: pkexec re-enters this same executable, so the compiled-in value is
+// the one thing an attacker invoking the helper directly cannot choose.
+var RunningVersion string
+
 func verifyOfficialPackageChecksum(ctx context.Context, version, packageKind, suppliedChecksum string, read officialChecksumReader) error {
 	if err := validateReleaseVersion(version); err != nil {
 		return err
+	}
+	// Refuse anything that is not newer than what is running.
+	//
+	// Re-fetching the checksum as root proves the package is an official
+	// release; it does not prove it is a release anyone should install now. An
+	// OLD official release has an official checksum too, so without this a local
+	// process could invoke the helper directly — it is a public pkexec entry
+	// point, guarded only by euid — and have root install a version with a known
+	// vulnerability. The comparison is against the compiled-in version rather
+	// than an argument, for the same reason.
+	//
+	// Empty means a development build with no version stamped in; there is
+	// nothing to compare against, and blocking updates for it would be worse
+	// than the risk this guards.
+	if RunningVersion != "" && !isNewerVersion(version, RunningVersion) {
+		return fmt.Errorf("refusing to install %s over the running %s: not an upgrade", version, RunningVersion)
 	}
 	if packageKind != "deb" && packageKind != "rpm" {
 		return fmt.Errorf("unsupported package type %q", packageKind)

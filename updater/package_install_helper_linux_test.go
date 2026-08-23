@@ -538,3 +538,56 @@ func TestStageVerifiedPackageRejectsOversizeSource(t *testing.T) {
 		t.Fatalf("oversize source was staged at %q", staged)
 	}
 }
+
+// The helper refuses anything that is not newer than the running version.
+//
+// Re-fetching the checksum as root proves a package is an official release. It
+// does not prove it is one worth installing: an old official release has an
+// official checksum too. The helper is a public pkexec entry point — guarded
+// only by euid — so without this a local process could invoke it directly and
+// have root install a version with a known vulnerability, with every integrity
+// check passing on the way.
+func TestVerifyOfficialPackageChecksumRefusesDowngrade(t *testing.T) {
+	official := packageChecksum([]byte("package"))
+	reader := func(ctx context.Context, rawURL, filename string) (string, error) {
+		return official, nil
+	}
+
+	previous := RunningVersion
+	t.Cleanup(func() { RunningVersion = previous })
+	RunningVersion = "v1.2.3"
+
+	for _, older := range []string{"v1.2.2", "v0.9.9", "v1.1.9"} {
+		if err := verifyOfficialPackageChecksum(context.Background(), older, "deb", official, reader); err == nil {
+			t.Errorf("installing %s over %s was allowed", older, RunningVersion)
+		}
+	}
+
+	// The same version is not an upgrade either: re-installing what is already
+	// running is at best pointless and at worst a way to replay an old package.
+	if err := verifyOfficialPackageChecksum(context.Background(), "v1.2.3", "deb", official, reader); err == nil {
+		t.Error("re-installing the running version was allowed")
+	}
+
+	// And a genuine upgrade still goes through.
+	if err := verifyOfficialPackageChecksum(context.Background(), "v1.2.4", "deb", official, reader); err != nil {
+		t.Errorf("a newer version was refused: %v", err)
+	}
+}
+
+// A development build has no version stamped in, and blocking its updates would
+// cost more than the risk this guards against.
+func TestVerifyOfficialPackageChecksumAllowsUnstampedBuild(t *testing.T) {
+	official := packageChecksum([]byte("package"))
+	reader := func(ctx context.Context, rawURL, filename string) (string, error) {
+		return official, nil
+	}
+
+	previous := RunningVersion
+	t.Cleanup(func() { RunningVersion = previous })
+	RunningVersion = ""
+
+	if err := verifyOfficialPackageChecksum(context.Background(), "v0.0.1", "deb", official, reader); err != nil {
+		t.Errorf("an unstamped build should not be blocked: %v", err)
+	}
+}
