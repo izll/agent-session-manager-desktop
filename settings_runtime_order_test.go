@@ -5,6 +5,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -49,20 +50,27 @@ func TestSaveSettingsAppliesRuntimeOnlyAfterDurableCommit(t *testing.T) {
 		taskMasterMu.Unlock()
 	})
 
-	// writeStorageDataLocked stages at sessions.json.tmp. A directory at that
-	// exact path lets the read and mutation callback succeed but forces the
-	// durable write to fail deterministically.
-	tmpPath := filepath.Join(os.Getenv("HOME"), ".config", "agent-session-manager-desktop", "sessions.json.tmp")
-	if err := os.Mkdir(tmpPath, 0o700); err != nil {
+	// Force the durable write to fail after the read and the mutation callback
+	// have succeeded.
+	//
+	// A read-only config directory does it. Planting a directory at the staging
+	// path used to, back when the write staged at a fixed sessions.json.tmp —
+	// it now goes through CreateTemp, so there is no name to plant at. The
+	// point of the test is the outcome, not how the failure is produced.
+	configDir := filepath.Join(os.Getenv("HOME"), ".config", "agent-session-manager-desktop")
+	if err := os.Chmod(configDir, 0o500); err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { _ = os.Chmod(configDir, 0o700) })
 	if err := app.SaveSettings(settings, ""); err == nil {
 		t.Fatal("settings save unexpectedly succeeded with an unusable staging path")
 	}
 	if mouseCalls.Load() != 0 || shellCalls.Load() != 0 {
 		t.Fatalf("failed persistence changed runtime state: mouse=%d shell=%d", mouseCalls.Load(), shellCalls.Load())
 	}
-	if err := os.Remove(tmpPath); err != nil {
+	// Let the next save through: the rest of the test checks that a SUCCESSFUL
+	// persist does apply the runtime settings.
+	if err := os.Chmod(configDir, 0o700); err != nil {
 		t.Fatal(err)
 	}
 
@@ -105,5 +113,44 @@ func TestReadOnlyProjectDoesNotRewriteSharedTmuxBindings(t *testing.T) {
 	app.applyActiveProjectRuntimeSettings()
 	if got := mouseCalls.Load(); got != 0 {
 		t.Fatalf("read-only project changed shared tmux bindings %d time(s)", got)
+	}
+}
+
+// Start-up applies the runtime settings after claiming the project lock.
+//
+// The mouse-copy half of applyActiveProjectRuntimeSettings is gated on
+// a.projectLocked: tmux key tables are server-wide, so only the lock owner may
+// rewrite them. Called before the claim, that gate is always shut and the
+// setting silently never applies — a binding left by an earlier run stays in
+// force, and a fresh install keeps copy-on-select on for someone who never
+// asked. The tables outlive the process, so nothing later corrects it.
+//
+// Checked against the source because the alternative is standing up a Wails
+// runtime and a tmux server to observe an ordering; the thing that went wrong
+// is the order of two statements, and that is what this reads.
+func TestStartupAppliesRuntimeSettingsAfterClaimingTheLock(t *testing.T) {
+	data, err := os.ReadFile("app.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := string(data)
+
+	startup := source[strings.Index(source, "func (a *App) startup("):]
+	if end := strings.Index(startup, "\nfunc "); end > 0 {
+		startup = startup[:end]
+	}
+
+	claim := strings.Index(startup, "a.projectLocked = true")
+	apply := strings.Index(startup, "a.applyActiveProjectRuntimeSettings()")
+
+	if claim < 0 {
+		t.Fatal("startup no longer claims the project lock")
+	}
+	if apply < 0 {
+		t.Fatal("startup no longer applies the runtime settings")
+	}
+	if apply < claim {
+		t.Error("startup applies runtime settings before claiming the lock, so the " +
+			"lock-gated half is skipped; SelectProject has the order right")
 	}
 }

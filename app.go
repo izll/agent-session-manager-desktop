@@ -150,7 +150,6 @@ func (a *App) startup(ctx context.Context) {
 	// restart a pane or launch a provider. The same helper runs after every
 	// successful project switch; these settings are stored per project even
 	// though their live implementation is process/server-wide.
-	a.applyActiveProjectRuntimeSettings()
 	// Server-wide, so it also covers the mirror sessions the terminal server
 	// creates for attaching — those never go through session start-up.
 	session.ConfigureClipboardForwarding()
@@ -173,6 +172,17 @@ func (a *App) startup(ctx context.Context) {
 	} else {
 		a.projectLocked = true
 	}
+
+	// After the lock, not before it.
+	//
+	// The mouse-copy half of this is gated on a.projectLocked — only the lock
+	// owner may rewrite tmux key tables, which are server-wide and shared with
+	// whatever else is attached. Called before the claim, that gate was always
+	// shut, so the setting silently never applied at start-up: a binding left
+	// by an earlier run stayed in force, and a fresh install kept copy-on-select
+	// on for someone who never asked for it. SelectProject has always had this
+	// order right; only start-up was inverted.
+	a.applyActiveProjectRuntimeSettings()
 
 	statsRecorder, err := NewActivityStatsRecorder()
 	if err != nil {
