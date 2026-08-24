@@ -641,8 +641,10 @@ func TestValidateDiffRootRejectsChangedWorkingDirectory(t *testing.T) {
 }
 
 func TestValidateBrowseRootRejectsChangedWorkingDirectory(t *testing.T) {
-	root := t.TempDir()
-	other := t.TempDir()
+	// Resolved: validateBrowseRoot returns a path with symlinks resolved, and on
+	// macOS t.TempDir() is under /var, a symlink to /private/var.
+	root := resolvedTempDir(t)
+	other := resolvedTempDir(t)
 	alias := filepath.Join(t.TempDir(), "root-link")
 	if err := os.Symlink(root, alias); err != nil {
 		t.Skipf("symlinks unavailable: %v", err)

@@ -8,7 +8,10 @@ import (
 )
 
 func TestListOpenCodeSessionsIsProjectScopedAndSkipsInvalidIDs(t *testing.T) {
-	home := t.TempDir()
+	// Resolved: the lookup compares against paths git and the filesystem report,
+	// and on macOS t.TempDir() is under /var, a symlink to /private/var — the
+	// two name the same directory and differ as strings.
+	home := resolvedTestDir(t)
 	t.Setenv("HOME", home)
 	sessionDir := filepath.Join(home, ".local", "share", "opencode", "storage", "session", "project-id")
 	if err := os.MkdirAll(sessionDir, 0o755); err != nil {

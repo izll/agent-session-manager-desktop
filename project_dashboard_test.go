@@ -14,7 +14,11 @@ import (
 )
 
 func TestInspectGitRepositoryIncludesUntrackedAndCommitMetadata(t *testing.T) {
-	repo := t.TempDir()
+	// Resolved, because the code under test resolves it. On macOS t.TempDir()
+	// hands back a path under /var, which is a symlink to /private/var — the
+	// repository root reported back is the real one, and comparing against the
+	// unresolved path fails there while passing on Linux.
+	repo := resolvedTempDir(t)
 	dashboardGit(t, repo, "init")
 	dashboardGit(t, repo, "config", "user.name", "Dashboard Tester")
 	dashboardGit(t, repo, "config", "user.email", "dashboard@example.invalid")
@@ -203,4 +207,19 @@ func dashboardGit(t *testing.T, dir string, args ...string) string {
 		t.Fatalf("git %v failed: %v\n%s", args, err, output)
 	}
 	return string(output)
+}
+
+// resolvedTempDir is t.TempDir() with symlinks resolved.
+//
+// Anything comparing a path against one the code produced needs this: macOS
+// puts temp directories under /var, a symlink to /private/var, so the two forms
+// name the same directory and differ as strings.
+func resolvedTempDir(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	resolved, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		return dir
+	}
+	return resolved
 }
