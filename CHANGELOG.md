@@ -35,6 +35,16 @@ dates; the format follows [Keep a Changelog](https://keepachangelog.com).
   running.
 - **Closing something with unsaved work asks first**, and asks again if the
   draft changes while the question is open.
+- **On Windows, creating two groups in a row no longer breaks the config.** Every
+  ID was minted from the clock alone, and Windows reads the same instant from it
+  many times in a row — measured at 199997 identical readings out of 200000. The
+  second group took the first one's ID and the file was rejected as invalid. The
+  same flaw could give two sessions one tmux session, and could hang the session
+  import outright. Groups, sessions, tasks, subtasks, commands and templates all
+  mint IDs that are checked against the ones already in use.
+- **On Windows, the log can be cleared and compacted again.** Both went through a
+  handle opened for appending, which Windows will not let shorten a file, so the
+  log grew past its limit and the button in Settings did nothing.
 
 ## 0.9.33 — 2026-08-20
 
