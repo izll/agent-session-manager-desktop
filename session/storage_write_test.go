@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -104,7 +105,9 @@ func TestStoreIsWrittenOwnerOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if perm := info.Mode().Perm(); perm != 0600 {
+	// Skipped on Windows: Go reports 0666 for every regular file there, and the
+	// protection that matters is the ACL, which Mode() does not describe.
+	if perm := info.Mode().Perm(); runtime.GOOS != "windows" && perm != 0600 {
 		t.Errorf("config permissions = %o, want 600", perm)
 	}
 }
@@ -112,6 +115,7 @@ func TestStoreIsWrittenOwnerOnly(t *testing.T) {
 func TestStorageHardensConfigDirectoryAndProjectCatalogPermissions(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home) // os.UserHomeDir reads this on Windows
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	configDir := filepath.Join(home, ".config", "agent-session-manager-desktop")
 	if err := os.MkdirAll(configDir, 0o755); err != nil {

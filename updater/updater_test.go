@@ -1245,6 +1245,7 @@ func TestInstallLockSerializesIndependentProcesses(t *testing.T) {
 	}
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home) // os.UserHomeDir reads this on Windows
 	if runtime.GOOS == "windows" {
 		t.Setenv("USERPROFILE", home)
 	}

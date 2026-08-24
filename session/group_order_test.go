@@ -6,7 +6,9 @@ import "testing"
 // touches the developer's real session store.
 func newTestStorage(t *testing.T) *Storage {
 	t.Helper()
-	t.Setenv("HOME", t.TempDir())
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home) // os.UserHomeDir reads this on Windows
 
 	s, err := NewStorage()
 	if err != nil {

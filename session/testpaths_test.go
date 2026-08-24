@@ -21,3 +21,19 @@ func resolvedTestDir(t *testing.T) string {
 	}
 	return resolved
 }
+
+// isolateHome points os.UserHomeDir() at a throwaway directory.
+//
+// t.Setenv("HOME", ...) alone is not enough: os.UserHomeDir reads USERPROFILE on
+// Windows, so a test setting only HOME kept using the real profile — and wrote
+// the developer's actual session store while doing it. That is how a stray
+// "{ this is not json" from one test made every later run fail there.
+//
+// Returns the directory so callers can look inside it.
+func isolateHome(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	t.Setenv("USERPROFILE", dir) // os.UserHomeDir reads this on Windows
+	return dir
+}

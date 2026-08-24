@@ -17,6 +17,7 @@ func TestSaveSettingsFailureDoesNotChangeLiveSettings(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("HOME", homeFile)
+	t.Setenv("USERPROFILE", homeFile) // os.UserHomeDir reads this on Windows
 	service := &AppService{settings: &Settings{Mode: "free", Language: "en"}}
 
 	err := service.SaveSettings(Settings{Mode: "api", Language: "hu"})
@@ -30,7 +31,9 @@ func TestSaveSettingsFailureDoesNotChangeLiveSettings(t *testing.T) {
 }
 
 func TestSaveSettingsDisablesGlobalHotkey(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home) // os.UserHomeDir reads this on Windows
 	manager := &HotkeyManagerReal{
 		isEnabled: true,
 		isRunning: true,
@@ -137,6 +140,7 @@ func TestAddUsageCrossProcessWorker(t *testing.T) {
 func TestAddUsageSerializesAcrossProcesses(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home) // os.UserHomeDir reads this on Windows
 	if _, err := getConfigDir(); err != nil {
 		t.Fatal(err)
 	}

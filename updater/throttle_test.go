@@ -14,6 +14,7 @@ func withTempHome(t *testing.T) string {
 	t.Helper()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home) // os.UserHomeDir reads this on Windows
 	return filepath.Join(home, ".config", "agent-session-manager-desktop")
 }
 

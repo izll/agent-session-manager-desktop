@@ -13,6 +13,7 @@ func TestListOpenCodeSessionsIsProjectScopedAndSkipsInvalidIDs(t *testing.T) {
 	// two name the same directory and differ as strings.
 	home := resolvedTestDir(t)
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home) // os.UserHomeDir reads this on Windows
 	sessionDir := filepath.Join(home, ".local", "share", "opencode", "storage", "session", "project-id")
 	if err := os.MkdirAll(sessionDir, 0o755); err != nil {
 		t.Fatal(err)

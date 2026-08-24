@@ -18,6 +18,7 @@ import (
 func TestTerminalRejectsMissingTmuxSessionBeforeWebSocketUpgrade(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home) // os.UserHomeDir reads this on Windows
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	storage, err := session.NewStorage()
 	if err != nil {

@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -110,7 +111,9 @@ func TestSessionStoreWriteLeavesNoDebris(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if perm := info.Mode().Perm(); perm != 0600 {
+	// Skipped on Windows: Go reports 0666 for every regular file there, and the
+	// protection that matters is the ACL, which Mode() does not describe.
+	if perm := info.Mode().Perm(); runtime.GOOS != "windows" && perm != 0600 {
 		t.Errorf("store permissions = %o, want 600 — it can hold an API key", perm)
 	}
 

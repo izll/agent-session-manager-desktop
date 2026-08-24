@@ -99,6 +99,7 @@ func TestDictationConfigReadRejectsOversizedFile(t *testing.T) {
 func TestUsageUpdateDoesNotDeadlockDuringMigrationCheck(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home) // os.UserHomeDir reads this on Windows
 	done := make(chan error, 1)
 	go func() {
 		app := &AppService{}

@@ -69,6 +69,7 @@ func TestTaskMasterOptInBlocksNpx(t *testing.T) {
 	}
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	t.Setenv("HOME", tmp)
+	t.Setenv("USERPROFILE", tmp) // os.UserHomeDir reads this on Windows
 
 	storage, err := session.NewStorage()
 	if err != nil {
@@ -185,6 +186,7 @@ func TestStopAllTaskMastersCancelsInFlightExternalStart(t *testing.T) {
 	}
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	t.Setenv("HOME", tmp)
+	t.Setenv("USERPROFILE", tmp) // os.UserHomeDir reads this on Windows
 
 	storage, err := session.NewStorage()
 	if err != nil {
@@ -263,6 +265,7 @@ func TestStopTaskMasterCancelsItsInFlightExternalStart(t *testing.T) {
 	}
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	t.Setenv("HOME", tmp)
+	t.Setenv("USERPROFILE", tmp) // os.UserHomeDir reads this on Windows
 
 	storage, err := session.NewStorage()
 	if err != nil {

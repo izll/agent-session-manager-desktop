@@ -18,6 +18,7 @@ func (p *privacyPopup) SetText(text string)    { p.text = text }
 func TestTypedTextIsNotPersistedInDictationLog(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)
+	t.Setenv("USERPROFILE", dir) // os.UserHomeDir reads this on Windows
 	t.Setenv("XDG_CONFIG_HOME", dir)
 	resetLoggingState(t)
 	if err := InitLogging(true); err != nil {

@@ -12,7 +12,9 @@ import (
 )
 
 func TestHistoryIndexLazyLoadIsConcurrent(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home) // os.UserHomeDir reads this on Windows
 	index := NewHistoryIndex()
 	var wg sync.WaitGroup
 	for range 16 {
@@ -32,6 +34,7 @@ func TestHistoryIndexLazyLoadIsConcurrent(t *testing.T) {
 func TestGeminiHistoryRejectsUnknownProjectAndOversizedPreview(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home) // os.UserHomeDir reads this on Windows
 	knownPath := filepath.Join(home, "known")
 	knownHash := sha256.Sum256([]byte(knownPath))
 	unknownHash := sha256.Sum256([]byte(filepath.Join(home, "unknown")))

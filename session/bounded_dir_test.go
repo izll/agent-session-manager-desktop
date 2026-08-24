@@ -28,6 +28,7 @@ func TestReadDirAtMostRejectsOversizedDirectoryWithoutPartialPublication(t *test
 func TestListAgentSessionsFailsClosedOnOversizedProjectsDirectory(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home) // os.UserHomeDir reads this on Windows
 	projectsDir := filepath.Join(home, ".claude", "projects")
 	if err := os.MkdirAll(projectsDir, 0o700); err != nil {
 		t.Fatal(err)
@@ -45,6 +46,7 @@ func TestListAgentSessionsFailsClosedOnOversizedProjectsDirectory(t *testing.T) 
 func TestDetectGeminiSessionIDFailsClosedOnOversizedChatsDirectory(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home) // os.UserHomeDir reads this on Windows
 	projectPath := filepath.Join(home, "repo")
 	hash := sha256.Sum256([]byte(projectPath))
 	chatsDir := filepath.Join(home, ".gemini", "tmp", hex.EncodeToString(hash[:]), "chats")

@@ -18,6 +18,7 @@ func guardedTestStorage(t *testing.T) *session.Storage {
 	t.Helper()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home) // os.UserHomeDir reads this on Windows
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	storage, err := session.NewStorage()
 	if err != nil {
@@ -488,6 +489,7 @@ func TestSelectProjectRejectsUnknownIDAndRestoresPreviousOwnership(t *testing.T)
 func TestSelectProjectRollsBackWhenTargetDeletionHasStarted(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home) // os.UserHomeDir reads this on Windows
 	storage, err := session.NewStorage()
 	if err != nil {
 		t.Fatal(err)
@@ -520,6 +522,7 @@ func TestSelectProjectRollsBackWhenTargetDeletionHasStarted(t *testing.T) {
 func TestTerminalAttachPinsProjectUntilRelease(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home) // os.UserHomeDir reads this on Windows
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	storage, err := session.NewStorage()
 	if err != nil {

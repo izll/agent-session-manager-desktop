@@ -20,6 +20,7 @@ import (
 func TestLoggingWritesAfterInit(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)
+	t.Setenv("USERPROFILE", dir) // os.UserHomeDir reads this on Windows
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(dir, ".config"))
 	resetLoggingState(t)
 
@@ -48,6 +49,7 @@ func TestLoggingWritesAfterInit(t *testing.T) {
 func TestErrorsAreLoggedWithLoggingOff(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)
+	t.Setenv("USERPROFILE", dir) // os.UserHomeDir reads this on Windows
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(dir, ".config"))
 	resetLoggingState(t)
 
@@ -72,6 +74,7 @@ func TestErrorsAreLoggedWithLoggingOff(t *testing.T) {
 func TestDictationLogIsPrivateAndSizeBounded(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)
+	t.Setenv("USERPROFILE", dir) // os.UserHomeDir reads this on Windows
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(dir, ".config"))
 	resetLoggingState(t)
 
