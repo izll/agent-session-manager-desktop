@@ -6,6 +6,36 @@ Entries describe what changed for someone using the app. Internal refactoring,
 test and CI work is left out unless it changed behaviour. Dates are release
 dates; the format follows [Keep a Changelog](https://keepachangelog.com).
 
+## 0.9.34 — 2026-08-24
+
+### Changed
+
+- **The diff moved in beside Files**, where it belongs: it answers the same
+  question about the same directory. It used to sit in the tab bar, a level
+  above the thing it describes — and since a tab can be opened in its own
+  directory, one session can hold several tabs with a different diff each.
+- **Opening the diff no longer hides where you came from.** The view bar stays
+  on screen with the view underneath still marked, so the way back is one press
+  of the same button. Choosing any view closes the diff over it.
+- **A tab left showing its diff comes back to it.** Comparing two agents means
+  moving between their diffs; the other views still open on the terminal.
+- **Outside a repository the Diff button is greyed out** and says why, rather
+  than disappearing.
+
+### Fixed
+
+- **The session list and its backups are flushed to disk before being replaced.**
+  Without that a power cut could leave a file of the right name and the wrong
+  length — and since neither was flushed, one could take the live file and its
+  newest backup together.
+- **The copy-on-select setting is applied at start-up.** It was skipped every
+  time, so a binding left by an earlier run stayed in force and a fresh install
+  kept copy-on-select on for anyone who never asked for it.
+- **The updater refuses to install a version that is not newer** than the one
+  running.
+- **Closing something with unsaved work asks first**, and asks again if the
+  draft changes while the question is open.
+
 ## 0.9.33 — 2026-08-20
 
 ### Fixed
