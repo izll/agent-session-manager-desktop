@@ -2049,12 +2049,18 @@ func (s *Storage) LoadAllForProject(projectID string) ([]*Instance, []*Group, er
 	return instances, groups, err
 }
 
+// nowUnixNano is a seam so a test can simulate a clock that does not advance,
+// which is what Windows actually does: its resolution is coarse enough that
+// consecutive readings are identical. Without the seam the collision is
+// invisible on Linux, where the clock is fine-grained enough to hide it.
+var nowUnixNano = func() int64 { return time.Now().UnixNano() }
+
 // NewUniqueID mints an ID with the given prefix that is not in taken. Callers
 // that mint IDs from time.Now().UnixNano() alone are relying on the clock to
 // never repeat, which it does on Windows: its resolution is coarse enough that
 // two calls in a row read the same instant.
 func NewUniqueID(prefix string, taken map[string]bool) string {
-	stamp := time.Now().UnixNano()
+	stamp := nowUnixNano()
 	for {
 		id := fmt.Sprintf("%s_%d", prefix, stamp)
 		if !taken[id] {
