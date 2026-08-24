@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"os"
 	"os/exec"
 	"strings"
 	"testing"
@@ -71,11 +70,7 @@ func TestBackgroundAgentLogTimeoutReapsDescendantHoldingOutputPipe(t *testing.T)
 }
 
 func TestBackgroundAgentMutationsUsePersistenceRollback(t *testing.T) {
-	source, err := os.ReadFile("bg_agents.go")
-	if err != nil {
-		t.Fatal(err)
-	}
-	text := string(source)
+	text := readGoSource(t, "bg_agents.go")
 	if strings.Count(text, "persistOrRollbackExternalMutation(") < 2 {
 		t.Fatal("background-agent session and tab attach paths do not both compensate persistence failures")
 	}

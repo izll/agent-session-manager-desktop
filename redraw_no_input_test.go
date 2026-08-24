@@ -48,11 +48,7 @@ func TestTerminalServerSendsNoKeystrokes(t *testing.T) {
 // the keystroke: resize-window is what tells a TUI its geometry changed, and
 // refresh-client is what repaints the clients watching it.
 func TestResizeStillSignalsThePane(t *testing.T) {
-	b, err := os.ReadFile("terminal_ws.go")
-	if err != nil {
-		t.Fatalf("reading terminal_ws.go: %v", err)
-	}
-	src := string(b)
+	src := readGoSource(t, "terminal_ws.go")
 
 	for _, want := range []string{`"resize-window"`, "RefreshSessionClients"} {
 		if !strings.Contains(src, want) {

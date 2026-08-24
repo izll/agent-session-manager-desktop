@@ -2,7 +2,6 @@ package main
 
 import (
 	"errors"
-	"os"
 	"strings"
 	"testing"
 
@@ -24,11 +23,7 @@ func TestResolveResumeIDValidatesStoredFallback(t *testing.T) {
 }
 
 func TestForkCreationPathsRollbackExternalProcessesOnPersistenceFailure(t *testing.T) {
-	source, err := os.ReadFile("app.go")
-	if err != nil {
-		t.Fatal(err)
-	}
-	text := string(source)
+	text := readGoSource(t, "app.go")
 	for _, marker := range []string{
 		"func (a *App) ForkToNewTab",
 		"func (a *App) ForkToNewSession",
@@ -49,11 +44,7 @@ func TestForkCreationPathsRollbackExternalProcessesOnPersistenceFailure(t *testi
 }
 
 func TestStartPathsRollbackExternalProcessesOnPersistenceFailure(t *testing.T) {
-	source, err := os.ReadFile("app.go")
-	if err != nil {
-		t.Fatal(err)
-	}
-	text := string(source)
+	text := readGoSource(t, "app.go")
 	for _, marker := range []string{
 		"func (a *App) StartSession(",
 		"func (a *App) StartSessionWithResume(",

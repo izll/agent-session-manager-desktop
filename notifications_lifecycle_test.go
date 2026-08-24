@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -104,11 +103,7 @@ func TestDesktopNotificationHasIndependentDeliveryTimeout(t *testing.T) {
 }
 
 func TestNativeNotificationLifecycleSurroundsTheWatcher(t *testing.T) {
-	raw, err := os.ReadFile("app.go")
-	if err != nil {
-		t.Fatal(err)
-	}
-	source := string(raw)
+	source := readGoSource(t, "app.go")
 	startup := strings.Index(source, "func (a *App) startup(ctx context.Context)")
 	shutdown := strings.Index(source, "func (a *App) shutdown(ctx context.Context)")
 	if startup < 0 || shutdown < 0 || startup >= shutdown {

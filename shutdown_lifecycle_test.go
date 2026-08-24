@@ -3,7 +3,6 @@ package main
 import (
 	"asmgr-desktop/session"
 	"context"
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -13,11 +12,7 @@ import (
 // gone before shutdown releases the project lock or removes GUI mirrors; a
 // later cancel leaves a real window in which another tick can enter teardown.
 func TestShutdownStopsPreviewPollingBeforeProjectTeardown(t *testing.T) {
-	source, err := os.ReadFile("app.go")
-	if err != nil {
-		t.Fatal(err)
-	}
-	text := string(source)
+	text := readGoSource(t, "app.go")
 	start := strings.Index(text, "func (a *App) shutdown(ctx context.Context)")
 	if start < 0 {
 		t.Fatal("shutdown method not found")

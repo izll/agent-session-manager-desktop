@@ -24,7 +24,10 @@ func readSource(t *testing.T) string {
 	if err != nil {
 		t.Fatalf("reading app_service.go: %v", err)
 	}
-	return string(b)
+	// Line endings normalised: git checks out CRLF on Windows by default, and
+	// this test looks for "\n}\n" to find where a function ends. Reading the
+	// raw bytes there finds nothing and reports the function as unterminated.
+	return strings.ReplaceAll(string(b), "\r\n", "\n")
 }
 
 func TestStartupDoesNotEnableHotkeyUnconditionally(t *testing.T) {

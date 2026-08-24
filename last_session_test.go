@@ -25,11 +25,7 @@ func TestLastSessionIsPersistedAndRestored(t *testing.T) {
 
 	// Carried through the API struct in both directions; a field that is read
 	// but never written back is silently lost on the next save.
-	app, err := os.ReadFile("app.go")
-	if err != nil {
-		t.Fatalf("reading app.go: %v", err)
-	}
-	src := string(app)
+	src := readGoSource(t, "app.go")
 	if strings.Count(src, "LastSessionID") < 3 {
 		t.Error("LastSessionID does not appear in the settings struct, the read and " +
 			"the write; one of those missing means it is dropped on the next save")

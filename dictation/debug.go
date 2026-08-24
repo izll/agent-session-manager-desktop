@@ -58,7 +58,21 @@ func InitLogging(clearLog bool) error {
 		return fmt.Errorf("failed to secure log file: %w", err)
 	}
 	if clearLog {
-		if err := withDictationLogLock(configDir, func() error { return opened.Truncate(0) }); err != nil {
+		// Truncated through a separate handle, not the append-mode one.
+		//
+		// Windows refuses Truncate on a file opened with O_APPEND — "Access is
+		// denied" — because append mode grants only the right to add. Unix
+		// allows it, which is why this went unnoticed until the suite ran there.
+		// Opening a second handle for the one operation keeps the append handle
+		// doing what it is for.
+		if err := withDictationLogLock(configDir, func() error {
+			truncator, openErr := os.OpenFile(logPath, os.O_RDWR, 0600)
+			if openErr != nil {
+				return openErr
+			}
+			defer truncator.Close()
+			return truncator.Truncate(0)
+		}); err != nil {
 			_ = opened.Close()
 			return fmt.Errorf("failed to clear log file: %w", err)
 		}

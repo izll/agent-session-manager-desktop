@@ -129,11 +129,7 @@ func TestReadOnlyProjectDoesNotRewriteSharedTmuxBindings(t *testing.T) {
 // runtime and a tmux server to observe an ordering; the thing that went wrong
 // is the order of two statements, and that is what this reads.
 func TestStartupAppliesRuntimeSettingsAfterClaimingTheLock(t *testing.T) {
-	data, err := os.ReadFile("app.go")
-	if err != nil {
-		t.Fatal(err)
-	}
-	source := string(data)
+	source := readGoSource(t, "app.go")
 
 	startup := source[strings.Index(source, "func (a *App) startup("):]
 	if end := strings.Index(startup, "\nfunc "); end > 0 {
