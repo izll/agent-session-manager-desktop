@@ -13,6 +13,7 @@ func TestGetFullDiffIncludesUntrackedWithoutMutatingIndex(t *testing.T) {
 	runGit(t, repo, "init")
 	runGit(t, repo, "config", "user.email", "test@example.invalid")
 	runGit(t, repo, "config", "user.name", "ASMGR test")
+	runGit(t, repo, "config", "core.autocrlf", "false") // keep line endings as written
 
 	tracked := filepath.Join(repo, "tracked.txt")
 	if err := os.WriteFile(tracked, []byte("before\n"), 0o644); err != nil {

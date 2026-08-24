@@ -37,7 +37,11 @@ func codexMetaLine(id, sessionID, cwd, source, threadSource, parentID string) st
 func TestParseCodexRootSessionMeta(t *testing.T) {
 	t.Parallel()
 
-	const cwd = "/work/project"
+	// An absolute path in the host's own form: sameCleanPath requires
+	// filepath.IsAbs, and "/work/project" is not absolute on Windows — only a
+	// path with a volume is. Codex writes real paths, so a POSIX literal only
+	// ever tested the Unix half.
+	cwd := filepath.Join(t.TempDir(), "project")
 	tests := []struct {
 		name string
 		line string

@@ -14,6 +14,13 @@ func newDiffRepo(t *testing.T) string {
 	runGit(t, repo, "init")
 	runGit(t, repo, "config", "user.email", "test@example.invalid")
 	runGit(t, repo, "config", "user.name", "ASMGR test")
+	// Line endings left exactly as written.
+	//
+	// Windows installs commonly set core.autocrlf=true globally, which converts
+	// on checkout — so a revert restored "committed\r\n" where the test wrote
+	// "committed\n" and compared against it. The behaviour under test is what
+	// git restores, not how the developer's git is configured.
+	runGit(t, repo, "config", "core.autocrlf", "false")
 	return repo
 }
 

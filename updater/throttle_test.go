@@ -3,6 +3,7 @@ package updater
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -163,7 +164,9 @@ func TestUserLocalUpdatePathWorks(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if info.Mode().Perm()&0o111 == 0 {
+	// Windows has no executable bit — what a file can do there is decided by its
+	// extension and the ACL, and Go reports 0666 regardless.
+	if runtime.GOOS != "windows" && info.Mode().Perm()&0o111 == 0 {
 		t.Error("the replacement is not executable")
 	}
 }

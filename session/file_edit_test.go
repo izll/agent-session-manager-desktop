@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -395,6 +396,13 @@ func TestSaveReportsDeletionDistinctly(t *testing.T) {
 
 // A chmod +x script must still be executable after a save.
 func TestSavePreservesPermissionBits(t *testing.T) {
+	// The editor preserves a file's permission bits — a unix idea. Windows has no permission
+	// bits: Go reports 0666 for every regular file and 0777 for every directory,
+	// and what actually protects them is the ACL, which Mode() does not
+	// describe. Asserting here would be testing the operating system.
+	if runtime.GOOS == "windows" {
+		t.Skip("permission bits are not meaningful on Windows")
+	}
 	root := t.TempDir()
 	path := filepath.Join(root, "run.sh")
 	if err := os.WriteFile(path, []byte("#!/bin/sh\necho hi\n"), 0o755); err != nil {

@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"fmt"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -11,7 +12,10 @@ func TestTaskMasterProcessLocksDoNotRetainCanonicalPaths(t *testing.T) {
 	const paths = 32
 	var wg sync.WaitGroup
 	for i := range paths {
-		path := filepath.Join(root, "project", string(rune('a'+i)), ".taskmaster", "tasks", "tasks.json")
+		// Numbered, not lettered: 'a'+i runs past 'z' at 26 into '{', '|', '}',
+		// which Windows refuses in a filename. The test only needs 32 distinct
+		// paths, and what they are called is beside the point.
+		path := filepath.Join(root, "project", fmt.Sprintf("p%02d", i), ".taskmaster", "tasks", "tasks.json")
 		wg.Add(1)
 		go func() {
 			defer wg.Done()

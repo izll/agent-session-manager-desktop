@@ -113,6 +113,13 @@ func TestStoreIsWrittenOwnerOnly(t *testing.T) {
 }
 
 func TestStorageHardensConfigDirectoryAndProjectCatalogPermissions(t *testing.T) {
+	// The config directory is tightened to 0700 — a unix idea. Windows has no permission
+	// bits: Go reports 0666 for every regular file and 0777 for every directory,
+	// and what actually protects them is the ACL, which Mode() does not
+	// describe. Asserting here would be testing the operating system.
+	if runtime.GOOS == "windows" {
+		t.Skip("permission bits are not meaningful on Windows")
+	}
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home) // os.UserHomeDir reads this on Windows
@@ -606,6 +613,12 @@ func TestFailedProjectSwitchReleasesPreviousLock(t *testing.T) {
 }
 
 func TestRemoveProjectRollsBackDataWhenCatalogSaveFails(t *testing.T) {
+	// The failure is induced by revoking write permission on a directory. That
+	// works on Unix; on Windows the ACL decides and Go's Chmod barely touches
+	// it, so the write succeeds and there is nothing here to observe.
+	if runtime.GOOS == "windows" {
+		t.Skip("directory permissions do not gate writes on Windows")
+	}
 	storage := newTestStorage(t)
 	project, err := storage.AddProject("rollback")
 	if err != nil {

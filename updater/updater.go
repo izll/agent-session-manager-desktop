@@ -1175,8 +1175,16 @@ func extractBundle(archivePath, destDir string) error {
 // safeJoin resolves an archive entry against destDir, refusing anything that
 // would land outside it.
 func safeJoin(destDir, name string) (string, error) {
+	// Rooted before conversion, because filepath.IsAbs is host-specific and the
+	// archive is not. On Windows "/etc/passwd" is NOT absolute — only a path
+	// with a drive letter is — so an entry naming an absolute POSIX path walked
+	// straight past the check and was joined onto the destination. A tar built
+	// on any Unix can carry one.
+	if strings.HasPrefix(name, "/") || strings.HasPrefix(name, `\`) {
+		return "", fmt.Errorf("archive entry %q escapes the destination", name)
+	}
 	name = filepath.FromSlash(name)
-	if filepath.IsAbs(name) {
+	if filepath.IsAbs(name) || filepath.VolumeName(name) != "" {
 		return "", fmt.Errorf("archive entry %q escapes the destination", name)
 	}
 	target := filepath.Join(destDir, name)

@@ -5,6 +5,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -25,7 +26,7 @@ func TestTmuxCommandUsesPlatformDefault(t *testing.T) {
 	// exec.Command resolves the name via PATH, so compare the base name: on a
 	// machine with tmux installed Path is absolute, on one without it stays
 	// the bare name plus a lookup error.
-	if base := filepath.Base(cmd.Path); base != defaultTmuxBinary {
+	if base := commandBaseName(cmd.Path); base != defaultTmuxBinary {
 		t.Errorf("cmd.Path = %q, want base %q", cmd.Path, defaultTmuxBinary)
 	}
 	if cmd.Args[0] != defaultTmuxBinary {
@@ -42,7 +43,7 @@ func TestSetTmuxBinaryChangesCommand(t *testing.T) {
 	}
 
 	cmd := TmuxCommand("has-session", "-t", "demo")
-	if base := filepath.Base(cmd.Path); base != "psmux" {
+	if base := commandBaseName(cmd.Path); base != "psmux" {
 		t.Errorf("cmd.Path = %q, want base %q", cmd.Path, "psmux")
 	}
 	if cmd.Args[0] != "psmux" {
@@ -111,7 +112,7 @@ func TestTmuxCommandContextUsesBinaryAndContext(t *testing.T) {
 	defer cancel()
 
 	cmd := TmuxCommandContext(ctx, "display-message", "-p", "#{pane_current_path}")
-	if base := filepath.Base(cmd.Path); base != "psmux" {
+	if base := commandBaseName(cmd.Path); base != "psmux" {
 		t.Errorf("cmd.Path = %q, want base %q", cmd.Path, "psmux")
 	}
 	want := []string{"psmux", "display-message", "-p", "#{pane_current_path}"}
@@ -141,4 +142,14 @@ func TestTmuxCommandIsDropInForExecCommand(t *testing.T) {
 	if !reflect.DeepEqual(got.Args, want.Args) {
 		t.Errorf("Args = %#v, want %#v", got.Args, want.Args)
 	}
+}
+
+// commandBaseName is the executable's name without directory or extension.
+//
+// exec.Command resolves a bare name through PATH, and on Windows the result
+// carries .exe — so filepath.Base alone reports "psmux.exe" for a command that
+// found exactly the right binary.
+func commandBaseName(path string) string {
+	base := filepath.Base(path)
+	return strings.TrimSuffix(base, filepath.Ext(base))
 }

@@ -22,6 +22,7 @@ func TestInspectGitRepositoryIncludesUntrackedAndCommitMetadata(t *testing.T) {
 	dashboardGit(t, repo, "init")
 	dashboardGit(t, repo, "config", "user.name", "Dashboard Tester")
 	dashboardGit(t, repo, "config", "user.email", "dashboard@example.invalid")
+	dashboardGit(t, repo, "config", "core.autocrlf", "false") // keep line endings as written
 	dashboardWriteFile(t, repo, "tracked.txt", "initial\n")
 	dashboardGit(t, repo, "add", "tracked.txt")
 	dashboardGit(t, repo, "commit", "-m", "initial dashboard commit")

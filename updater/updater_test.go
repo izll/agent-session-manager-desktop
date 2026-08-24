@@ -713,7 +713,9 @@ func TestCleanStaleUpdateDownloadsKeepsFreshAndUnrelatedFiles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if info.Mode().Perm() != 0o700 {
+	// 0700 is a unix statement; Windows reports 0777 for every directory and
+	// protects them through the ACL instead.
+	if runtime.GOOS != "windows" && info.Mode().Perm() != 0o700 {
 		t.Fatalf("download directory permissions = %v", info.Mode().Perm())
 	}
 }
@@ -1404,6 +1406,12 @@ func TestPackageCommandHasTimeAndOutputBounds(t *testing.T) {
 // a binary run out of a build directory has no bundle and must not have
 // unrelated parent directories mistaken for one.
 func TestBundleRootFor(t *testing.T) {
+	// macOS bundle layout, expressed in POSIX paths. filepath on Windows uses
+	// backslash as its separator, so it neither splits nor rebuilds these — the
+	// function is only ever called there with a real macOS executable path.
+	if runtime.GOOS == "windows" {
+		t.Skip("macOS bundle paths are not filepath-compatible on Windows")
+	}
 	tests := []struct {
 		name string
 		exec string
@@ -1476,6 +1484,13 @@ func TestExtractBundleRestoresTheTree(t *testing.T) {
 
 // The executable bit has to survive, or the extracted bundle cannot be run.
 func TestExtractBundleKeepsTheExecutableBit(t *testing.T) {
+	// The executable bit survives extraction — a unix idea. Windows has no permission
+	// bits: Go reports 0666 for every regular file and 0777 for every directory,
+	// and what actually protects them is the ACL, which Mode() does not
+	// describe. Asserting here would be testing the operating system.
+	if runtime.GOOS == "windows" {
+		t.Skip("permission bits are not meaningful on Windows")
+	}
 	p := filepath.Join(t.TempDir(), "app.tar.gz")
 	f, err := os.Create(p)
 	if err != nil {
