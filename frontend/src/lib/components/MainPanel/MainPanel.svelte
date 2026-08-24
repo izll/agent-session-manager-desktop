@@ -141,7 +141,6 @@
       }
       return;
     }
-    fullDiffActive = false;
     selectView(view);
   }
 
@@ -186,16 +185,19 @@
   // because this is the component that owns which view is showing.
   $: if ($browserViewRequested) {
     clearBrowserViewRequest();
-    // Leaving the full-screen diff as well as switching the view. The diff is
-    // not one of the selectable views — it covers the panel and hides the
-    // selector entirely — so selecting 'browser' underneath it changed which
-    // view would show once the diff closed, and nothing on screen moved.
-    fullDiffActive = false;
+    // selectView closes the diff, so opening a file from it lands on the
+    // browser rather than under a diff still covering the panel.
     selectView('browser');
   }
 
   function selectView(view: ViewName) {
     activeView = view;
+    // Picking a view closes the diff covering it.
+    //
+    // The diff fills the area below the bar, so without this the button
+    // highlighted but nothing moved — the chosen view was updating underneath a
+    // diff that stayed on top. Choosing a view IS the request to see it.
+    fullDiffActive = false;
   }
 
   // Height in pixels rather than a fraction. The pane below is a terminal

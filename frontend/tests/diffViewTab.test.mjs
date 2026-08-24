@@ -79,4 +79,29 @@ assert.match(
 );
 assert.match(panel, /\.view-tab\.behind-diff \{/, 'and be styled apart from the active one');
 
+// Choosing a view closes the diff covering it.
+//
+// The diff fills the area below the bar, so a view chosen while it is open was
+// updating underneath it: the button highlighted and nothing moved. Every
+// caller of selectView is asking to SEE a view, so the closing belongs there
+// rather than being remembered at each call site — two of them were already
+// compensating for it by hand.
+const selectView = panel.match(/function selectView\(view: ViewName\) \{[\s\S]*?\n  \}/);
+assert.ok(selectView, 'selectView should still exist');
+assert.match(
+  selectView[0],
+  /fullDiffActive = false;/,
+  'selecting a view must close the diff on top of it',
+);
+
+// closeFullDiff must NOT do the reverse: hiding the diff reveals the view the
+// tab was already on, which is what makes "press Diff again to go back" true.
+const closeFullDiff = panel.match(/function closeFullDiff\(\) \{[\s\S]*?\n  \}/);
+assert.ok(closeFullDiff, 'closeFullDiff should still exist');
+assert.doesNotMatch(
+  closeFullDiff[0],
+  /activeView = /,
+  'closing the diff must leave the underlying view alone',
+);
+
 console.log('diffViewTab: ok');
