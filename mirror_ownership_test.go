@@ -17,7 +17,7 @@ import (
 // Nothing failed loudly, which is why this is pinned by a test: the ownership
 // question has to be answered BEFORE the id swap and carried in a variable.
 func TestMirrorOwnershipRecordedBeforeIDSwap(t *testing.T) {
-	src := readGoSource(t, "terminal_ws.go")
+	src := readTextFile(t, "terminal_ws.go")
 
 	const flag = "attachedToOwnMirror := attachTarget == linkedName"
 	flagAt := strings.Index(src, flag)
@@ -55,7 +55,7 @@ func TestMirrorOwnershipRecordedBeforeIDSwap(t *testing.T) {
 // The resize is what the user notices: without it the multiplexer window keeps
 // its creation size and the content wraps at the wrong column.
 func TestResizeIsGuardedByOwnershipFlag(t *testing.T) {
-	src := readGoSource(t, "terminal_ws.go")
+	src := readTextFile(t, "terminal_ws.go")
 
 	at := strings.Index(src, `"resize-window"`)
 	if at < 0 {

@@ -249,10 +249,10 @@ func TestSessionFileSearchRequiresCanonicalRootSnapshot(t *testing.T) {
 	if len(index.Files) != 1 || index.Files[0].Path != "root.txt" {
 		t.Fatalf("index searched wrong root: %+v", index.Files)
 	}
-	resolvedRoot, err := filepath.EvalSymlinks(root)
-	if err != nil {
-		t.Fatal(err)
-	}
+	// The same canonicalisation the cache key uses. EvalSymlinks alone is not
+	// it: CanonicalProjectPath also lowercases on Windows, where paths are
+	// case-insensitive, so the key would differ only in case.
+	resolvedRoot := session.CanonicalProjectPath(root)
 	fileIndexMu.Lock()
 	_, cachedUnderCanonicalRoot := fileIndexCache[fileIndexKey{sessionID: inst.ID, root: resolvedRoot}]
 	fileIndexMu.Unlock()

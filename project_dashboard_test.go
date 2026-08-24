@@ -44,7 +44,10 @@ func TestInspectGitRepositoryIncludesUntrackedAndCommitMetadata(t *testing.T) {
 	if summary.Branch == "" {
 		t.Fatal("branch is empty")
 	}
-	if summary.RepositoryRoot != repo {
+	// Compared through filepath.Clean: the root comes from git, which reports
+	// forward slashes on Windows, while t.TempDir() uses the host separator.
+	// Both name the same directory.
+	if filepath.Clean(summary.RepositoryRoot) != filepath.Clean(repo) {
 		t.Fatalf("unexpected repository root: %q, want %q", summary.RepositoryRoot, repo)
 	}
 	if summary.LastCommitHash == "" || summary.LastCommitMessage != "initial dashboard commit" {

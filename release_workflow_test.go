@@ -11,11 +11,7 @@ import (
 // an ordinary release, GitHub may return it from /releases/latest; the updater
 // then discards it and never sees the stable release behind it.
 func TestEveryPlatformMarksPrereleaseTagsInReleaseWorkflow(t *testing.T) {
-	raw, err := os.ReadFile(".github/workflows/release.yml")
-	if err != nil {
-		t.Fatal(err)
-	}
-	workflow := string(raw)
+	workflow := readTextFile(t, ".github/workflows/release.yml")
 	actions := strings.Count(workflow, "uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65")
 	flags := strings.Count(workflow, "prerelease: ${{ contains(steps.ver.outputs.tag, '-') }}")
 	if actions != 3 {
@@ -47,11 +43,7 @@ func TestWorkflowActionsArePinnedToImmutableCommits(t *testing.T) {
 }
 
 func TestNativeCICompilesAndTestsTheFullApplication(t *testing.T) {
-	raw, err := os.ReadFile(".github/workflows/ci.yml")
-	if err != nil {
-		t.Fatal(err)
-	}
-	workflow := string(raw)
+	workflow := readTextFile(t, ".github/workflows/ci.yml")
 	macStart := strings.Index(workflow, "  go-test-macos:")
 	windowsStart := strings.Index(workflow, "  go-test-windows:")
 	if macStart < 0 || windowsStart < 0 || macStart >= windowsStart {
@@ -74,11 +66,7 @@ func TestNativeCICompilesAndTestsTheFullApplication(t *testing.T) {
 }
 
 func TestCIRegeneratesBindingsThroughPinnedWailsBuild(t *testing.T) {
-	raw, err := os.ReadFile(".github/workflows/ci.yml")
-	if err != nil {
-		t.Fatal(err)
-	}
-	workflow := string(raw)
+	workflow := readTextFile(t, ".github/workflows/ci.yml")
 	backendStart := strings.Index(workflow, "  backend:")
 	macStart := strings.Index(workflow, "  go-test-macos:")
 	if backendStart < 0 || macStart < 0 || backendStart >= macStart {
@@ -112,11 +100,7 @@ func TestCIRegeneratesBindingsThroughPinnedWailsBuild(t *testing.T) {
 }
 
 func TestReleaseFailsOnRegeneratedBindingDrift(t *testing.T) {
-	raw, err := os.ReadFile(".github/workflows/release.yml")
-	if err != nil {
-		t.Fatal(err)
-	}
-	workflow := string(raw)
+	workflow := readTextFile(t, ".github/workflows/release.yml")
 	linuxStart := strings.Index(workflow, "  release:\n")
 	macStart := strings.Index(workflow, "  release-macos:\n")
 	windowsStart := strings.Index(workflow, "  release-windows:\n")
@@ -148,11 +132,7 @@ func TestReleaseFailsOnRegeneratedBindingDrift(t *testing.T) {
 }
 
 func TestNativeReleaseJobsExecutePlatformTestsBeforePackaging(t *testing.T) {
-	raw, err := os.ReadFile(".github/workflows/release.yml")
-	if err != nil {
-		t.Fatal(err)
-	}
-	workflow := string(raw)
+	workflow := readTextFile(t, ".github/workflows/release.yml")
 	macStart := strings.Index(workflow, "  release-macos:\n")
 	windowsStart := strings.Index(workflow, "  release-windows:\n")
 	publishStart := strings.Index(workflow, "  publish-release:\n")
@@ -178,11 +158,7 @@ func TestNativeReleaseJobsExecutePlatformTestsBeforePackaging(t *testing.T) {
 }
 
 func TestWindowsCrossBuildVerifiesDownloadedNativeDependency(t *testing.T) {
-	raw, err := os.ReadFile("scripts/build-windows.sh")
-	if err != nil {
-		t.Fatal(err)
-	}
-	script := string(raw)
+	script := readTextFile(t, "scripts/build-windows.sh")
 	shaDefinition := regexp.MustCompile(`(?m)^PA_SHA256="[0-9a-f]{64}"$`)
 	if !shaDefinition.MatchString(script) {
 		t.Fatal("Windows cross-build must pin PortAudio to an exact SHA-256")
@@ -272,11 +248,7 @@ func TestMacBundlesDoNotAdvertiseAnUnsupportedGoRuntime(t *testing.T) {
 }
 
 func TestMacReleasePublishesTheActualNativeDeploymentFloor(t *testing.T) {
-	raw, err := os.ReadFile(".github/workflows/release.yml")
-	if err != nil {
-		t.Fatal(err)
-	}
-	workflow := string(raw)
+	workflow := readTextFile(t, ".github/workflows/release.yml")
 	required := []string{
 		`macho_minimum()`,
 		`LC_BUILD_VERSION`,

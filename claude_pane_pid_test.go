@@ -17,7 +17,7 @@ import (
 // so nothing looked broken. What it could not do is notice the user moving the
 // tab to a different conversation — which is the whole reason detection exists.
 func TestClaudeDetectionInspectsThePaneProcess(t *testing.T) {
-	src := readGoSource(t, "app.go")
+	src := readTextFile(t, "app.go")
 
 	start := strings.Index(src, "func getClaudeSessionIDFromTmuxWindowContext(")
 	if start < 0 {

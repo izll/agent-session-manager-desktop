@@ -20,7 +20,7 @@ import (
 // canvas renderer, Unicode width tables, glyph caches and font stacks before
 // the environment turned out to be the cause.
 func TestAttachSetsUTF8Locale(t *testing.T) {
-	src := readGoSource(t, "terminal_ws.go")
+	src := readTextFile(t, "terminal_ws.go")
 
 	at := strings.Index(src, `"attach-session"`)
 	if at < 0 {

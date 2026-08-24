@@ -23,7 +23,7 @@ func TestResolveResumeIDValidatesStoredFallback(t *testing.T) {
 }
 
 func TestForkCreationPathsRollbackExternalProcessesOnPersistenceFailure(t *testing.T) {
-	text := readGoSource(t, "app.go")
+	text := readTextFile(t, "app.go")
 	for _, marker := range []string{
 		"func (a *App) ForkToNewTab",
 		"func (a *App) ForkToNewSession",
@@ -44,7 +44,7 @@ func TestForkCreationPathsRollbackExternalProcessesOnPersistenceFailure(t *testi
 }
 
 func TestStartPathsRollbackExternalProcessesOnPersistenceFailure(t *testing.T) {
-	text := readGoSource(t, "app.go")
+	text := readTextFile(t, "app.go")
 	for _, marker := range []string{
 		"func (a *App) StartSession(",
 		"func (a *App) StartSessionWithResume(",

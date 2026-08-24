@@ -12,7 +12,7 @@ import (
 // gone before shutdown releases the project lock or removes GUI mirrors; a
 // later cancel leaves a real window in which another tick can enter teardown.
 func TestShutdownStopsPreviewPollingBeforeProjectTeardown(t *testing.T) {
-	text := readGoSource(t, "app.go")
+	text := readTextFile(t, "app.go")
 	start := strings.Index(text, "func (a *App) shutdown(ctx context.Context)")
 	if start < 0 {
 		t.Fatal("shutdown method not found")

@@ -99,16 +99,34 @@ type filteredLogWriter struct {
 //
 // Under both the process mutex and the filesystem lock because writes can come
 // from every goroutine and from another GUI instance.
+// truncateByPath shortens a file through a handle opened for the purpose.
+//
+// Windows refuses Truncate on a handle opened with O_APPEND — append mode
+// grants the right to add, not to shorten — and the log handles are all
+// O_APPEND, deliberately, so several instances can share one file. Unix allows
+// it, which is why clearing and compacting the logs worked everywhere except
+// the platform where they silently failed.
+func truncateByPath(path string, size int64) error {
+	handle, err := os.OpenFile(path, os.O_RDWR, 0600)
+	if err != nil {
+		return err
+	}
+	defer handle.Close()
+	return handle.Truncate(size)
+}
+
 func (w *filteredLogWriter) truncate() error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if w.file == nil {
 		return nil
 	}
-	action := func() error { return w.file.Truncate(0) }
 	if w.path == "" {
-		return action()
+		// No path to reopen: an in-memory or test writer, where append mode is
+		// not in play.
+		return w.file.Truncate(0)
 	}
+	action := func() error { return truncateByPath(w.path, 0) }
 	return withLogFileLock(w.path+".lock", action)
 }
 
@@ -207,7 +225,9 @@ func compactLogFile(file *os.File, maximum, retain int64) error {
 	} else {
 		buf = nil
 	}
-	if err := file.Truncate(0); err != nil {
+	// Reopened for the truncate: file is O_APPEND, which Windows will not let
+	// us shorten. file.Name() is the path it was opened with.
+	if err := truncateByPath(file.Name(), 0); err != nil {
 		return err
 	}
 	if len(buf) != 0 {
