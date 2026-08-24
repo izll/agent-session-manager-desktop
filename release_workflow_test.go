@@ -1,7 +1,6 @@
 package main
 
 import (
-	"os"
 	"regexp"
 	"strings"
 	"testing"
@@ -30,10 +29,7 @@ func TestWorkflowActionsArePinnedToImmutableCommits(t *testing.T) {
 	mutable := regexp.MustCompile(`(?m)^\s*-?\s*uses:\s+[^\s@]+@([^\s#]+)`)
 	sha := regexp.MustCompile(`^[0-9a-f]{40}$`)
 	for _, path := range []string{".github/workflows/ci.yml", ".github/workflows/release.yml"} {
-		raw, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatal(err)
-		}
+		raw := []byte(readTextFile(t, path))
 		for _, match := range mutable.FindAllStringSubmatch(string(raw), -1) {
 			if !sha.MatchString(match[1]) {
 				t.Errorf("%s has mutable third-party action reference %q; pin its full commit SHA", path, match[1])
@@ -182,14 +178,8 @@ func TestWindowsCrossBuildVerifiesDownloadedNativeDependency(t *testing.T) {
 }
 
 func TestWindowsReleaseDoesNotAdvertiseUnsafeInProcessUpdates(t *testing.T) {
-	workflow, err := os.ReadFile(".github/workflows/release.yml")
-	if err != nil {
-		t.Fatal(err)
-	}
-	installer, err := os.ReadFile("build/windows/installer/project.nsi")
-	if err != nil {
-		t.Fatal(err)
-	}
+	workflow := []byte(readTextFile(t, ".github/workflows/release.yml"))
+	installer := []byte(readTextFile(t, "build/windows/installer/project.nsi"))
 	if !strings.Contains(string(workflow), "- name: Package portable .tar.gz") {
 		t.Fatal("Windows archive is not identified as a manual portable package")
 	}
@@ -214,10 +204,7 @@ func TestWindowsReleaseDoesNotAdvertiseUnsafeInProcessUpdates(t *testing.T) {
 func TestMacBundlesAllowTheLoopbackTerminalTransport(t *testing.T) {
 	localATS := regexp.MustCompile(`(?s)<key>NSAppTransportSecurity</key>\s*<dict>.*?<key>NSAllowsLocalNetworking</key>\s*<true\s*/>.*?</dict>`)
 	for _, path := range []string{"build/darwin/Info.plist", "build/darwin/Info.dev.plist"} {
-		raw, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatal(err)
-		}
+		raw := []byte(readTextFile(t, path))
 		if !localATS.Match(raw) {
 			t.Errorf("%s does not allow the ws://127.0.0.1 terminal transport", path)
 		}
@@ -225,10 +212,7 @@ func TestMacBundlesAllowTheLoopbackTerminalTransport(t *testing.T) {
 }
 
 func TestMacBundlesDoNotAdvertiseAnUnsupportedGoRuntime(t *testing.T) {
-	goMod, err := os.ReadFile("go.mod")
-	if err != nil {
-		t.Fatal(err)
-	}
+	goMod := []byte(readTextFile(t, "go.mod"))
 	// Go 1.25 dropped support for macOS releases older than Monterey. Keep the
 	// bundle's install/runtime gate aligned instead of letting Finder offer an
 	// application whose Go runtime cannot start on the advertised OS.
@@ -237,10 +221,7 @@ func TestMacBundlesDoNotAdvertiseAnUnsupportedGoRuntime(t *testing.T) {
 	}
 	minimum := regexp.MustCompile(`(?s)<key>LSMinimumSystemVersion</key>\s*<string>12\.0\.0</string>`)
 	for _, path := range []string{"build/darwin/Info.plist", "build/darwin/Info.dev.plist"} {
-		raw, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatal(err)
-		}
+		raw := []byte(readTextFile(t, path))
 		if !minimum.Match(raw) {
 			t.Errorf("%s advertises a macOS version unsupported by the Go 1.25 runtime", path)
 		}

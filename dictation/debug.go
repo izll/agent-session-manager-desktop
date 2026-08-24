@@ -313,7 +313,18 @@ func compactDictationLogLocked(file *os.File, maximum, retain int64) error {
 	} else {
 		buf = nil
 	}
-	if err := file.Truncate(0); err != nil {
+	// Not file.Truncate: the handle is opened O_APPEND, and Windows grants an
+	// append handle the right to add to the file, not to shorten it — Truncate
+	// there fails with "Access is denied". A separate O_RDWR handle can.
+	truncator, err := os.OpenFile(file.Name(), os.O_RDWR, 0600)
+	if err != nil {
+		return err
+	}
+	if err := truncator.Truncate(0); err != nil {
+		truncator.Close()
+		return err
+	}
+	if err := truncator.Close(); err != nil {
 		return err
 	}
 	if len(buf) != 0 {

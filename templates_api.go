@@ -116,7 +116,7 @@ func (a *App) SaveSessionTemplate(id, name, description, sessionName, path, agen
 
 	err := a.storage.UpdateTemplates(func(lib *session.TemplateLibrary) error {
 		if id == "" {
-			entry.ID = fmt.Sprintf("tpl_%d", time.Now().UnixNano())
+			entry.ID = session.NewUniqueID("tpl", takenTemplateIDs(lib.Templates))
 			entry.CreatedAt = time.Now()
 			entry.Name = uniqueTemplateName(entry.Name, lib.Templates, "")
 			lib.Templates = append(lib.Templates, entry)
@@ -163,7 +163,7 @@ func (a *App) SaveSessionAsTemplate(sessionID, templateName string, keepPath boo
 		return "", err
 	}
 	err = a.storage.UpdateTemplates(func(lib *session.TemplateLibrary) error {
-		entry.ID = fmt.Sprintf("tpl_%d", time.Now().UnixNano())
+		entry.ID = session.NewUniqueID("tpl", takenTemplateIDs(lib.Templates))
 		entry.Name = uniqueTemplateName(entry.Name, lib.Templates, "")
 		lib.Templates = append(lib.Templates, entry)
 		return nil
@@ -289,4 +289,13 @@ func uniqueTemplateName(base string, existing []session.SessionTemplate, ignoreI
 			return candidate
 		}
 	}
+}
+
+// takenTemplateIDs collects the template IDs already in use.
+func takenTemplateIDs(templates []session.SessionTemplate) map[string]bool {
+	taken := make(map[string]bool, len(templates))
+	for _, t := range templates {
+		taken[t.ID] = true
+	}
+	return taken
 }

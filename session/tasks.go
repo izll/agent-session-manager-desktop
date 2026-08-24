@@ -700,7 +700,7 @@ func (tm *TaskManager) AddSubtask(taskID, title string) (*Subtask, error) {
 			previous := cloneTask(tm.store.Tasks[i])
 			previousMeta := tm.store.Meta
 			created = Subtask{
-				ID:        fmt.Sprintf("subtask_%d", time.Now().UnixNano()),
+				ID:        NewUniqueID("subtask", takenSubtaskIDs(tm.store.Tasks[i].Subtasks)),
 				Title:     title,
 				Status:    TaskStatusBacklog,
 				Done:      false,
@@ -951,4 +951,13 @@ func (tm *TaskManager) FormatTaskForAgent(taskID string) (string, error) {
 	prompt += fmt.Sprintf("### Priority: %s\n", task.Priority)
 
 	return prompt, nil
+}
+
+// takenSubtaskIDs collects the subtask IDs already in use.
+func takenSubtaskIDs(subtasks []Subtask) map[string]bool {
+	taken := make(map[string]bool, len(subtasks))
+	for _, st := range subtasks {
+		taken[st.ID] = true
+	}
+	return taken
 }

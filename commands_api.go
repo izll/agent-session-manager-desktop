@@ -87,7 +87,11 @@ func (a *App) SaveCommand(id, name, command, description, groupID string, sendEn
 
 	err := a.storage.UpdateCommands(func(lib *session.CommandLibrary) error {
 		if id == "" {
-			entry.ID = fmt.Sprintf("cmd_%d", time.Now().UnixNano())
+			taken := make(map[string]bool, len(lib.Commands))
+			for _, c := range lib.Commands {
+				taken[c.ID] = true
+			}
+			entry.ID = session.NewUniqueID("cmd", taken)
 			entry.CreatedAt = time.Now()
 			lib.Commands = append(lib.Commands, entry)
 			return nil
@@ -140,7 +144,7 @@ func (a *App) SaveCommandGroup(id, name string) (string, error) {
 	err := a.storage.UpdateCommands(func(lib *session.CommandLibrary) error {
 		if id == "" {
 			g := session.CommandGroup{
-				ID:    fmt.Sprintf("cgrp_%d", time.Now().UnixNano()),
+				ID:    session.NewUniqueID("cgrp", takenGroupIDs(lib.Groups)),
 				Name:  name,
 				Order: len(lib.Groups),
 			}
@@ -242,4 +246,13 @@ func (a *App) RunCommand(id, sessionID string, windowIdx int, values map[string]
 		log.Printf("[commands] could not record usage of %s: %v", id, serr)
 	}
 	return nil
+}
+
+// takenGroupIDs collects the command-group IDs already in use.
+func takenGroupIDs(groups []session.CommandGroup) map[string]bool {
+	taken := make(map[string]bool, len(groups))
+	for _, g := range groups {
+		taken[g.ID] = true
+	}
+	return taken
 }

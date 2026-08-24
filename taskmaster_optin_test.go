@@ -61,11 +61,8 @@ func TestTaskMasterOptInBlocksNpx(t *testing.T) {
 		t.Fatal(err)
 	}
 	tripwire := filepath.Join(tmp, "npx-was-called")
-	script := "#!/bin/sh\necho \"$@\" >> " + tripwire + "\nexit 1\n"
 	for _, name := range []string{"npx", "npm"} {
-		if err := os.WriteFile(filepath.Join(binDir, name), []byte(script), 0o755); err != nil {
-			t.Fatal(err)
-		}
+		writeFakeRecorder(t, binDir, name, tripwire)
 	}
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	t.Setenv("HOME", tmp)
@@ -180,10 +177,7 @@ func TestStopAllTaskMastersCancelsInFlightExternalStart(t *testing.T) {
 		t.Fatal(err)
 	}
 	started := filepath.Join(tmp, "npx-started")
-	script := "#!/bin/sh\necho started > '" + started + "'\nexec sleep 30\n"
-	if err := os.WriteFile(filepath.Join(binDir, "npx"), []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	writeFakeBlocker(t, binDir, "npx", started)
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	t.Setenv("HOME", tmp)
 	t.Setenv("USERPROFILE", tmp) // os.UserHomeDir reads this on Windows
@@ -259,10 +253,7 @@ func TestStopTaskMasterCancelsItsInFlightExternalStart(t *testing.T) {
 		t.Fatal(err)
 	}
 	started := filepath.Join(tmp, "npx-started")
-	script := "#!/bin/sh\necho started > '" + started + "'\nexec sleep 30\n"
-	if err := os.WriteFile(filepath.Join(binDir, "npx"), []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	writeFakeBlocker(t, binDir, "npx", started)
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	t.Setenv("HOME", tmp)
 	t.Setenv("USERPROFILE", tmp) // os.UserHomeDir reads this on Windows

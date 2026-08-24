@@ -1083,8 +1083,8 @@ func (s *Storage) importDefaultSessions(projectID string, save func([]*Instance,
 			continue
 		}
 		newID := group.ID
-		for newID == "" || usedGroupIDs[newID] {
-			newID = fmt.Sprintf("grp_%d", time.Now().UnixNano())
+		if newID == "" || usedGroupIDs[newID] {
+			newID = newGroupID(usedGroupIDs)
 		}
 		group.ID = newID
 		groupRemap[sourceID] = newID
@@ -1764,8 +1764,12 @@ func (s *Storage) AddGroup(name string) (*Group, error) {
 		}
 	}
 
+	taken := make(map[string]bool, len(groups))
+	for _, g := range groups {
+		taken[g.ID] = true
+	}
 	group := &Group{
-		ID:        fmt.Sprintf("grp_%d", time.Now().UnixNano()),
+		ID:        newGroupID(taken),
 		Name:      name,
 		Collapsed: false,
 	}
@@ -1776,6 +1780,15 @@ func (s *Storage) AddGroup(name string) (*Group, error) {
 	}
 
 	return group, nil
+}
+
+// newGroupID mints a group ID that is not already taken. The nanosecond clock
+// is not a source of unique values: on Windows its resolution is coarse enough
+// that two calls in a row read the same instant, and the ID would collide with
+// the one just handed out. Counting up from the timestamp keeps the IDs sorted
+// by creation while guaranteeing they differ.
+func newGroupID(taken map[string]bool) string {
+	return NewUniqueID("grp", taken)
 }
 
 // RemoveGroup removes a group (sessions become ungrouped)
@@ -2034,4 +2047,19 @@ func (s *Storage) LoadAllForProject(projectID string) ([]*Instance, []*Group, er
 		return loadErr
 	})
 	return instances, groups, err
+}
+
+// NewUniqueID mints an ID with the given prefix that is not in taken. Callers
+// that mint IDs from time.Now().UnixNano() alone are relying on the clock to
+// never repeat, which it does on Windows: its resolution is coarse enough that
+// two calls in a row read the same instant.
+func NewUniqueID(prefix string, taken map[string]bool) string {
+	stamp := time.Now().UnixNano()
+	for {
+		id := fmt.Sprintf("%s_%d", prefix, stamp)
+		if !taken[id] {
+			return id
+		}
+		stamp++
+	}
 }

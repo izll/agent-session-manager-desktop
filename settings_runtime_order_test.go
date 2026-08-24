@@ -53,15 +53,22 @@ func TestSaveSettingsAppliesRuntimeOnlyAfterDurableCommit(t *testing.T) {
 	// Force the durable write to fail after the read and the mutation callback
 	// have succeeded.
 	//
-	// A read-only config directory does it. Planting a directory at the staging
-	// path used to, back when the write staged at a fixed sessions.json.tmp —
-	// it now goes through CreateTemp, so there is no name to plant at. The
-	// point of the test is the outcome, not how the failure is produced.
+	// Standing a plain file where the config directory belongs does it: nothing
+	// can be created inside a file, on any platform. A read-only directory is
+	// not the way — Windows ignores the POSIX permission bits, so chmod 0500
+	// there leaves the directory perfectly writable and the write succeeds.
+	// Planting a directory at the staging path used to work, back when the
+	// write staged at a fixed sessions.json.tmp; it now goes through CreateTemp,
+	// so there is no name to plant at. The point of the test is the outcome,
+	// not how the failure is produced.
 	configDir := filepath.Join(os.Getenv("HOME"), ".config", "agent-session-manager-desktop")
-	if err := os.Chmod(configDir, 0o500); err != nil {
+	if err := os.RemoveAll(configDir); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = os.Chmod(configDir, 0o700) })
+	if err := os.WriteFile(configDir, []byte("not a directory"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Remove(configDir) })
 	if err := app.SaveSettings(settings, ""); err == nil {
 		t.Fatal("settings save unexpectedly succeeded with an unusable staging path")
 	}
@@ -70,7 +77,10 @@ func TestSaveSettingsAppliesRuntimeOnlyAfterDurableCommit(t *testing.T) {
 	}
 	// Let the next save through: the rest of the test checks that a SUCCESSFUL
 	// persist does apply the runtime settings.
-	if err := os.Chmod(configDir, 0o700); err != nil {
+	if err := os.Remove(configDir); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(configDir, 0o700); err != nil {
 		t.Fatal(err)
 	}
 

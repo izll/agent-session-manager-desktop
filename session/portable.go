@@ -367,10 +367,7 @@ func (s *Storage) ImportPortableSessions(sessions []PortableSession, portableGro
 		if id := groupByName[name]; id != "" {
 			return id
 		}
-		id := fmt.Sprintf("grp_%d", time.Now().UnixNano())
-		for groupIDs[id] {
-			id = fmt.Sprintf("grp_%d", time.Now().UnixNano())
-		}
+		id := newGroupID(groupIDs)
 		metadata := portableGroupByName[name]
 		data.Groups = append(data.Groups, &Group{
 			ID: id, Name: name, Color: metadata.Color,
