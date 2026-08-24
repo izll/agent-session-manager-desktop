@@ -140,13 +140,41 @@ func CanonicalProjectPath(projectPath string) string {
 		projectPath = absolute
 	}
 	projectPath = filepath.Clean(projectPath)
-	if resolved, err := filepath.EvalSymlinks(projectPath); err == nil {
-		projectPath = filepath.Clean(resolved)
-	}
+	projectPath = resolveThroughExistingAncestor(projectPath)
 	if runtime.GOOS == "windows" {
 		projectPath = strings.ToLower(projectPath)
 	}
 	return projectPath
+}
+
+// resolveThroughExistingAncestor resolves the symlinks in path even when path
+// itself does not exist yet.
+//
+// EvalSymlinks fails on a missing path, and simply keeping the unresolved one
+// makes the answer depend on *when* it is asked: a directory that exists
+// resolves to /private/var/…, the same directory a moment before it is created
+// stays /var/…. Two processes then disagree about a project's identity and take
+// different lock files and different tasks.json — each overwriting the other.
+// macOS reaches this every time, since its temporary and per-user directories
+// live under a symlinked /var.
+//
+// So walk up to the deepest ancestor that does exist, resolve that, and rejoin
+// the components that were trimmed. If nothing resolves, the cleaned path is
+// still returned, which is what the caller would have got anyway.
+func resolveThroughExistingAncestor(path string) string {
+	remainder := ""
+	current := path
+	for {
+		if resolved, err := filepath.EvalSymlinks(current); err == nil {
+			return filepath.Clean(filepath.Join(resolved, remainder))
+		}
+		parent := filepath.Dir(current)
+		if parent == current {
+			return path
+		}
+		remainder = filepath.Join(filepath.Base(current), remainder)
+		current = parent
+	}
 }
 
 // getTaskFilePath returns the path to the tasks.json file
