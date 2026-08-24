@@ -345,6 +345,8 @@ export function StopTab(arg1:string,arg2:number,arg3:string):Promise<void>;
 
 export function StopTaskMaster(arg1:string,arg2:string):Promise<void>;
 
+export function TabIsGitRepo(arg1:string,arg2:number):Promise<boolean>;
+
 export function TaskMasterAddDependency(arg1:string,arg2:string,arg3:string,arg4:string):Promise<void>;
 
 export function TaskMasterAddManualTask(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string,arg6:string):Promise<main.MCPTaskInfo>;

@@ -686,6 +686,10 @@ export function StopTaskMaster(arg1, arg2) {
   return window['go']['main']['App']['StopTaskMaster'](arg1, arg2);
 }
 
+export function TabIsGitRepo(arg1, arg2) {
+  return window['go']['main']['App']['TabIsGitRepo'](arg1, arg2);
+}
+
 export function TaskMasterAddDependency(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['TaskMasterAddDependency'](arg1, arg2, arg3, arg4);
 }

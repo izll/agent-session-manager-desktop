@@ -509,6 +509,19 @@ func allDigits(s string) bool {
 	return s != ""
 }
 
+// RunningVersion is the version compiled into this binary, set by main at
+// start-up.
+//
+// Declared here rather than beside the Linux package helper that reads it: main
+// assigns it on every platform, so a build-tagged declaration leaves Windows and
+// macOS failing to compile — which is exactly what happened.
+//
+// The helper needs it to refuse a downgrade, and cannot take the caller's word
+// for the running version: pkexec re-enters this same executable, so the
+// compiled-in value is the one thing an attacker invoking the helper directly
+// cannot choose.
+var RunningVersion string
+
 func validateReleaseVersion(version string) error {
 	parsed, ok := parseSemver(version)
 	if !ok || parsed.prerelease != "" {

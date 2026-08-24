@@ -274,14 +274,6 @@ func readOfficialChecksumContext(ctx context.Context, rawURL, filename string) (
 	return readChecksumContextWithClient(ctx, client, rawURL, filename)
 }
 
-// RunningVersion is the version compiled into this binary, set by main at
-// start-up.
-//
-// The helper needs it to refuse a downgrade, and cannot take the caller's word
-// for it: pkexec re-enters this same executable, so the compiled-in value is
-// the one thing an attacker invoking the helper directly cannot choose.
-var RunningVersion string
-
 func verifyOfficialPackageChecksum(ctx context.Context, version, packageKind, suppliedChecksum string, read officialChecksumReader) error {
 	if err := validateReleaseVersion(version); err != nil {
 		return err
