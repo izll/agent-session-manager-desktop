@@ -1,6 +1,7 @@
 package dictation
 
 import (
+	"io"
 	"os"
 	"os/exec"
 	"strings"
@@ -41,13 +42,27 @@ func TestTypedTextIsNotPersistedInDictationLog(t *testing.T) {
 func TestKeyboardCommandHasTimeAndOutputBounds(t *testing.T) {
 	switch os.Getenv("ASMGR_KEYBOARD_HELPER") {
 	case "leaf":
-		time.Sleep(30 * time.Second)
+		// Block on a pipe the parent holds instead of sleeping, so this process
+		// goes away the moment the parent is killed. A fixed sleep outlives it,
+		// and on Windows a running .exe cannot be deleted — the leftover
+		// grandchild made `go test` fail cleaning its own build cache, long
+		// after every test had passed.
+		_, _ = io.Copy(io.Discard, os.Stdin)
 		return
 	case "hang":
 		child := exec.Command(os.Args[0], "-test.run=^TestKeyboardCommandHasTimeAndOutputBounds$")
 		child.Env = append(os.Environ(), "ASMGR_KEYBOARD_HELPER=leaf")
 		child.Stdout, child.Stderr = os.Stdout, os.Stderr
+		// The grandchild inherits this end of the pipe; it closes when this
+		// process dies, which unblocks and ends the grandchild.
+		stdin, pipeErr := child.StdinPipe()
+		if pipeErr == nil {
+			defer stdin.Close()
+		}
 		_ = child.Start()
+		// This process is the one runKeyboardCommand must time out on, so it
+		// does have to block for longer than the timeout. It is killed by the
+		// context; only the grandchild needed a way out.
 		time.Sleep(30 * time.Second)
 		return
 	}
@@ -60,6 +75,12 @@ func TestKeyboardCommandHasTimeAndOutputBounds(t *testing.T) {
 	if _, err := runKeyboardCommand(os.Args[0], "-test.run=^TestKeyboardCommandHasTimeAndOutputBounds$"); err == nil {
 		t.Fatal("hanging keyboard helper unexpectedly succeeded")
 	}
+	// The helpers run this very test binary. Windows will not delete a running
+	// .exe, so any helper still winding down when the test ends makes `go test`
+	// fail clearing its own build cache — after every test has already passed.
+	// runKeyboardCommand's context kill does not wait for the tree to go away,
+	// so give it a moment here rather than leaving it to chance.
+	time.Sleep(250 * time.Millisecond)
 	if elapsed := time.Since(started); elapsed > 2*time.Second {
 		t.Fatalf("keyboard helper ignored timeout for %v", elapsed)
 	}
