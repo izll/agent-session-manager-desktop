@@ -26,9 +26,18 @@ func writeFakeRecorder(t *testing.T, dir, name, logPath string) {
 func writeFakeBlocker(t *testing.T, dir, name, startedPath string) {
 	t.Helper()
 	if runtime.GOOS == "windows" {
-		// ping is the batch idiom for sleeping; timeout needs a real console.
-		script := "@echo off\r\necho started > \"" + startedPath + "\"\r\n" +
-			"ping -n 31 127.0.0.1 > nul\r\n"
+		// cd out of the temp tree first: a running process holds its working
+		// directory open, and Windows will not remove a directory anything is
+		// using — t.TempDir()'s cleanup then fails the test that just passed.
+		//
+		// Loop over short pings rather than one long one. Killing the batch
+		// interpreter does not kill the ping it is waiting on, so a single
+		// 30-second ping outlives the test; a one-second one is gone almost
+		// immediately. ping is the batch idiom for sleeping — timeout needs a
+		// real console and fails under a redirected stdin.
+		script := "@echo off\r\ncd /d \"%SystemRoot%\"\r\n" +
+			"echo started > \"" + startedPath + "\"\r\n" +
+			"for /l %%i in (1,1,30) do ping -n 2 127.0.0.1 > nul\r\n"
 		writeExecutable(t, filepath.Join(dir, name+".cmd"), script)
 		return
 	}
