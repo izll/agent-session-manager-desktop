@@ -25,6 +25,11 @@ const backend = new Proxy({
   GetBufferText: async () => '',
   GetVoiceLevel: async () => 0,
   GetTabWorkingDirectory: async () => '/fixture',
+  // The diff controls ask about the TAB's directory, not the session's — a tab
+  // can be opened in one of its own. Without this the proxy below answers
+  // undefined and the fixture's repository looks like a plain folder, so the
+  // diff buttons this file exercises never render.
+  TabIsGitRepo: async () => true,
   GetGitBranch: async () => ({ isRepo: true, branch: 'main' }),
   SaveSettings: async (...args: unknown[]) => { settingsSaves.push(structuredClone(args)); },
   LogFrontend: async () => undefined,
