@@ -364,6 +364,12 @@
     showNewTabDialog = true;
   }
 
+  // The dialogs this component owns, by state rather than by rendered DOM.
+  function tabBarDialogOpen(): boolean {
+    return showNewTabDialog || showQuickTerminalDialog || showDeleteConfirm ||
+      showDeleteTabConfirm || showExtraArgsEditor || showTabColorDialog;
+  }
+
   // Restore terminal focus when TabBar-local dialogs close
   let prevTabBarDialogOpen = false;
   $: {
@@ -383,9 +389,14 @@
     // Matched against the configured bindings rather than hard-coded keys, so
     // rebinding tab navigation in settings reaches this too.
     if (matchesShortcut(e, 'tab.newTerminal')) {
-      if (document.querySelector('.dialog-overlay')) return;
+      // Not only the rendered overlay: `show` is set here but the element it
+      // creates does not exist until Svelte's next tick, so a key held long
+      // enough to auto-repeat gets past a DOM-only check and opens the dialog
+      // twice — two terminals from one press.
+      if (tabBarDialogOpen() || document.querySelector('.dialog-overlay')) return;
       e.preventDefault();
       e.stopPropagation();
+      if (e.repeat) return;
       const session = get(selectedSession);
       if (session?.status !== 'running') return;
       quickTerminalSessionId = session.id;
@@ -393,9 +404,10 @@
       return;
     }
     if (matchesShortcut(e, 'tab.new')) {
-      if (document.querySelector('.dialog-overlay')) return;
+      if (tabBarDialogOpen() || document.querySelector('.dialog-overlay')) return;
       e.preventDefault();
       e.stopPropagation();
+      if (e.repeat) return;
       // Through the same guard the palette's action uses: a tab can only be
       // opened on a session that is running.
       handleCommandNewTab();

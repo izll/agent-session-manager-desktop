@@ -113,6 +113,10 @@
       close();
     } else if (e.key === 'Enter' && !e.shiftKey && !dialogEnterBelongsToControl(e)) {
       e.preventDefault();
+      // A held Enter repeats, and the first repeat can arrive before the tab
+      // exists — isSubmitting is set by then, but not before this second event
+      // is already queued. One press, one terminal.
+      if (e.repeat) return;
       handleSubmit();
     }
   }
