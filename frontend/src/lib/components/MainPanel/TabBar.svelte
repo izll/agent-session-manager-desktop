@@ -1675,9 +1675,14 @@
     {#if windows.length > 0}
       <div class="tabs-container">
         {#each windows as win, winArrayIdx (win.Index)}
+          <!-- Active regardless of the diff: the diff is a view OF this tab,
+               not somewhere else. The old exclusion dates from when the diff
+               was a tab in this bar, competing for the same highlight; it lives
+               in the view bar now, so leaving the tab unmarked merely hid which
+               tab the diff belonged to. -->
           <button
             class="tab"
-            class:active={$selectedWindowIdx === win.Index && !fullDiffActive}
+            class:active={$selectedWindowIdx === win.Index}
             class:dead={win.Dead}
             class:stopped={currentSessionStatus !== 'running'}
             class:tab-dragging={draggingTabIndex === winArrayIdx}

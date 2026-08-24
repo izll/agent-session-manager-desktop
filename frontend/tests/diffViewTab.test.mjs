@@ -104,4 +104,36 @@ assert.doesNotMatch(
   'closing the diff must leave the underlying view alone',
 );
 
+// A tab left showing its diff comes back to it.
+//
+// The diff is that tab's work: comparing two agents means going back and forth
+// between their diffs, and demanding a press of Diff on every arrival makes the
+// app fight the comparison. Notes, tasks and files deliberately do NOT come
+// back — those are places you go to look at something, and restoring them read
+// as the app losing track of where you were.
+//
+// This was removed once, when the diff covered the whole view bar and returning
+// to one left no sign of where you were or how to leave. It sits under the bar
+// now, with the tab and the view both still marked.
+assert.match(panel, /const tabDiffMemory = new Set<string>\(\);/, 'the tabs left on the diff must be remembered');
+assert.match(
+  panel,
+  /fullDiffActive = tabDiffMemory\.has\(key\);/,
+  'returning to such a tab must restore its diff',
+);
+assert.match(
+  panel,
+  /if \(fullDiffActive\) tabDiffMemory\.add\(lastViewKey\);\s*\n\s*else tabDiffMemory\.delete\(lastViewKey\);/,
+  'and leaving a tab must record whether the diff was open',
+);
+// The other views stay unremembered on purpose.
+assert.match(panel, /activeView = 'terminal';/, 'arrival still lands on the terminal for every other view');
+
+// The tab stays marked while its diff is open: the diff is a view OF that tab.
+assert.match(
+  tabBar,
+  /class:active=\{\$selectedWindowIdx === win\.Index\}/,
+  'a tab showing its diff must still read as the active tab',
+);
+
 console.log('diffViewTab: ok');

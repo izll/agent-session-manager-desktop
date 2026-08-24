@@ -158,26 +158,41 @@
   // activeView one of its dependencies, so every view change would re-enter it
   // and race with the assignment that caused it.
   let lastViewKey = '';
+  /**
+   * Which tabs were left showing their diff.
+   *
+   * In memory only: it tracks where you are in this sitting, not a preference.
+   * Keyed the same way the tab itself is, so a tab in another project cannot
+   * inherit it.
+   */
+  const tabDiffMemory = new Set<string>();
+
   $: {
     const key = tabViewKey($selectedSessionId, $selectedWindowIdx ?? 0);
     if (key !== lastViewKey) {
+      // Record the outgoing tab before the key moves on.
+      if (lastViewKey) {
+        if (fullDiffActive) tabDiffMemory.add(lastViewKey);
+        else tabDiffMemory.delete(lastViewKey);
+      }
       lastViewKey = key;
       // Coming back to a tab shows its terminal, whatever was on screen when
       // you left it.
       //
-      // The view used to be restored per tab, on the reasoning that the tab
-      // itself is remembered so its view should be too. In use that read as the
-      // app losing track: going agent tab → diff → another agent tab → back
-      // brought up the diff, when what you returned for was the agent. A diff
-      // or a notes panel is somewhere you go to look at something, not a place
-      // the tab lives, and the cost of guessing wrong is high — the diff covers
-      // the whole panel, so the agent you meant to check is not even behind it.
+      // Notes, tasks and files do not come back with you: those are places you
+      // go to look at something, and restoring them read as the app losing
+      // track of where you were.
       //
-      // The per-tab memories this used to keep went with it: nothing read them
-      // once arrival stopped depending on them.
-      fullDiffActive = false;
+      // The diff does, and the difference is what it is about. A tab's diff is
+      // that tab's work — comparing two agents means going back and forth
+      // between their diffs, and forcing a press of Diff on every arrival makes
+      // the app fight the comparison. When this last changed the diff covered
+      // the whole view bar, so returning to one left no sign of where you were
+      // or how to leave; it sits under the bar now, with the tab and the view
+      // both still marked, which is what makes coming back to it legible.
       diffAbove = false;
       activeView = 'terminal';
+      fullDiffActive = tabDiffMemory.has(key);
     }
   }
 
