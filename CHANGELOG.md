@@ -42,6 +42,14 @@ dates; the format follows [Keep a Changelog](https://keepachangelog.com).
   same flaw could give two sessions one tmux session, and could hang the session
   import outright. Groups, sessions, tasks, subtasks, commands and templates all
   mint IDs that are checked against the ones already in use.
+- **One press of Ctrl+Shift+T opens one terminal.** Holding the shortcut a moment
+  too long created two tabs, one of them in an odd state: the check for an
+  already-open dialog looked at the screen, and the dialog is not on screen yet
+  in the instant the key repeats.
+- **Two app instances agree on which directory a project is.** The path was
+  resolved only when it already existed, so the same project could be identified
+  two different ways depending on the moment — and the two instances then kept
+  separate task files, each overwriting the other. macOS met this routinely.
 - **On Windows, the log can be cleared and compacted again.** Both went through a
   handle opened for appending, which Windows will not let shorten a file, so the
   log grew past its limit and the button in Settings did nothing.
