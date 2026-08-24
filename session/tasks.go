@@ -421,9 +421,15 @@ func (tm *TaskManager) GetTask(id string) (*Task, error) {
 	return nil, fmt.Errorf("task not found: %s", id)
 }
 
-// generateTaskID generates a unique task ID
+// generateTaskID generates a task ID that no existing task already holds. The
+// clock alone does not give one: on Windows its resolution is coarse enough
+// that two calls in a row read the same instant. Callers hold tm.mu.
 func (tm *TaskManager) generateTaskID() string {
-	return fmt.Sprintf("task_%d", time.Now().UnixNano())
+	taken := make(map[string]bool, len(tm.store.Tasks))
+	for _, task := range tm.store.Tasks {
+		taken[task.ID] = true
+	}
+	return NewUniqueID("task", taken)
 }
 
 // CreateTask creates a new task

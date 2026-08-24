@@ -382,8 +382,8 @@ func (s *Storage) ImportPortableSessions(sessions []PortableSession, portableGro
 		portable.Name = uniquePortableSessionName(portable.Name, takenNames)
 		takenNames[portable.Name] = true
 		instance := portable.FromPortable(ensureGroup(portable.GroupName))
-		for takenIDs[instance.ID] {
-			instance.ID = generateID(instance.Name, instance.Agent)
+		if takenIDs[instance.ID] {
+			instance.ID = generateUniqueID(instance.Name, instance.Agent, takenIDs)
 		}
 		takenIDs[instance.ID] = true
 		data.Instances = append(data.Instances, instance)

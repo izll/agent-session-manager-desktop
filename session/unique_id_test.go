@@ -69,3 +69,38 @@ func TestAddGroupTwiceGivesDistinctIDs(t *testing.T) {
 		t.Fatalf("both groups got the ID %q", first.ID)
 	}
 }
+
+// The session ID becomes the tmux session name. The import path used to retry
+// on a collision by calling generateID again, which on Windows returns the same
+// value from the same frozen clock — an infinite loop, not just a duplicate.
+func TestGenerateUniqueIDTerminatesWithAFrozenClock(t *testing.T) {
+	frozen := time.Now().UnixNano()
+	restore := nowUnixNano
+	nowUnixNano = func() int64 { return frozen }
+	t.Cleanup(func() { nowUnixNano = restore })
+
+	taken := make(map[string]bool)
+	done := make(chan []string, 1)
+	go func() {
+		ids := make([]string, 0, 50)
+		for i := 0; i < 50; i++ {
+			id := generateUniqueID("my session", AgentClaude, taken)
+			taken[id] = true
+			ids = append(ids, id)
+		}
+		done <- ids
+	}()
+
+	select {
+	case ids := <-done:
+		seen := make(map[string]bool, len(ids))
+		for _, id := range ids {
+			if seen[id] {
+				t.Fatalf("generateUniqueID repeated %q", id)
+			}
+			seen[id] = true
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("generateUniqueID did not terminate with a clock that never advances")
+	}
+}

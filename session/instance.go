@@ -337,13 +337,28 @@ func sanitizeSessionName(name string) string {
 }
 
 func generateID(name string, agent AgentType) string {
+	return generateUniqueID(name, agent, nil)
+}
+
+// generateUniqueID builds a session ID that is not in taken. The ID becomes the
+// tmux session name, so a collision means two sessions driving one tmux
+// session. The clock does not prevent it: on Windows its resolution is coarse
+// enough that consecutive readings are identical, so retrying on a collision
+// without advancing the stamp would spin forever.
+func generateUniqueID(name string, agent AgentType, taken map[string]bool) string {
 	sanitized := sanitizeSessionName(name)
-	timestamp := time.Now().UnixNano()
 	agentStr := string(agent)
 	if agentStr == "" {
 		agentStr = "claude"
 	}
-	return fmt.Sprintf("asm_%s_%s_%d", agentStr, sanitized, timestamp)
+	stamp := nowUnixNano()
+	for {
+		id := fmt.Sprintf("asm_%s_%s_%d", agentStr, sanitized, stamp)
+		if !taken[id] {
+			return id
+		}
+		stamp++
+	}
 }
 
 func (i *Instance) TmuxSessionName() string {
