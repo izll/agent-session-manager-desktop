@@ -102,6 +102,16 @@ type Settings struct {
 	UITheme string `json:"ui_theme,omitempty"`
 	// UIAccent is the custom accent hex, used when UITheme is "custom".
 	UIAccent string `json:"ui_accent,omitempty"`
+	// WindowX/Y/Width/Height remember where the window was when the app last
+	// closed, so it reopens where it was left rather than being recentred every
+	// time. Zero width or height means "never saved" and the centred default
+	// applies; a saved position is only honoured if it still lands on a screen,
+	// since a monitor that has since been unplugged would put the window
+	// somewhere the user cannot reach it.
+	WindowX      int `json:"window_x,omitempty"`
+	WindowY      int `json:"window_y,omitempty"`
+	WindowWidth  int `json:"window_width,omitempty"`
+	WindowHeight int `json:"window_height,omitempty"`
 	// TerminalRenderer selects the xterm.js renderer: "canvas" (default),
 	// "webgl" (fastest but flaky on some WebKitGTK), or "dom" (most compatible).
 	TerminalRenderer string `json:"terminal_renderer,omitempty"`

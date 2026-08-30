@@ -1,5 +1,6 @@
 <script lang="ts">
   import { autoFocusDialog } from '../../utils/dialogActions';
+  import { setDictationHotkey } from '../../utils/dictationHotkey';
   import { createEventDispatcher, onDestroy } from 'svelte';
   import { get } from 'svelte/store';
   import { settings, saveSettings } from '../../stores/settings';
@@ -445,6 +446,15 @@
     (dictationSettings as any)[key] = value;
     dictationSettings = dictationSettings; // trigger reactivity
     saveDictationSettings();
+    // Rebinding takes effect in the panes immediately. Without this the
+    // terminal would keep declining the old combination and pass the new one
+    // straight through to the agent.
+    setDictationHotkey({
+      ctrl: dictationSettings.hotkeyCtrl,
+      alt: dictationSettings.hotkeyAlt,
+      shift: dictationSettings.hotkeyShift,
+      key: dictationSettings.hotkeyKey,
+    });
 
     // Notify parent when enabled state changes
     if (key === 'enabled') {

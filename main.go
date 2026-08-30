@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"asmgr-desktop/session"
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
@@ -129,16 +130,11 @@ func main() {
 			app.startup(ctx)
 		},
 		OnDomReady: func(ctx context.Context) {
-			screens, err := runtime.ScreenGetAll(ctx)
-			if err == nil && len(screens) > 0 {
-				screen := screens[0]
-				w := screen.Size.Width * 80 / 100
-				h := screen.Size.Height * 80 / 100
-				x := (screen.Size.Width - w) / 2
-				y := (screen.Size.Height - h) / 2
-				runtime.WindowSetPosition(ctx, x, y)
-				runtime.WindowSetSize(ctx, w, h)
-			}
+			restoreWindowGeometry(ctx, app)
+		},
+		OnBeforeClose: func(ctx context.Context) bool {
+			saveWindowGeometry(ctx, app)
+			return false
 		},
 		OnShutdown: app.shutdown,
 		Bind: []interface{}{
@@ -300,4 +296,87 @@ func gpuPolicyFromEnv() linux.WebviewGpuPolicy {
 		// raised idle CPU to ~51%.) Override with ASMGR_GPU=never|always.
 		return linux.WebviewGpuPolicyOnDemand
 	}
+}
+
+// restoreWindowGeometry reopens the window where it was last closed.
+//
+// The centred 80% is not only the first-run default: a stored position is only
+// usable while it still lands somewhere reachable. Wails reports each screen's
+// size but not where it sits in the desktop, so this cannot verify the exact
+// monitor — it checks the position against the combined extent of the screens
+// it can see, which catches the case that matters: a monitor unplugged since,
+// leaving coordinates far outside anything that exists.
+func restoreWindowGeometry(ctx context.Context, app *App) {
+	screens, err := runtime.ScreenGetAll(ctx)
+	if err != nil || len(screens) == 0 {
+		return
+	}
+
+	if _, _, settings, err := app.storage.LoadAllWithSettings(); err == nil && settings != nil {
+		w, h := settings.WindowWidth, settings.WindowHeight
+		if w > 0 && h > 0 && positionLooksReachable(screens, settings.WindowX, settings.WindowY) {
+			runtime.WindowSetSize(ctx, w, h)
+			runtime.WindowSetPosition(ctx, settings.WindowX, settings.WindowY)
+			return
+		}
+	}
+
+	screen := currentScreen(screens)
+	w := screen.Size.Width * 80 / 100
+	h := screen.Size.Height * 80 / 100
+	runtime.WindowSetSize(ctx, w, h)
+	runtime.WindowSetPosition(ctx, (screen.Size.Width-w)/2, (screen.Size.Height-h)/2)
+}
+
+// saveWindowGeometry records where the window is, so the next run reopens
+// there. A degenerate size — minimised, or mid-teardown — is not worth storing:
+// it would reopen as a sliver.
+func saveWindowGeometry(ctx context.Context, app *App) {
+	w, h := runtime.WindowGetSize(ctx)
+	if w <= 0 || h <= 0 {
+		return
+	}
+	x, y := runtime.WindowGetPosition(ctx)
+	if err := app.storage.UpdateSettings(func(settings *session.Settings) {
+		settings.WindowX, settings.WindowY = x, y
+		settings.WindowWidth, settings.WindowHeight = w, h
+	}); err != nil {
+		log.Printf("[window] could not save the window geometry: %v", err)
+	}
+}
+
+// currentScreen prefers the screen the window is on, then the primary one.
+// Taking screens[0] is a guess: with several outputs connected it need not be
+// the one the user is looking at.
+func currentScreen(screens []runtime.Screen) runtime.Screen {
+	for _, screen := range screens {
+		if screen.IsCurrent {
+			return screen
+		}
+	}
+	for _, screen := range screens {
+		if screen.IsPrimary {
+			return screen
+		}
+	}
+	return screens[0]
+}
+
+// positionLooksReachable rejects coordinates that cannot correspond to any
+// screen still attached. It is deliberately permissive about the exact monitor,
+// which Wails does not expose: the failure worth preventing is a window opening
+// far off the desktop, not one a little over an edge.
+func positionLooksReachable(screens []runtime.Screen, x, y int) bool {
+	totalWidth, maxHeight := 0, 0
+	for _, screen := range screens {
+		totalWidth += screen.Size.Width
+		if screen.Size.Height > maxHeight {
+			maxHeight = screen.Size.Height
+		}
+	}
+	// A window may sit partly off the top or left, but not wholly beyond the
+	// last screen: from there it cannot be dragged back.
+	const margin = 200
+	return x > -totalWidth && y > -maxHeight &&
+		x < totalWidth+margin && y < maxHeight+margin
 }

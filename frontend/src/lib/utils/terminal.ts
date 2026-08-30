@@ -1,4 +1,5 @@
 import { Terminal, type IDisposable } from '@xterm/xterm';
+import { matchesDictationHotkey } from './dictationHotkey';
 import { FitAddon } from '@xterm/addon-fit';
 import { SearchAddon } from '@xterm/addon-search';
 import { CanvasAddon } from '@xterm/addon-canvas';
@@ -515,6 +516,15 @@ export function createTerminal(
     // Returning false keeps the key out of the pane while still letting it
     // bubble to whoever is listening above.
     if (document.querySelector('.dialog-overlay')) {
+      return false;
+    }
+
+    // The dictation hotkey is registered system-wide, and that listener only
+    // observes key events — on X11 it cannot consume them. So the same press
+    // that starts dictation also reaches the pane: Ctrl+Alt+G was arriving in
+    // Codex and killing the agent. Nothing upstream can swallow it, so the
+    // pane declines it here.
+    if (matchesDictationHotkey(event)) {
       return false;
     }
 

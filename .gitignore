@@ -23,3 +23,7 @@ dictation/api_usage_log.json
 
 # IDE settings — per-developer, not per-project.
 .idea/
+
+# Helyi aláírási segédszkript: személyes adatokat tartalmaz (Apple ID, Team ID,
+# a .p12 jelszavának helye), a repó pedig publikus.
+scripts/setup-macos-signing-secrets.sh

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy, tick } from 'svelte';
+  import { setDictationHotkey } from './lib/utils/dictationHotkey';
   import { get } from 'svelte/store';
   import SessionTree from './lib/components/Sidebar/SessionTree.svelte';
   import ProjectSelector from './lib/components/Sidebar/ProjectSelector.svelte';
@@ -845,6 +846,14 @@
     try {
       const settings = await DictationService.GetDictationSettings();
       if (!appMounted) return;
+      // The terminal needs the binding so it can keep the press out of the
+      // pane: the system-wide listener that starts dictation cannot consume it.
+      setDictationHotkey({
+        ctrl: settings.hotkeyCtrl,
+        alt: settings.hotkeyAlt,
+        shift: settings.hotkeyShift,
+        key: settings.hotkeyKey,
+      });
       dictationEnabled = settings.enabled;
       if (dictationEnabled) {
         await DictationService.Initialize();
