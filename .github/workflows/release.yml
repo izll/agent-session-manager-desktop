@@ -426,8 +426,24 @@ jobs:
           # missing codesign flag or Wails template regression must fail here.
           SIGNED_ENTITLEMENTS="$RUNNER_TEMP/asmgr-signed-entitlements.plist"
           codesign -d --entitlements :- "$APP" > "$SIGNED_ENTITLEMENTS"
-          [ "$(plutil -extract com.apple.security.device.audio-input raw -o - "$SIGNED_ENTITLEMENTS")" = "true" ]
-          test -n "$(plutil -extract NSMicrophoneUsageDescription raw -o - "$APP/Contents/Info.plist")"
+          # The dots must be escaped: plutil reads a key path, so an unescaped
+          # com.apple.security.device.audio-input asks for four nested
+          # dictionaries and never matches the flat key that is actually there.
+          # Unescaped, this failed on a correctly signed bundle — and being a
+          # bare [ ] test under set -e, it exited 1 with nothing said.
+          AUDIO_ENTITLEMENT=$(plutil -extract 'com\.apple\.security\.device\.audio-input' \
+            raw -o - "$SIGNED_ENTITLEMENTS" 2>/dev/null || true)
+          if [ "$AUDIO_ENTITLEMENT" != "true" ]; then
+            echo "Signed bundle is missing the audio-input entitlement" >&2
+            echo "--- entitlements read back from the signature:" >&2
+            cat "$SIGNED_ENTITLEMENTS" >&2
+            exit 1
+          fi
+          if ! plutil -extract NSMicrophoneUsageDescription raw -o - \
+                 "$APP/Contents/Info.plist" >/dev/null 2>&1; then
+            echo "Signed bundle has no NSMicrophoneUsageDescription" >&2
+            exit 1
+          fi
           DECLARED_MIN=$(plutil -extract LSMinimumSystemVersion raw -o - "$APP/Contents/Info.plist")
           if [ "$DECLARED_MIN" != "$MACOS_ARTIFACT_MIN_VERSION" ]; then
             echo "Signed bundle minimum $DECLARED_MIN does not match native payload $MACOS_ARTIFACT_MIN_VERSION" >&2
