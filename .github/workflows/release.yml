@@ -699,6 +699,71 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  # The cask points at a release asset by version and checksum, so it can only
+  # be written once that asset exists. It is deliberately not part of `needs`
+  # for publishing: a tap that lags by one release is a smaller problem than a
+  # release held back by a tap.
+  update-homebrew-cask:
+    name: Update the Homebrew cask
+    needs:
+      - release
+      - release-macos
+    runs-on: ubuntu-24.04
+    # A pre-release must not become what `brew install` hands out.
+    if: ${{ !contains(needs.release.outputs.tag, '-') }}
+    steps:
+      - name: Point the cask at this release
+        env:
+          # The default GITHUB_TOKEN is scoped to this repository alone and
+          # cannot write to the tap. HOMEBREW_TAP_TOKEN is a PAT with `repo`
+          # (or contents:write) on izll/homebrew-tap.
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          TAG: ${{ needs.release.outputs.tag }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::warning::HOMEBREW_TAP_TOKEN is not set — the cask still" \
+                 "points at the previous release. Add the secret, then re-run" \
+                 "this job."
+            exit 0
+          fi
+          V="${TAG#v}"
+          ASSET="asmgr-desktop_${V}_darwin_arm64.tar.gz"
+          BASE="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}"
+
+          # Take the checksum from the file published beside the archive rather
+          # than recomputing it here: if the two ever disagree, the release is
+          # wrong and the cask must not paper over it.
+          SHA=$(curl -sSfL "$BASE/${ASSET}.sha256" | awk '{print $1}')
+          if [ ${#SHA} -ne 64 ]; then
+            echo "Unexpected checksum for $ASSET: '$SHA'" >&2
+            exit 1
+          fi
+          curl -sSfL -o "$RUNNER_TEMP/$ASSET" "$BASE/$ASSET"
+          echo "$SHA  $RUNNER_TEMP/$ASSET" | sha256sum -c - \
+            || { echo "The published archive does not match its own .sha256" >&2; exit 1; }
+
+          git clone --depth 1 \
+            "https://x-access-token:${GH_TOKEN}@github.com/izll/homebrew-tap.git" tap
+          CASK="tap/Casks/asmgr-desktop.rb"
+
+          # Anchored to the whole line so a version string appearing anywhere
+          # else in the file cannot be rewritten by accident.
+          sed -i -E "s|^  version \".*\"$|  version \"${V}\"|" "$CASK"
+          sed -i -E "s|^  sha256 \".*\"$|  sha256 \"${SHA}\"|" "$CASK"
+
+          grep -q "version \"${V}\"" "$CASK" || { echo "version not updated" >&2; exit 1; }
+          grep -q "sha256 \"${SHA}\"" "$CASK" || { echo "sha256 not updated" >&2; exit 1; }
+
+          cd tap
+          if git diff --quiet; then
+            echo "The cask already describes ${TAG}; nothing to do."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -aqm "asmgr-desktop ${V}"
+          git push
+
   publish-release:
     name: Publish complete release
     # macOS is deliberately NOT in needs. Notarization waits on Apple's queue,
