@@ -1037,6 +1037,14 @@
         ((event.ctrlKey || event.metaKey) && event.key === 'g')) {
       event.preventDefault();
       stepDiffSearch(event.shiftKey ? -1 : 1);
+      return;
+    }
+    // The arrows step through matches too. The field is one line, so up and
+    // down do nothing in it — and reaching for them is the natural move once a
+    // search has produced a list of results to walk.
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      stepDiffSearch(event.key === 'ArrowDown' ? 1 : -1);
     }
   }
   /** The hunk-list scroller. The whole-file view has VirtualLines to scroll
@@ -2040,7 +2048,7 @@
                   on:input={runDiffSearch}
                   on:keydown={handleDiffFindKeydown}
                   placeholder={$t('diff.findPlaceholder')}
-                  title="{$t('notes.nextMatch')}: Enter · F3 · Ctrl+G — {$t('notes.previousMatch')}: Shift+Enter"
+                  title="{$t('notes.nextMatch')}: Enter · ↓ · F3 · Ctrl+G — {$t('notes.previousMatch')}: Shift+Enter · ↑"
                 />
                 <span class="find-count">
                   {diffHitCount ? `${diffHitAt}/${diffHitCount}` : (diffQuery ? $t('notes.noMatches') : '')}
@@ -2048,12 +2056,12 @@
                 <button
                   on:click={() => stepDiffSearch(-1)}
                   disabled={!diffHitCount}
-                  title="{$t('notes.previousMatch')} (Shift+Enter)"
+                  title="{$t('notes.previousMatch')} (Shift+Enter · ↑)"
                 >↑</button>
                 <button
                   on:click={() => stepDiffSearch(1)}
                   disabled={!diffHitCount}
-                  title="{$t('notes.nextMatch')} (Enter · F3 · Ctrl+G)"
+                  title="{$t('notes.nextMatch')} (Enter · ↓ · F3 · Ctrl+G)"
                 >↓</button>
                 <button on:click={closeDiffFind} title="{$t('common.close')} (Esc)">×</button>
               </div>
