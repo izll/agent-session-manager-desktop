@@ -701,9 +701,13 @@ jobs:
 
   publish-release:
     name: Publish complete release
+    # macOS is deliberately NOT in needs. Notarization waits on Apple's queue,
+    # which has taken hours — and while it waited, the finished Linux and
+    # Windows builds sat undelivered in a draft. They now publish on their own,
+    # and the macOS job attaches its assets to the same release whenever Apple
+    # answers; re-running that job alone is enough.
     needs:
       - release
-      - release-macos
       - release-windows
     runs-on: ubuntu-24.04
     steps:
@@ -716,8 +720,40 @@ jobs:
         # everybody. Without this a test build for one platform would reach
         # every user as an upgrade.
         run: |
+          # macOS no longer gates this job, so the Linux and Windows assets are
+          # checked here instead of being implied by needs. Publishing a release
+          # that is missing a platform's binary or its checksum would offer the
+          # in-app updater something it cannot verify.
+          V="${RELEASE_TAG#v}"
+          MISSING=""
+          for ASSET in \
+            "asmgr-desktop_${V}_linux_amd64.tar.gz" \
+            "asmgr-desktop_${V}_linux_amd64.tar.gz.sha256" \
+            "asmgr-desktop_${V}_linux_x86_64.deb" \
+            "asmgr-desktop_${V}_linux_x86_64.deb.sha256" \
+            "asmgr-desktop_${V}_linux_x86_64.rpm" \
+            "asmgr-desktop_${V}_linux_x86_64.rpm.sha256" \
+            "asmgr-desktop_${V}_windows_amd64.tar.gz" \
+            "asmgr-desktop_${V}_windows_amd64.tar.gz.sha256" \
+            "asmgr-desktop_${V}_windows_amd64_setup.exe" \
+            "asmgr-desktop_${V}_windows_amd64_setup.exe.sha256"; do
+            gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+              --json assets --jq '.assets[].name' | grep -qx "$ASSET" \
+              || MISSING="$MISSING $ASSET"
+          done
+          if [ -n "$MISSING" ]; then
+            echo "Refusing to publish, these assets are missing:$MISSING" >&2
+            exit 1
+          fi
+
           if [[ "$RELEASE_TAG" =~ -(alpha|beta|rc)([.-]?[0-9]+)?$ ]]; then
             gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false --prerelease
           else
             gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest
+          fi
+          if ! gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+                 --json assets --jq '.assets[].name' | grep -q darwin; then
+            echo "::warning::Published without the macOS build — Apple's" \
+                 "notarization had not finished. Re-run the macOS job to" \
+                 "attach it to this release."
           fi
