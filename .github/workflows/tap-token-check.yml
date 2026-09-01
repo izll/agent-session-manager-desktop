@@ -1,0 +1,17 @@
+name: Tap token check
+on: workflow_dispatch
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Can the token read and write the tap?
+        env:
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then echo "HOMEBREW_TAP_TOKEN is not set" >&2; exit 1; fi
+          echo "--- read:"
+          gh api repos/izll/homebrew-tap --jq '"  \(.full_name) (private=\(.private))"'
+          echo "--- write permission as reported by the API:"
+          gh api repos/izll/homebrew-tap --jq '"  push=\(.permissions.push)  admin=\(.permissions.admin)"'
+          echo "--- the cask is visible:"
+          gh api repos/izll/homebrew-tap/contents/Casks/asmgr-desktop.rb --jq '"  \(.name), \(.size) bytes"'
