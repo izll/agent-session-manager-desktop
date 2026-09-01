@@ -111,6 +111,12 @@ export interface TerminalInstance {
   onAwaitingRedraw?: (waiting: boolean) => void;
   /** Timer that gives up on the wait; see clearAwaitingRedraw. */
   awaitingRedrawTimer?: ReturnType<typeof setTimeout>;
+  /**
+   * When the pane last produced output, so the idle repaint can tell a quiet
+   * pane from a working one. A pane that is drawing needs no help, and asking
+   * tmux to resize one mid-render is how a TUI is made to flicker.
+   */
+  lastOutputAt?: number;
 }
 
 /**
@@ -1000,6 +1006,7 @@ export async function attachToSession(
 
       // Output means the pane has been redrawn, whatever prompted it.
       clearAwaitingRedraw(terminalInstance);
+      terminalInstance.lastOutputAt = Date.now();
 
       if (terminalInstance.visible) {
         visibleQueue.push(chunk);

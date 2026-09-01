@@ -44,6 +44,31 @@ function clearGlyphCache(terminal: Terminal): void {
  */
 const lastRedrawAt = new Map<string, number>();
 
+/**
+ * The activity-change event, duplicated rather than imported.
+ *
+ * Importing it from the activities store would pull that module — and its
+ * backend call — into everything the pool is loaded by, including tests that
+ * mock the bridge with only the handful of methods the pool itself uses. The
+ * name is the whole contract, and the store's tests assert it stays this.
+ */
+const ACTIVITY_CHANGED_EVENT = 'session:activity-changed';
+
+interface ActivityChangedDetail {
+  sessionId: string;
+  from: string;
+  to: string;
+}
+
+/** How often the visible pane is checked for having gone stale. */
+const IDLE_REPAINT_INTERVAL_MS = 30_000;
+/**
+ * How long a pane must have been silent before a repaint is worth asking for.
+ * A pane that is drawing is already correct; only one that stopped drawing can
+ * be showing something out of date.
+ */
+const IDLE_REPAINT_QUIET_MS = 30_000;
+
 function requestRedraw(entry: PoolEntry): void {
   const ti = entry.terminalInstance;
   const sessionId = ti.sessionId;
@@ -85,6 +110,10 @@ export class TerminalPool {
   private connecting = new Map<string, Promise<void>>();
   /** The currently armed device-pixel-ratio watcher, released on dispose. */
   private pixelRatioWatch: { mql: MediaQueryList; onChange: () => void } | null = null;
+  /** Periodic repaint of the visible pane; see startIdleRepaint. */
+  private idleRepaintTimer: ReturnType<typeof setInterval> | undefined;
+  /** Released on dispose; see watchActivityChanges. */
+  private activityListener: ((event: Event) => void) | null = null;
   private terminalOptions: Partial<Terminal['options']>;
   /**
    * Told whether the visible pane is waiting for its redraw, so the view can
@@ -97,6 +126,8 @@ export class TerminalPool {
     this.parentEl = parentEl;
     this.terminalOptions = terminalOptions;
     this.watchPixelRatio();
+    this.startIdleRepaint();
+    this.watchActivityChanges();
   }
 
   /**
@@ -679,6 +710,83 @@ export class TerminalPool {
     await this.show(projectId, sessionId, widx, shouldFocus, themeCtx);
   }
 
+  /**
+   * Repaint the visible pane when it has gone quiet.
+   *
+   * The terminal is fed by an attached tmux client, which sends only what the
+   * pane draws. An agent that is thinking or waiting draws nothing, so if the
+   * view lost content — a resize the pane never redrew, a TUI laid out for a
+   * size that has since changed — nothing arrives to correct it, and the tab
+   * stays stale until the agent happens to print something. Pressing a key
+   * fixed that, but the key goes to the agent.
+   *
+   * This asks tmux to repaint, which sends the pane no input at all. Only the
+   * pane on screen is touched, only once it has fallen silent, and never while
+   * the window is hidden — so a pane that is actively drawing is left alone.
+   */
+  private startIdleRepaint(): void {
+    if (this.idleRepaintTimer !== undefined) return;
+    this.idleRepaintTimer = setInterval(() => {
+      if (this.disposed) return;
+      // Nothing to correct on a window no one is looking at.
+      if (typeof document !== 'undefined' && document.hidden) return;
+      const key = this.activeKey;
+      if (!key) return;
+      const entry = this.entries.get(key);
+      if (!entry) return;
+      const ti = entry.terminalInstance;
+      // A pane already waiting on a repaint is about to get one.
+      if (ti.awaitingRedrawTimer !== undefined) return;
+      if (Date.now() - (ti.lastOutputAt ?? 0) < IDLE_REPAINT_QUIET_MS) return;
+      requestRedraw(entry);
+    }, IDLE_REPAINT_INTERVAL_MS);
+  }
+
+  /**
+   * Repaint when the visible session stops working.
+   *
+   * The idle timer eventually catches a stale pane, but it waits for the pane
+   * to have been quiet a while first. An agent finishing its turn is precisely
+   * the moment output stops, so a view that is going to be left out of date is
+   * left out of date right then — checking at that moment costs one repaint and
+   * removes most of the wait.
+   *
+   * Only leaving 'busy' counts. Entering it means the pane is about to draw on
+   * its own, and repainting one that is mid-render is how a TUI is made to
+   * flicker.
+   */
+  private watchActivityChanges(): void {
+    // Check the method, not merely that a window exists: a test harness can
+    // supply a stand-in object without listener support, and a repaint hint is
+    // never worth throwing from a constructor over.
+    if (typeof window?.addEventListener !== 'function' || this.activityListener) return;
+    this.activityListener = (event: Event) => {
+      if (this.disposed) return;
+      const detail = (event as CustomEvent<ActivityChangedDetail>).detail;
+      if (!detail || detail.from !== 'busy') return;
+      const key = this.activeKey;
+      if (!key) return;
+      const entry = this.entries.get(key);
+      if (!entry) return;
+      if (entry.terminalInstance.sessionId !== detail.sessionId) return;
+      if (entry.terminalInstance.awaitingRedrawTimer !== undefined) return;
+      requestRedraw(entry);
+    };
+    window.addEventListener(ACTIVITY_CHANGED_EVENT, this.activityListener);
+  }
+
+  private stopWatchingActivityChanges(): void {
+    if (!this.activityListener || typeof window?.removeEventListener !== 'function') return;
+    window.removeEventListener(ACTIVITY_CHANGED_EVENT, this.activityListener);
+    this.activityListener = null;
+  }
+
+  private stopIdleRepaint(): void {
+    if (this.idleRepaintTimer === undefined) return;
+    clearInterval(this.idleRepaintTimer);
+    this.idleRepaintTimer = undefined;
+  }
+
   hideAll(): void {
     this.showGeneration++;
     this.activeKey = null;
@@ -687,6 +795,8 @@ export class TerminalPool {
 
   async dispose(): Promise<void> {
     this.disposed = true;
+    this.stopIdleRepaint();
+    this.stopWatchingActivityChanges();
     if (this.pixelRatioWatch) {
       this.pixelRatioWatch.mql.removeEventListener('change', this.pixelRatioWatch.onChange);
       this.pixelRatioWatch = null;

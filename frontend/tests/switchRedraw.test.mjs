@@ -32,8 +32,11 @@ assert.doesNotMatch(
 );
 
 // Both settle paths repaint, so a switch that lands on the timeout branch is
-// not left out.
-const calls = pool.match(/requestRedraw\(entry\)/g) ?? [];
+// not left out. Counted within the show path rather than across the file: the
+// idle repaint calls the same helper for its own reasons, and folding the two
+// together would let one of these disappear unnoticed.
+const showPath = pool.slice(pool.indexOf('const settle ='), pool.indexOf('private startIdleRepaint'));
+const calls = showPath.match(/requestRedraw\(entry\)/g) ?? [];
 assert.equal(calls.length, 2, 'both the settle and the settle-timeout paths must ask for a repaint');
 
 // Debounced: the two paths can both run for one switch, and a second redraw a
