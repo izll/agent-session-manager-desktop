@@ -3969,6 +3969,21 @@ var (
 	applyRuntimeTerminalShell = session.SetTerminalShell
 )
 
+// ForgetWindowGeometry discards the remembered window position and size, so the
+// next launch centres the window again.
+//
+// The way out of a window that opened somewhere unusable. The saved position is
+// checked against the attached screens before it is used, but that check cannot
+// know which monitor a position belongs to — Wails reports screen sizes and not
+// their arrangement — so a layout it accepts can still put the window somewhere
+// awkward. This gives the user the last word.
+func (a *App) ForgetWindowGeometry() error {
+	return a.storage.UpdateSettings(func(current *session.Settings) {
+		current.WindowX, current.WindowY = 0, 0
+		current.WindowWidth, current.WindowHeight = 0, 0
+	})
+}
+
 // SaveSettings saves UI settings
 func (a *App) SaveSettings(settings SettingsInfo, expectedProjectID string) error {
 	done, err := a.beginExpectedProjectMutation(expectedProjectID)

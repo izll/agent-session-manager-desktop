@@ -69,6 +69,8 @@ export function ExportSessions(arg1:Array<string>,arg2:string):Promise<string>;
 
 export function FetchOnlineSchemes(arg1:Array<string>):Promise<Array<main.ImportedScheme>>;
 
+export function ForgetWindowGeometry():Promise<void>;
+
 export function ForkSession(arg1:string,arg2:number,arg3:string):Promise<main.ForkResult>;
 
 export function ForkToNewSession(arg1:string,arg2:string,arg3:string,arg4:string):Promise<main.SessionInfo>;

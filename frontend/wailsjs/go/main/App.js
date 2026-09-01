@@ -134,6 +134,10 @@ export function FetchOnlineSchemes(arg1) {
   return window['go']['main']['App']['FetchOnlineSchemes'](arg1);
 }
 
+export function ForgetWindowGeometry() {
+  return window['go']['main']['App']['ForgetWindowGeometry']();
+}
+
 export function ForkSession(arg1, arg2, arg3) {
   return window['go']['main']['App']['ForkSession'](arg1, arg2, arg3);
 }

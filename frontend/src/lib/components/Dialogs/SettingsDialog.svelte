@@ -441,6 +441,30 @@
     }
   }
 
+  let forgettingWindow = false;
+  let forgotWindow = false;
+
+  /**
+   * Discard the remembered window position, so the next launch centres it.
+   *
+   * The confirmation sits on the button rather than in a toast: the effect is
+   * invisible until the app restarts, so without it nothing shows the click
+   * did anything at all.
+   */
+  async function forgetWindowGeometry() {
+    if (forgettingWindow) return;
+    forgettingWindow = true;
+    try {
+      await App.ForgetWindowGeometry();
+      forgotWindow = true;
+      setTimeout(() => { forgotWindow = false; }, 3000);
+    } catch (e) {
+      console.error('Failed to forget the window geometry:', e);
+    } finally {
+      forgettingWindow = false;
+    }
+  }
+
   function updateDictation<K extends keyof main.DictationSettings>(key: K, value: main.DictationSettings[K]) {
     if (!dictationSettings) return;
     (dictationSettings as any)[key] = value;
@@ -632,6 +656,22 @@
               {#if currentUITheme === CUSTOM_UI_THEME && customAccentTooDark}
                 <p class="accent-warning">{$t('settings.uiAccentTooDark')}</p>
               {/if}
+            </div>
+          </div>
+
+          <div class="settings-section">
+            <h3>{$t('settings.windowSection')}</h3>
+
+            <!-- Not input-item: that aligns to flex-start for tall fields,
+                 which leaves a button hanging below its own label. -->
+            <div class="setting-item">
+              <span class="setting-info">
+                <span class="setting-label">{$t('settings.forgetWindowGeometry')}</span>
+                <span class="setting-desc">{$t('settings.forgetWindowGeometryDesc')}</span>
+              </span>
+              <button class="action-btn" on:click={forgetWindowGeometry} disabled={forgettingWindow}>
+                {forgotWindow ? $t('settings.forgetWindowGeometryDone') : $t('settings.forgetWindowGeometryAction')}
+              </button>
             </div>
           </div>
 
@@ -1956,9 +1996,16 @@
     cursor: pointer;
     transition: border-color 0.15s ease, color 0.15s ease;
   }
-  .action-btn:hover {
+  .action-btn:hover:not(:disabled) {
     border-color: rgba(var(--accent-rgb), 0.5);
     color: var(--accent-pale);
+  }
+  /* The first action button that can be disabled — while its request is in
+     flight — so the muted state is defined here rather than left to the browser
+     default, which greys only the label and keeps the hover effect. */
+  .action-btn:disabled {
+    opacity: 0.5;
+    cursor: default;
   }
 
   .font-size-control {
