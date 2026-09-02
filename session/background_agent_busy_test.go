@@ -161,35 +161,33 @@ func TestShippedPatternsFileCarriesTheDefault(t *testing.T) {
 	}
 }
 
-// Claude Code abbreviates when the pane is narrow: the full sentence becomes a
-// count in the status bar. Both mean the same thing and both must be seen.
-func TestAbbreviatedStatusBarFormIsDetected(t *testing.T) {
+// The status bar's "← 1 agent" was tried as a shorter form of the same signal
+// and removed. It is a count of the agents the session HAS, not of what is
+// running: it stays on screen after the work finishes, so a session that had
+// plainly ended — recap printed, "Sautéed for 2m 9s" — was marked busy.
+func TestTheAgentCountAloneIsNotBusy(t *testing.T) {
 	pane := []string{
-		"✻ Cogitated for 32m 18s · done 15:45",
+		"● Szólj, ha nézzem meg, mi eszi a RAM-ot.",
+		"",
+		"✻ Sautéed for 2m 9s",
+		"",
+		"※ recap: Cél a plandoc gép memórianyomásának enyhítése.",
 		"────────────────────────────────────────────────────────────────────",
 		"❯ ",
 		"────────────────────────────────────────────────────────────────────",
 		"  ⏵⏵ auto mode on (shift+tab to cycle) · ← 1 agent",
 	}
-	if !hasRunningBackgroundAgent(pane) {
-		t.Fatal("the abbreviated '← 1 agent' form was not seen as busy")
+	if hasRunningBackgroundAgent(pane) {
+		t.Fatal("a finished session was marked busy by the agent count in the status bar")
 	}
 }
 
-// The distinction the count carries: "← for agents" is the resting wording and
-// is on screen constantly. Reading it as busy would make every idle Claude
-// session look like it were working.
+// The idle hint must not match either — it is on screen constantly.
 func TestTheIdleAgentsHintIsNotBusy(t *testing.T) {
 	pane := []string{
 		"  ⏵⏵ auto mode on (shift+tab to cycle) · ← for agents · ↓ to manage",
 	}
 	if hasRunningBackgroundAgent(pane) {
 		t.Fatal("the idle '← for agents' hint was taken for a running agent")
-	}
-}
-
-func TestSeveralAgentsInTheAbbreviatedForm(t *testing.T) {
-	if !hasRunningBackgroundAgent([]string{"· ← 3 agents"}) {
-		t.Fatal("the plural abbreviation was not matched")
 	}
 }

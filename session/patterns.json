@@ -20,16 +20,15 @@
     "version: increment when changing anything here. The app only replaces its",
     "copy with a higher version, so an older file cannot overwrite a newer one."
   ],
-  "version": 2,
+  "version": 3,
 
   "defaultSpinners": ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"],
 
   "thinkingIndicators": ["✽", "✻"],
 
-  "$comment_backgroundAgentBusy": "Case-insensitive regular expressions, matched against the whole pane. They mean a spawned agent is still working while the main thread sits idle: Claude Code prints the full sentence when there is room and abbreviates to a count in the status bar when there is not. The count is what distinguishes it from the resting hint, which reads \"for agents\".",
+  "$comment_backgroundAgentBusy": "Case-insensitive regular expressions, matched against the whole pane, meaning a spawned agent is still working while the main thread sits idle. Only Claude Code's explicit sentence qualifies. The status bar's \"← 1 agent\" was tried and removed: that count is how many agents the session HAS, not how many are running, so it stays on screen after the work finishes and marked finished sessions busy.",
   "backgroundAgentBusy": [
-    "waiting for \\d+ background agents? to finish",
-    "←\\s*\\d+\\s+agents?\\b"
+    "waiting for \\d+ background agents? to finish"
   ],
 
   "agents": {

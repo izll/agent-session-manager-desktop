@@ -732,11 +732,12 @@ func hasActiveToolExecution(lines []string, maxLines int) bool {
 // defaultBackgroundAgentPatterns is the fallback when patterns.json has none:
 // Claude Code's wording for a spawned agent that has not finished.
 var defaultBackgroundAgentPatterns = []string{
-	// The full sentence, printed when there is room for it.
+	// Claude Code's explicit sentence, and only that. The status bar's
+	// "← 1 agent" looked like a shorter way to say the same thing and is not:
+	// the count is how many agents the session HAS, not how many are running,
+	// so it stays on screen after the work ends and marked finished sessions
+	// busy. The sentence appears only while an agent is actually working.
 	`waiting for \d+ background agents? to finish`,
-	// The status bar's abbreviation when there is not. The count is what makes
-	// this safe: "← for agents" is the idle wording and appears constantly.
-	`←\s*\d+\s+agents?\b`,
 }
 
 var (
