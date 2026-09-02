@@ -464,10 +464,121 @@ func truncateString(s string, maxLen int) string {
 	return string(runes[:maxLen-1]) + "…"
 }
 
+// runningAgentActivity returns what a spawned agent is doing, from the list
+// Claude Code draws at the bottom of the pane:
+//
+//	● main
+//	◯ general-purpose  Rebuilding nesting-cli with settlePassOnFeasible
+//
+// The filled bullet is the main thread; a hollow one is a spawned agent. Only
+// the description is wanted, not the agent's type or the token counter that
+// follows it — those change every second and say nothing about the work.
+//
+// The list is only drawn while it is open, so an empty result is the ordinary
+// case and simply leaves the usual search to run.
+func runningAgentActivity(lines []string, stripANSIFunc func(string) string) string {
+	for i := len(lines) - 1; i >= 0 && i >= len(lines)-12; i-- {
+		clean := strings.TrimSpace(stripANSIFunc(lines[i]))
+		if !strings.HasPrefix(clean, "◯") {
+			continue
+		}
+		rest := strings.TrimSpace(strings.TrimPrefix(clean, "◯"))
+		// "general-purpose  Rebuilding …" — the agent type, then two spaces,
+		// then what it is doing.
+		if _, description, ok := strings.Cut(rest, "  "); ok {
+			rest = description
+		}
+		// The list is padded to the pane width, so the description arrives with
+		// a tail of spaces that would otherwise reach the sidebar verbatim.
+		rest = strings.TrimSpace(rest)
+		// The elapsed time and token counter trail the description, sometimes
+		// after a "·" and sometimes pushed to the right margin with spaces.
+		// Both tick every second and say nothing about the work, so the
+		// description ends at whichever separator comes first.
+		if idx := strings.Index(rest, " · "); idx > 0 {
+			rest = rest[:idx]
+		}
+		if idx := strings.Index(rest, "   "); idx > 0 {
+			rest = rest[:idx]
+		}
+		rest = strings.TrimSpace(rest)
+		if rest != "" {
+			return rest
+		}
+	}
+	return ""
+}
+
+// isRecapContinuation reports whether a line is part of a wrapped "※ recap:"
+// block rather than a line of its own.
+//
+// Matching the recap's closing words is not enough: the block wraps at whatever
+// width the pane happens to be, so the tail can be any fragment — one session
+// ended it "(disable recaps in /config)" and another simply "in /config)".
+// What does hold is the shape: the continuation lines are indented, and walking
+// up from one reaches the ※ that started it.
+func isRecapContinuation(lines []string, idx int, stripANSIFunc func(string) string) bool {
+	// A continuation is indented; a line of its own is not.
+	if raw := stripANSIFunc(lines[idx]); !strings.HasPrefix(raw, " ") && !strings.HasPrefix(raw, "\t") {
+		return false
+	}
+	for j := idx - 1; j >= 0 && j >= idx-6; j-- {
+		clean := strings.TrimSpace(stripANSIFunc(lines[j]))
+		if clean == "" {
+			return false // a blank line ends the block
+		}
+		if strings.HasPrefix(clean, "※") {
+			return true
+		}
+		// Another unindented line means this belongs to that one, not a recap.
+		if raw := stripANSIFunc(lines[j]); !strings.HasPrefix(raw, " ") && !strings.HasPrefix(raw, "\t") {
+			return false
+		}
+	}
+	return false
+}
+
+// isClaudeInterfaceLine reports whether a line is Claude Code's own furniture
+// rather than anything the session produced.
+//
+// Each of these was seen standing in for the status of a working session: a
+// "/model" the user typed an hour earlier, "Update installed · Restart to
+// update", and the "※ recap:" summary — which wraps, so the line picked up was
+// a fragment beginning mid-sentence.
+func isClaudeInterfaceLine(cleanLine string) bool {
+	// A slash command the user typed, echoed back at the prompt.
+	if strings.HasPrefix(cleanLine, "❯ /") || strings.HasPrefix(cleanLine, "> /") {
+		return true
+	}
+	// The recap block and its wrapped continuation.
+	if strings.HasPrefix(cleanLine, "※") || strings.Contains(cleanLine, "disable recaps in /config") {
+		return true
+	}
+	// The updater's banner.
+	if strings.Contains(cleanLine, "Update installed") || strings.Contains(cleanLine, "Restart to update") {
+		return true
+	}
+	// The mode/hint bar along the bottom.
+	if strings.HasPrefix(cleanLine, "⏵⏵") || strings.Contains(cleanLine, "shift+tab to cycle") {
+		return true
+	}
+	return false
+}
+
 // GetClaudeStatusLine handles Claude Code's special UI with horizontal separator lines.
 // If the input area (between two horizontal lines) has only 1 line (the prompt),
 // it returns the content above the top separator instead of the prompt line.
 func GetClaudeStatusLine(lines []string, stripANSIFunc func(string) string) string {
+	// A running background agent takes precedence over anything above.
+	//
+	// While an agent works the main thread has already said its piece, so the
+	// conversation's last line is a finished thought — "I will report back when
+	// v15 is done" — while the session is in fact busy doing something else.
+	// The agent list says what that is, and changes as the work moves on.
+	if agentLine := runningAgentActivity(lines, stripANSIFunc); agentLine != "" {
+		return agentLine
+	}
+
 	// Spinner characters used by Claude
 	spinnerChars := "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏◐◑◒◓"
 
@@ -582,6 +693,14 @@ func GetClaudeStatusLine(lines []string, stripANSIFunc func(string) string) stri
 
 		// Skip lines that look like planned steps (indented with tree chars)
 		if strings.HasPrefix(cleanLine, "├") || strings.HasPrefix(cleanLine, "│") {
+			continue
+		}
+
+		// Skip Claude Code's own chrome. None of it is what the session is
+		// doing, and each of these had been shown as the status: a slash
+		// command the user typed long ago, the updater's notice, and the recap
+		// block — whose wrapped second line is not even a whole sentence.
+		if isClaudeInterfaceLine(cleanLine) || isRecapContinuation(lines, j, stripANSIFunc) {
 			continue
 		}
 
