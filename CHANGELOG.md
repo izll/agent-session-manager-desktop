@@ -6,6 +6,38 @@ Entries describe what changed for someone using the app. Internal refactoring,
 test and CI work is left out unless it changed behaviour. Dates are release
 dates; the format follows [Keep a Changelog](https://keepachangelog.com).
 
+## 0.9.35 — 2026-09-02
+
+### Added
+
+- **Terminal views refresh themselves.** A pane that had lost content used to
+  wait for a keystroke to come back. Pressing a key did fix it — but the key went
+  to the agent, and in Codex it read as an interrupt and stopped the work. The
+  refresh now happens on its own, at the two moments it is needed: shortly after
+  a pane falls silent, and the instant the session stops working.
+- **The arrow keys step through diff search results**, alongside Enter and F3.
+- **The remembered window position can be forgotten**, from Settings. The window
+  reopens where it was last closed; if that ever lands somewhere awkward, this
+  puts it back in the middle.
+
+### Fixed
+
+- **The dictation hotkey no longer reaches the agent.** Ctrl+Alt+G both started
+  dictation and arrived in the pane, where Codex read it as an interrupt and
+  killed the work. The system-wide listener cannot swallow the key, so the pane
+  declines it instead.
+- **A session running a background agent shows as busy.** The main thread has
+  finished by then, so nothing gave it away — an agent could work for an hour
+  while the sidebar called the session idle.
+- **The status line shows what the session is doing.** It could otherwise be a
+  "/model" typed an hour earlier, the updater's banner, or half a sentence from
+  the recap block. When a background agent is working, its activity is shown
+  instead.
+- **The window reopens where it was left.** Every launch used to recentre it at
+  80% of the screen.
+- **Releases no longer wait on Apple.** The Linux and Windows packages appear as
+  soon as they are built; the macOS one joins them when notarization finishes.
+
 ## 0.9.34 — 2026-08-24
 
 ### Changed
