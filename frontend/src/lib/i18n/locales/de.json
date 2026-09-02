@@ -1043,7 +1043,7 @@
   "settings.refreshPatternsDesc": "Aktualisiert die Muster, an denen erkannt wird, ob ein Agent arbeitet oder wartet — ohne App-Update",
   "settings.refreshPatternsAction": "Aktualisieren",
   "settings.refreshPatternsBusy": "Wird geprüft…",
-  "settings.refreshPatternsUpdated": "Auf v{version} aktualisiert",
+  "settings.refreshPatternsUpdated": "Updated to v{version} — in force now, no restart needed",
   "settings.refreshPatternsCurrent": "Bereits aktuell",
   "error.patternsUnreachable": "Musterdatei nicht erreichbar",
   "error.patternsInvalid": "Die geladene Musterdatei ist unbrauchbar",

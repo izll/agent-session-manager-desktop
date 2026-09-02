@@ -1043,7 +1043,7 @@
   "settings.refreshPatternsDesc": "Aggiorna i criteri che riconoscono se un agente sta lavorando o ti sta aspettando, senza aggiornare l'app",
   "settings.refreshPatternsAction": "Aggiorna",
   "settings.refreshPatternsBusy": "Controllo…",
-  "settings.refreshPatternsUpdated": "Aggiornato a v{version}",
+  "settings.refreshPatternsUpdated": "Updated to v{version} — in force now, no restart needed",
   "settings.refreshPatternsCurrent": "Già aggiornato",
   "error.patternsUnreachable": "File dei criteri irraggiungibile",
   "error.patternsInvalid": "Il file dei criteri scaricato non è utilizzabile",

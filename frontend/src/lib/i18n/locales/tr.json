@@ -1043,7 +1043,7 @@
   "settings.refreshPatternsDesc": "Bir aracının çalıştığını mı yoksa sizi mi beklediğini tanıyan kalıpları uygulama güncellemesi olmadan yeniler",
   "settings.refreshPatternsAction": "Yenile",
   "settings.refreshPatternsBusy": "Denetleniyor…",
-  "settings.refreshPatternsUpdated": "v{version} sürümüne güncellendi",
+  "settings.refreshPatternsUpdated": "Updated to v{version} — in force now, no restart needed",
   "settings.refreshPatternsCurrent": "Zaten güncel",
   "error.patternsUnreachable": "Kalıp dosyasına ulaşılamadı",
   "error.patternsInvalid": "İndirilen kalıp dosyası kullanılamıyor",

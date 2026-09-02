@@ -1043,7 +1043,7 @@
   "settings.refreshPatternsDesc": "Uppdaterar mönstren som känner igen om en agent arbetar eller väntar på dig, utan appuppdatering",
   "settings.refreshPatternsAction": "Uppdatera",
   "settings.refreshPatternsBusy": "Kontrollerar…",
-  "settings.refreshPatternsUpdated": "Uppdaterad till v{version}",
+  "settings.refreshPatternsUpdated": "Updated to v{version} — in force now, no restart needed",
   "settings.refreshPatternsCurrent": "Redan aktuell",
   "error.patternsUnreachable": "Mönsterfilen kunde inte nås",
   "error.patternsInvalid": "Den hämtade mönsterfilen är oanvändbar",

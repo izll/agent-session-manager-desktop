@@ -1043,7 +1043,7 @@
   "settings.refreshPatternsDesc": "Оновлює шаблони, за якими розпізнається, чи агент працює, чи чекає на вас — без оновлення застосунку",
   "settings.refreshPatternsAction": "Оновити",
   "settings.refreshPatternsBusy": "Перевірка…",
-  "settings.refreshPatternsUpdated": "Оновлено до v{version}",
+  "settings.refreshPatternsUpdated": "Updated to v{version} — in force now, no restart needed",
   "settings.refreshPatternsCurrent": "Уже актуально",
   "error.patternsUnreachable": "Файл шаблонів недоступний",
   "error.patternsInvalid": "Завантажений файл шаблонів непридатний",

@@ -1043,7 +1043,7 @@
   "settings.refreshPatternsDesc": "Atualiza os padrões que reconhecem se um agente está trabalhando ou esperando por você, sem atualizar o app",
   "settings.refreshPatternsAction": "Atualizar",
   "settings.refreshPatternsBusy": "Verificando…",
-  "settings.refreshPatternsUpdated": "Atualizado para v{version}",
+  "settings.refreshPatternsUpdated": "Updated to v{version} — in force now, no restart needed",
   "settings.refreshPatternsCurrent": "Já está atualizado",
   "error.patternsUnreachable": "Não foi possível acessar o arquivo de padrões",
   "error.patternsInvalid": "O arquivo de padrões baixado não é utilizável",

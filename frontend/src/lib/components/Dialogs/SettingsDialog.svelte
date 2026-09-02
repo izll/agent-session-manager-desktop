@@ -1,5 +1,6 @@
 <script lang="ts">
   import { autoFocusDialog } from '../../utils/dialogActions';
+  import { loadActivities } from '../../stores/activities';
   import { setDictationHotkey } from '../../utils/dictationHotkey';
   import { createEventDispatcher, onDestroy } from 'svelte';
   import { get } from 'svelte/store';
@@ -244,6 +245,13 @@
       patternsMessage = result?.updated
         ? $t('settings.refreshPatternsUpdated').replace('{version}', String(patternsVersion))
         : $t('settings.refreshPatternsCurrent');
+      if (result?.updated) {
+        // New patterns apply to the next detection rather than needing a
+        // restart, and that runs every couple of seconds anyway — but the
+        // point of pressing the button is to see the effect, so ask for it
+        // now instead of waiting out the poll.
+        void loadActivities();
+      }
     } catch (e) {
       // The backend returns translation keys, so an unknown one still shows
       // something readable rather than an empty line.

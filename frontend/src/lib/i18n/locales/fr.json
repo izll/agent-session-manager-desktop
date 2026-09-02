@@ -1043,7 +1043,7 @@
   "settings.refreshPatternsDesc": "Actualise les motifs qui reconnaissent si un agent travaille ou vous attend, sans mise à jour de l'application",
   "settings.refreshPatternsAction": "Actualiser",
   "settings.refreshPatternsBusy": "Vérification…",
-  "settings.refreshPatternsUpdated": "Mis à jour vers v{version}",
+  "settings.refreshPatternsUpdated": "Updated to v{version} — in force now, no restart needed",
   "settings.refreshPatternsCurrent": "Déjà à jour",
   "error.patternsUnreachable": "Fichier de motifs inaccessible",
   "error.patternsInvalid": "Le fichier de motifs téléchargé est inutilisable",

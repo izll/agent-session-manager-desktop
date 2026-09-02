@@ -1043,7 +1043,7 @@
   "settings.refreshPatternsDesc": "Vernieuwt de patronen die herkennen of een agent werkt of op je wacht, zonder app-update",
   "settings.refreshPatternsAction": "Vernieuwen",
   "settings.refreshPatternsBusy": "Controleren…",
-  "settings.refreshPatternsUpdated": "Bijgewerkt naar v{version}",
+  "settings.refreshPatternsUpdated": "Updated to v{version} — in force now, no restart needed",
   "settings.refreshPatternsCurrent": "Al up-to-date",
   "error.patternsUnreachable": "Patroonbestand niet bereikbaar",
   "error.patternsInvalid": "Het gedownloade patroonbestand is onbruikbaar",

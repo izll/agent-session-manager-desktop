@@ -1043,7 +1043,7 @@
   "settings.refreshPatternsDesc": "Odświeża wzorce rozpoznające, czy agent pracuje, czy na Ciebie czeka — bez aktualizacji aplikacji",
   "settings.refreshPatternsAction": "Odśwież",
   "settings.refreshPatternsBusy": "Sprawdzanie…",
-  "settings.refreshPatternsUpdated": "Zaktualizowano do v{version}",
+  "settings.refreshPatternsUpdated": "Updated to v{version} — in force now, no restart needed",
   "settings.refreshPatternsCurrent": "Już aktualne",
   "error.patternsUnreachable": "Nie można pobrać pliku wzorców",
   "error.patternsInvalid": "Pobrany plik wzorców jest nieprawidłowy",

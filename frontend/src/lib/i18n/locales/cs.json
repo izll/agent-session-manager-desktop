@@ -1043,7 +1043,7 @@
   "settings.refreshPatternsDesc": "Aktualizuje vzory, podle kterých se pozná, zda agent pracuje nebo čeká na vás — bez aktualizace aplikace",
   "settings.refreshPatternsAction": "Aktualizovat",
   "settings.refreshPatternsBusy": "Kontrola…",
-  "settings.refreshPatternsUpdated": "Aktualizováno na v{version}",
+  "settings.refreshPatternsUpdated": "Updated to v{version} — in force now, no restart needed",
   "settings.refreshPatternsCurrent": "Již aktuální",
   "error.patternsUnreachable": "Soubor se vzory není dostupný",
   "error.patternsInvalid": "Stažený soubor se vzory je nepoužitelný",

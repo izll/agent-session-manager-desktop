@@ -1047,7 +1047,7 @@
   "settings.refreshPatternsDesc": "Frissíti azokat a mintákat, amelyekből az app felismeri, hogy egy agent dolgozik vagy rád vár — alkalmazásfrissítés nélkül",
   "settings.refreshPatternsAction": "Frissítés",
   "settings.refreshPatternsBusy": "Ellenőrzés…",
-  "settings.refreshPatternsUpdated": "Frissítve: v{version}",
+  "settings.refreshPatternsUpdated": "Frissítve: v{version} — már érvényben van, nem kell újraindítás",
   "settings.refreshPatternsCurrent": "Már naprakész",
   "error.patternsUnreachable": "A mintafájl nem érhető el",
   "error.patternsInvalid": "A letöltött mintafájl nem használható",

@@ -1043,7 +1043,7 @@
   "settings.refreshPatternsDesc": "에이전트가 작업 중인지 대기 중인지 인식하는 패턴을 앱 업데이트 없이 새로 고칩니다",
   "settings.refreshPatternsAction": "새로 고침",
   "settings.refreshPatternsBusy": "확인 중…",
-  "settings.refreshPatternsUpdated": "v{version}(으)로 업데이트됨",
+  "settings.refreshPatternsUpdated": "Updated to v{version} — in force now, no restart needed",
   "settings.refreshPatternsCurrent": "이미 최신입니다",
   "error.patternsUnreachable": "패턴 파일에 연결할 수 없습니다",
   "error.patternsInvalid": "내려받은 패턴 파일을 사용할 수 없습니다",

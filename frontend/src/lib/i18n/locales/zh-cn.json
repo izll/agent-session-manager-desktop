@@ -1043,7 +1043,7 @@
   "settings.refreshPatternsDesc": "无需更新应用即可刷新用于识别代理正在工作还是等待你的匹配规则",
   "settings.refreshPatternsAction": "刷新",
   "settings.refreshPatternsBusy": "检查中…",
-  "settings.refreshPatternsUpdated": "已更新至 v{version}",
+  "settings.refreshPatternsUpdated": "Updated to v{version} — in force now, no restart needed",
   "settings.refreshPatternsCurrent": "已是最新",
   "error.patternsUnreachable": "无法访问规则文件",
   "error.patternsInvalid": "下载的规则文件不可用",

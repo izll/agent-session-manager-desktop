@@ -1047,7 +1047,7 @@
   "settings.refreshPatternsDesc": "Refresh the patterns that recognise when an agent is working or waiting for you, without waiting for an app update",
   "settings.refreshPatternsAction": "Refresh",
   "settings.refreshPatternsBusy": "Checking…",
-  "settings.refreshPatternsUpdated": "Updated to v{version}",
+  "settings.refreshPatternsUpdated": "Updated to v{version} — in force now, no restart needed",
   "settings.refreshPatternsCurrent": "Already up to date",
   "error.patternsUnreachable": "Could not reach the pattern file",
   "error.patternsInvalid": "The downloaded pattern file is not usable",

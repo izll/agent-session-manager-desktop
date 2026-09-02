@@ -1043,7 +1043,7 @@
   "settings.refreshPatternsDesc": "Actualiza los patrones que reconocen si un agente está trabajando o esperándote, sin actualizar la aplicación",
   "settings.refreshPatternsAction": "Actualizar",
   "settings.refreshPatternsBusy": "Comprobando…",
-  "settings.refreshPatternsUpdated": "Actualizado a v{version}",
+  "settings.refreshPatternsUpdated": "Updated to v{version} — in force now, no restart needed",
   "settings.refreshPatternsCurrent": "Ya está al día",
   "error.patternsUnreachable": "No se pudo acceder al archivo de patrones",
   "error.patternsInvalid": "El archivo de patrones descargado no es utilizable",

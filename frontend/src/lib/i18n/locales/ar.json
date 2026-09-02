@@ -1043,7 +1043,7 @@
   "settings.refreshPatternsDesc": "يحدّث الأنماط التي تتعرف على ما إذا كان الوكيل يعمل أم ينتظرك، دون تحديث التطبيق",
   "settings.refreshPatternsAction": "تحديث",
   "settings.refreshPatternsBusy": "جارٍ التحقق…",
-  "settings.refreshPatternsUpdated": "تم التحديث إلى v{version}",
+  "settings.refreshPatternsUpdated": "Updated to v{version} — in force now, no restart needed",
   "settings.refreshPatternsCurrent": "محدّث بالفعل",
   "error.patternsUnreachable": "تعذّر الوصول إلى ملف الأنماط",
   "error.patternsInvalid": "ملف الأنماط الذي تم تنزيله غير صالح",

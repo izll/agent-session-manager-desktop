@@ -1043,7 +1043,7 @@
   "settings.refreshPatternsDesc": "エージェントが作業中か入力待ちかを判別するパターンを、アプリの更新を待たずに更新します",
   "settings.refreshPatternsAction": "更新",
   "settings.refreshPatternsBusy": "確認中…",
-  "settings.refreshPatternsUpdated": "v{version} に更新しました",
+  "settings.refreshPatternsUpdated": "Updated to v{version} — in force now, no restart needed",
   "settings.refreshPatternsCurrent": "すでに最新です",
   "error.patternsUnreachable": "パターンファイルに接続できませんでした",
   "error.patternsInvalid": "ダウンロードしたパターンファイルは使用できません",

@@ -1043,7 +1043,7 @@
   "settings.refreshPatternsDesc": "Làm mới các mẫu nhận biết agent đang làm việc hay đang chờ bạn, mà không cần cập nhật ứng dụng",
   "settings.refreshPatternsAction": "Làm mới",
   "settings.refreshPatternsBusy": "Đang kiểm tra…",
-  "settings.refreshPatternsUpdated": "Đã cập nhật lên v{version}",
+  "settings.refreshPatternsUpdated": "Updated to v{version} — in force now, no restart needed",
   "settings.refreshPatternsCurrent": "Đã là mới nhất",
   "error.patternsUnreachable": "Không thể truy cập tệp mẫu",
   "error.patternsInvalid": "Tệp mẫu đã tải xuống không dùng được",
