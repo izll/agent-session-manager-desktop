@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -393,7 +394,17 @@ func detectClaudeActivityContext(ctx context.Context, lines []string, patterns A
 		return ActivityBusy
 	}
 
-	// --- Busy detection 1: extended thinking indicator (✽/✻ with …) - FAST, no delay ---
+	// --- Busy detection 1: a background agent is still running ---
+	// The main thread can be idle while a spawned agent works for an hour, and
+	// none of the other indicators fire: there is no "esc to interrupt", no
+	// spinner, and the line saying so sits ABOVE the input separator, where the
+	// thinking check stops looking. The session is plainly busy all the same.
+	if hasRunningBackgroundAgent(lines) {
+		debugf("[StatusDebug] %s → BUSY (background agent)", target)
+		return ActivityBusy
+	}
+
+	// --- Busy detection 2: extended thinking indicator (✽/✻ with …) - FAST, no delay ---
 	if hasActiveThinking(lines, 20) {
 		debugf("[StatusDebug] %s → BUSY (thinking)", target)
 		return ActivityBusy
@@ -718,6 +729,88 @@ func hasActiveToolExecution(lines []string, maxLines int) bool {
 // hasActiveThinking checks for extended thinking indicators (✽/✻) with
 // ellipsis (…) which indicates thinking is still in progress.
 // After completion, the line shows "✻ Cogitated for Xs" without ellipsis.
+// defaultBackgroundAgentPatterns is the fallback when patterns.json has none:
+// Claude Code's wording for a spawned agent that has not finished.
+var defaultBackgroundAgentPatterns = []string{
+	// The full sentence, printed when there is room for it.
+	`waiting for \d+ background agents? to finish`,
+	// The status bar's abbreviation when there is not. The count is what makes
+	// this safe: "← for agents" is the idle wording and appears constantly.
+	`←\s*\d+\s+agents?\b`,
+}
+
+var (
+	backgroundAgentMu       sync.Mutex
+	backgroundAgentCompiled []*regexp.Regexp
+	backgroundAgentSource   []string
+)
+
+// backgroundAgentPatterns compiles the configured expressions, reusing the last
+// result while the configuration is unchanged. An expression that does not
+// compile is skipped rather than fatal: the pattern file is updated over the
+// network, and one bad entry must not stop the rest from working.
+func backgroundAgentPatterns() []*regexp.Regexp {
+	source := backgroundAgentPatternsFromFile()
+	if source == nil {
+		source = defaultBackgroundAgentPatterns
+	}
+
+	backgroundAgentMu.Lock()
+	defer backgroundAgentMu.Unlock()
+	if slicesEqual(source, backgroundAgentSource) {
+		return backgroundAgentCompiled
+	}
+
+	compiled := make([]*regexp.Regexp, 0, len(source))
+	for _, expr := range source {
+		re, err := regexp.Compile("(?i)" + expr)
+		if err != nil {
+			debugf("[StatusDebug] ignoring unparsable background-agent pattern %q: %v", expr, err)
+			continue
+		}
+		compiled = append(compiled, re)
+	}
+	backgroundAgentSource = append([]string(nil), source...)
+	backgroundAgentCompiled = compiled
+	return compiled
+}
+
+func slicesEqual(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+// hasRunningBackgroundAgent reports whether the pane says a spawned agent is
+// still working.
+//
+// Unlike the other busy checks this one does not stop at the separator: the
+// notice is printed above the input box, so a separator-bounded search would
+// never reach it. The whole visible pane is searched instead, which is safe
+// because the line is removed as soon as the agent finishes — unlike the
+// scrollback text the separator rule exists to ignore.
+func hasRunningBackgroundAgent(lines []string) bool {
+	patterns := backgroundAgentPatterns()
+	if len(patterns) == 0 {
+		return false
+	}
+	for _, line := range lines {
+		clean := stripANSIForDetect(line)
+		for _, re := range patterns {
+			if re.MatchString(clean) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func hasActiveThinking(lines []string, maxLines int) bool {
 	nonEmptyCount := 0
 	for j := len(lines) - 1; j >= 0 && nonEmptyCount < maxLines; j-- {

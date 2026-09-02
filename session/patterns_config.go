@@ -33,10 +33,15 @@ var embeddedPatterns []byte
 
 // patternsFile is the JSON shape. Field names match the file.
 type patternsFile struct {
-	Version            int                       `json:"version"`
-	DefaultSpinners    []string                  `json:"defaultSpinners"`
-	ThinkingIndicators []string                  `json:"thinkingIndicators"`
-	Agents             map[string]agentPatterned `json:"agents"`
+	Version         int      `json:"version"`
+	DefaultSpinners []string `json:"defaultSpinners"`
+	// BackgroundAgentBusy are regular expressions, matched case-insensitively
+	// against the whole pane, that mean a spawned agent is still working while
+	// the main thread sits idle. Wording that Anthropic can reword at will, so
+	// it belongs here rather than compiled in.
+	BackgroundAgentBusy []string                  `json:"backgroundAgentBusy"`
+	ThinkingIndicators  []string                  `json:"thinkingIndicators"`
+	Agents              map[string]agentPatterned `json:"agents"`
 }
 
 type agentPatterned struct {
@@ -146,6 +151,15 @@ func patternsFor(agent AgentType) (AgentPatterns, bool) {
 func thinkingIndicatorsFromFile() []string {
 	if p := currentPatterns(); p != nil && len(p.ThinkingIndicators) > 0 {
 		return p.ThinkingIndicators
+	}
+	return nil
+}
+
+// backgroundAgentPatternsFromFile returns the configured expressions, or nil to
+// use the compiled ones.
+func backgroundAgentPatternsFromFile() []string {
+	if p := currentPatterns(); p != nil && len(p.BackgroundAgentBusy) > 0 {
+		return p.BackgroundAgentBusy
 	}
 	return nil
 }

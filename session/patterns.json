@@ -20,11 +20,17 @@
     "version: increment when changing anything here. The app only replaces its",
     "copy with a higher version, so an older file cannot overwrite a newer one."
   ],
-  "version": 1,
+  "version": 2,
 
   "defaultSpinners": ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"],
 
   "thinkingIndicators": ["✽", "✻"],
+
+  "$comment_backgroundAgentBusy": "Case-insensitive regular expressions, matched against the whole pane. They mean a spawned agent is still working while the main thread sits idle: Claude Code prints the full sentence when there is room and abbreviates to a count in the status bar when there is not. The count is what distinguishes it from the resting hint, which reads \"for agents\".",
+  "backgroundAgentBusy": [
+    "waiting for \\d+ background agents? to finish",
+    "←\\s*\\d+\\s+agents?\\b"
+  ],
 
   "agents": {
     "claude": {
