@@ -283,10 +283,13 @@ func (tm *TaskManager) Save() error {
 		return fmt.Errorf("failed to open task directory: %w", err)
 	}
 	if probe, openErr := taskRoot.OpenFile("tasks.json.lock", os.O_CREATE|os.O_RDWR, 0o600); openErr != nil {
+		// Whatever the failure, try once through a freshly resolved handle
+		// rather than reading the error's shape: a directory replaced under an
+		// open handle reports "no such file or directory" on Unix and "Access
+		// is denied" on Windows, and matching either one means missing the
+		// other. A cause that reopening cannot fix — a real permissions
+		// problem, a full disk — simply fails again below, with its own error.
 		taskRoot.Close()
-		if !os.IsNotExist(openErr) {
-			return fmt.Errorf("failed to open task directory: %w", openErr)
-		}
 		if taskRoot, err = openProjectTaskRoot(tm.projectPath, true); err != nil {
 			return fmt.Errorf("failed to open task directory: %w", err)
 		}

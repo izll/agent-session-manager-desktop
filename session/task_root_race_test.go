@@ -30,10 +30,11 @@ func TestStaleTaskRootIsRecovered(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// The error differs by platform — "no such file or directory" on Unix,
+	// "Access is denied" on Windows — which is exactly why the recovery does
+	// not inspect it. All that matters here is that the stale handle fails.
 	if _, openErr := stale.OpenFile("tasks.json.lock", os.O_CREATE|os.O_RDWR, 0o600); openErr == nil {
 		t.Skip("this platform tolerates the stale handle; nothing to recover from")
-	} else if !os.IsNotExist(openErr) {
-		t.Fatalf("unexpected error shape: %v", openErr)
 	}
 
 	// What mutateLocked does about it.
