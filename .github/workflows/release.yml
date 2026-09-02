@@ -705,9 +705,14 @@ jobs:
   # release held back by a tap.
   update-homebrew-cask:
     name: Update the Homebrew cask
+    # After publishing, not merely after the macOS build. The cask is verified
+    # by downloading the archive from its public release URL, and a draft's
+    # assets do not answer there — the job failed with a 404 on a release whose
+    # files were sitting right there, still unpublished.
     needs:
       - release
       - release-macos
+      - publish-release
     runs-on: ubuntu-24.04
     # A pre-release must not become what `brew install` hands out.
     if: ${{ !contains(needs.release.outputs.tag, '-') }}
