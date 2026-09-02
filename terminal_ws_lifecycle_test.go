@@ -439,6 +439,9 @@ func TestTerminalServerStopCancelsAndWaitsForPendingAttachHandler(t *testing.T) 
 		defer close(handlerExited)
 		defer done()
 		<-handlerCtx.Done()
+		// Long enough that a Stop which does not wait will certainly return
+		// first, short enough not to slow the suite.
+		time.Sleep(150 * time.Millisecond)
 	}()
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
@@ -446,9 +449,19 @@ func TestTerminalServerStopCancelsAndWaitsForPendingAttachHandler(t *testing.T) 
 	if err := ts.Stop(ctx); err != nil {
 		t.Fatal(err)
 	}
+	// Stop must not return until the handler is done. Asserting that with a
+	// bare default case tests something slightly different — that the handler
+	// goroutine has already been *scheduled* — and Go promises no such thing
+	// the instant the channel it waits on closes, which is why this failed on
+	// loaded CI runners while passing everywhere else.
+	//
+	// The distinction that matters is kept by making the handler observably
+	// slow: if Stop waits, that time has already passed when it returns, and
+	// the channel is closed. If Stop does not wait, it returns while the
+	// handler is still sleeping and the check fails — as it must.
 	select {
 	case <-handlerExited:
-	default:
+	case <-time.After(50 * time.Millisecond):
 		t.Fatal("Stop returned before the pending attach handler exited")
 	}
 	if _, _, allowed := ts.beginHandler(); allowed {

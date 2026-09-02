@@ -269,9 +269,29 @@ func (tm *TaskManager) initializeEmptyStoreLocked() error {
 func (tm *TaskManager) Save() error {
 	tm.mu.Lock()
 	defer tm.mu.Unlock()
+	// Two processes creating .taskmaster at the same moment each end up with
+	// their own handle to it, and one of them can be left holding a directory
+	// the other has already replaced. The handle stays valid — stat succeeds on
+	// it — but opening the lock file inside fails with "no such file or
+	// directory" against a directory that plainly exists. Reopening resolves
+	// the name again and lands on the survivor.
+	//
+	// Retried once, not in a loop: this is a first-mutation race, and looping
+	// would turn a real permissions or disk error into a spin.
 	taskRoot, err := openProjectTaskRoot(tm.projectPath, true)
 	if err != nil {
 		return fmt.Errorf("failed to open task directory: %w", err)
+	}
+	if probe, openErr := taskRoot.OpenFile("tasks.json.lock", os.O_CREATE|os.O_RDWR, 0o600); openErr != nil {
+		taskRoot.Close()
+		if !os.IsNotExist(openErr) {
+			return fmt.Errorf("failed to open task directory: %w", openErr)
+		}
+		if taskRoot, err = openProjectTaskRoot(tm.projectPath, true); err != nil {
+			return fmt.Errorf("failed to open task directory: %w", err)
+		}
+	} else {
+		probe.Close()
 	}
 	defer taskRoot.Close()
 	return withCrossProcessRootFileLock(taskRoot, "tasks.json.lock", func() error {
