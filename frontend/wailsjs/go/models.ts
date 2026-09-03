@@ -1330,6 +1330,7 @@ export namespace main {
 	    showClaudeSevenDayRing: boolean;
 	    showCodexUsageRing: boolean;
 	    showGeminiUsageRing: boolean;
+	    dictationSendWithoutEnter: boolean;
 	    hideYoloBadge: boolean;
 	    showResumeBadge: boolean;
 	    splitView: boolean;
@@ -1383,6 +1384,7 @@ export namespace main {
 	        this.showClaudeSevenDayRing = source["showClaudeSevenDayRing"];
 	        this.showCodexUsageRing = source["showCodexUsageRing"];
 	        this.showGeminiUsageRing = source["showGeminiUsageRing"];
+	        this.dictationSendWithoutEnter = source["dictationSendWithoutEnter"];
 	        this.hideYoloBadge = source["hideYoloBadge"];
 	        this.showResumeBadge = source["showResumeBadge"];
 	        this.splitView = source["splitView"];

@@ -43,6 +43,59 @@
   let bufferMode = false;
   let streamingMode = false;
   let bufferCloseOnSend = true;
+  /**
+   * Send the dictated text without pressing Enter.
+   *
+   * Dictation is not typing: what comes back is often close but not right, and
+   * a prompt submitted the moment it is transcribed cannot be corrected. With
+   * this on the words land in the agent's composer and Enter stays the user's
+   * to press.
+   *
+   * Stored with the app's settings rather than the dictation service's, because
+   * it is the backend's send path that has to know.
+   */
+
+  // Read from the store rather than mirrored into a local variable: a copy
+  // would be overwritten the moment the store settled, undoing the click.
+  $: bufferSendWithoutEnter = $settings?.dictationSendWithoutEnter ?? false;
+
+  /**
+   * Throw away whatever is in the dictation buffer, front and back.
+   *
+   * Both halves matter: clearing only the local copy leaves the backend holding
+   * the words, and the next poll would put them straight back.
+   */
+  async function discardBuffer() {
+    bufferText = '';
+    lastGoText = '';
+    updateEditorDisplay();
+    try {
+      await DictationService.ClearBuffer();
+    } catch (e) {
+      console.error('Failed to clear the dictation buffer:', e);
+    }
+  }
+
+  /**
+   * Close the dictation panel: discard the words and stop listening.
+   *
+   * The same three steps the close button takes, in one place — Escape and the
+   * button must not drift apart, and leaving dictation running behind a closed
+   * panel would keep the microphone open with nowhere for the text to go.
+   */
+  function closeDictationPanel() {
+    clearBuffer();
+    dictationListening = false;
+    void DictationService.ToggleDictation();
+  }
+
+  async function toggleSendWithoutEnter() {
+    try {
+      await saveSettings({ dictationSendWithoutEnter: !bufferSendWithoutEnter });
+    } catch (e) {
+      console.error('Failed to save the dictation submit setting:', e);
+    }
+  }
   let bufferText = '';
   let bufferBusy = false;
   let bufferSyncBusy = false;
@@ -495,6 +548,15 @@
         stopVoiceLevelPoll();
         stopBufferTextPoll();
         cleanupNotesField();
+        // Dictation stopped with words still in the buffer.
+        //
+        // The buffer lives in the backend and outlived the session that filled
+        // it: stopping only stopped the polling, so the next time dictation was
+        // switched on, a sentence spoken and abandoned an hour earlier
+        // reappeared and was ready to send. Text that was never sent was never
+        // meant to be kept — the close button already discarded it, and
+        // stopping any other way should too.
+        void discardBuffer();
       }
     });
 
@@ -785,8 +847,13 @@
       return;
     }
     if (e.key === 'Escape') {
+      // Closes the window, rather than only emptying it. Escape used to
+      // clear the text and leave the panel sitting there, which meant
+      // reaching for the mouse to finish dismissing a thought one had
+      // decided against. Emptying it is what the bin button is for.
       e.preventDefault();
-      clearBuffer();
+      e.stopPropagation();
+      closeDictationPanel();
     }
   }
 
@@ -1996,7 +2063,7 @@
               <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
               <div class="buffer-header" role="banner" on:mousedown={onHeaderMousedown}>
                 <span class="buffer-title">{bufferMode ? $t('tabBar.dictationBuffer') : $t('tabBar.livePreview')}</span>
-                <button class="buffer-close" on:click={() => { clearBuffer(); dictationListening = false; DictationService.ToggleDictation(); }} title={$t('tabBar.closeDictation')}>
+                <button class="buffer-close" on:click={closeDictationPanel} title={$t('tabBar.closeDictation')}>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <line x1="18" y1="6" x2="6" y2="18"/>
                     <line x1="6" y1="6" x2="18" y2="18"/>
@@ -2028,6 +2095,13 @@
                       }}>
                       <span class="mini-toggle-track"><span class="mini-toggle-thumb"></span></span>
                       <span class="buffer-toggle-label">{$t('tabBar.closeAfterSend')}</span>
+                    </button>
+                    <!-- Beside the send button, because that is where the decision is
+                         made: dictation comes back close but not always right, and
+                         this leaves the words where they can still be fixed. -->
+                    <button class="buffer-setting-toggle" class:active={bufferSendWithoutEnter} title={$t('tabBar.sendWithoutEnterTitle')} on:click={toggleSendWithoutEnter}>
+                      <span class="mini-toggle-track"><span class="mini-toggle-thumb"></span></span>
+                      <span class="buffer-toggle-label">{$t('tabBar.sendWithoutEnter')}</span>
                     </button>
                   </div>
                 </div>
