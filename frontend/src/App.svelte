@@ -1042,21 +1042,16 @@
 
   function handleStart() {
     if (!$selectedSession || $selectedSession.status === 'running') return;
-    // If session has a saved resume ID, restart with it directly (no dialog)
-    if ($selectedSession.resumeSessionId) {
-      startSession($selectedSession.id, $selectedSession.resumeSessionId);
-      return;
-    }
-    // Check if agent supports resume
-    const agentConfig = $agents.find(a => a.type === $selectedSession.agent);
-    if (agentConfig?.supportsResume) {
-      resumeOperationGeneration++;
-      pendingResumeSession = $selectedSession;
-      showResumeChoice = true;
-      return;
-    }
-    // No resume support, start directly
-    if ($selectedSession.followedWindows && $selectedSession.followedWindows.length > 0) {
+
+    // How much to start comes first, whatever happens after.
+    //
+    // The three ways a session can start — a saved resume id, an agent that
+    // offers to resume, a plain start — each used to decide this for
+    // themselves, and only the last one asked. So the same button on the same
+    // session started one tab or all of them depending on which agent it ran
+    // and whether it had been resumed before. Asking here makes it one
+    // question, asked once, in the one case where the answer is not obvious.
+    if (($selectedSession.followedWindows?.length ?? 0) > 0) {
       pendingStartTarget = {
         sessionId: $selectedSession.id,
         windowIdx: get(selectedWindowIdx),
@@ -1064,16 +1059,40 @@
         hasFollowedWindows: true,
       };
       showStartDialog = true;
-    } else {
-      startSession($selectedSession.id);
+      return;
     }
+    startWholeSession($selectedSession);
+  }
+
+  // Starting a whole session: resume it where it left off if there is somewhere
+  // to resume to, otherwise ask, otherwise start it fresh. This is what the
+  // start button used to do inline, now reachable from the tab question too.
+  function startWholeSession(sess: any) {
+    if (sess.resumeSessionId) {
+      startSession(sess.id, sess.resumeSessionId);
+      return;
+    }
+    const agentConfig = $agents.find(a => a.type === sess.agent);
+    if (agentConfig?.supportsResume) {
+      resumeOperationGeneration++;
+      pendingResumeSession = sess;
+      showResumeChoice = true;
+      return;
+    }
+    startSession(sess.id);
   }
 
   async function handleStartSession() {
     const target = pendingStartTarget;
     pendingStartTarget = null;
     if (!target) return;
-    // Start the main session (which will restore all followed windows)
+    // Through the same path a session with no tabs takes, so "start all" and
+    // "start" mean the same thing: resume where it left off if it can.
+    const sess = get(sessions).find(s => s.id === target.sessionId);
+    if (sess) {
+      startWholeSession(sess);
+      return;
+    }
     await startSession(target.sessionId);
   }
 
