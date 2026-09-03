@@ -6,6 +6,43 @@ Entries describe what changed for someone using the app. Internal refactoring,
 test and CI work is left out unless it changed behaviour. Dates are release
 dates; the format follows [Keep a Changelog](https://keepachangelog.com).
 
+## 0.9.36 — 2026-09-03
+
+### Added
+
+- **Usage rings in the header**, beside the search button: how much of Claude's
+  5-hour and 7-day limits is spent, Codex's window, and Gemini's daily count.
+  Each is switched on separately in Settings, and off means off — nothing is
+  fetched for a ring that is not shown. The colour compares spending against
+  elapsed time rather than a fixed threshold, so half the quota gone at the
+  halfway mark reads as fine and the same figure in the first hour does not.
+- **Dictation can send without pressing Enter.** The words land in the agent's
+  composer where they can still be corrected, which is usually what dictated
+  text needs. The switch is beside the send button.
+- **Escape closes the dictation panel** instead of only emptying it.
+
+### Fixed
+
+- **Dictated text that was never sent no longer comes back.** A sentence spoken
+  and abandoned could reappear the next time dictation was switched on.
+- **A Gemini tab no longer starts on a conversation Gemini will refuse.** It
+  files sessions per directory, and hides any transcript that holds nothing but
+  error notices — which is exactly what a failed login leaves behind. Starting
+  on one printed the same rejection on every attempt.
+- **The status line no longer shows Gemini's input box** as though it were
+  something the session had said.
+- **Renaming a tab works in a stopped session.** It used to fail with "instance
+  not running", which is true of tmux and beside the point: the name is stored,
+  and applied when the session starts again.
+- **The start button asks the same question every time.** Whether it offered to
+  start one tab or all of them depended on which agent the session ran and
+  whether it had been resumed before.
+- **Two windows open on the same project no longer lose task edits on macOS.**
+  Both could end up with a handle that opens nothing, and every call reported
+  success until the write failed.
+- **A session running a background agent shows as busy** — and the status line
+  shows what that agent is doing.
+
 ## 0.9.35 — 2026-09-02
 
 ### Added
