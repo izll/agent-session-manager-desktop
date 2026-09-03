@@ -562,7 +562,7 @@ func (i *Instance) StartWithResume(resumeID string) error {
 	if effectiveResumeID == "" {
 		effectiveResumeID = i.ResumeSessionID
 	}
-	if effectiveResumeID != "" && !ResumeIDExists(i.Agent, effectiveResumeID) {
+	if effectiveResumeID != "" && !ResumeIDExistsForDir(i.Agent, effectiveResumeID, i.Path) {
 		// An empty argument normally falls back to ResumeSessionID below. Clear
 		// both so corrupt or stale persisted input cannot bypass validation.
 		log.Printf("[StartWithResume] saved conversation unavailable; starting fresh for session=%s", i.ID)
@@ -910,7 +910,7 @@ func (i *Instance) restoreFollowedWindows() {
 		}
 		// Drop the saved resume ID if it no longer exists on disk so the
 		// tab boots fresh instead of dying with "No conversation found".
-		if resumeID != "" && !ResumeIDExists(fw.Agent, resumeID) {
+		if resumeID != "" && !ResumeIDExistsForDir(fw.Agent, resumeID, tabDir) {
 			log.Printf("[restoreFollowedWindows] saved conversation unavailable for agent=%s tab=%q — starting fresh", fw.Agent, fw.Name)
 			resumeID = ""
 			fw.ResumeSessionID = ""
@@ -1285,7 +1285,7 @@ func (i *Instance) RestartWindowWithResume(windowIdx int, resumeID string) error
 		if resumeID == "" {
 			resumeID = i.ResumeSessionID
 		}
-		if resumeID != "" && !ResumeIDExists(i.Agent, resumeID) {
+		if resumeID != "" && !ResumeIDExistsForDir(i.Agent, resumeID, i.Path) {
 			log.Printf("[RestartWindow] saved main conversation unavailable; starting fresh for session=%s", i.ID)
 			resumeID = ""
 			i.ResumeSessionID = ""
@@ -1374,7 +1374,7 @@ func (i *Instance) RestartWindowWithResume(windowIdx int, resumeID string) error
 		if tabResumeID == "" {
 			tabResumeID = fw.ResumeSessionID
 		}
-		if tabResumeID != "" && !ResumeIDExists(fw.Agent, tabResumeID) {
+		if tabResumeID != "" && !ResumeIDExistsForDir(fw.Agent, tabResumeID, i.Path) {
 			log.Printf("[RestartWindow] saved tab conversation unavailable; starting fresh for session=%s window=%d", i.ID, windowIdx)
 			tabResumeID = ""
 			fw.ResumeSessionID = ""

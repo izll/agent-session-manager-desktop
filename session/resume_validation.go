@@ -2,6 +2,8 @@ package session
 
 import (
 	"bufio"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -40,8 +42,8 @@ func IsSafeResumeID(resumeID string) bool {
 // than letting the agent boot into a fatal error, we detect the missing ID
 // up-front and either start fresh or fall back to a new session.
 //
-// Returns true for agents we don't know how to validate (e.g. Gemini) so we
-// don't break their existing flow.
+// Returns true for agents we don't know how to validate, so we don't break
+// their existing flow.
 func ResumeIDExists(agent AgentType, resumeID string) bool {
 	if resumeID == "" {
 		return false
@@ -57,6 +59,13 @@ func ResumeIDExists(agent AgentType, resumeID string) bool {
 		return claudeResumeIDExists(resumeID)
 	case AgentCodex:
 		return codexResumeIDExists(resumeID)
+	case AgentGemini:
+		// Gemini scopes sessions to the working directory, so the same id can
+		// exist and still be unusable from elsewhere. The caller knows the
+		// directory; this entry point does not, so it answers the weaker
+		// question. ResumeIDExistsForDir is the one to use where the directory
+		// is known.
+		return geminiResumeIDExists(resumeID, "")
 	default:
 		// Unknown agent: assume the ID is valid, don't second-guess.
 		return true
@@ -130,4 +139,117 @@ func codexResumeIDExists(resumeID string) bool {
 		return nil
 	})
 	return found
+}
+
+// geminiResumeIDExists scans ~/.gemini/tmp/*/chats/*.json.
+//
+// The filename carries only the first eight characters of the id, so a match
+// there is not proof — the id is in the file's own sessionId field, and that is
+// what the CLI compares against. Checking the filename alone would accept an
+// id that Gemini then refuses, which is the failure this exists to prevent:
+// "Invalid session identifier ... No previous sessions found for this project",
+// printed twice and leaving a dead tab.
+func geminiResumeIDExists(resumeID, projectDir string) bool {
+	dir := geminiConfigDirForResume()
+	if dir == "" {
+		return true // can't check — be safe and let the CLI try
+	}
+	// The prefix narrows the search to at most a handful of files; without it
+	// this would open every transcript the CLI has ever written.
+	prefix := resumeID
+	if len(prefix) > 8 {
+		prefix = prefix[:8]
+	}
+	matches, err := filepath.Glob(filepath.Join(dir, "tmp", "*", "chats", "*-"+prefix+".json"))
+	if err != nil || len(matches) == 0 {
+		return false
+	}
+	for _, path := range matches {
+		raw, err := readFileAtMost(path, geminiSessionProbeLimit)
+		if err != nil {
+			continue
+		}
+		var session struct {
+			SessionID   string `json:"sessionId"`
+			ProjectHash string `json:"projectHash"`
+			Messages    []struct {
+				Type string `json:"type"`
+			} `json:"messages"`
+		}
+		if err := json.Unmarshal(raw, &session); err != nil {
+			continue
+		}
+		if session.SessionID != resumeID {
+			continue
+		}
+		// Found it — but the file existing is not enough for Gemini to accept it.
+		//
+		// It hides any transcript holding nothing but system messages, so a
+		// session that failed at startup and recorded only errors is invisible
+		// to it while sitting right there on disk. That is exactly what a failed
+		// login leaves behind, and resuming it produced "Invalid session
+		// identifier ... No previous sessions found for this project" on every
+		// start.
+		if !geminiHasRealMessage(session.Messages) {
+			return false
+		}
+		// And it files sessions per directory, so an id belonging elsewhere is
+		// as good as missing.
+		if projectDir == "" || session.ProjectHash == "" {
+			return true
+		}
+		return session.ProjectHash == geminiProjectHash(projectDir)
+	}
+	return false
+}
+
+// geminiSessionProbeLimit bounds the read: only the head of a transcript is
+// needed, and they can be large.
+const geminiSessionProbeLimit = 1 << 20
+
+func geminiConfigDirForResume() string {
+	if dir := os.Getenv("GEMINI_CONFIG_DIR"); dir != "" {
+		return dir
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(home, ".gemini")
+}
+
+// ResumeIDExistsForDir is ResumeIDExists with the working directory the agent
+// will start in — which Gemini needs, since it files sessions per directory.
+func ResumeIDExistsForDir(agent AgentType, resumeID, projectDir string) bool {
+	if agent == AgentGemini {
+		if resumeID == "" || !IsSafeResumeID(resumeID) {
+			return false
+		}
+		return geminiResumeIDExists(resumeID, projectDir)
+	}
+	return ResumeIDExists(agent, resumeID)
+}
+
+// geminiProjectHash mirrors the CLI's own getProjectHash: sha256 of the project
+// root, hex-encoded, with no separator or normalisation.
+func geminiProjectHash(projectDir string) string {
+	sum := sha256.Sum256([]byte(projectDir))
+	return hex.EncodeToString(sum[:])
+}
+
+// geminiHasRealMessage reports whether a transcript holds anything the user
+// said or the model answered, as opposed to the info/error notices Gemini
+// writes when a session cannot start. Its own listing applies the same rule.
+func geminiHasRealMessage(messages []struct {
+	Type string `json:"type"`
+}) bool {
+	for _, m := range messages {
+		switch m.Type {
+		case "info", "error", "warning", "":
+			continue
+		default:
+			return true
+		}
+	}
+	return false
 }
