@@ -86,6 +86,8 @@
   "tabBar.sendEnterTitle": "在文本后发送回车（提交给代理）",
   "tabBar.closeAfterSend": "发送后关闭",
   "tabBar.closeAfterSendTitle": "发送文本后关闭窗口",
+  "tabBar.sendWithoutEnter": "no Enter",
+  "tabBar.sendWithoutEnterTitle": "Put the text in the agent's composer without submitting it, so it can still be edited",
   "tabBar.dictationBuffer": "听写缓冲区",
   "tabBar.livePreview": "实时预览",
   "tabBar.closeDictation": "关闭（停止听写）",

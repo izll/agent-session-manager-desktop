@@ -86,6 +86,8 @@
   "tabBar.sendEnterTitle": "テキスト送信後に Enter を送信（エージェントに送信）",
   "tabBar.closeAfterSend": "送信後に閉じる",
   "tabBar.closeAfterSendTitle": "テキスト送信後にウィンドウを閉じる",
+  "tabBar.sendWithoutEnter": "no Enter",
+  "tabBar.sendWithoutEnterTitle": "Put the text in the agent's composer without submitting it, so it can still be edited",
   "tabBar.dictationBuffer": "音声入力バッファ",
   "tabBar.livePreview": "ライブプレビュー",
   "tabBar.closeDictation": "閉じる（音声入力を停止）",

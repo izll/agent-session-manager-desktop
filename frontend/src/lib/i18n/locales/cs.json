@@ -86,6 +86,8 @@
   "tabBar.sendEnterTitle": "Odeslat Enter po textu (odeslat agentovi)",
   "tabBar.closeAfterSend": "Zavřít po odeslání",
   "tabBar.closeAfterSendTitle": "Zavřít okno po odeslání textu",
+  "tabBar.sendWithoutEnter": "no Enter",
+  "tabBar.sendWithoutEnterTitle": "Put the text in the agent's composer without submitting it, so it can still be edited",
   "tabBar.dictationBuffer": "Vyrovnávací paměť diktování",
   "tabBar.livePreview": "Živý náhled",
   "tabBar.closeDictation": "Zavřít (zastavit diktování)",

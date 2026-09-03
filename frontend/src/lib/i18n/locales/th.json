@@ -86,6 +86,8 @@
   "tabBar.sendEnterTitle": "ส่ง Enter หลังข้อความ (ส่งไปยัง agent)",
   "tabBar.closeAfterSend": "ปิดหลังส่ง",
   "tabBar.closeAfterSendTitle": "ปิดหน้าต่างหลังส่งข้อความ",
+  "tabBar.sendWithoutEnter": "no Enter",
+  "tabBar.sendWithoutEnterTitle": "Put the text in the agent's composer without submitting it, so it can still be edited",
   "tabBar.dictationBuffer": "บัฟเฟอร์การป้อนเสียง",
   "tabBar.livePreview": "ตัวอย่างสด",
   "tabBar.closeDictation": "ปิด (หยุดการป้อนเสียง)",

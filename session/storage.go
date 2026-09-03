@@ -118,6 +118,14 @@ type Settings struct {
 	ShowClaudeSevenDayRing bool `json:"show_claude_seven_day_ring,omitempty"`
 	ShowCodexUsageRing     bool `json:"show_codex_usage_ring,omitempty"`
 	ShowGeminiUsageRing    bool `json:"show_gemini_usage_ring,omitempty"`
+	// DictationSendWithoutEnter leaves the dictated text in the agent's
+	// composer instead of submitting it.
+	//
+	// Dictation is not typing: what comes back is often close but not right,
+	// and a prompt sent the moment it is transcribed cannot be corrected. With
+	// this on, the words arrive where they can still be edited, and Enter is
+	// the user's to press.
+	DictationSendWithoutEnter bool `json:"dictation_send_without_enter,omitempty"`
 	// WindowX/Y/Width/Height remember where the window was when the app last
 	// closed, so it reopens where it was left rather than being recentred every
 	// time. Zero width or height means "never saved" and the centred default

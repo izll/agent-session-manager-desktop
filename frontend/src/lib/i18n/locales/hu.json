@@ -245,6 +245,8 @@
   "tabBar.sendEnterTitle": "Enter küldése a szöveg után (beküldés az agentnek)",
   "tabBar.closeAfterSend": "Bezárás küldés után",
   "tabBar.closeAfterSendTitle": "Ablak bezárása a szöveg elküldése után",
+  "tabBar.sendWithoutEnter": "Enter nélkül",
+  "tabBar.sendWithoutEnterTitle": "A szöveg az agent beviteli mezőjébe kerül elküldés nélkül, így még javítható",
   "tabBar.dictationBuffer": "Diktálási puffer",
   "tabBar.livePreview": "Élő előnézet",
   "tabBar.closeDictation": "Bezárás (diktálás leállítása)",

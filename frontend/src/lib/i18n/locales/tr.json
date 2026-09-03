@@ -86,6 +86,8 @@
   "tabBar.sendEnterTitle": "Metin sonrası Enter gönder (ajana gönder)",
   "tabBar.closeAfterSend": "Gönderdikten sonra kapat",
   "tabBar.closeAfterSendTitle": "Metin gönderdikten sonra pencereyi kapat",
+  "tabBar.sendWithoutEnter": "no Enter",
+  "tabBar.sendWithoutEnterTitle": "Put the text in the agent's composer without submitting it, so it can still be edited",
   "tabBar.dictationBuffer": "Dikte Arabelleği",
   "tabBar.livePreview": "Canlı Önizleme",
   "tabBar.closeDictation": "Kapat (dikteyi durdur)",

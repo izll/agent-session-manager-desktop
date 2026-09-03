@@ -86,6 +86,8 @@
   "tabBar.sendEnterTitle": "Skicka Enter efter text (skicka till agent)",
   "tabBar.closeAfterSend": "Stäng efter skickning",
   "tabBar.closeAfterSendTitle": "Stäng fönstret efter att text skickats",
+  "tabBar.sendWithoutEnter": "no Enter",
+  "tabBar.sendWithoutEnterTitle": "Put the text in the agent's composer without submitting it, so it can still be edited",
   "tabBar.dictationBuffer": "Dikteringsbuffert",
   "tabBar.livePreview": "Liveförhandsgranskning",
   "tabBar.closeDictation": "Stäng (stoppa diktering)",

@@ -86,6 +86,8 @@
   "tabBar.sendEnterTitle": "Gửi Enter sau văn bản (gửi đến agent)",
   "tabBar.closeAfterSend": "Đóng sau khi gửi",
   "tabBar.closeAfterSendTitle": "Đóng cửa sổ sau khi gửi văn bản",
+  "tabBar.sendWithoutEnter": "no Enter",
+  "tabBar.sendWithoutEnterTitle": "Put the text in the agent's composer without submitting it, so it can still be edited",
   "tabBar.dictationBuffer": "Bộ đệm đọc chính tả",
   "tabBar.livePreview": "Xem trước trực tiếp",
   "tabBar.closeDictation": "Đóng (dừng đọc chính tả)",

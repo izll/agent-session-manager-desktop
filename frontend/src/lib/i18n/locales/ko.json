@@ -86,6 +86,8 @@
   "tabBar.sendEnterTitle": "텍스트 전송 후 Enter 전송 (에이전트에 제출)",
   "tabBar.closeAfterSend": "전송 후 닫기",
   "tabBar.closeAfterSendTitle": "텍스트 전송 후 창 닫기",
+  "tabBar.sendWithoutEnter": "no Enter",
+  "tabBar.sendWithoutEnterTitle": "Put the text in the agent's composer without submitting it, so it can still be edited",
   "tabBar.dictationBuffer": "받아쓰기 버퍼",
   "tabBar.livePreview": "실시간 미리보기",
   "tabBar.closeDictation": "닫기 (받아쓰기 중지)",

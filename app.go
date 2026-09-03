@@ -1946,7 +1946,14 @@ func (a *App) SendPromptToWindow(id string, windowIdx int, text, expectedProject
 	if err != nil {
 		return err
 	}
-	return inst.SendPromptToWindow(text, windowIdx)
+	settings, err := a.currentSettings()
+	submit := true
+	if err == nil && settings != nil {
+		// Off means the text lands in the composer and waits — see
+		// session.Settings for why that is worth a setting.
+		submit = !settings.DictationSendWithoutEnter
+	}
+	return inst.SendPromptToWindowWithSubmit(text, windowIdx, submit)
 }
 
 // ============================================================================
@@ -3824,23 +3831,24 @@ type SettingsInfo struct {
 	HideStatusLines bool `json:"hideStatusLines"`
 	ShowAgentIcons  bool `json:"showAgentIcons"`
 	// Usage rings; see session.Settings for why these gate the fetching too.
-	ShowClaudeFiveHourRing bool   `json:"showClaudeFiveHourRing"`
-	ShowClaudeSevenDayRing bool   `json:"showClaudeSevenDayRing"`
-	ShowCodexUsageRing     bool   `json:"showCodexUsageRing"`
-	ShowGeminiUsageRing    bool   `json:"showGeminiUsageRing"`
-	HideYoloBadge          bool   `json:"hideYoloBadge"`
-	ShowResumeBadge        bool   `json:"showResumeBadge"`
-	SplitView              bool   `json:"splitView"`
-	MarkedSessionID        string `json:"markedSessionId"`
-	LastSessionID          string `json:"lastSessionId"`
-	MarkedWindowIdx        int    `json:"markedWindowIdx"`
-	Language               string `json:"language"`
-	UITheme                string `json:"uiTheme"`
-	UIAccent               string `json:"uiAccent"`
-	TerminalRenderer       string `json:"terminalRenderer"`
-	TerminalCopyMode       string `json:"terminalCopyMode"`
-	TerminalFontFamily     string `json:"terminalFontFamily"`
-	TerminalShell          string `json:"terminalShell"`
+	ShowClaudeFiveHourRing    bool   `json:"showClaudeFiveHourRing"`
+	ShowClaudeSevenDayRing    bool   `json:"showClaudeSevenDayRing"`
+	ShowCodexUsageRing        bool   `json:"showCodexUsageRing"`
+	ShowGeminiUsageRing       bool   `json:"showGeminiUsageRing"`
+	DictationSendWithoutEnter bool   `json:"dictationSendWithoutEnter"`
+	HideYoloBadge             bool   `json:"hideYoloBadge"`
+	ShowResumeBadge           bool   `json:"showResumeBadge"`
+	SplitView                 bool   `json:"splitView"`
+	MarkedSessionID           string `json:"markedSessionId"`
+	LastSessionID             string `json:"lastSessionId"`
+	MarkedWindowIdx           int    `json:"markedWindowIdx"`
+	Language                  string `json:"language"`
+	UITheme                   string `json:"uiTheme"`
+	UIAccent                  string `json:"uiAccent"`
+	TerminalRenderer          string `json:"terminalRenderer"`
+	TerminalCopyMode          string `json:"terminalCopyMode"`
+	TerminalFontFamily        string `json:"terminalFontFamily"`
+	TerminalShell             string `json:"terminalShell"`
 	// ShellChoices is what this platform offers for TerminalShell. Supplied by
 	// the backend because the answer is platform-specific and the frontend has
 	// no way to know which platform it is running on.
@@ -3937,52 +3945,53 @@ func (a *App) GetSettings() (*SettingsInfo, error) {
 	}
 
 	return &SettingsInfo{
-		CompactList:            settings.CompactList,
-		HideStatusLines:        settings.HideStatusLines,
-		ShowAgentIcons:         settings.ShowAgentIcons,
-		ShowClaudeFiveHourRing: settings.ShowClaudeFiveHourRing,
-		ShowClaudeSevenDayRing: settings.ShowClaudeSevenDayRing,
-		ShowCodexUsageRing:     settings.ShowCodexUsageRing,
-		ShowGeminiUsageRing:    settings.ShowGeminiUsageRing,
-		HideYoloBadge:          settings.HideYoloBadge,
-		ShowResumeBadge:        settings.ShowResumeBadge,
-		SplitView:              settings.SplitView,
-		MarkedSessionID:        settings.MarkedSessionID,
-		LastSessionID:          settings.LastSessionID,
-		MarkedWindowIdx:        settings.MarkedWindowIdx,
-		Language:               lang,
-		UITheme:                settings.UITheme,
-		UIAccent:               settings.UIAccent,
-		TerminalRenderer:       renderer,
-		TerminalShell:          settings.TerminalShell,
-		ShellChoices:           session.ShellChoices(),
-		TerminalCopyMode:       copyMode,
-		TerminalFontFamily:     settings.TerminalFontFamily,
-		GitBranchDisplay:       branchDisplay,
-		DiffFlatFileList:       settings.DiffFlatFileList,
-		TrashRetentionDays:     settings.TrashRetentionDays,
-		TaskMasterEnabled:      settings.TaskMasterEnabled,
-		RestoreLastSession:     settings.RestoreLastSession,
-		TerminalFontSize:       settings.TerminalFontSize,
-		AgentFontSize:          settings.AgentFontSize,
-		HideViewBar:            settings.HideViewBar,
-		AgentHideViewBar:       settings.AgentHideViewBar,
-		HideStatusBar:          settings.HideStatusBar,
-		AgentHideStatusBar:     settings.AgentHideStatusBar,
-		NotifyOnWaiting:        settings.NotifyOnWaiting,
-		NotifyDesktop:          settings.NotifyDesktop,
-		NotifyNtfy:             settings.NotifyNtfy,
-		NtfyURL:                settings.NtfyURL,
-		ShortcutOverrides:      settings.ShortcutOverrides,
-		DiffAboveHeight:        settings.DiffAboveHeight,
-		DictationBuffer:        settings.DictationBuffer,
-		DiffSideBySide:         settings.DiffSideBySide,
-		DiffHunksOnly:          settings.DiffHunksOnly,
-		DiffLastFile:           settings.DiffLastFile,
-		TerminalTheme:          theme,
-		AgentDefaultTheme:      agentTheme,
-		AgentTerminalThemes:    settings.AgentTerminalThemes,
-		CustomTerminalThemes:   customThemes,
+		CompactList:               settings.CompactList,
+		HideStatusLines:           settings.HideStatusLines,
+		ShowAgentIcons:            settings.ShowAgentIcons,
+		ShowClaudeFiveHourRing:    settings.ShowClaudeFiveHourRing,
+		ShowClaudeSevenDayRing:    settings.ShowClaudeSevenDayRing,
+		ShowCodexUsageRing:        settings.ShowCodexUsageRing,
+		ShowGeminiUsageRing:       settings.ShowGeminiUsageRing,
+		DictationSendWithoutEnter: settings.DictationSendWithoutEnter,
+		HideYoloBadge:             settings.HideYoloBadge,
+		ShowResumeBadge:           settings.ShowResumeBadge,
+		SplitView:                 settings.SplitView,
+		MarkedSessionID:           settings.MarkedSessionID,
+		LastSessionID:             settings.LastSessionID,
+		MarkedWindowIdx:           settings.MarkedWindowIdx,
+		Language:                  lang,
+		UITheme:                   settings.UITheme,
+		UIAccent:                  settings.UIAccent,
+		TerminalRenderer:          renderer,
+		TerminalShell:             settings.TerminalShell,
+		ShellChoices:              session.ShellChoices(),
+		TerminalCopyMode:          copyMode,
+		TerminalFontFamily:        settings.TerminalFontFamily,
+		GitBranchDisplay:          branchDisplay,
+		DiffFlatFileList:          settings.DiffFlatFileList,
+		TrashRetentionDays:        settings.TrashRetentionDays,
+		TaskMasterEnabled:         settings.TaskMasterEnabled,
+		RestoreLastSession:        settings.RestoreLastSession,
+		TerminalFontSize:          settings.TerminalFontSize,
+		AgentFontSize:             settings.AgentFontSize,
+		HideViewBar:               settings.HideViewBar,
+		AgentHideViewBar:          settings.AgentHideViewBar,
+		HideStatusBar:             settings.HideStatusBar,
+		AgentHideStatusBar:        settings.AgentHideStatusBar,
+		NotifyOnWaiting:           settings.NotifyOnWaiting,
+		NotifyDesktop:             settings.NotifyDesktop,
+		NotifyNtfy:                settings.NotifyNtfy,
+		NtfyURL:                   settings.NtfyURL,
+		ShortcutOverrides:         settings.ShortcutOverrides,
+		DiffAboveHeight:           settings.DiffAboveHeight,
+		DictationBuffer:           settings.DictationBuffer,
+		DiffSideBySide:            settings.DiffSideBySide,
+		DiffHunksOnly:             settings.DiffHunksOnly,
+		DiffLastFile:              settings.DiffLastFile,
+		TerminalTheme:             theme,
+		AgentDefaultTheme:         agentTheme,
+		AgentTerminalThemes:       settings.AgentTerminalThemes,
+		CustomTerminalThemes:      customThemes,
 	}, nil
 }
 
@@ -4025,6 +4034,7 @@ func (a *App) SaveSettings(settings SettingsInfo, expectedProjectID string) erro
 		current.ShowClaudeSevenDayRing = settings.ShowClaudeSevenDayRing
 		current.ShowCodexUsageRing = settings.ShowCodexUsageRing
 		current.ShowGeminiUsageRing = settings.ShowGeminiUsageRing
+		current.DictationSendWithoutEnter = settings.DictationSendWithoutEnter
 		current.HideYoloBadge = settings.HideYoloBadge
 		current.ShowResumeBadge = settings.ShowResumeBadge
 		current.SplitView = settings.SplitView

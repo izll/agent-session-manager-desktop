@@ -249,6 +249,8 @@
   "tabBar.sendEnterTitle": "Send Enter after text (submit to agent)",
   "tabBar.closeAfterSend": "Close after send",
   "tabBar.closeAfterSendTitle": "Close window after sending text",
+  "tabBar.sendWithoutEnter": "no Enter",
+  "tabBar.sendWithoutEnterTitle": "Put the text in the agent's composer without submitting it, so it can still be edited",
   "tabBar.dictationBuffer": "Dictation Buffer",
   "tabBar.livePreview": "Live Preview",
   "tabBar.closeDictation": "Close (stop dictation)",

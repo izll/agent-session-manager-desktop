@@ -2691,6 +2691,16 @@ func (i *Instance) SendPrompt(text string) error {
 // window is active — so dictated text landed in a different tab than the one
 // being looked at, which reads as the text never being sent at all.
 func (i *Instance) SendPromptToWindow(text string, windowIdx int) error {
+	return i.SendPromptToWindowWithSubmit(text, windowIdx, true)
+}
+
+// SendPromptToWindowWithSubmit types the text and, when submit is true, presses
+// Enter after it.
+//
+// Leaving it unpressed puts the text in the agent's composer without sending
+// it, which is what dictation often wants: speak a prompt, read it back, add to
+// it, and submit when it says what was meant.
+func (i *Instance) SendPromptToWindowWithSubmit(text string, windowIdx int, submit bool) error {
 	if !i.IsAlive() {
 		return fmt.Errorf("session not running")
 	}
@@ -2734,6 +2744,9 @@ func (i *Instance) SendPromptToWindow(text string, windowIdx int) error {
 	//
 	// A suggestion popup left open is harmless: Enter submits the line either
 	// way, and a wrong guess about what a keystroke means is not.
+	if !submit {
+		return nil
+	}
 	cmd := TmuxCommand("send-keys", "-t", sessionName, "Enter")
 	return cmd.Run()
 }

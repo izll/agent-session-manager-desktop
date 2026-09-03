@@ -86,6 +86,8 @@
   "tabBar.sendEnterTitle": "إرسال Enter بعد النص (إرسال إلى الوكيل)",
   "tabBar.closeAfterSend": "إغلاق بعد الإرسال",
   "tabBar.closeAfterSendTitle": "إغلاق النافذة بعد إرسال النص",
+  "tabBar.sendWithoutEnter": "no Enter",
+  "tabBar.sendWithoutEnterTitle": "Put the text in the agent's composer without submitting it, so it can still be edited",
   "tabBar.dictationBuffer": "مخزن الإملاء المؤقت",
   "tabBar.livePreview": "معاينة مباشرة",
   "tabBar.closeDictation": "إغلاق (إيقاف الإملاء)",

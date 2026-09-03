@@ -86,6 +86,8 @@
   "tabBar.sendEnterTitle": "Enviar Enter após o texto (submeter ao agente)",
   "tabBar.closeAfterSend": "Fechar após enviar",
   "tabBar.closeAfterSendTitle": "Fechar janela após enviar o texto",
+  "tabBar.sendWithoutEnter": "no Enter",
+  "tabBar.sendWithoutEnterTitle": "Put the text in the agent's composer without submitting it, so it can still be edited",
   "tabBar.dictationBuffer": "Buffer de Ditado",
   "tabBar.livePreview": "Pré-visualização ao Vivo",
   "tabBar.closeDictation": "Fechar (parar ditado)",
