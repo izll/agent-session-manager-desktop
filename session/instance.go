@@ -1749,9 +1749,13 @@ func (i *Instance) PrevWindow() error {
 // separate commands; another attached client can change the selection between
 // them and make the rename land on the wrong tab.
 func (i *Instance) RenameWindow(index int, name string) (string, error) {
-	if i.Status != StatusRunning {
-		return "", fmt.Errorf("instance not running")
-	}
+	// A stopped session can be renamed too. The name lives in the store, and a
+	// stopped session's tabs are listed from there — so refusing here left the
+	// tab bar showing a name the user had just replaced, with "instance not
+	// running" as the only explanation. tmux is simply skipped: there is no
+	// window to rename, and the name is applied to the one that gets created
+	// when the session starts again.
+	running := i.Status == StatusRunning
 
 	sessionName := i.TmuxSessionName()
 	target := fmt.Sprintf("%s:%d", sessionName, index)
@@ -1765,13 +1769,23 @@ func (i *Instance) RenameWindow(index int, name string) (string, error) {
 		}
 	}
 	if followedIndex < 0 {
-		mainIndex, ok := i.getMainWindowIndex()
-		if !ok || index != mainIndex {
-			return "", fmt.Errorf("tmux window %s is not a tracked tab", target)
+		// Which window is the main one is answered by tmux, so a stopped session
+		// cannot be asked. The tab bar lists a stopped session as its main tab
+		// plus its followed windows, and index 0 is what it shows for the main
+		// one — so that is what a rename arriving here refers to.
+		if running {
+			mainIndex, ok := i.getMainWindowIndex()
+			if !ok || index != mainIndex {
+				return "", fmt.Errorf("tmux window %s is not a tracked tab", target)
+			}
+		} else if index != 0 {
+			return "", fmt.Errorf("window %d is not a tracked tab", index)
 		}
 	}
-	if err := TmuxCommand("rename-window", "-t", target, name).Run(); err != nil {
-		return "", err
+	if running {
+		if err := TmuxCommand("rename-window", "-t", target, name).Run(); err != nil {
+			return "", err
+		}
 	}
 	if followedIndex < 0 {
 		i.MainWindowName = name

@@ -2289,26 +2289,41 @@ func (a *App) CloseTab(sessionID string, windowIdx int, expectedProjectID string
 
 // RenameTab renames a tab
 func (a *App) RenameTab(sessionID string, windowIdx int, name, expectedProjectID string) error {
+	// Logged at every exit, because a tab name that goes missing leaves nothing
+	// behind to look at: the name lives in tmux and in the store, and if the two
+	// ever disagree there is no way afterwards to tell which step failed. A
+	// renamed tab reverting to its default has been reported and could not be
+	// traced for exactly this reason.
 	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
+		log.Printf("[RenameTab] refused session=%s win=%d name=%q: %v", sessionID, windowIdx, name, err)
 		return err
 	}
 	defer done()
 	inst, err := a.storage.GetInstance(sessionID)
 	if err != nil {
+		log.Printf("[RenameTab] session not found session=%s win=%d name=%q: %v", sessionID, windowIdx, name, err)
 		return err
 	}
 	oldName, err := inst.RenameWindow(windowIdx, name)
 	if err != nil {
+		log.Printf("[RenameTab] tmux rename failed session=%s win=%d name=%q: %v", sessionID, windowIdx, name, err)
 		return err
 	}
-	return persistOrRollbackExternalMutation(
+	if err := persistOrRollbackExternalMutation(
 		func() error { return a.storage.UpdateInstance(inst) },
 		func() error {
 			_, rollbackErr := inst.RenameWindow(windowIdx, oldName)
 			return rollbackErr
 		},
-	)
+	); err != nil {
+		log.Printf("[RenameTab] not persisted, rolled back session=%s win=%d %q→%q: %v",
+			sessionID, windowIdx, oldName, name, err)
+		return err
+	}
+	log.Printf("[RenameTab] session=%s win=%d %q→%q (main=%v)",
+		sessionID, windowIdx, oldName, name, windowIdx == inst.GetMainWindowIndex())
+	return nil
 }
 
 func persistOrRollbackExternalMutation(persist, rollback func() error) error {
