@@ -16,6 +16,8 @@ dates; the format follows [Keep a Changelog](https://keepachangelog.com).
   fetched for a ring that is not shown. The colour compares spending against
   elapsed time rather than a fixed threshold, so half the quota gone at the
   halfway mark reads as fine and the same figure in the first hour does not.
+  Switching one on or off takes effect straight away, and the agent's icon
+  pulses while the first figure is on its way.
 - **Dictation can send without pressing Enter.** The words land in the agent's
   composer where they can still be corrected, which is usually what dictated
   text needs. The switch is beside the send button.

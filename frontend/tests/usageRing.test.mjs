@@ -79,3 +79,41 @@ test('the settings offer a switch per window rather than a dropdown', () => {
   assert.doesNotMatch(dialog, /usageRingWindow/,
     'the exclusive window dropdown is still there');
 });
+
+// Switching a ring off has to take it off the screen at once.
+//
+// The rings were drawn from what the last fetch returned, and that fetch is
+// five minutes apart — so a ring switched off stayed on screen until the next
+// one, long after the backend had stopped sending it. The settings are what the
+// user just changed; they are what the display follows.
+test('the rings are drawn from the settings, not the last response', () => {
+  const src = readFileSync(new URL('../src/App.svelte', import.meta.url), 'utf8');
+  for (const flag of ['showClaudeRings', 'showCodexRing', 'showGeminiRing']) {
+    const line = src.split('\n').find((l) => l.includes(`$: ${flag} =`));
+    assert.ok(line, `${flag} is gone`);
+    assert.match(line, /\$settings\?\./,
+      `${flag} reads the fetch result, so switching it off leaves the ring up`);
+  }
+});
+
+test('each Claude window is drawn from its own switch', () => {
+  const src = readFileSync(new URL('../src/App.svelte', import.meta.url), 'utf8');
+  assert.match(src, /claudeUsable && \$settings\?\.showClaudeFiveHourRing/,
+    'the 5h ring follows the last response rather than its switch');
+  assert.match(src, /claudeUsable && \$settings\?\.showClaudeSevenDayRing/,
+    'the 7d ring follows the last response rather than its switch');
+});
+
+// And switching one on should fill it in straight away rather than after the
+// poll — but only the switches count, or every unrelated setting change would
+// spend a request against the rate limit.
+test('flipping a switch refetches, other settings do not', () => {
+  const src = readFileSync(new URL('../src/App.svelte', import.meta.url), 'utf8');
+  const at = src.indexOf('let lastRingSwitches');
+  assert.ok(at > 0, 'nothing refetches when a ring is switched on');
+  const block = src.slice(at, at + 700);
+  assert.match(block, /loadUsageRings\(\)/, 'the refetch is gone');
+  assert.match(block, /showClaudeFiveHourRing/, 'the switches are no longer watched');
+  assert.doesNotMatch(block, /showAgentIcons|compactList/,
+    'unrelated settings would trigger a fetch against the rate limit');
+});

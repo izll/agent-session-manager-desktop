@@ -37,6 +37,8 @@
   }
 
   let usageRings: UsageRingsData | null = null;
+  /** True while a fetch is in flight for a ring that has just been switched on. */
+  let usageRingsLoading = false;
   let usageTimer: ReturnType<typeof setInterval> | undefined;
   const USAGE_POLL_MS = 5 * 60 * 1000;
   const FIVE_HOURS_MS = 5 * 60 * 60 * 1000;
@@ -49,6 +51,8 @@
       // A ring is decoration; failing to fetch one must not disturb the app.
       console.error('Failed to load usage rings:', e);
       usageRings = null;
+    } finally {
+      usageRingsLoading = false;
     }
   }
 
@@ -85,15 +89,19 @@
   // A ring that simply vanishes on an error leaves no way to tell a rate limit
   // from a setting nobody switched on — the icon stays, dimmed, and its
   // tooltip says what went wrong.
-  $: showClaudeRings = !!(usageRings && (usageRings.showFiveHour || usageRings.showSevenDay));
+  // Driven by the settings rather than by what the last fetch returned. The
+  // poll is five minutes apart, so reading the response alone left a ring on
+  // screen for that long after it was switched off — the backend had already
+  // stopped sending it, but nothing on screen knew yet.
+  $: showClaudeRings = !!($settings?.showClaudeFiveHourRing || $settings?.showClaudeSevenDayRing);
   $: claudeUsable = !!usageRings?.claude?.available;
   $: claudeProblem = claudeUsable ? '' : (usageRings?.claude?.error || $t('usage.unavailable'));
 
-  $: showCodexRing = !!usageRings?.codex;
+  $: showCodexRing = !!$settings?.showCodexUsageRing;
   $: codexUsable = !!(usageRings?.codex?.available && usageRings.codex.primary);
   $: codexProblem = codexUsable ? '' : (usageRings?.codex?.error || $t('usage.unavailable'));
 
-  $: showGeminiRing = !!usageRings?.gemini;
+  $: showGeminiRing = !!$settings?.showGeminiUsageRing;
   $: geminiUsable = !!usageRings?.gemini?.available;
   $: geminiProblem = geminiUsable ? '' : (usageRings?.gemini?.error || $t('usage.unavailable'));
   $: geminiRing = {
@@ -105,6 +113,25 @@
     ),
     title: `Gemini: ${usageRings?.gemini?.requestsToday ?? 0} / ${usageRings?.gemini?.dailyLimit ?? 0}`,
   };
+
+  // Refetch the moment a ring is switched on, so it fills in at once instead of
+  // waiting out the poll. Keyed on the switches alone: any other settings change
+  // is not a reason to spend a request.
+  let lastRingSwitches = '';
+  $: {
+    const switches = [
+      $settings?.showClaudeFiveHourRing, $settings?.showClaudeSevenDayRing,
+      $settings?.showCodexUsageRing, $settings?.showGeminiUsageRing,
+    ].join(',');
+    if (lastRingSwitches && switches !== lastRingSwitches) {
+      // A ring switched on has to fetch before it can show a figure, and the
+      // Claude one is a network round trip. Saying so beats an empty gap that
+      // looks like something is broken.
+      usageRingsLoading = true;
+      void loadUsageRings();
+    }
+    lastRingSwitches = switches;
+  }
 
   $: fiveHourRing = claudeRingFor(usageRings?.claude?.fiveHour, '5h', FIVE_HOURS_MS);
   $: sevenDayRing = claudeRingFor(usageRings?.claude?.sevenDay, '7d', SEVEN_DAYS_MS);
@@ -1432,18 +1459,18 @@
               <!-- One icon for both windows: they are the same account, and a
                    second copy of the mark says nothing the first did not. -->
               <span class="usage-group">
-                <img class="agent-icon" class:unavailable={!claudeUsable} src={claudeAgentIcon} alt="Claude" width="13" height="13" title={claudeProblem} />
-                {#if claudeUsable && usageRings?.showFiveHour}
+                <img class="agent-icon" class:unavailable={!claudeUsable && !usageRingsLoading} class:loading={usageRingsLoading && !claudeUsable} src={claudeAgentIcon} alt="Claude" width="13" height="13" title={claudeProblem} />
+                {#if claudeUsable && $settings?.showClaudeFiveHourRing}
                   <UsageRing percent={fiveHourRing.percent} timePercent={fiveHourRing.timePercent} label="5h" title={fiveHourRing.title} />
                 {/if}
-                {#if claudeUsable && usageRings?.showSevenDay}
+                {#if claudeUsable && $settings?.showClaudeSevenDayRing}
                   <UsageRing percent={sevenDayRing.percent} timePercent={sevenDayRing.timePercent} label="7d" title={sevenDayRing.title} />
                 {/if}
               </span>
             {/if}
             {#if showCodexRing}
               <span class="usage-group">
-                <img class="agent-icon" class:unavailable={!codexUsable} src={codexAgentIcon} alt="Codex" width="13" height="13" title={codexProblem} />
+                <img class="agent-icon" class:unavailable={!codexUsable && !usageRingsLoading} class:loading={usageRingsLoading && !codexUsable} src={codexAgentIcon} alt="Codex" width="13" height="13" title={codexProblem} />
                 {#if codexUsable}
                   <UsageRing percent={usageRings?.codex?.primary?.usedPercent ?? 0} timePercent={codexRing.timePercent} title={codexRing.title} />
                 {/if}
@@ -1451,7 +1478,7 @@
             {/if}
             {#if showGeminiRing}
               <span class="usage-group">
-                <img class="agent-icon" class:unavailable={!geminiUsable} src={geminiAgentIcon} alt="Gemini" width="13" height="13" title={geminiProblem} />
+                <img class="agent-icon" class:unavailable={!geminiUsable && !usageRingsLoading} class:loading={usageRingsLoading && !geminiUsable} src={geminiAgentIcon} alt="Gemini" width="13" height="13" title={geminiProblem} />
                 {#if geminiUsable}
                   <UsageRing percent={geminiRing.percent} timePercent={geminiRing.timePercent} title={geminiRing.title} />
                 {/if}
@@ -2059,6 +2086,16 @@
   .agent-icon.unavailable {
     opacity: 0.35;
     filter: grayscale(1);
+  }
+  /* Waiting on the first fetch: dimmed, but pulsing rather than greyed, so the
+     pause reads as "coming" instead of "not working". */
+  .agent-icon.loading {
+    opacity: 0.5;
+    animation: usage-ring-wait 1.1s ease-in-out infinite;
+  }
+  @keyframes usage-ring-wait {
+    0%, 100% { opacity: 0.35; }
+    50% { opacity: 0.7; }
   }
 
   .header-text-actions {

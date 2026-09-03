@@ -1,6 +1,10 @@
 package main
 
-import "asmgr-desktop/session"
+import (
+	"sync"
+
+	"asmgr-desktop/session"
+)
 
 // UsageRings is what the sidebar draws beside the search box.
 //
@@ -33,17 +37,28 @@ func (a *App) GetUsageRings() *UsageRings {
 	}
 	rings.ShowFiveHour = settings.ShowClaudeFiveHourRing
 	rings.ShowSevenDay = settings.ShowClaudeSevenDayRing
-	// One fetch serves both windows — the endpoint returns them together — so
-	// showing both costs no more than showing one.
+
+	// In parallel, because one of the three is not like the others: Claude is a
+	// network round trip of a few hundred milliseconds, while Codex and Gemini
+	// read local files in microseconds. Run in sequence, the two instant ones
+	// waited behind the slow one for no reason, and switching a ring on left a
+	// visible gap before anything appeared.
+	var wg sync.WaitGroup
 	if rings.ShowFiveHour || rings.ShowSevenDay {
-		rings.Claude = a.GetClaudeUsage()
+		// One fetch serves both windows — the endpoint returns them together —
+		// so showing both costs no more than showing one.
+		wg.Add(1)
+		go func() { defer wg.Done(); rings.Claude = a.GetClaudeUsage() }()
 	}
 	if settings.ShowCodexUsageRing {
-		rings.Codex = a.GetCodexUsage()
+		wg.Add(1)
+		go func() { defer wg.Done(); rings.Codex = a.GetCodexUsage() }()
 	}
 	if settings.ShowGeminiUsageRing {
-		rings.Gemini = a.GetGeminiUsage()
+		wg.Add(1)
+		go func() { defer wg.Done(); rings.Gemini = a.GetGeminiUsage() }()
 	}
+	wg.Wait()
 	return rings
 }
 
