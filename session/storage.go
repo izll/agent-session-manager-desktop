@@ -102,6 +102,22 @@ type Settings struct {
 	UITheme string `json:"ui_theme,omitempty"`
 	// UIAccent is the custom accent hex, used when UITheme is "custom".
 	UIAccent string `json:"ui_accent,omitempty"`
+	// Usage rings in the sidebar, off by default.
+	//
+	// Off means off: with these false nothing is fetched at all. The Claude
+	// figure is a live call to Anthropic's usage endpoint with the user's own
+	// token and a request budget to respect, so polling for a ring nobody asked
+	// for would spend someone's rate limit on a decoration.
+	//
+	// The two Claude windows are separate switches rather than a choice between
+	// them: they answer different questions — "am I about to be cut off in the
+	// next hour" and "will this last the week" — and someone watching one
+	// usually wants the other beside it. Codex reports its own window and has
+	// nothing to choose.
+	ShowClaudeFiveHourRing bool `json:"show_claude_five_hour_ring,omitempty"`
+	ShowClaudeSevenDayRing bool `json:"show_claude_seven_day_ring,omitempty"`
+	ShowCodexUsageRing     bool `json:"show_codex_usage_ring,omitempty"`
+	ShowGeminiUsageRing    bool `json:"show_gemini_usage_ring,omitempty"`
 	// WindowX/Y/Width/Height remember where the window was when the app last
 	// closed, so it reopens where it was left rather than being recentred every
 	// time. Zero width or height means "never saved" and the centred default

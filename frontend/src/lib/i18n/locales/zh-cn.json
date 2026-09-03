@@ -710,6 +710,15 @@
   "settings.forgetWindowGeometryDesc": "The window reopens where it was last closed. Use this if it opens somewhere awkward — the next launch centres it again.",
   "settings.forgetWindowGeometryAction": "Forget",
   "settings.forgetWindowGeometryDone": "Forgotten",
+  "settings.usageSection": "Usage rings",
+  "settings.claudeFiveHourRing": "Claude session ring (5 hours)",
+  "settings.claudeFiveHourRingDesc": "How much of the 5-hour session limit is spent. Off by default: the figure is a live request to Anthropic with your own token, so nothing is fetched while both Claude rings are off.",
+  "settings.claudeSevenDayRing": "Claude weekly ring (7 days)",
+  "settings.claudeSevenDayRingDesc": "How much of the weekly limit is spent. Both windows come from one request, so showing this alongside the session ring costs nothing extra.",
+  "settings.codexUsageRing": "Show the Codex usage ring",
+  "settings.codexUsageRingDesc": "Read from Codex's own session logs, so it needs no network — but it only moves when Codex has been used.",
+  "settings.geminiUsageRing": "Show the Gemini usage ring",
+  "settings.geminiUsageRingDesc": "Counted from Gemini's own logs — today's prompts against the daily allowance — since it reports no remaining quota locally. An approximation, and it needs no network.",
   "settings.terminalRendering": "渲染",
   "settings.terminalRenderer": "终端渲染器",
   "settings.terminalRendererDesc": "下次打开时对所有终端视图（含代理会话）生效。推荐 Canvas；WebGL 最快但在部分机器上不稳定；DOM 兼容性最好但较慢。",
@@ -1178,5 +1187,6 @@
   "history.nextChange": "下一处更改 (F7)",
   "diff.showSideBySide": "以两栏显示",
   "diff.showUnified": "以单栏显示",
-  "diff.revertBlock": "撤销此块"
+  "diff.revertBlock": "撤销此块",
+  "usage.unavailable": "Usage figures are not available right now"
 }

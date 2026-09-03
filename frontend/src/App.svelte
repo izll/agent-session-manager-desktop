@@ -1,6 +1,120 @@
 <script lang="ts">
   import { onMount, onDestroy, tick } from 'svelte';
   import { setDictationHotkey } from './lib/utils/dictationHotkey';
+  import UsageRing from './lib/components/Sidebar/UsageRing.svelte';
+  // The marks the Plasma widgets use, so the same figure looks the same
+  // wherever it is read. Images rather than currentColor paths, because they
+  // carry their own brand colours; the rings beside them still change colour.
+  import claudeAgentIcon from './assets/agents/claude.svg';
+  import codexAgentIcon from './assets/agents/codex.svg';
+  import geminiAgentIcon from './assets/agents/gemini.svg';
+
+  /**
+   * Usage rings in the header, beside the search button.
+   *
+   * The backend decides what to fetch: a ring switched off costs nothing there,
+   * so this only asks and draws. Polling matches the Plasma widgets these
+   * mirror — five minutes, with the backend caching a minute on top.
+   */
+  interface RingWindow {
+    usedPercent?: number;
+    utilization?: number;
+    // Claude sends ISO-8601; Codex sends Unix seconds. Parsing one as the other
+    // gives NaN, which reads as "no reset time" and drops the colour back to
+    // fixed thresholds without saying so.
+    resetsAt?: string | number;
+    windowMinutes?: number;
+  }
+  interface UsageRingsData {
+    showFiveHour: boolean;
+    showSevenDay: boolean;
+    claude?: { available: boolean; error?: string; fiveHour: RingWindow; sevenDay: RingWindow } | null;
+    codex?: { available: boolean; error?: string; primary?: RingWindow | null; planType?: string } | null;
+    // Gemini reports no remaining quota anywhere local, so this is a count of
+    // today's logged prompts against the tier's daily allowance — the same
+    // approximation the ai-usage-hub widget makes, so the two agree.
+    gemini?: { available: boolean; error?: string; usedPercent?: number; requestsToday?: number; dailyLimit?: number; resetsAt?: string } | null;
+  }
+
+  let usageRings: UsageRingsData | null = null;
+  let usageTimer: ReturnType<typeof setInterval> | undefined;
+  const USAGE_POLL_MS = 5 * 60 * 1000;
+  const FIVE_HOURS_MS = 5 * 60 * 60 * 1000;
+  const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+
+  async function loadUsageRings() {
+    try {
+      usageRings = (await GetUsageRings()) as unknown as UsageRingsData;
+    } catch (e) {
+      // A ring is decoration; failing to fetch one must not disturb the app.
+      console.error('Failed to load usage rings:', e);
+      usageRings = null;
+    }
+  }
+
+  // How far through a window we are, so the colour can compare spending against
+  // elapsed time rather than a fixed threshold. -1 when unknown.
+  function elapsedPercent(resetsAtMs: number, windowMs: number): number {
+    if (!resetsAtMs || !windowMs) return -1;
+    const remaining = resetsAtMs - Date.now();
+    if (remaining <= 0 || remaining > windowMs) return -1;
+    return Math.max(0, Math.min(100, ((windowMs - remaining) / windowMs) * 100));
+  }
+
+  function isoResetMs(value: string | number | undefined): number {
+    if (typeof value !== 'string' || !value) return 0;
+    const ms = Date.parse(value);
+    return Number.isNaN(ms) ? 0 : ms;
+  }
+
+  function epochResetMs(value: string | number | undefined): number {
+    const seconds = typeof value === 'number' ? value : Number(value);
+    return Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : 0;
+  }
+
+  function claudeRingFor(win: RingWindow | undefined, label: string, windowMs: number) {
+    const percent = win?.utilization ?? 0;
+    return {
+      percent,
+      timePercent: elapsedPercent(isoResetMs(win?.resetsAt), windowMs),
+      title: `Claude ${label}: ${percent.toFixed(0)}%`,
+    };
+  }
+
+  // Shown whenever the rings are switched on, not only when figures arrived.
+  // A ring that simply vanishes on an error leaves no way to tell a rate limit
+  // from a setting nobody switched on — the icon stays, dimmed, and its
+  // tooltip says what went wrong.
+  $: showClaudeRings = !!(usageRings && (usageRings.showFiveHour || usageRings.showSevenDay));
+  $: claudeUsable = !!usageRings?.claude?.available;
+  $: claudeProblem = claudeUsable ? '' : (usageRings?.claude?.error || $t('usage.unavailable'));
+
+  $: showCodexRing = !!usageRings?.codex;
+  $: codexUsable = !!(usageRings?.codex?.available && usageRings.codex.primary);
+  $: codexProblem = codexUsable ? '' : (usageRings?.codex?.error || $t('usage.unavailable'));
+
+  $: showGeminiRing = !!usageRings?.gemini;
+  $: geminiUsable = !!usageRings?.gemini?.available;
+  $: geminiProblem = geminiUsable ? '' : (usageRings?.gemini?.error || $t('usage.unavailable'));
+  $: geminiRing = {
+    percent: usageRings?.gemini?.usedPercent ?? 0,
+    // The window is a calendar day, so elapsed time is how far into it we are.
+    timePercent: elapsedPercent(
+      usageRings?.gemini?.resetsAt ? Date.parse(usageRings.gemini.resetsAt) : 0,
+      24 * 60 * 60 * 1000,
+    ),
+    title: `Gemini: ${usageRings?.gemini?.requestsToday ?? 0} / ${usageRings?.gemini?.dailyLimit ?? 0}`,
+  };
+
+  $: fiveHourRing = claudeRingFor(usageRings?.claude?.fiveHour, '5h', FIVE_HOURS_MS);
+  $: sevenDayRing = claudeRingFor(usageRings?.claude?.sevenDay, '7d', SEVEN_DAYS_MS);
+  $: codexRing = {
+    timePercent: elapsedPercent(
+      epochResetMs(usageRings?.codex?.primary?.resetsAt),
+      (usageRings?.codex?.primary?.windowMinutes ?? 0) * 60 * 1000,
+    ),
+    title: `Codex: ${(usageRings?.codex?.primary?.usedPercent ?? 0).toFixed(0)}%`,
+  };
   import { get } from 'svelte/store';
   import SessionTree from './lib/components/Sidebar/SessionTree.svelte';
   import ProjectSelector from './lib/components/Sidebar/ProjectSelector.svelte';
@@ -49,7 +163,7 @@
   import { WindowMinimise, WindowToggleMaximise, Quit, EventsOn, EventsOff, EventsEmit } from '../wailsjs/runtime/runtime';
   import { afterUnsavedChanges } from './lib/stores/unsavedChanges';
   import * as DictationService from '../wailsjs/go/main/DictationService';
-  import { IsDevMode, GetMultiplexerStatus, InstallMultiplexer, UnfinishedTasksForSession, GetTabWorkingDirectory } from '../wailsjs/go/main/App';
+  import { IsDevMode, GetMultiplexerStatus, InstallMultiplexer, UnfinishedTasksForSession, GetTabWorkingDirectory, GetUsageRings } from '../wailsjs/go/main/App';
   import asmgrIcon from './assets/icons/asmgr.svg';
   import { applyUITheme, DEFAULT_UI_THEME } from './lib/utils/uiThemes';
   import { t, isRTL, loadTranslations } from './lib/i18n';
@@ -737,6 +851,11 @@
   let appMounted = false;
 
   onMount(async () => {
+    // The backend returns nothing for rings that are switched off, so this
+    // costs one call that answers "nothing to draw" when they all are.
+    loadUsageRings();
+    usageTimer = setInterval(loadUsageRings, USAGE_POLL_MS);
+
     appMounted = true;
     stopOpenTaskWatch = watchOpenCount();
 
@@ -819,6 +938,7 @@
   });
 
   onDestroy(() => {
+    if (usageTimer !== undefined) clearInterval(usageTimer);
     appMounted = false;
     if (isResizing) stopResize();
     stopOpenTaskWatch?.();
@@ -1306,6 +1426,39 @@
 
     <div class="flex items-center gap-3" style="--wails-draggable:no-drag">
       <div class="header-text-actions">
+        {#if showClaudeRings || showCodexRing || showGeminiRing}
+          <div class="usage-rings">
+            {#if showClaudeRings}
+              <!-- One icon for both windows: they are the same account, and a
+                   second copy of the mark says nothing the first did not. -->
+              <span class="usage-group">
+                <img class="agent-icon" class:unavailable={!claudeUsable} src={claudeAgentIcon} alt="Claude" width="13" height="13" title={claudeProblem} />
+                {#if claudeUsable && usageRings?.showFiveHour}
+                  <UsageRing percent={fiveHourRing.percent} timePercent={fiveHourRing.timePercent} label="5h" title={fiveHourRing.title} />
+                {/if}
+                {#if claudeUsable && usageRings?.showSevenDay}
+                  <UsageRing percent={sevenDayRing.percent} timePercent={sevenDayRing.timePercent} label="7d" title={sevenDayRing.title} />
+                {/if}
+              </span>
+            {/if}
+            {#if showCodexRing}
+              <span class="usage-group">
+                <img class="agent-icon" class:unavailable={!codexUsable} src={codexAgentIcon} alt="Codex" width="13" height="13" title={codexProblem} />
+                {#if codexUsable}
+                  <UsageRing percent={usageRings?.codex?.primary?.usedPercent ?? 0} timePercent={codexRing.timePercent} title={codexRing.title} />
+                {/if}
+              </span>
+            {/if}
+            {#if showGeminiRing}
+              <span class="usage-group">
+                <img class="agent-icon" class:unavailable={!geminiUsable} src={geminiAgentIcon} alt="Gemini" width="13" height="13" title={geminiProblem} />
+                {#if geminiUsable}
+                  <UsageRing percent={geminiRing.percent} timePercent={geminiRing.timePercent} title={geminiRing.title} />
+                {/if}
+              </span>
+            {/if}
+          </div>
+        {/if}
         <button class="btn btn-ghost" on:click={() => showGlobalSearch = true} title={$t('header.globalSearch')}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="11" cy="11" r="8"/>
@@ -1877,6 +2030,35 @@
     color: var(--accent-lighter);
     background: rgba(var(--accent-rgb), 0.15);
     border-color: rgba(var(--accent-rgb), 0.3);
+  }
+
+  /* Left of the search button, since these are read rather than pressed and a
+     row of things to click reads better with the passive ones first. */
+  .usage-rings {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-right: 4px;
+    padding-right: 10px;
+    border-right: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  /* Icon once per agent, then that agent's rings. */
+  .usage-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .agent-icon {
+    opacity: 0.9;
+    flex-shrink: 0;
+  }
+  /* Still there, plainly not working — the tooltip says why. Dropping it
+     entirely would leave no way to tell a rate limit from a setting nobody
+     switched on. */
+  .agent-icon.unavailable {
+    opacity: 0.35;
+    filter: grayscale(1);
   }
 
   .header-text-actions {

@@ -710,6 +710,15 @@
   "settings.forgetWindowGeometryDesc": "The window reopens where it was last closed. Use this if it opens somewhere awkward — the next launch centres it again.",
   "settings.forgetWindowGeometryAction": "Forget",
   "settings.forgetWindowGeometryDone": "Forgotten",
+  "settings.usageSection": "Usage rings",
+  "settings.claudeFiveHourRing": "Claude session ring (5 hours)",
+  "settings.claudeFiveHourRingDesc": "How much of the 5-hour session limit is spent. Off by default: the figure is a live request to Anthropic with your own token, so nothing is fetched while both Claude rings are off.",
+  "settings.claudeSevenDayRing": "Claude weekly ring (7 days)",
+  "settings.claudeSevenDayRingDesc": "How much of the weekly limit is spent. Both windows come from one request, so showing this alongside the session ring costs nothing extra.",
+  "settings.codexUsageRing": "Show the Codex usage ring",
+  "settings.codexUsageRingDesc": "Read from Codex's own session logs, so it needs no network — but it only moves when Codex has been used.",
+  "settings.geminiUsageRing": "Show the Gemini usage ring",
+  "settings.geminiUsageRingDesc": "Counted from Gemini's own logs — today's prompts against the daily allowance — since it reports no remaining quota locally. An approximation, and it needs no network.",
   "settings.terminalRendering": "العرض",
   "settings.terminalRenderer": "محرك عرض الطرفية",
   "settings.terminalRendererDesc": "يُطبَّق على كل عروض الطرفية، بما فيها جلسات الوكلاء، عند الفتح التالي. يُنصح بـ Canvas؛ WebGL الأسرع لكنه غير مستقر على بعض الأجهزة؛ DOM الأكثر توافقًا لكنه أبطأ.",
@@ -1178,5 +1187,6 @@
   "history.nextChange": "التغيير التالي (F7)",
   "diff.showSideBySide": "عرض في عمودين",
   "diff.showUnified": "عرض في عمود واحد",
-  "diff.revertBlock": "التراجع عن هذه الكتلة"
+  "diff.revertBlock": "التراجع عن هذه الكتلة",
+  "usage.unavailable": "Usage figures are not available right now"
 }

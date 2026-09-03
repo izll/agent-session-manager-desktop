@@ -560,6 +560,32 @@ export namespace main {
 	        this.sessionId = source["sessionId"];
 	    }
 	}
+	export class GeminiUsageInfo {
+	    available: boolean;
+	    usedPercent: number;
+	    requestsToday: number;
+	    dailyLimit: number;
+	    tierLabel?: string;
+	    account?: string;
+	    resetsAt?: string;
+	    error?: string;
+
+	    static createFrom(source: any = {}) {
+	        return new GeminiUsageInfo(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.available = source["available"];
+	        this.usedPercent = source["usedPercent"];
+	        this.requestsToday = source["requestsToday"];
+	        this.dailyLimit = source["dailyLimit"];
+	        this.tierLabel = source["tierLabel"];
+	        this.account = source["account"];
+	        this.resetsAt = source["resetsAt"];
+	        this.error = source["error"];
+	    }
+	}
 	export class GitBranchEntry {
 	    name: string;
 	    hash: string;
@@ -1300,6 +1326,10 @@ export namespace main {
 	    compactList: boolean;
 	    hideStatusLines: boolean;
 	    showAgentIcons: boolean;
+	    showClaudeFiveHourRing: boolean;
+	    showClaudeSevenDayRing: boolean;
+	    showCodexUsageRing: boolean;
+	    showGeminiUsageRing: boolean;
 	    hideYoloBadge: boolean;
 	    showResumeBadge: boolean;
 	    splitView: boolean;
@@ -1349,6 +1379,10 @@ export namespace main {
 	        this.compactList = source["compactList"];
 	        this.hideStatusLines = source["hideStatusLines"];
 	        this.showAgentIcons = source["showAgentIcons"];
+	        this.showClaudeFiveHourRing = source["showClaudeFiveHourRing"];
+	        this.showClaudeSevenDayRing = source["showClaudeSevenDayRing"];
+	        this.showCodexUsageRing = source["showCodexUsageRing"];
+	        this.showGeminiUsageRing = source["showGeminiUsageRing"];
 	        this.hideYoloBadge = source["hideYoloBadge"];
 	        this.showResumeBadge = source["showResumeBadge"];
 	        this.splitView = source["splitView"];
@@ -1676,6 +1710,44 @@ export namespace main {
 	        this.manualInstallHint = source["manualInstallHint"];
 	        this.manualInstallURL = source["manualInstallURL"];
 	    }
+	}
+	export class UsageRings {
+	    claude?: ClaudeUsageInfo;
+	    codex?: CodexUsageInfo;
+	    gemini?: GeminiUsageInfo;
+	    showFiveHour: boolean;
+	    showSevenDay: boolean;
+
+	    static createFrom(source: any = {}) {
+	        return new UsageRings(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.claude = this.convertValues(source["claude"], ClaudeUsageInfo);
+	        this.codex = this.convertValues(source["codex"], CodexUsageInfo);
+	        this.gemini = this.convertValues(source["gemini"], GeminiUsageInfo);
+	        this.showFiveHour = source["showFiveHour"];
+	        this.showSevenDay = source["showSevenDay"];
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 
 }

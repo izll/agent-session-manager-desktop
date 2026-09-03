@@ -210,6 +210,10 @@ export function GetFullDiffForFile(arg1, arg2, arg3, arg4, arg5) {
   return window['go']['main']['App']['GetFullDiffForFile'](arg1, arg2, arg3, arg4, arg5);
 }
 
+export function GetGeminiUsage() {
+  return window['go']['main']['App']['GetGeminiUsage']();
+}
+
 export function GetGitBranch(arg1, arg2, arg3) {
   return window['go']['main']['App']['GetGitBranch'](arg1, arg2, arg3);
 }
@@ -352,6 +356,10 @@ export function GetTerminalWSToken() {
 
 export function GetTrashItems() {
   return window['go']['main']['App']['GetTrashItems']();
+}
+
+export function GetUsageRings() {
+  return window['go']['main']['App']['GetUsageRings']();
 }
 
 export function GetVersion() {

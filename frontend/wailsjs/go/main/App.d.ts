@@ -107,6 +107,8 @@ export function GetFullDiffFiles(arg1:string,arg2:number,arg3:string):Promise<Ar
 
 export function GetFullDiffForFile(arg1:string,arg2:string,arg3:boolean,arg4:number,arg5:string):Promise<session.DiffFile>;
 
+export function GetGeminiUsage():Promise<main.GeminiUsageInfo>;
+
 export function GetGitBranch(arg1:string,arg2:number,arg3:string):Promise<main.GitBranchInfo>;
 
 export function GetGitCommitDiff(arg1:string,arg2:string,arg3:string,arg4:boolean,arg5:number,arg6:string):Promise<session.DiffFile>;
@@ -178,6 +180,8 @@ export function GetTerminalWSPort():Promise<number>;
 export function GetTerminalWSToken():Promise<string>;
 
 export function GetTrashItems():Promise<Array<main.TrashItemInfo>>;
+
+export function GetUsageRings():Promise<main.UsageRings>;
 
 export function GetVersion():Promise<string>;
 

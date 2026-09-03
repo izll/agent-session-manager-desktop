@@ -33,6 +33,12 @@ export interface Settings {
   compactList: boolean;
   hideStatusLines: boolean;
   showAgentIcons: boolean;
+  // Usage rings in the sidebar. Off by default, and off means nothing is
+  // fetched: the Claude figure is a live request against the user's own limit.
+  showClaudeFiveHourRing: boolean;
+  showClaudeSevenDayRing: boolean;
+  showCodexUsageRing: boolean;
+  showGeminiUsageRing: boolean;
   /** YOLO shows unless hidden; the resume marker is opt-in. */
   hideYoloBadge: boolean;
   showResumeBadge: boolean;
@@ -114,6 +120,10 @@ function defaultSettings(): Settings {
     compactList: false,
     hideStatusLines: false,
     showAgentIcons: true,
+    showClaudeFiveHourRing: false,
+    showClaudeSevenDayRing: false,
+    showCodexUsageRing: false,
+    showGeminiUsageRing: false,
     hideYoloBadge: false,
     showResumeBadge: false,
     splitView: false,

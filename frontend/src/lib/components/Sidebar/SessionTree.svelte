@@ -19,6 +19,11 @@
   import { t } from '../../i18n';
   import { activeProjectId } from '../../stores/projects';
 
+
+
+
+  
+
   export let onNewSession: () => void;
   export let onNewGroup: () => void;
   export let onCollapse: () => void;
@@ -388,6 +393,7 @@
   .search-container {
     padding: 12px;
   }
+
 
   .search-box {
     position: relative;

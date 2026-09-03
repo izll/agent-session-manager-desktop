@@ -510,7 +510,7 @@
     }
   }
 
-  function toggle(key: 'hideStatusLines' | 'showAgentIcons' | 'compactList' | 'hideViewBar' | 'agentHideViewBar' | 'hideStatusBar' | 'agentHideStatusBar' | 'notifyOnWaiting' | 'notifyDesktop' | 'notifyNtfy' | 'taskMasterEnabled' | 'restoreLastSession') {
+  function toggle(key: 'hideStatusLines' | 'showAgentIcons' | 'showClaudeFiveHourRing' | 'showClaudeSevenDayRing' | 'showCodexUsageRing' | 'showGeminiUsageRing' | 'compactList' | 'hideViewBar' | 'agentHideViewBar' | 'hideStatusBar' | 'agentHideStatusBar' | 'notifyOnWaiting' | 'notifyDesktop' | 'notifyNtfy' | 'taskMasterEnabled' | 'restoreLastSession') {
     saveSettings({ [key]: !$settings[key] });
   }
 
@@ -669,6 +669,74 @@
 
           <div class="settings-section">
             <h3>{$t('settings.windowSection')}</h3>
+
+            <div class="settings-section">
+              <h3>{$t('settings.usageSection')}</h3>
+
+              <label class="setting-item">
+                <span class="setting-info">
+                  <span class="setting-label">{$t('settings.claudeFiveHourRing')}</span>
+                  <span class="setting-desc">{$t('settings.claudeFiveHourRingDesc')}</span>
+                </span>
+                <button
+                  class="toggle-btn"
+                  class:active={$settings.showClaudeFiveHourRing}
+                  on:click={() => toggle('showClaudeFiveHourRing')}
+                >
+                  <span class="toggle-track">
+                    <span class="toggle-thumb"></span>
+                  </span>
+                </button>
+              </label>
+
+              <label class="setting-item">
+                <span class="setting-info">
+                  <span class="setting-label">{$t('settings.claudeSevenDayRing')}</span>
+                  <span class="setting-desc">{$t('settings.claudeSevenDayRingDesc')}</span>
+                </span>
+                <button
+                  class="toggle-btn"
+                  class:active={$settings.showClaudeSevenDayRing}
+                  on:click={() => toggle('showClaudeSevenDayRing')}
+                >
+                  <span class="toggle-track">
+                    <span class="toggle-thumb"></span>
+                  </span>
+                </button>
+              </label>
+
+              <label class="setting-item">
+                <span class="setting-info">
+                  <span class="setting-label">{$t('settings.codexUsageRing')}</span>
+                  <span class="setting-desc">{$t('settings.codexUsageRingDesc')}</span>
+                </span>
+                <button
+                  class="toggle-btn"
+                  class:active={$settings.showCodexUsageRing}
+                  on:click={() => toggle('showCodexUsageRing')}
+                >
+                  <span class="toggle-track">
+                    <span class="toggle-thumb"></span>
+                  </span>
+                </button>
+              </label>
+
+              <label class="setting-item">
+                <span class="setting-info">
+                  <span class="setting-label">{$t('settings.geminiUsageRing')}</span>
+                  <span class="setting-desc">{$t('settings.geminiUsageRingDesc')}</span>
+                </span>
+                <button
+                  class="toggle-btn"
+                  class:active={$settings.showGeminiUsageRing}
+                  on:click={() => toggle('showGeminiUsageRing')}
+                >
+                  <span class="toggle-track">
+                    <span class="toggle-thumb"></span>
+                  </span>
+                </button>
+              </label>
+            </div>
 
             <!-- Not input-item: that aligns to flex-start for tall fields,
                  which leaves a button hanging below its own label. -->

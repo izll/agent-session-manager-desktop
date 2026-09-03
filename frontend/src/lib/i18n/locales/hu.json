@@ -782,6 +782,15 @@
   "settings.forgetWindowGeometryDesc": "Az ablak ott nyílik, ahol utoljára bezártad. Ha rossz helyre kerülne, ezzel a következő indításnál újra középre kerül.",
   "settings.forgetWindowGeometryAction": "Elfelejt",
   "settings.forgetWindowGeometryDone": "Elfelejtve",
+  "settings.usageSection": "Használati gyűrűk",
+  "settings.claudeFiveHourRing": "Claude munkamenet-gyűrű (5 óra)",
+  "settings.claudeFiveHourRingDesc": "Az 5 órás munkamenet-korlátból mennyi fogyott. Alapból ki: az érték élő lekérdezés az Anthropic felé a saját tokeneddel, ezért amíg mindkét Claude gyűrű ki van kapcsolva, semmit nem kérdez le.",
+  "settings.claudeSevenDayRing": "Claude heti gyűrű (7 nap)",
+  "settings.claudeSevenDayRingDesc": "A heti korlátból mennyi fogyott. A két ablak egyetlen lekérdezésből jön, tehát a munkamenet-gyűrű mellett megjelenítve nem kerül semmibe.",
+  "settings.codexUsageRing": "Codex használati gyűrű",
+  "settings.codexUsageRingDesc": "A Codex saját naplóiból olvassa, hálózat nélkül — viszont csak akkor változik, ha használtad a Codexet.",
+  "settings.geminiUsageRing": "Gemini használati gyűrű",
+  "settings.geminiUsageRingDesc": "A Gemini saját naplóiból számolva: a mai kérések a napi keretből — mert a maradék kvótát helyben nem közli. Közelítés, viszont hálózat nélkül működik.",
   "settings.terminalRendering": "Terminál megjelenítése",
   "settings.terminalRenderer": "Terminál renderer",
   "settings.terminalRendererDesc": "Minden terminálnézetre érvényes — az agent-session-ökre is —, a következő megnyitástól. Canvas = ajánlott; WebGL = leggyorsabb, de egyes gépeken hibás lehet; DOM = legkompatibilisebb, de lassabb.",
@@ -1182,5 +1191,6 @@
   "history.nextChange": "Következő eltérés (F7)",
   "diff.showSideBySide": "Megjelenítés két hasábban",
   "diff.showUnified": "Megjelenítés egy hasábban",
-  "diff.revertBlock": "Blokk visszavonása"
+  "diff.revertBlock": "Blokk visszavonása",
+  "usage.unavailable": "A használati adatok most nem érhetők el"
 }

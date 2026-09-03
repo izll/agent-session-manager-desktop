@@ -710,6 +710,15 @@
   "settings.forgetWindowGeometryDesc": "The window reopens where it was last closed. Use this if it opens somewhere awkward — the next launch centres it again.",
   "settings.forgetWindowGeometryAction": "Forget",
   "settings.forgetWindowGeometryDone": "Forgotten",
+  "settings.usageSection": "Usage rings",
+  "settings.claudeFiveHourRing": "Claude session ring (5 hours)",
+  "settings.claudeFiveHourRingDesc": "How much of the 5-hour session limit is spent. Off by default: the figure is a live request to Anthropic with your own token, so nothing is fetched while both Claude rings are off.",
+  "settings.claudeSevenDayRing": "Claude weekly ring (7 days)",
+  "settings.claudeSevenDayRingDesc": "How much of the weekly limit is spent. Both windows come from one request, so showing this alongside the session ring costs nothing extra.",
+  "settings.codexUsageRing": "Show the Codex usage ring",
+  "settings.codexUsageRingDesc": "Read from Codex's own session logs, so it needs no network — but it only moves when Codex has been used.",
+  "settings.geminiUsageRing": "Show the Gemini usage ring",
+  "settings.geminiUsageRingDesc": "Counted from Gemini's own logs — today's prompts against the daily allowance — since it reports no remaining quota locally. An approximation, and it needs no network.",
   "settings.terminalRendering": "Renderização",
   "settings.terminalRenderer": "Renderizador do terminal",
   "settings.terminalRendererDesc": "Vale para toda visão de terminal, incluindo sessões de agente, na próxima abertura. Canvas é recomendado; WebGL é o mais rápido, mas instável em algumas máquinas; DOM é o mais compatível, porém mais lento.",
@@ -1178,5 +1187,6 @@
   "history.nextChange": "Próxima alteração (F7)",
   "diff.showSideBySide": "Mostrar em duas colunas",
   "diff.showUnified": "Mostrar em uma coluna",
-  "diff.revertBlock": "Reverter este bloco"
+  "diff.revertBlock": "Reverter este bloco",
+  "usage.unavailable": "Usage figures are not available right now"
 }
