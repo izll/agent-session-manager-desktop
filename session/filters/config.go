@@ -224,8 +224,17 @@ func getDefaultFilters() AgentFilters {
 			MinSeparators: 20,
 		},
 		"gemini": {
-			SkipContains:  []string{"Type your message", "no sandbox", "/model", "Auto (Gemini"},
-			SkipPrefixes:  []string{"╭", "╰", "│", ">", "~/", "~"},
+			// The bottom bar's labels, and the placeholder inside the input box.
+			// "workspace (/directory)" heads the columns of that bar; without it
+			// the column titles read as something the agent said.
+			SkipContains: []string{
+				"Type your message", "no sandbox", "/model", "Auto (Gemini",
+				"workspace (/directory)", "for shortcuts", "to accept edits",
+			},
+			// Gemini draws its input box with half-block characters rather than
+			// the light box-drawing set — a row of ▄ or ▀ is a border, and was
+			// being shown in the sidebar as though the session had said it.
+			SkipPrefixes:  []string{"╭", "╰", "│", "▄", "▀", "█", ">", "~/", "~"},
 			MinSeparators: 20,
 		},
 		"aider": {
