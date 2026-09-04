@@ -791,18 +791,39 @@ func slicesEqual(a, b []string) bool {
 // hasRunningBackgroundAgent reports whether the pane says a spawned agent is
 // still working.
 //
-// Unlike the other busy checks this one does not stop at the separator: the
-// notice is printed above the input box, so a separator-bounded search would
-// never reach it. The whole visible pane is searched instead, which is safe
-// because the line is removed as soon as the agent finishes — unlike the
-// scrollback text the separator rule exists to ignore.
+// The notice is printed just above the input box, so a search bounded by the
+// separator would never see it. Searching the whole pane is wrong too: the
+// notice is not removed when the agent finishes, it scrolls up into the
+// transcript, where it went on claiming the session was busy — one session read
+// as busy for over an hour with the sentence sitting 77 lines up.
+//
+// What separates the two is what comes after it. A live notice is the last
+// thing the agent has said; once the work finishes, Claude answers, and that
+// reply ("● ...") lands below the notice. So a notice with a reply under it
+// belongs to the transcript, whatever its distance from the box.
 func hasRunningBackgroundAgent(lines []string) bool {
 	patterns := backgroundAgentPatterns()
 	if len(patterns) == 0 {
 		return false
 	}
-	for _, line := range lines {
-		clean := stripANSIForDetect(line)
+
+	for j := len(lines) - 1; j >= 0; j-- {
+		clean := stripANSIForDetect(lines[j])
+		trimmed := strings.TrimSpace(clean)
+		if trimmed == "" {
+			continue
+		}
+
+		// A reply below the notice means the wait it announced is over. Reached
+		// first while walking up, it ends the search: anything above is past.
+		//
+		// Column matters: Claude's replies start at column zero, while the
+		// status bar's branch and agent rows ("  ● main") are indented and sit
+		// below the notice, where they would end the search on every pane.
+		if strings.HasPrefix(clean, "●") {
+			return false
+		}
+
 		for _, re := range patterns {
 			if re.MatchString(clean) {
 				return true

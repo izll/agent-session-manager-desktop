@@ -2,6 +2,7 @@ package session
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -189,5 +190,54 @@ func TestTheIdleAgentsHintIsNotBusy(t *testing.T) {
 	}
 	if hasRunningBackgroundAgent(pane) {
 		t.Fatal("the idle '← for agents' hint was taken for a running agent")
+	}
+}
+
+// The notice is not removed when the agent finishes: it scrolls up into the
+// transcript and stays on screen. Searching the whole pane therefore kept
+// reporting busy long after the work ended — observed on a session that had
+// been idle for over an hour with the sentence sitting 77 lines up.
+func TestTheNoticeInTheTranscriptIsNotLive(t *testing.T) {
+	separator := strings.Repeat("─", 72)
+	pane := []string{
+		"● Elindítom a hátteret.",
+		"",
+		"✻ Waiting for 1 background agent to finish",
+		"",
+		"● Az agent végzett, összefoglalom.",
+		"",
+		"● A mérés lezárult, minden referencia bitre azonos.",
+		"",
+		"✻ Cooked for 1m 0s · done 14:50",
+		"",
+		"※ recap: a következő lépés a te döntésed.",
+		"",
+		separator,
+		"❯ ",
+		separator,
+		"  ⏵⏵ auto mode on (shift+tab to cycle) · ← for agents",
+	}
+	if hasRunningBackgroundAgent(pane) {
+		t.Fatal("a notice left behind in the transcript was taken for a live one")
+	}
+}
+
+// The live notice sits just above the input box, so the search has to cross the
+// separator to see it at all. Guarding against the transcript must not cost us
+// the real thing.
+func TestTheNoticeAboveTheInputBoxIsLive(t *testing.T) {
+	separator := strings.Repeat("─", 72)
+	pane := []string{
+		"● Elindítom a hátteret.",
+		"",
+		"✻ Waiting for 2 background agents to finish",
+		"",
+		separator,
+		"❯ ",
+		separator,
+		"  ⏵⏵ auto mode on (shift+tab to cycle) · ← 2 agents",
+	}
+	if !hasRunningBackgroundAgent(pane) {
+		t.Fatal("the live notice above the input box was missed")
 	}
 }
