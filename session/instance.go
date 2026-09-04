@@ -146,12 +146,23 @@ var AgentConfigs = map[AgentType]AgentConfig{
 }
 
 type Instance struct {
-	ID              string    `json:"id"`
-	Name            string    `json:"name"`
-	Path            string    `json:"path"`
-	Status          Status    `json:"status"`
-	CreatedAt       time.Time `json:"created_at"`
-	UpdatedAt       time.Time `json:"updated_at"`
+	ID        string    `json:"id"`
+	Name      string    `json:"name"`
+	Path      string    `json:"path"`
+	Status    Status    `json:"status"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+	// LastActiveAt is when an agent in this session was last seen working.
+	//
+	// Distinct from UpdatedAt, which moves only when the session is started or
+	// stopped: sorting by that puts a session started this morning and busy
+	// ever since below one started five minutes ago and idle the whole time,
+	// which is the opposite of what "most recent activity" means.
+	// omitempty does nothing for time.Time — a struct is never "empty" — so the
+	// zero value is written out as year 1 and read back as a real timestamp.
+	// Harmless here only because every comparison goes through
+	// lastActivityTime, which treats it as "nothing observed".
+	LastActiveAt    time.Time `json:"last_active_at,omitempty"`
 	AutoYes         bool      `json:"auto_yes"`
 	HideStatusLine  bool      `json:"hide_status_line,omitempty"`  // Don't show the main window's status line in the session list
 	ResumeSessionID string    `json:"resume_session_id,omitempty"` // Claude session ID to resume

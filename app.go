@@ -1197,7 +1197,7 @@ func (a *App) instanceToSessionInfo(inst *session.Instance) SessionInfo {
 		ResumeSessionID:    inst.ResumeSessionID,
 		FollowedWindows:    inst.FollowedWindows,
 		MainWindowStopped:  mainStopped,
-		UpdatedAt:          formatSessionTimestamp(inst.UpdatedAt),
+		UpdatedAt:          formatSessionTimestamp(lastActivityTime(inst)),
 		TabOrder:           inst.GetTabOrder(),
 		ExtraArgs:          inst.ExtraArgs,
 		TabTextColor:       inst.TabTextColor,
@@ -2601,6 +2601,11 @@ type SidebarUpdate struct {
 	StatusLines  map[string]string          `json:"statusLines"`
 	SpinnerTexts map[string]string          `json:"spinnerTexts"`
 	TabStatuses  map[string][]TabStatusInfo `json:"tabStatuses"`
+	// LastActive carries the activity-ordering timestamps, because the session
+	// list itself is only reloaded on events (startup, dialogs). Without this
+	// the sidebar showed a live activity dot on a session that the ordering
+	// still placed by its startup-time snapshot.
+	LastActive   map[string]string `json:"lastActive"`
 	observations []activityObservation
 }
 
@@ -2619,6 +2624,7 @@ func (a *App) getSidebarUpdates(ctx context.Context) SidebarUpdate {
 		StatusLines:  make(map[string]string),
 		SpinnerTexts: make(map[string]string),
 		TabStatuses:  make(map[string][]TabStatusInfo),
+		LastActive:   make(map[string]string),
 	}
 
 	projectID, instances, _, err := a.storage.LoadAllWithProjectSnapshotContext(ctx)
@@ -2846,8 +2852,16 @@ func (a *App) getSidebarUpdates(ctx context.Context) SidebarUpdate {
 	wg.Wait()
 	close(resultsCh)
 
+	// When an agent was last seen working, for the sidebar's activity ordering.
+	//
+	// "waiting" counts as activity — a session holding a permission prompt is
+	// very much where the work is, and often the one to go back to.
+	activeNow := make(map[string]time.Time)
 	for sr := range resultsCh {
 		result.Activities[sr.instID] = sr.activity
+		if sr.activity == "busy" || sr.activity == "waiting" {
+			activeNow[sr.instID] = time.Now()
+		}
 		if sr.statusLine != "" {
 			result.StatusLines[sr.instID] = sr.statusLine
 		}
@@ -2858,6 +2872,29 @@ func (a *App) getSidebarUpdates(ctx context.Context) SidebarUpdate {
 			result.TabStatuses[sr.instID] = sr.agentTabs
 		}
 		result.observations = append(result.observations, sr.observations...)
+	}
+
+	// Persist the activity marks. The instances above were loaded fresh from
+	// disk for this tick and are discarded with it, so setting the field on
+	// them would be forgotten a second later — it has to go back to storage.
+	if mayPersist && len(activeNow) > 0 {
+		if err := a.storage.RecordActivityForProject(projectID, activeNow); err != nil {
+			log.Printf("[SidebarPoll] failed to record session activity times: %v", err)
+		}
+	}
+
+	// Send every session's ordering time, not just the ones active right now.
+	// The session list is reloaded only on events, so this poll is what keeps
+	// the activity ordering current; a session left out would keep whatever
+	// time it was loaded with.
+	for _, inst := range instances {
+		at := lastActivityTime(inst)
+		if seen, ok := activeNow[inst.ID]; ok && seen.After(at) {
+			at = seen
+		}
+		if stamp := formatSessionTimestamp(at); stamp != "" {
+			result.LastActive[inst.ID] = stamp
+		}
 	}
 
 	return result
@@ -5955,4 +5992,18 @@ func formatSessionTimestamp(t time.Time) string {
 		return ""
 	}
 	return t.Format(time.RFC3339)
+}
+
+// lastActivityTime is what the sidebar's activity ordering sorts on: when an
+// agent here was last seen working, falling back to when the session was last
+// started or stopped.
+//
+// The fallback matters for a session that has not run since the app started —
+// nothing has observed it working, and without it every such session would
+// collapse into one undated group at the bottom.
+func lastActivityTime(inst *session.Instance) time.Time {
+	if inst.LastActiveAt.After(inst.UpdatedAt) {
+		return inst.LastActiveAt
+	}
+	return inst.UpdatedAt
 }

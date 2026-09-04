@@ -2111,3 +2111,48 @@ func NewUniqueID(prefix string, taken map[string]bool) string {
 		stamp++
 	}
 }
+
+// RecordActivityForProject stores when agents in the given sessions were last
+// seen working, for the sidebar's activity ordering.
+//
+// The sidebar poll works on instances freshly loaded from disk each tick, so a
+// field set on those is dropped a second later. This reloads under the lock and
+// writes only LastActiveAt, leaving every other field to whoever else is
+// editing the session.
+//
+// Times older than what is already stored are ignored rather than written: a
+// poll that started before a newer one finished must not move the mark
+// backwards.
+func (s *Storage) RecordActivityForProject(projectID string, seen map[string]time.Time) error {
+	if len(seen) == 0 {
+		return nil
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	originalProject := s.projectID
+	if err := s.setActiveProjectLocked(projectID); err != nil {
+		return err
+	}
+	defer s.setActiveProjectLocked(originalProject)
+
+	instances, groups, settings, err := s.loadAllWithSettingsLocked()
+	if err != nil {
+		return err
+	}
+
+	changed := false
+	for _, current := range instances {
+		at, ok := seen[current.ID]
+		if !ok || !at.After(current.LastActiveAt) {
+			continue
+		}
+		current.LastActiveAt = at
+		changed = true
+	}
+	if !changed {
+		return nil
+	}
+	return s.saveAllLocked(instances, groups, settings)
+}
