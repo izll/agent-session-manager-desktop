@@ -255,7 +255,6 @@
   <div
     class="dialog-overlay" use:autoFocusDialog
     class:fullscreen={isFullscreen}
-    on:click|self={close}
     on:keydown={handleKeydown}
     role="dialog"
     aria-modal="true"

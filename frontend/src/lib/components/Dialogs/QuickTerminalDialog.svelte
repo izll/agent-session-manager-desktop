@@ -128,7 +128,6 @@
   <div
     class="dialog-overlay"
     use:autoFocusDialog
-    on:click|self={close}
     on:keydown={handleKeydown}
     role="dialog"
     tabindex="-1"

@@ -297,7 +297,7 @@
 </script>
 
 {#if show}
-  <div class="dialog-overlay" use:autoFocusDialog on:click|self={close} on:keydown={handleKeydown} role="dialog" aria-modal="true">
+  <div class="dialog-overlay" use:autoFocusDialog on:keydown={handleKeydown} role="dialog" aria-modal="true">
     <div class="dialog-content recovery-dialog">
       <div class="dialog-header">
         <div>

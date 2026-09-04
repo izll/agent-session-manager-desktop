@@ -241,8 +241,8 @@
 <svelte:window on:keydown={show ? handleKeydown : undefined} />
 
 {#if show}
-  <div class="dialog-overlay" use:autoFocusDialog on:click={close} role="dialog" aria-modal="true">
-    <div class="dialog-content" on:click|stopPropagation>
+  <div class="dialog-overlay" use:autoFocusDialog role="dialog" aria-modal="true">
+    <div class="dialog-content">
       <div class="dialog-header">
         <h2>{$t('bgAgents.title')}{#if agents.length > 0} <span class="agent-count">{agents.length}</span>{/if}</h2>
         <button class="close-btn" on:click={close}>×</button>

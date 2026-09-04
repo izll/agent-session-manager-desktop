@@ -178,7 +178,6 @@
 {#if show && target}
   <div
     class="dialog-overlay" use:portal use:autoFocusDialog
-    on:click|self={close}
     on:keydown={handleKeydown}
     role="dialog"
     aria-modal="true"

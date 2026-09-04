@@ -363,7 +363,7 @@
 </script>
 
 {#if show}
-  <div class="dialog-overlay palette-overlay" on:click|self={close} role="presentation">
+  <div class="dialog-overlay palette-overlay" role="presentation">
     <div class="command-palette" use:autoFocusDialog role="dialog" aria-modal="true" aria-label={$t('palette.title')} on:keydown={handleKeydown}>
       <div class="palette-search">
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">

@@ -40,7 +40,6 @@
 {#if show}
   <div
     class="dialog-overlay" use:autoFocusDialog
-    on:click|self={handleCancel}
     on:keydown={handleKeydown}
     role="dialog"
     aria-modal="true"

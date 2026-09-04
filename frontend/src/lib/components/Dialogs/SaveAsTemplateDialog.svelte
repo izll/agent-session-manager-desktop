@@ -101,7 +101,6 @@
     use:autoFocusDialog
     role="dialog"
     aria-modal="true"
-    on:click|self={close}
     on:keydown={handleKeydown}
   >
     <div class="dialog-content">

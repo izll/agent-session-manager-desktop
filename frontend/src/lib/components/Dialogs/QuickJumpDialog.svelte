@@ -458,7 +458,7 @@
 
 {#if show}
   <!-- svelte-ignore a11y-click-events-have-key-events -->
-  <div class="dialog-overlay" use:autoFocusDialog on:click|self={close} on:keydown={onKeydown} role="dialog" aria-modal="true">
+  <div class="dialog-overlay" use:autoFocusDialog on:keydown={onKeydown} role="dialog" aria-modal="true">
     <div class="dialog-content jump-dialog">
       <div class="dialog-header">
         <h2>{$t('quickJump.title')}</h2>

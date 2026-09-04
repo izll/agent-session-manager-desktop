@@ -117,8 +117,8 @@
 <svelte:window on:keydown={show ? handleKeydown : undefined} />
 
 {#if show}
-  <div class="dialog-overlay" use:autoFocusDialog on:click={close} role="presentation">
-    <div class="dialog-content log-dialog" on:click|stopPropagation role="presentation">
+  <div class="dialog-overlay" use:autoFocusDialog role="presentation">
+    <div class="dialog-content log-dialog" role="presentation">
       <div class="dialog-header">
         <h2>{$t('logs.title')}</h2>
         <button class="close-btn" on:click={close}>×</button>
