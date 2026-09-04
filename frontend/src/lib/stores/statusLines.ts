@@ -4,6 +4,20 @@ import * as App from '../../../wailsjs/go/main/App';
 // Map of session ID to last output line
 export const statusLines = writable<Record<string, string>>({});
 
+/**
+ * Map of session ID to when an agent there was last seen working.
+ *
+ * Lives here rather than beside the session list because the sidebar poll is
+ * what refreshes it, and this module is what the poll already imports: putting
+ * it next to the sessions store dragged the terminal helpers into the poll's
+ * import graph along with it.
+ *
+ * The session list is reloaded only on events (startup, dialogs), so the
+ * updatedAt it carries goes stale within seconds; the activity ordering reads
+ * this first and falls back to the loaded value.
+ */
+export const lastActive = writable<Record<string, string>>({});
+
 // Map of session ID to spinner text (e.g. "Thinking...", "Puzzling...")
 export const spinnerTexts = writable<Record<string, string>>({});
 

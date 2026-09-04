@@ -47,6 +47,7 @@ const result = await build({
           export const statusLines = sink('__statusLines');
           export const spinnerTexts = sink('__spinnerTexts');
           export const tabStatuses = sink('__tabStatuses');
+          export const lastActive = sink('__lastActive');
         `,
         loader: 'js',
       }));
@@ -65,9 +66,13 @@ globalThis.__sidebarHandler({
   statusLines: { shared: 'wrong project' },
   spinnerTexts: {},
   tabStatuses: {},
+  lastActive: { shared: '2026-09-04T08:36:56Z' },
 });
 assert.equal(globalThis.__activities, undefined, 'a late old-project event must be ignored');
 assert.equal(globalThis.__statusLines, undefined, 'old-project status must not reach the active store');
+// Session IDs are project-local, so an old project's activity times would
+// reorder the new project's list by another project's work.
+assert.equal(globalThis.__lastActive, undefined, 'old-project activity times must not reach the ordering');
 
 globalThis.__sidebarHandler({
   projectId: 'project-b',
@@ -75,9 +80,11 @@ globalThis.__sidebarHandler({
   statusLines: { shared: 'current project' },
   spinnerTexts: { shared: 'thinking' },
   tabStatuses: { shared: [] },
+  lastActive: { shared: '2026-09-04T09:00:00Z' },
 });
 assert.deepEqual(globalThis.__activities, { shared: 'waiting' });
 assert.deepEqual(globalThis.__statusLines, { shared: 'current project' });
+assert.deepEqual(globalThis.__lastActive, { shared: '2026-09-04T09:00:00Z' });
 
 module.stopSidebarPolling();
 delete globalThis.__sidebarHandler;
@@ -86,5 +93,6 @@ delete globalThis.__activities;
 delete globalThis.__statusLines;
 delete globalThis.__spinnerTexts;
 delete globalThis.__tabStatuses;
+delete globalThis.__lastActive;
 
 console.log('sidebarProjectGuard: ok');

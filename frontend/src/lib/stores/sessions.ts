@@ -1,4 +1,5 @@
 import { writable, derived, get } from 'svelte/store';
+import { lastActive } from './statusLines';
 import * as App from '../../../wailsjs/go/main/App';
 import type { main } from '../../../wailsjs/go/models';
 import { showSessionView } from './navigation';
@@ -80,15 +81,22 @@ export const selectedSession = derived(
  * session pinned to the top for being important is not an answer to that. The
  * ordinary list is still there behind the toggle for everything else.
  */
-export const sessionsByActivity = derived(sessions, ($sessions) =>
-  [...$sessions].sort((a, b) => {
-    // A session with no recorded activity sorts last rather than first: an
-    // empty timestamp is "never", not "the beginning of time".
-    const at = a.updatedAt ? Date.parse(a.updatedAt) : 0;
-    const bt = b.updatedAt ? Date.parse(b.updatedAt) : 0;
-    if (bt !== at) return bt - at;
-    return a.name.localeCompare(b.name);
-  }),
+export const sessionsByActivity = derived(
+  [sessions, lastActive],
+  ([$sessions, $lastActive]) => {
+    const timeOf = (s: Session) => {
+      const stamp = $lastActive[s.id] || s.updatedAt;
+      // A session with no recorded activity sorts last rather than first: an
+      // empty timestamp is "never", not "the beginning of time".
+      return stamp ? Date.parse(stamp) : 0;
+    };
+    return [...$sessions].sort((a, b) => {
+      const at = timeOf(a);
+      const bt = timeOf(b);
+      if (bt !== at) return bt - at;
+      return a.name.localeCompare(b.name);
+    });
+  },
 );
 
 export const favorites = derived(

@@ -1454,6 +1454,7 @@ export namespace main {
 	    statusLines: Record<string, string>;
 	    spinnerTexts: Record<string, string>;
 	    tabStatuses: Record<string, Array<TabStatusInfo>>;
+	    lastActive: Record<string, string>;
 	
 	    static createFrom(source: any = {}) {
 	        return new SidebarUpdate(source);
@@ -1466,6 +1467,7 @@ export namespace main {
 	        this.statusLines = source["statusLines"];
 	        this.spinnerTexts = source["spinnerTexts"];
 	        this.tabStatuses = this.convertValues(source["tabStatuses"], Array<TabStatusInfo>, true);
+	        this.lastActive = source["lastActive"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

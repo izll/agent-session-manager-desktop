@@ -10,21 +10,40 @@ const treeSrc = readFileSync(
 // The comparator, lifted out of the store so it can be run here. The store
 // itself pulls in Svelte and the Wails bindings, neither of which exists under
 // plain node.
+// The comparator, lifted out of the store so it can be run here. The store
+// itself pulls in Svelte and the Wails bindings, neither of which exists under
+// plain node. Its timeOf helper reads the live poll map, so the extraction
+// supplies an empty one — the fallback path is what these cases exercise.
 const comparator = (() => {
   const at = storeSrc.indexOf('export const sessionsByActivity');
   assert.ok(at > 0, 'sessionsByActivity is gone');
   const from = storeSrc.indexOf('.sort((a, b) => {', at);
   assert.ok(from > 0, 'the sort call is gone');
+
+  const timeOfAt = storeSrc.indexOf('const timeOf =', at);
+  assert.ok(timeOfAt > 0 && timeOfAt < from, 'the time lookup is gone');
+  // Brace-matched rather than matched on indentation, which moves.
+  const timeOf = (() => {
+    let d = 0;
+    for (let i = storeSrc.indexOf('{', timeOfAt); i < storeSrc.length; i++) {
+      if (storeSrc[i] === '{') d++;
+      else if (storeSrc[i] === '}' && --d === 0) {
+        return storeSrc.slice(timeOfAt, i + 1).replace(/: Session/g, '') + ';';
+      }
+    }
+    throw new Error('the time lookup is unbalanced');
+  })();
+
   const open = from + '.sort('.length;
-  // Walk to the arrow function's matching brace rather than guessing at a
-  // closing token: the body contains both braces and parentheses.
   let depth = 0, end = -1;
   for (let i = storeSrc.indexOf('{', open); i < storeSrc.length; i++) {
     if (storeSrc[i] === '{') depth++;
     else if (storeSrc[i] === '}' && --depth === 0) { end = i + 1; break; }
   }
   assert.ok(end > 0, 'the comparator body is unbalanced');
-  return eval(`(${storeSrc.slice(open, end)})`);
+
+  const body = storeSrc.slice(open, end).replace(/: Session/g, '');
+  return eval(`(($lastActive) => { ${timeOf} return ${body}; })`)({});
 })();
 
 const at = (name, updatedAt, extra = {}) => ({ name, updatedAt, ...extra });
@@ -81,4 +100,21 @@ test('the activity view is one flat list with no favourites section', () => {
 test('the toggle persists through settings rather than local state', () => {
   assert.ok(treeSrc.includes('saveSettings({ sortByActivity:'),
     'the toggle does not write the setting, so it is lost on restart');
+});
+
+// The session list is reloaded only on events, so its updatedAt is a startup
+// snapshot: a session could show a live activity dot while the ordering still
+// placed it by a timestamp minutes or hours old. The sidebar poll supplies
+// fresh times every tick and they have to win.
+test('the live poll time takes precedence over the loaded one', () => {
+  const at = storeSrc.indexOf('export const sessionsByActivity');
+  const decl = storeSrc.slice(at, storeSrc.indexOf('\n);', at));
+
+  assert.match(decl, /\[sessions, lastActive\]/,
+    'the ordering does not depend on the live activity times, so it goes stale');
+
+  const timeOfAt = storeSrc.indexOf('const timeOf =', at);
+  const timeOf = storeSrc.slice(timeOfAt, storeSrc.indexOf('\n    };', timeOfAt));
+  assert.match(timeOf, /\$lastActive\[s\.id\] \|\| s\.updatedAt/,
+    'the loaded timestamp is not overridden by the live one');
 });
