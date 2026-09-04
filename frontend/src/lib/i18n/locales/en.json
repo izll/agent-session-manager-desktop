@@ -89,6 +89,8 @@
   "sidebar.collapseSidebar": "Collapse sidebar",
   "sidebar.searchPlaceholder": "Search sessions...",
   "sidebar.favorites": "Favorites",
+  "sidebar.sortByActivity": "Sort by activity",
+  "sidebar.sortDefault": "Default order",
   "sidebar.sessions": "Sessions",
   "sidebar.noSessions": "No sessions yet",
   "sidebar.noMatches": "No matching sessions",

@@ -40,6 +40,7 @@ export interface Settings {
   showCodexUsageRing: boolean;
   showGeminiUsageRing: boolean;
   /** Leave dictated text in the composer instead of submitting it. */
+  sortByActivity: boolean;
   dictationSendWithoutEnter: boolean;
   /** YOLO shows unless hidden; the resume marker is opt-in. */
   hideYoloBadge: boolean;
@@ -126,6 +127,7 @@ function defaultSettings(): Settings {
     showClaudeSevenDayRing: false,
     showCodexUsageRing: false,
     showGeminiUsageRing: false,
+    sortByActivity: false,
     dictationSendWithoutEnter: false,
     hideYoloBadge: false,
     showResumeBadge: false,

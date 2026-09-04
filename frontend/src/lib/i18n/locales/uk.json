@@ -13,6 +13,8 @@
   "sidebar.collapseSidebar": "Згорнути бічну панель",
   "sidebar.searchPlaceholder": "Пошук сеансів...",
   "sidebar.favorites": "Обране",
+  "sidebar.sortByActivity": "Сортувати за активністю",
+  "sidebar.sortDefault": "Типовий порядок",
   "sidebar.sessions": "Сеанси",
   "sidebar.noSessions": "Сеансів ще немає",
   "sidebar.noMatches": "Немає відповідних сеансів",

@@ -13,6 +13,8 @@
   "sidebar.collapseSidebar": "サイドバーを折りたたむ",
   "sidebar.searchPlaceholder": "セッションを検索...",
   "sidebar.favorites": "お気に入り",
+  "sidebar.sortByActivity": "アクティビティ順に並べ替え",
+  "sidebar.sortDefault": "既定の並び順",
   "sidebar.sessions": "セッション",
   "sidebar.noSessions": "セッションがありません",
   "sidebar.noMatches": "一致するセッションがありません",

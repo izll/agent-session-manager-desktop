@@ -13,6 +13,8 @@
   "sidebar.collapseSidebar": "Zijbalk invouwen",
   "sidebar.searchPlaceholder": "Sessies zoeken...",
   "sidebar.favorites": "Favorieten",
+  "sidebar.sortByActivity": "Sorteren op activiteit",
+  "sidebar.sortDefault": "Standaardvolgorde",
   "sidebar.sessions": "Sessies",
   "sidebar.noSessions": "Nog geen sessies",
   "sidebar.noMatches": "Geen overeenkomende sessies",

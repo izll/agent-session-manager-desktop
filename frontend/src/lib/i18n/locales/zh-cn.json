@@ -13,6 +13,8 @@
   "sidebar.collapseSidebar": "收起侧边栏",
   "sidebar.searchPlaceholder": "搜索会话...",
   "sidebar.favorites": "收藏夹",
+  "sidebar.sortByActivity": "按活动排序",
+  "sidebar.sortDefault": "默认顺序",
   "sidebar.sessions": "会话",
   "sidebar.noSessions": "暂无会话",
   "sidebar.noMatches": "没有匹配的会话",

@@ -4,6 +4,7 @@
   import {
     sessions,
     favorites,
+    sessionsByActivity,
     groups,
     sessionsByGroup,
     ungroupedSessions,
@@ -15,8 +16,12 @@
   import { onDestroy } from 'svelte';
   import { activities, getActivity } from '../../stores/activities';
   import { statusLines, spinnerTexts, tabStatuses, getStatusLine } from '../../stores/statusLines';
-  import { settings } from '../../stores/settings';
+  import { settings, saveSettings } from '../../stores/settings';
   import { t } from '../../i18n';
+
+  function toggleSortByActivity() {
+    void saveSettings({ sortByActivity: !$settings?.sortByActivity });
+  }
   import { activeProjectId } from '../../stores/projects';
 
 
@@ -195,11 +200,33 @@
         bind:value={$searchFilter}
       />
     </div>
+    <!-- Ordering, not filtering: the list beneath is the same sessions,
+         arranged by when each last did something. -->
+    <button
+      class="sort-toggle"
+      class:active={$settings?.sortByActivity}
+      title={$settings?.sortByActivity ? $t('sidebar.sortDefault') : $t('sidebar.sortByActivity')}
+      on:click={toggleSortByActivity}
+    >
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M3 6h13M3 12h9M3 18h5"/>
+        <path d="M19 8v11M16 16l3 3 3-3"/>
+      </svg>
+    </button>
   </div>
 
   <!-- Session List -->
   <!-- svelte-ignore a11y-no-static-element-interactions -->
   <div class="session-list" bind:this={sessionListEl} on:dragover={handleListDragOver} on:dragstart={handleDragStartGlobal} on:dragend={handleDragEndGlobal} on:drop={handleDragEndGlobal}>
+    {#if $settings?.sortByActivity}
+      <!-- One flat list, most recently active first. No groups and no
+           favourites section: this view answers "where was I", and a
+           session pinned to the top for being important is not an answer
+           to that. -->
+      {#each $sessionsByActivity as session (session.id)}
+        <SessionItem {session} index={$sessions.findIndex(s => s.id === session.id)} favoriteSlot={favoriteSlot(session.id)} activity={getActivity(session.id, $activities)} statusLine={getStatusLine(session.id, $statusLines)} spinnerText={$spinnerTexts[session.id] || ''} tabStatuses={$tabStatuses[session.id] || []} on:drop={handleSessionDrop} />
+      {/each}
+    {:else}
     <!-- Favorites -->
     {#if $favorites.length > 0}
       <div class="section">
@@ -279,6 +306,7 @@
       <div class="no-matches">
         {$t('sidebar.noMatches')}
       </div>
+    {/if}
     {/if}
   </div>
 
@@ -391,6 +419,9 @@
   }
 
   .search-container {
+    display: flex;
+    align-items: center;
+    gap: 6px;
     padding: 12px;
   }
 
@@ -399,6 +430,9 @@
     position: relative;
     display: flex;
     align-items: center;
+    /* The toggle beside it is a fixed square; the box takes the rest. */
+    flex: 1;
+    min-width: 0;
   }
 
   .search-icon {
@@ -699,4 +733,30 @@
 
 
 
+  .sort-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    flex-shrink: 0;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: background 0.12s, color 0.12s, border-color 0.12s;
+  }
+
+  .sort-toggle:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+  }
+
+  .sort-toggle.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+  }
 </style>

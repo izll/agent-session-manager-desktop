@@ -13,6 +13,8 @@
   "sidebar.collapseSidebar": "Sbalit postranní panel",
   "sidebar.searchPlaceholder": "Hledat relace...",
   "sidebar.favorites": "Oblíbené",
+  "sidebar.sortByActivity": "Seřadit podle aktivity",
+  "sidebar.sortDefault": "Výchozí pořadí",
   "sidebar.sessions": "Relace",
   "sidebar.noSessions": "Zatím žádné relace",
   "sidebar.noMatches": "Žádné odpovídající relace",

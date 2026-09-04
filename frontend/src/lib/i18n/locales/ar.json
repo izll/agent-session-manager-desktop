@@ -13,6 +13,8 @@
   "sidebar.collapseSidebar": "طي الشريط الجانبي",
   "sidebar.searchPlaceholder": "البحث في الجلسات...",
   "sidebar.favorites": "المفضلة",
+  "sidebar.sortByActivity": "الترتيب حسب النشاط",
+  "sidebar.sortDefault": "الترتيب الافتراضي",
   "sidebar.sessions": "الجلسات",
   "sidebar.noSessions": "لا توجد جلسات بعد",
   "sidebar.noMatches": "لا توجد جلسات مطابقة",

@@ -22,6 +22,8 @@ export interface Session {
   notes: string;
   favorite: boolean;
   resumeSessionId: string;
+  /** RFC3339 of the last activity, or empty when never recorded. */
+  updatedAt?: string;
   followedWindows: any[];
   tabOrder: number[];
   mainWindowStopped: boolean;
@@ -69,6 +71,24 @@ export const selectedSession = derived(
   [sessions, selectedSessionId],
   ([$sessions, $selectedSessionId]) =>
     $sessions.find(s => s.id === $selectedSessionId) || null
+);
+
+/**
+ * Every session in one flat list, most recently active first.
+ *
+ * No groups and no favourites section: this view answers "where was I", and a
+ * session pinned to the top for being important is not an answer to that. The
+ * ordinary list is still there behind the toggle for everything else.
+ */
+export const sessionsByActivity = derived(sessions, ($sessions) =>
+  [...$sessions].sort((a, b) => {
+    // A session with no recorded activity sorts last rather than first: an
+    // empty timestamp is "never", not "the beginning of time".
+    const at = a.updatedAt ? Date.parse(a.updatedAt) : 0;
+    const bt = b.updatedAt ? Date.parse(b.updatedAt) : 0;
+    if (bt !== at) return bt - at;
+    return a.name.localeCompare(b.name);
+  }),
 );
 
 export const favorites = derived(

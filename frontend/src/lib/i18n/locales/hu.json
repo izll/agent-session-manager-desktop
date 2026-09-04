@@ -89,6 +89,8 @@
   "sidebar.collapseSidebar": "Oldalsáv összecsukása",
   "sidebar.searchPlaceholder": "Munkamenetek keresése...",
   "sidebar.favorites": "Kedvencek",
+  "sidebar.sortByActivity": "Rendezés aktivitás szerint",
+  "sidebar.sortDefault": "Alapértelmezett sorrend",
   "sidebar.sessions": "Munkamenetek",
   "sidebar.noSessions": "Még nincsenek munkamenetek",
   "sidebar.noMatches": "Nincs egyező munkamenet",

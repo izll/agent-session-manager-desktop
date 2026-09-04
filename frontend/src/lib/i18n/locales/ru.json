@@ -13,6 +13,8 @@
   "sidebar.collapseSidebar": "Свернуть боковую панель",
   "sidebar.searchPlaceholder": "Поиск сессий...",
   "sidebar.favorites": "Избранное",
+  "sidebar.sortByActivity": "Сортировать по активности",
+  "sidebar.sortDefault": "Порядок по умолчанию",
   "sidebar.sessions": "Сессии",
   "sidebar.noSessions": "Сессий пока нет",
   "sidebar.noMatches": "Нет совпадающих сеансов",

@@ -13,6 +13,8 @@
   "sidebar.collapseSidebar": "Comprimi barra laterale",
   "sidebar.searchPlaceholder": "Cerca sessioni...",
   "sidebar.favorites": "Preferiti",
+  "sidebar.sortByActivity": "Ordina per attività",
+  "sidebar.sortDefault": "Ordine predefinito",
   "sidebar.sessions": "Sessioni",
   "sidebar.noSessions": "Nessuna sessione ancora",
   "sidebar.noMatches": "Nessuna sessione corrispondente",

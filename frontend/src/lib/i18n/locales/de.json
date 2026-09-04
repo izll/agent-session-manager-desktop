@@ -13,6 +13,8 @@
   "sidebar.collapseSidebar": "Seitenleiste ausblenden",
   "sidebar.searchPlaceholder": "Sitzungen suchen...",
   "sidebar.favorites": "Favoriten",
+  "sidebar.sortByActivity": "Nach Aktivität sortieren",
+  "sidebar.sortDefault": "Standardreihenfolge",
   "sidebar.sessions": "Sitzungen",
   "sidebar.noSessions": "Noch keine Sitzungen",
   "sidebar.noMatches": "Keine passenden Sitzungen",

@@ -13,6 +13,8 @@
   "sidebar.collapseSidebar": "사이드바 접기",
   "sidebar.searchPlaceholder": "세션 검색...",
   "sidebar.favorites": "즐겨찾기",
+  "sidebar.sortByActivity": "활동순 정렬",
+  "sidebar.sortDefault": "기본 순서",
   "sidebar.sessions": "세션",
   "sidebar.noSessions": "세션이 없습니다",
   "sidebar.noMatches": "일치하는 세션 없음",

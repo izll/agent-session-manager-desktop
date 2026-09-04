@@ -13,6 +13,8 @@
   "sidebar.collapseSidebar": "ย่อแถบด้านข้าง",
   "sidebar.searchPlaceholder": "ค้นหาเซสชัน...",
   "sidebar.favorites": "รายการโปรด",
+  "sidebar.sortByActivity": "เรียงตามกิจกรรม",
+  "sidebar.sortDefault": "ลำดับเริ่มต้น",
   "sidebar.sessions": "เซสชัน",
   "sidebar.noSessions": "ยังไม่มีเซสชัน",
   "sidebar.noMatches": "ไม่มีเซสชันที่ตรงกัน",

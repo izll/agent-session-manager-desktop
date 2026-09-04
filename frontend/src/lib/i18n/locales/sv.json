@@ -13,6 +13,8 @@
   "sidebar.collapseSidebar": "Minimera sidofältet",
   "sidebar.searchPlaceholder": "Sök sessioner...",
   "sidebar.favorites": "Favoriter",
+  "sidebar.sortByActivity": "Sortera efter aktivitet",
+  "sidebar.sortDefault": "Standardordning",
   "sidebar.sessions": "Sessioner",
   "sidebar.noSessions": "Inga sessioner ännu",
   "sidebar.noMatches": "Inga matchande sessioner",

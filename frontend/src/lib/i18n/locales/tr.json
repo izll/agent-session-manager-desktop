@@ -13,6 +13,8 @@
   "sidebar.collapseSidebar": "Kenar çubuğunu daralt",
   "sidebar.searchPlaceholder": "Oturum ara...",
   "sidebar.favorites": "Favoriler",
+  "sidebar.sortByActivity": "Etkinliğe göre sırala",
+  "sidebar.sortDefault": "Varsayılan sıralama",
   "sidebar.sessions": "Oturumlar",
   "sidebar.noSessions": "Henüz oturum yok",
   "sidebar.noMatches": "Eşleşen oturum yok",

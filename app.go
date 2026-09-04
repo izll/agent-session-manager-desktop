@@ -1108,30 +1108,33 @@ func (a *App) ImportSessions(sourceProjectID string, sessionIDs []string, expect
 
 // SessionInfo represents session data for frontend
 type SessionInfo struct {
-	ID                 string                   `json:"id"`
-	Name               string                   `json:"name"`
-	Path               string                   `json:"path"`
-	Status             string                   `json:"status"`
-	Agent              string                   `json:"agent"`
-	Color              string                   `json:"color"`
-	BgColor            string                   `json:"bgColor"`
-	FullRowColor       bool                     `json:"fullRowColor"`
-	GroupID            string                   `json:"groupId"`
-	AutoYes            bool                     `json:"autoYes"`
-	HideStatusLine     bool                     `json:"hideStatusLine"`
-	Notes              string                   `json:"notes"`
-	Favorite           bool                     `json:"favorite"`
-	ResumeSessionID    string                   `json:"resumeSessionId"`
-	FollowedWindows    []session.FollowedWindow `json:"followedWindows"`
-	MainWindowStopped  bool                     `json:"mainWindowStopped"`
-	TabOrder           []int                    `json:"tabOrder"`
-	ExtraArgs          string                   `json:"extraArgs"`
-	TabTextColor       string                   `json:"tabTextColor"`
-	TabBackgroundColor string                   `json:"tabBackgroundColor"`
-	TerminalTheme      string                   `json:"terminalTheme"`
-	TerminalFontSize   int                      `json:"terminalFontSize"`
-	HideViewBar        int                      `json:"hideViewBar"`
-	HideStatusBar      int                      `json:"hideStatusBar"`
+	ID                string                   `json:"id"`
+	Name              string                   `json:"name"`
+	Path              string                   `json:"path"`
+	Status            string                   `json:"status"`
+	Agent             string                   `json:"agent"`
+	Color             string                   `json:"color"`
+	BgColor           string                   `json:"bgColor"`
+	FullRowColor      bool                     `json:"fullRowColor"`
+	GroupID           string                   `json:"groupId"`
+	AutoYes           bool                     `json:"autoYes"`
+	HideStatusLine    bool                     `json:"hideStatusLine"`
+	Notes             string                   `json:"notes"`
+	Favorite          bool                     `json:"favorite"`
+	ResumeSessionID   string                   `json:"resumeSessionId"`
+	FollowedWindows   []session.FollowedWindow `json:"followedWindows"`
+	MainWindowStopped bool                     `json:"mainWindowStopped"`
+	// UpdatedAt is when this session last did anything, for the activity
+	// ordering in the sidebar. RFC3339, empty when never recorded.
+	UpdatedAt          string `json:"updatedAt,omitempty"`
+	TabOrder           []int  `json:"tabOrder"`
+	ExtraArgs          string `json:"extraArgs"`
+	TabTextColor       string `json:"tabTextColor"`
+	TabBackgroundColor string `json:"tabBackgroundColor"`
+	TerminalTheme      string `json:"terminalTheme"`
+	TerminalFontSize   int    `json:"terminalFontSize"`
+	HideViewBar        int    `json:"hideViewBar"`
+	HideStatusBar      int    `json:"hideStatusBar"`
 	// The main window isn't always index 0, so the frontend needs it to map a
 	// tab back to the session-level palette.
 	MainWindowIndex int `json:"mainWindowIndex"`
@@ -1194,6 +1197,7 @@ func (a *App) instanceToSessionInfo(inst *session.Instance) SessionInfo {
 		ResumeSessionID:    inst.ResumeSessionID,
 		FollowedWindows:    inst.FollowedWindows,
 		MainWindowStopped:  mainStopped,
+		UpdatedAt:          formatSessionTimestamp(inst.UpdatedAt),
 		TabOrder:           inst.GetTabOrder(),
 		ExtraArgs:          inst.ExtraArgs,
 		TabTextColor:       inst.TabTextColor,
@@ -3835,6 +3839,7 @@ type SettingsInfo struct {
 	ShowClaudeSevenDayRing    bool   `json:"showClaudeSevenDayRing"`
 	ShowCodexUsageRing        bool   `json:"showCodexUsageRing"`
 	ShowGeminiUsageRing       bool   `json:"showGeminiUsageRing"`
+	SortByActivity            bool   `json:"sortByActivity"`
 	DictationSendWithoutEnter bool   `json:"dictationSendWithoutEnter"`
 	HideYoloBadge             bool   `json:"hideYoloBadge"`
 	ShowResumeBadge           bool   `json:"showResumeBadge"`
@@ -3952,6 +3957,7 @@ func (a *App) GetSettings() (*SettingsInfo, error) {
 		ShowClaudeSevenDayRing:    settings.ShowClaudeSevenDayRing,
 		ShowCodexUsageRing:        settings.ShowCodexUsageRing,
 		ShowGeminiUsageRing:       settings.ShowGeminiUsageRing,
+		SortByActivity:            settings.SortByActivity,
 		DictationSendWithoutEnter: settings.DictationSendWithoutEnter,
 		HideYoloBadge:             settings.HideYoloBadge,
 		ShowResumeBadge:           settings.ShowResumeBadge,
@@ -4034,6 +4040,7 @@ func (a *App) SaveSettings(settings SettingsInfo, expectedProjectID string) erro
 		current.ShowClaudeSevenDayRing = settings.ShowClaudeSevenDayRing
 		current.ShowCodexUsageRing = settings.ShowCodexUsageRing
 		current.ShowGeminiUsageRing = settings.ShowGeminiUsageRing
+		current.SortByActivity = settings.SortByActivity
 		current.DictationSendWithoutEnter = settings.DictationSendWithoutEnter
 		current.HideYoloBadge = settings.HideYoloBadge
 		current.ShowResumeBadge = settings.ShowResumeBadge
@@ -5938,4 +5945,14 @@ func (a *App) TaskMasterRemoveDependency(sessionID, taskID, dependsOnID, expecte
 	}
 
 	return tm.RemoveDependency(taskID, dependsOnID)
+}
+
+// formatSessionTimestamp renders a session's last-activity time for the
+// frontend, or "" when it has none — a zero time formatted would read as the
+// year 1, and sort as the oldest thing on the list.
+func formatSessionTimestamp(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	return t.Format(time.RFC3339)
 }

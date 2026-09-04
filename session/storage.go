@@ -118,6 +118,14 @@ type Settings struct {
 	ShowClaudeSevenDayRing bool `json:"show_claude_seven_day_ring,omitempty"`
 	ShowCodexUsageRing     bool `json:"show_codex_usage_ring,omitempty"`
 	ShowGeminiUsageRing    bool `json:"show_gemini_usage_ring,omitempty"`
+	// SortByActivity lists the sessions flat, most recently active first,
+	// instead of the usual favourites/groups arrangement.
+	//
+	// It answers a different question from the ordinary list — "where was I"
+	// rather than "what do I have" — so favourites are not lifted out of it:
+	// a session pinned for being important is not an answer to where the work
+	// was left off.
+	SortByActivity bool `json:"sort_by_activity,omitempty"`
 	// DictationSendWithoutEnter leaves the dictated text in the agent's
 	// composer instead of submitting it.
 	//

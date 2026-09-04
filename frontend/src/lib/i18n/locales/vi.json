@@ -13,6 +13,8 @@
   "sidebar.collapseSidebar": "Thu gọn thanh bên",
   "sidebar.searchPlaceholder": "Tìm kiếm phiên...",
   "sidebar.favorites": "Yêu thích",
+  "sidebar.sortByActivity": "Sắp xếp theo hoạt động",
+  "sidebar.sortDefault": "Thứ tự mặc định",
   "sidebar.sessions": "Phiên",
   "sidebar.noSessions": "Chưa có phiên nào",
   "sidebar.noMatches": "Không có phiên khớp",
