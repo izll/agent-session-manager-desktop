@@ -6,6 +6,34 @@ Entries describe what changed for someone using the app. Internal refactoring,
 test and CI work is left out unless it changed behaviour. Dates are release
 dates; the format follows [Keep a Changelog](https://keepachangelog.com).
 
+## 0.9.37 — 2026-09-04
+
+### Added
+
+- **Sessions can be listed by most recent activity.** A button beside the search
+  box swaps the usual grouping for one flat list, whatever was worked on most
+  recently at the top. Favourites are not lifted out of it: this view answers
+  "where was I", and a session pinned for being important is not an answer to
+  that. The ordinary list is one press away, and the choice survives a restart.
+
+### Fixed
+
+- **Sessions no longer stay marked busy after the work finishes.** Claude Code
+  prints a line about waiting for a background agent, and that line is not
+  removed when the agent is done — it scrolls up into the transcript and stays
+  on screen. A session idle for over an hour still read as busy because the
+  sentence was sitting further up the pane.
+- **The terminal gets the keyboard back when the dictation panel closes.** It
+  was returned only after sending, so closing the panel any other way — the
+  hotkey a second time, Escape, the close button — left the caret nowhere and
+  the terminal ignoring keys until it was clicked. Sending had its own problem:
+  the panel's text refresh kept quietly taking focus back, which is why it
+  worked most of the time and not always.
+- **Dialogs no longer vanish when a click lands beside them.** A stray click
+  discarded whatever had been filled in, with no confirmation and no way back —
+  hit while filling in the new-tab form. All dialogs still close with Escape or
+  their own button.
+
 ## 0.9.36 — 2026-09-03
 
 ### Added
