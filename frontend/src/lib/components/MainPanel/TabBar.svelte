@@ -77,6 +77,59 @@
   }
 
   /**
+   * Put the caret back in the terminal after a send, and keep it there.
+   *
+   * One tick is not enough. The backend announces dictation state over an
+   * event, and the handler for it focuses the buffer when listening resumes —
+   * so a state message arriving just after the send took the caret straight
+   * back, which is why this worked most of the time and not always.
+   * Reasserting over the next few frames outlasts that race without guessing
+   * a single delay that would be wrong on a slower machine.
+   */
+  /**
+   * Hand the caret back to the terminal.
+   *
+   * Called after a send and after every way of closing the panel. Sending
+   * without Enter leaves the prompt in the agent's composer waiting for exactly
+   * that key, and a closed panel leaves the caret nowhere at all, so in both
+   * cases the terminal is where the next keystroke should go.
+   *
+   * One attempt is enough now that the buffer poll no longer selects inside the
+   * editor while it is unfocused; the retry loop that used to be here was
+   * fighting that, and lost whenever the poll landed after the last try.
+   */
+  function focusTerminalAfterSend(reason = '') {
+    void tick().then(() => {
+      // Ask the terminal component rather than reaching for a textarea.
+      //
+      // querySelector('.xterm-helper-textarea') takes the FIRST match in the
+      // document, and the terminal pool keeps every opened tab's instance in
+      // the DOM — so it could hand focus to a hidden pane while the visible one
+      // stayed dead to the keyboard. The component knows which entry is active
+      // and whether it may take focus at all.
+      //
+      // focusTerminal() from utils/focus is not usable here: it declines while
+      // the caret is in a textarea, which after dictation is exactly where it
+      // is, and exactly what needs moving.
+      window.dispatchEvent(new CustomEvent('terminal:focus'));
+      // Whether the focus actually took is the one fact worth having when this
+      // is reported again: it separates "nothing tried" from "something took it
+      // back", and names the thief. Two frames, because the terminal component
+      // defers its own focus by one to let the DOM settle.
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        const active = document.activeElement as HTMLElement | null;
+        if (active?.classList?.contains('xterm-helper-textarea')) return;
+        console.warn('[Dictation] focus did not return to the terminal', {
+          reason,
+          activeTag: active?.tagName,
+          activeClass: active?.className,
+          inBuffer: !!active?.closest?.('.dictation-buffer'),
+        });
+      }));
+    });
+  }
+
+  /**
    * Close the dictation panel: discard the words and stop listening.
    *
    * The same three steps the close button takes, in one place — Escape and the
@@ -85,7 +138,13 @@
    */
   function closeDictationPanel() {
     clearBuffer();
+    // This hides the panel by itself, before the backend's state event gets a
+    // chance to arrive — and the event is where focus is normally returned. If
+    // it is late, or never comes because listening was already off, nothing
+    // would hand the caret back. Doing it here too is harmless when the event
+    // does arrive: both land on the same terminal.
     dictationListening = false;
+    focusTerminalAfterSend('close-panel');
     void DictationService.ToggleDictation();
   }
 
@@ -155,7 +214,16 @@
     if (!bufferEditor) return;
     bufferEditor.textContent = bufferText;
     appendInterimSpan(interimText);
-    // Place cursor at end of confirmed text (before interim span)
+    // Place cursor at end of confirmed text (before interim span).
+    //
+    // Only while the editor already holds the caret. Selecting inside a
+    // contenteditable element focuses it, and this runs from the 150ms buffer
+    // poll: after a send it fired with the caret already handed back to the
+    // terminal and pulled it straight back into the panel — so a prompt left in
+    // the agent's composer could not be submitted, the Enter went to the buffer
+    // instead. Whether it happened at all depended on where the poll landed,
+    // which is why it looked intermittent.
+    if (document.activeElement !== bufferEditor) return;
     const sel = window.getSelection();
     if (sel && bufferEditor.firstChild?.nodeType === Node.TEXT_NODE) {
       const range = document.createRange();
@@ -538,11 +606,11 @@
           startBufferTextPoll();
           tick().then(() => bufferEditor?.focus());
         } else if (streamingMode) {
-          // Live preview mode: return focus to terminal
-          tick().then(() => {
-            const xtermTextarea = document.querySelector('.xterm-helper-textarea') as HTMLTextAreaElement;
-            xtermTextarea?.focus();
-          });
+          // Live preview mode: return focus to terminal. Same reason as
+          // focusTerminalAfterSend for going through the component: the pool
+          // keeps hidden panes in the DOM, and the first textarea in document
+          // order need not belong to the visible one.
+          focusTerminalAfterSend('live-preview-started');
         }
       } else {
         stopVoiceLevelPoll();
@@ -557,6 +625,14 @@
         // meant to be kept — the close button already discarded it, and
         // stopping any other way should too.
         void discardBuffer();
+        // The panel is going away; the caret has to land somewhere.
+        //
+        // Every way of closing arrives here — the hotkey pressed a second time,
+        // Escape, the close button — and none of them returned focus, so the
+        // terminal stayed dead to the keyboard until it was clicked. Sending
+        // has its own call for this, which is why closing without sending was
+        // the case that kept failing.
+        if (bufferMode) focusTerminalAfterSend('dictation-stopped');
       }
     });
 
@@ -792,12 +868,14 @@
       if (bufferCloseOnSend) {
         dictationListening = false;
         await DictationService.ToggleDictation();
-        // Return focus to terminal
-        tick().then(() => {
-          const xtermTextarea = document.querySelector('.xterm-helper-textarea') as HTMLTextAreaElement;
-          xtermTextarea?.focus();
-        });
       }
+      // Focus goes back to the terminal either way.
+      //
+      // It used to happen only when the panel closed, so with the panel kept
+      // open the caret stayed in it — and sending without Enter leaves a
+      // prompt in the agent's composer waiting for exactly that key, which
+      // then went to the dictation buffer instead.
+      focusTerminalAfterSend('send');
     } catch (e) {
       console.error('[Dictation] Send buffer failed:', e);
     } finally {
