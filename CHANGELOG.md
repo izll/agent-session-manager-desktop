@@ -6,6 +6,19 @@ Entries describe what changed for someone using the app. Internal refactoring,
 test and CI work is left out unless it changed behaviour. Dates are release
 dates; the format follows [Keep a Changelog](https://keepachangelog.com).
 
+## 0.9.38 — 2026-09-05
+
+### Fixed
+
+- **A session running several agents no longer shows as idle.** Claude lists
+  every agent it has spawned below the status bar, and with five of them the
+  bar was pushed out of the small window the check looked at — so a session
+  read as idle exactly when it was at its busiest.
+- **A Codex session shows what it is doing, not which model it is using.** The
+  status line read "gpt-6-astra medium · ~/project · Main [default]", the CLI's
+  own bottom bar. It was recognised by a list of model names that needed
+  extending for every model OpenAI ships; it is now recognised by its shape.
+
 ## 0.9.37 — 2026-09-04
 
 ### Added
