@@ -20,6 +20,19 @@ type FilterConfig struct {
 	MinContentLen int      `json:"min_content_len"` // Minimum content length to show
 	ShowContains  []string `json:"show_contains"`   // Show special status if line contains (e.g., "Generating")
 	ShowAs        []string `json:"show_as"`         // What to show for each ShowContains match
+	// SkipDotFieldsWithPath skips a line of N or more " · "-separated fields
+	// where one of them is a filesystem path.
+	//
+	// For Codex's bottom bar: "<model> <effort> · <path> · <branch>". Listing
+	// model names instead meant the bar leaked into the status line every time
+	// OpenAI shipped a name nobody had added yet — "gpt-6-astra medium ·
+	// ~/NetBeansProjects/nesting-project · Main [default]" showed up as a
+	// session's status. The shape does not change when the model does.
+	//
+	// The path is what keeps this off ordinary prose: an agent writing "kész ·
+	// a tesztek zöldek · commitolható" has the field count but no path, and is
+	// a real status line worth showing.
+	SkipDotFieldsWithPath int `json:"skip_dot_fields_with_path"`
 }
 
 // AgentFilters holds all agent filter configurations
@@ -97,6 +110,7 @@ func cloneAgentFilters(source AgentFilters) AgentFilters {
 		copy.SkipContains = append([]string(nil), config.SkipContains...)
 		copy.SkipPrefixes = append([]string(nil), config.SkipPrefixes...)
 		copy.SkipSuffixes = append([]string(nil), config.SkipSuffixes...)
+		copy.SkipDotFieldsWithPath = config.SkipDotFieldsWithPath
 		copy.SkipExact = append([]string(nil), config.SkipExact...)
 		copy.ShowContains = append([]string(nil), config.ShowContains...)
 		copy.ShowAs = append([]string(nil), config.ShowAs...)
@@ -175,6 +189,14 @@ func ApplyFilter(config *FilterConfig, cleanLine string) (skip bool, content str
 	// Check prefixes
 	for _, prefix := range config.SkipPrefixes {
 		if strings.HasPrefix(cleanLine, prefix) {
+			return true, ""
+		}
+	}
+
+	// Check for a path-carrying, dot-separated bar
+	if config.SkipDotFieldsWithPath > 0 {
+		fields := strings.Split(cleanLine, " · ")
+		if len(fields) >= config.SkipDotFieldsWithPath && anyFieldIsPath(fields) {
 			return true, ""
 		}
 	}
@@ -258,15 +280,13 @@ func getDefaultFilters() AgentFilters {
 				"›",
 				"╭", "╰", "│",
 				"Tip:",
-				// Idle status bar starts with the model id followed by " high · ".
-				// Match the common GPT-x.y prefixes Codex prints. New models can
-				// be added here as they ship.
-				"gpt-5",
-				"gpt-4",
-				"gpt-3",
-				"o1", "o3", "o4",
 			},
-			MinSeparators: 20,
+			// The bottom bar is "<model> <effort> · <path> · <branch>": three
+			// dot-separated fields. Recognised by that shape rather than by a
+			// list of model names, which needed editing for every model OpenAI
+			// shipped and showed the bar as the status line until someone did.
+			SkipDotFieldsWithPath: 3,
+			MinSeparators:         20,
 		},
 		"amazonq": {
 			SkipContains:  []string{"Amazon Q"},
@@ -285,4 +305,18 @@ func getDefaultFilters() AgentFilters {
 		},
 		"custom": {},
 	}
+}
+
+// anyFieldIsPath reports whether one of the fields looks like a filesystem
+// path: "~/...", "/...", or a bare "./...". Deliberately narrow — it decides
+// whether a line is chrome or something the user should see.
+func anyFieldIsPath(fields []string) bool {
+	for _, field := range fields {
+		field = strings.TrimSpace(field)
+		if strings.HasPrefix(field, "~/") || strings.HasPrefix(field, "/") ||
+			strings.HasPrefix(field, "./") {
+			return true
+		}
+	}
+	return false
 }
