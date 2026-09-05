@@ -686,17 +686,28 @@ func isSpinnerAnimatingContext(ctx context.Context, lines []string, spinners []s
 
 // hasEscToInterrupt checks if the Claude Code status bar shows "esc to interrupt"
 // which is a reliable indicator that Claude is actively processing.
-// Only checks the last few non-empty lines to avoid false positives from scrollback.
+//
+// The search is bounded by the input box rather than by a line count. It used
+// to stop after five non-empty lines from the bottom, which was enough only
+// while nothing followed the status bar — but Claude lists every spawned agent
+// underneath it, and a session running five agents pushed the bar six lines up,
+// out of reach. A busy session then showed as idle precisely when it was at its
+// busiest.
+//
+// Everything below the last separator belongs to the current screen, never to
+// the scrollback the count was there to exclude, so the whole of it is safe to
+// search.
 func hasEscToInterrupt(lines []string) bool {
-	nonEmptyCount := 0
-	for j := len(lines) - 1; j >= 0 && nonEmptyCount < 5; j-- {
+	for j := len(lines) - 1; j >= 0; j-- {
 		cleanLine := strings.TrimSpace(stripANSIForDetect(lines[j]))
 		if cleanLine == "" {
 			continue
 		}
-		nonEmptyCount++
-		lineLower := strings.ToLower(cleanLine)
-		if strings.Contains(lineLower, "esc to interrupt") {
+		sepCount := strings.Count(cleanLine, "─") + strings.Count(cleanLine, "━") + strings.Count(cleanLine, "╌")
+		if sepCount > 20 {
+			return false
+		}
+		if strings.Contains(strings.ToLower(cleanLine), "esc to interrupt") {
 			return true
 		}
 	}
