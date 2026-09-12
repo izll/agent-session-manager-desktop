@@ -4609,11 +4609,14 @@ type AgentInfo struct {
 
 // GetAgents returns available agents
 func (a *App) GetAgents() []AgentInfo {
+	// Ordered by how often they are reached for, not alphabetically: this list
+	// is the order of the buttons in the new-tab dialog, and the first two are
+	// most of the clicks.
 	agents := []AgentInfo{
 		{Type: "claude", Name: "Claude", Icon: "🤖"},
+		{Type: "codex", Name: "Codex", Icon: "📦"},
 		{Type: "gemini", Name: "Gemini", Icon: "💎"},
 		{Type: "aider", Name: "Aider", Icon: "🔧"},
-		{Type: "codex", Name: "Codex", Icon: "📦"},
 		{Type: "amazonq", Name: "Amazon Q", Icon: "🦜"},
 		{Type: "opencode", Name: "OpenCode", Icon: "💻"},
 		{Type: "custom", Name: "Custom", Icon: "⚙️"},
