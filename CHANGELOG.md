@@ -6,6 +6,27 @@ Entries describe what changed for someone using the app. Internal refactoring,
 test and CI work is left out unless it changed behaviour. Dates are release
 dates; the format follows [Keep a Changelog](https://keepachangelog.com).
 
+## 0.9.39 — 2026-09-12
+
+### Added
+
+- **Files, diffs and the whole folder can be opened in VS Code.** Reviewing a
+  change and making a small edit are things people already do in an editor, so
+  the built-in views hand the work over rather than growing into one. From the
+  diff and the file browser: the file at the line being read, the file's changes
+  in the editor's own diff view, or the whole directory as a project — which is
+  the one that shows everything changed at once. Cursor, Codium, Insiders and
+  Windsurf are found too, and the editor can be named in Settings.
+
+### Fixed
+
+- **Escape no longer reaches the terminal when a dialog closes.** Closing a
+  dialog typed the same key into the pane behind it. A guard for this existed
+  but asked whether a dialog was on screen — and Escape is the one key that
+  removes the thing being asked about, so at the only moment that mattered it
+  saw nothing. The same blind spot affected the global shortcuts, the tab bar
+  and the file browser, where a shortcut could fire on the way out of a dialog.
+
 ## 0.9.38 — 2026-09-05
 
 ### Fixed
