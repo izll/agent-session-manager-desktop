@@ -1363,6 +1363,7 @@ export namespace main {
 	    notifyDesktop: boolean;
 	    notifyNtfy: boolean;
 	    ntfyUrl: string;
+	    externalEditor: string;
 	    terminalTheme: string;
 	    agentDefaultTheme: string;
 	    shortcutOverrides: Record<string, any>;
@@ -1418,6 +1419,7 @@ export namespace main {
 	        this.notifyDesktop = source["notifyDesktop"];
 	        this.notifyNtfy = source["notifyNtfy"];
 	        this.ntfyUrl = source["ntfyUrl"];
+	        this.externalEditor = source["externalEditor"];
 	        this.terminalTheme = source["terminalTheme"];
 	        this.agentDefaultTheme = source["agentDefaultTheme"];
 	        this.shortcutOverrides = source["shortcutOverrides"];

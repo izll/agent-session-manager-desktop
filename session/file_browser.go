@@ -355,3 +355,20 @@ func displayPath(rel string) string {
 	}
 	return rel
 }
+
+// ResolveBrowsePathForEditor turns a path from the UI into an absolute one,
+// with the same containment check every other browse operation uses.
+//
+// Exported for handing the path to an external editor, which is the one case
+// where the file is not read here: the editor opens it itself, so the check
+// that it lies inside the session tree has to happen before we let go of it.
+func (i *Instance) ResolveBrowsePathForEditor(rel string) (string, error) {
+	if strings.TrimSpace(rel) == "" {
+		return "", fmt.Errorf("no file given")
+	}
+	abs, _, err := i.resolveBrowsePath(rel)
+	if err != nil {
+		return "", err
+	}
+	return abs, nil
+}

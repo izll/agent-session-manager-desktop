@@ -59,6 +59,8 @@ export function DeleteTask(arg1:string,arg2:string,arg3:string):Promise<void>;
 
 export function DetachSession(arg1:string):Promise<void>;
 
+export function DetectedEditor():Promise<string>;
+
 export function DetectionPatternsVersion():Promise<number>;
 
 export function DiscoverLocalSchemes():Promise<Array<main.ImportedScheme>>;
@@ -225,7 +227,13 @@ export function MoveTask(arg1:string,arg2:string,arg3:string,arg4:string):Promis
 
 export function OpenAppLogFolder():Promise<void>;
 
+export function OpenDiffInEditor(arg1:string,arg2:string,arg3:string,arg4:number,arg5:string):Promise<void>;
+
+export function OpenFileInEditor(arg1:string,arg2:string,arg3:number,arg4:number,arg5:string):Promise<void>;
+
 export function OpenFolder(arg1:string):Promise<void>;
+
+export function OpenFolderInEditor(arg1:string,arg2:number,arg3:string):Promise<void>;
 
 export function OpenLogFolder(arg1:string):Promise<void>;
 

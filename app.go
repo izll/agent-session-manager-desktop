@@ -118,6 +118,11 @@ func (a *App) startup(ctx context.Context) {
 	// is also why the TUI never hit it: a terminal launch inherits a real PATH.
 	session.EnsureToolPath()
 
+	// Clear the "before" files left by external diffs. Done here rather than
+	// when each editor closes: we never learn when that is, and deleting one
+	// while its editor is still starting shows an empty pane.
+	go sweepDiffTempDirs()
+
 	// Refresh the activity-detection patterns in the background. Agents reword
 	// their prompts on their own schedule, and a changed phrase means the app
 	// stops noticing one waiting for an answer; this makes that fixable by
@@ -3910,6 +3915,7 @@ type SettingsInfo struct {
 	NotifyDesktop      bool                  `json:"notifyDesktop"`
 	NotifyNtfy         bool                  `json:"notifyNtfy"`
 	NtfyURL            string                `json:"ntfyUrl"`
+	ExternalEditor     string                `json:"externalEditor"`
 	TerminalTheme      string                `json:"terminalTheme"`
 	AgentDefaultTheme  string                `json:"agentDefaultTheme"`
 	// ShortcutOverrides holds only the shortcuts the user has rebound, keyed by
@@ -4025,6 +4031,7 @@ func (a *App) GetSettings() (*SettingsInfo, error) {
 		NotifyDesktop:             settings.NotifyDesktop,
 		NotifyNtfy:                settings.NotifyNtfy,
 		NtfyURL:                   settings.NtfyURL,
+		ExternalEditor:            settings.ExternalEditor,
 		ShortcutOverrides:         settings.ShortcutOverrides,
 		DiffAboveHeight:           settings.DiffAboveHeight,
 		DictationBuffer:           settings.DictationBuffer,
@@ -4111,6 +4118,7 @@ func (a *App) SaveSettings(settings SettingsInfo, expectedProjectID string) erro
 		current.NotifyDesktop = settings.NotifyDesktop
 		current.NotifyNtfy = settings.NotifyNtfy
 		current.NtfyURL = settings.NtfyURL
+		current.ExternalEditor = settings.ExternalEditor
 		current.ShortcutOverrides = settings.ShortcutOverrides
 		current.DiffAboveHeight = settings.DiffAboveHeight
 		current.DictationBuffer = settings.DictationBuffer

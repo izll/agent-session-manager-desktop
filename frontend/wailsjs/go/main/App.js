@@ -114,6 +114,10 @@ export function DetachSession(arg1) {
   return window['go']['main']['App']['DetachSession'](arg1);
 }
 
+export function DetectedEditor() {
+  return window['go']['main']['App']['DetectedEditor']();
+}
+
 export function DetectionPatternsVersion() {
   return window['go']['main']['App']['DetectionPatternsVersion']();
 }
@@ -446,8 +450,20 @@ export function OpenAppLogFolder() {
   return window['go']['main']['App']['OpenAppLogFolder']();
 }
 
+export function OpenDiffInEditor(arg1, arg2, arg3, arg4, arg5) {
+  return window['go']['main']['App']['OpenDiffInEditor'](arg1, arg2, arg3, arg4, arg5);
+}
+
+export function OpenFileInEditor(arg1, arg2, arg3, arg4, arg5) {
+  return window['go']['main']['App']['OpenFileInEditor'](arg1, arg2, arg3, arg4, arg5);
+}
+
 export function OpenFolder(arg1) {
   return window['go']['main']['App']['OpenFolder'](arg1);
+}
+
+export function OpenFolderInEditor(arg1, arg2, arg3) {
+  return window['go']['main']['App']['OpenFolderInEditor'](arg1, arg2, arg3);
 }
 
 export function OpenLogFolder(arg1) {

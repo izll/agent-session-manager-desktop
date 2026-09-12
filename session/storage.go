@@ -198,6 +198,12 @@ type Settings struct {
 	NotifyDesktop   bool   `json:"notify_desktop,omitempty"`
 	NotifyNtfy      bool   `json:"notify_ntfy,omitempty"`
 	NtfyURL         string `json:"ntfy_url,omitempty"`
+	// ExternalEditor is the command used for "open in editor", empty to use
+	// whichever of VS Code and its forks is found on PATH.
+	//
+	// A name rather than a choice from a list: the fork people use is not
+	// predictable, and a wrapper script is a legitimate answer too.
+	ExternalEditor string `json:"external_editor,omitempty"`
 	// TerminalTheme is the BASE terminal colour palette (see
 	// frontend/src/lib/utils/terminalThemes.ts). Empty = the app default.
 	// AgentTerminalThemes overrides it per agent type ("claude", "terminal",

@@ -571,3 +571,64 @@ func contextFor(wholeFile bool) int {
 	}
 	return 0
 }
+
+// DiffTempPrefix names the temporary directories holding the "before" side of
+// an external diff. Shared with the sweep that removes them at startup.
+const DiffTempPrefix = "asmgr-diff-"
+
+// WriteDiffBaseToTemp writes the pre-change contents of one file to a temporary
+// file and returns its path.
+//
+// An external editor compares two files on disk, and the "before" side is not
+// one: it lives in git's object store. For a file that did not exist at baseRef
+// — one added during the session — git has nothing to show, and an empty file
+// is written instead, which is what the diff against it should say anyway.
+//
+// The caller does not delete the result: the editor is still starting when this
+// returns, and removing the file from under it shows an empty pane. They are
+// swept at the next startup instead.
+func (i *Instance) WriteDiffBaseToTemp(rel, baseRef string) (string, error) {
+	if strings.TrimSpace(rel) == "" {
+		return "", fmt.Errorf("no file given")
+	}
+	// baseRef reaches git as an argument, so it is checked the same way the
+	// diff itself checks it rather than trusted from the caller.
+	if err := validateBaseCommitRef(baseRef); err != nil {
+		return "", err
+	}
+	// Containment matters here too: the path is interpolated into a git
+	// argument, and ".." would read a file from outside the tree.
+	if _, err := i.ResolveBrowsePathForEditor(rel); err != nil {
+		return "", err
+	}
+
+	ref := baseRef
+	if ref == "" {
+		// No base commit means "compare against HEAD", which is what the
+		// uncommitted-changes view shows.
+		ref = "HEAD"
+	}
+
+	cmd, cancel := GitCommandTimed("-C", i.gitDir(), "--no-pager", "show",
+		"--end-of-options", ref+":"+filepath.ToSlash(filepath.Clean(rel)))
+	defer cancel()
+	out, err := cmd.Output()
+	if err != nil {
+		// A file added during the session has no "before". That is not a
+		// failure — the diff is the whole file — so an empty side is written.
+		out = nil
+	}
+
+	dir, err := os.MkdirTemp("", DiffTempPrefix)
+	if err != nil {
+		return "", fmt.Errorf("could not create a temporary directory: %w", err)
+	}
+	// Keep the original name so the editor's tab title and syntax highlighting
+	// still make sense; the directory is what makes it unique.
+	target := filepath.Join(dir, filepath.Base(filepath.Clean(rel)))
+	if err := os.WriteFile(target, out, 0o600); err != nil {
+		os.RemoveAll(dir)
+		return "", fmt.Errorf("could not write the original version: %w", err)
+	}
+	return target, nil
+}

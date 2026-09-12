@@ -9,6 +9,77 @@
    * a file from a diff is the change, and a long file would otherwise arrive
    * scrolled nowhere near it.
    */
+  /**
+   * The line the reader is looking at, when that can be established.
+   *
+   * Opening at it means arriving at the change being read rather than at the
+   * file's first change, which in a long file can be thousands of lines away.
+   * Only the displayed file has a viewport to ask; a button on another row in
+   * the list falls back to that file's first hunk.
+   */
+  function lineForFile(path: string): number | undefined {
+    let line: number | undefined;
+    if (path === selectedPath) {
+      if (sideBySide) {
+        line = sideBySideView?.topVisibleNewLine() ?? undefined;
+      } else if (wholeFileView) {
+        const at = virtualLines?.firstVisibleLine();
+        if (typeof at === 'number') line = at + 1;
+      }
+    }
+    if (line === undefined && selectedFile?.path === path) {
+      const firstHunk = selectedFile.hunks?.[0];
+      line = firstHunk ? parseHunkHeader(firstHunk.header).newStart : undefined;
+    }
+    return line;
+  }
+
+  /** Open one file in the external editor, at the line being read. */
+  async function openFileInEditor(path: string) {
+    const sessionId = get(selectedSessionId);
+    const expectedRoot = loadedRoot;
+    if (!sessionId || !expectedRoot) return;
+    try {
+      await App.OpenFileInEditor(sessionId, path, lineForFile(path) ?? 0, tabIdx(), expectedRoot);
+    } catch (e) {
+      editorError = String(e);
+    }
+  }
+
+  /**
+   * Open the whole directory as a project in the editor.
+   *
+   * The editor's own source-control view then shows every change at once,
+   * which the per-file buttons cannot: they answer "this file", not
+   * "everything I have touched".
+   */
+  async function openFolderInEditor() {
+    const sessionId = get(selectedSessionId);
+    const expectedRoot = loadedRoot;
+    if (!sessionId || !expectedRoot) return;
+    try {
+      await App.OpenFolderInEditor(sessionId, tabIdx(), expectedRoot);
+    } catch (e) {
+      editorError = String(e);
+    }
+  }
+
+  /** Open one file's changes in the editor's own diff view. */
+  async function openDiffInEditor(path: string) {
+    const sessionId = get(selectedSessionId);
+    const expectedRoot = loadedRoot;
+    if (!sessionId || !expectedRoot) return;
+    try {
+      await App.OpenDiffInEditor(sessionId, path, diffMode, tabIdx(), expectedRoot);
+    } catch (e) {
+      editorError = String(e);
+    }
+  }
+
+  // Surfaced rather than logged: a missing editor is a setting the user can
+  // fix, and a button that silently does nothing reads as a broken button.
+  let editorError = '';
+
   function openFileInBrowser(path: string) {
     // Where the reader is looking, when that can be established: opening the
     // file at the line showing at the top of the diff means the editor arrives
@@ -1675,6 +1746,20 @@
         </svg>
         {copyState === 'copied' ? $t('diff.copied') : copyState === 'failed' ? $t('diff.copyFailed') : $t('diff.copy')}
       </button>
+      <!-- Acts on the whole tree, so it belongs here rather than on a file row. -->
+      <button
+        class="refresh-btn"
+        on:click={openFolderInEditor}
+        disabled={!loadedRoot}
+        title={$t('diff.openFolderInEditor')}
+      >
+        <!-- A folder with an arrow leaving it: the project opens outside. -->
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v3"/>
+          <path d="M3 10v8a2 2 0 0 0 2 2h8"/>
+          <path d="M16 19h6v-6"/><path d="M22 13l-6 6"/>
+        </svg>
+      </button>
       <button class="refresh-btn" on:click={() => loadDiff()} disabled={loading}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class:spinning={loading}>
           <path d="M23 4v6h-6M1 20v-6h6"/>
@@ -1702,6 +1787,15 @@
   {:else}
     <!-- A revert that failed still leaves a usable diff on screen, so the error
          sits above the panes instead of replacing them. -->
+    {#if editorError}
+      <!-- A missing editor is a setting the user can fix, so it is shown
+           rather than logged: a button that silently does nothing reads as
+           a broken button. -->
+      <div class="diff-error" role="alert">
+        {editorError}
+        <button class="nav-btn" on:click={() => (editorError = '')}>×</button>
+      </div>
+    {/if}
     {#if error}
       <div class="revert-error">{error}</div>
     {/if}
@@ -1818,6 +1912,28 @@
                     <span class="stat removed">-{file.removed}</span>
                     <button
                       class="revert-btn open-file"
+                      title={$t('diff.openDiffInEditor')}
+                      on:click|stopPropagation={() => openDiffInEditor(file.path)}
+                    >
+                      <!-- Two panes side by side: the editor's own diff view. -->
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="2" y="4" width="8" height="16" rx="1"/>
+                        <rect x="14" y="4" width="8" height="16" rx="1"/>
+                      </svg>
+                    </button>
+                    <button
+                      class="revert-btn open-file"
+                      title={$t('diff.openInEditor')}
+                      on:click|stopPropagation={() => openFileInEditor(file.path)}
+                    >
+                      <!-- Arrow leaving a frame: the file opens outside the app. -->
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                        <path d="M15 3h6v6"/><path d="M10 14 21 3"/>
+                      </svg>
+                    </button>
+                    <button
+                      class="revert-btn open-file"
                       title={$t('diff.openInBrowser')}
                       on:click|stopPropagation={() => openFileInBrowser(file.path)}
                     >
@@ -1876,6 +1992,28 @@
               <div class="file-meta">
                 <span class="stat added">+{file.added}</span>
                 <span class="stat removed">-{file.removed}</span>
+                <button
+                  class="revert-btn open-file"
+                  title={$t('diff.openDiffInEditor')}
+                  on:click|stopPropagation={() => openDiffInEditor(file.path)}
+                >
+                  <!-- Two panes side by side: the editor's own diff view. -->
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="2" y="4" width="8" height="16" rx="1"/>
+                    <rect x="14" y="4" width="8" height="16" rx="1"/>
+                  </svg>
+                </button>
+                <button
+                  class="revert-btn open-file"
+                  title={$t('diff.openInEditor')}
+                  on:click|stopPropagation={() => openFileInEditor(file.path)}
+                >
+                  <!-- Arrow leaving a frame: the file opens outside the app. -->
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                    <path d="M15 3h6v6"/><path d="M10 14 21 3"/>
+                  </svg>
+                </button>
                 <button
                   class="revert-btn open-file"
                   title={$t('diff.openInBrowser')}
@@ -1972,8 +2110,18 @@
                   on:click={() => (showDiffFind ? closeDiffFind() : openDiffFind())}
                 >⌕</button>
               {/if}
-              <!-- Last in the row, next to the file it acts on: this is the one
-                   control here that leaves the diff. -->
+              <!-- Last in the row, next to the file they act on: these are the
+                   controls here that leave the diff. -->
+              <button
+                class="nav-btn"
+                title={$t('diff.openDiffInEditor')}
+                on:click={() => openDiffInEditor(selectedFile.path)}
+              >⧉</button>
+              <button
+                class="nav-btn"
+                title={$t('diff.openInEditor')}
+                on:click={() => openFileInEditor(selectedFile.path)}
+              >↗</button>
               <button
                 class="nav-btn"
                 title={$t('diff.openInBrowser')}
@@ -2799,6 +2947,16 @@
   }
   .nav-btn.wide { padding: 2px 10px; }
 
+  /* The symbol buttons carry a glyph, not a word: at the row's 11px the search
+     and side-by-side marks were too small to read, let alone aim at. The text
+     button beside them keeps its own size — matching it would make "Whole
+     file" shout. */
+  .nav-btn:not(.wide) {
+    font-size: 14px;
+    line-height: 1.1;
+    min-width: 26px;
+  }
+
   .nav-btn:hover { background: rgba(255, 255, 255, 0.14); }
   .nav-btn.active {
     border-color: rgba(var(--accent-rgb), 0.5);
@@ -2965,5 +3123,22 @@
   }
 
 
+
+  .diff-error {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 6px 8px;
+    padding: 6px 10px;
+    border: 1px solid var(--error, #e5534b);
+    border-radius: 5px;
+    background: color-mix(in srgb, var(--error, #e5534b) 12%, transparent);
+    color: var(--text-primary);
+    font-size: 12px;
+  }
+
+  .diff-error button {
+    margin-left: auto;
+  }
 
 </style>

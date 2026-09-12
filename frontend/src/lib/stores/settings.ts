@@ -113,6 +113,8 @@ export interface Settings {
   notifyDesktop: boolean;
   notifyNtfy: boolean;
   ntfyUrl: string;
+  /** Command for "open in editor"; empty means detect VS Code or a fork. */
+  externalEditor: string;
   terminalTheme: string;
   agentTerminalThemes?: Record<string, string>;
   customTerminalThemes?: Array<{ id: string; name: string; colors: Record<string, string> }>;
@@ -159,6 +161,7 @@ function defaultSettings(): Settings {
     notifyDesktop: true,
     notifyNtfy: false,
     ntfyUrl: '',
+    externalEditor: '',
     terminalTheme: 'asmgr',
     agentTerminalThemes: {},
     customTerminalThemes: [],

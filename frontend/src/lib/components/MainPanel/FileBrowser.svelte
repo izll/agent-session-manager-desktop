@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { keyClaimedByDialog } from '../../utils/dialogKeys';
   import { onMount, onDestroy, createEventDispatcher, tick } from 'svelte';
   import { pendingFileJump, clearFileJump } from '../../stores/fileJump';
   import { registerUnsavedGuard } from '../../stores/unsavedChanges';
@@ -258,7 +259,7 @@
     if (e.key.toLowerCase() !== 'o') return;
     // Another dialog owning the keyboard must keep it — the overlay opening
     // behind a confirm prompt would leave two things listening for Escape.
-    if (document.querySelector('.dialog-overlay')) return;
+    if (document.querySelector('.dialog-overlay') || keyClaimedByDialog()) return;
     e.preventDefault();
     e.stopPropagation();
     showQuickOpen = true;
@@ -414,6 +415,30 @@
   }
 
   // --- Edit mode ------------------------------------------------------------
+
+  /** Open the browsed directory as a project in the external editor. */
+  async function openFolderInEditor() {
+    const sessionId = get(selectedSessionId);
+    const expectedRoot = rootAbsPath;
+    if (!sessionId || !expectedRoot) return;
+    try {
+      await App.OpenFolderInEditor(sessionId, get(selectedWindowIdx) ?? 0, expectedRoot);
+    } catch (e) {
+      rootError = String(e);
+    }
+  }
+
+  /** Hand the selected file to the external editor. */
+  async function openSelectedInEditor() {
+    const sessionId = get(selectedSessionId);
+    const expectedRoot = rootAbsPath;
+    if (!sessionId || !expectedRoot || !selectedPath) return;
+    try {
+      await App.OpenFileInEditor(sessionId, selectedPath, 0, get(selectedWindowIdx) ?? 0, expectedRoot);
+    } catch (e) {
+      rootError = String(e);
+    }
+  }
 
   async function enterEditMode() {
     if (!selectedPath) return;
@@ -1268,6 +1293,18 @@
           <path d="M21 21l-4.35-4.35"/>
         </svg>
       </button>
+      <button
+        class="refresh-btn"
+        on:click={openFolderInEditor}
+        disabled={!rootAbsPath}
+        title={$t('browser.openFolderInEditor')}
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v3"/>
+          <path d="M3 10v8a2 2 0 0 0 2 2h8"/>
+          <path d="M16 19h6v-6"/><path d="M22 13l-6 6"/>
+        </svg>
+      </button>
       <button class="refresh-btn" on:click={refresh} disabled={rootLoading} title={$t('browser.refresh')}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class:spinning={rootLoading}>
           <path d="M23 4v6h-6M1 20v-6h6"/>
@@ -1420,6 +1457,14 @@
               </button>
             {:else if selectedFile && !selectedFile.binary && !selectedFile.truncated}
               <button class="edit-btn" on:click={enterEditMode}>{$t('browser.edit')}</button>
+            {/if}
+            {#if selectedFile}
+              <!-- Heavy editing goes where the user already does it; this view
+                   stays a quick look. Offered for binary and truncated files
+                   too: those are exactly the ones this view cannot show. -->
+              <button class="edit-btn" on:click={openSelectedInEditor}>
+                {$t('browser.openInEditor')}
+              </button>
             {/if}
           </div>
         {/if}
