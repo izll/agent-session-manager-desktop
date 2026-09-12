@@ -6,6 +6,21 @@ Entries describe what changed for someone using the app. Internal refactoring,
 test and CI work is left out unless it changed behaviour. Dates are release
 dates; the format follows [Keep a Changelog](https://keepachangelog.com).
 
+## 1.0.0 — 2026-09-12
+
+The version number catching up with the program.
+
+Nothing here is a rewrite: the app has been in daily use for months, and
+what changed over the last releases was polish rather than foundations —
+session handling, tabs, resume, diff, the file browser, dictation and the
+usage rings have all settled. 1.0 says that out loud.
+
+### Changed
+
+- **The new-tab agent buttons follow how often they are picked**: Claude,
+  Codex, Gemini, then the rest. Codex sat fourth while being the second most
+  reached for.
+
 ## 0.9.39 — 2026-09-12
 
 ### Added
