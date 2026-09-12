@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { claimKeyForDialog } from '../../utils/dialogKeys';
   import { autoFocusDialog } from '../../utils/dialogActions';
   // Rendered into <body>: this dialog is opened from the sidebar's session
   // context menu, and the session list carries transform/contain for a
@@ -88,6 +89,7 @@
 
   function handleKeydown(e: KeyboardEvent) {
     if (e.key === 'Escape') {
+      claimKeyForDialog();
       e.stopPropagation();
       close();
     }

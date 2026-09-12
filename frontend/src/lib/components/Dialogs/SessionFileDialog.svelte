@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { claimKeyForDialog } from '../../utils/dialogKeys';
   import { autoFocusDialog } from '../../utils/dialogActions';
   import * as App from '../../../../wailsjs/go/main/App';
   import type { main } from '../../../../wailsjs/go/models';
@@ -107,7 +108,11 @@
   }
 
   function handleKeydown(e: KeyboardEvent) {
-    if (e.key === 'Escape') close();
+    if (e.key === 'Escape') {
+      claimKeyForDialog();
+      e.stopPropagation();
+      close();
+    }
   }
 </script>
 

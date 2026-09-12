@@ -45,9 +45,14 @@ assert.match(
 // xterm listens on its own textarea, below the window listeners a dialog uses,
 // so it sees a key first and stopPropagation cannot help. Escape closed the
 // commit history and reached the pane behind it at the same time.
+//
+// The overlay check alone is not enough — Escape closes the dialog, and the
+// overlay is gone before this handler looks — so the claim a dialog raises
+// while handling the key has to be checked too. dialogEscapeLeak.test.mjs
+// covers that side; here the point is that the guard still exists at all.
 assert.match(
   terminal,
-  /if \(document\.querySelector\('\.dialog-overlay'\)\) \{\s*return false;/,
+  /if \(document\.querySelector\('\.dialog-overlay'\)[\s\S]{0,40}?\) \{\s*return false;/,
   'the terminal must decline keys while a dialog is open',
 );
 

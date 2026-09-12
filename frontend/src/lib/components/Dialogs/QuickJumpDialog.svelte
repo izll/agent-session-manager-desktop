@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { claimKeyForDialog } from '../../utils/dialogKeys';
   /**
    * The quick-jump window: the handful of places you move between all day,
    * behind one keystroke.
@@ -271,6 +272,7 @@
   function onNoteKeydown(e: KeyboardEvent) {
     // Handled here and stopped, so the list's own keys — digits jumping,
     // arrows moving, Delete removing — do not fire while typing a note.
+    claimKeyForDialog();
     e.stopPropagation();
     if (e.key === 'Enter') {
       e.preventDefault();

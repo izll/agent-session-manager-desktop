@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { claimKeyForDialog } from '../../utils/dialogKeys';
   import * as App from '../../../../wailsjs/go/main/App';
   import { settings, saveSettings } from '../../stores/settings';
   import { nextCustomId, TERMINAL_THEMES, type CustomPalette } from '../../utils/terminalThemes';
@@ -200,6 +201,7 @@
   // too. Handling it on the overlay (not window) keeps stopPropagation useful.
   function handleKeydown(e: KeyboardEvent) {
     if (e.key !== 'Escape') return;
+    claimKeyForDialog();
     e.stopPropagation();
     close();
   }

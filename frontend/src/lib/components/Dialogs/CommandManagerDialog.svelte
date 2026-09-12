@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { claimKeyForDialog } from '../../utils/dialogKeys';
   import * as App from '../../../../wailsjs/go/main/App';
   import type { main } from '../../../../wailsjs/go/models';
   import Select from '../common/Select.svelte';
@@ -290,6 +291,7 @@
   // close both. Handled on the overlay to keep stopPropagation meaningful.
   function handleKeydown(e: KeyboardEvent) {
     if (e.key !== 'Escape') return;
+    claimKeyForDialog();
     e.stopPropagation();
     if (editing) {
       cancelCommandEdit();

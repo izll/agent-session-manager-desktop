@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { keyClaimedByDialog } from '../../utils/dialogKeys';
   import { onMount, onDestroy, createEventDispatcher, tick } from 'svelte';
   import { claimMenu, releaseMenu } from '../../utils/openMenu';
   import AgentIcon from '../common/AgentIcon.svelte';
@@ -514,7 +515,7 @@
       // creates does not exist until Svelte's next tick, so a key held long
       // enough to auto-repeat gets past a DOM-only check and opens the dialog
       // twice — two terminals from one press.
-      if (tabBarDialogOpen() || document.querySelector('.dialog-overlay')) return;
+      if (tabBarDialogOpen() || document.querySelector('.dialog-overlay') || keyClaimedByDialog()) return;
       e.preventDefault();
       e.stopPropagation();
       if (e.repeat) return;
@@ -525,7 +526,7 @@
       return;
     }
     if (matchesShortcut(e, 'tab.new')) {
-      if (tabBarDialogOpen() || document.querySelector('.dialog-overlay')) return;
+      if (tabBarDialogOpen() || document.querySelector('.dialog-overlay') || keyClaimedByDialog()) return;
       e.preventDefault();
       e.stopPropagation();
       if (e.repeat) return;
@@ -538,7 +539,7 @@
     const wantsPrev = matchesShortcut(e, 'tab.prev');
     if (!wantsNext && !wantsPrev) return;
     if (windows.length <= 1) return;
-    if (document.querySelector('.dialog-overlay')) return;
+    if (document.querySelector('.dialog-overlay') || keyClaimedByDialog()) return;
 
     e.preventDefault();
     e.stopPropagation();

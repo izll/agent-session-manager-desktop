@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { claimKeyForDialog } from '../../utils/dialogKeys';
   import { autoFocusDialog } from '../../utils/dialogActions';
   import { createEventDispatcher } from 'svelte';
   import { selectedSessionId, loadSessions, selectWindow, sessions } from '../../stores/sessions';
@@ -126,6 +127,8 @@
 
   function handleKeydown(e: KeyboardEvent) {
     if (e.key === 'Escape') {
+      claimKeyForDialog();
+      e.stopPropagation();
       close();
     }
   }

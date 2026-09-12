@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { claimKeyForDialog } from '../../utils/dialogKeys';
   import { autoFocusDialog } from '../../utils/dialogActions';
   // Rendered into <body>: this dialog is opened from the sidebar, whose scroll
   // container carries transform/contain for a WebKitGTK compositing workaround.
@@ -77,6 +78,8 @@
 
   function handleKeydown(e: KeyboardEvent) {
     if (e.key === 'Escape') {
+      claimKeyForDialog();
+      e.stopPropagation();
       close();
     } else if (e.key === 'Tab') {
       e.preventDefault();

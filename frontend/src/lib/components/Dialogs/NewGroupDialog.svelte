@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { claimKeyForDialog } from '../../utils/dialogKeys';
   import { autoFocusDialog, dialogEnterBelongsToControl } from '../../utils/dialogActions';
   import { createEventDispatcher } from 'svelte';
   import { get } from 'svelte/store';
@@ -45,6 +46,8 @@
 
   function handleKeydown(e: KeyboardEvent) {
     if (e.key === 'Escape') {
+      claimKeyForDialog();
+      e.stopPropagation();
       close();
     } else if (e.key === 'Enter' && groupName.trim() && !dialogEnterBelongsToControl(e)) {
       handleCreate();

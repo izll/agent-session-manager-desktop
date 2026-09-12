@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { claimKeyForDialog } from '../../utils/dialogKeys';
   import { tick } from 'svelte';
   import { get } from 'svelte/store';
   import {
@@ -358,6 +359,7 @@
       e.preventDefault();
       void execute(filteredItems[cursor]);
     }
+    claimKeyForDialog();
     e.stopPropagation();
   }
 </script>

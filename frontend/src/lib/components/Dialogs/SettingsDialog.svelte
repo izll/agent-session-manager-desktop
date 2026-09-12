@@ -1,4 +1,9 @@
 <script lang="ts">
+  // What the editor buttons use when the setting is empty. Read once: PATH
+  // does not change under a running app.
+  let detectedEditor = '';
+  void App.DetectedEditor().then((name) => (detectedEditor = name)).catch(() => {});
+  import { claimKeyForDialog } from '../../utils/dialogKeys';
   import { autoFocusDialog } from '../../utils/dialogActions';
   import { loadActivities } from '../../stores/activities';
   import { setDictationHotkey } from '../../utils/dictationHotkey';
@@ -506,6 +511,8 @@
 
   function handleKeydown(e: KeyboardEvent) {
     if (e.key === 'Escape') {
+      claimKeyForDialog();
+      e.stopPropagation();
       close();
     }
   }
@@ -979,6 +986,22 @@
                 </div>
               {/if}
             {/if}
+
+              <div class="setting-item input-item">
+                <span class="setting-info">
+                  <span class="setting-label">{$t('settings.externalEditor')}</span>
+                  <span class="setting-desc">{$t('settings.externalEditorDesc')}</span>
+                </span>
+                <!-- The placeholder shows what was detected, so an empty field
+                     is visibly a choice rather than a gap. -->
+                <input
+                  type="text"
+                  class="setting-input"
+                  placeholder={detectedEditor || 'code'}
+                  value={$settings.externalEditor}
+                  on:input={(e) => saveSettings({ externalEditor: e.currentTarget.value })}
+                />
+              </div>
           </div>
 
           <!-- General rather than Maintenance: this switches a view on and off,

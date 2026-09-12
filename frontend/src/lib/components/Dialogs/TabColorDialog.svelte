@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { claimKeyForDialog } from '../../utils/dialogKeys';
   import { createEventDispatcher } from 'svelte';
   import { autoFocusDialog } from '../../utils/dialogActions';
   import { t } from '../../i18n';
@@ -124,7 +125,11 @@
   }
 
   function handleKeydown(event: KeyboardEvent) {
-    if (event.key === 'Escape') close();
+    if (event.key === 'Escape') {
+      claimKeyForDialog();
+      event.stopPropagation();
+      close();
+    }
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
       apply();

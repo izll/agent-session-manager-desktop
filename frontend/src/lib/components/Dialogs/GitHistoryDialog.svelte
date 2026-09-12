@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { claimKeyForDialog } from '../../utils/dialogKeys';
   /**
    * Browsing a repository's history.
    *
@@ -838,6 +839,7 @@
   function onKeydown(e: KeyboardEvent) {
     if (e.key === 'Escape') {
       e.preventDefault();
+      claimKeyForDialog();
       e.stopPropagation();
       close();
       return;

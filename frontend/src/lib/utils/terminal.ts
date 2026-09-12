@@ -1,5 +1,6 @@
 import { Terminal, type IDisposable } from '@xterm/xterm';
 import { matchesDictationHotkey } from './dictationHotkey';
+import { keyClaimedByDialog } from './dialogKeys';
 import { FitAddon } from '@xterm/addon-fit';
 import { SearchAddon } from '@xterm/addon-search';
 import { CanvasAddon } from '@xterm/addon-canvas';
@@ -521,7 +522,14 @@ export function createTerminal(
     //
     // Returning false keeps the key out of the pane while still letting it
     // bubble to whoever is listening above.
-    if (document.querySelector('.dialog-overlay')) {
+    // Two checks, and both are needed.
+    //
+    // The overlay is what covers a dialog sitting open: keys typed while it is
+    // on screen belong to it. But Escape CLOSES the dialog, and Svelte removes
+    // the overlay before this handler runs — so at the one moment that matters
+    // the DOM says no dialog is open, and the key lands in the pane. The claim
+    // survives that removal because a dialog sets it as it handles the key.
+    if (document.querySelector('.dialog-overlay') || keyClaimedByDialog()) {
       return false;
     }
 

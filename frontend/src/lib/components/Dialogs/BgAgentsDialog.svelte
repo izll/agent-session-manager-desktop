@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { claimKeyForDialog } from '../../utils/dialogKeys';
   import { onDestroy } from 'svelte';
   import { get } from 'svelte/store';
   import * as App from '../../../../wailsjs/go/main/App';
@@ -234,7 +235,11 @@
   }
 
   function handleKeydown(e: KeyboardEvent) {
-    if (e.key === 'Escape') close();
+    if (e.key === 'Escape') {
+      claimKeyForDialog();
+      e.stopPropagation();
+      close();
+    }
   }
 </script>
 

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { claimKeyForDialog } from '../../utils/dialogKeys';
   import { createEventDispatcher, tick } from 'svelte';
   import * as App from '../../../../wailsjs/go/main/App';
   import { ClipboardSetText } from '../../../../wailsjs/runtime/runtime';
@@ -94,7 +95,11 @@
 
   function handleKeydown(e: KeyboardEvent) {
     // Only the outer dialog: with the confirmation open, Escape belongs to it.
-    if (e.key === 'Escape' && !confirmClear) close();
+    if (e.key === 'Escape' && !confirmClear) {
+      claimKeyForDialog();
+      e.stopPropagation();
+      close();
+    }
   }
 
   let confirmClear = false;

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { claimKeyForDialog } from '../../utils/dialogKeys';
   import * as App from '../../../../wailsjs/go/main/App';
   import type { main } from '../../../../wailsjs/go/models';
   import { t } from '../../i18n';
@@ -199,6 +200,7 @@
       return;
     }
     if (e.key === 'Escape') {
+      claimKeyForDialog();
       e.stopPropagation();
       pending = null;
       return;
@@ -231,6 +233,7 @@
 
   function handleKeydown(e: KeyboardEvent) {
     if (e.key === 'Escape') {
+      claimKeyForDialog();
       e.stopPropagation();
       if (pending) {
         pending = null;

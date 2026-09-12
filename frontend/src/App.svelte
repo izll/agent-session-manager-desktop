@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { keyClaimedByDialog } from './lib/utils/dialogKeys';
   import { onMount, onDestroy, tick } from 'svelte';
   import { setDictationHotkey } from './lib/utils/dictationHotkey';
   import UsageRing from './lib/components/Sidebar/UsageRing.svelte';
@@ -738,7 +739,11 @@
     if (!shortcutId && favouriteSlotNo <= 0) return;
 
     // Don't handle shortcuts when any dialog is open
-    const dialogOpen = showCommandPalette || document.querySelector('.dialog-overlay') !== null;
+    // The overlay covers a dialog sitting open; the claim covers the moment
+    // one closes, when Escape has already removed the overlay but the key is
+    // still travelling. Without it a shortcut fired on the way out.
+    const dialogOpen = showCommandPalette ||
+      document.querySelector('.dialog-overlay') !== null || keyClaimedByDialog();
 
     // The palette and the command picker answer even from inside a dialog, so
     // they are handled before the dialog check swallows everything else.
