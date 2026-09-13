@@ -13,6 +13,9 @@ printf "${CYAN}•${R} Ran ${B}go test ./webhook/...${R} → ${GREEN}ok${R} ${DI
 printf "  Worth noting: the jitter uses math/rand without a seed, which is fine\n"
 printf "  here but will repeat across restarts. Say the word and I'll switch it\n"
 printf "  to crypto/rand.\n\n"
-printf "${DIM}▌${R} \n"
-printf "  ${DIM}gpt-5-codex medium · ~/projects/billing · main${R}\n"
+case "${1:-0}" in
+  1) printf "  ${DIM}reviewed 3 files · 2 suggestions · gpt-5-codex medium${R}\n" ;;
+  2) printf "  ${DIM}waiting on the test run before the next edit${R}\n" ;;
+  *) printf "  ${DIM}gpt-5-codex medium · ~/projects/billing · main${R}\n" ;;
+esac
 while :; do sleep 30; done

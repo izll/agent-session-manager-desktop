@@ -13,4 +13,9 @@ printf "${BLUE}│${R} ${ORANGE}❯ 1. Yes${R}                                  
 printf "${BLUE}│${R}   2. Yes, and don't ask again for psql commands                                                                                                                                                                          ${BLUE}│${R}\n"
 printf "${BLUE}│${R}   3. No, tell Claude what to do differently ${DIM}(esc)${R}                                                                                                                                                                        ${BLUE}│${R}\n"
 printf "${BLUE}╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯${R}\n"
+case "${1:-0}" in
+  1) printf "\n  ${DIM}Waiting on you: run the migration, or say what to do instead.${R}\n" ;;
+  2) printf "\n  ${DIM}Held for approval — the index change touches a live table.${R}\n" ;;
+  *) printf "\n  ${DIM}Waiting for your answer — 1 to run it, 3 to redirect.${R}\n" ;;
+esac
 while :; do sleep 30; done

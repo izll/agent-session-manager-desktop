@@ -44,7 +44,7 @@ CONTENT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/scripts/demo-content"
 declare -A RUNNING_OUTPUT=(
   [d51]="bash $CONTENT/claude_busy.sh"
   [d3]="bash $CONTENT/term_test.sh"
-  [d4]="bash $CONTENT/claude_main.sh"
+  [d4]="bash $CONTENT/claude_busy.sh"
   [d5]="bash $CONTENT/codex_tab.sh"
   [d6]="bash $CONTENT/term_build.sh"
   [d7]="bash $CONTENT/claude_main.sh"
@@ -382,14 +382,29 @@ for s in "${!RUNNING_OUTPUT[@]}"; do
     # here they drifted: a tab read "codex review" under a Claude icon.
     while IFS=$'\t' read -r sid widx wname wagent; do
       [[ "$sid" == "$s" ]] || continue
+      # Rotate within an agent as well as between them. The sidebar shows each
+      # session's last line, so six Claude tabs running the same transcript
+      # gave six identical status lines — the list read as one session repeated.
       case "$wagent" in
-        claude) tab=claude_main.sh ;;
-        codex)  tab=codex_tab.sh ;;
-        gemini) tab=codex_tab.sh ;;
-        *)      tab=term_test.sh ;;
+        claude)
+          case $(( widx % 3 )) in
+            0) tab=claude_main.sh ;;
+            1) tab=claude_waiting.sh ;;
+            *) tab=claude_busy.sh ;;
+          esac
+          variant=$(( widx / 3 )) ;;
+        codex|gemini) tab=codex_tab.sh; variant=$(( widx % 3 )) ;;
+        *)
+          case $(( widx % 3 )) in
+            0) tab=term_test.sh ;;
+            1) tab=term_build.sh ;;
+            *) tab=train.sh ;;
+          esac
+          variant=$(( widx / 3 )) ;;
       esac
       tmux new-window -d -t "$s:$widx" -n "$wname" \
-        -c "$PROJECTS/${PATHS[$s]}" "bash $CONTENT/$tab" 2>/dev/null
+        -c "$PROJECTS/${PATHS[$s]}" \
+        "bash $CONTENT/$tab $variant" 2>/dev/null
       tmux resize-window -t "$s:$widx" -x "$DEMO_COLS" -y "$DEMO_ROWS" 2>/dev/null
     done < "$DEMO/tabnames"
 done
