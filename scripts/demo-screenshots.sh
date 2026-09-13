@@ -42,6 +42,7 @@ CONTENT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/scripts/demo-content"
 # are transcripts of the work the agents actually do.
 CONTENT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/scripts/demo-content"
 declare -A RUNNING_OUTPUT=(
+  [d51]="bash $CONTENT/claude_busy.sh"
   [d3]="bash $CONTENT/term_test.sh"
   [d4]="bash $CONTENT/claude_main.sh"
   [d5]="bash $CONTENT/codex_tab.sh"
@@ -108,6 +109,7 @@ declare -A REPOS=(
   [budget-2026]='initial commit'         [form-builder]='initial commit'
   [tui-manager]='initial commit'         [discord-bot]='initial commit'
   [pool-booking]='initial commit'        [vm-manager]='initial commit'
+  [pbx]='add batching API'
   [misc]='initial commit'
 )
 DIRTY="api-gateway ml-pipeline billing voice-relay vm-manager"
@@ -185,8 +187,9 @@ groups = [{'id':'g1','name':'Work','collapsed':False},
 # Distinct name colours, and NO background colour: the session colour tints the
 # card's header band, and a saturated background behind a card of small text is
 # tiring to read.
-colours = {'api-gateway':'#7dd3fc','auth-service':'#a78bfa','billing':'#fbbf24',
-           'web-dashboard':'#34d399','voice-relay':'#f472b6','search-index':'#60a5fa',
+colours = {'api-gateway':'#7dd3fc','asmgr-desktop':'#7dd3fc','Web ERP':'#fbbf24',
+           'claude-usage':'#f9a8d4','pbx':'#86efac','auth-service':'#a78bfa','billing':'#fbbf24',
+           'web-dashboard':'#34d399','voice-relay':'#c4b5fd','search-index':'#60a5fa',
            'ml-pipeline':'#fb923c','feature-store':'#22d3ee','docs-site':'#c4b5fd',
            'infra-terraform':'#94a3b8','release-notes':'#f87171','cad-viewer':'#fdba74',
            'market-watch':'#86efac','shell':'#e2e8f0','portal-gateway':'#93c5fd',
@@ -238,18 +241,14 @@ def T(*names):
 
 CL, CX, GM, TM = 'claude', 'codex', 'gemini', 'terminal'
 instances = [
-    mk(1,'cad-viewer',CL,'stopped','cad-viewer','g1',False,
-       T(('build',TM),('review',GM))),
-    mk(2,'market-watch',CL,'stopped','market-watch','g2',False,T(('Terminal',TM))),
-    mk(3,'shell',TM,'running','misc','g1',True,T(('Terminal',TM),('Terminal',TM))),
-    mk(4,'editor-bridge',CL,'running','editor-bridge','g2',True,
+    mk(4,'asmgr-desktop',CL,'running','editor-bridge','g2',True,
        T(('cmd',TM),('claude tab',CL),('save test',CL),('codex tab',CX),
          ('claude tab',CL),('gemini test',GM))),
     mk(5,'cad-suite',CL,'running','cad-viewer','g1',True,
        T(('Terminal',TM),('codex tab',CX),('claude tab',CL),('Terminal',TM),
          ('codex tab',CX),('Terminal',TM),('Terminal',TM),('nesting',CL),
          ('claude tab',CL),('nesting codex',CX))),
-    mk(6,'billing',CL,'running','billing','g4',True,
+    mk(6,'Web ERP',CL,'running','billing','g4',True,
        T(('backend',TM),('database',CL),('frontend',TM),('port review',CL),
          ('codex',CX),('crawling',CL))),
     mk(7,'voice-relay',CL,'running','voice-relay','',True,
@@ -257,7 +256,13 @@ instances = [
          ('claude tab',CL),('claude tab sonnet',CL),('codex tab',CX))),
     mk(8,'portal-gateway',CL,'running','portal-gateway','g2',True,
        T(('claude tab',CL),('codex tab',CX),('Terminal',TM))),
-    mk(9,'usage-widget',CL,'running','usage-widget','g1',True,T(('Terminal',TM))),
+    mk(9,'claude-usage',CL,'running','usage-widget','g1',True,T(('Terminal',TM))),
+    mk(51,'pbx',CL,'running','pbx','g1',True,
+       T(('claude tab',CL),('Terminal',TM),('codex review',CX))),
+    mk(1,'cad-viewer',CL,'stopped','cad-viewer','g1',False,
+       T(('build',TM),('review',GM))),
+    mk(2,'market-watch',CL,'stopped','market-watch','g2',False,T(('Terminal',TM))),
+    mk(3,'shell',TM,'running','misc','g1',True,T(('Terminal',TM),('Terminal',TM))),
     mk(10,'notes-app',CL,'stopped','misc','g2',False,
        T(('Terminal',TM),('codex tab',CX),('codex tab',CX))),
     mk(11,'dictation',CL,'running','dictation','g2',True,T(('cmd',TM))),
@@ -341,13 +346,13 @@ JSON
 # The pane the screenshots are taken in, in characters. Measured from the
 # window the app opens at 2560x1385: the terminal area is about 150 columns
 # by 60 rows at the default font size.
-DEMO_COLS=150
+DEMO_COLS=222
 DEMO_ROWS=60
 
 echo "==> starting tmux sessions for the running ones"
 # The app looks up a session's multiplexer session by its instance id
 # (Instance.TmuxSessionName returns the id), so the names must match d1, d2, ...
-declare -A PATHS=([d3]=misc [d4]=editor-bridge [d5]=cad-viewer [d6]=billing
+declare -A PATHS=([d51]=pbx [d3]=misc [d4]=editor-bridge [d5]=cad-viewer [d6]=billing
                   [d7]=voice-relay [d8]=portal-gateway [d9]=usage-widget
                   [d11]=dictation [d12]=company-lookup [d13]=push-notify
                   [d14]=home-hub [d15]=grid-sim [d18]=admin-console
@@ -357,7 +362,7 @@ declare -A PATHS=([d3]=misc [d4]=editor-bridge [d5]=cad-viewer [d6]=billing
 # A tab in the store is only half of one: the app reads its content from a
 # multiplexer window of the same index, and without it the tab strip is there
 # but every tab opens on nothing.
-declare -A TAB_COUNT=([d3]=2 [d4]=6 [d5]=10 [d6]=6 [d7]=7 [d8]=3 [d9]=1
+declare -A TAB_COUNT=([d51]=3 [d3]=2 [d4]=6 [d5]=10 [d6]=6 [d7]=7 [d8]=3 [d9]=1
                       [d11]=1 [d12]=2 [d13]=2 [d14]=1 [d15]=2 [d18]=1
                       [d38]=1 [d40]=0 [d41]=0 [d44]=0 [d45]=2 [d46]=0
                       [d47]=4 [d48]=4)
@@ -374,7 +379,7 @@ for s in "${!RUNNING_OUTPUT[@]}"; do
   tmux set-option -t "$s" -w window-size manual 2>/dev/null
   # -n names the window. Without it every tab reads "bash", which is both
   # wrong and the one thing a screenshot of a multi-agent session must not say.
-  declare -a TAB_NAMES=('claude tab' 'codex tab' 'Terminal' 'eval' 'tests' 'notebook')
+  declare -a TAB_NAMES=('claude tab' 'codex tab' 'Terminal' 'eval' 'tests' 'codex review')
   for ((w = 1; w <= ${TAB_COUNT[$s]:-0}; w++)); do
     tab="${TAB_CONTENT[$(( (w % 6) + 1 ))]:-term_test.sh}"
     tmux new-window -d -t "$s:$w" -n "${TAB_NAMES[$(( (w - 1) % 6 ))]}" \
