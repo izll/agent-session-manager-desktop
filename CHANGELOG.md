@@ -6,6 +6,14 @@ Entries describe what changed for someone using the app. Internal refactoring,
 test and CI work is left out unless it changed behaviour. Dates are release
 dates; the format follows [Keep a Changelog](https://keepachangelog.com).
 
+## 1.0.1 — 2026-09-13
+
+### Fixed
+
+- **Four strings appeared in English in eighteen languages.** The unsaved-notes
+  warning and two update messages had never been translated; all twenty
+  languages are complete now.
+
 ## 1.0.0 — 2026-09-12
 
 The version number catching up with the program.
