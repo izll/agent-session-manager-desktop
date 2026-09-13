@@ -146,7 +146,12 @@ def mk(i, name, agent, status, repo, gid='', fav=False):
              path=f'{P}/{repo}', group_id=gid, color=colours.get(name,''),
              bg_color='', full_row_color=False, favorite=fav,
              resume_session_id='', base_commit_sha='')
-    for k in ('followedWindows','windows','notes'):
+    # snake_case, as the store writes them. Spelled only in camelCase these
+    # popped nothing, so every demo session inherited the template's real
+    # tabs - a tab name from the author's own config reached a screenshot
+    # meant to contain nothing real.
+    for k in ('followed_windows', 'followedWindows', 'windows',
+              'tab_order', 'notes', 'main_window_stopped'):
         o.pop(k, None)
     return o
 
