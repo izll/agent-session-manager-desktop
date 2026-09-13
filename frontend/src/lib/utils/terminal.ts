@@ -1,6 +1,7 @@
 import { Terminal, type IDisposable } from '@xterm/xterm';
 import { matchesDictationHotkey } from './dictationHotkey';
 import { keyClaimedByDialog } from './dialogKeys';
+import { guardImeCommits } from './imeCommit';
 import { FitAddon } from '@xterm/addon-fit';
 import { SearchAddon } from '@xterm/addon-search';
 import { CanvasAddon } from '@xterm/addon-canvas';
@@ -441,6 +442,11 @@ export function createTerminal(
 
   terminal.open(container);
 
+  // Accented characters from the input method were sent two and three times.
+  // See imeCommit.ts.
+  const unguardImeCommits = guardImeCommits(container, terminal,
+    () => !(document.querySelector('.dialog-overlay') || keyClaimedByDialog()));
+
   // Renderer chosen in Settings (canvas | webgl | dom). See loadRenderer().
   loadRenderer(terminal);
 
@@ -654,6 +660,7 @@ export function createTerminal(
       container.removeEventListener('mousedown', onMouseDown, true);
       container.removeEventListener('mouseup', onMouseUp, true);
       container.removeEventListener('wheel', onWheel, true);
+      unguardImeCommits();
       // xterm's dispose() intermittently throws from its internal linkifier
       // ("this._linkifier2.onShowLinkUnderline" is undefined) when a tab is
       // torn down right after an abrupt WebSocket close (1005). The throw
