@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
+E=$'\033'; R="${E}[0m"; GREY="${E}[38;5;245m"; GREEN="${E}[38;5;114m"
 printf '\033[2J\033[H'
-echo "$ go test ./... -run Refund"
-echo "ok  	billing/internal/money	0.019s"
-echo "ok  	billing/internal/ledger	0.204s"
-echo "ok  	billing/webhook	0.311s"
-echo ""
-echo "$ "
+printf "${GREY}\$${R} go test ./... -run Refund\n"
+printf "${GREEN}ok${R}  \tbilling/internal/money\t0.019s\n"
+printf "${GREEN}ok${R}  \tbilling/internal/ledger\t0.204s\n"
+printf "${GREEN}ok${R}  \tbilling/webhook\t0.311s\n\n"
+printf "${GREY}\$${R} "
 while :; do sleep 30; done
