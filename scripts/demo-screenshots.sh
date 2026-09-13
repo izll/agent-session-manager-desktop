@@ -66,10 +66,6 @@ declare -A RUNNING_OUTPUT=(
   [d48]="bash $CONTENT/train.sh"
 )
 
-declare -A TAB_CONTENT=(
-  [1]="claude_main.sh" [2]="codex_tab.sh" [3]="term_build.sh"
-  [4]="claude_waiting.sh" [5]="term_test.sh" [6]="train.sh"
-)
 
 clean() {
   for s in "${!RUNNING_OUTPUT[@]}"; do tmux kill-session -t "$s" 2>/dev/null; done
@@ -170,7 +166,7 @@ echo "==> writing sessions.json"
 # then overwritten with invented values. Reading the real file is safe: nothing
 # from it survives into the demo except the schema.
 REAL_STORE="$HOME/.config/agent-session-manager-desktop/sessions.json" \
-CONFIG="$CONFIG" PROJECTS="$PROJECTS" python3 - <<'PY'
+CONFIG="$CONFIG" PROJECTS="$PROJECTS" DEMO="$DEMO" python3 - <<'PY'
 import json, os
 src = json.load(open(os.environ['REAL_STORE']))
 tmpl = src['instances'][0]
@@ -252,8 +248,8 @@ instances = [
        T(('backend',TM),('database',CL),('frontend',TM),('port review',CL),
          ('codex',CX),('crawling',CL))),
     mk(7,'voice-relay',CL,'running','voice-relay','',True,
-       T(('claude tab',CL),('Terminal',TM),('claude tab',CL),('claude tab',CL),
-         ('claude tab',CL),('claude tab sonnet',CL),('codex tab',CX))),
+       T(('claude tab',CL),('server',TM),('codex tab',CX),('migrations',CL),
+         ('tests',TM),('claude tab sonnet',CL),('codex review',CX))),
     mk(8,'portal-gateway',CL,'running','portal-gateway','g2',True,
        T(('claude tab',CL),('codex tab',CX),('Terminal',TM))),
     mk(9,'claude-usage',CL,'running','usage-widget','g1',True,T(('Terminal',TM))),
@@ -322,6 +318,10 @@ json.dump({'schema_version': src['schema_version'], 'revision': 1,
            'instances': instances, 'groups': groups,
            'settings': settings, 'trash': []},
           open(os.path.join(os.environ['CONFIG'], 'sessions.json'), 'w'), indent=2)
+with open(os.path.join(os.environ['DEMO'], 'tabnames'), 'w') as fh:
+    for inst in instances:
+        for w in inst.get('followed_windows', []):
+            fh.write(f"{inst['id']}\t{w['index']}\t{w['name']}\t{w['agent']}\n")
 print(f"    {len(instances)} sessions, {len(groups)} groups, 3 favourites")
 PY
 
@@ -377,15 +377,21 @@ for s in "${!RUNNING_OUTPUT[@]}"; do
   # Manual, or tmux drags the window back to the size of whichever client
   # attaches next.
   tmux set-option -t "$s" -w window-size manual 2>/dev/null
-  # -n names the window. Without it every tab reads "bash", which is both
-  # wrong and the one thing a screenshot of a multi-agent session must not say.
-  declare -a TAB_NAMES=('claude tab' 'codex tab' 'Terminal' 'eval' 'tests' 'codex review')
-  for ((w = 1; w <= ${TAB_COUNT[$s]:-0}; w++)); do
-    tab="${TAB_CONTENT[$(( (w % 6) + 1 ))]:-term_test.sh}"
-    tmux new-window -d -t "$s:$w" -n "${TAB_NAMES[$(( (w - 1) % 6 ))]}" \
-      -c "$PROJECTS/${PATHS[$s]}" "bash $CONTENT/$tab" 2>/dev/null
-    tmux resize-window -t "$s:$w" -x "$DEMO_COLS" -y "$DEMO_ROWS" 2>/dev/null
-  done
+    # Name and content both come from the store's own tab list, so what a tab
+    # says and what its icon shows cannot disagree. Held in a separate array
+    # here they drifted: a tab read "codex review" under a Claude icon.
+    while IFS=$'\t' read -r sid widx wname wagent; do
+      [[ "$sid" == "$s" ]] || continue
+      case "$wagent" in
+        claude) tab=claude_main.sh ;;
+        codex)  tab=codex_tab.sh ;;
+        gemini) tab=codex_tab.sh ;;
+        *)      tab=term_test.sh ;;
+      esac
+      tmux new-window -d -t "$s:$widx" -n "$wname" \
+        -c "$PROJECTS/${PATHS[$s]}" "bash $CONTENT/$tab" 2>/dev/null
+      tmux resize-window -t "$s:$widx" -x "$DEMO_COLS" -y "$DEMO_ROWS" 2>/dev/null
+    done < "$DEMO/tabnames"
 done
 sleep 3
 
