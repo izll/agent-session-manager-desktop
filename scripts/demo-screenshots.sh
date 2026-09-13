@@ -338,6 +338,12 @@ cat > "$PROJECTS/billing/.taskmaster/tasks.json" <<'JSON'
 ]}
 JSON
 
+# The pane the screenshots are taken in, in characters. Measured from the
+# window the app opens at 2560x1385: the terminal area is about 150 columns
+# by 60 rows at the default font size.
+DEMO_COLS=150
+DEMO_ROWS=60
+
 echo "==> starting tmux sessions for the running ones"
 # The app looks up a session's multiplexer session by its instance id
 # (Instance.TmuxSessionName returns the id), so the names must match d1, d2, ...
@@ -358,7 +364,14 @@ declare -A TAB_COUNT=([d3]=2 [d4]=6 [d5]=10 [d6]=6 [d7]=7 [d8]=3 [d9]=1
 for s in "${!RUNNING_OUTPUT[@]}"; do
   script="$DEMO/s_$s.sh"
   printf '%s\n' "${RUNNING_OUTPUT[$s]}" > "$script"
-  tmux new-session -d -s "$s" -n "claude" -c "$PROJECTS/${PATHS[$s]}" "bash $script" 2>/dev/null
+  # -x/-y size the window for the pane it will be photographed in. Without
+  # them tmux opens at its 80x24 default, the transcript wraps short and the
+  # bottom two-thirds of the terminal sit empty in every screenshot.
+  tmux new-session -d -s "$s" -n "claude" -x "$DEMO_COLS" -y "$DEMO_ROWS" \
+    -c "$PROJECTS/${PATHS[$s]}" "bash $script" 2>/dev/null
+  # Manual, or tmux drags the window back to the size of whichever client
+  # attaches next.
+  tmux set-option -t "$s" -w window-size manual 2>/dev/null
   # -n names the window. Without it every tab reads "bash", which is both
   # wrong and the one thing a screenshot of a multi-agent session must not say.
   declare -a TAB_NAMES=('claude tab' 'codex tab' 'Terminal' 'eval' 'tests' 'notebook')
@@ -366,6 +379,7 @@ for s in "${!RUNNING_OUTPUT[@]}"; do
     tab="${TAB_CONTENT[$(( (w % 6) + 1 ))]:-term_test.sh}"
     tmux new-window -d -t "$s:$w" -n "${TAB_NAMES[$(( (w - 1) % 6 ))]}" \
       -c "$PROJECTS/${PATHS[$s]}" "bash $CONTENT/$tab" 2>/dev/null
+    tmux resize-window -t "$s:$w" -x "$DEMO_COLS" -y "$DEMO_ROWS" 2>/dev/null
   done
 done
 sleep 3
