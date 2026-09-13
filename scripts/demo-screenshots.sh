@@ -37,19 +37,34 @@ APP="$REPO_ROOT/build/bin/asmgr-desktop"
 # on an answer — so the sidebar status lines and the terminal both read like a
 # working day.
 CONTENT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/scripts/demo-content"
+# What the running sessions show. Echo loops made the screenshots useless: a
+# terminal repeating one line says nothing about what this app is for. These
+# are transcripts of the work the agents actually do.
+CONTENT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/scripts/demo-content"
 declare -A RUNNING_OUTPUT=(
-  [d1]="bash $CONTENT/claude_main.sh"
-  [d2]="bash $CONTENT/codex_tab.sh"
-  [d3]="bash $CONTENT/claude_waiting.sh"
-  [d4]="bash $CONTENT/term_build.sh"
-  [d5]="bash $CONTENT/term_test.sh"
+  [d3]="bash $CONTENT/term_test.sh"
+  [d4]="bash $CONTENT/claude_main.sh"
+  [d5]="bash $CONTENT/codex_tab.sh"
+  [d6]="bash $CONTENT/term_build.sh"
   [d7]="bash $CONTENT/claude_main.sh"
-  [d8]="bash $CONTENT/codex_tab.sh"
-  [d10]="bash $CONTENT/term_test.sh"
+  [d8]="bash $CONTENT/claude_waiting.sh"
+  [d9]="bash $CONTENT/term_test.sh"
+  [d11]="bash $CONTENT/claude_waiting.sh"
+  [d12]="bash $CONTENT/codex_tab.sh"
+  [d13]="bash $CONTENT/term_test.sh"
+  [d14]="bash $CONTENT/claude_main.sh"
+  [d15]="bash $CONTENT/codex_tab.sh"
+  [d18]="bash $CONTENT/term_build.sh"
+  [d38]="bash $CONTENT/claude_main.sh"
+  [d40]="bash $CONTENT/term_test.sh"
+  [d41]="bash $CONTENT/claude_waiting.sh"
+  [d44]="bash $CONTENT/term_test.sh"
+  [d45]="bash $CONTENT/codex_tab.sh"
+  [d46]="bash $CONTENT/term_build.sh"
+  [d47]="bash $CONTENT/term_test.sh"
+  [d48]="bash $CONTENT/train.sh"
 )
 
-# Tab windows get their own transcripts, so moving between tabs is not the same
-# screen twice.
 declare -A TAB_CONTENT=(
   [1]="claude_main.sh" [2]="codex_tab.sh" [3]="term_build.sh"
   [4]="claude_waiting.sh" [5]="term_test.sh" [6]="train.sh"
@@ -76,13 +91,26 @@ rm -rf "$DEMO"; mkdir -p "$CONFIG" "$PROJECTS"
 # Ten repositories, three of them with uncommitted work, so the dashboard's
 # "dirty repositories" count is not zero.
 declare -A REPOS=(
-  [api-gateway]='add rate limiting'   [auth-service]='rotate signing keys'
-  [billing]='add refund handling'     [web-dashboard]='fix retry banner'
-  [mobile-app]='initial commit'       [search-index]='initial commit'
-  [ml-pipeline]='add training script' [feature-store]='initial commit'
-  [docs-site]='initial commit'        [infra]='initial commit'
+  [api-gateway]='add rate limiting'      [auth-service]='rotate signing keys'
+  [billing]='add refund handling'        [web-dashboard]='fix retry banner'
+  [voice-relay]='initial commit'         [search-index]='initial commit'
+  [ml-pipeline]='add training script'    [feature-store]='initial commit'
+  [docs-site]='initial commit'           [infra]='initial commit'
+  [cad-viewer]='initial commit'          [market-watch]='initial commit'
+  [portal-gateway]='initial commit'      [usage-widget]='initial commit'
+  [editor-bridge]='initial commit'       [dictation]='initial commit'
+  [company-lookup]='initial commit'      [push-notify]='initial commit'
+  [home-hub]='initial commit'            [grid-sim]='initial commit'
+  [agent-runner]='initial commit'        [user-stats]='initial commit'
+  [admin-console]='initial commit'       [newsroom]='initial commit'
+  [inventory]='initial commit'           [session-manager]='initial commit'
+  [social-sync]='initial commit'         [home-inventory]='initial commit'
+  [budget-2026]='initial commit'         [form-builder]='initial commit'
+  [tui-manager]='initial commit'         [discord-bot]='initial commit'
+  [pool-booking]='initial commit'        [vm-manager]='initial commit'
+  [misc]='initial commit'
 )
-DIRTY="api-gateway ml-pipeline billing"
+DIRTY="api-gateway ml-pipeline billing voice-relay vm-manager"
 
 for name in "${!REPOS[@]}"; do
   d="$PROJECTS/$name"; mkdir -p "$d/src"
@@ -146,17 +174,35 @@ src = json.load(open(os.environ['REAL_STORE']))
 tmpl = src['instances'][0]
 P = os.environ['PROJECTS']
 
-groups = [{'id':'g1','name':'Backend','collapsed':True},
-          {'id':'g2','name':'Frontend','collapsed':True},
-          {'id':'g3','name':'Data & ML','collapsed':False}]
+groups = [{'id':'g1','name':'Work','collapsed':False},
+          {'id':'g2','name':'Side projects','collapsed':False},
+          {'id':'g3','name':'Misc','collapsed':False},
+          {'id':'g4','name':'Platform','collapsed':False},
+          {'id':'g5','name':'Games','collapsed':False},
+          {'id':'g6','name':'Parked','collapsed':False},
+          {'id':'g7','name':'Shared','collapsed':False}]
 
 # Distinct name colours, and NO background colour: the session colour tints the
 # card's header band, and a saturated background behind a card of small text is
 # tiring to read.
 colours = {'api-gateway':'#7dd3fc','auth-service':'#a78bfa','billing':'#fbbf24',
-           'web-dashboard':'#34d399','mobile-app':'#f472b6','search-index':'#60a5fa',
+           'web-dashboard':'#34d399','voice-relay':'#f472b6','search-index':'#60a5fa',
            'ml-pipeline':'#fb923c','feature-store':'#22d3ee','docs-site':'#c4b5fd',
-           'infra-terraform':'#94a3b8','release-notes':'#f87171'}
+           'infra-terraform':'#94a3b8','release-notes':'#f87171','cad-viewer':'#fdba74',
+           'market-watch':'#86efac','shell':'#e2e8f0','portal-gateway':'#93c5fd',
+           'usage-widget':'#f9a8d4','editor-bridge':'#a5b4fc','dictation':'#fca5a5',
+           'company-lookup':'#5eead4','push-notify':'#d8b4fe','home-hub':'#fde047',
+           'grid-sim':'#67e8f9','agent-runner':'#bef264','user-stats':'#fdba74',
+           'admin-console':'#c7d2fe','lookup-grab':'#f0abfc','newsroom':'#7dd3fc',
+           'aider-trial':'#94a3b8','opencode-trial':'#94a3b8','amazonq-trial':'#94a3b8',
+           'inventory':'#fbbf24','crawl-test':'#94a3b8','session-manager':'#a78bfa',
+           'social-sync':'#60a5fa','checklists':'#94a3b8','disk-tree':'#94a3b8',
+           'disk-tree-gen':'#94a3b8','display-switch':'#94a3b8','public-site':'#94a3b8',
+           'codex-trial':'#94a3b8','documents':'#94a3b8','downloads':'#94a3b8',
+           'legacy-api':'#94a3b8','home-inventory':'#34d399','agent-comms':'#94a3b8',
+           'folder-perms':'#94a3b8','budget-2026':'#fbbf24','form-builder':'#c4b5fd',
+           'election-map':'#94a3b8','tui-manager':'#a78bfa','discord-bot':'#bef264',
+           'pool-booking':'#5eead4','vm-manager':'#93c5fd'}
 
 def mk(i, name, agent, status, repo, gid='', fav=False, tabs=()):
     o = dict(tmpl)
@@ -184,33 +230,86 @@ def mk(i, name, agent, status, repo, gid='', fav=False, tabs=()):
 
 # Tab shapes follow how the app is actually used: several agents and a shell
 # in one session, not a single agent on its own.
+# The shape of a real working set: a few dozen sessions, a third of them
+# running, most with several tabs. A demo of five empty sessions says nothing
+# about what this is for.
+def T(*names):
+    return [(n, a) for n, a in names]
+
+CL, CX, GM, TM = 'claude', 'codex', 'gemini', 'terminal'
 instances = [
-    mk(1,'api-gateway','claude','running','api-gateway','g1',True,
-       [('claude tab','claude'),('codex tab','codex'),('Terminal','terminal'),
-        ('rate limits','claude')]),
-    mk(2,'auth-service','codex','running','auth-service','g1',False,
-       [('server','terminal'),('claude tab','claude'),('codex tab','codex')]),
-    mk(3,'billing','claude','running','billing','g1',False,
-       [('refunds','claude'),('Terminal','terminal'),('codex tab','codex'),
-        ('claude tab','claude'),('tests','terminal')]),
-    mk(4,'web-dashboard','claude','running','web-dashboard','g2',True,
-       [('claude tab','claude'),('vite','terminal'),('codex tab','codex')]),
-    mk(5,'mobile-app','gemini','running','mobile-app','g2',False,
-       [('gemini tab','gemini'),('Terminal','terminal')]),
-    mk(6,'search-index','aider','stopped','search-index','g2',False,
-       [('aider tab','aider'),('Terminal','terminal')]),
-    mk(7,'ml-pipeline','claude','running','ml-pipeline','g3',True,
-       [('training','terminal'),('claude tab','claude'),('codex tab','codex'),
-        ('eval','claude'),('Terminal','terminal'),('notebook','terminal')]),
-    mk(8,'feature-store','codex','running','feature-store','g3',False,
-       [('codex tab','codex'),('Terminal','terminal'),('claude tab','claude')]),
-    mk(9,'docs-site','opencode','stopped','docs-site','g3',False,
-       [('opencode tab','opencode')]),
-    mk(10,'infra-terraform','terminal','running','infra','',False,
-       [('plan','terminal'),('claude tab','claude')]),
-    mk(11,'release-notes','claude','stopped','docs-site','',False,
-       [('claude tab','claude'),('Terminal','terminal')]),
+    mk(1,'cad-viewer',CL,'stopped','cad-viewer','g1',False,
+       T(('build',TM),('review',GM))),
+    mk(2,'market-watch',CL,'stopped','market-watch','g2',False,T(('Terminal',TM))),
+    mk(3,'shell',TM,'running','misc','g1',True,T(('Terminal',TM),('Terminal',TM))),
+    mk(4,'editor-bridge',CL,'running','editor-bridge','g2',True,
+       T(('cmd',TM),('claude tab',CL),('save test',CL),('codex tab',CX),
+         ('claude tab',CL),('gemini test',GM))),
+    mk(5,'cad-suite',CL,'running','cad-viewer','g1',True,
+       T(('Terminal',TM),('codex tab',CX),('claude tab',CL),('Terminal',TM),
+         ('codex tab',CX),('Terminal',TM),('Terminal',TM),('nesting',CL),
+         ('claude tab',CL),('nesting codex',CX))),
+    mk(6,'billing',CL,'running','billing','g4',True,
+       T(('backend',TM),('database',CL),('frontend',TM),('port review',CL),
+         ('codex',CX),('crawling',CL))),
+    mk(7,'voice-relay',CL,'running','voice-relay','',True,
+       T(('claude tab',CL),('Terminal',TM),('claude tab',CL),('claude tab',CL),
+         ('claude tab',CL),('claude tab sonnet',CL),('codex tab',CX))),
+    mk(8,'portal-gateway',CL,'running','portal-gateway','g2',True,
+       T(('claude tab',CL),('codex tab',CX),('Terminal',TM))),
+    mk(9,'usage-widget',CL,'running','usage-widget','g1',True,T(('Terminal',TM))),
+    mk(10,'notes-app',CL,'stopped','misc','g2',False,
+       T(('Terminal',TM),('codex tab',CX),('codex tab',CX))),
+    mk(11,'dictation',CL,'running','dictation','g2',True,T(('cmd',TM))),
+    mk(12,'company-lookup',CL,'running','company-lookup','g1',True,
+       T(('codex tab',CX),('Terminal',TM))),
+    mk(13,'push-notify',CL,'running','push-notify','g1',True,
+       T(('Terminal',TM),('codex',CX))),
+    mk(14,'home-hub',CL,'running','home-hub','g2',True,T(('claude 2',CL))),
+    mk(15,'grid-sim',CL,'running','grid-sim','g5',True,
+       T(('Terminal',TM),('codex tab',CX))),
+    mk(16,'agent-runner',CL,'stopped','agent-runner','g4',True,T(('Terminal',TM))),
+    mk(17,'user-stats',CL,'stopped','user-stats','g1',True,T(('Terminal',TM))),
+    mk(18,'admin-console',CL,'running','admin-console','g2',True,T(('Terminal',TM))),
+    mk(19,'lookup-grab',CL,'stopped','company-lookup','g2',True,
+       T(('codex tab',CX),('Terminal',TM))),
+    mk(20,'newsroom',CL,'stopped','newsroom','g2',True),
+    mk(21,'aider-trial','aider','stopped','misc','g1'),
+    mk(22,'opencode-trial','opencode','stopped','misc','g1'),
+    mk(23,'amazonq-trial','amazonq','stopped','misc','g1'),
+    mk(24,'inventory',CL,'stopped','inventory','g4',True,
+       T(('Terminal',TM),('codex tab',CX))),
+    mk(25,'crawl-test',CL,'stopped','misc','g4'),
+    mk(26,'session-manager',CL,'stopped','session-manager','g2'),
+    mk(27,'social-sync',CL,'stopped','social-sync','g3',True,T(('Terminal',TM))),
+    mk(28,'push-notify-old',CL,'stopped','push-notify','g6'),
+    mk(29,'checklists',CL,'stopped','misc','g4'),
+    mk(30,'disk-tree',CL,'stopped','misc','g6',False,T(('cmd',TM))),
+    mk(31,'disk-tree-gen',CL,'stopped','misc','g6'),
+    mk(32,'display-switch',CL,'stopped','misc','g6'),
+    mk(33,'public-site',GM,'stopped','misc','g2'),
+    mk(34,'codex-trial',CX,'stopped','misc','g1'),
+    mk(35,'documents',CL,'stopped','misc','g2'),
+    mk(36,'downloads',CL,'stopped','misc','g2'),
+    mk(37,'legacy-api',CL,'stopped','misc',''),
+    mk(38,'home-inventory',CL,'running','home-inventory','',True,
+       T(('claude test 2',CL))),
+    mk(39,'agent-comms',CL,'stopped','misc','g1'),
+    mk(40,'folder-perms',CL,'running','misc','g1'),
+    mk(41,'budget-2026',CL,'running','budget-2026','g1',True),
+    mk(42,'form-builder',CL,'stopped','form-builder','g3',True),
+    mk(43,'election-map',CX,'stopped','misc','g2',False,
+       T(('Terminal',TM),('claude tab',CL))),
+    mk(44,'tui-manager',CL,'running','tui-manager','g1'),
+    mk(45,'discord-bot',CL,'running','discord-bot','g7',False,
+       T(('Terminal',TM),('claude tab',CL))),
+    mk(46,'pool-booking',CL,'running','pool-booking','g2'),
+    mk(47,'vm-manager',CL,'running','vm-manager','g2',False,
+       T(('Terminal',TM),('codex tab',CX),('Terminal',TM),('Terminal',TM))),
+    mk(48,'ml-pipeline',CL,'running','ml-pipeline','g1',True,
+       T(('training',TM),('claude tab',CL),('codex tab',CX),('eval',CL))),
 ]
+
 
 settings = {**src.get('settings', {}), 'language': 'en',
             'showAgentIcons': True, 'markedSessionId': '', 'splitView': False}
@@ -242,13 +341,20 @@ JSON
 echo "==> starting tmux sessions for the running ones"
 # The app looks up a session's multiplexer session by its instance id
 # (Instance.TmuxSessionName returns the id), so the names must match d1, d2, ...
-declare -A PATHS=([d1]=api-gateway [d2]=auth-service [d3]=billing
-                  [d4]=web-dashboard [d5]=mobile-app [d7]=ml-pipeline
-                  [d8]=feature-store [d10]=infra)
+declare -A PATHS=([d3]=misc [d4]=editor-bridge [d5]=cad-viewer [d6]=billing
+                  [d7]=voice-relay [d8]=portal-gateway [d9]=usage-widget
+                  [d11]=dictation [d12]=company-lookup [d13]=push-notify
+                  [d14]=home-hub [d15]=grid-sim [d18]=admin-console
+                  [d38]=home-inventory [d40]=misc [d41]=budget-2026
+                  [d44]=tui-manager [d45]=discord-bot [d46]=pool-booking
+                  [d47]=vm-manager [d48]=ml-pipeline)
 # A tab in the store is only half of one: the app reads its content from a
 # multiplexer window of the same index, and without it the tab strip is there
 # but every tab opens on nothing.
-declare -A TAB_COUNT=([d1]=4 [d2]=3 [d3]=5 [d4]=3 [d5]=2 [d7]=6 [d8]=3 [d10]=2)
+declare -A TAB_COUNT=([d3]=2 [d4]=6 [d5]=10 [d6]=6 [d7]=7 [d8]=3 [d9]=1
+                      [d11]=1 [d12]=2 [d13]=2 [d14]=1 [d15]=2 [d18]=1
+                      [d38]=1 [d40]=0 [d41]=0 [d44]=0 [d45]=2 [d46]=0
+                      [d47]=4 [d48]=4)
 for s in "${!RUNNING_OUTPUT[@]}"; do
   script="$DEMO/s_$s.sh"
   printf '%s\n' "${RUNNING_OUTPUT[$s]}" > "$script"
