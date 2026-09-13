@@ -29,12 +29,30 @@ APP="$REPO_ROOT/build/bin/asmgr-desktop"
 # and the sidebar has status lines to read. Without live tmux sessions every
 # card says "Stopped" and the sidebar is bare — which is what makes a demo
 # screenshot look thinner than the app really is.
+# What the running sessions show.
+#
+# Echo loops made the screenshots useless: a terminal repeating one line says
+# nothing about what this app is for. These are transcripts of the kind of work
+# the agents actually do — a tool call, an edit, a test run, a question waiting
+# on an answer — so the sidebar status lines and the terminal both read like a
+# working day.
+CONTENT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/scripts/demo-content"
 declare -A RUNNING_OUTPUT=(
-  [d1]='while :; do echo "$(date +%H:%M:%S) INFO request POST /v1/tokens 201 8ms"; sleep 2; done'
-  [d2]='while :; do echo "$(date +%H:%M:%S) rotating signing key kid=2026-08"; sleep 3; done'
-  [d4]='while :; do echo "a Retry-After header on 429 responses. All mi..."; sleep 3; done'
-  [d7]='i=24; while :; do echo "Training... (esc to interrupt · $i/50 epochs · 3..."; i=$((i+1)); sleep 4; done'
-  [d10]='while :; do echo "$(date +%H:%M:%S) terraform plan: no changes"; sleep 5; done'
+  [d1]="bash $CONTENT/claude_main.sh"
+  [d2]="bash $CONTENT/codex_tab.sh"
+  [d3]="bash $CONTENT/claude_waiting.sh"
+  [d4]="bash $CONTENT/term_build.sh"
+  [d5]="bash $CONTENT/term_test.sh"
+  [d7]="bash $CONTENT/claude_main.sh"
+  [d8]="bash $CONTENT/codex_tab.sh"
+  [d10]="bash $CONTENT/term_test.sh"
+)
+
+# Tab windows get their own transcripts, so moving between tabs is not the same
+# screen twice.
+declare -A TAB_CONTENT=(
+  [1]="claude_main.sh" [2]="codex_tab.sh" [3]="term_build.sh"
+  [4]="claude_waiting.sh" [5]="term_test.sh" [6]="train.sh"
 )
 
 clean() {
@@ -140,7 +158,7 @@ colours = {'api-gateway':'#7dd3fc','auth-service':'#a78bfa','billing':'#fbbf24',
            'ml-pipeline':'#fb923c','feature-store':'#22d3ee','docs-site':'#c4b5fd',
            'infra-terraform':'#94a3b8','release-notes':'#f87171'}
 
-def mk(i, name, agent, status, repo, gid='', fav=False):
+def mk(i, name, agent, status, repo, gid='', fav=False, tabs=()):
     o = dict(tmpl)
     o.update(id=f'd{i}', name=name, agent=agent, status=status,
              path=f'{P}/{repo}', group_id=gid, color=colours.get(name,''),
@@ -153,20 +171,45 @@ def mk(i, name, agent, status, repo, gid='', fav=False):
     for k in ('followed_windows', 'followedWindows', 'windows',
               'tab_order', 'notes', 'main_window_stopped'):
         o.pop(k, None)
+    # Tabs, because a session without them looks nothing like a real one: the
+    # sidebar row collapses to a single line and the tab strip is empty, which
+    # is the opposite of what this app is for.
+    if tabs:
+        o['followed_windows'] = [
+            {'index': n + 1, 'agent': ag, 'name': nm, 'custom_command': '',
+             'auto_yes': False, 'resume_session_id': '', 'hide_status_bar': 0,
+             'work_dir': ''}
+            for n, (nm, ag) in enumerate(tabs)]
     return o
 
+# Tab shapes follow how the app is actually used: several agents and a shell
+# in one session, not a single agent on its own.
 instances = [
-    mk(1,'api-gateway','claude','running','api-gateway','g1',True),
-    mk(2,'auth-service','codex','running','auth-service','g1'),
-    mk(3,'billing','claude','stopped','billing','g1'),
-    mk(4,'web-dashboard','claude','running','web-dashboard','g2',True),
-    mk(5,'mobile-app','gemini','stopped','mobile-app','g2'),
-    mk(6,'search-index','aider','stopped','search-index','g2'),
-    mk(7,'ml-pipeline','claude','running','ml-pipeline','g3',True),
-    mk(8,'feature-store','codex','stopped','feature-store','g3'),
-    mk(9,'docs-site','opencode','stopped','docs-site','g3'),
-    mk(10,'infra-terraform','terminal','running','infra'),
-    mk(11,'release-notes','claude','stopped','docs-site'),
+    mk(1,'api-gateway','claude','running','api-gateway','g1',True,
+       [('claude tab','claude'),('codex tab','codex'),('Terminal','terminal'),
+        ('rate limits','claude')]),
+    mk(2,'auth-service','codex','running','auth-service','g1',False,
+       [('server','terminal'),('claude tab','claude'),('codex tab','codex')]),
+    mk(3,'billing','claude','running','billing','g1',False,
+       [('refunds','claude'),('Terminal','terminal'),('codex tab','codex'),
+        ('claude tab','claude'),('tests','terminal')]),
+    mk(4,'web-dashboard','claude','running','web-dashboard','g2',True,
+       [('claude tab','claude'),('vite','terminal'),('codex tab','codex')]),
+    mk(5,'mobile-app','gemini','running','mobile-app','g2',False,
+       [('gemini tab','gemini'),('Terminal','terminal')]),
+    mk(6,'search-index','aider','stopped','search-index','g2',False,
+       [('aider tab','aider'),('Terminal','terminal')]),
+    mk(7,'ml-pipeline','claude','running','ml-pipeline','g3',True,
+       [('training','terminal'),('claude tab','claude'),('codex tab','codex'),
+        ('eval','claude'),('Terminal','terminal'),('notebook','terminal')]),
+    mk(8,'feature-store','codex','running','feature-store','g3',False,
+       [('codex tab','codex'),('Terminal','terminal'),('claude tab','claude')]),
+    mk(9,'docs-site','opencode','stopped','docs-site','g3',False,
+       [('opencode tab','opencode')]),
+    mk(10,'infra-terraform','terminal','running','infra','',False,
+       [('plan','terminal'),('claude tab','claude')]),
+    mk(11,'release-notes','claude','stopped','docs-site','',False,
+       [('claude tab','claude'),('Terminal','terminal')]),
 ]
 
 settings = {**src.get('settings', {}), 'language': 'en',
@@ -199,12 +242,25 @@ JSON
 echo "==> starting tmux sessions for the running ones"
 # The app looks up a session's multiplexer session by its instance id
 # (Instance.TmuxSessionName returns the id), so the names must match d1, d2, ...
-declare -A PATHS=([d1]=api-gateway [d2]=auth-service [d4]=web-dashboard
-                  [d7]=ml-pipeline [d10]=infra)
+declare -A PATHS=([d1]=api-gateway [d2]=auth-service [d3]=billing
+                  [d4]=web-dashboard [d5]=mobile-app [d7]=ml-pipeline
+                  [d8]=feature-store [d10]=infra)
+# A tab in the store is only half of one: the app reads its content from a
+# multiplexer window of the same index, and without it the tab strip is there
+# but every tab opens on nothing.
+declare -A TAB_COUNT=([d1]=4 [d2]=3 [d3]=5 [d4]=3 [d5]=2 [d7]=6 [d8]=3 [d10]=2)
 for s in "${!RUNNING_OUTPUT[@]}"; do
   script="$DEMO/s_$s.sh"
   printf '%s\n' "${RUNNING_OUTPUT[$s]}" > "$script"
-  tmux new-session -d -s "$s" -c "$PROJECTS/${PATHS[$s]}" "bash $script" 2>/dev/null
+  tmux new-session -d -s "$s" -n "claude" -c "$PROJECTS/${PATHS[$s]}" "bash $script" 2>/dev/null
+  # -n names the window. Without it every tab reads "bash", which is both
+  # wrong and the one thing a screenshot of a multi-agent session must not say.
+  declare -a TAB_NAMES=('claude tab' 'codex tab' 'Terminal' 'eval' 'tests' 'notebook')
+  for ((w = 1; w <= ${TAB_COUNT[$s]:-0}; w++)); do
+    tab="${TAB_CONTENT[$(( (w % 6) + 1 ))]:-term_test.sh}"
+    tmux new-window -d -t "$s:$w" -n "${TAB_NAMES[$(( (w - 1) % 6 ))]}" \
+      -c "$PROJECTS/${PATHS[$s]}" "bash $CONTENT/$tab" 2>/dev/null
+  done
 done
 sleep 3
 
