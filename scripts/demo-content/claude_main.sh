@@ -54,6 +54,7 @@ printf "${BLUE}╰────────────────────�
 case "${1:-0}" in
   1) printf "  ${DIM}⏵⏵ auto mode on · 4 shells · 2 agents · ← for agents${R}\n" ;;
   2) printf "  ${DIM}⏵⏵ accept edits on · 1 shell · ← for agents${R}\n" ;;
+  3) printf "  ${DIM}⏵⏵ plan mode · 2 shells · ← for agents${R}\n" ;;
   *) printf "  ${DIM}⏵⏵ auto mode on · 2 shells · ← for agents${R}\n" ;;
 esac
 while :; do sleep 30; done

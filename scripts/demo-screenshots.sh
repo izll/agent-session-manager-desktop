@@ -44,7 +44,7 @@ CONTENT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/scripts/demo-content"
 declare -A RUNNING_OUTPUT=(
   [d51]="bash $CONTENT/claude_busy.sh"
   [d3]="bash $CONTENT/term_test.sh"
-  [d4]="bash $CONTENT/claude_busy.sh"
+  [d4]="bash $CONTENT/claude_main.sh"
   [d5]="bash $CONTENT/codex_tab.sh"
   [d6]="bash $CONTENT/term_build.sh"
   [d7]="bash $CONTENT/claude_main.sh"
@@ -387,12 +387,16 @@ for s in "${!RUNNING_OUTPUT[@]}"; do
       # gave six identical status lines — the list read as one session repeated.
       case "$wagent" in
         claude)
-          case $(( widx % 3 )) in
-            0) tab=claude_main.sh ;;
-            1) tab=claude_waiting.sh ;;
-            *) tab=claude_busy.sh ;;
+          # Two tabs in three were waiting or working, which filled the list
+          # with amber and teal. One in five waits, one in five is mid-run;
+          # the rest show finished work, and their own variants keep those
+          # from repeating.
+          case $(( widx % 5 )) in
+            2) tab=claude_waiting.sh ;;
+            4) tab=claude_busy.sh ;;
+            *) tab=claude_main.sh ;;
           esac
-          variant=$(( widx / 3 )) ;;
+          variant=$(( widx % 4 )) ;;
         codex|gemini) tab=codex_tab.sh; variant=$(( widx % 3 )) ;;
         *)
           case $(( widx % 3 )) in
