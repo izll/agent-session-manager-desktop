@@ -6,6 +6,16 @@ Entries describe what changed for someone using the app. Internal refactoring,
 test and CI work is left out unless it changed behaviour. Dates are release
 dates; the format follows [Keep a Changelog](https://keepachangelog.com).
 
+## 1.0.2 — 2026-09-14
+
+### Fixed
+
+- **Accented characters typed through an input method arrived two or three
+  times.** On Linux with IBus, "árvíztűrő" came out as "árvííztűíűrőíűő" —
+  plain ASCII was unaffected, which is why it went unnoticed. Reported and
+  fixed by [@muzsij](https://github.com/muzsij) in
+  [#1](https://github.com/izll/agent-session-manager-desktop/pull/1).
+
 ## 1.0.1 — 2026-09-13
 
 ### Fixed
