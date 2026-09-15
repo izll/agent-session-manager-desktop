@@ -751,6 +751,7 @@
   "terminal.plugIn": "세션을 연결하세요!",
   "terminal.frozen": "세션이 동결되었습니다. 클릭하여 해동하세요.",
   "terminal.notFound": "404: 터미널 활동을 찾을 수 없음",
+  "terminal.tabParked": "This tab is parked, waiting for a start...",
   "error.sessionNotFound": "세션을 찾을 수 없습니다",
   "error.groupNotFound": "그룹을 찾을 수 없습니다",
   "error.windowNotFound": "창을 찾을 수 없습니다",

@@ -751,6 +751,7 @@
   "terminal.plugIn": "قم بتوصيل جلسة!",
   "terminal.frozen": "الجلسة مجمدة. انقر لإذابة التجميد.",
   "terminal.notFound": "404: لم يتم العثور على نشاط الطرفية",
+  "terminal.tabParked": "This tab is parked, waiting for a start...",
   "error.sessionNotFound": "الجلسة غير موجودة",
   "error.groupNotFound": "المجموعة غير موجودة",
   "error.windowNotFound": "النافذة غير موجودة",

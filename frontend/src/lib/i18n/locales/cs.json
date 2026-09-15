@@ -751,6 +751,7 @@
   "terminal.plugIn": "Připojte relaci!",
   "terminal.frozen": "Relace zmrazena. Klikněte pro rozmrazení.",
   "terminal.notFound": "404: Aktivita terminálu nenalezena",
+  "terminal.tabParked": "This tab is parked, waiting for a start...",
   "error.sessionNotFound": "Relace nenalezena",
   "error.groupNotFound": "Skupina nenalezena",
   "error.windowNotFound": "Okno nenalezeno",

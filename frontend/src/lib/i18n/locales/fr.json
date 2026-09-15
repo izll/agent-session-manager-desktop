@@ -751,6 +751,7 @@
   "terminal.plugIn": "Branchez une session !",
   "terminal.frozen": "Session gelée. Cliquez pour dégeler.",
   "terminal.notFound": "404 : Activité du terminal introuvable",
+  "terminal.tabParked": "This tab is parked, waiting for a start...",
   "error.sessionNotFound": "Session introuvable",
   "error.groupNotFound": "Groupe introuvable",
   "error.windowNotFound": "Fenêtre introuvable",

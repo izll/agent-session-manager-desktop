@@ -751,6 +751,7 @@
   "terminal.plugIn": "Kết nối một phiên!",
   "terminal.frozen": "Phiên bị đóng băng. Nhấp để rã đông.",
   "terminal.notFound": "404: Không tìm thấy hoạt động terminal",
+  "terminal.tabParked": "This tab is parked, waiting for a start...",
   "error.sessionNotFound": "Không tìm thấy phiên",
   "error.groupNotFound": "Không tìm thấy nhóm",
   "error.windowNotFound": "Không tìm thấy cửa sổ",

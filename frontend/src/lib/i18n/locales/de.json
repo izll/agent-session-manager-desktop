@@ -751,6 +751,7 @@
   "terminal.plugIn": "Schließe eine Sitzung an!",
   "terminal.frozen": "Sitzung eingefroren. Zum Auftauen klicken.",
   "terminal.notFound": "404: Terminal-Aktivität nicht gefunden",
+  "terminal.tabParked": "This tab is parked, waiting for a start...",
   "error.sessionNotFound": "Sitzung nicht gefunden",
   "error.groupNotFound": "Gruppe nicht gefunden",
   "error.windowNotFound": "Fenster nicht gefunden",

@@ -751,6 +751,7 @@
   "terminal.plugIn": "Plug in a session!",
   "terminal.frozen": "Session frozen. Thaw with a click.",
   "terminal.notFound": "404: Terminal activity not found",
+  "terminal.tabParked": "This tab is parked, waiting for a start...",
   "error.sessionNotFound": "Session not found",
   "error.groupNotFound": "Group not found",
   "error.windowNotFound": "Window not found",

@@ -751,6 +751,7 @@
   "terminal.plugIn": "セッションを接続してください！",
   "terminal.frozen": "セッションが凍結中。クリックで解凍。",
   "terminal.notFound": "404: ターミナルの活動が見つかりません",
+  "terminal.tabParked": "This tab is parked, waiting for a start...",
   "error.sessionNotFound": "セッションが見つかりません",
   "error.groupNotFound": "グループが見つかりません",
   "error.windowNotFound": "ウィンドウが見つかりません",

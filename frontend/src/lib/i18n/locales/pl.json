@@ -751,6 +751,7 @@
   "terminal.plugIn": "Podłącz sesję!",
   "terminal.frozen": "Sesja zamrożona. Kliknij, aby odmrozić.",
   "terminal.notFound": "404: Nie znaleziono aktywności terminala",
+  "terminal.tabParked": "This tab is parked, waiting for a start...",
   "error.sessionNotFound": "Nie znaleziono sesji",
   "error.groupNotFound": "Nie znaleziono grupy",
   "error.windowNotFound": "Nie znaleziono okna",

@@ -594,8 +594,23 @@
   // Get current session's status reactively
   $: currentSessionStatus = $sessions.find(s => s.id === targetSessionId)?.status;
 
-  // Show placeholder when no running session is active
-  $: showPlaceholder = !isAttached;
+  // Whether the tab on screen is parked: brought up with the session but left
+  // as a dead pane, waiting for the user to start it.
+  //
+  // Window 0 is the session's own agent and has its own flag; every other
+  // index is a tab. Read from the session list rather than from tmux, so it is
+  // known at the moment the pane is drawn without a round trip.
+  $: parkedTab = (() => {
+    const sess = $sessions.find(s => s.id === targetSessionId);
+    if (!sess || sess.status !== 'running') return false;
+    if (targetWindowIdx === 0) return !!(sess as any).mainWindowStopped;
+    return !!sess.followedWindows?.find((w: any) => w.index === targetWindowIdx)?.stopped;
+  })();
+
+  // Show placeholder when no running session is active, and over a parked tab:
+  // what tmux leaves in that pane is the bare words "Pane is dead", which
+  // reads as a crash rather than as a tab waiting to be started.
+  $: showPlaceholder = !isAttached || parkedTab;
 
   const placeholderIcons = [
     '\u{1F634}', '\u{1F60C}', '\u{1F3D6}\u{FE0F}', '\u{1F995}', '\u{1F47B}',
@@ -606,6 +621,12 @@
     'terminal.noSession', 'terminal.crickets', 'terminal.launch',
     'terminal.resting', 'terminal.plugIn', 'terminal.frozen', 'terminal.notFound',
   ];
+
+  // A parked tab shows the same placeholder as an empty pane — one icon above
+  // one line of text — with its own pair rather than a shape of its own.
+  const parkedIcon = '⏸️';
+  $: placeholderIcon = parkedTab ? parkedIcon : placeholderIcons[placeholderIdx];
+  $: placeholderKey = parkedTab ? 'terminal.tabParked' : placeholderKeys[placeholderIdx];
 
   let placeholderIdx = 0;
   $: if (showPlaceholder) {
@@ -787,9 +808,9 @@
     </div>
   {/if}
   {#if showPlaceholder}
-    <div class="terminal-placeholder">
-      <span class="placeholder-icon">{placeholderIcons[placeholderIdx]}</span>
-      <p class="placeholder-msg">{$t(placeholderKeys[placeholderIdx])}</p>
+    <div class="terminal-placeholder" class:parked={parkedTab}>
+      <span class="placeholder-icon" class:parked={parkedTab}>{placeholderIcon}</span>
+      <p class="placeholder-msg">{$t(placeholderKey)}</p>
     </div>
   {/if}
 </div>
@@ -890,6 +911,29 @@
     pointer-events: none;
     user-select: none;
     z-index: 10;
+  }
+
+  /* The idle placeholder floats over an empty pane; this one has tmux's
+     dead-pane text underneath and has to cover it. The terminal publishes its
+     own background as --xterm-background, so the parked pane matches the tab
+     beside it rather than a colour of its own. */
+  .terminal-placeholder.parked {
+    background: var(--xterm-background, var(--bg-surface));
+  }
+
+  /* The same icon the idle placeholder uses, breathing: slow enough to read as
+     "waiting", not as "working" — nothing is running in this pane. */
+  .placeholder-icon.parked {
+    animation: parked-breath 2.4s ease-in-out infinite;
+  }
+
+  @keyframes parked-breath {
+    0%, 100% { opacity: 0.28; transform: scale(0.94); }
+    50% { opacity: 0.6; transform: scale(1); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .placeholder-icon.parked { animation: none; }
   }
 
   .placeholder-icon {

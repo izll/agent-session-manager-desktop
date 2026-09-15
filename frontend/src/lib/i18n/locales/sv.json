@@ -751,6 +751,7 @@
   "terminal.plugIn": "Anslut en session!",
   "terminal.frozen": "Sessionen är frusen. Klicka för att tina.",
   "terminal.notFound": "404: Terminalaktivitet hittades inte",
+  "terminal.tabParked": "This tab is parked, waiting for a start...",
   "error.sessionNotFound": "Sessionen hittades inte",
   "error.groupNotFound": "Gruppen hittades inte",
   "error.windowNotFound": "Fönstret hittades inte",

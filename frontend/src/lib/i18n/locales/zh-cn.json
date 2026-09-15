@@ -751,6 +751,7 @@
   "terminal.plugIn": "接入一个会话！",
   "terminal.frozen": "会话已冻结。点击解冻。",
   "terminal.notFound": "404：未找到终端活动",
+  "terminal.tabParked": "This tab is parked, waiting for a start...",
   "error.sessionNotFound": "未找到会话",
   "error.groupNotFound": "未找到分组",
   "error.windowNotFound": "未找到窗口",

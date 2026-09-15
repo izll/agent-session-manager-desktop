@@ -751,6 +751,7 @@
   "terminal.plugIn": "Підключіть сесію!",
   "terminal.frozen": "Сесію заморожено. Натисніть, щоб розморозити.",
   "terminal.notFound": "404: Активність терміналу не знайдено",
+  "terminal.tabParked": "This tab is parked, waiting for a start...",
   "error.sessionNotFound": "Сеанс не знайдено",
   "error.groupNotFound": "Групу не знайдено",
   "error.windowNotFound": "Вікно не знайдено",

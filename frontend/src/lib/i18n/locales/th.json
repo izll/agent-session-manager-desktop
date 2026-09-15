@@ -751,6 +751,7 @@
   "terminal.plugIn": "เชื่อมต่อเซสชัน!",
   "terminal.frozen": "เซสชันถูกแช่แข็ง คลิกเพื่อละลาย",
   "terminal.notFound": "404: ไม่พบกิจกรรมเทอร์มินัล",
+  "terminal.tabParked": "This tab is parked, waiting for a start...",
   "error.sessionNotFound": "ไม่พบเซสชัน",
   "error.groupNotFound": "ไม่พบกลุ่ม",
   "error.windowNotFound": "ไม่พบหน้าต่าง",

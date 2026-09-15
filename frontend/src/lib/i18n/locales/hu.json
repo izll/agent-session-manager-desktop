@@ -742,6 +742,7 @@
   "terminal.plugIn": "Csatlakoztass egy session-t!",
   "terminal.frozen": "A session befagyott. Kattints az olvasztáshoz.",
   "terminal.notFound": "404: Terminál aktivitás nem található",
+  "terminal.tabParked": "Ez a fül parkol, indításra vár...",
   "error.sessionNotFound": "Munkamenet nem található",
   "error.groupNotFound": "Csoport nem található",
   "error.windowNotFound": "Ablak nem található",

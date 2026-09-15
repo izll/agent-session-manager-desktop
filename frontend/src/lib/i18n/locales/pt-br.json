@@ -751,6 +751,7 @@
   "terminal.plugIn": "Conecte uma sessão!",
   "terminal.frozen": "Sessão congelada. Clique para descongelar.",
   "terminal.notFound": "404: Atividade do terminal não encontrada",
+  "terminal.tabParked": "This tab is parked, waiting for a start...",
   "error.sessionNotFound": "Sessão não encontrada",
   "error.groupNotFound": "Grupo não encontrado",
   "error.windowNotFound": "Janela não encontrada",

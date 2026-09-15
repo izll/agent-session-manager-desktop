@@ -751,6 +751,7 @@
   "terminal.plugIn": "Bir oturum bağlayın!",
   "terminal.frozen": "Oturum donmuş. Çözmek için tıklayın.",
   "terminal.notFound": "404: Terminal etkinliği bulunamadı",
+  "terminal.tabParked": "This tab is parked, waiting for a start...",
   "error.sessionNotFound": "Oturum bulunamadı",
   "error.groupNotFound": "Grup bulunamadı",
   "error.windowNotFound": "Pencere bulunamadı",

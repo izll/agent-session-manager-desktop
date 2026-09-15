@@ -751,6 +751,7 @@
   "terminal.plugIn": "Sluit een sessie aan!",
   "terminal.frozen": "Sessie bevroren. Klik om te ontdooien.",
   "terminal.notFound": "404: Terminal activiteit niet gevonden",
+  "terminal.tabParked": "This tab is parked, waiting for a start...",
   "error.sessionNotFound": "Sessie niet gevonden",
   "error.groupNotFound": "Groep niet gevonden",
   "error.windowNotFound": "Venster niet gevonden",
