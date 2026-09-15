@@ -729,12 +729,30 @@ func GetClaudeStatusLine(lines []string, stripANSIFunc func(string) string) stri
 	return ""
 }
 
+// trimLeadingBrailleSpinner strips the braille cells a line begins with and
+// returns what follows. ok is false when the line does not start with one.
+//
+// Cursor draws "⠘⠤ Thinking  13 tokens" — two cells, not one — and pads other
+// frames with the blank U+2800. Removing a single rune left the remainder
+// starting with a spinner character, which then showed up in the sidebar.
+func trimLeadingBrailleSpinner(cleanLine string) (string, bool) {
+	trimmed := strings.TrimLeftFunc(cleanLine, isBrailleSpinnerRune)
+	if trimmed == cleanLine {
+		return "", false
+	}
+	return strings.TrimSpace(trimmed), true
+}
+
 // ExtractSpinnerText finds the active spinner/thinking/tool-execution line text
 // and returns it without the spinner character prefix.
 // For Claude: looks above the input separator area.
 // For generic agents: looks from the bottom of the screen.
 func ExtractSpinnerText(lines []string, agentName string, stripANSIFunc func(string) string) string {
-	spinnerChars := "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏◐◑◒◓"
+	// The wheel only. The braille frames are matched by range instead: each
+	// agent spins through its own handful of the 256 braille cells, and a
+	// frame missing from a list leaves the sidebar with no text to show while
+	// the agent works. See isBrailleSpinnerRune.
+	spinnerChars := "◐◑◒◓"
 
 	// For Claude, look above the separator (same area as GetClaudeStatusLine)
 	if agentName == "claude" {
@@ -759,11 +777,19 @@ func ExtractSpinnerText(lines []string, agentName string, stripANSIFunc func(str
 				continue
 			}
 
-			// Braille spinner: "⠋ Thinking..."
+			// Braille spinner: "⠋ Thinking...", "⠘⠤ Thinking  13 tokens".
+			// The leading cells are stripped as a group: some agents pad or
+			// animate with two of them, so trimming a single character left
+			// the second one at the front of the text.
+			if text, ok := trimLeadingBrailleSpinner(cleanLine); ok {
+				// Skip completed lines like "Churned for 1m"
+				if !strings.Contains(strings.ToLower(text), " for ") && text != "" {
+					return text
+				}
+			}
 			for _, r := range spinnerChars {
 				if strings.HasPrefix(cleanLine, string(r)) {
 					text := strings.TrimSpace(strings.TrimPrefix(cleanLine, string(r)))
-					// Skip completed lines like "Churned for 1m"
 					if strings.Contains(strings.ToLower(text), " for ") {
 						continue
 					}
@@ -795,6 +821,9 @@ func ExtractSpinnerText(lines []string, agentName string, stripANSIFunc func(str
 		cleanLine := strings.TrimSpace(stripANSIFunc(lines[j]))
 		if cleanLine == "" {
 			continue
+		}
+		if text, ok := trimLeadingBrailleSpinner(cleanLine); ok && text != "" {
+			return text
 		}
 		for _, r := range spinnerChars {
 			if strings.HasPrefix(cleanLine, string(r)) {

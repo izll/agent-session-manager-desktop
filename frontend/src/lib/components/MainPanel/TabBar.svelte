@@ -1631,6 +1631,10 @@
   function getAgentColor(agent: string): string {
     const colors: Record<string, string> = {
       claude: 'var(--accent-light)',
+      // Fuchsia rather than anything from the icon itself: the blue that
+      // carries most of the icon's area is four degrees from Gemini's
+      // #60a5fa, and two tabs side by side were indistinguishable.
+      antigravity: '#e879f9',
       gemini: '#60a5fa',
       aider: '#4ade80',
       codex: '#fbbf24',

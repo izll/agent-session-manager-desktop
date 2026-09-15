@@ -113,17 +113,25 @@ func TestCursorModeLabelIsNotAPrompt(t *testing.T) {
 	}
 }
 
-// The spinner line begins with the blank braille cell, not with the animating
-// glyph. Matching on a prefix with the default set found nothing, which is why
-// a working Cursor could never be seen as busy through the spinner.
-func TestCursorSpinnerLineIsFound(t *testing.T) {
-	line := "⠀⠞ Thinking  28 tokens"
-	if findSpinnerLine([]string{line}, defaultSpinners, 15) != "" {
-		t.Error("the default set now matches; cursorSpinners may be redundant")
+// Cursor spins through several braille frames and does not keep to one set:
+// "⠀⠞ Thinking" pads with the blank cell, "⠘⠤ Thinking" uses two filled ones,
+// "⠴ Exploring" a single one from the classic run. Listing frames meant the
+// ones nobody had written down read as idle — measured twice on the same
+// agent, minutes apart. Any line beginning in the braille block counts now.
+func TestCursorSpinnerFramesAreAllRecognised(t *testing.T) {
+	for _, line := range []string{
+		"⠀⠞ Thinking  28 tokens",
+		"⠘⠤ Thinking  13 tokens",
+		"⠴ Exploring 205s",
+		"⡿  Generating...",
+	} {
+		if findSpinnerLine([]string{line}, cursorSpinners, 15) == "" {
+			t.Errorf("%q is not seen as a spinner, so that frame reads as idle", line)
+		}
 	}
-	if findSpinnerLine([]string{line}, cursorSpinners, 15) == "" {
-		t.Error("Cursor's own spinner set does not match its Thinking line, so the " +
-			"spinner can never report busy")
+	// And a line that merely contains braille further along is not one.
+	if findSpinnerLine([]string{"a doksi szerint ⠴ a pörgő jel"}, cursorSpinners, 15) != "" {
+		t.Error("braille in the middle of a sentence was taken for a spinner")
 	}
 }
 
@@ -198,6 +206,28 @@ func TestCursorSpinnerWithNoInputBoxIsBusy(t *testing.T) {
 	}
 	if got := detectCursorActivity(lines, agentPatterns[AgentCursor], ""); got != ActivityBusy {
 		t.Errorf("a spinner with no input box was detected as %v, want busy", got)
+	}
+}
+
+// Between the spinner and the input box Cursor draws its own lines: a "Tip:"
+// hint and the box's top border. Counted as output they used up a window meant
+// for the agent's last few lines, and a spinner two lines further up was never
+// reached — a working session read as idle while the pane plainly said
+// "Thinking". The window is counted after those are filtered out.
+func TestCursorSpinnerSurvivesTheTipAndBorder(t *testing.T) {
+	pane := `
+● Elkezdem.
+
+⠘⠤ Thinking  13 tokens
+  Tip: Use /plan to iterate on an implementation plan before code changes.
+ ` + strings.Repeat("▄", 60) + `
+  → Add a follow-up
+ ` + strings.Repeat("▀", 60) + `
+  Auto · 6.1%
+`
+	lines := strings.Split(pane, "\n")
+	if got := detectCursorActivity(lines, agentPatterns[AgentCursor], ""); got != ActivityBusy {
+		t.Errorf("a spinner behind the Tip line and the border was detected as %v, want busy", got)
 	}
 }
 

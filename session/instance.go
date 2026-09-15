@@ -41,15 +41,20 @@ const (
 type AgentType string
 
 const (
-	AgentClaude   AgentType = "claude"
-	AgentGemini   AgentType = "gemini"
-	AgentAider    AgentType = "aider"
-	AgentCodex    AgentType = "codex"
-	AgentAmazonQ  AgentType = "amazonq"
-	AgentOpenCode AgentType = "opencode"
-	AgentCursor   AgentType = "cursor"
-	AgentCustom   AgentType = "custom"
-	AgentTerminal AgentType = "terminal" // Plain shell/terminal window
+	AgentClaude AgentType = "claude"
+	// Antigravity is the harness Google moved Gemini CLI into: the models are
+	// the same, the binary is not. Listed before Gemini because it is the one
+	// still served to consumer accounts — Gemini CLI stopped serving those on
+	// 18 June 2026 and continues only on enterprise licences and paid keys.
+	AgentAntigravity AgentType = "antigravity"
+	AgentGemini      AgentType = "gemini"
+	AgentAider       AgentType = "aider"
+	AgentCodex       AgentType = "codex"
+	AgentAmazonQ     AgentType = "amazonq"
+	AgentOpenCode    AgentType = "opencode"
+	AgentCursor      AgentType = "cursor"
+	AgentCustom      AgentType = "custom"
+	AgentTerminal    AgentType = "terminal" // Plain shell/terminal window
 )
 
 // AgentConfig contains configuration for each agent type
@@ -90,6 +95,21 @@ var AgentConfigs = map[AgentType]AgentConfig{
 		SessionIDFlag:     "--session-id",
 		// --fork-session alongside --resume: same history, new conversation.
 		ForkFlag: "--fork-session",
+	},
+	AgentAntigravity: {
+		// Taken from `agy --help` on 1.2.3, not from the documentation.
+		//
+		// --continue resumes the most recent conversation and takes no id;
+		// --conversation <id> resumes a named one. ResumeFlag is the former
+		// because that is what "resume this session" means here, and the id
+		// the launcher would pass is one Antigravity never gave us: there is
+		// no --session-id to pre-assign one with, so SupportsSessionID stays
+		// false and no fork flag exists at all.
+		Command:         "agy",
+		SupportsResume:  true,
+		SupportsAutoYes: true,
+		AutoYesFlag:     "--dangerously-skip-permissions",
+		ResumeFlag:      "--continue",
 	},
 	AgentGemini: {
 		Command:         "gemini",

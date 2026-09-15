@@ -154,6 +154,7 @@
   function getAgentIcon(agent: string): string {
     const icons: Record<string, string> = {
       claude: '🤖',
+      antigravity: '🛸',
       gemini: '💎',
       aider: '🔧',
       codex: '📦',
@@ -168,6 +169,11 @@
   function getAgentColor(agent: string): string {
     const colors: Record<string, string> = {
       claude: 'var(--accent-light)',
+      // Fuchsia rather than anything from the icon itself. The icon is the
+      // real multi-colour mark, and the blue that carries most of its area
+      // sits four degrees from Gemini's #60a5fa — as a dot beside a session
+      // name the two were telling each other apart by nothing.
+      antigravity: '#e879f9',
       gemini: '#60a5fa',
       aider: '#4ade80',
       codex: '#fbbf24',

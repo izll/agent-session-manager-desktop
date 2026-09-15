@@ -24,6 +24,7 @@ export async function loadAgents() {
 export function getAgentIcon(agentType: string): string {
   const icons: Record<string, string> = {
     'claude': '🤖',
+    'antigravity': '🛸',
     'gemini': '💎',
     'aider': '🔧',
     'codex': '📦',
@@ -39,6 +40,7 @@ export function getAgentIcon(agentType: string): string {
 export function getAgentName(agentType: string): string {
   const names: Record<string, string> = {
     'claude': 'Claude',
+    'antigravity': 'Antigravity',
     'gemini': 'Gemini',
     'aider': 'Aider',
     'codex': 'Codex',

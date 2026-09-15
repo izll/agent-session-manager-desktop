@@ -245,6 +245,26 @@ func getDefaultFilters() AgentFilters {
 			SkipExact:     []string{">"},
 			MinSeparators: 20,
 		},
+		"antigravity": {
+			// Measured off a running agy 1.2.3.
+			//
+			// The footer is two labels with a wide gap: "? for shortcuts" on
+			// the left and the model on the right, or "esc to cancel" while a
+			// turn runs. SkipDotFieldsWithPath cannot reach the model half —
+			// "Gemini 3.8 Flash · high" has the separator but no filesystem
+			// path — so the two footer phrases are matched directly instead.
+			SkipContains: []string{
+				"for shortcuts", "esc to cancel", "ctrl+o to expand",
+				"Navigate · tab", "Requesting permission for",
+			},
+			// ▸ heads the collapsed thinking summary ("▸ Thought for 30s"), ●
+			// a tool call, > the input line. The startup banner is drawn in
+			// half blocks, the input box in light rules.
+			SkipPrefixes: []string{">", "▸", "●", "▀", "▄", "─", "Thought for"},
+			// The one-word heading above a permission dialog's command block.
+			SkipExact:     []string{"Command", "Antigravity CLI"},
+			MinSeparators: 20,
+		},
 		"gemini": {
 			// The bottom bar's labels, and the placeholder inside the input box.
 			// "workspace (/directory)" heads the columns of that bar; without it

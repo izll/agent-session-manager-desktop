@@ -53,6 +53,25 @@
         "yes, and always allow"
       ]
     },
+    "antigravity": {
+      "$comment": "Measured off a running agy 1.2.3, not copied from Gemini: the harness is a rewrite and words its prompts its own way. Two prompts were seen — the permission dialog (\"Requesting permission for:\" / \"Run this command?\" over a numbered list ending in \"No, cancel\") and the trust prompt a fresh workspace shows before the agent has done anything. \"esc to cancel\" is deliberately absent: it sits in the footer throughout a turn, including under the permission dialog, so it means busy rather than waiting. The extra spinners are the denser half of the braille block, none of which is in the default set.",
+      "waiting": [
+        "requesting permission for:",
+        "run this command?",
+        "no, cancel",
+        "do you trust the contents"
+      ],
+      "extraSpinners": [
+        "\u287f",
+        "\u28bf",
+        "\u28df",
+        "\u28ef",
+        "\u28f7",
+        "\u28fb",
+        "\u28fd",
+        "\u28fe"
+      ]
+    },
     "gemini": {
       "waiting": [
         "allow once",

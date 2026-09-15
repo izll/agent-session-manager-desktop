@@ -8,6 +8,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"asmgr-desktop/session/filters"
 )
 
 // busyGracePeriod is the duration to keep reporting Busy after the last
@@ -71,6 +73,20 @@ var defaultSpinners = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", 
 // the file and what is compiled in.
 var cursorSpinners = append(append([]string{}, defaultSpinners...), "⠀")
 
+// antigravitySpinners are the braille cells Antigravity's working line spins
+// through: "⡿  Generating...", "⢿  Editing files...".
+//
+// None of the eight is in the default set — that one runs ⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏, the
+// lighter half of the block, and Antigravity uses the denser half. Collected
+// from a running 1.2.3 rather than reasoned about, which is also how it is
+// known that the line does animate between two captures 60ms apart.
+//
+// Ordered defaults-first to match how patternsFor builds the list from
+// patterns.json (DefaultSpinners then extraSpinners): the two are compared
+// element by element.
+var antigravitySpinners = append(append([]string{}, defaultSpinners...),
+	"⡿", "⢿", "⣟", "⣯", "⣷", "⣻", "⣽", "⣾")
+
 // Extended thinking indicators (static, non-animated)
 // These appear at line start during extended thinking: "✽ Thinking… (stats)"
 // After completion they show "✻ Cogitated for Xs" (no ellipsis)
@@ -99,6 +115,29 @@ var agentPatterns = map[AgentType]AgentPatterns{
 			"yes, and always allow",
 		},
 		Spinners: defaultSpinners,
+	},
+	AgentAntigravity: {
+		// Measured off a running agy 1.2.3, not copied from Gemini: the harness
+		// is a rewrite and words its prompts its own way.
+		//
+		// Two prompts were seen. The permission dialog leads with "Requesting
+		// permission for:" and asks "Run this command?" over a numbered list
+		// ending in "No, cancel". The trust prompt is the first thing a fresh
+		// workspace shows — it blocks before the agent has done anything, and a
+		// session sitting on it is waiting on the user as surely as any
+		// approval.
+		//
+		// Deliberately absent: "esc to cancel". It is in the footer throughout
+		// a turn, including under the permission dialog, so it says the turn is
+		// in flight — busy, not waiting — and the generic detector checks
+		// waiting first, which is what keeps the two apart.
+		WaitingPatterns: []string{
+			"requesting permission for:",
+			"run this command?",
+			"no, cancel",
+			"do you trust the contents",
+		},
+		Spinners: antigravitySpinners,
 	},
 	AgentGemini: {
 		WaitingPatterns: []string{
@@ -709,7 +748,8 @@ func detectCursorActivityContext(ctx context.Context, lines []string, patterns A
 	if from > 0 {
 		above = lines[:from]
 	}
-	if line := findSpinnerLine(above, patterns.Spinners, cursorSpinnerLookback); line != "" {
+	if line := findSpinnerLine(cursorSpinnerSearchArea(above), patterns.Spinners,
+		cursorSpinnerLookback); line != "" {
 		debugf("[StatusDebug] %s → BUSY (spinner %q)", target, line)
 		return ActivityBusy
 	}
@@ -717,13 +757,43 @@ func detectCursorActivityContext(ctx context.Context, lines []string, patterns A
 	return ActivityIdle
 }
 
-// cursorSpinnerLookback is how many non-empty lines above the input box are
-// searched for the spinner.
+// cursorSpinnerSearchArea drops the lines Cursor draws for itself, so that the
+// lookback below counts what the agent wrote rather than what the interface
+// painted.
 //
-// Three, because the spinner is the last thing the agent draws before the box
-// and at most a blank line separates them. Widening it to the generic 15 was
-// enough to reach a braille character quoted in the transcript.
-const cursorSpinnerLookback = 3
+// Measured on a running pane: between the spinner and the input box sat a
+// "Tip: Use /plan …" hint and the box's own top border. Three screen lines
+// were therefore spent before reaching a spinner two lines up, and a working
+// session read as idle. The same filter the sidebar uses already knows both
+// for what they are.
+func cursorSpinnerSearchArea(lines []string) []string {
+	config, ok := filters.LoadFilters()["cursor"]
+	if !ok {
+		return lines
+	}
+	kept := make([]string, 0, len(lines))
+	for _, line := range lines {
+		clean := strings.TrimSpace(stripANSIForDetect(line))
+		if clean == "" {
+			continue
+		}
+		if skip, _ := filters.ApplyFilter(config, clean); skip {
+			continue
+		}
+		kept = append(kept, line)
+	}
+	return kept
+}
+
+// cursorSpinnerLookback is how many lines of the agent's own output above the
+// input box are searched for the spinner.
+//
+// Two, counted after cursorSpinnerSearchArea has removed the interface's own
+// lines. Measured against three panes: on a live turn and on the reported
+// screenshot the spinner is the first line that survives filtering, while a
+// braille character quoted in the transcript sits third, behind two sentences
+// the agent actually said. Two separates them; three does not.
+const cursorSpinnerLookback = 2
 
 // cursorInputBoxTop returns the index of the line where Cursor's current screen
 // starts — everything below it belongs to now, everything above is transcript.
@@ -784,6 +854,23 @@ func detectGenericActivityContext(ctx context.Context, lines []string, patterns 
 	return ActivityIdle
 }
 
+// isBrailleSpinnerRune reports whether r is in the braille block, U+2800-U+28FF.
+//
+// Every agent here that spins does it with braille, and each picks its own
+// frames out of the 256 available: the classic ⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏, Antigravity's
+// denser ⡿⢿⣟⣯⣷⣻⣽⣾, Cursor's ⠘⠤ and ⠞. Listing them was a losing game —
+// "⠴ Exploring" was recognised while "⠘⠤ Thinking" was not, on the same agent,
+// minutes apart, because one frame happened to be in the list and the other
+// was not. A missing frame is silent: the session simply reads as idle while
+// it works.
+//
+// The block holds nothing but spinner cells, so accepting all of it costs no
+// precision and ends the whole class of bug. Spinners outside braille — the
+// ◐◑◒◓ wheel, Gemini's ∴∵⋮⋯✦ — still come from the per-agent list.
+func isBrailleSpinnerRune(r rune) bool {
+	return r >= 0x2800 && r <= 0x28FF
+}
+
 // findSpinnerLine returns the first line (from bottom) that starts with a
 // spinner character. Returns the cleaned line content, or "" if not found.
 func findSpinnerLine(lines []string, spinners []string, maxLines int) string {
@@ -794,6 +881,12 @@ func findSpinnerLine(lines []string, spinners []string, maxLines int) string {
 			continue
 		}
 		nonEmptyCount++
+		for _, r := range cleanLine {
+			if isBrailleSpinnerRune(r) {
+				return cleanLine
+			}
+			break // only the first rune decides
+		}
 		for _, s := range spinners {
 			if strings.HasPrefix(cleanLine, s) {
 				return cleanLine

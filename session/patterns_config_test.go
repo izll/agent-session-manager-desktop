@@ -29,7 +29,7 @@ func TestEmbeddedPatternsParse(t *testing.T) {
 	// Every agent the app knows about needs an entry, or it silently falls back
 	// to Claude's patterns — which is how Codex questions went undetected.
 	for _, agent := range []AgentType{
-		AgentClaude, AgentGemini, AgentAider, AgentCodex,
+		AgentClaude, AgentAntigravity, AgentGemini, AgentAider, AgentCodex,
 		AgentAmazonQ, AgentOpenCode, AgentCursor, AgentCustom,
 	} {
 		entry, ok := p.Agents[string(agent)]

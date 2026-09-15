@@ -4,6 +4,7 @@
 
   // Import all icon SVGs
   import claudeIcon from '../../../assets/icons/claude.svg';
+  import antigravityIcon from '../../../assets/icons/antigravity.svg';
   import geminiIcon from '../../../assets/icons/gemini.svg';
   import aiderIcon from '../../../assets/icons/aider.svg';
   import codexIcon from '../../../assets/icons/codex.svg';
@@ -15,6 +16,7 @@
 
   const icons: Record<string, string> = {
     'claude': claudeIcon,
+    'antigravity': antigravityIcon,
     'gemini': geminiIcon,
     'aider': aiderIcon,
     'codex': codexIcon,
