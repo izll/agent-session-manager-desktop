@@ -391,6 +391,8 @@ func (a *App) shutdown(ctx context.Context) {
 	// exact conversation.
 	if a.projectLocked {
 		a.persistActiveProjectCodexResumeIDs("shutdown")
+		a.persistActiveProjectCursorResumeIDs("shutdown")
+		a.persistActiveProjectAntigravityResumeIDs("shutdown")
 		// Mirrors belong to the project lock owner. Remove them before dropping
 		// ownership so the guard in cleanupAllGUISessions remains meaningful.
 		cleanupCtx, cancel := context.WithTimeout(context.Background(), session.TmuxCommandTimeout)
@@ -705,6 +707,8 @@ func (a *App) SelectProject(id string) error {
 	// project's lock and before switching storage to the new project.
 	if a.projectLocked {
 		a.persistActiveProjectCodexResumeIDs("project switch")
+		a.persistActiveProjectCursorResumeIDs("project switch")
+		a.persistActiveProjectAntigravityResumeIDs("project switch")
 	}
 	legacyDrainCtx, cancelLegacyDrain := context.WithTimeout(a.lifecycleContext(), 10*time.Second)
 	legacyDrainErr := a.closeAllLegacyPTYs(legacyDrainCtx)
@@ -817,6 +821,45 @@ func clearProjectScopedCaches() {
 	tabWorkingDirMu.Lock()
 	tabWorkingDirCache = make(map[string]tabWorkingDirCacheEntry)
 	tabWorkingDirMu.Unlock()
+}
+
+// persistActiveProjectAntigravityResumeIDs records the conversation each live
+// Antigravity pane has open. Its id is assigned by the agent and never appears
+// on the command line, so the only place it exists is the presence lock the
+// running process holds.
+func (a *App) persistActiveProjectAntigravityResumeIDs(reason string) {
+	projectID, instances, _, err := a.storage.LoadAllWithProjectSnapshot()
+	if err != nil {
+		log.Printf("[%s] failed to load sessions for Antigravity resume capture: %v", reason, err)
+		return
+	}
+	for _, instance := range instances {
+		if !instance.NeedsAntigravityResumeCapture() {
+			continue
+		}
+		if _, err := a.storage.CaptureAntigravityResumeIDsForProject(projectID, instance.ID); err != nil {
+			log.Printf("[%s] failed to persist Antigravity conversation IDs for session=%s: %v", reason, instance.ID, err)
+		}
+	}
+}
+
+// persistActiveProjectCursorResumeIDs records the chat each live Cursor pane
+// has open, so that resuming a tab returns to the conversation that was on
+// screen rather than to whatever Cursor last touched.
+func (a *App) persistActiveProjectCursorResumeIDs(reason string) {
+	projectID, instances, _, err := a.storage.LoadAllWithProjectSnapshot()
+	if err != nil {
+		log.Printf("[%s] failed to load sessions for Cursor resume capture: %v", reason, err)
+		return
+	}
+	for _, instance := range instances {
+		if !instance.NeedsCursorResumeCapture() {
+			continue
+		}
+		if _, err := a.storage.CaptureCursorResumeIDsForProject(projectID, instance.ID); err != nil {
+			log.Printf("[%s] failed to persist Cursor chat IDs for session=%s: %v", reason, instance.ID, err)
+		}
+	}
 }
 
 func (a *App) persistActiveProjectCodexResumeIDs(reason string) {
@@ -2663,6 +2706,21 @@ func (a *App) getSidebarUpdates(ctx context.Context) SidebarUpdate {
 				log.Printf("[SidebarPoll] failed to capture Codex session IDs for session=%s: %v", inst.ID, err)
 			}
 		}
+		// Cursor is read the same way and for the same reason: its chat id is
+		// never on the command line, so the only place it exists is the store
+		// the running process holds open.
+		if mayPersist && inst.NeedsCursorResumeCapture() {
+			if _, err := a.storage.CaptureCursorResumeIDsForProjectContext(ctx, projectID, inst.ID); err != nil {
+				log.Printf("[SidebarPoll] failed to capture Cursor chat IDs for session=%s: %v", inst.ID, err)
+			}
+		}
+		// Antigravity the same way: the presence lock is the only live record
+		// of which conversation a pane is on.
+		if mayPersist && inst.NeedsAntigravityResumeCapture() {
+			if _, err := a.storage.CaptureAntigravityResumeIDsForProjectContext(ctx, projectID, inst.ID); err != nil {
+				log.Printf("[SidebarPoll] failed to capture Antigravity conversation IDs for session=%s: %v", inst.ID, err)
+			}
+		}
 		// Detected on every poll, not only while nothing is recorded: /resume
 		// inside a session moves it to another conversation, and stopping at the
 		// first answer left us pointing at the one the user had left behind.
@@ -3830,6 +3888,10 @@ func (a *App) GetResumeSessions(agent string, path string) ([]AgentSessionInfo, 
 		sessions, err = session.ListGeminiSessions(path)
 	case session.AgentCodex:
 		sessions, err = session.ListCodexSessions(path)
+	case session.AgentCursor:
+		sessions, err = session.ListCursorSessions(path)
+	case session.AgentAntigravity:
+		sessions, err = session.ListAntigravitySessions(path)
 	case session.AgentOpenCode:
 		sessions, err = session.ListOpenCodeSessions(path)
 	case session.AgentAmazonQ:
@@ -4621,6 +4683,7 @@ func (a *App) GetAgents() []AgentInfo {
 	agents := []AgentInfo{
 		{Type: "claude", Name: "Claude", Icon: "🤖"},
 		{Type: "codex", Name: "Codex", Icon: "📦"},
+		{Type: "antigravity", Name: "Antigravity", Icon: "🛸"},
 		{Type: "gemini", Name: "Gemini", Icon: "💎"},
 		{Type: "cursor", Name: "Cursor", Icon: "🔷"},
 		{Type: "aider", Name: "Aider", Icon: "🔧"},

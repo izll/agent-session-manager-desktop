@@ -1699,6 +1699,122 @@ func (s *Storage) MergeResumeSessionIDsForProject(projectID string, detected *In
 	return fmt.Errorf("instance not found")
 }
 
+// CaptureAntigravityResumeIDsForProject reloads the current instance and
+// records the conversation each live Antigravity pane has open. Same shape as
+// the Cursor and Codex pairs below.
+func (s *Storage) CaptureAntigravityResumeIDsForProject(projectID, instanceID string) (bool, error) {
+	return s.CaptureAntigravityResumeIDsForProjectContext(context.Background(), projectID, instanceID)
+}
+
+// CaptureAntigravityResumeIDsForProjectContext cancels the live detector with
+// the poll that started it.
+func (s *Storage) CaptureAntigravityResumeIDsForProjectContext(ctx context.Context, projectID, instanceID string) (bool, error) {
+	return s.captureAntigravityResumeIDsForProject(
+		projectID,
+		instanceID,
+		func(tmuxSession string, windowIdx int, expectedCWD string) string {
+			return DetectAntigravityConversationIDFromTmuxContext(ctx, tmuxSession, windowIdx, expectedCWD)
+		},
+		func(instance *Instance) (int, bool) { return instance.getMainWindowIndex() },
+	)
+}
+
+func (s *Storage) captureAntigravityResumeIDsForProject(
+	projectID,
+	instanceID string,
+	detect antigravitySessionDetector,
+	detectMainWindow func(*Instance) (int, bool),
+) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	originalProject := s.projectID
+	if err := s.setActiveProjectLocked(projectID); err != nil {
+		return false, err
+	}
+	defer s.setActiveProjectLocked(originalProject)
+
+	instances, groups, settings, err := s.loadAllWithSettingsLocked()
+	if err != nil {
+		return false, err
+	}
+	for _, current := range instances {
+		if current.ID != instanceID {
+			continue
+		}
+		mainWindowIdx, mainWindowOK := 0, false
+		if current.Agent == AgentAntigravity && !current.MainWindowStopped {
+			mainWindowIdx, mainWindowOK = detectMainWindow(current)
+		}
+		if !current.captureAntigravityResumeIDsAtMainWindow(detect, mainWindowIdx, mainWindowOK) {
+			return false, nil
+		}
+		if err := s.saveAllLocked(instances, groups, settings); err != nil {
+			return false, err
+		}
+		return true, nil
+	}
+	return false, fmt.Errorf("instance not found")
+}
+
+// CaptureCursorResumeIDsForProject reloads the current instance and records the
+// chat each live Cursor pane has open. Same shape as the Codex pair below: the
+// detector is injected so tests need no processes of their own.
+func (s *Storage) CaptureCursorResumeIDsForProject(projectID, instanceID string) (bool, error) {
+	return s.CaptureCursorResumeIDsForProjectContext(context.Background(), projectID, instanceID)
+}
+
+// CaptureCursorResumeIDsForProjectContext cancels the live detector with the
+// poll that started it.
+func (s *Storage) CaptureCursorResumeIDsForProjectContext(ctx context.Context, projectID, instanceID string) (bool, error) {
+	return s.captureCursorResumeIDsForProject(
+		projectID,
+		instanceID,
+		func(tmuxSession string, windowIdx int, expectedCWD string) string {
+			return DetectCursorChatIDFromTmuxContext(ctx, tmuxSession, windowIdx, expectedCWD)
+		},
+		func(instance *Instance) (int, bool) { return instance.getMainWindowIndex() },
+	)
+}
+
+func (s *Storage) captureCursorResumeIDsForProject(
+	projectID,
+	instanceID string,
+	detect cursorSessionDetector,
+	detectMainWindow func(*Instance) (int, bool),
+) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	originalProject := s.projectID
+	if err := s.setActiveProjectLocked(projectID); err != nil {
+		return false, err
+	}
+	defer s.setActiveProjectLocked(originalProject)
+
+	instances, groups, settings, err := s.loadAllWithSettingsLocked()
+	if err != nil {
+		return false, err
+	}
+	for _, current := range instances {
+		if current.ID != instanceID {
+			continue
+		}
+		mainWindowIdx, mainWindowOK := 0, false
+		if current.Agent == AgentCursor && !current.MainWindowStopped {
+			mainWindowIdx, mainWindowOK = detectMainWindow(current)
+		}
+		if !current.captureCursorResumeIDsAtMainWindow(detect, mainWindowIdx, mainWindowOK) {
+			return false, nil
+		}
+		if err := s.saveAllLocked(instances, groups, settings); err != nil {
+			return false, err
+		}
+		return true, nil
+	}
+	return false, fmt.Errorf("instance not found")
+}
+
 // CaptureCodexResumeIDsForProject reloads the current instance and detects its
 // live process while holding the storage lock. This prevents a stale sidebar
 // snapshot from assigning an old process ID after a rapid stop/start or a

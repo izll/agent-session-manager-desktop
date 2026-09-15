@@ -60,7 +60,7 @@ func DetectCodexSessionIDFromTmuxContext(ctx context.Context, tmuxSession string
 // detectCodexSessionIDFromOpenPaths applies the same containment, format and
 // ambiguity checks to platform-specific process open-file discovery.
 func detectCodexSessionIDFromOpenPaths(sessionsRoot, expectedCWD string, paths []string) string {
-	sessionsRoot, err := filepath.Abs(sessionsRoot)
+	sessionsRoot, err := filepath.Abs(trimExtendedLengthPrefix(sessionsRoot))
 	if err != nil {
 		return ""
 	}
@@ -70,6 +70,7 @@ func detectCodexSessionIDFromOpenPaths(sessionsRoot, expectedCWD string, paths [
 
 	candidates := make(map[string]struct{})
 	for _, path := range paths {
+		path = trimExtendedLengthPrefix(path)
 		if !filepath.IsAbs(path) || strings.HasSuffix(path, " (deleted)") {
 			continue
 		}
@@ -247,6 +248,24 @@ func parseCodexRootSessionMeta(r io.Reader, expectedCWD string) string {
 		return ""
 	}
 	return sessionID
+}
+
+// trimExtendedLengthPrefix removes Windows' \\?\ prefix from a path.
+//
+// gopsutil reports open files in extended-length form —
+// \\?\C:\Users\...\presence\<id>.lock — while the roots here are built from
+// os.UserHomeDir, which has no prefix. filepath.Rel cannot relate the two
+// ("can't make \\?\C:\... relative to C:\..."), so every candidate was
+// discarded and detection returned nothing at all. Measured on Windows 11
+// with a live agent holding its lock open.
+//
+// Everywhere else this is a no-op: no other platform produces the prefix.
+func trimExtendedLengthPrefix(path string) string {
+	if strings.HasPrefix(path, `\\?\UNC\`) {
+		// \\?\UNC\server\share -> \\server\share
+		return `\\` + strings.TrimPrefix(path, `\\?\UNC\`)
+	}
+	return strings.TrimPrefix(path, `\\?\`)
 }
 
 func pathInsideDirectory(root, path string) bool {
