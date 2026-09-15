@@ -1634,6 +1634,9 @@
       gemini: '#60a5fa',
       aider: '#4ade80',
       codex: '#fbbf24',
+      // Indigo rather than another blue: Gemini already holds #60a5fa, and two
+      // tabs side by side were telling them apart by nothing.
+      cursor: '#818cf8',
       amazonq: '#f87171',
       opencode: '#22d3ee',
       terminal: '#9ca3af',

@@ -4616,6 +4616,7 @@ func (a *App) GetAgents() []AgentInfo {
 		{Type: "claude", Name: "Claude", Icon: "🤖"},
 		{Type: "codex", Name: "Codex", Icon: "📦"},
 		{Type: "gemini", Name: "Gemini", Icon: "💎"},
+		{Type: "cursor", Name: "Cursor", Icon: "🔷"},
 		{Type: "aider", Name: "Aider", Icon: "🔧"},
 		{Type: "amazonq", Name: "Amazon Q", Icon: "🦜"},
 		{Type: "opencode", Name: "OpenCode", Icon: "💻"},

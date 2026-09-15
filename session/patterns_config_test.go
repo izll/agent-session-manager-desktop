@@ -30,7 +30,7 @@ func TestEmbeddedPatternsParse(t *testing.T) {
 	// to Claude's patterns — which is how Codex questions went undetected.
 	for _, agent := range []AgentType{
 		AgentClaude, AgentGemini, AgentAider, AgentCodex,
-		AgentAmazonQ, AgentOpenCode, AgentCustom,
+		AgentAmazonQ, AgentOpenCode, AgentCursor, AgentCustom,
 	} {
 		entry, ok := p.Agents[string(agent)]
 		if !ok {

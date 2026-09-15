@@ -288,6 +288,49 @@ func getDefaultFilters() AgentFilters {
 			SkipDotFieldsWithPath: 3,
 			MinSeparators:         20,
 		},
+		"cursor": {
+			// Measured against a running session. The first version of this was
+			// copied from Codex's entry and matched almost nothing: the sidebar
+			// showed the input box's own border where the session's last words
+			// belonged.
+			//
+			// "ctrl+c to stop" rather than Codex's "esc to interrupt" — Cursor
+			// words it its own way, and the footer carries the mode labels.
+			//
+			// "Run Everything" stays here because it also appears in the
+			// footer; "Add a follow-up" does not, because matching the prompt's
+			// text only worked while the box was empty — see the → prefix below.
+			SkipContains: []string{
+				"context left", "? for", "ctrl+c to stop", "Run Everything",
+			},
+			// Cursor draws its input box with half blocks, like Gemini, not with
+			// the light box-drawing set. A row of ▄ or ▀ is that border, and it
+			// was what the preview ended up showing.
+			//
+			// "→" is what marks the line inside that box, and it has to be
+			// matched on the arrow rather than on the words after it: the
+			// placeholder reads "Add a follow-up" only until you start typing,
+			// and after that the line carries whatever you have half-written —
+			// which then appeared on the tab as though the agent had said it.
+			// "Auto · " carries the footer's model label together with whatever
+			// follows it — the context percentage, or the mode: "Auto · 6.1%",
+			// "Auto · Plan Mode", "Auto · Ask". Matched with the separator
+			// attached rather than on "Auto" alone, because a bare prefix
+			// swallowed real sentences beginning with those four letters
+			// ("Automatikusan generált teszt hozzáadva"), and " · " after them
+			// is not something a sentence does.
+			SkipPrefixes: []string{">", "›", "→", "╭", "╰", "│", "▄", "▀", "█", "Tip:", "Auto · "},
+			// The label on its own, when there is nothing to append to it, and
+			// the banner's first line on a freshly started agent.
+			SkipExact: []string{"Auto", "Cursor Agent"},
+
+			// Two, not three: Codex's bar is "<model> <effort> · <path> ·
+			// <branch>", but Cursor puts the model on a line of its own and
+			// leaves "~/path · branch" — two fields, so a threshold of three
+			// let the bar through as though the agent had said it.
+			SkipDotFieldsWithPath: 2,
+			MinSeparators:         20,
+		},
 		"amazonq": {
 			SkipContains:  []string{"Amazon Q"},
 			SkipPrefixes:  []string{">"},

@@ -53,6 +53,24 @@ type AgentPatterns struct {
 // Default spinner characters (braille dots)
 var defaultSpinners = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
 
+// cursorSpinners are the braille cells Cursor's "Thinking" line can start with.
+//
+// It pads the line with U+2800 — the blank braille cell, which looks like a
+// space and is not in the default set — and puts the animating glyph second:
+// "⠀⠞ Thinking  28 tokens". findSpinnerLine matches on a prefix, so with the
+// default set it found nothing and a working Cursor never registered as busy.
+//
+// The blank is what every frame of the animation has in common, whatever glyph
+// follows it. A glyph missing from the set costs nothing beyond that frame —
+// the line is re-read every tick, and "ctrl+c to stop" in the footer answers
+// the same question without depending on the animation at all.
+//
+// Ordered defaults-first to match how patternsFor builds the list from
+// patterns.json (DefaultSpinners then extraSpinners): the two are compared
+// element by element, so the reverse order would read as a mismatch between
+// the file and what is compiled in.
+var cursorSpinners = append(append([]string{}, defaultSpinners...), "⠀")
+
 // Extended thinking indicators (static, non-animated)
 // These appear at line start during extended thinking: "✽ Thinking… (stats)"
 // After completion they show "✻ Cogitated for Xs" (no ellipsis)
@@ -136,6 +154,24 @@ var agentPatterns = map[AgentType]AgentPatterns{
 			"waiting for user",
 		},
 		Spinners: defaultSpinners,
+	},
+	AgentCursor: {
+		// Taken from a captured approval prompt, not from the documentation.
+		// The generic wording that was here first — "allow once", "(y/n)" —
+		// matched a Go source listing in the transcript, and a session sat on
+		// "waiting" because the pane happened to be showing this very file.
+		//
+		// Each of these appears once on a pane that is asking, and nowhere on
+		// one that is not. "Run Everything" is deliberately absent although it
+		// is one of the answers offered: it is also the footer's standing mode
+		// label, on screen while the agent sits idle, so it would pin every
+		// idle session to waiting instead.
+		WaitingPatterns: []string{
+			"run this command?",
+			"not in allowlist:",
+			"skip & tell the agent",
+		},
+		Spinners: cursorSpinners,
 	},
 	AgentCustom: {
 		WaitingPatterns: []string{
@@ -228,6 +264,8 @@ func (i *Instance) DetectActivityForWindowWithValidityContext(ctx context.Contex
 		activity = detectClaudeActivityContext(ctx, lines, patterns, target)
 	} else if agent == AgentCodex {
 		activity = detectCodexActivity(lines, patterns)
+	} else if agent == AgentCursor {
+		activity = detectCursorActivityContext(ctx, lines, patterns, target)
 	} else {
 		// All other agents use generic detection
 		activity = detectGenericActivityContext(ctx, lines, patterns, target)
@@ -595,6 +633,124 @@ func detectCodexActivity(lines []string, patterns AgentPatterns) SessionActivity
 	}
 
 	return ActivityIdle
+}
+
+// detectCursorActivity recognises Cursor CLI's busy/waiting markers.
+//
+// Cursor gets its own detection rather than the generic path for two reasons,
+// both measured against a running session:
+//
+//   - Its input box is drawn with half-block characters (▄ above, ▀ below), not
+//     the light box-drawing set every other agent uses. The generic path has no
+//     boundary at all, so it read the last 15 lines wherever they came from —
+//     and matched "allow once" inside a Go source listing that happened to be
+//     on screen. The transcript above the box is not a prompt.
+//
+//   - Its spinner line begins with U+2800, the *blank* braille cell, with the
+//     animating glyph second: "⠀⠞ Thinking  28 tokens". findSpinnerLine matches
+//     on a prefix, so the default braille set never matched that frame.
+//
+//   - The spinner is drawn *above* the input box, in the last lines of the
+//     transcript — not below it like the footer. Reading only from the box
+//     down, which is right for a prompt, cannot see it, and "⠴ Exploring 205s"
+//     was reported idle although every character of it was already recognised.
+//     Its counter ticks once a second, so re-capturing 60ms later to prove the
+//     line is animating usually gets the same line back and proves nothing.
+//     The spinner is therefore taken as busy on its own, as Codex's "Working"
+//     line is.
+func detectCursorActivity(lines []string, patterns AgentPatterns, target string) SessionActivity {
+	return detectCursorActivityContext(context.Background(), lines, patterns, target)
+}
+
+func detectCursorActivityContext(ctx context.Context, lines []string, patterns AgentPatterns, target string) SessionActivity {
+	// Everything below the input box belongs to the current screen. Above it is
+	// the transcript, where the agent's own words — or a file it printed — can
+	// say anything at all.
+	from := cursorInputBoxTop(lines)
+
+	for j := len(lines) - 1; j >= from; j-- {
+		clean := strings.TrimSpace(stripANSIForDetect(lines[j]))
+		if clean == "" {
+			continue
+		}
+		lower := strings.ToLower(clean)
+		for _, pattern := range patterns.WaitingPatterns {
+			if strings.Contains(lower, pattern) {
+				debugf("[StatusDebug] %s → WAITING (%q)", target, pattern)
+				return ActivityWaiting
+			}
+		}
+	}
+
+	// Busy: the footer says how to stop the turn while one is in flight, and
+	// removes it when the turn ends. Cheaper and steadier than the spinner,
+	// which needs a second capture to prove it is animating.
+	for j := len(lines) - 1; j >= from; j-- {
+		clean := strings.TrimSpace(stripANSIForDetect(lines[j]))
+		if clean == "" {
+			continue
+		}
+		if strings.Contains(strings.ToLower(clean), "ctrl+c to stop") {
+			debugf("[StatusDebug] %s → BUSY (ctrl+c to stop)", target)
+			return ActivityBusy
+		}
+	}
+
+	// The spinner sits above the input box, so it is looked for in the lines
+	// leading up to it rather than below. The window is kept short — a spinner
+	// is on the last line the agent wrote, and a wider one would reach into the
+	// transcript, where a braille character is just a character.
+	//
+	// With no box on screen — Cursor draws none while it is starting up, and
+	// cursorInputBoxTop then answers 0 — the whole capture is the search area.
+	// Slicing to lines[:0] instead would hide the spinner in exactly the case
+	// where it is the only thing there is to go on.
+	above := lines
+	if from > 0 {
+		above = lines[:from]
+	}
+	if line := findSpinnerLine(above, patterns.Spinners, cursorSpinnerLookback); line != "" {
+		debugf("[StatusDebug] %s → BUSY (spinner %q)", target, line)
+		return ActivityBusy
+	}
+
+	return ActivityIdle
+}
+
+// cursorSpinnerLookback is how many non-empty lines above the input box are
+// searched for the spinner.
+//
+// Three, because the spinner is the last thing the agent draws before the box
+// and at most a blank line separates them. Widening it to the generic 15 was
+// enough to reach a braille character quoted in the transcript.
+const cursorSpinnerLookback = 3
+
+// cursorInputBoxTop returns the index of the line where Cursor's current screen
+// starts — everything below it belongs to now, everything above is transcript.
+// 0 when no boundary is on screen.
+//
+// Cursor draws two different rules, and both have to count. Its input box is
+// made of half blocks (▄ on top, ▀ underneath), but its approval dialog is
+// introduced by a plain ─ rule instead, with no box around it at all. Looking
+// only for half blocks found no boundary on a pane that was asking a question,
+// which put the search back over the whole transcript — the thing this is here
+// to prevent.
+//
+// The lowest rule wins: it is the one belonging to whatever is on screen now,
+// rather than to something scrolled up. A single glyph is not enough — both
+// characters occur in ordinary output, in a chart or a progress bar — so a run
+// is required, the same threshold the other separator checks use.
+func cursorInputBoxTop(lines []string) int {
+	for j := len(lines) - 1; j >= 0; j-- {
+		clean := strings.TrimSpace(stripANSIForDetect(lines[j]))
+		if strings.Count(clean, "▄")+strings.Count(clean, "▀") > 20 {
+			return j
+		}
+		if strings.Count(clean, "─")+strings.Count(clean, "━")+strings.Count(clean, "╌") > 20 {
+			return j
+		}
+	}
+	return 0
 }
 
 // detectGenericActivity checks last lines for waiting patterns,

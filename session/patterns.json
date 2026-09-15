@@ -21,16 +21,26 @@
     "copy with a higher version, so an older file cannot overwrite a newer one."
   ],
   "version": 3,
-
-  "defaultSpinners": ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"],
-
-  "thinkingIndicators": ["✽", "✻"],
-
+  "defaultSpinners": [
+    "⠋",
+    "⠙",
+    "⠹",
+    "⠸",
+    "⠼",
+    "⠴",
+    "⠦",
+    "⠧",
+    "⠇",
+    "⠏"
+  ],
+  "thinkingIndicators": [
+    "✽",
+    "✻"
+  ],
   "$comment_backgroundAgentBusy": "Case-insensitive regular expressions, matched against the whole pane, meaning a spawned agent is still working while the main thread sits idle. Only Claude Code's explicit sentence qualifies. The status bar's \"← 1 agent\" was tried and removed: that count is how many agents the session HAS, not how many are running, so it stays on screen after the work finishes and marked finished sessions busy.",
   "backgroundAgentBusy": [
     "waiting for \\d+ background agents? to finish"
   ],
-
   "agents": {
     "claude": {
       "waiting": [
@@ -52,7 +62,13 @@
         "keep trying",
         "high demand"
       ],
-      "extraSpinners": ["∴", "∵", "⋮", "⋯", "✦"]
+      "extraSpinners": [
+        "∴",
+        "∵",
+        "⋮",
+        "⋯",
+        "✦"
+      ]
     },
     "aider": {
       "waiting": [
@@ -74,6 +90,17 @@
         "allow always",
         "do you want to proceed",
         "waiting for user"
+      ]
+    },
+    "cursor": {
+      "$comment": "Taken from a captured approval prompt, not from the documentation. The generic wording that was here first (\"allow once\", \"(y/n)\") matched a Go source listing in the transcript and held a session on \"waiting\". \"Run Everything\" is deliberately absent although it is one of the answers offered: it is also the footer's standing mode label, on screen while the agent is idle. Busy is read from \"ctrl+c to stop\" in the footer, which needs no pattern here.",
+      "waiting": [
+        "run this command?",
+        "not in allowlist:",
+        "skip & tell the agent"
+      ],
+      "extraSpinners": [
+        "⠀"
       ]
     },
     "amazonq": {

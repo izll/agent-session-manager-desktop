@@ -134,9 +134,15 @@ var AgentConfigs = map[AgentType]AgentConfig{
 		ResumeFlag:      "--session",
 	},
 	AgentCursor: {
-		Command:         "cursor",
-		SupportsResume:  false,
-		SupportsAutoYes: false,
+		// cursor-agent, not cursor: the latter is the GUI editor, and starting
+		// it here opened a window instead of an agent.
+		Command:         "cursor-agent",
+		SupportsResume:  true,
+		SupportsAutoYes: true,
+		// --force allows commands unless explicitly denied; there is no
+		// separate skip-all-permissions flag.
+		AutoYesFlag: "--force",
+		ResumeFlag:  "--resume",
 	},
 	AgentCustom: {
 		Command:         "",

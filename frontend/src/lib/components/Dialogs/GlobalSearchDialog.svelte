@@ -157,6 +157,7 @@
       gemini: '💎',
       aider: '🔧',
       codex: '📦',
+      cursor: '🔷',
       amazonq: '🦜',
       opencode: '💻',
       terminal: '🖥️',
@@ -170,6 +171,9 @@
       gemini: '#60a5fa',
       aider: '#4ade80',
       codex: '#fbbf24',
+      // Indigo rather than another blue: Gemini already holds #60a5fa, and the
+      // two sat next to each other in the results list indistinguishably.
+      cursor: '#818cf8',
       amazonq: '#f87171',
       opencode: '#22d3ee',
       terminal: '#9ca3af',

@@ -7,6 +7,7 @@
   import geminiIcon from '../../../assets/icons/gemini.svg';
   import aiderIcon from '../../../assets/icons/aider.svg';
   import codexIcon from '../../../assets/icons/codex.svg';
+  import cursorIcon from '../../../assets/icons/cursor.svg';
   import amazonqIcon from '../../../assets/icons/amazonq.svg';
   import opencodeIcon from '../../../assets/icons/opencode.svg';
   import terminalIcon from '../../../assets/icons/terminal.svg';
@@ -17,6 +18,7 @@
     'gemini': geminiIcon,
     'aider': aiderIcon,
     'codex': codexIcon,
+    'cursor': cursorIcon,
     'amazonq': amazonqIcon,
     'opencode': opencodeIcon,
     'terminal': terminalIcon,
