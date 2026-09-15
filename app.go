@@ -4673,6 +4673,15 @@ type AgentInfo struct {
 	SupportsResume  bool   `json:"supportsResume"`
 	SupportsAutoYes bool   `json:"supportsAutoYes"`
 	SupportsFork    bool   `json:"supportsFork"`
+	// Installed reports whether the agent's command is on PATH right now.
+	//
+	// Answered here rather than left to the failure at launch: the dialog can
+	// then say so before the user has filled anything in, instead of letting
+	// them pick an agent and find out at the end.
+	Installed bool `json:"installed"`
+	// InstallURL is the agent's own installation page, for the offer shown
+	// when it is missing. Empty for the pseudo-agents.
+	InstallURL string `json:"installUrl,omitempty"`
 }
 
 // GetAgents returns available agents
@@ -4700,11 +4709,25 @@ func (a *App) GetAgents() []AgentInfo {
 	for at := range agents {
 		config, ok := session.AgentConfigs[session.AgentType(agents[at].Type)]
 		if !ok {
+			// Terminal has no entry: it runs the user's own shell rather than
+			// an agent, so there is no command to look for and nothing to
+			// install. Without this it fell through with Installed false and
+			// the dialog offered to install a terminal.
+			agents[at].Installed = true
 			continue
 		}
 		agents[at].SupportsResume = config.SupportsResume
 		agents[at].SupportsAutoYes = config.SupportsAutoYes
 		agents[at].SupportsFork = config.ForkFlag != ""
+		agents[at].InstallURL = config.InstallURL
+		// Terminal runs the user's shell and Custom runs whatever they name,
+		// so neither has a command of its own to look for.
+		if config.Command != "" {
+			_, lookErr := exec.LookPath(config.Command)
+			agents[at].Installed = lookErr == nil
+		} else {
+			agents[at].Installed = true
+		}
 	}
 	return agents
 }

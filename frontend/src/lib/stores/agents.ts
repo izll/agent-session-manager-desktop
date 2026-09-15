@@ -8,6 +8,10 @@ export interface Agent {
   supportsResume: boolean;
   supportsAutoYes: boolean;
   supportsFork: boolean;
+  /** Whether the agent's command is on PATH, as the backend saw it. */
+  installed: boolean;
+  /** The agent's own installation page; empty for Terminal and Custom. */
+  installUrl?: string;
 }
 
 export const agents = writable<Agent[]>([]);

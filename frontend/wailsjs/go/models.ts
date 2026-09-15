@@ -97,6 +97,8 @@ export namespace main {
 	    supportsResume: boolean;
 	    supportsAutoYes: boolean;
 	    supportsFork: boolean;
+	    installed: boolean;
+	    installUrl?: string;
 
 	    static createFrom(source: any = {}) {
 	        return new AgentInfo(source);
@@ -110,6 +112,8 @@ export namespace main {
 	        this.supportsResume = source["supportsResume"];
 	        this.supportsAutoYes = source["supportsAutoYes"];
 	        this.supportsFork = source["supportsFork"];
+	        this.installed = source["installed"];
+	        this.installUrl = source["installUrl"];
 	    }
 	}
 	export class AgentSessionInfo {

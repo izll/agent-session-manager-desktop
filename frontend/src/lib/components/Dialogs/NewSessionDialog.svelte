@@ -1,5 +1,6 @@
 <script lang="ts">
   import { claimKeyForDialog } from '../../utils/dialogKeys';
+  import { BrowserOpenURL } from '../../../../wailsjs/runtime/runtime';
   import { autoFocusDialog } from '../../utils/dialogActions';
   import { createEventDispatcher, onDestroy } from 'svelte';
   import { agents, loadAgents } from '../../stores/agents';
@@ -11,6 +12,12 @@
   import { t } from '../../i18n';
 
   export let show = false;
+
+  // The agent the user has picked, and whether its command is on PATH. The
+  // backend answers this with the list, so the dialog can say so before
+  // anything is filled in rather than failing at the end.
+  $: chosenAgent = $agents.find((a) => a.type === selectedAgent);
+  $: agentMissing = !!chosenAgent && chosenAgent.installed === false;
 
   const dispatch = createEventDispatcher();
 
@@ -342,6 +349,27 @@
         </div>
       {/if}
 
+      <!-- Shown before anything is submitted, not only after the failure: the
+           backend already knows the command is missing. The install page is
+           opened in the real browser rather than pasting a shell command,
+           because the instructions differ by platform and change. -->
+      {#if agentMissing}
+        <div class="error-message agent-missing">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 9v4"/><path d="M12 17h.01"/>
+            <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+          </svg>
+          <span>{$t('agentInstall.missing', { name: chosenAgent?.name || selectedAgent })}</span>
+          {#if chosenAgent?.installUrl}
+            <button
+              type="button"
+              class="install-link"
+              on:click={() => BrowserOpenURL(chosenAgent?.installUrl || '')}
+            >{$t('agentInstall.open')}</button>
+          {/if}
+        </div>
+      {/if}
+
       <form on:submit|preventDefault={() => handleSubmit(false)}>
         <!-- Agent Type -->
         <div class="form-group">
@@ -351,6 +379,8 @@
               <button
                 type="button"
                 class="agent-btn {selectedAgent === agent.type ? 'selected' : ''}"
+                class:not-installed={agent.installed === false}
+                title={agent.installed === false ? $t('agentInstall.notInstalled') : agent.name}
                 on:click={() => selectedAgent = agent.type}
               >
                 <span class="agent-icon-wrapper">
@@ -602,6 +632,33 @@
     border-radius: 12px;
     cursor: pointer;
     transition: all 0.2s ease;
+  }
+
+  /* Dimmed rather than disabled: the user may want to pick it, see why it
+     cannot start, and install it from the offer below. */
+  .agent-btn.not-installed .agent-icon-wrapper,
+  .agent-btn.not-installed .agent-name {
+    opacity: 0.45;
+  }
+
+  .agent-missing {
+    color: #fbbf24;
+  }
+
+  .install-link {
+    margin-left: auto;
+    flex-shrink: 0;
+    padding: 4px 10px;
+    border-radius: 6px;
+    border: 1px solid rgba(var(--accent-rgb), 0.5);
+    background: rgba(var(--accent-rgb), 0.12);
+    color: var(--accent-light);
+    font-size: 12px;
+    cursor: pointer;
+  }
+
+  .install-link:hover {
+    background: rgba(var(--accent-rgb), 0.2);
   }
 
   .agent-btn:hover {

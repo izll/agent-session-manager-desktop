@@ -81,12 +81,21 @@ type AgentConfig struct {
 	 */
 	ForkFlag         string
 	ForkIsSubcommand bool
+
+	// InstallURL is the agent's own installation page.
+	//
+	// Opened in a browser when the command is missing, rather than printing a
+	// shell one-liner: the instructions differ by platform and change without
+	// notice, and a stale command copied from here would be worse than none.
+	// Empty for the pseudo-agents, which install nothing.
+	InstallURL string
 }
 
 // AgentConfigs maps agent types to their configurations
 var AgentConfigs = map[AgentType]AgentConfig{
 	AgentClaude: {
 		Command:           "claude",
+		InstallURL:        "https://code.claude.com/docs/en/overview",
 		SupportsResume:    true,
 		SupportsAutoYes:   true,
 		AutoYesFlag:       "--dangerously-skip-permissions",
@@ -106,6 +115,7 @@ var AgentConfigs = map[AgentType]AgentConfig{
 		// no --session-id to pre-assign one with, so SupportsSessionID stays
 		// false and no fork flag exists at all.
 		Command:         "agy",
+		InstallURL:      "https://antigravity.google/docs/cli/install/",
 		SupportsResume:  true,
 		SupportsAutoYes: true,
 		AutoYesFlag:     "--dangerously-skip-permissions",
@@ -113,18 +123,21 @@ var AgentConfigs = map[AgentType]AgentConfig{
 	},
 	AgentGemini: {
 		Command:         "gemini",
+		InstallURL:      "https://github.com/google-gemini/gemini-cli",
 		SupportsResume:  true,
 		SupportsAutoYes: false,
 		ResumeFlag:      "--resume",
 	},
 	AgentAider: {
 		Command:         "aider",
+		InstallURL:      "https://aider.chat/docs/install.html",
 		SupportsResume:  false,
 		SupportsAutoYes: true,
 		AutoYesFlag:     "--yes",
 	},
 	AgentCodex: {
 		Command:         "codex",
+		InstallURL:      "https://github.com/openai/codex",
 		SupportsResume:  true,
 		SupportsAutoYes: true,
 		// Codex CLI removed `--full-auto`. The closest replacement (skips
@@ -141,6 +154,7 @@ var AgentConfigs = map[AgentType]AgentConfig{
 	},
 	AgentAmazonQ: {
 		Command:            "q",
+		InstallURL:         "https://docs.aws.amazon.com/amazonq/latest/qdeveloper-ug/command-line-installing.html",
 		SupportsResume:     true,
 		SupportsAutoYes:    true,
 		AutoYesFlag:        "--trust-all-tools",
@@ -149,6 +163,7 @@ var AgentConfigs = map[AgentType]AgentConfig{
 	},
 	AgentOpenCode: {
 		Command:         "opencode",
+		InstallURL:      "https://opencode.ai/docs/",
 		SupportsResume:  true,
 		SupportsAutoYes: false,
 		ResumeFlag:      "--session",
@@ -157,6 +172,7 @@ var AgentConfigs = map[AgentType]AgentConfig{
 		// cursor-agent, not cursor: the latter is the GUI editor, and starting
 		// it here opened a window instead of an agent.
 		Command:         "cursor-agent",
+		InstallURL:      "https://cursor.com/docs/cli/installation",
 		SupportsResume:  true,
 		SupportsAutoYes: true,
 		// --force allows commands unless explicitly denied; there is no

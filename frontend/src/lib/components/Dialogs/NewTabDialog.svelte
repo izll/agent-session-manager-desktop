@@ -4,6 +4,7 @@
   import { createEventDispatcher } from 'svelte';
   import { selectedSessionId, loadSessions, selectWindow, sessions } from '../../stores/sessions';
   import { agents } from '../../stores/agents';
+  import { BrowserOpenURL } from '../../../../wailsjs/runtime/runtime';
   import { get } from 'svelte/store';
   import * as App from '../../../../wailsjs/go/main/App';
   import AgentIcon from '../common/AgentIcon.svelte';
@@ -22,6 +23,11 @@
   let workDir = '';
   let isSubmitting = false;
   let error = '';
+
+  // Same as the new-session dialog: the list already says whether the command
+  // is on PATH, so the offer can appear before the tab is submitted.
+  $: chosenAgent = $agents.find((a) => a.type === selectedAgent);
+  $: agentMissing = tabType === 'agent' && !!chosenAgent && chosenAgent.installed === false;
   let userTouchedName = false;
   let operationGeneration = 0;
   let lastTargetKey = '';
@@ -168,6 +174,23 @@
         </div>
       {/if}
 
+      {#if agentMissing}
+        <div class="error-message agent-missing">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 9v4"/><path d="M12 17h.01"/>
+            <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+          </svg>
+          <span>{$t('agentInstall.missing', { name: chosenAgent?.name || selectedAgent })}</span>
+          {#if chosenAgent?.installUrl}
+            <button
+              type="button"
+              class="install-link"
+              on:click={() => BrowserOpenURL(chosenAgent?.installUrl || '')}
+            >{$t('agentInstall.open')}</button>
+          {/if}
+        </div>
+      {/if}
+
       <form on:submit|preventDefault={handleSubmit}>
         <!-- Tab Type -->
         <div class="form-group">
@@ -209,6 +232,8 @@
                 <button
                   type="button"
                   class="agent-btn {selectedAgent === agent.type ? 'selected' : ''}"
+                  class:not-installed={agent.installed === false}
+                  title={agent.installed === false ? $t('agentInstall.notInstalled') : agent.name}
                   on:click={() => selectAgent(agent.type)}
                 >
                   <AgentIcon agent={agent.type} size="md" />
@@ -375,6 +400,31 @@
     transition: all 0.2s ease;
     color: #9ca3af;
     font-size: 12px;
+  }
+
+  .agent-btn.not-installed :global(img),
+  .agent-btn.not-installed span {
+    opacity: 0.45;
+  }
+
+  .agent-missing {
+    color: #fbbf24;
+  }
+
+  .install-link {
+    margin-left: auto;
+    flex-shrink: 0;
+    padding: 4px 10px;
+    border-radius: 6px;
+    border: 1px solid rgba(var(--accent-rgb), 0.5);
+    background: rgba(var(--accent-rgb), 0.12);
+    color: var(--accent-light);
+    font-size: 12px;
+    cursor: pointer;
+  }
+
+  .install-link:hover {
+    background: rgba(var(--accent-rgb), 0.2);
   }
 
   .agent-btn:hover {
