@@ -1760,7 +1760,10 @@
           <path d="M16 19h6v-6"/><path d="M22 13l-6 6"/>
         </svg>
       </button>
-      <button class="refresh-btn" on:click={() => loadDiff()} disabled={loading}>
+      <!-- reload-btn as well as refresh-btn: the folder button beside it carries
+           the same styling class, so a selector on refresh-btn alone matches
+           both and cannot name this one. -->
+      <button class="refresh-btn reload-btn" on:click={() => loadDiff()} disabled={loading}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class:spinning={loading}>
           <path d="M23 4v6h-6M1 20v-6h6"/>
           <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>

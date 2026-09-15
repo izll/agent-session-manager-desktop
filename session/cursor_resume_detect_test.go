@@ -2,8 +2,6 @@ package session
 
 import (
 	"context"
-	"crypto/md5"
-	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -14,8 +12,7 @@ import (
 // way a live cursor-agent holds one open.
 func linkCursorStore(t *testing.T, procRoot, chatsRoot, projectPath, chatID, fd string, pid int) {
 	t.Helper()
-	sum := md5.Sum([]byte(filepath.Clean(projectPath)))
-	chatDir := filepath.Join(chatsRoot, hex.EncodeToString(sum[:]), chatID)
+	chatDir := filepath.Join(chatsRoot, cursorProjectHash(projectPath), chatID)
 	if err := os.MkdirAll(chatDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -60,8 +57,7 @@ func TestCursorSidecarFilesAreTheSameChat(t *testing.T) {
 
 	writeProcessChildren(t, procRoot, 100, "")
 	linkCursorStore(t, procRoot, chatsRoot, project, chatID, "7", 100)
-	sum := md5.Sum([]byte(filepath.Clean(project)))
-	chatDir := filepath.Join(chatsRoot, hex.EncodeToString(sum[:]), chatID)
+	chatDir := filepath.Join(chatsRoot, cursorProjectHash(project), chatID)
 	for i, suffix := range []string{"-wal", "-shm"} {
 		path := filepath.Join(chatDir, "store.db"+suffix)
 		if err := os.WriteFile(path, []byte("x"), 0o600); err != nil {

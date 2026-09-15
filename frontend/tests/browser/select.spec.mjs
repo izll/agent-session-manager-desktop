@@ -985,7 +985,7 @@ test('project-aware FileBrowser and Diff guards accept their current file respon
   const diff = page.locator('#diff');
   await expect.poll(() => page.evaluate(() => window.projectContentFixture.diffReads())).toBe(1);
   await expect(diff.locator('.revert-error')).toContainText('fixture diff read refused');
-  await diff.locator('.refresh-btn').click();
+  await diff.locator('.reload-btn').click();
   await expect.poll(() => page.evaluate(() => window.projectContentFixture.diffReads())).toBe(2);
   await expect(diff.locator('.diff-lines')).toContainText('diff content marker');
 

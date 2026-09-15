@@ -45,6 +45,15 @@ func agRow(id, title, preview string, steps int, modified, workspaces string) []
 	return []any{id, title, preview, steps, modified, workspaces, "CASCADE_RUN_STATUS_IDLE", modified}
 }
 
+// antigravityFileURI builds the file URI the CLI stores for a workspace.
+//
+// Not "file://" + path: on Windows that puts the drive where the host belongs
+// (file://D:\\a\\repo) and leaves backslashes, which are not URI separators —
+// the value parses to nothing and every conversation drops out of the picker.
+func antigravityFileURI(path string) string {
+	return "file:///" + strings.TrimPrefix(filepath.ToSlash(path), "/")
+}
+
 func TestAntigravitySessionsAreScopedByWorkspaceURI(t *testing.T) {
 	home := isolateHome(t)
 	project := filepath.Join(home, "repo")
@@ -56,9 +65,9 @@ func TestAntigravitySessionsAreScopedByWorkspaceURI(t *testing.T) {
 	}
 	writeAntigravitySummaries(t, home, [][]any{
 		agRow("11111111-1111-4111-8111-111111111111", "Mine", "preview", 9,
-			"2026-09-15 15:26:10.12+00:00", `["file://`+project+`"]`),
+			"2026-09-15 15:26:10.12+00:00", `["`+antigravityFileURI(project)+`"]`),
 		agRow("22222222-2222-4222-8222-222222222222", "Theirs", "preview", 3,
-			"2026-09-15 14:00:00+00:00", `["file://`+other+`"]`),
+			"2026-09-15 14:00:00+00:00", `["`+antigravityFileURI(other)+`"]`),
 	})
 
 	sessions, err := ListAntigravitySessions(project)
@@ -105,7 +114,7 @@ func TestAntigravityMatchesAnyOfSeveralWorkspaces(t *testing.T) {
 	writeAntigravitySummaries(t, home, [][]any{
 		agRow("44444444-4444-4444-8444-444444444444", "Multi", "", 4,
 			"2026-09-15 15:26:10.12+00:00",
-			`["file://`+filepath.Join(home, "elsewhere")+`","file://`+project+`"]`),
+			`["`+antigravityFileURI(filepath.Join(home, "elsewhere"))+`","`+antigravityFileURI(project)+`"]`),
 	})
 
 	if sessions, _ := ListAntigravitySessions(project); len(sessions) != 1 {

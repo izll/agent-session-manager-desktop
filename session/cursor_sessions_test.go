@@ -1,8 +1,6 @@
 package session
 
 import (
-	"crypto/md5"
-	"encoding/hex"
 	"os"
 	"path/filepath"
 	"testing"
@@ -12,8 +10,11 @@ import (
 // after the chat id, under a directory named after the project's path hash.
 func writeCursorChat(t *testing.T, home, projectPath, chatID, meta, prompts string) {
 	t.Helper()
-	sum := md5.Sum([]byte(filepath.Clean(projectPath)))
-	dir := filepath.Join(home, ".cursor", "chats", hex.EncodeToString(sum[:]), chatID)
+	// Through the same helper the code uses, not a second copy of the rule:
+	// cursorProjectHash resolves symlinks first, and on macOS a temporary
+	// directory is one (/var -> /private/var), so a hash computed here from
+	// the raw path put the chat where nothing would look for it.
+	dir := filepath.Join(home, ".cursor", "chats", cursorProjectHash(projectPath), chatID)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
