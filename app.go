@@ -1408,6 +1408,34 @@ func (a *App) RestartTab(id string, windowIdx int, expectedProjectID string) err
 	)
 }
 
+// StartTabOnly starts a fully stopped session with just one of its tabs running.
+//
+// RestartTab cannot serve this: respawning a pane needs a multiplexer session
+// to respawn it into, and a stopped session has none — the "only this tab"
+// offer failed with "instance not running" every time it was taken. The
+// session is started in full instead, and everything the user did not pick,
+// the session's own agent included, is left parked.
+func (a *App) StartTabOnly(id string, windowIdx int, expectedProjectID string) error {
+	done, err := a.beginExpectedProjectMutation(expectedProjectID)
+	if err != nil {
+		return err
+	}
+	defer done()
+	inst, err := a.storage.GetInstance(id)
+	if err != nil {
+		return err
+	}
+
+	log.Printf("[StartTabOnly] id=%s window=%d starting the session with only this tab", id, windowIdx)
+	if err := inst.StartOnlyWindow(windowIdx); err != nil {
+		return err
+	}
+	return persistOrRollbackExternalMutation(
+		func() error { return a.storage.UpdateInstance(inst) },
+		func() error { return inst.Stop() },
+	)
+}
+
 // RestartTabWithResume restarts a stopped tab with a specific resume session ID
 func (a *App) RestartTabWithResume(id string, windowIdx int, resumeId, expectedProjectID string) error {
 	done, err := a.beginExpectedProjectMutation(expectedProjectID)

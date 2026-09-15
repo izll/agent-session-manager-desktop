@@ -698,6 +698,10 @@ export function StartSessionWithResume(arg1, arg2, arg3) {
   return window['go']['main']['App']['StartSessionWithResume'](arg1, arg2, arg3);
 }
 
+export function StartTabOnly(arg1, arg2, arg3) {
+  return window['go']['main']['App']['StartTabOnly'](arg1, arg2, arg3);
+}
+
 export function StopBackgroundAgent(arg1, arg2) {
   return window['go']['main']['App']['StopBackgroundAgent'](arg1, arg2);
 }

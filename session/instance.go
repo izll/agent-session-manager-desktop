@@ -596,7 +596,28 @@ func lockSessionStart(name string) func() {
 	}
 }
 
+// allWindows means "start every tab", the ordinary case.
+//
+// A named constant rather than a bare -1 because the value travels through
+// three functions before it is read, and at the far end "-1" says nothing.
+const allWindows = -1
+
+// StartOnlyWindow starts the session but brings back just one tab running.
+//
+// A stopped session has no multiplexer session to respawn a pane into, so the
+// "start this tab" offer could not be served by RestartWindow: it answered
+// "instance not running" and the dialog's own option failed every time. What
+// it means instead is a full start where everything except the chosen tab —
+// the session's own agent included — comes back parked.
+func (i *Instance) StartOnlyWindow(windowIdx int) error {
+	return i.startWithResume("", windowIdx)
+}
+
 func (i *Instance) StartWithResume(resumeID string) error {
+	return i.startWithResume(resumeID, allWindows)
+}
+
+func (i *Instance) startWithResume(resumeID string, onlyWindowIdx int) error {
 	// Nothing below can work without the multiplexer, and every command that
 	// tries fails on its own terms — "exec: no such file", repeated once per
 	// call. Said plainly once, before any of them run, and with how to install
@@ -872,7 +893,17 @@ func (i *Instance) StartWithResume(resumeID string) error {
 	i.saveBaseCommit()
 
 	// Restore followed windows (tabs) if any
-	i.restoreFollowedWindows()
+	i.restoreFollowedWindows(onlyWindowIdx)
+
+	// "Only this tab" for a followed window means the session's own agent must
+	// not run either. The window has to exist first — it is what the session
+	// was created around — so it is started and then stopped, the same way
+	// StopWindow leaves a main window behind as a dead pane.
+	if onlyWindowIdx != allWindows && !i.isMainWindowIndex(onlyWindowIdx) {
+		if err := i.stopMainWindowAfterStart(); err != nil {
+			log.Printf("[StartWithResume] session=%s could not park the main window: %v", i.ID, err)
+		}
+	}
 
 	// A fresh Codex process usually has its rollout open by this point. Save
 	// the generated ID in the same storage update as the start operation;
@@ -880,6 +911,62 @@ func (i *Instance) StartWithResume(resumeID string) error {
 	i.CaptureCodexResumeIDs()
 
 	return nil
+}
+
+// isMainWindowIndex reports whether windowIdx is the session's own window
+// rather than one of its tabs.
+//
+// Answered from the stored tabs, not from tmux: this runs during a start, when
+// restoreFollowedWindows has just renumbered the windows, and the question is
+// about the index the caller asked for — which came from the UI before any of
+// that happened.
+func (i *Instance) isMainWindowIndex(windowIdx int) bool {
+	for idx := range i.FollowedWindows {
+		if i.FollowedWindows[idx].Index == windowIdx {
+			return false
+		}
+	}
+	return true
+}
+
+// stopMainWindowAfterStart parks the session's own agent, leaving its window
+// behind as a dead pane.
+//
+// The same two commands StopWindow uses for a main window: the session cannot
+// be created without its first window, so "start only this tab" has to start
+// it and then stop it rather than skip it.
+// parkMainWindowContext stops the session's own agent and leaves its window
+// behind as a dead pane.
+//
+// The session cannot exist without its first window, so this is what "the
+// agent is not running" looks like for the main one: the window stays, its
+// process does not. Both callers — stopping the main tab, and starting a
+// session with only another tab live — need exactly this, and a second copy of
+// the two commands is how the two drift apart.
+func (i *Instance) parkMainWindowContext(ctx context.Context, sessionName string, mainWindowIdx int) error {
+	target := fmt.Sprintf("%s:%d", sessionName, mainWindowIdx)
+	// Keep the window alive as a dead pane
+	if err := TmuxCommandContext(ctx, "set-option", "-w", "-t", target, "remain-on-exit", "on").Run(); err != nil {
+		return fmt.Errorf("failed to prepare main window for stop: %w", err)
+	}
+	// Kill the agent and replace with an immediately-exiting command
+	if err := TmuxCommandContext(ctx, "respawn-pane", "-k", "-t", target, "exit 0").Run(); err != nil {
+		return fmt.Errorf("failed to stop main window: %w", err)
+	}
+	i.MainWindowStopped = true
+	return nil
+}
+
+func (i *Instance) stopMainWindowAfterStart() error {
+	mainWindowIdx, ok := i.getMainWindowIndex()
+	if !ok {
+		// Without knowing which window is the main one, stopping the wrong one
+		// would take a tab down. Leaving the agent running is the safer miss.
+		return fmt.Errorf("cannot identify main tmux window for session %s", i.TmuxSessionName())
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), TmuxCommandTimeout)
+	defer cancel()
+	return i.parkMainWindowContext(ctx, i.TmuxSessionName(), mainWindowIdx)
 }
 
 // saveBaseCommit saves the current git HEAD commit SHA for diff tracking
@@ -943,18 +1030,35 @@ func tmuxWindowIndexListed(output []byte, windowIdx int) bool {
 }
 
 // restoreFollowedWindows recreates agent tabs after session restart
-func (i *Instance) restoreFollowedWindows() {
+// restoreFollowedWindows recreates the session's tabs.
+//
+// onlyWindowIdx names the one tab that should come back running; every other
+// is brought back as a stopped placeholder. Pass allWindows to start them all,
+// which is what an ordinary session start does.
+func (i *Instance) restoreFollowedWindows(onlyWindowIdx int) {
 	if len(i.FollowedWindows) == 0 {
 		return
 	}
 
 	sessionName := i.TmuxSessionName()
 
+	// Where the chosen tab ended up, for the final select-window.
+	chosenNewIdx := 0
+	chosenFound := false
+
 	// Store old followed windows and clear the list (will be repopulated)
 	oldWindows := i.FollowedWindows
 	i.FollowedWindows = nil
 
 	for _, fw := range oldWindows {
+		// "Start only this tab" is expressed by marking the others stopped
+		// before the loop decides what to launch: the stopped branch below
+		// already knows how to bring a tab back as a dead pane, and reusing it
+		// keeps one description of what a stopped tab looks like.
+		originalIdx := fw.Index
+		if onlyWindowIdx != allWindows && originalIdx != onlyWindowIdx {
+			fw.Stopped = true
+		}
 		var cmd *exec.Cmd
 		resumeID := fw.ResumeSessionID
 		tabDir := fw.WorkDir
@@ -1047,6 +1151,15 @@ func (i *Instance) restoreFollowedWindows() {
 			_ = TmuxCommand("respawn-pane", "-k", "-t", target, "exit 0").Run()
 		}
 
+		// Remember where the chosen tab landed. tmux renumbers the windows as
+		// they are recreated, so the index the user picked is not the index the
+		// tab ends up on, and the view has to follow the tab rather than the
+		// number.
+		if onlyWindowIdx != allWindows && originalIdx == onlyWindowIdx {
+			chosenNewIdx = newIdx
+			chosenFound = true
+		}
+
 		// Re-add to followed windows with updated index (preserve all fields)
 		restored := fw
 		restored.Index = newIdx
@@ -1057,7 +1170,15 @@ func (i *Instance) restoreFollowedWindows() {
 	// Clear TabOrder since window indices changed after restart
 	i.TabOrder = nil
 
-	// Switch back to the main agent window.
+	// Switch to the window the user will be looking at. Normally that is the
+	// session's own agent; with "only this tab" it is the tab they picked —
+	// selecting the main window there would land them on the pane that is
+	// about to be parked, which reads as "it started everything but the one I
+	// asked for".
+	if chosenFound {
+		TmuxCommand("select-window", "-t", fmt.Sprintf("%s:%d", sessionName, chosenNewIdx)).Run()
+		return
+	}
 	if mainWindowIdx, ok := i.getMainWindowIndex(); ok {
 		TmuxCommand("select-window", "-t", fmt.Sprintf("%s:%d", sessionName, mainWindowIdx)).Run()
 	}
@@ -1254,20 +1375,7 @@ func (i *Instance) StopWindowContext(ctx context.Context, windowIdx int) error {
 		}
 
 		// Has active followed windows - stop just the main agent process
-		target := fmt.Sprintf("%s:%d", sessionName, mainWindowIdx)
-		// Keep the window alive as a dead pane
-		setErr := TmuxCommandContext(ctx, "set-option", "-w", "-t", target, "remain-on-exit", "on").Run()
-		if setErr != nil {
-			return fmt.Errorf("failed to prepare main window for stop: %w", setErr)
-		}
-		// Kill the agent and replace with an immediately-exiting command
-		err := TmuxCommandContext(ctx, "respawn-pane", "-k", "-t", target, "exit 0").Run()
-		if err != nil {
-			return fmt.Errorf("failed to stop main window: %w", err)
-		}
-
-		i.MainWindowStopped = true
-		return nil
+		return i.parkMainWindowContext(ctx, sessionName, mainWindowIdx)
 	}
 
 	// Followed window: stop the process but keep the window (dead pane)

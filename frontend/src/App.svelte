@@ -177,7 +177,7 @@
   import type { Session } from './lib/stores/sessions';
   import { error as sessionError } from './lib/stores/sessions';
   import { appError } from './lib/stores/appErrors';
-  import { sessions, loadSessions, selectSession, selectWindow, selectedSession, selectedSessionId, selectedWindowIdx, startSession, stopSession, stopTab, restartTab, restartTabWithResume, deleteSession, toggleFavorite, reorderSession, selectPrevSession, selectNextSession } from './lib/stores/sessions';
+  import { sessions, loadSessions, selectSession, selectWindow, selectedSession, selectedSessionId, selectedWindowIdx, startSession, stopSession, stopTab, restartTab, restartTabWithResume, startTabOnly, deleteSession, toggleFavorite, reorderSession, selectPrevSession, selectNextSession } from './lib/stores/sessions';
   import { activities } from './lib/stores/activities';
   import { statusLines, tabStatuses } from './lib/stores/statusLines';
   import { QuickReplyTab, ExportSessions, PendingUpdate, AddQuickJump } from '../wailsjs/go/main/App';
@@ -1257,6 +1257,14 @@
     const target = pendingStartTarget;
     pendingStartTarget = null;
     if (!target) return;
+    // A stopped session has no pane to respawn, so restartTab would fail with
+    // "instance not running". Starting the session with only this tab running
+    // is what the offer actually means.
+    const session = $sessions.find(s => s.id === target.sessionId);
+    if (session?.status === 'stopped') {
+      await startTabOnly(target.sessionId, target.windowIdx);
+      return;
+    }
     await restartTab(target.sessionId, target.windowIdx);
   }
 

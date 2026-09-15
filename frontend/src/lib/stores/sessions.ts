@@ -326,6 +326,22 @@ export async function restartTab(id: string, windowIdx: number) {
   }
 }
 
+// Starting one tab of a *stopped* session is a different backend call from
+// restarting one tab of a running session: there is no pane to respawn yet.
+export async function startTabOnly(id: string, windowIdx: number) {
+  const target = projectTarget();
+  try {
+    await App.StartTabOnly(id, windowIdx, target.projectId);
+    if (!projectTargetIsCurrent(target)) return;
+    dropPoolForWindow(id, windowIdx);
+    await loadSessions();
+  } catch (e) {
+    if (!projectTargetIsCurrent(target)) return;
+    error.set(String(e));
+    throw e;
+  }
+}
+
 export async function restartTabWithResume(id: string, windowIdx: number, resumeId: string) {
   const target = projectTarget();
   try {
