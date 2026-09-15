@@ -60,6 +60,10 @@ export interface Settings {
   uiTheme: string;
   /** Custom accent hex, used when uiTheme is 'custom'. */
   uiAccent: string;
+  /** Interface background id (see uiThemes.ts). */
+  uiBackground: string;
+  /** Custom background hex, used when uiBackground is 'custom'. */
+  uiBackgroundColor: string;
   terminalRenderer: TerminalRenderer;
   /**
    * Terminal font stack. Empty means the built-in default.
@@ -141,6 +145,8 @@ function defaultSettings(): Settings {
     language: 'en',
     uiTheme: 'violet',
     uiAccent: '#8b5cf6',
+    uiBackground: 'midnight',
+    uiBackgroundColor: '#0d0d1a',
     // Platform-dependent; see defaultTerminalRenderer(). A saved setting
     // overrides this, so it only decides what a fresh install starts with.
     terminalRenderer: defaultTerminalRenderer(),

@@ -799,7 +799,7 @@
     height: 100%;
     display: flex;
     flex-direction: column;
-    background: #0a0a0f;
+    background: var(--bg-surface);
     /* positioning context for the floating search bar */
     position: relative;
   }
@@ -815,7 +815,7 @@
     padding: 5px 8px;
     border-radius: 8px;
     border: 1px solid rgba(var(--accent-rgb), 0.35);
-    background: rgba(15, 15, 26, 0.95);
+    background: rgba(var(--bg-sunken-rgb), 0.95);
     box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
     color: #71717a;
   }

@@ -620,7 +620,7 @@
 </div>
 
 <style>
-  .dashboard { height: 100%; background: radial-gradient(circle at 15% 0%, rgba(var(--accent-rgb), .10), transparent 34%), #0a0a0f; }
+  .dashboard { height: 100%; background: radial-gradient(circle at 15% 0%, rgba(var(--accent-rgb), .10), transparent 34%), var(--bg-surface); }
   .dashboard-scroll { height: 100%; overflow-y: auto; padding: 28px clamp(20px, 3vw, 42px) 42px; }
   .dashboard-header { display:flex; align-items:flex-end; justify-content:space-between; gap:24px; margin-bottom:22px; }
   .eyebrow { color:var(--accent-light); font-size:11px; text-transform:uppercase; letter-spacing:.11em; font-weight:700; margin-bottom:5px; }
@@ -637,7 +637,7 @@
   .spinning svg { animation:spin 1s linear infinite; }
   @keyframes spin { to { transform:rotate(360deg); } }
 
-  .dashboard-tabs { display:inline-flex; gap:3px; margin:-5px 0 18px; padding:3px; border:1px solid rgba(255,255,255,.065); border-radius:9px; background:rgba(12,12,20,.72); }
+  .dashboard-tabs { display:inline-flex; gap:3px; margin:-5px 0 18px; padding:3px; border:1px solid rgba(255,255,255,.065); border-radius:9px; background:rgba(var(--bg-base-rgb),.72); }
   .dashboard-tabs button { padding:7px 13px; border:0; border-radius:6px; color:#71717a; background:transparent; cursor:pointer; font-size:11px; font-weight:650; transition:.15s ease; }
   .dashboard-tabs button:hover { color:#d4d4d8; }
   .dashboard-tabs button.active { color:#ede9fe; background:rgba(var(--accent-rgb), .18); box-shadow:inset 0 0 0 1px rgba(var(--accent-rgb), .2); }
@@ -669,7 +669,7 @@
   .usage-models { margin-left:auto; color:#71717a; font-size:11px; white-space:nowrap; }
 
   .toolbar { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:15px; }
-  .filter-box { flex:1; max-width:540px; display:flex; align-items:center; gap:9px; padding:0 12px; height:38px; border-radius:8px; border:1px solid rgba(255,255,255,.075); background:rgba(8,8,14,.68); color:#52525b; }
+  .filter-box { flex:1; max-width:540px; display:flex; align-items:center; gap:9px; padding:0 12px; height:38px; border-radius:8px; border:1px solid rgba(255,255,255,.075); background:rgba(var(--bg-surface-rgb),.68); color:#52525b; }
   .filter-box:focus-within { border-color:rgba(var(--accent-rgb), .45); box-shadow:0 0 0 2px rgba(var(--accent-rgb), .08); color:var(--accent-light); }
   .filter-box input { flex:1; min-width:0; color:#e4e4e7; background:transparent; border:0; outline:0; font-size:12px; }
   .filter-box input::placeholder { color:#52525b; }
@@ -695,7 +695,7 @@
      a card's worth of small text is tiring to read — the colour is a label, not
      a surface. It now tints the header band only, where the name it belongs to
      actually is. */
-  .session-card { position:relative; min-width:0; display:flex; flex-direction:column; padding:17px; border:1px solid rgba(255,255,255,.07); border-radius:12px; background:linear-gradient(145deg,rgba(22,22,35,.92),rgba(12,12,20,.96)); overflow:hidden; transition:border-color .15s ease,transform .15s ease,box-shadow .15s ease; }
+  .session-card { position:relative; min-width:0; display:flex; flex-direction:column; padding:17px; border:1px solid rgba(255,255,255,.07); border-radius:12px; background:linear-gradient(145deg,rgba(22,22,35,.92),rgba(var(--bg-base-rgb),.96)); overflow:hidden; transition:border-color .15s ease,transform .15s ease,box-shadow .15s ease; }
   .session-card:hover { border-color:rgba(var(--accent-rgb), .27); transform:translateY(-1px); box-shadow:0 10px 28px rgba(0,0,0,.2); }
   .session-card.needs-attention { border-color:rgba(0,206,209,.26); }
   .session-accent { position:absolute; top:0; left:0; right:0; height:2px; background:linear-gradient(90deg,var(--accent-dark),var(--accent-light)); opacity:.9; }

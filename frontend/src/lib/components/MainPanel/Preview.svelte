@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
+  import { settings } from '../../stores/settings';
   import { Terminal } from '@xterm/xterm';
   import { FitAddon } from '@xterm/addon-fit';
   import { selectedSessionId } from '../../stores/sessions';
@@ -25,7 +26,29 @@
     pendingTimeouts.add(timeout);
   }
 
+  /** Read a CSS custom property off the root element, with a fallback. */
+  function readCssVar(name: string, fallback: string): string {
+    const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    return v || fallback;
+  }
+
   export let activity: 'idle' | 'busy' | 'waiting' = 'idle';
+
+  // A background change reaches a live xterm only by being written into it:
+  // its theme was copied at construction, not bound to the variable.
+  //
+  // Both settings are named, not just the id: picking a custom colour leaves
+  // the id at 'custom' and changes only the hex, so depending on the id alone
+  // left the preview on whatever background it was built with.
+  $: applyPreviewBackground($settings.uiBackground, $settings.uiBackgroundColor);
+
+  function applyPreviewBackground(_id?: string, _hex?: string) {
+    if (!terminal) return;
+    terminal.options.theme = {
+      ...terminal.options.theme,
+      background: readCssVar('--bg-surface', '#0a0a0f'),
+    };
+  }
 
   onMount(() => {
     terminal = new Terminal({
@@ -36,8 +59,12 @@
       fontFamily: 'monospace',
       cols: 120,
       rows: 40,
+      // xterm takes its colours as values, not as CSS, so the background has
+      // to be read out of the variable rather than named. Left as the old
+      // fixed colour if the property is not resolvable yet — a preview on the
+      // previous background for one frame, rather than a black pane.
       theme: {
-        background: '#0a0a0f',
+        background: readCssVar('--bg-surface', '#0a0a0f'),
         foreground: '#e4e4e7',
         cursor: 'var(--accent)',
         selectionBackground: 'rgba(var(--accent-rgb), 0.3)',
@@ -173,7 +200,7 @@
     height: 100%;
     display: flex;
     flex-direction: column;
-    background: #0a0a0f;
+    background: var(--bg-surface);
   }
 
   .preview-header {

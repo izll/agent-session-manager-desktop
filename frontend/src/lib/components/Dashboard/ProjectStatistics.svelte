@@ -332,7 +332,7 @@
   .statistics { min-width:0; }
   button { font:inherit; }
   .statistics-toolbar { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:13px; }
-  .range-selector { display:flex; gap:3px; padding:3px; border:1px solid rgba(255,255,255,.065); border-radius:8px; background:rgba(8,8,14,.6); }
+  .range-selector { display:flex; gap:3px; padding:3px; border:1px solid rgba(255,255,255,.065); border-radius:8px; background:rgba(var(--bg-surface-rgb),.6); }
   .range-selector button { padding:6px 11px; border:0; border-radius:5px; color:#71717a; background:transparent; cursor:pointer; font-size:10px; font-weight:650; }
   .range-selector button.active { color:#ede9fe; background:rgba(var(--accent-rgb), .17); }
   .refresh-button { display:flex; align-items:center; gap:6px; padding:7px 10px; border:1px solid rgba(255,255,255,.075); border-radius:7px; color:#a1a1aa; background:rgba(255,255,255,.035); cursor:pointer; font-size:10px; }
@@ -345,7 +345,7 @@
   .retry-hint { min-height:180px; display:grid; place-items:center; color:#71717a; font-size:10px; }
 
   .metric-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:10px; margin-bottom:13px; }
-  .metric-card { position:relative; min-width:0; padding:15px 16px; border:1px solid rgba(255,255,255,.065); border-radius:11px; background:linear-gradient(145deg,rgba(22,22,35,.9),rgba(13,13,21,.94)); overflow:hidden; }
+  .metric-card { position:relative; min-width:0; padding:15px 16px; border:1px solid rgba(255,255,255,.065); border-radius:11px; background:linear-gradient(145deg,rgba(22,22,35,.9),rgba(var(--bg-base-rgb),.94)); overflow:hidden; }
   .metric-card::before { content:""; position:absolute; inset:0 auto 0 0; width:2px; background:var(--accent); }
   .metric-card.busy::before { background:#f59e0b; }.metric-card.waiting::before { background:#22d3ee; }.metric-card.idle::before { background:#64748b; }
   .metric-card span { display:block; color:#71717a; font-size:10px; text-transform:uppercase; letter-spacing:.07em; }
@@ -354,7 +354,7 @@
   .metric-card.busy strong { color:#fbbf24; }.metric-card.waiting strong { color:#67e8f9; }
 
   .chart-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,360px),1fr)); gap:13px; margin-bottom:13px; }
-  .chart-card { min-width:0; padding:16px; border:1px solid rgba(255,255,255,.065); border-radius:11px; background:rgba(18,18,29,.82); }
+  .chart-card { min-width:0; padding:16px; border:1px solid rgba(255,255,255,.065); border-radius:11px; background:rgba(var(--bg-raised-rgb),.82); }
   .card-heading { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; margin-bottom:15px; }
   .card-heading h2 { margin:0; color:#e4e4e7; font-size:13px; }
   .card-heading p { margin:4px 0 0; color:#52525b; font-size:9px; }

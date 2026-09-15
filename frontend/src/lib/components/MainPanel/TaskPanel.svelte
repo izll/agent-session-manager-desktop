@@ -1796,7 +1796,7 @@
     height: 100%;
     display: flex;
     flex-direction: column;
-    background: #0a0a0f;
+    background: var(--bg-surface);
     container-type: inline-size;
   }
 
@@ -2343,7 +2343,7 @@
   /* Context Menu */
   .context-menu {
     position: fixed;
-    background: #1a1a2e;
+    background: var(--bg-raised);
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 8px;
     padding: 6px 0;

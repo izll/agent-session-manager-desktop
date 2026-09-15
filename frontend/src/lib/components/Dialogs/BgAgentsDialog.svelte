@@ -375,7 +375,7 @@
     max-width: min(760px, 92vw);
     max-height: 78vh;
     overflow-y: auto;
-    background: linear-gradient(180deg, #1a1a2e 0%, #0f0f1a 100%);
+    background: linear-gradient(180deg, var(--bg-raised) 0%, var(--bg-sunken) 100%);
     border: 1px solid rgba(var(--accent-rgb), 0.25);
     border-radius: 12px;
     padding: 18px;

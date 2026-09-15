@@ -102,6 +102,13 @@ type Settings struct {
 	UITheme string `json:"ui_theme,omitempty"`
 	// UIAccent is the custom accent hex, used when UITheme is "custom".
 	UIAccent string `json:"ui_accent,omitempty"`
+	// UIBackground is the interface background id (see uiThemes.ts); empty =
+	// default. The background is four derived layers rather than one colour —
+	// only the choice is stored, not the shades worked out from it.
+	UIBackground string `json:"ui_background,omitempty"`
+	// UIBackgroundColor is the custom background hex, used when UIBackground
+	// is "custom".
+	UIBackgroundColor string `json:"ui_background_color,omitempty"`
 	// Usage rings in the sidebar, off by default.
 	//
 	// Off means off: with these false nothing is fetched at all. The Claude

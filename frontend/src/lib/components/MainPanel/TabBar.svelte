@@ -2476,7 +2476,7 @@
     position: fixed;
     z-index: 1000;
     min-width: 140px;
-    background: #1a1a2e;
+    background: var(--bg-raised);
     border: 1px solid rgba(var(--accent-rgb), 0.3);
     border-radius: 8px;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
@@ -2971,7 +2971,7 @@
 
   /* Extra Args Editor */
   .extra-args-dialog {
-    background: #1a1a2e;
+    background: var(--bg-raised);
     border: 1px solid rgba(var(--accent-rgb), 0.3);
     border-radius: 12px;
     padding: 20px;

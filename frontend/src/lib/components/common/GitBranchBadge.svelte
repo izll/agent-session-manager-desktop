@@ -330,7 +330,7 @@
     max-width: 380px;
     max-height: 320px;
     overflow-y: auto;
-    background: #1a1a2e;
+    background: var(--bg-raised);
     border: 1px solid rgba(var(--accent-rgb), 0.3);
     border-radius: 8px;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);

@@ -1011,7 +1011,7 @@
 
 <style>
   .main-panel {
-    background: linear-gradient(180deg, rgba(15, 15, 26, 0.8) 0%, rgba(10, 10, 15, 0.9) 100%);
+    background: linear-gradient(180deg, rgba(var(--bg-sunken-rgb), 0.8) 0%, rgba(var(--bg-surface-rgb), 0.9) 100%);
   }
 
   /* Not ".hidden": Tailwind ships that name as a global utility, so the
@@ -1182,7 +1182,7 @@
     min-width: 0;
     min-height: 0;
     overflow: hidden;
-    background: #0a0a0f;
+    background: var(--bg-surface);
   }
 
   .terminal-pane.focused {
@@ -1202,7 +1202,7 @@
     justify-content: space-between;
     gap: 10px;
     padding: 0 8px 0 11px;
-    background: rgba(17, 17, 27, 0.96);
+    background: rgba(var(--bg-raised-rgb), 0.96);
     border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   }
 

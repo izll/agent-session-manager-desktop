@@ -1598,7 +1598,7 @@
     height: 100%;
     display: flex;
     flex-direction: column;
-    background: #0a0a0f;
+    background: var(--bg-surface);
   }
 
   .browser-header {

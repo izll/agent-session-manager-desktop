@@ -193,7 +193,8 @@
   import * as DictationService from '../wailsjs/go/main/DictationService';
   import { IsDevMode, GetMultiplexerStatus, InstallMultiplexer, UnfinishedTasksForSession, GetTabWorkingDirectory, GetUsageRings } from '../wailsjs/go/main/App';
   import asmgrIcon from './assets/icons/asmgr.svg';
-  import { applyUITheme, DEFAULT_UI_THEME } from './lib/utils/uiThemes';
+  import { applyUITheme, DEFAULT_UI_THEME,
+           applyUIBackground, DEFAULT_UI_BACKGROUND } from './lib/utils/uiThemes';
   import { t, isRTL, loadTranslations } from './lib/i18n';
   import { focusTerminal } from './lib/utils/focus';
   import { shortcutForEvent, capturingShortcut } from './lib/stores/shortcuts';
@@ -202,6 +203,10 @@
   // The accent lives in CSS variables, so applying a theme is one write to
   // the root element — no component needs to know about it.
   $: applyUITheme($settings.uiTheme || DEFAULT_UI_THEME, $settings.uiAccent);
+  // Same again for the background, which is four variables rather than one
+  // colour — see UIBackground.
+  $: applyUIBackground($settings.uiBackground || DEFAULT_UI_BACKGROUND,
+                       $settings.uiBackgroundColor);
 
   // Dev mode
   let devMode = false;
@@ -1984,7 +1989,7 @@
     padding: 6px;
     border-radius: 10px;
     border: 1px solid rgba(0, 206, 209, 0.25);
-    background: rgba(12, 12, 20, 0.98);
+    background: rgba(var(--bg-base-rgb), 0.98);
     box-shadow: 0 12px 34px rgba(0, 0, 0, 0.5);
   }
   .waiting-row {
@@ -2028,7 +2033,7 @@
     padding: 0;
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen,
       Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
-    background: #0a0a0f;
+    background: var(--bg-surface);
   }
 
   :global(*) {
@@ -2040,7 +2045,7 @@
      why widening the one in style.css appeared to do nothing at all. */
 
   .app-container {
-    background: linear-gradient(135deg, #0a0a0f 0%, #0f0f1a 50%, #0a0a0f 100%);
+    background: linear-gradient(135deg, var(--bg-surface) 0%, var(--bg-sunken) 50%, var(--bg-surface) 100%);
   }
 
   .main-content {
@@ -2233,7 +2238,7 @@
 
   .sidebar {
     position: relative;
-    background: linear-gradient(180deg, rgba(15, 15, 26, 0.9) 0%, rgba(10, 10, 15, 0.95) 100%);
+    background: linear-gradient(180deg, rgba(var(--bg-sunken-rgb), 0.9) 0%, rgba(var(--bg-surface-rgb), 0.95) 100%);
     border-right: 1px solid rgba(var(--accent-rgb), 0.1);
     box-shadow: 4px 0 24px rgba(0, 0, 0, 0.3);
   }
@@ -2329,7 +2334,7 @@
   }
 
   .main-content {
-    background: linear-gradient(180deg, rgba(15, 15, 26, 0.5) 0%, rgba(10, 10, 15, 0.7) 100%);
+    background: linear-gradient(180deg, rgba(var(--bg-sunken-rgb), 0.5) 0%, rgba(var(--bg-surface-rgb), 0.7) 100%);
   }
 
   .btn {
@@ -2437,7 +2442,7 @@
     height: 7px;
     border-radius: 50%;
     background: #4ade80;
-    box-shadow: 0 0 0 2px rgba(15, 15, 26, 0.9);
+    box-shadow: 0 0 0 2px rgba(var(--bg-sunken-rgb), 0.9);
   }
 
   .header-icons {
@@ -2535,7 +2540,7 @@
   }
 
   .sidebar-overlay {
-    background: linear-gradient(180deg, rgba(15, 15, 26, 0.97) 0%, rgba(10, 10, 15, 0.99) 100%);
+    background: linear-gradient(180deg, rgba(var(--bg-sunken-rgb), 0.97) 0%, rgba(var(--bg-surface-rgb), 0.99) 100%);
     border-right: 1px solid rgba(var(--accent-rgb), 0.15);
     box-shadow: 8px 0 32px rgba(0, 0, 0, 0.5);
     display: flex;

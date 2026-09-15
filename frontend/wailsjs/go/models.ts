@@ -1343,6 +1343,8 @@ export namespace main {
 	    language: string;
 	    uiTheme: string;
 	    uiAccent: string;
+	    uiBackground: string;
+	    uiBackgroundColor: string;
 	    terminalRenderer: string;
 	    terminalCopyMode: string;
 	    terminalFontFamily: string;
@@ -1399,6 +1401,8 @@ export namespace main {
 	        this.language = source["language"];
 	        this.uiTheme = source["uiTheme"];
 	        this.uiAccent = source["uiAccent"];
+	        this.uiBackground = source["uiBackground"];
+	        this.uiBackgroundColor = source["uiBackgroundColor"];
 	        this.terminalRenderer = source["terminalRenderer"];
 	        this.terminalCopyMode = source["terminalCopyMode"];
 	        this.terminalFontFamily = source["terminalFontFamily"];

@@ -1383,7 +1383,7 @@
     flex: 0 0 auto;
     overflow-y: auto;
     border-right: 1px solid rgba(255, 255, 255, 0.05);
-    background: #08080c;
+    background: var(--bg-surface);
   }
   /* Takes whatever the panes to its left are not using, so folding one widens
      the diff instead of leaving a gap — which is the point of folding it. */
@@ -1542,7 +1542,7 @@
   .commit-detail.collapsed {
     height: auto;
     padding: 7px 14px;
-    background: #0d0d14;
+    background: var(--bg-raised);
   }
   .detail-body {
     margin: 6px 0 0;
@@ -1572,7 +1572,7 @@
     flex: 0 0 auto;
     overflow-y: auto;
     border-right: 1px solid rgba(255, 255, 255, 0.05);
-    background: #08080c;
+    background: var(--bg-surface);
     padding: 4px 0;
   }
   .tree-row {
@@ -1635,7 +1635,7 @@
     gap: 8px;
     padding: 7px 12px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-    background: #0d0d14;
+    background: var(--bg-raised);
     font-family: 'JetBrains Mono', 'Fira Code', monospace;
     font-size: 12px;
     color: #d4d4d8;
@@ -1693,7 +1693,7 @@
        dialog's backdrop — a vertical gradient — shows through and tints the
        code a faint purple that shifts down the page. The unified pane sets
        this on itself and so never showed the problem. */
-    background: #0a0a0f;
+    background: var(--bg-surface);
   }
 
   /* Taken from the diff view, so the two behave the same way. */
@@ -1742,7 +1742,7 @@
     flex: 1 1 auto;
     min-width: 0;
     overflow: auto;
-    background: #0a0a0f;
+    background: var(--bg-surface);
     padding: 4px 0;
     font-family: var(--terminal-font, monospace);
     font-size: 13px;

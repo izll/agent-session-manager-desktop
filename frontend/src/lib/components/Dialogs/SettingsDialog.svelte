@@ -21,6 +21,8 @@
   import PalettePicker from '../common/PalettePicker.svelte';
   import PaletteManager from '../common/PaletteManager.svelte';
   import { UI_THEMES, DEFAULT_UI_THEME, CUSTOM_UI_THEME,
+           UI_BACKGROUNDS, DEFAULT_UI_BACKGROUND, CUSTOM_UI_BACKGROUND,
+           getUIBackground,
            accentContrastOnBackground, MIN_ACCENT_CONTRAST } from '../../utils/uiThemes';
   import { agents } from '../../stores/agents';
   import ShortcutEditor from '../Settings/ShortcutEditor.svelte';
@@ -184,10 +186,23 @@
 
   $: currentUITheme = $settings.uiTheme || DEFAULT_UI_THEME;
   $: customAccent = $settings.uiAccent || '#8b5cf6';
+  $: currentUIBackground = $settings.uiBackground || DEFAULT_UI_BACKGROUND;
+  $: customBackground = $settings.uiBackgroundColor || '#0d0d1a';
   // A very dark accent is nearly invisible on the dark background; say so
   // rather than leave the user wondering why nothing changed.
+  //
+  // Measured against the background in use, not a fixed one: the same accent
+  // can be fine on Midnight and unreadable on a pale custom colour, and a
+  // warning that ignores the pairing is worse than none.
+  $: activeBackgroundBase =
+    getUIBackground(currentUIBackground, customBackground).base;
   $: customAccentTooDark =
-    accentContrastOnBackground(customAccent) < MIN_ACCENT_CONTRAST;
+    accentContrastOnBackground(customAccent, activeBackgroundBase) < MIN_ACCENT_CONTRAST;
+
+  // Picking a background colour selects the custom entry, same as the accent.
+  function pickCustomBackground(hex: string) {
+    saveSettings({ uiBackground: CUSTOM_UI_BACKGROUND, uiBackgroundColor: hex });
+  }
 
   // Picking a colour also selects the custom theme: choosing a shade and then
   // having to select it separately would be a step with no purpose.
@@ -670,6 +685,44 @@
               {#if currentUITheme === CUSTOM_UI_THEME && customAccentTooDark}
                 <p class="accent-warning">{$t('settings.uiAccentTooDark')}</p>
               {/if}
+            </div>
+
+            <div class="setting-item input-item column-item">
+              <span class="setting-info">
+                <span class="setting-label">{$t('settings.uiBackground')}</span>
+                <span class="setting-desc">{$t('settings.uiBackgroundDesc')}</span>
+              </span>
+              <div class="theme-grid">
+                {#each UI_BACKGROUNDS as bg (bg.id)}
+                  <button
+                    class="theme-swatch"
+                    class:selected={currentUIBackground === bg.id}
+                    title={bg.name}
+                    style="--sw: {bg.base}; --sw-light: {bg.raised}"
+                    on:click={() => saveSettings({ uiBackground: bg.id })}
+                  >
+                    <span class="theme-dot"></span>
+                    <span class="theme-name">{bg.name}</span>
+                  </button>
+                {/each}
+
+                <!-- One colour again: the panel and dialog shades are derived
+                     from it, so the layering survives whatever is picked. -->
+                <label
+                  class="theme-swatch custom"
+                  class:selected={currentUIBackground === CUSTOM_UI_BACKGROUND}
+                  title={$t('settings.uiBackgroundCustom')}
+                  style="--sw: {customBackground}; --sw-light: {customBackground}"
+                >
+                  <span class="theme-dot custom-dot"></span>
+                  <span class="theme-name">{$t('settings.uiBackgroundCustom')}</span>
+                  <input
+                    type="color"
+                    value={customBackground}
+                    on:input={(e) => pickCustomBackground(e.currentTarget.value)}
+                  />
+                </label>
+              </div>
             </div>
           </div>
 
@@ -1807,7 +1860,7 @@
   }
 
   .dialog-content {
-    background: linear-gradient(180deg, #1a1a2e 0%, #0f0f1a 100%);
+    background: linear-gradient(180deg, var(--bg-raised) 0%, var(--bg-sunken) 100%);
     border: 1px solid rgba(var(--accent-rgb), 0.2);
     border-radius: 16px;
     box-shadow: 0 25px 50px rgba(0, 0, 0, 0.5), 0 0 100px rgba(var(--accent-rgb), 0.1);
@@ -2045,6 +2098,11 @@
     border-radius: 50%;
     flex-shrink: 0;
     background: linear-gradient(135deg, var(--sw), var(--sw-light));
+    /* The accent dots carry their own colour and stand out unaided. The
+       background ones are two dark shades a few levels apart, and without a
+       rim they disappear into the tile they sit on — the swatch then reads as
+       having no colour at all. Same rim the custom dot already uses. */
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25);
   }
   /* The colour input covers the swatch so the whole tile is the target,
      rather than a separate small square beside the label. */

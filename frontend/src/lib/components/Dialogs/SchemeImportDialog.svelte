@@ -320,7 +320,7 @@
     padding: 18px;
     border-radius: 12px;
     border: 1px solid rgba(var(--accent-rgb), 0.25);
-    background: linear-gradient(180deg, #1a1a2e 0%, #0f0f1a 100%);
+    background: linear-gradient(180deg, var(--bg-raised) 0%, var(--bg-sunken) 100%);
   }
   .dialog-header { display: flex; align-items: center; justify-content: space-between; }
   .dialog-header h2 { margin: 0; font-size: 16px; color: #e4e4e7; }

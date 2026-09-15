@@ -503,10 +503,14 @@ const gutter = source.match(/\n {2}\.gutter \{([\s\S]*?)\n {2}\}/);
 assert.ok(gutter, 'the .gutter rule is missing');
 assert.match(gutter[1], /position: sticky/, 'the ruler should hold its place');
 // And it has to be opaque, or the line's own tint slides past behind the
-// numbers.
-assert.match(
-  gutter[1],
-  /background: #[0-9a-f]{6}/,
+// numbers. Checked for what makes it see-through rather than for a hex
+// literal: the colour is now mixed against the background variable, which is
+// every bit as opaque but no longer spelled #rrggbb.
+const gutterBackground = gutter[1].match(/background: ([^;]+);/);
+assert.ok(gutterBackground, 'the ruler has no background at all');
+assert.doesNotMatch(
+  gutterBackground[1],
+  /rgba|transparent|hsla/,
   'a translucent ruler shows the scrolling tint through it',
 );
 

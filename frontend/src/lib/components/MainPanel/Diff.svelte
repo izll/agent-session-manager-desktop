@@ -2347,7 +2347,7 @@
     height: 100%;
     display: flex;
     flex-direction: column;
-    background: #0a0a0f;
+    background: var(--bg-surface);
   }
 
   .diff-header {
@@ -2830,7 +2830,7 @@
     align-items: center;
     gap: 6px;
     padding: 6px 10px;
-    background: #14141f;
+    background: var(--bg-raised);
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
     flex-shrink: 0;
   }

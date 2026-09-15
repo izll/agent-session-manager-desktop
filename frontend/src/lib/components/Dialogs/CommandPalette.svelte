@@ -421,7 +421,7 @@
 
 <style>
   .palette-overlay { position:fixed; inset:0; z-index:12000; display:flex; align-items:flex-start; justify-content:center; padding-top:min(14vh,120px); background:rgba(0,0,0,.42); backdrop-filter:blur(3px); }
-  .command-palette { width:min(680px,calc(100vw - 32px)); max-height:min(620px,calc(100vh - 80px)); display:flex; flex-direction:column; overflow:hidden; border:1px solid rgba(var(--accent-rgb), .32); border-radius:12px; background:rgba(17,17,27,.985); box-shadow:0 24px 80px rgba(0,0,0,.55),0 0 35px rgba(109,40,217,.12); }
+  .command-palette { width:min(680px,calc(100vw - 32px)); max-height:min(620px,calc(100vh - 80px)); display:flex; flex-direction:column; overflow:hidden; border:1px solid rgba(var(--accent-rgb), .32); border-radius:12px; background:rgba(var(--bg-raised-rgb),.985); box-shadow:0 24px 80px rgba(0,0,0,.55),0 0 35px rgba(109,40,217,.12); }
   .palette-search { display:flex; align-items:center; gap:10px; padding:14px 15px; border-bottom:1px solid rgba(255,255,255,.07); color:var(--accent); }
   .palette-search input { flex:1; border:0; background:transparent; color:#f4f4f5; font-size:15px; }
   .palette-search input:disabled { opacity:.65; }

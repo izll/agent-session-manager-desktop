@@ -233,7 +233,7 @@
     top: calc(100% + 4px);
     left: 44px;
     right: 0;
-    background: #1a1a2e;
+    background: var(--bg-raised);
     border: 1px solid rgba(var(--accent-rgb), 0.2);
     border-radius: 8px;
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);

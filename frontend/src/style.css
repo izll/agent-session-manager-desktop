@@ -18,6 +18,20 @@
   --accent-dark: #7c3aed;
   /* Text on a solid accent fill — dark on the brighter themes. */
   --accent-ink: #ffffff;
+
+  /* The interface background, in four layers — see UIBackground in
+     uiThemes.ts. These are the defaults the app shipped with as fixed colours;
+     applyUIBackground overwrites them on the root element when the setting
+     says otherwise. Both forms again: the hex for solid fills, the triple for
+     the rgba() tints, so a translucent surface follows the background too. */
+  --bg-base: #0d0d1a;
+  --bg-surface: #0a0a0f;
+  --bg-raised: #1a1a2e;
+  --bg-sunken: #0f0f1a;
+  --bg-base-rgb: 13, 13, 26;
+  --bg-surface-rgb: 10, 10, 15;
+  --bg-raised-rgb: 26, 26, 46;
+  --bg-sunken-rgb: 15, 15, 26;
 }
 
 * {
@@ -31,7 +45,7 @@ html, body {
   overflow: hidden;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen,
     Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
-  background-color: #0d0d1a;
+  background-color: var(--bg-base);
   color: #fff;
 }
 
@@ -132,7 +146,7 @@ button, label {
 
 /* Global select styling for dark theme */
 select {
-  background-color: #1a1a2e;
+  background-color: var(--bg-raised);
   color: white;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 6px;
@@ -146,7 +160,7 @@ select:focus {
 }
 
 select option {
-  background: #1a1a2e;
+  background: var(--bg-raised);
   color: white;
 }
 
@@ -177,7 +191,7 @@ select option {
 
 /* Dialog content */
 .dialog-content {
-  background: linear-gradient(180deg, #1a1a2e 0%, #0f0f1a 100%);
+  background: linear-gradient(180deg, var(--bg-raised) 0%, var(--bg-sunken) 100%);
   border: 1px solid rgba(var(--accent-rgb), 0.2);
   border-radius: 16px;
   box-shadow: 0 25px 50px rgba(0, 0, 0, 0.5), 0 0 100px rgba(var(--accent-rgb), 0.1);

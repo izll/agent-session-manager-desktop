@@ -872,7 +872,7 @@
        vertical gradient, which tinted the code a faint purple that shifted as
        the page scrolled. The unified pane sets its own background and so never
        showed the problem. */
-    background: #0a0a0f;
+    background: var(--bg-surface);
   }
 
   /* Search matches.
@@ -977,10 +977,13 @@
      * Its own line's tint it must still carry, though — a changed line whose
      * number sits on plain grey reads as if the ruler were a separate thing
      * beside the diff rather than part of the row. So each state has its
-     * translucent colour pre-mixed over the diff's background (#0a0a0f) here:
-     * the same result, without letting anything through.
+     * translucent colour mixed over the diff's background here: the same
+     * result, without letting anything through. Mixed live rather than
+     * pre-computed — it used to be the fixed #111116, worked out against the
+     * old fixed #0a0a0f, and any other background left the ruler a shade from
+     * the previous theme.
      */
-    background: #111116;
+    background: color-mix(in srgb, #ffffff 4%, var(--bg-surface));
     border-right: 1px solid rgba(255, 255, 255, 0.06);
     font-variant-numeric: tabular-nums;
     /* Held against the pane's edge while the code scrolls under it: a ruler
@@ -1099,7 +1102,7 @@
     background: rgba(97, 175, 239, 0.1);
   }
   .sbs-line.current:not(.removed):not(.added) .gutter {
-    background: #131a25;
+    background: color-mix(in srgb, var(--accent) 9%, var(--bg-surface));
   }
 
   /* Moved by whichever pane is scrolled rather than scrolling itself: it has

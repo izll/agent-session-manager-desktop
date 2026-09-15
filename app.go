@@ -3892,6 +3892,8 @@ type SettingsInfo struct {
 	Language                  string `json:"language"`
 	UITheme                   string `json:"uiTheme"`
 	UIAccent                  string `json:"uiAccent"`
+	UIBackground              string `json:"uiBackground"`
+	UIBackgroundColor         string `json:"uiBackgroundColor"`
 	TerminalRenderer          string `json:"terminalRenderer"`
 	TerminalCopyMode          string `json:"terminalCopyMode"`
 	TerminalFontFamily        string `json:"terminalFontFamily"`
@@ -4011,6 +4013,8 @@ func (a *App) GetSettings() (*SettingsInfo, error) {
 		Language:                  lang,
 		UITheme:                   settings.UITheme,
 		UIAccent:                  settings.UIAccent,
+		UIBackground:              settings.UIBackground,
+		UIBackgroundColor:         settings.UIBackgroundColor,
 		TerminalRenderer:          renderer,
 		TerminalShell:             settings.TerminalShell,
 		ShellChoices:              session.ShellChoices(),
@@ -4095,6 +4099,8 @@ func (a *App) SaveSettings(settings SettingsInfo, expectedProjectID string) erro
 		current.Language = settings.Language
 		current.UITheme = settings.UITheme
 		current.UIAccent = settings.UIAccent
+		current.UIBackground = settings.UIBackground
+		current.UIBackgroundColor = settings.UIBackgroundColor
 		current.TerminalRenderer = settings.TerminalRenderer
 		current.TerminalCopyMode = settings.TerminalCopyMode
 		current.TerminalFontFamily = settings.TerminalFontFamily
