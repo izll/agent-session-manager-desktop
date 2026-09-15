@@ -6,6 +6,55 @@ Entries describe what changed for someone using the app. Internal refactoring,
 test and CI work is left out unless it changed behaviour. Dates are release
 dates; the format follows [Keep a Changelog](https://keepachangelog.com).
 
+## 1.0.3 — 2026-09-16
+
+### Added
+
+- **Cursor CLI and Antigravity CLI are now agents of their own.** Both appear in
+  the agent picker with their own icons, resume and auto-yes flags, and status
+  detection measured against running sessions rather than borrowed from another
+  agent. Antigravity is listed ahead of Gemini: Google moved Gemini CLI into it,
+  and consumer accounts stopped being served on 18 June 2026.
+- **Previous conversations can be resumed in Cursor and Antigravity.** Both
+  advertised resume support while showing an empty picker; both now list their
+  past conversations for the current project. Conversations that were opened and
+  never used, or that stopped at a trust prompt, are left out — resuming one
+  gives an empty session.
+- **A live Cursor or Antigravity tab remembers which conversation it is on.**
+  Neither agent puts its conversation id on the command line, so resuming a tab
+  used to reopen whatever the agent had touched last instead of what was on
+  screen. The id is now read while the agent runs, and refreshed on every poll,
+  so using `/resume` inside either CLI is followed too.
+- **The interface background is a setting.** The window was a fixed near-black;
+  nine backgrounds are now offered, or a custom colour, each paired with one of
+  the eight accent colours in the same position of the grid.
+- **A missing agent now offers its installation page.** Creating a session with
+  an agent that is not installed used to fail with "command not found" and
+  nothing else — no indication of which agent, and nowhere to go. Uninstalled
+  agents are marked in the picker, and choosing one offers to open its own
+  installation page in the browser.
+- **A parked tab shows a placeholder instead of tmux's dead pane.** A tab that
+  comes up with its session but is left stopped used to show the bare words
+  "Pane is dead", which reads as a crash. It now carries the same placeholder an
+  empty pane shows, with an icon that breathes while the tab waits.
+
+### Fixed
+
+- **Starting a single tab of a fully stopped session failed every time.** The
+  "only this tab" option answered "instance not running" and did nothing.
+  Choosing it now starts the session with that tab running and everything else —
+  the other tabs and the session's own agent — parked, and opens on the tab that
+  was picked.
+- **Cursor sessions showed as idle while the agent was working.** Its spinner is
+  drawn above the input box rather than below it, and its frames are drawn from
+  the full braille range, so lines like "⠴ Exploring 205s" were recognised and
+  then reported as idle anyway.
+- **Conversation ids were never detected on Windows.** Open files are reported
+  there in extended-length form (`\\?\C:\Users\...`), which could not be
+  matched against the session's own directory, so detection silently found
+  nothing. Codex had been affected since the feature was added; Cursor and
+  Antigravity are fixed with it.
+
 ## 1.0.2 — 2026-09-14
 
 ### Fixed
