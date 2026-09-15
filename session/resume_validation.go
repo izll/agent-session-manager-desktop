@@ -59,6 +59,10 @@ func ResumeIDExists(agent AgentType, resumeID string) bool {
 		return claudeResumeIDExists(resumeID)
 	case AgentCodex:
 		return codexResumeIDExists(resumeID)
+	case AgentCursor:
+		return cursorResumeIDExists(resumeID)
+	case AgentAntigravity:
+		return antigravityResumeIDExists(resumeID)
 	case AgentGemini:
 		// Gemini scopes sessions to the working directory, so the same id can
 		// exist and still be unusable from elsewhere. The caller knows the
@@ -70,6 +74,60 @@ func ResumeIDExists(agent AgentType, resumeID string) bool {
 		// Unknown agent: assume the ID is valid, don't second-guess.
 		return true
 	}
+}
+
+// cursorResumeIDExists looks for a chat directory with this id.
+//
+// Cursor files chats under a directory named after the project, so answering
+// without knowing the project means looking in all of them. ResumeIDExistsForDir
+// is the cheaper and stricter one where the directory is known.
+func cursorResumeIDExists(resumeID string) bool {
+	root, err := cursorChatsDir()
+	if err != nil {
+		return true // cannot check — let the CLI decide
+	}
+	projects, err := os.ReadDir(root)
+	if err != nil {
+		return false
+	}
+	for _, project := range projects {
+		if !project.IsDir() {
+			continue
+		}
+		if info, statErr := os.Stat(filepath.Join(root, project.Name(), resumeID)); statErr == nil && info.IsDir() {
+			return true
+		}
+	}
+	return false
+}
+
+// cursorResumeIDExistsForDir is the same question asked of one project, which
+// is a single stat: the directory name is derived from the path.
+func cursorResumeIDExistsForDir(resumeID, projectDir string) bool {
+	root, err := cursorChatsDir()
+	if err != nil {
+		return true
+	}
+	hash := cursorProjectHash(projectDir)
+	if hash == "" {
+		return cursorResumeIDExists(resumeID)
+	}
+	info, statErr := os.Stat(filepath.Join(root, hash, resumeID))
+	return statErr == nil && info.IsDir()
+}
+
+// antigravityResumeIDExists checks for the conversation's own database.
+//
+// The summary table would answer this too, but a file check needs no SQLite
+// connection and cannot contend with a running CLI for the database.
+func antigravityResumeIDExists(resumeID string) bool {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return true
+	}
+	path := filepath.Join(homeDir, ".gemini", "antigravity-cli", "conversations", resumeID+".db")
+	info, statErr := os.Stat(path)
+	return statErr == nil && !info.IsDir()
 }
 
 // claudeResumeIDExists scans ~/.claude/projects/*/<id>.jsonl. Claude stores
@@ -221,6 +279,15 @@ func geminiConfigDirForResume() string {
 // ResumeIDExistsForDir is ResumeIDExists with the working directory the agent
 // will start in — which Gemini needs, since it files sessions per directory.
 func ResumeIDExistsForDir(agent AgentType, resumeID, projectDir string) bool {
+	// Cursor scopes chats to the project directory the same way, and there the
+	// directory turns the search into one stat rather than a scan of every
+	// project's chats.
+	if agent == AgentCursor && projectDir != "" {
+		if resumeID == "" || !IsSafeResumeID(resumeID) {
+			return false
+		}
+		return cursorResumeIDExistsForDir(resumeID, projectDir)
+	}
 	if agent == AgentGemini {
 		if resumeID == "" || !IsSafeResumeID(resumeID) {
 			return false
