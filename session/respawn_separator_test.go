@@ -49,7 +49,9 @@ func TestEveryRespawnGoesThroughTheHelper(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reading instance.go: %v", err)
 	}
-	body := string(source)
+	// Normalised, because a Windows checkout hands this file back with CRLF
+	// line endings and every "\n}\n" search below would miss.
+	body := strings.ReplaceAll(string(source), "\r\n", "\n")
 
 	helper := strings.Index(body, "func respawnPaneArgs(")
 	if helper < 0 {
