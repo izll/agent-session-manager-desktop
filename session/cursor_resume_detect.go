@@ -78,6 +78,14 @@ func cursorChatIDFromOpenPaths(chatsRoot, expectedCWD string, paths []string) st
 		wantProject = cursorProjectHash(expectedCWD)
 	}
 
+	// Counted rather than just filtered: when this finds nothing there is no
+	// way to tell from the outside whether the process held no store at all,
+	// whether the store was somewhere else, or whether the project hash
+	// disagreed — and each of those has a different cause. Only written under
+	// --debug / ASMGR_DEBUG=1.
+	named, contained := 0, 0
+	otherProjects := make(map[string]struct{})
+
 	candidates := make(map[string]struct{})
 	for _, path := range paths {
 		path = trimExtendedLengthPrefix(path)
@@ -92,12 +100,15 @@ func cursorChatIDFromOpenPaths(chatsRoot, expectedCWD string, paths []string) st
 		if !strings.HasPrefix(filepath.Base(path), "store.db") {
 			continue
 		}
+		named++
 		if resolved, evalErr := filepath.EvalSymlinks(path); evalErr == nil {
 			path = resolved
 		}
 		if !pathInsideDirectory(chatsRoot, path) {
+			debugf("[CursorResume] store outside the chats root: %s (root %s)", path, chatsRoot)
 			continue
 		}
+		contained++
 		chatDir := filepath.Dir(path)
 		chatID := filepath.Base(chatDir)
 		project := filepath.Base(filepath.Dir(chatDir))
@@ -105,11 +116,16 @@ func cursorChatIDFromOpenPaths(chatsRoot, expectedCWD string, paths []string) st
 			continue
 		}
 		if wantProject != "" && project != wantProject {
+			otherProjects[project] = struct{}{}
 			continue
 		}
 		candidates[chatID] = struct{}{}
 	}
 	if len(candidates) != 1 {
+		debugf("[CursorResume] no single chat: paths=%d store-named=%d inside-root=%d "+
+			"matching-project=%d want-project=%q other-projects=%v cwd=%q",
+			len(paths), named, contained, len(candidates), wantProject,
+			sortedKeys(otherProjects), expectedCWD)
 		return ""
 	}
 	for chatID := range candidates {

@@ -92,6 +92,10 @@ func antigravityConversationIDFromOpenPaths(presenceRoot string, paths []string)
 		presenceRoot = evaluated
 	}
 
+	// See the note in cursorChatIDFromOpenPaths: silence here is ambiguous, so
+	// the counts say which filter emptied the list. Only under --debug.
+	named, contained := 0, 0
+
 	candidates := make(map[string]struct{})
 	for _, path := range paths {
 		path = trimExtendedLengthPrefix(path)
@@ -105,12 +109,15 @@ func antigravityConversationIDFromOpenPaths(presenceRoot string, paths []string)
 		if filepath.Ext(path) != ".lock" {
 			continue
 		}
+		named++
 		if resolved, evalErr := filepath.EvalSymlinks(path); evalErr == nil {
 			path = resolved
 		}
 		if !pathInsideDirectory(presenceRoot, path) {
+			debugf("[AntigravityResume] lock outside the presence root: %s (root %s)", path, presenceRoot)
 			continue
 		}
+		contained++
 		id := strings.TrimSuffix(filepath.Base(path), ".lock")
 		if id == "" || !IsSafeResumeID(id) {
 			continue
@@ -118,6 +125,9 @@ func antigravityConversationIDFromOpenPaths(presenceRoot string, paths []string)
 		candidates[id] = struct{}{}
 	}
 	if len(candidates) != 1 {
+		debugf("[AntigravityResume] no single conversation: paths=%d lock-named=%d "+
+			"inside-root=%d candidates=%d root=%s",
+			len(paths), named, contained, len(candidates), presenceRoot)
 		return ""
 	}
 	for id := range candidates {

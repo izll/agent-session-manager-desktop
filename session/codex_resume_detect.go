@@ -9,6 +9,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -68,6 +69,10 @@ func detectCodexSessionIDFromOpenPaths(sessionsRoot, expectedCWD string, paths [
 		sessionsRoot = evaluated
 	}
 
+	// See the note in cursorChatIDFromOpenPaths: without these counts a miss is
+	// indistinguishable from "the agent had nothing open". Only under --debug.
+	named, contained, parsed := 0, 0, 0
+
 	candidates := make(map[string]struct{})
 	for _, path := range paths {
 		path = trimExtendedLengthPrefix(path)
@@ -78,12 +83,15 @@ func detectCodexSessionIDFromOpenPaths(sessionsRoot, expectedCWD string, paths [
 		if err != nil || filepath.Ext(path) != ".jsonl" {
 			continue
 		}
+		named++
 		if resolved, evalErr := filepath.EvalSymlinks(path); evalErr == nil {
 			path = resolved
 		}
 		if !pathInsideDirectory(sessionsRoot, path) {
+			debugf("[CodexResume] rollout outside the sessions root: %s (root %s)", path, sessionsRoot)
 			continue
 		}
+		contained++
 		f, err := os.Open(path)
 		if err != nil {
 			continue
@@ -91,10 +99,14 @@ func detectCodexSessionIDFromOpenPaths(sessionsRoot, expectedCWD string, paths [
 		sessionID := parseCodexRootSessionMeta(f, expectedCWD)
 		_ = f.Close()
 		if sessionID != "" {
+			parsed++
 			candidates[sessionID] = struct{}{}
 		}
 	}
 	if len(candidates) != 1 {
+		debugf("[CodexResume] no single conversation: paths=%d jsonl-named=%d "+
+			"inside-root=%d matched-cwd=%d cwd=%q",
+			len(paths), named, contained, parsed, expectedCWD)
 		return ""
 	}
 	for sessionID := range candidates {
@@ -266,6 +278,17 @@ func trimExtendedLengthPrefix(path string) string {
 		return `\\` + strings.TrimPrefix(path, `\\?\UNC\`)
 	}
 	return strings.TrimPrefix(path, `\\?\`)
+}
+
+// sortedKeys returns a set's members in a stable order, for diagnostics that
+// are compared between runs.
+func sortedKeys(set map[string]struct{}) []string {
+	out := make([]string, 0, len(set))
+	for key := range set {
+		out = append(out, key)
+	}
+	sort.Strings(out)
+	return out
 }
 
 func pathInsideDirectory(root, path string) bool {
