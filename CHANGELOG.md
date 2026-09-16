@@ -6,6 +6,28 @@ Entries describe what changed for someone using the app. Internal refactoring,
 test and CI work is left out unless it changed behaviour. Dates are release
 dates; the format follows [Keep a Changelog](https://keepachangelog.com).
 
+## 1.0.4 — 2026-09-16
+
+### Fixed
+
+- **On Windows, restarting a single tab brought back a shell instead of the
+  agent.** Starting the whole session worked, so the tab looked fine until it
+  was restarted on its own — and then it sat at a PowerShell prompt whatever
+  agent it held. Stopping a tab had the same fault: instead of a parked tab it
+  got a fresh shell and went on looking alive.
+- **Antigravity tabs could not resume a conversation.** The wrong resume flag
+  was used — `--continue` reopens the most recent conversation and takes no id,
+  while `--conversation <id>` opens a named one — so the id was passed as a
+  prompt, the agent exited with "unexpected argument", and the status bar never
+  showed a conversation id for the tab.
+
+### Added
+
+- **`--debug` now explains why a conversation id was not found.** The Cursor,
+  Antigravity and Codex detectors used to return nothing in silence; they now
+  report how many files they saw and which check discarded them. Nothing is
+  written in a normal run.
+
 ## 1.0.3 — 2026-09-16
 
 ### Added
