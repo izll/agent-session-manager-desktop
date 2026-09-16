@@ -108,18 +108,20 @@ var AgentConfigs = map[AgentType]AgentConfig{
 	AgentAntigravity: {
 		// Taken from `agy --help` on 1.2.3, not from the documentation.
 		//
-		// --continue resumes the most recent conversation and takes no id;
-		// --conversation <id> resumes a named one. ResumeFlag is the former
-		// because that is what "resume this session" means here, and the id
-		// the launcher would pass is one Antigravity never gave us: there is
-		// no --session-id to pre-assign one with, so SupportsSessionID stays
-		// false and no fork flag exists at all.
+		// --conversation <id> resumes a named conversation; --continue takes no
+		// id and reopens whichever was most recent. ResumeFlag must be the
+		// former: every resume here names the conversation the tab was on, and
+		// passing that id after --continue left it as a bare argument, which
+		// agy reads as a prompt — "unexpected argument <uuid>", and the agent
+		// exited before it drew anything. There is still no --session-id to
+		// pre-assign one with, so SupportsSessionID stays false; the id comes
+		// from the presence lock the running agent holds.
 		Command:         "agy",
 		InstallURL:      "https://antigravity.google/docs/cli/install/",
 		SupportsResume:  true,
 		SupportsAutoYes: true,
 		AutoYesFlag:     "--dangerously-skip-permissions",
-		ResumeFlag:      "--continue",
+		ResumeFlag:      "--conversation",
 	},
 	AgentGemini: {
 		Command:         "gemini",
@@ -950,7 +952,7 @@ func (i *Instance) parkMainWindowContext(ctx context.Context, sessionName string
 		return fmt.Errorf("failed to prepare main window for stop: %w", err)
 	}
 	// Kill the agent and replace with an immediately-exiting command
-	if err := TmuxCommandContext(ctx, "respawn-pane", "-k", "-t", target, "exit 0").Run(); err != nil {
+	if err := TmuxCommandContext(ctx, respawnPaneArgs(nil, target, "exit", "0")...).Run(); err != nil {
 		return fmt.Errorf("failed to stop main window: %w", err)
 	}
 	i.MainWindowStopped = true
@@ -985,6 +987,27 @@ func (i *Instance) saveBaseCommit() {
 	}
 
 	i.BaseCommitSHA = strings.TrimSpace(string(output))
+}
+
+// respawnPaneArgs builds a respawn-pane command line that actually runs what it
+// is given.
+//
+// The command must follow a "--" separator. tmux accepts it either way, but
+// psmux — the Windows multiplexer — documents respawn-pane as "restart the
+// pane's shell" and silently drops a command passed without it: the pane came
+// back as a bare PowerShell prompt, whatever agent was asked for. That is why
+// starting a whole session worked while restarting one of its tabs did not —
+// a session's tabs are created with new-window, which takes its command
+// directly, and only a restart goes through respawn-pane.
+//
+// The same omission broke stopping a tab: "exit 0" was dropped too, so instead
+// of a dead pane the tab got a fresh shell and went on looking alive.
+func respawnPaneArgs(extraFlags []string, target string, command ...string) []string {
+	args := make([]string, 0, 6+len(extraFlags)+len(command))
+	args = append(args, "respawn-pane", "-k")
+	args = append(args, extraFlags...)
+	args = append(args, "-t", target, "--")
+	return append(args, command...)
 }
 
 func newTmuxWindowCommand(sessionName, tabDir, name string, detached bool, argv []string) *exec.Cmd {
@@ -1148,7 +1171,7 @@ func (i *Instance) restoreFollowedWindows(onlyWindowIdx int) {
 		// Disable automatic-rename so the window keeps the user-specified name
 		TmuxCommand("set-option", "-w", "-t", target, "automatic-rename", "off").Run()
 		if fw.Stopped {
-			_ = TmuxCommand("respawn-pane", "-k", "-t", target, "exit 0").Run()
+			_ = TmuxCommand(respawnPaneArgs(nil, target, "exit", "0")...).Run()
 		}
 
 		// Remember where the chosen tab landed. tmux renumbers the windows as
@@ -1380,7 +1403,7 @@ func (i *Instance) StopWindowContext(ctx context.Context, windowIdx int) error {
 
 	// Followed window: stop the process but keep the window (dead pane)
 	target := fmt.Sprintf("%s:%d", sessionName, windowIdx)
-	err := TmuxCommandContext(ctx, "respawn-pane", "-k", "-t", target, "exit 0").Run()
+	err := TmuxCommandContext(ctx, respawnPaneArgs(nil, target, "exit", "0")...).Run()
 	if err != nil {
 		return fmt.Errorf("failed to stop window %s: %w", target, err)
 	}
@@ -1426,9 +1449,7 @@ func (i *Instance) RestartWindowWithResume(windowIdx int, resumeID string) error
 			// the session path, which is also where it started. Passing it
 			// explicitly matters because respawn-pane would otherwise reuse
 			// wherever the dead pane happened to be left.
-			args := []string{"respawn-pane", "-k"}
-			args = append(args, restartDirArgs(i.Path)...)
-			args = append(args, "-t", target, shell)
+			args := respawnPaneArgs(restartDirArgs(i.Path), target, shell)
 			if err := TmuxCommand(args...).Run(); err != nil {
 				return fmt.Errorf("failed to restart terminal window: %w", err)
 			}
@@ -1491,7 +1512,7 @@ func (i *Instance) RestartWindowWithResume(windowIdx int, resumeID string) error
 		}
 		argv := buildAgentArgv(config.Command, args, i.ExtraArgs)
 		log.Printf("[RestartWindow] launching main window session=%s agent=%s argc=%d", i.ID, i.Agent, len(argv))
-		tmuxArgs := append([]string{"respawn-pane", "-k", "-t", target}, argv...)
+		tmuxArgs := respawnPaneArgs(nil, target, argv...)
 		if err := TmuxCommand(tmuxArgs...).Run(); err != nil {
 			return fmt.Errorf("failed to restart main window: %w", err)
 		}
@@ -1581,15 +1602,14 @@ func (i *Instance) RestartWindowWithResume(windowIdx int, resumeID string) error
 		argv = []string{defaultShell()}
 	}
 	log.Printf("[RestartWindow] launching followed window target=%s agent=%s argc=%d", target, fw.Agent, len(argv))
-	tmuxArgs := []string{"respawn-pane", "-k"}
 	// A terminal tab restarts where it was left; an agent tab keeps whatever
 	// directory it was configured with, since that is part of what identifies
 	// the conversation it resumes.
+	var dirFlags []string
 	if fw.Agent == AgentTerminal {
-		tmuxArgs = append(tmuxArgs, restartDirArgs(fw.WorkDir)...)
+		dirFlags = restartDirArgs(fw.WorkDir)
 	}
-	tmuxArgs = append(tmuxArgs, "-t", target)
-	tmuxArgs = append(tmuxArgs, argv...)
+	tmuxArgs := respawnPaneArgs(dirFlags, target, argv...)
 	if err := TmuxCommand(tmuxArgs...).Run(); err != nil {
 		return fmt.Errorf("failed to restart window %d: %w", windowIdx, err)
 	}
@@ -1639,7 +1659,7 @@ func (i *Instance) RestopWindow(windowIdx int) error {
 		return fmt.Errorf("failed to prepare stopped window %s: %w", target, setErr)
 	}
 
-	stopCmd, stopCancel := TmuxCommandTimed("respawn-pane", "-k", "-t", target, "exit 0")
+	stopCmd, stopCancel := TmuxCommandTimed(respawnPaneArgs(nil, target, "exit", "0")...)
 	stopErr := stopCmd.Run()
 	stopCancel()
 	if stopErr != nil {

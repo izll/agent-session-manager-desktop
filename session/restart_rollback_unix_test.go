@@ -45,7 +45,7 @@ printf '%s\n' "$*" >> "$ASMGR_TMUX_LOG"
 	commands := string(data)
 	target := inst.TmuxSessionName() + ":4"
 	if !strings.Contains(commands, "set-option -w -t "+target+" remain-on-exit on") ||
-		!strings.Contains(commands, "respawn-pane -k -t "+target+" exit 0") {
+		!strings.Contains(commands, "respawn-pane -k -t "+target+" -- exit 0") {
 		t.Fatalf("rollback commands = %q", commands)
 	}
 	if strings.Contains(commands, "kill-session") || strings.Contains(commands, "kill-window") {

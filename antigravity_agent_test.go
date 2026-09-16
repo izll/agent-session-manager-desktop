@@ -22,8 +22,10 @@ func TestAntigravityRunsAgy(t *testing.T) {
 // Both flags are from `agy --help` on 1.2.3.
 func TestAntigravityResumeAndAutoYesMatchItsCLI(t *testing.T) {
 	cfg := session.AgentConfigs[session.AgentAntigravity]
-	if !cfg.SupportsResume || cfg.ResumeFlag != "--continue" {
-		t.Errorf("resume = %v %q; want true --continue", cfg.SupportsResume, cfg.ResumeFlag)
+	// --conversation, not --continue: the latter takes no id, so the id was
+	// passed as a bare argument and agy rejected it as an unexpected prompt.
+	if !cfg.SupportsResume || cfg.ResumeFlag != "--conversation" {
+		t.Errorf("resume = %v %q; want true --conversation", cfg.SupportsResume, cfg.ResumeFlag)
 	}
 	if !cfg.SupportsAutoYes || cfg.AutoYesFlag != "--dangerously-skip-permissions" {
 		t.Errorf("auto-yes = %v %q; want true --dangerously-skip-permissions",
