@@ -36,6 +36,8 @@ export function CreateSession(arg1:string,arg2:string,arg3:string,arg4:boolean,a
 
 export function CreateSessionFromTemplate(arg1:string,arg2:string,arg3:string,arg4:string):Promise<main.SessionInfo>;
 
+export function CreateSessionOnServer(arg1:string,arg2:string,arg3:string,arg4:boolean,arg5:string,arg6:string,arg7:string):Promise<main.SessionInfo>;
+
 export function CreateTab(arg1:string,arg2:boolean,arg3:string,arg4:string,arg5:string,arg6:string,arg7:string):Promise<number>;
 
 export function CreateTask(arg1:string,arg2:string,arg3:string,arg4:string,arg5:Array<string>,arg6:string):Promise<main.TaskInfo>;
@@ -263,6 +265,8 @@ export function QuickReplyTab(arg1:string,arg2:number,arg3:string,arg4:string):P
 export function ReadSessionDirectoryFile(arg1:string,arg2:string,arg3:number,arg4:string):Promise<session.BrowseFile>;
 
 export function ReadSessionFile():Promise<main.PortableFileInfo>;
+
+export function ReconnectServer(arg1:string):Promise<void>;
 
 export function RedrawWindow(arg1:string,arg2:number,arg3:string):Promise<void>;
 

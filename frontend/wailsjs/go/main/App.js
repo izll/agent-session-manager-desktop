@@ -66,6 +66,10 @@ export function CreateSessionFromTemplate(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['CreateSessionFromTemplate'](arg1, arg2, arg3, arg4);
 }
 
+export function CreateSessionOnServer(arg1, arg2, arg3, arg4, arg5, arg6, arg7) {
+  return window['go']['main']['App']['CreateSessionOnServer'](arg1, arg2, arg3, arg4, arg5, arg6, arg7);
+}
+
 export function CreateTab(arg1, arg2, arg3, arg4, arg5, arg6, arg7) {
   return window['go']['main']['App']['CreateTab'](arg1, arg2, arg3, arg4, arg5, arg6, arg7);
 }
@@ -520,6 +524,10 @@ export function ReadSessionDirectoryFile(arg1, arg2, arg3, arg4) {
 
 export function ReadSessionFile() {
   return window['go']['main']['App']['ReadSessionFile']();
+}
+
+export function ReconnectServer(arg1) {
+  return window['go']['main']['App']['ReconnectServer'](arg1);
 }
 
 export function RedrawWindow(arg1, arg2, arg3) {

@@ -249,3 +249,21 @@ func (a *App) ReorderServers(ids []string) ([]ServerInfo, error) {
 func (a *App) KeyringAvailable() bool {
 	return session.KeyringAvailable()
 }
+
+// serverDisplayName names a session's server for the sidebar.
+//
+// Resolved here rather than in the frontend so a session carries the name it
+// should show even when the server list has not been loaded yet — and empty
+// for a local session, which is what the sidebar treats as "no marker".
+func (a *App) serverDisplayName(serverID string) string {
+	if serverID == "" {
+		return ""
+	}
+	server, err := a.storage.FindServer(serverID)
+	if err != nil {
+		// A session pointing at a server that no longer exists: shown as
+		// unknown rather than as local, because it will not start here either.
+		return "?"
+	}
+	return server.DisplayName()
+}

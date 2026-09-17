@@ -1265,5 +1265,9 @@
   "servers.tmuxInstalled": "A tmux telepítve: {version}",
   "servers.tmuxCannotInstall": "Innen nem telepíthető a tmux — telepítsd a szerveren kézzel.",
   "servers.tmuxWouldRemove": "A tmux telepítése itt más csomagokat is eltávolítana:",
-  "servers.tmuxRemoveRefused": "Nem telepítettünk semmit. Rendezd ezt a szerveren kézzel — nem tudhatjuk, mire kellenek azok a csomagok."
+  "servers.tmuxRemoveRefused": "Nem telepítettünk semmit. Rendezd ezt a szerveren kézzel — nem tudhatjuk, mire kellenek azok a csomagok.",
+  "servers.thisComputer": "Ez a számítógép",
+  "servers.runsOn": "Hol fusson",
+  "servers.runsOnHint": "Az elérési út a szerveren van, és az agent az alkalmazás bezárása után is dolgozik tovább.",
+  "servers.onServer": "{server} szerveren"
 }

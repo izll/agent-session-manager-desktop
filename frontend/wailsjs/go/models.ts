@@ -1297,6 +1297,8 @@ export namespace main {
 	    notes: string;
 	    favorite: boolean;
 	    resumeSessionId: string;
+	    serverId?: string;
+	    serverName?: string;
 	    followedWindows: session.FollowedWindow[];
 	    mainWindowStopped: boolean;
 	    updatedAt?: string;
@@ -1332,6 +1334,8 @@ export namespace main {
 	        this.notes = source["notes"];
 	        this.favorite = source["favorite"];
 	        this.resumeSessionId = source["resumeSessionId"];
+	        this.serverId = source["serverId"];
+	        this.serverName = source["serverName"];
 	        this.followedWindows = this.convertValues(source["followedWindows"], session.FollowedWindow);
 	        this.mainWindowStopped = source["mainWindowStopped"];
 	        this.updatedAt = source["updatedAt"];

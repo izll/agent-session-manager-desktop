@@ -28,6 +28,8 @@ export interface Session {
   followedWindows: any[];
   tabOrder: number[];
   mainWindowStopped: boolean;
+  serverId?: string;
+  serverName?: string;
   extraArgs: string;
   tabTextColor: string;
   tabBackgroundColor: string;
@@ -204,7 +206,7 @@ export async function loadSessions() {
   }
 }
 
-export async function createSession(name: string, path: string, agent: string, autoYes: boolean = false, extraArgs: string = '') {
+export async function createSession(name: string, path: string, agent: string, autoYes: boolean = false, extraArgs: string = '', serverId: string = '') {
   const target = projectTarget();
   try {
     const session = await App.CreateSession(name, path, agent, autoYes, extraArgs, target.projectId);

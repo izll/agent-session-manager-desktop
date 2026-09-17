@@ -1182,20 +1182,25 @@ func (a *App) ImportSessions(sourceProjectID string, sessionIDs []string, expect
 
 // SessionInfo represents session data for frontend
 type SessionInfo struct {
-	ID                string                   `json:"id"`
-	Name              string                   `json:"name"`
-	Path              string                   `json:"path"`
-	Status            string                   `json:"status"`
-	Agent             string                   `json:"agent"`
-	Color             string                   `json:"color"`
-	BgColor           string                   `json:"bgColor"`
-	FullRowColor      bool                     `json:"fullRowColor"`
-	GroupID           string                   `json:"groupId"`
-	AutoYes           bool                     `json:"autoYes"`
-	HideStatusLine    bool                     `json:"hideStatusLine"`
-	Notes             string                   `json:"notes"`
-	Favorite          bool                     `json:"favorite"`
-	ResumeSessionID   string                   `json:"resumeSessionId"`
+	ID              string `json:"id"`
+	Name            string `json:"name"`
+	Path            string `json:"path"`
+	Status          string `json:"status"`
+	Agent           string `json:"agent"`
+	Color           string `json:"color"`
+	BgColor         string `json:"bgColor"`
+	FullRowColor    bool   `json:"fullRowColor"`
+	GroupID         string `json:"groupId"`
+	AutoYes         bool   `json:"autoYes"`
+	HideStatusLine  bool   `json:"hideStatusLine"`
+	Notes           string `json:"notes"`
+	Favorite        bool   `json:"favorite"`
+	ResumeSessionID string `json:"resumeSessionId"`
+	// ServerID names the machine this session runs on; empty is this computer.
+	ServerID string `json:"serverId,omitempty"`
+	// ServerName is the display name, so the sidebar can mark a session
+	// without looking every server up itself.
+	ServerName        string                   `json:"serverName,omitempty"`
 	FollowedWindows   []session.FollowedWindow `json:"followedWindows"`
 	MainWindowStopped bool                     `json:"mainWindowStopped"`
 	// UpdatedAt is when this session last did anything, for the activity
@@ -1269,6 +1274,8 @@ func (a *App) instanceToSessionInfo(inst *session.Instance) SessionInfo {
 		Notes:              inst.Notes,
 		Favorite:           inst.Favorite,
 		ResumeSessionID:    inst.ResumeSessionID,
+		ServerID:           inst.ServerID,
+		ServerName:         a.serverDisplayName(inst.ServerID),
 		FollowedWindows:    inst.FollowedWindows,
 		MainWindowStopped:  mainStopped,
 		UpdatedAt:          formatSessionTimestamp(lastActivityTime(inst)),
@@ -1288,6 +1295,16 @@ func (a *App) instanceToSessionInfo(inst *session.Instance) SessionInfo {
 
 // CreateSession creates a new session
 func (a *App) CreateSession(name, path string, agent string, autoYes bool, extraArgs, expectedProjectID string) (*SessionInfo, error) {
+	return a.CreateSessionOnServer(name, path, agent, autoYes, extraArgs, expectedProjectID, "")
+}
+
+// CreateSessionOnServer creates a session that runs on a remote machine.
+//
+// serverID empty means this computer, which is what CreateSession passes — the
+// two are one function so that everything after the checks is shared, and a
+// change to session creation cannot apply to only one of them.
+func (a *App) CreateSessionOnServer(name, path string, agent string, autoYes bool,
+	extraArgs, expectedProjectID, serverID string) (*SessionInfo, error) {
 	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return nil, err
@@ -1307,11 +1324,22 @@ func (a *App) CreateSession(name, path string, agent string, autoYes bool, extra
 	// still produced that dead entry — and on Windows, where the multiplexer is
 	// a separate download rather than something most machines already have,
 	// that is the likelier one to be missing.
-	if err := session.CheckMultiplexer(); err != nil {
-		return nil, err
-	}
-	if err := session.CheckAgentCommand(inst); err != nil {
-		return nil, err
+	inst.ServerID = serverID
+	if serverID == "" {
+		if err := session.CheckMultiplexer(); err != nil {
+			return nil, err
+		}
+		if err := session.CheckAgentCommand(inst); err != nil {
+			return nil, err
+		}
+	} else {
+		// Both checks belong to the machine the session will run on, and both
+		// were made against it by the connection test — which is also where a
+		// missing multiplexer can be fixed. Repeating them here would ask this
+		// computer about a server's software.
+		if _, err := a.storage.FindServer(serverID); err != nil {
+			return nil, err
+		}
 	}
 	if err := a.storage.AddInstance(inst); err != nil {
 		return nil, err

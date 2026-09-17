@@ -362,6 +362,14 @@
     {/if}
 
     <div class="badges">
+      <!-- Which machine this session runs on. Only for remote ones: a marker
+           on every session would say nothing, and most are local. -->
+      {#if session.serverName}
+        <span
+          class="badge server"
+          title={$t('servers.onServer').replace('{server}', session.serverName)}
+        >&#9729;</span>
+      {/if}
       {#if session.resumeSessionId && showResume}
         <span class="badge resume" title={$t('sessionItem.resumed')}>&#8635;</span>
       {/if}
@@ -628,6 +636,11 @@
     text-shadow: 0 0 10px rgba(251, 191, 36, 0.8);
     font-size: 13px;
     padding: 0;
+  }
+
+  .badge.server {
+    color: #60a5fa;
+    font-size: 12px;
   }
 
   .badge.resume {

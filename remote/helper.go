@@ -45,6 +45,17 @@ type Helper struct {
 
 	writeMu sync.Mutex
 	encoder *json.Encoder
+
+	// onClosed is called once when the helper stops answering, so the owner of
+	// the connection can replace it instead of handing out a dead one.
+	onClosed func(error)
+}
+
+// OnClosed registers what to do when this helper ends.
+func (h *Helper) OnClosed(handler func(error)) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.onClosed = handler
 }
 
 // StartHelper launches the helper and begins reading its answers.
@@ -122,6 +133,14 @@ func (h *Helper) failAll(err error) {
 	for id, waiting := range h.pending {
 		waiting <- &protocol.Response{ID: id, Error: err.Error()}
 		delete(h.pending, id)
+	}
+	handler := h.onClosed
+	h.onClosed = nil
+
+	if handler != nil {
+		// Outside the lock, and in its own goroutine: the handler drops this
+		// connection from the pool, which takes locks of its own.
+		go handler(err)
 	}
 }
 
@@ -215,7 +234,15 @@ func (h *Helper) Version(ctx context.Context) (*protocol.VersionResult, error) {
 }
 
 // Close ends the helper process.
+//
+// A deliberate close is not a lost connection, so the closed handler is
+// dropped first: the pool is already doing whatever it called this for, and
+// telling it the connection failed would have it rebuild one nobody asked for.
 func (h *Helper) Close() error {
+	h.mu.Lock()
+	h.onClosed = nil
+	h.mu.Unlock()
+
 	h.failAll(fmt.Errorf("the helper was closed"))
 	h.stdin.Close()
 	return h.session.Close()

@@ -168,9 +168,53 @@ func (a *App) connectionFor(serverID string) (*serverConnection, error) {
 		helper:   helper,
 		executor: remote.NewExecutor(helper, server.DisplayName(), server.ExtraPath),
 	}
+	// When the helper ends — the network dropped, the server rebooted, someone
+	// killed it — the connection is marked so the next use builds a fresh one
+	// rather than waiting on something that cannot answer. The tmux sessions on
+	// the server are unaffected: that is the point of them living there.
+	helper.OnClosed(func(reason error) {
+		log.Printf("[servers] lost the connection to %s: %v", server.DisplayName(), reason)
+		a.servers.markFailed(serverID)
+	})
 	a.servers.put(serverID, connection)
 	log.Printf("[servers] connected to %s", server.DisplayName())
 	return connection, nil
+}
+
+// markFailed records that a server's connection has stopped answering, so the
+// next caller builds a new one rather than waiting on something dead.
+func (p *serverPool) markFailed(serverID string) {
+	p.mu.Lock()
+	connection, found := p.connections[serverID]
+	if found {
+		connection.failed = true
+	}
+	p.mu.Unlock()
+
+	if found {
+		// Closed on the way out: the SSH connection may still be holding a
+		// socket open, and nothing will ever read from it again.
+		go func() {
+			if connection.helper != nil {
+				connection.helper.Close()
+			}
+			if connection.client != nil {
+				connection.client.Close()
+			}
+		}()
+	}
+}
+
+// ReconnectServer drops a server's connection so the next use builds a fresh
+// one.
+//
+// Exposed for the UI, because a user who has just fixed something on the
+// server — restarted it, repaired the network — should not have to restart the
+// app to have it noticed.
+func (a *App) ReconnectServer(serverID string) error {
+	a.servers.drop(serverID)
+	log.Printf("[servers] connection to %s dropped; it will be rebuilt on next use", serverID)
+	return nil
 }
 
 // routeSessionCommands points a session's commands at its server.

@@ -201,6 +201,37 @@ left off.
 
 <img src="docs/screenshot-diff.png" alt="A session's changes side by side, with the file tree beside them" width="900">
 
+## Sessions on a server
+
+A session can run on another machine instead of this one. The agent keeps
+working there after you close the app, reboot your laptop, or walk away — the
+session lives in the server's `tmux`, and the app is only looking at it.
+
+Set one up in **Settings › Remote servers**: add the host, choose how to sign
+in (ssh-agent, a key file or a password), and press **Test connection**. The
+test reports what it found step by step — whether it reached the machine,
+whether it signed in, whether `tmux` is there, and which agents are installed.
+A server you have not connected to before shows its fingerprint for you to
+accept; one whose identity has changed is refused outright.
+
+If the server has no `tmux`, the test offers to install it. What would run is
+shown first, and the package manager is asked in advance what it would change:
+if installing would remove anything, nothing is installed and you are told what
+it wanted to take off.
+
+Once a server is set up, **New session** gains a *Runs on* field. Sessions
+running elsewhere are marked in the sidebar with the server's name.
+
+Requirements on the server: SSH access, `tmux`, and whichever agents you want
+to run there, signed in as themselves. Agents installed somewhere a
+non-interactive shell does not look — `~/.local/bin`, nvm — need that directory
+in the server's **Extra PATH** field, since an SSH command reads no shell
+profile.
+
+A small helper program is installed at `~/.asmgr/asmgrd` on first connection.
+It is a single static binary with no dependencies, it holds no state, and it
+ends when you disconnect. Your sessions keep running without it.
+
 ## Install
 
 Grab the latest build for your platform from the

@@ -9,6 +9,7 @@
   import { activeProjectId } from '../../stores/projects';
   import AgentIcon from '../common/AgentIcon.svelte';
   import * as App from '../../../../wailsjs/go/main/App';
+  import type { main } from '../../../../wailsjs/go/models';
   import { t } from '../../i18n';
 
   export let show = false;
@@ -29,6 +30,10 @@
   let isSubmitting = false;
   let error = '';
   let selectedGroupId = '';
+  // Which machine the session runs on. Empty is this computer — what every
+  // session was before remote support, and what most still are.
+  let serverId = '';
+  let servers: main.ServerInfo[] = [];
   let groupInitialized = false;
   let extraArgs = '';
   let operationGeneration = 0;
@@ -77,6 +82,39 @@
   $: if (show && $agents.length === 0) {
     loadAgents();
   }
+
+  // The server list is loaded each time the dialog opens rather than once:
+  // a server can be added while the app is running, and an empty picker after
+  // adding one reads as the feature not working.
+  let serversLoadedFor = false;
+  $: if (show && !serversLoadedFor) {
+    serversLoadedFor = true;
+    void loadServers();
+  }
+  $: if (!show) {
+    serversLoadedFor = false;
+  }
+
+  async function loadServers() {
+    try {
+      servers = (await App.GetServers()) || [];
+      // Preselect the default, so someone who works mainly on a server does
+      // not choose it every time.
+      if (!serverId) {
+        serverId = servers.find(s => s.isDefault)?.id || '';
+      }
+    } catch {
+      // A server list that cannot be read leaves the picker local-only, which
+      // is the behaviour without any servers at all — not worth an error in
+      // front of someone creating a local session.
+      servers = [];
+    }
+  }
+
+  $: serverOptions = [
+    { value: '', label: $t('servers.thisComputer') },
+    ...servers.map(s => ({ value: s.id, label: s.displayName })),
+  ];
 
   // Set default group from selected session ONLY when dialog first opens
   $: if (show && !groupInitialized) {
@@ -260,7 +298,7 @@
     const groupId = selectedGroupId;
 
     try {
-      const session = await createSession(sessionName, sessionPath, agent, automaticYes, args);
+      const session = await createSession(sessionName, sessionPath, agent, automaticYes, args, serverId);
       if (targetProjectId !== $activeProjectId) return;
       if (session) {
         if (groupId) {
@@ -423,6 +461,23 @@
             class="form-input"
           />
         </div>
+
+        <!-- Which machine this session runs on. Shown only when there is a
+             choice to make: someone with no servers configured should not have
+             to read a field that always says the same thing. -->
+        {#if servers.length > 0}
+          <div class="form-group">
+            <label class="form-label" for="server">{$t('servers.runsOn')}</label>
+            <select id="server" bind:value={serverId} class="form-input form-select">
+              {#each serverOptions as option (option.value)}
+                <option value={option.value}>{option.label}</option>
+              {/each}
+            </select>
+            {#if serverId}
+              <p class="field-hint">{$t('servers.runsOnHint')}</p>
+            {/if}
+          </div>
+        {/if}
 
         <!-- Group -->
         {#if $groups.length > 0}

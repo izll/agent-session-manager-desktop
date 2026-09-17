@@ -191,3 +191,46 @@ test('the install strings are translated', () => {
     assert.notEqual(en[key], hu[key], `${key} is still English in hu.json`);
   }
 });
+
+// Creating a session has to say where it runs, and default to this computer —
+// which is what every session was before, and what most still are.
+test('a new session can be placed on a server', () => {
+  const dialog = readFileSync(
+    new URL('../src/lib/components/Dialogs/NewSessionDialog.svelte', import.meta.url), 'utf8');
+
+  assert.match(dialog, /let serverId = '';/,
+    'the dialog has no notion of which machine a session runs on');
+  assert.match(dialog, /createSession\([^)]*serverId\)/s,
+    'the chosen server is not passed to the creation call');
+
+  // The field only appears when there is a choice: someone with no servers
+  // should not have to read a control that always says the same thing.
+  assert.match(dialog, /\{#if servers\.length > 0\}/,
+    'the server field is shown even when there are no servers to choose from');
+
+  // The default server is preselected, so someone who works mainly on one
+  // does not pick it every time.
+  assert.match(dialog, /servers\.find\(s => s\.isDefault\)\?\.id/,
+    'the default server is not preselected');
+});
+
+// A session running elsewhere has to be visible as such in the list — but only
+// those, since a marker on every session would say nothing.
+test('remote sessions are marked in the sidebar', () => {
+  const item = readFileSync(
+    new URL('../src/lib/components/Sidebar/SessionItem.svelte', import.meta.url), 'utf8');
+
+  assert.match(item, /\{#if session\.serverName\}/,
+    'nothing marks a session that runs on a server');
+  assert.match(item, /\$t\('servers\.onServer'\)\.replace\('\{server\}', session\.serverName\)/,
+    'the marker does not name the server it points at');
+});
+
+test('the placement strings are translated', () => {
+  for (const key of ['servers.thisComputer', 'servers.runsOn', 'servers.runsOnHint',
+                     'servers.onServer']) {
+    assert.ok(en[key], `${key} is missing from en.json`);
+    assert.ok(hu[key], `${key} is missing from hu.json`);
+    assert.notEqual(en[key], hu[key], `${key} is still English in hu.json`);
+  }
+});

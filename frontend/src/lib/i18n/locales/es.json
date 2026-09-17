@@ -1265,5 +1265,9 @@
   "servers.tmuxInstalled": "tmux is installed: {version}",
   "servers.tmuxCannotInstall": "tmux cannot be installed from here — install it on the server yourself.",
   "servers.tmuxWouldRemove": "Installing tmux here would remove other packages:",
-  "servers.tmuxRemoveRefused": "Nothing was installed. Sort this out on the server yourself — we cannot know what those packages are for."
+  "servers.tmuxRemoveRefused": "Nothing was installed. Sort this out on the server yourself — we cannot know what those packages are for.",
+  "servers.thisComputer": "This computer",
+  "servers.runsOn": "Runs on",
+  "servers.runsOnHint": "The path is on the server, and the agent keeps working there after you close the app.",
+  "servers.onServer": "on {server}"
 }
