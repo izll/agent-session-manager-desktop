@@ -1506,25 +1506,26 @@
             {/if}
           </div>
         {/if}
-        <button class="btn btn-ghost" on:click={() => showGlobalSearch = true} title={$t('header.globalSearch')}>
+        <!-- Icons rather than labels: four of these sit side by side, and their
+             names are long in several of the languages this ships in. The title
+             carries the name for anyone who needs it. -->
+        <button class="btn btn-ghost btn-icon" on:click={() => showGlobalSearch = true} title={$t('header.globalSearch')}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="11" cy="11" r="8"/>
             <path d="M21 21l-4.35-4.35"/>
           </svg>
-          {$t('app.search')}
         </button>
-        <button class="btn btn-ghost palette-trigger" on:click={() => showCommandPalette = true} title={$t('palette.title')}>
+        <button class="btn btn-ghost btn-icon palette-trigger" on:click={() => showCommandPalette = true} title={$t('palette.title')}>
           <!-- Corner-out arrow: this palette jumps you to a session or view. -->
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
             <path d="M15 3h6v6M10 14L21 3"/>
           </svg>
-          {$t('palette.title')}
         </button>
         <!-- The saved-command library, distinct from the palette above: that
              one jumps to sessions and views, this one runs shell commands. -->
         <button
-          class="btn btn-ghost palette-trigger"
+          class="btn btn-ghost btn-icon palette-trigger"
           on:click={() => showCommandPicker = true}
           title={$t('header.commands')}
         >
@@ -1533,7 +1534,18 @@
             <rect x="3" y="4" width="18" height="16" rx="2"/>
             <path d="M7 9l3 3-3 3M13 15h4"/>
           </svg>
-          {$t('header.commands')}
+        </button>
+        <!-- The machines sessions can run on. Beside the commands because both
+             are things you set up once and then reach for. -->
+        <button
+          class="btn btn-ghost btn-icon"
+          on:click={() => showServerManager = true}
+          title={$t('servers.managerTitle')}
+        >
+          <!-- A cloud: the same mark the sidebar puts on a remote session. -->
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/>
+          </svg>
         </button>
       </div>
       <div class="header-divider-vertical actions-divider"></div>
@@ -2123,7 +2135,10 @@
   .header-text-actions {
     display: flex;
     align-items: center;
-    gap: 10px;
+    /* 4px, matching .header-icons on the other side of the bar: these were
+       labelled buttons once, where 10px kept the words apart, and the wider
+       gap made the two groups of icons look like different kinds of control. */
+    gap: 4px;
   }
 
   .header-text-actions .btn {

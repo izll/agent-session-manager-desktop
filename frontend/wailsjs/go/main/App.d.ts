@@ -154,6 +154,8 @@ export function GetQuickJump():Promise<Array<session.QuickJumpEntry>>;
 
 export function GetResumeSessions(arg1:string,arg2:string):Promise<Array<main.AgentSessionInfo>>;
 
+export function GetSSHConfigHosts():Promise<Array<main.SSHConfigHostInfo>>;
+
 export function GetServers():Promise<Array<main.ServerInfo>>;
 
 export function GetSessionDiff(arg1:string,arg2:number,arg3:string):Promise<main.DiffData>;

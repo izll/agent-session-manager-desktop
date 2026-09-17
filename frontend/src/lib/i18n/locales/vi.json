@@ -1269,5 +1269,10 @@
   "servers.thisComputer": "This computer",
   "servers.runsOn": "Runs on",
   "servers.runsOnHint": "The path is on the server, and the agent keeps working there after you close the app.",
-  "servers.onServer": "on {server}"
+  "servers.onServer": "on {server}",
+  "servers.fromSshConfig": "From SSH config",
+  "servers.fromSshConfigTitle": "Machines in ~/.ssh/config",
+  "servers.noSshConfig": "No hosts found in ~/.ssh/config.",
+  "servers.useThis": "Use this",
+  "servers.alreadyAdded": "already added"
 }

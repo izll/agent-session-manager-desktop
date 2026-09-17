@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"asmgr-desktop/remote"
 	"asmgr-desktop/session"
 )
 
@@ -266,4 +267,74 @@ func (a *App) serverDisplayName(serverID string) string {
 		return "?"
 	}
 	return server.DisplayName()
+}
+
+// SSHConfigHostInfo is one entry from ~/.ssh/config, offered as a starting
+// point when adding a server.
+type SSHConfigHostInfo struct {
+	Alias    string `json:"alias"`
+	HostName string `json:"hostName"`
+	User     string `json:"user"`
+	Port     int    `json:"port"`
+	KeyPath  string `json:"keyPath"`
+	// AlreadyAdded marks an entry that is already in the server list, so the
+	// picker can say so instead of letting the user add it twice.
+	AlreadyAdded bool `json:"alreadyAdded"`
+}
+
+// GetSSHConfigHosts lists the machines described in the user's SSH
+// configuration.
+//
+// Read only, and only when asked. The file is where someone who uses SSH daily
+// has already written down every host, port, user and key — retyping all of
+// that into another form is the small friction that makes a feature feel like
+// work.
+func (a *App) GetSSHConfigHosts() ([]SSHConfigHostInfo, error) {
+	hosts, err := remote.ReadSSHConfig()
+	if err != nil {
+		// A configuration that cannot be read is not a failure worth stopping
+		// for: the user can still type the details in.
+		log.Printf("[GetSSHConfigHosts] could not read the SSH configuration: %v", err)
+		return nil, nil
+	}
+
+	existing, err := a.storage.LoadServers()
+	if err != nil {
+		return nil, err
+	}
+
+	out := make([]SSHConfigHostInfo, 0, len(hosts))
+	for _, host := range hosts {
+		out = append(out, SSHConfigHostInfo{
+			Alias:        host.Alias,
+			HostName:     host.HostName,
+			User:         host.User,
+			Port:         host.Port,
+			KeyPath:      host.KeyPath,
+			AlreadyAdded: serverListHas(existing.Servers, host),
+		})
+	}
+	return out, nil
+}
+
+// serverListHas reports whether a config entry is already in the server list.
+//
+// Matched on host and user rather than on the alias: the alias is a local
+// nickname, and the same machine may well have been added under a different
+// one.
+func serverListHas(servers []session.Server, host remote.SSHConfigHost) bool {
+	wantPort := host.Port
+	if wantPort == 0 {
+		wantPort = 22
+	}
+	for _, server := range servers {
+		serverPort := server.Port
+		if serverPort == 0 {
+			serverPort = 22
+		}
+		if server.Host == host.HostName && server.User == host.User && serverPort == wantPort {
+			return true
+		}
+	}
+	return false
 }

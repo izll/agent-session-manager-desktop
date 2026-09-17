@@ -61,6 +61,14 @@
   let installing = false;
   let installedVersion = '';
 
+  // Entries read from ~/.ssh/config, offered as a starting point. Loaded when
+  // the picker is opened rather than with the dialog: most visits are to edit
+  // an existing server, and reading a file nobody asked about is work for
+  // nothing.
+  let showImport = false;
+  let configHosts: main.SSHConfigHostInfo[] = [];
+  let loadingImport = false;
+
   let lastShow = false;
   $: {
     if (show && !lastShow) void load();
@@ -248,6 +256,45 @@
   $: multiplexerMissing = (testResult?.steps || []).some(
     step => step.name === 'multiplexer' && step.status === 'failed');
 
+  async function openImport() {
+    showImport = true;
+    loadingImport = true;
+    error = '';
+    const generation = ++operationGeneration;
+    try {
+      const hosts = await App.GetSSHConfigHosts();
+      if (!show || generation !== operationGeneration) return;
+      configHosts = hosts || [];
+    } catch (e) {
+      if (!show || generation !== operationGeneration) return;
+      error = String(e);
+    } finally {
+      if (generation === operationGeneration) loadingImport = false;
+    }
+  }
+
+  // The entry fills the form rather than saving itself. What lands in the list
+  // is what the user looked at and confirmed — an SSH config can hold machines
+  // they have no intention of running agents on.
+  function useConfigHost(host: main.SSHConfigHostInfo) {
+    showImport = false;
+    editing = true;
+    editingId = '';
+    fName = host.alias || host.hostName;
+    fHost = host.hostName;
+    fPort = host.port || null;
+    fUser = host.user;
+    // A named key file means that key; without one, ssh-agent is the better
+    // guess than a path we would have to invent.
+    fAuthMethod = host.keyPath ? 'key' : 'agent';
+    fKeyPath = host.keyPath || '';
+    fJumpHostId = '';
+    fExtraPath = '';
+    fIsDefault = servers.length === 0;
+    fPassword = '';
+    hasStoredPassword = false;
+  }
+
   function stepLabel(translate: (key: string) => string, name: string): string {
     return translate('servers.step.' + name);
   }
@@ -423,18 +470,52 @@
             </label>
 
             <div class="form-actions">
-              <button class="btn" on:click={() => (editing = false)}>{$t('common.cancel')}</button>
-              <button class="btn primary" on:click={save} disabled={saving}>
+              <button class="btn-secondary" on:click={() => (editing = false)}>{$t('common.cancel')}</button>
+              <button class="btn-primary" on:click={save} disabled={saving}>
                 {saving ? $t('common.saving') : $t('common.save')}
               </button>
             </div>
           </div>
         {:else}
           <div class="toolbar">
-            <button class="btn primary" on:click={startNew}>{$t('servers.add')}</button>
+            <button class="btn-secondary" on:click={openImport}>{$t('servers.fromSshConfig')}</button>
+            <button class="btn-primary" on:click={startNew}>{$t('servers.add')}</button>
           </div>
 
-          {#if loading}
+          {#if showImport}
+            <div class="import-panel">
+              <div class="import-head">
+                <span>{$t('servers.fromSshConfigTitle')}</span>
+                <button class="icon-btn" on:click={() => (showImport = false)}>×</button>
+              </div>
+              {#if loadingImport}
+                <p class="empty">{$t('common.loading')}</p>
+              {:else if configHosts.length === 0}
+                <p class="empty">{$t('servers.noSshConfig')}</p>
+              {:else}
+                <ul class="list">
+                  {#each configHosts as host (host.alias)}
+                    <li class="row">
+                      <div class="row-main">
+                        <div class="row-name">{host.alias}</div>
+                        <div class="row-detail">
+                          {host.user}@{host.hostName}{host.port && host.port !== 22 ? ':' + host.port : ''}
+                          {#if host.keyPath} · {host.keyPath}{/if}
+                        </div>
+                      </div>
+                      {#if host.alreadyAdded}
+                        <span class="already">{$t('servers.alreadyAdded')}</span>
+                      {:else}
+                        <button class="btn-secondary small" on:click={() => useConfigHost(host)}>
+                          {$t('servers.useThis')}
+                        </button>
+                      {/if}
+                    </li>
+                  {/each}
+                </ul>
+              {/if}
+            </div>
+          {:else if loading}
             <p class="empty">{$t('common.loading')}</p>
           {:else if servers.length === 0}
             <p class="empty">{$t('servers.empty')}</p>
@@ -499,7 +580,7 @@
                             {#if installPlan.possible}
                               <p>{$t('servers.tmuxWillRun')}</p>
                               <code>{installPlan.command}</code>
-                              <button class="btn small" on:click={() => runInstall(srv)} disabled={installing}>
+                              <button class="btn-secondary small" on:click={() => runInstall(srv)} disabled={installing}>
                                 {installing ? $t('servers.tmuxInstalling') : $t('servers.tmuxInstallRun')}
                               </button>
                             {:else if installPlan.wouldRemove?.length}
@@ -512,7 +593,7 @@
                             {/if}
                           {:else}
                             <p>{$t('servers.tmuxMissing')}</p>
-                            <button class="btn small" on:click={() => planInstall(srv)}>
+                            <button class="btn-secondary small" on:click={() => planInstall(srv)}>
                               {$t('servers.tmuxInstallOffer')}
                             </button>
                           {/if}
@@ -527,7 +608,7 @@
                         <div class="host-key">
                           <p>{$t('servers.hostKeyNew')}</p>
                           <code>{testResult.hostKey}</code>
-                          <button class="btn small" on:click={() => acceptHostKey(srv)}>
+                          <button class="btn-secondary small" on:click={() => acceptHostKey(srv)}>
                             {$t('servers.hostKeyAccept')}
                           </button>
                         </div>
@@ -543,7 +624,7 @@
                             bind:value={attemptPassword}
                             on:keydown={e => { if (e.key === 'Enter') runTest(srv); }}
                           />
-                          <button class="btn small" on:click={() => runTest(srv)}>
+                          <button class="btn-secondary small" on:click={() => runTest(srv)}>
                             {$t('servers.test')}
                           </button>
                         </div>
@@ -713,6 +794,26 @@
     white-space: nowrap;
   }
 
+  .import-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .import-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 12px;
+    color: #a1a1aa;
+  }
+
+  .already {
+    font-size: 11px;
+    color: #71717a;
+    flex: none;
+  }
+
   .install-offer {
     margin-top: 7px;
     padding: 8px 10px;
@@ -793,9 +894,46 @@
     font-size: 12px;
   }
 
-  .btn.small {
+  /* Matching the command manager, so the two dialogs do not each invent
+     their own buttons. */
+  .btn-primary,
+  .btn-secondary {
+    padding: 7px 16px;
+    border-radius: 7px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .btn-secondary {
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.05);
+    color: #a1a1aa;
+  }
+
+  .btn-secondary:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.09);
+    color: #e4e4e7;
+  }
+
+  .btn-primary {
+    border: 1px solid var(--accent);
+    background: linear-gradient(135deg, var(--accent-dark), var(--accent));
+    color: var(--accent-ink);
+  }
+
+  .btn-primary:disabled,
+  .btn-secondary:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+
+  /* The inline actions inside a test result sit next to text rather than in a
+     button row, so they are smaller. */
+  .btn-secondary.small {
     padding: 4px 10px;
     font-size: 11px;
+    font-weight: 500;
   }
 
   .form {

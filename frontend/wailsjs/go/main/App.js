@@ -302,6 +302,10 @@ export function GetResumeSessions(arg1, arg2) {
   return window['go']['main']['App']['GetResumeSessions'](arg1, arg2);
 }
 
+export function GetSSHConfigHosts() {
+  return window['go']['main']['App']['GetSSHConfigHosts']();
+}
+
 export function GetServers() {
   return window['go']['main']['App']['GetServers']();
 }

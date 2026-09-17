@@ -1269,5 +1269,10 @@
   "servers.thisComputer": "Ez a számítógép",
   "servers.runsOn": "Hol fusson",
   "servers.runsOnHint": "Az elérési út a szerveren van, és az agent az alkalmazás bezárása után is dolgozik tovább.",
-  "servers.onServer": "{server} szerveren"
+  "servers.onServer": "{server} szerveren",
+  "servers.fromSshConfig": "SSH configból",
+  "servers.fromSshConfigTitle": "Gépek a ~/.ssh/config fájlból",
+  "servers.noSshConfig": "Nincs gép a ~/.ssh/config fájlban.",
+  "servers.useThis": "Ezt választom",
+  "servers.alreadyAdded": "már felvéve"
 }

@@ -1179,6 +1179,28 @@ export namespace main {
 	        this.isLocked = source["isLocked"];
 	    }
 	}
+	export class SSHConfigHostInfo {
+	    alias: string;
+	    hostName: string;
+	    user: string;
+	    port: number;
+	    keyPath: string;
+	    alreadyAdded: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new SSHConfigHostInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.alias = source["alias"];
+	        this.hostName = source["hostName"];
+	        this.user = source["user"];
+	        this.port = source["port"];
+	        this.keyPath = source["keyPath"];
+	        this.alreadyAdded = source["alreadyAdded"];
+	    }
+	}
 	export class SaveFileEditResult {
 	    saved: boolean;
 	    conflict?: string;
