@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	_ "github.com/mattn/go-sqlite3"
+	_ "modernc.org/sqlite"
 )
 
 // antigravitySessionListLimit caps how many conversations are read back. The
@@ -47,7 +47,7 @@ func ListAntigravitySessions(projectPath string) ([]AgentSession, error) {
 		return []AgentSession{}, nil
 	}
 
-	db, err := sql.Open("sqlite3", dbPath+"?mode=ro")
+	db, err := sql.Open("sqlite", readOnlySQLiteDSN(dbPath))
 	if err != nil {
 		return []AgentSession{}, nil
 	}

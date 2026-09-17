@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	_ "github.com/mattn/go-sqlite3"
+	_ "modernc.org/sqlite"
 )
 
 // writeAntigravitySummaries builds the one table the picker reads, with the
@@ -18,7 +18,7 @@ func writeAntigravitySummaries(t *testing.T, home string, rows [][]any) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	db, err := sql.Open("sqlite3", filepath.Join(dir, "conversation_summaries.db"))
+	db, err := sql.Open("sqlite", filepath.Join(dir, "conversation_summaries.db"))
 	if err != nil {
 		t.Fatal(err)
 	}

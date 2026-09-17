@@ -17,8 +17,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	_ "github.com/mattn/go-sqlite3"
 	"github.com/sahilm/fuzzy"
+	_ "modernc.org/sqlite"
 )
 
 const (
@@ -690,7 +690,7 @@ func (h *HistoryIndex) parseOpenCodeDB() []HistoryEntry {
 func (h *HistoryIndex) parseOpenCodeDBFile(dbPath, projectPath string) []HistoryEntry {
 	var entries []HistoryEntry
 
-	db, err := sql.Open("sqlite3", dbPath+"?mode=ro")
+	db, err := sql.Open("sqlite", readOnlySQLiteDSN(dbPath))
 	if err != nil {
 		return entries
 	}

@@ -12,16 +12,16 @@ require (
 	github.com/gordonklaus/portaudio v0.0.0-20260203164431-765aa7dfa631
 	github.com/gorilla/websocket v1.5.3
 	github.com/mattn/go-runewidth v0.0.16
-	github.com/mattn/go-sqlite3 v1.14.33
 	github.com/maxhawkins/go-webrtcvad v0.0.0-20210121163624-be60036f3083
 	github.com/moutend/go-wca v0.3.0
 	github.com/robotn/gohook v0.42.3
 	github.com/sahilm/fuzzy v0.1.1
 	github.com/shirou/gopsutil/v4 v4.25.10
 	github.com/wailsapp/wails/v2 v2.14.0
-	golang.org/x/sys v0.46.0
+	golang.org/x/sys v0.47.0
 	google.golang.org/api v0.264.0
 	google.golang.org/grpc v1.78.0
+	modernc.org/sqlite v1.59.0
 )
 
 require (
@@ -34,6 +34,7 @@ require (
 	github.com/bep/debounce v1.2.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/dblohm7/wingoes v0.0.0-20250822163801-6d8e6105c62d // indirect
+	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/ebitengine/purego v0.9.1 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/gen2brain/shm v0.1.1 // indirect
@@ -54,11 +55,13 @@ require (
 	github.com/leaanthony/u v1.1.1 // indirect
 	github.com/lufia/plan9stats v0.0.0-20251013123823-9fd1530e3ec3 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
-	github.com/mattn/go-isatty v0.0.20 // indirect
+	github.com/mattn/go-isatty v0.0.24 // indirect
+	github.com/ncruces/go-strftime v1.0.0 // indirect
 	github.com/otiai10/gosseract/v2 v2.4.1 // indirect
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/power-devops/perfstat v0.0.0-20240221224432-82ca36839d55 // indirect
+	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/robotn/xgb v0.10.0 // indirect
 	github.com/robotn/xgbutil v0.10.0 // indirect
@@ -88,10 +91,13 @@ require (
 	golang.org/x/image v0.41.0 // indirect
 	golang.org/x/net v0.56.0 // indirect
 	golang.org/x/oauth2 v0.34.0 // indirect
-	golang.org/x/sync v0.21.0 // indirect
+	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/text v0.39.0 // indirect
 	golang.org/x/time v0.14.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20251202230838-ff82c1b0f217 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260122232226-8e98ce8d340d // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
+	modernc.org/libc v1.75.7 // indirect
+	modernc.org/mathutil v1.7.1 // indirect
+	modernc.org/memory v1.12.1 // indirect
 )
