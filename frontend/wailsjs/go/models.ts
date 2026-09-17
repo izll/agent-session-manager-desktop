@@ -1904,6 +1904,8 @@ export namespace remote {
 	    needsSudo: boolean;
 	    possible: boolean;
 	    reason?: string;
+	    wouldRemove?: string[];
+	    preview?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new MultiplexerPlan(source);
@@ -1916,6 +1918,8 @@ export namespace remote {
 	        this.needsSudo = source["needsSudo"];
 	        this.possible = source["possible"];
 	        this.reason = source["reason"];
+	        this.wouldRemove = source["wouldRemove"];
+	        this.preview = source["preview"];
 	    }
 	}
 

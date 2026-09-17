@@ -502,6 +502,10 @@
                               <button class="btn small" on:click={() => runInstall(srv)} disabled={installing}>
                                 {installing ? $t('servers.tmuxInstalling') : $t('servers.tmuxInstallRun')}
                               </button>
+                            {:else if installPlan.wouldRemove?.length}
+                              <p class="warn">{$t('servers.tmuxWouldRemove')}</p>
+                              <code>{installPlan.wouldRemove.join(', ')}</code>
+                              <p>{$t('servers.tmuxRemoveRefused')}</p>
                             {:else}
                               <p>{$t('servers.tmuxCannotInstall')}</p>
                               {#if installPlan.reason}<code>{installPlan.reason}</code>{/if}
@@ -719,6 +723,10 @@
     flex-direction: column;
     gap: 6px;
     align-items: flex-start;
+  }
+
+  .install-offer p.warn {
+    color: #fbbf24;
   }
 
   .install-offer p {

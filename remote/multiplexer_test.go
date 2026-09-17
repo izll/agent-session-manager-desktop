@@ -114,3 +114,112 @@ func TestLongOutputIsTrimmedForTheMessage(t *testing.T) {
 		t.Error("a short message was altered")
 	}
 }
+
+// An install that removes packages is never offered.
+//
+// Installing tmux can pull a dependency that conflicts with something already
+// there, and a package manager told not to ask questions resolves that by
+// removing the something — on a machine that is somebody's running server. The
+// multiplexer is not worth one package of it, and we cannot know what that
+// package was for.
+func TestAptRemovalsAreDetected(t *testing.T) {
+	// The shape apt-get -s uses when it would take something off.
+	simulation := `Reading package lists...
+Building dependency tree...
+The following packages will be REMOVED:
+  libfoo1 oldthing
+Remv libfoo1 [1.2-3]
+Remv oldthing [4.5]
+Inst tmux (3.0a-2 Debian:11/stable [amd64])
+Conf tmux (3.0a-2 Debian:11/stable [amd64])`
+
+	removals := removalsFrom("apt-get", simulation)
+	if len(removals) != 2 {
+		t.Fatalf("found %d removals in a simulation that removes two: %v", len(removals), removals)
+	}
+	if removals[0] != "libfoo1" || removals[1] != "oldthing" {
+		t.Errorf("removals = %v; the package names were not picked out cleanly", removals)
+	}
+}
+
+// The ordinary case must not be read as a removal, or the offer would never
+// appear. Measured against a real Ubuntu 18.04 server, whose simulation
+// mentions packages that "are no longer required" without removing any.
+func TestACleanInstallReportsNoRemovals(t *testing.T) {
+	simulation := `Reading package lists...
+Building dependency tree...
+The following packages were automatically installed and are no longer required:
+  cgmanager dh-python dkms gcc-6-base:i386
+Use 'apt autoremove' to remove them.
+Inst tmux (2.6-3ubuntu0.3 Ubuntu:18.04/bionic-updates [amd64])
+Conf tmux (2.6-3ubuntu0.3 Ubuntu:18.04/bionic-updates [amd64])`
+
+	if removals := removalsFrom("apt-get", simulation); len(removals) != 0 {
+		t.Errorf("a clean install was read as removing %v — the offer would never "+
+			"be shown on a perfectly ordinary server", removals)
+	}
+}
+
+// Every package manager we offer has to be able to say in advance what it
+// would do. One that cannot is one we must not run unattended.
+func TestEveryInstallRecipeHasADryRun(t *testing.T) {
+	for manager := range installCommands {
+		if _, found := dryRunCommands[manager]; !found {
+			t.Errorf("%s can be installed with but not previewed — it would run "+
+				"unattended with no way to know what it changes", manager)
+		}
+	}
+}
+
+// A dry run that changes something is not a dry run.
+func TestDryRunsAreReadOnly(t *testing.T) {
+	previews := map[string]string{
+		"apt-get": "-s",
+		"dnf":     "--assumeno",
+		"yum":     "--assumeno",
+		"pacman":  "--print",
+		"zypper":  "--dry-run",
+		"apk":     "--simulate",
+		"brew":    "--dry-run",
+	}
+	for manager, flag := range previews {
+		command, found := dryRunCommands[manager]
+		if !found {
+			t.Errorf("%s has no dry run", manager)
+			continue
+		}
+		if !strings.Contains(command, flag) {
+			t.Errorf("%s dry run %q is missing %s, so it would actually install",
+				manager, command, flag)
+		}
+		if strings.Contains(command, " -y") {
+			t.Errorf("%s dry run %q carries -y", manager, command)
+		}
+	}
+}
+
+// The belt to the dry run's braces: if the server changed between the check
+// and the run, apt refuses rather than removing something to make room.
+func TestAptRefusesToRemoveAtRunTime(t *testing.T) {
+	if !strings.Contains(installCommands["apt-get"], "--no-remove") {
+		t.Error("the apt recipe would let a changed situation remove packages " +
+			"between the preview and the install")
+	}
+}
+
+// The plan the user accepted is the plan that runs. A plan carrying removals
+// was never one they were offered.
+func TestRunRefusesAPlanWithRemovals(t *testing.T) {
+	plan := &MultiplexerPlan{
+		Command:     "apt-get install -y tmux",
+		Possible:    true,
+		WouldRemove: []string{"libfoo1"},
+	}
+	_, err := InstallMultiplexer(nil, nil, plan)
+	if err == nil {
+		t.Fatal("a plan that removes packages was run")
+	}
+	if !strings.Contains(err.Error(), "libfoo1") {
+		t.Errorf("the error does not name what would go: %v", err)
+	}
+}

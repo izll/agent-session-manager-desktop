@@ -1263,5 +1263,7 @@
   "servers.tmuxInstallRun": "Futtatás",
   "servers.tmuxInstalling": "Telepítés…",
   "servers.tmuxInstalled": "A tmux telepítve: {version}",
-  "servers.tmuxCannotInstall": "Innen nem telepíthető a tmux — telepítsd a szerveren kézzel."
+  "servers.tmuxCannotInstall": "Innen nem telepíthető a tmux — telepítsd a szerveren kézzel.",
+  "servers.tmuxWouldRemove": "A tmux telepítése itt más csomagokat is eltávolítana:",
+  "servers.tmuxRemoveRefused": "Nem telepítettünk semmit. Rendezd ezt a szerveren kézzel — nem tudhatjuk, mire kellenek azok a csomagok."
 }

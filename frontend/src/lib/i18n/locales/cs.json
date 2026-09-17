@@ -1263,5 +1263,7 @@
   "servers.tmuxInstallRun": "Run it",
   "servers.tmuxInstalling": "Installing…",
   "servers.tmuxInstalled": "tmux is installed: {version}",
-  "servers.tmuxCannotInstall": "tmux cannot be installed from here — install it on the server yourself."
+  "servers.tmuxCannotInstall": "tmux cannot be installed from here — install it on the server yourself.",
+  "servers.tmuxWouldRemove": "Installing tmux here would remove other packages:",
+  "servers.tmuxRemoveRefused": "Nothing was installed. Sort this out on the server yourself — we cannot know what those packages are for."
 }
