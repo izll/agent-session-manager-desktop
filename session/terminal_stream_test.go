@@ -96,3 +96,50 @@ type failingCloser struct{}
 
 func (failingCloser) Write(p []byte) (int, error) { return len(p), nil }
 func (failingCloser) Close() error                { return errors.New("handle already gone") }
+
+// selfResizingStream stands in for a terminal that lives on a server, where
+// there is no local file descriptor to act on.
+type selfResizingStream struct {
+	cols, rows int
+	called     bool
+}
+
+func (s *selfResizingStream) Read([]byte) (int, error)  { return 0, nil }
+func (s *selfResizingStream) Write([]byte) (int, error) { return 0, nil }
+func (s *selfResizingStream) Close() error              { return nil }
+
+func (s *selfResizingStream) SetSize(cols, rows int) error {
+	s.called = true
+	s.cols, s.rows = cols, rows
+	return nil
+}
+
+// A remote terminal is an SSH channel, not a pty: the platform resize has no
+// file to act on, and would return nil without doing anything. A pane that
+// silently keeps its old size is a pane the agent draws wrongly into.
+func TestAStreamThatResizesItselfIsAsked(t *testing.T) {
+	stream := &selfResizingStream{}
+
+	if err := SetTerminalSize(stream, 120, 40); err != nil {
+		t.Fatalf("resize: %v", err)
+	}
+	if !stream.called {
+		t.Fatal("the stream was never asked to resize itself; the platform path " +
+			"would have quietly done nothing")
+	}
+	if stream.cols != 120 || stream.rows != 40 {
+		t.Errorf("resized to %dx%d, want 120x40", stream.cols, stream.rows)
+	}
+}
+
+// The ordinary case is unchanged: a stream with no size of its own falls
+// through to whatever the platform does.
+func TestAPlainStreamFallsThroughToThePlatform(t *testing.T) {
+	handled, err := resizeBySelf(&terminalPipes{}, 80, 24)
+	if handled {
+		t.Error("a plain stream claimed to handle its own resize")
+	}
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+}

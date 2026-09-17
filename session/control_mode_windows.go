@@ -363,6 +363,11 @@ func paneHasContentContext(ctx context.Context, pane string) bool {
 // A resize failure is reported but not fatal to the stream: the terminal keeps
 // working at its previous size, which beats tearing down a live session.
 func SetTerminalSize(s TerminalStream, cols, rows int) error {
+	// A stream that knows how to resize itself — a remote terminal over SSH —
+	// is asked first: there is no local console to act on.
+	if handled, err := resizeBySelf(s, cols, rows); handled {
+		return err
+	}
 	c, ok := s.(*controlModeStream)
 	if !ok || cols <= 0 || rows <= 0 {
 		return nil

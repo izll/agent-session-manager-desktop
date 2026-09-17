@@ -15,6 +15,29 @@ type TerminalStream interface {
 	io.ReadWriteCloser
 }
 
+// resizableTerminal is a stream that knows its own way to report a size
+// change.
+//
+// A local terminal is a pty, and resizing it is an ioctl on the file — which
+// is what the platform implementations do. A remote one is an SSH channel,
+// where the protocol has a message for this, and no file to ioctl. Rather than
+// teach each platform about SSH, a stream that can resize itself says so.
+type resizableTerminal interface {
+	SetSize(cols, rows int) error
+}
+
+// resizeBySelf gives a stream the chance to handle its own resize.
+//
+// Returns whether it did, so the platform code only runs for streams that do
+// not — and a remote terminal never silently keeps its old size because the
+// local path could not recognise it.
+func resizeBySelf(s TerminalStream, cols, rows int) (bool, error) {
+	if resizable, ok := s.(resizableTerminal); ok {
+		return true, resizable.SetSize(cols, rows)
+	}
+	return false, nil
+}
+
 // StartTerminal runs cmd with its standard streams wired to a terminal-ish
 // byte stream and returns that stream. The caller keeps ownership of cmd: it
 // still has to Wait (or Kill) the process, exactly as it did when this was a

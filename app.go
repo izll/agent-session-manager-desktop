@@ -213,6 +213,10 @@ func (a *App) startup(ctx context.Context) {
 
 	// Start WebSocket terminal server for low-latency terminal I/O
 	a.termServer = NewTerminalServer(storage, 9753)
+	// The terminal server reaches back for the connection pool when a session
+	// lives on a server. Set here rather than passed to the constructor, which
+	// tests call without an app.
+	a.termServer.app = a
 	a.termServer.typingSignal = &a.lastTypingSignal
 	a.termServer.beginAttach = a.beginTerminalAttach
 	if err := a.termServer.Start(); err != nil {

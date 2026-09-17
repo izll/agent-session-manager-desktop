@@ -159,14 +159,17 @@ type TerminalServer struct {
 	// session and created its terminal attach. Returning only a bool would leave
 	// a check/use window where SelectProject could switch Storage in between.
 	beginAttach func(expectedProjectID string) (release func(), allowed bool)
-	server      *http.Server
-	listener    net.Listener
-	serveDone   chan struct{}
-	stopping    bool
-	connWG      sync.WaitGroup
-	handlerWG   sync.WaitGroup
-	lifecycle   context.Context
-	cancel      context.CancelFunc
+	// app is consulted only for sessions that live on a server, to reach the
+	// connection pool. Nil in tests, which is why attachRemote checks it.
+	app       *App
+	server    *http.Server
+	listener  net.Listener
+	serveDone chan struct{}
+	stopping  bool
+	connWG    sync.WaitGroup
+	handlerWG sync.WaitGroup
+	lifecycle context.Context
+	cancel    context.CancelFunc
 }
 
 type termConn struct {
@@ -1063,7 +1066,15 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 	// come out as replacement blocks no matter which renderer draws them.
 	cmd.Env = append(cmd.Env, "LANG=en_US.UTF-8", "LC_ALL=en_US.UTF-8")
 
-	ptmx, err := session.StartTerminal(cmd)
+	// A session that lives on a server is attached over its own SSH channel
+	// instead: there is no local process to give a pty to, and the stream the
+	// rest of this handler works with is the same either way.
+	var ptmx session.TerminalStream
+	if remoteStream, handled := ts.attachRemote(inst, windowTarget); handled {
+		ptmx, err = remoteStream.stream, remoteStream.err
+	} else {
+		ptmx, err = session.StartTerminal(cmd)
+	}
 	if err != nil {
 		// Clean up linked session on error (only if it was created)
 		if attachedToOwnMirror {

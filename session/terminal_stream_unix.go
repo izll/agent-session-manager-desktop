@@ -22,6 +22,11 @@ func StartTerminal(cmd *exec.Cmd) (TerminalStream, error) {
 // reacts to the resulting SIGWINCH, which is what makes the pane follow the
 // xterm.js viewport.
 func SetTerminalSize(s TerminalStream, cols, rows int) error {
+	// A stream that knows how to resize itself — a remote terminal over SSH —
+	// is asked first: there is no local file descriptor to act on.
+	if handled, err := resizeBySelf(s, cols, rows); handled {
+		return err
+	}
 	f, ok := s.(*os.File)
 	if !ok {
 		return nil
