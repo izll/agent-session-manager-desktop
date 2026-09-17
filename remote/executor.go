@@ -103,3 +103,36 @@ func firstLine(candidates ...string) string {
 	}
 	return "no output"
 }
+
+// RunShell runs a command other than tmux in a directory on the server.
+//
+// This is what the diff, the file browser and the history search need: their
+// commands are git invocations and file reads against a working directory that
+// lives on the far machine.
+func (e *Executor) RunShell(ctx context.Context, dir string, args ...string) ([]byte, []byte, int, error) {
+	if len(args) == 0 {
+		return nil, nil, 0, fmt.Errorf("no command given")
+	}
+
+	var builder strings.Builder
+	if extra := strings.TrimSpace(e.extraPath); extra != "" {
+		builder.WriteString("export PATH=")
+		builder.WriteString(shellQuote(extra))
+		builder.WriteString(":$PATH; ")
+	}
+	for index, arg := range args {
+		if index > 0 {
+			builder.WriteByte(' ')
+		}
+		builder.WriteString(shellQuote(arg))
+	}
+
+	result, err := e.helper.RunIn(ctx, dir, builder.String())
+	if err != nil {
+		return nil, nil, 0, err
+	}
+	if result.TimedOut {
+		return nil, nil, 0, fmt.Errorf("%s timed out on %s", args[0], e.name)
+	}
+	return []byte(result.Output), []byte(result.Stderr), result.ExitCode, nil
+}

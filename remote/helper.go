@@ -192,6 +192,19 @@ func (h *Helper) Run(ctx context.Context, command string) (*protocol.RunResult, 
 	return &result, nil
 }
 
+// RunIn executes a command in a directory on the server.
+func (h *Helper) RunIn(ctx context.Context, dir, command string) (*protocol.RunResult, error) {
+	var result protocol.RunResult
+	err := h.Call(ctx, protocol.MethodRun, protocol.RunParams{
+		Command: command,
+		Dir:     dir,
+	}, &result)
+	if err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
 // Version asks what the helper is.
 func (h *Helper) Version(ctx context.Context) (*protocol.VersionResult, error) {
 	var result protocol.VersionResult

@@ -2,6 +2,9 @@ package session
 
 import (
 	"context"
+	"fmt"
+	"strconv"
+	"strings"
 	"sync"
 )
 
@@ -36,6 +39,52 @@ type Executor interface {
 	// Describe names where commands go, for logs and error messages. "local",
 	// or the server's display name.
 	Describe() string
+}
+
+// ShellExecutor is an executor that can also run arbitrary commands, not only
+// multiplexer ones.
+//
+// Separate from Executor because the two have different reach: the multiplexer
+// commands are a closed set this package builds, while these are git
+// invocations and file reads whose arguments come from a working directory on
+// the far machine. An executor that cannot do this is still useful for
+// sessions; one that can serves the diff and the file browser too.
+type ShellExecutor interface {
+	Executor
+	// RunShell runs one command in a directory and returns its standard
+	// output, its standard error and the exit status.
+	//
+	// The exit status is returned rather than turned into an error because
+	// several callers here depend on it: `git ls-files --error-unmatch`
+	// failing is how the code learns a file is untracked, which is an answer
+	// rather than a fault.
+	RunShell(ctx context.Context, dir string, args ...string) (stdout, stderr []byte, exitCode int, err error)
+}
+
+// ShellExecutorFor returns an executor that can run commands other than the
+// multiplexer's, or nil when this session runs on the local machine.
+//
+// A nil return is the signal to take the local path, which is what every
+// caller does today: the remote branch is an addition, not a replacement.
+func ShellExecutorFor(sessionID string) ShellExecutor {
+	found, ok := executors.Load(sessionID)
+	if !ok {
+		return nil
+	}
+	shell, isShell := found.(ShellExecutor)
+	if !isShell {
+		return nil
+	}
+	return shell
+}
+
+// shellExec returns this instance's shell executor, or nil for a local
+// session.
+func (i *Instance) shellExec() ShellExecutor {
+	if i.ServerID == "" {
+		return nil
+	}
+	return ShellExecutorFor(i.ID)
 }
 
 // localExecutor runs commands on this computer, exactly as before.
@@ -146,4 +195,122 @@ func routeLoaded(instances []*Instance) {
 			route(inst)
 		}
 	}
+}
+
+// gitOutput runs a git command where this session's files are.
+//
+// Local sessions keep the behaviour this package always had, including the
+// environment the caller set up. A session on a server has its repository
+// there, so the command goes through the helper instead — and gitEnv is not
+// carried across: it exists to stop git reading the developer's own config,
+// which is a local concern, and the server's git has its own.
+func (i *Instance) gitOutput(args []string, gitEnv []string) ([]byte, error) {
+	if shell := i.shellExec(); shell != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), GitTimeout)
+		defer cancel()
+
+		stdout, stderr, exitCode, err := shell.RunShell(ctx, "", append([]string{"git"}, args...)...)
+		if err != nil {
+			return nil, err
+		}
+		if exitCode != 0 {
+			return stdout, fmt.Errorf("git %s failed on %s: %s",
+				args[0], shell.Describe(), strings.TrimSpace(string(stderr)))
+		}
+		return stdout, nil
+	}
+
+	cmd, cancel := GitCommandTimed(args...)
+	defer cancel()
+	if gitEnv != nil {
+		cmd.Env = gitEnv
+	}
+	return cmd.Output()
+}
+
+// Reading files where a session lives.
+//
+// The file browser, the editor and the diff all read from the working
+// directory, which is on the server for a remote session. Each of these takes
+// the local path when the session is local, so the ordinary case is untouched.
+
+// RemoteDirEntry is one item in a remote directory listing.
+type RemoteDirEntry struct {
+	Name  string
+	IsDir bool
+	Size  int64
+}
+
+// readFileWhereSessionLives reads a file from the machine this session runs on.
+func (i *Instance) readFileWhereSessionLives(path string, limit int64) ([]byte, error) {
+	shell := i.shellExec()
+	if shell == nil {
+		return readFileAtMost(path, limit)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), GitTimeout)
+	defer cancel()
+
+	// head rather than cat: a caller asking for at most N bytes must not have
+	// a gigabyte pulled across the network first and trimmed afterwards.
+	stdout, stderr, exitCode, err := shell.RunShell(ctx, "",
+		"head", "-c", fmt.Sprintf("%d", limit), "--", path)
+	if err != nil {
+		return nil, err
+	}
+	if exitCode != 0 {
+		return nil, fmt.Errorf("could not read %s on %s: %s",
+			path, shell.Describe(), strings.TrimSpace(string(stderr)))
+	}
+	return stdout, nil
+}
+
+// listDirectoryWhereSessionLives lists a directory on the machine this session
+// runs on.
+func (i *Instance) listDirectoryWhereSessionLives(path string) ([]RemoteDirEntry, error) {
+	shell := i.shellExec()
+	if shell == nil {
+		return nil, nil // Caller falls back to the local listing.
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), GitTimeout)
+	defer cancel()
+
+	// One line per entry, tab-separated, with the type first. Parsed rather
+	// than ls -l, whose columns differ between systems and locales.
+	script := fmt.Sprintf(
+		`find %s -maxdepth 1 -mindepth 1 -printf '%%y\t%%s\t%%f\n' 2>/dev/null`,
+		shellQuoteForRemote(path))
+	stdout, stderr, exitCode, err := shell.RunShell(ctx, "", "sh", "-c", script)
+	if err != nil {
+		return nil, err
+	}
+	if exitCode != 0 {
+		return nil, fmt.Errorf("could not list %s on %s: %s",
+			path, shell.Describe(), strings.TrimSpace(string(stderr)))
+	}
+
+	var entries []RemoteDirEntry
+	for _, line := range strings.Split(string(stdout), "\n") {
+		fields := strings.SplitN(strings.TrimRight(line, "\r"), "\t", 3)
+		if len(fields) != 3 {
+			continue
+		}
+		size, _ := strconv.ParseInt(fields[1], 10, 64)
+		entries = append(entries, RemoteDirEntry{
+			Name:  fields[2],
+			IsDir: fields[0] == "d",
+			Size:  size,
+		})
+	}
+	return entries, nil
+}
+
+// shellQuoteForRemote quotes a path for a command that will be interpreted by
+// a shell on the server.
+//
+// Separate from the quoting the executor does to its arguments: this value
+// ends up inside a script passed to sh -c, so it needs quoting of its own.
+func shellQuoteForRemote(value string) string {
+	return "'" + strings.ReplaceAll(value, "'", `'\''`) + "'"
 }

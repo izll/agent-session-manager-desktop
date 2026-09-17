@@ -328,10 +328,7 @@ func (i *Instance) diffFileSummaries(baseRef string) ([]DiffFileSummary, error) 
 	if baseRef != "" {
 		args = append(args, "--end-of-options", baseRef)
 	}
-	cmd, cancel := GitCommandTimed(args...)
-	defer cancel()
-	cmd.Env = gitEnv
-	out, err := cmd.Output()
+	out, err := i.gitOutput(args, gitEnv)
 	if err != nil {
 		return nil, fmt.Errorf("git diff --numstat failed: %w", err)
 	}
@@ -345,10 +342,7 @@ func (i *Instance) diffFileSummaries(baseRef string) ([]DiffFileSummary, error) 
 	if baseRef != "" {
 		statusArgs = append(statusArgs, "--end-of-options", baseRef)
 	}
-	statusCmd, cancelStatus := GitCommandTimed(statusArgs...)
-	defer cancelStatus()
-	statusCmd.Env = gitEnv
-	statusOut, statusErr := statusCmd.Output()
+	statusOut, statusErr := i.gitOutput(statusArgs, gitEnv)
 	if statusErr != nil {
 		// The counts are still useful without it; better a list labelled
 		// "modified" than no list at all.
