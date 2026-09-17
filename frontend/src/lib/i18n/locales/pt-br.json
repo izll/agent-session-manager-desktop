@@ -1243,5 +1243,18 @@
   "servers.deleteTitle": "Delete server?",
   "servers.deleteMessage": "{name} will be removed from the list, along with any password saved for it.",
   "settings.serversDesc": "Machines where sessions can run instead of on this computer, so agents keep working after you close the lid.",
-  "settings.serversAction": "Manage servers"
+  "settings.serversAction": "Manage servers",
+  "servers.test": "Test connection",
+  "servers.testing": "Connecting…",
+  "servers.step.connect": "Reached the machine",
+  "servers.step.auth": "Signed in",
+  "servers.step.hostkey": "Server identity",
+  "servers.step.multiplexer": "tmux",
+  "servers.step.agents": "Agents found",
+  "servers.step.arch": "Architecture",
+  "servers.hostKeyNew": "This server has not been connected to before. Check that the fingerprint matches the one the server itself reports, then accept it.",
+  "servers.hostKeyAccept": "Accept this server",
+  "servers.hostKeyChanged": "The server is answering with a different identity than the one accepted earlier. This can mean the machine was rebuilt — or that something is impersonating it. Nothing will connect until you check what happened.",
+  "servers.passwordPrompt": "Password for this connection",
+  "servers.passphrasePrompt": "Passphrase for the key"
 }

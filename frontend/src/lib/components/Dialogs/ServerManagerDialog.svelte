@@ -40,6 +40,19 @@
   let showDelete = false;
   let deleteTarget: Server | null = null;
 
+  // Connection test state. The result is a list of steps rather than a verdict:
+  // reaching the machine, proving who we are and finding tmux there are three
+  // different problems with three different fixes.
+  let testing = false;
+  let testResult: main.ConnectionTestResult | null = null;
+  let testedId = '';
+  // Asked for only when the attempt needs them, and kept out of the saved
+  // entry: a passphrase is never stored, and a password typed here is only
+  // stored when the user saves the server with it.
+  let askPassword = false;
+  let attemptPassword = '';
+  let attemptPassphrase = '';
+
   let lastShow = false;
   $: {
     if (show && !lastShow) void load();
@@ -147,6 +160,51 @@
     } finally {
       if (generation === operationGeneration) saving = false;
     }
+  }
+
+  async function runTest(srv: Server) {
+    if (testing) return;
+    const generation = ++operationGeneration;
+    testing = true;
+    testedId = srv.id;
+    testResult = null;
+    error = '';
+    try {
+      const result = await App.TestServerConnection(srv.id, attemptPassword, attemptPassphrase);
+      if (!show || generation !== operationGeneration) return;
+      testResult = result;
+      askPassword = !!result?.needsPassword || !!result?.needsPassphrase;
+    } catch (e) {
+      if (!show || generation !== operationGeneration) return;
+      error = String(e);
+    } finally {
+      if (generation === operationGeneration) testing = false;
+    }
+  }
+
+  // Accepting a key is a separate call that carries the fingerprint the user
+  // was shown — a key that changed between the test and the click must not be
+  // accepted on the strength of the earlier prompt.
+  async function acceptHostKey(srv: Server) {
+    if (!testResult?.hostKey) return;
+    const generation = ++operationGeneration;
+    try {
+      await App.AcceptServerHostKey(srv.id, testResult.hostKey);
+      if (!show || generation !== operationGeneration) return;
+      await load();
+      const refreshed = servers.find(s => s.id === srv.id);
+      if (refreshed) await runTest(refreshed);
+    } catch (e) {
+      if (!show || generation !== operationGeneration) return;
+      error = String(e);
+    }
+  }
+
+  // The translator is passed in rather than read inside: called from markup, a
+  // helper that reaches for a store on its own gives Svelte nothing to watch,
+  // and the step names would keep the language they were first rendered in.
+  function stepLabel(translate: (key: string) => string, name: string): string {
+    return translate('servers.step.' + name);
   }
 
   function askDelete(srv: Server) {
@@ -356,6 +414,11 @@
                   <div class="row-actions">
                     <button
                       class="icon-btn"
+                      title={$t('servers.test')}
+                      disabled={testing}
+                      on:click={() => runTest(srv)}>⇄</button>
+                    <button
+                      class="icon-btn"
                       title={$t('servers.moveUp')}
                       disabled={index === 0}
                       on:click={() => move(srv, -1)}>▲</button>
@@ -368,6 +431,53 @@
                     <button class="icon-btn danger" title={$t('common.delete')} on:click={() => askDelete(srv)}>×</button>
                   </div>
                 </li>
+                {#if testedId === srv.id && (testing || testResult)}
+                  <li class="result">
+                    {#if testing}
+                      <span class="result-line pending">{$t('servers.testing')}</span>
+                    {:else if testResult}
+                      {#each testResult.steps || [] as step}
+                        <span class="result-line {step.status}">
+                          <span class="mark">
+                            {step.status === 'ok' ? '✓' : step.status === 'failed' ? '✗' : '!'}
+                          </span>
+                          <span class="step-name">{stepLabel($t, step.name)}</span>
+                          {#if step.detail}<span class="step-detail">{step.detail}</span>{/if}
+                        </span>
+                      {/each}
+
+                      {#if testResult.hostKeyChanged}
+                        <div class="host-key danger">
+                          <p>{$t('servers.hostKeyChanged')}</p>
+                        </div>
+                      {:else if testResult.hostKeyIsNew}
+                        <div class="host-key">
+                          <p>{$t('servers.hostKeyNew')}</p>
+                          <code>{testResult.hostKey}</code>
+                          <button class="btn small" on:click={() => acceptHostKey(srv)}>
+                            {$t('servers.hostKeyAccept')}
+                          </button>
+                        </div>
+                      {/if}
+
+                      {#if askPassword}
+                        <div class="retry">
+                          <input
+                            type="password"
+                            placeholder={testResult.needsPassphrase
+                              ? $t('servers.passphrasePrompt')
+                              : $t('servers.passwordPrompt')}
+                            bind:value={attemptPassword}
+                            on:keydown={e => { if (e.key === 'Enter') runTest(srv); }}
+                          />
+                          <button class="btn small" on:click={() => runTest(srv)}>
+                            {$t('servers.test')}
+                          </button>
+                        </div>
+                      {/if}
+                    {/if}
+                  </li>
+                {/if}
               {/each}
             </ul>
           {/if}
@@ -484,6 +594,103 @@
 
   .icon-btn.danger:hover:not(:disabled) {
     color: #f87171;
+  }
+
+  .result {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    margin: -3px 0 4px;
+    padding: 8px 11px 10px;
+    border-radius: 0 0 7px 7px;
+    background: rgba(0, 0, 0, 0.22);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-top: none;
+  }
+
+  .result-line {
+    display: flex;
+    align-items: baseline;
+    gap: 7px;
+    font-size: 11px;
+    color: #a1a1aa;
+  }
+
+  .result-line .mark {
+    width: 12px;
+    flex: none;
+    text-align: center;
+  }
+
+  .result-line.ok .mark { color: #4ade80; }
+  .result-line.failed .mark { color: #f87171; }
+  .result-line.attention .mark { color: #fbbf24; }
+  .result-line.pending { color: #71717a; font-style: italic; }
+
+  .step-name {
+    color: #d4d4d8;
+    flex: none;
+  }
+
+  .step-detail {
+    color: #71717a;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .host-key {
+    margin-top: 7px;
+    padding: 8px 10px;
+    border-radius: 6px;
+    background: rgba(251, 191, 36, 0.08);
+    border: 1px solid rgba(251, 191, 36, 0.25);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    align-items: flex-start;
+  }
+
+  .host-key.danger {
+    background: rgba(248, 113, 113, 0.1);
+    border-color: rgba(248, 113, 113, 0.3);
+  }
+
+  .host-key p {
+    margin: 0;
+    font-size: 11px;
+    color: #d4d4d8;
+  }
+
+  .host-key code {
+    font-size: 11px;
+    color: #e4e4e7;
+    background: rgba(0, 0, 0, 0.3);
+    padding: 3px 6px;
+    border-radius: 4px;
+    word-break: break-all;
+  }
+
+  .retry {
+    display: flex;
+    gap: 6px;
+    margin-top: 7px;
+  }
+
+  .retry input {
+    flex: 1;
+    background: rgba(0, 0, 0, 0.25);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+    padding: 5px 8px;
+    color: #e4e4e7;
+    font-size: 12px;
+  }
+
+  .btn.small {
+    padding: 4px 10px;
+    font-size: 11px;
   }
 
   .form {

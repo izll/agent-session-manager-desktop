@@ -3,6 +3,8 @@
 import {main} from '../models';
 import {session} from '../models';
 
+export function AcceptServerHostKey(arg1:string,arg2:string):Promise<void>;
+
 export function AddQuickJump(arg1:string,arg2:number,arg3:string,arg4:string):Promise<void>;
 
 export function AddSubtask(arg1:string,arg2:string,arg3:string,arg4:string):Promise<main.SubtaskInfo>;
@@ -418,6 +420,8 @@ export function TaskMasterUpdateSubtask(arg1:string,arg2:string,arg3:string,arg4
 export function TaskMasterUpdateTask(arg1:string,arg2:string,arg3:string,arg4:boolean,arg5:string):Promise<void>;
 
 export function TaskMasterUpdateTaskDirect(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string,arg6:string,arg7:string,arg8:string,arg9:string):Promise<void>;
+
+export function TestServerConnection(arg1:string,arg2:string,arg3:string):Promise<main.ConnectionTestResult>;
 
 export function ToggleAutoYes(arg1:string,arg2:string):Promise<void>;
 

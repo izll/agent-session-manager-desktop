@@ -1243,5 +1243,18 @@
   "servers.deleteTitle": "Törlöd a szervert?",
   "servers.deleteMessage": "A(z) {name} kikerül a listából, a hozzá mentett jelszóval együtt.",
   "settings.serversDesc": "Gépek, ahol a munkamenetek futhatnak e helyett a számítógép helyett, így az agentek akkor is dolgoznak, ha lecsukod a laptopot.",
-  "settings.serversAction": "Szerverek kezelése"
+  "settings.serversAction": "Szerverek kezelése",
+  "servers.test": "Kapcsolat tesztelése",
+  "servers.testing": "Kapcsolódás…",
+  "servers.step.connect": "Gép elérve",
+  "servers.step.auth": "Bejelentkezve",
+  "servers.step.hostkey": "Szerver azonossága",
+  "servers.step.multiplexer": "tmux",
+  "servers.step.agents": "Talált agentek",
+  "servers.step.arch": "Architektúra",
+  "servers.hostKeyNew": "Ehhez a szerverhez még nem kapcsolódtál. Ellenőrizd, hogy az ujjlenyomat megegyezik azzal, amit maga a szerver mond, majd fogadd el.",
+  "servers.hostKeyAccept": "Szerver elfogadása",
+  "servers.hostKeyChanged": "A szerver más azonossággal válaszol, mint amit korábban elfogadtál. Ez jelentheti azt, hogy a gépet újratelepítették — de azt is, hogy valaki más adja ki magát neki. Amíg ki nem deríted, mi történt, nem lesz kapcsolat.",
+  "servers.passwordPrompt": "Jelszó ehhez a kapcsolathoz",
+  "servers.passphrasePrompt": "A kulcs jelmondata"
 }

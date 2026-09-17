@@ -100,3 +100,54 @@ test('the delete confirmation names the server', () => {
   assert.match(hu['servers.deleteMessage'], /\{name\}/,
     'the Hungarian message has no placeholder to substitute');
 });
+
+// The connection test reports steps, not a verdict. "Could not connect" is the
+// least useful thing to tell someone setting up a server: reaching the machine,
+// signing in and finding tmux are three problems with three different fixes.
+test('the test result is shown step by step', () => {
+  assert.match(dialogSrc, /testResult\.steps/,
+    'the dialog shows a single verdict rather than what was checked');
+  assert.match(dialogSrc, /step\.status === 'ok' \? '✓'/,
+    'the steps carry no pass/fail marks');
+  assert.match(dialogSrc, /stepLabel\(\$t, step\.name\)/,
+    'step names are shown raw, or the translator is not passed in — a helper ' +
+    'that reads the store itself does not re-run when the language changes');
+});
+
+// Accepting a host key is a decision, so it is a deliberate second action —
+// and it carries the fingerprint the user was shown, not one re-read later.
+test('a new host key is confirmed, never accepted silently', () => {
+  const at = dialogSrc.indexOf('async function acceptHostKey');
+  assert.ok(at > 0, 'there is no way to accept a host key');
+  const fn = dialogSrc.slice(at, dialogSrc.indexOf('function stepLabel'));
+
+  assert.match(fn, /testResult\?\.hostKey/,
+    'the accepted fingerprint is not the one that was displayed');
+  assert.match(fn, /App\.AcceptServerHostKey\(srv\.id, testResult\.hostKey\)/,
+    'the acceptance does not name the fingerprint, so a key that changed in ' +
+    'between would be accepted on the strength of the earlier prompt');
+
+  assert.match(dialogSrc, /\{#if testResult\.hostKeyChanged\}/,
+    'a changed host key is not called out');
+  assert.match(dialogSrc, /\{:else if testResult\.hostKeyIsNew\}/,
+    'a first connection is not distinguished from a changed key');
+});
+
+// A changed key must not offer an "accept" button: the honest explanation and
+// the dishonest one look identical, and one click would settle it wrongly.
+test('a changed host key offers no accept button', () => {
+  const at = dialogSrc.indexOf('{#if testResult.hostKeyChanged}');
+  const branch = dialogSrc.slice(at, dialogSrc.indexOf('{:else if testResult.hostKeyIsNew}'));
+  assert.ok(!/hostKeyAccept/.test(branch),
+    'a changed host key can be accepted with one click');
+});
+
+test('the test strings are translated', () => {
+  for (const key of ['servers.test', 'servers.testing', 'servers.hostKeyNew',
+                     'servers.hostKeyChanged', 'servers.step.connect']) {
+    assert.ok(en[key], `${key} is missing from en.json`);
+    assert.ok(hu[key], `${key} is missing from hu.json`);
+  }
+  assert.notEqual(en['servers.hostKeyChanged'], hu['servers.hostKeyChanged'],
+    'the host-key warning is still English in hu.json');
+});

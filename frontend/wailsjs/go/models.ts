@@ -398,6 +398,48 @@ export namespace main {
 		    return a;
 		}
 	}
+	export class ConnectionTestResult {
+	    steps: remote.CheckStep[];
+	    hostKey: string;
+	    hostKeyIsNew: boolean;
+	    hostKeyChanged: boolean;
+	    needsPassphrase: boolean;
+	    needsPassword: boolean;
+	    ok: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new ConnectionTestResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.steps = this.convertValues(source["steps"], remote.CheckStep);
+	        this.hostKey = source["hostKey"];
+	        this.hostKeyIsNew = source["hostKeyIsNew"];
+	        this.hostKeyChanged = source["hostKeyChanged"];
+	        this.needsPassphrase = source["needsPassphrase"];
+	        this.needsPassword = source["needsPassword"];
+	        this.ok = source["ok"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class DeletedSubtaskSnapshot {
 	    id: string;
 	    title: string;
@@ -1834,6 +1876,27 @@ export namespace main {
 		    }
 		    return a;
 		}
+	}
+
+}
+
+export namespace remote {
+	
+	export class CheckStep {
+	    name: string;
+	    status: string;
+	    detail?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new CheckStep(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.status = source["status"];
+	        this.detail = source["detail"];
+	    }
 	}
 
 }

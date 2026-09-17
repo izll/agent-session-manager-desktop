@@ -19,6 +19,7 @@ require (
 	github.com/shirou/gopsutil/v4 v4.25.10
 	github.com/wailsapp/wails/v2 v2.14.0
 	github.com/zalando/go-keyring v0.2.8
+	golang.org/x/crypto v0.53.0
 	golang.org/x/sys v0.47.0
 	google.golang.org/api v0.264.0
 	google.golang.org/grpc v1.78.0
@@ -88,7 +89,6 @@ require (
 	go.opentelemetry.io/otel v1.39.0 // indirect
 	go.opentelemetry.io/otel/metric v1.39.0 // indirect
 	go.opentelemetry.io/otel/trace v1.39.0 // indirect
-	golang.org/x/crypto v0.53.0 // indirect
 	golang.org/x/exp v0.0.0-20251125195548-87e1e737ad39 // indirect
 	golang.org/x/image v0.41.0 // indirect
 	golang.org/x/net v0.56.0 // indirect
