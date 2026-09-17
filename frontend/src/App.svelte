@@ -167,6 +167,7 @@
   import CommandPalette from './lib/components/Dialogs/CommandPalette.svelte';
   import CommandPickerDialog from './lib/components/Dialogs/CommandPickerDialog.svelte';
   import CommandManagerDialog from './lib/components/Dialogs/CommandManagerDialog.svelte';
+  import ServerManagerDialog from './lib/components/Dialogs/ServerManagerDialog.svelte';
   import SessionTemplateDialog from './lib/components/Dialogs/SessionTemplateDialog.svelte';
   import SessionColorDialog from './lib/components/Dialogs/SessionColorDialog.svelte';
   import ConfirmDialog from './lib/components/Dialogs/ConfirmDialog.svelte';
@@ -307,6 +308,7 @@
   /** Saved-command library: Ctrl+P picker and its editor. */
   let showCommandPicker = false;
   let showCommandManager = false;
+  let showServerManager = false;
   /** The picker closes itself before handing over to the editor. */
   function openCommandManager() {
     showCommandManager = true;
@@ -353,7 +355,7 @@
     showHelpDialog || showUpdateDialog || showImportDialog || showFileImportDialog ||
     showSettingsDialog || showRecoveryCenter || showCommandPalette || showColorDialog || showDeleteConfirm ||
     showLogDialog || showQuickJump || showGitHistory || quickJumpPrompt || quickJumpNaming ||
-    showCommandPicker || showCommandManager || showTemplateDialog ||
+    showCommandPicker || showCommandManager || showServerManager || showTemplateDialog ||
     showQuitConfirm || showStopDialog || showStartDialog ||
     showResumeChoice || showResumeSessionPicker;
   $: if (prevAnyDialogOpen && !anyDialogOpen) {
@@ -1755,6 +1757,7 @@
     on:openLogs={() => { showSettingsDialog = false; showLogDialog = true; }}
     on:openImport={() => { showSettingsDialog = false; showImportDialog = true; }}
     on:openFileImport={() => { showSettingsDialog = false; showFileImportDialog = true; }}
+    on:openServers={() => { showSettingsDialog = false; showServerManager = true; }}
     on:exportSessions={exportSessions}
   />
   <RecoveryCenterDialog bind:show={showRecoveryCenter} />
@@ -1766,6 +1769,7 @@
     onOpenManager={openCommandManager}
   />
   <CommandManagerDialog bind:show={showCommandManager} />
+  <ServerManagerDialog bind:show={showServerManager} />
   <SessionTemplateDialog bind:show={showTemplateDialog} useTemplateId={templateToUse} />
   <!-- Opened from the tab bar's colour button. The sidebar's context-menu
        entry opens its own instance from SessionItem, which is rendered in

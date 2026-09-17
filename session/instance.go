@@ -210,6 +210,11 @@ type Instance struct {
 	AutoYes         bool      `json:"auto_yes"`
 	HideStatusLine  bool      `json:"hide_status_line,omitempty"`  // Don't show the main window's status line in the session list
 	ResumeSessionID string    `json:"resume_session_id,omitempty"` // Claude session ID to resume
+	// ServerID names the remote machine this session runs on; empty is this
+	// computer. Per session rather than per project on purpose: the same
+	// project is often worked on locally and on a server, and a sessions file
+	// written before remote support existed loads unchanged, every entry local.
+	ServerID string `json:"server_id,omitempty"`
 	// ForkFrom names a conversation this session should BRANCH from on its
 	// first start, rather than continue. Not stored: it is true of that one
 	// start and nothing after it — restarting a forked session resumes the

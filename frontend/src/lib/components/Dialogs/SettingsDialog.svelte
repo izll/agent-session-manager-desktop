@@ -1704,6 +1704,20 @@
           </div>
 
           <div class="settings-section">
+            <h3>{$t('servers.managerTitle')}</h3>
+
+            <div class="setting-item">
+              <span class="setting-info">
+                <span class="setting-label">{$t('servers.managerTitle')}</span>
+                <span class="setting-desc">{$t('settings.serversDesc')}</span>
+              </span>
+              <button class="action-btn" on:click={() => dispatch('openServers')}>
+                {$t('settings.serversAction')}
+              </button>
+            </div>
+          </div>
+
+          <div class="settings-section">
             <h3>{$t('settings.logSection')}</h3>
 
             <div class="setting-item">

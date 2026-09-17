@@ -47,6 +47,8 @@ export function DeleteGroup(arg1:string,arg2:string):Promise<void>;
 
 export function DeleteProject(arg1:string):Promise<void>;
 
+export function DeleteServer(arg1:string):Promise<Array<main.ServerInfo>>;
+
 export function DeleteSession(arg1:string,arg2:string):Promise<void>;
 
 export function DeleteSessionTemplate(arg1:string):Promise<void>;
@@ -147,6 +149,8 @@ export function GetQuickJump():Promise<Array<session.QuickJumpEntry>>;
 
 export function GetResumeSessions(arg1:string,arg2:string):Promise<Array<main.AgentSessionInfo>>;
 
+export function GetServers():Promise<Array<main.ServerInfo>>;
+
 export function GetSessionDiff(arg1:string,arg2:number,arg3:string):Promise<main.DiffData>;
 
 export function GetSessionDiffFileList(arg1:string,arg2:number,arg3:string):Promise<Array<session.DiffFileSummary>>;
@@ -207,6 +211,8 @@ export function InvalidateSessionFileIndex(arg1:string):Promise<void>;
 
 export function IsDevMode():Promise<boolean>;
 
+export function KeyringAvailable():Promise<boolean>;
+
 export function ListBackgroundAgents():Promise<Array<main.BackgroundAgentInfo>>;
 
 export function ListGitBranches(arg1:string,arg2:number,arg3:string):Promise<main.GitBranchList>;
@@ -265,6 +271,8 @@ export function RenameSession(arg1:string,arg2:string,arg3:string):Promise<void>
 
 export function RenameTab(arg1:string,arg2:number,arg3:string,arg4:string):Promise<void>;
 
+export function ReorderServers(arg1:Array<string>):Promise<Array<main.ServerInfo>>;
+
 export function ReorderSession(arg1:string,arg2:number,arg3:string):Promise<void>;
 
 export function ReorderTab(arg1:string,arg2:number,arg3:number,arg4:string):Promise<void>;
@@ -294,6 +302,8 @@ export function RunCommand(arg1:string,arg2:string,arg3:number,arg4:Record<strin
 export function SaveCommand(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string,arg6:boolean):Promise<string>;
 
 export function SaveCommandGroup(arg1:string,arg2:string):Promise<string>;
+
+export function SaveServer(arg1:main.ServerSaveRequest):Promise<Array<main.ServerInfo>>;
 
 export function SaveSessionAsTemplate(arg1:string,arg2:string,arg3:boolean,arg4:string):Promise<string>;
 

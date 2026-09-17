@@ -90,6 +90,10 @@ export function DeleteProject(arg1) {
   return window['go']['main']['App']['DeleteProject'](arg1);
 }
 
+export function DeleteServer(arg1) {
+  return window['go']['main']['App']['DeleteServer'](arg1);
+}
+
 export function DeleteSession(arg1, arg2) {
   return window['go']['main']['App']['DeleteSession'](arg1, arg2);
 }
@@ -290,6 +294,10 @@ export function GetResumeSessions(arg1, arg2) {
   return window['go']['main']['App']['GetResumeSessions'](arg1, arg2);
 }
 
+export function GetServers() {
+  return window['go']['main']['App']['GetServers']();
+}
+
 export function GetSessionDiff(arg1, arg2, arg3) {
   return window['go']['main']['App']['GetSessionDiff'](arg1, arg2, arg3);
 }
@@ -410,6 +418,10 @@ export function IsDevMode() {
   return window['go']['main']['App']['IsDevMode']();
 }
 
+export function KeyringAvailable() {
+  return window['go']['main']['App']['KeyringAvailable']();
+}
+
 export function ListBackgroundAgents() {
   return window['go']['main']['App']['ListBackgroundAgents']();
 }
@@ -526,6 +538,10 @@ export function RenameTab(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['RenameTab'](arg1, arg2, arg3, arg4);
 }
 
+export function ReorderServers(arg1) {
+  return window['go']['main']['App']['ReorderServers'](arg1);
+}
+
 export function ReorderSession(arg1, arg2, arg3) {
   return window['go']['main']['App']['ReorderSession'](arg1, arg2, arg3);
 }
@@ -584,6 +600,10 @@ export function SaveCommand(arg1, arg2, arg3, arg4, arg5, arg6) {
 
 export function SaveCommandGroup(arg1, arg2) {
   return window['go']['main']['App']['SaveCommandGroup'](arg1, arg2);
+}
+
+export function SaveServer(arg1) {
+  return window['go']['main']['App']['SaveServer'](arg1);
 }
 
 export function SaveSessionAsTemplate(arg1, arg2, arg3, arg4) {
