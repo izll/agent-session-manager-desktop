@@ -1256,5 +1256,12 @@
   "servers.hostKeyAccept": "Accept this server",
   "servers.hostKeyChanged": "The server is answering with a different identity than the one accepted earlier. This can mean the machine was rebuilt — or that something is impersonating it. Nothing will connect until you check what happened.",
   "servers.passwordPrompt": "Password for this connection",
-  "servers.passphrasePrompt": "Passphrase for the key"
+  "servers.passphrasePrompt": "Passphrase for the key",
+  "servers.tmuxMissing": "There is no tmux on this server, and sessions cannot run without it.",
+  "servers.tmuxInstallOffer": "Install it",
+  "servers.tmuxWillRun": "This is what would run on the server:",
+  "servers.tmuxInstallRun": "Run it",
+  "servers.tmuxInstalling": "Installing…",
+  "servers.tmuxInstalled": "tmux is installed: {version}",
+  "servers.tmuxCannotInstall": "tmux cannot be installed from here — install it on the server yourself."
 }

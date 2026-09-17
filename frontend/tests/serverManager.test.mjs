@@ -151,3 +151,43 @@ test('the test strings are translated', () => {
   assert.notEqual(en['servers.hostKeyChanged'], hu['servers.hostKeyChanged'],
     'the host-key warning is still English in hu.json');
 });
+
+// Without a multiplexer nothing here works — sessions live in it. So a server
+// without one is not degraded, it is unusable, and offering to fix it beats
+// telling the user to go and do it themselves.
+test('a server with no tmux is offered the install', () => {
+  assert.match(dialogSrc, /multiplexerMissing/,
+    'nothing notices that the server has no multiplexer');
+  assert.match(dialogSrc, /step\.name === 'multiplexer' && step\.status === 'failed'/,
+    'the offer is not tied to what the test actually found');
+  assert.match(dialogSrc, /App\.PlanServerMultiplexerInstall/, 'there is no way to plan an install');
+  assert.match(dialogSrc, /App\.InstallServerMultiplexer/, 'there is no way to run it');
+});
+
+// This installs software on someone's server. The command is shown first, and
+// running it is a second, separate click.
+test('the install command is shown before it runs', () => {
+  const at = dialogSrc.indexOf('{#if multiplexerMissing}');
+  const block = dialogSrc.slice(at, dialogSrc.indexOf('{#if testResult.hostKeyChanged}', at));
+
+  assert.match(block, /\{installPlan\.command\}/,
+    'the command that would run on the server is never displayed');
+
+  // The plan and the run are different buttons: one call must not do both.
+  assert.match(block, /planInstall\(srv\)/, 'there is no step that only looks');
+  assert.match(block, /runInstall\(srv\)/, 'there is no step that runs it');
+
+  const planIndex = block.indexOf('planInstall(srv)');
+  const runIndex = block.indexOf('runInstall(srv)');
+  assert.ok(runIndex < planIndex,
+    'the run button is not inside the branch that has a plan to show');
+});
+
+test('the install strings are translated', () => {
+  for (const key of ['servers.tmuxMissing', 'servers.tmuxInstallOffer',
+                     'servers.tmuxWillRun', 'servers.tmuxCannotInstall']) {
+    assert.ok(en[key], `${key} is missing from en.json`);
+    assert.ok(hu[key], `${key} is missing from hu.json`);
+    assert.notEqual(en[key], hu[key], `${key} is still English in hu.json`);
+  }
+});

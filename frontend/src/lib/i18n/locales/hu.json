@@ -1256,5 +1256,12 @@
   "servers.hostKeyAccept": "Szerver elfogadása",
   "servers.hostKeyChanged": "A szerver más azonossággal válaszol, mint amit korábban elfogadtál. Ez jelentheti azt, hogy a gépet újratelepítették — de azt is, hogy valaki más adja ki magát neki. Amíg ki nem deríted, mi történt, nem lesz kapcsolat.",
   "servers.passwordPrompt": "Jelszó ehhez a kapcsolathoz",
-  "servers.passphrasePrompt": "A kulcs jelmondata"
+  "servers.passphrasePrompt": "A kulcs jelmondata",
+  "servers.tmuxMissing": "Ezen a szerveren nincs tmux, enélkül pedig nem futhatnak munkamenetek.",
+  "servers.tmuxInstallOffer": "Telepítsük",
+  "servers.tmuxWillRun": "Ez futna le a szerveren:",
+  "servers.tmuxInstallRun": "Futtatás",
+  "servers.tmuxInstalling": "Telepítés…",
+  "servers.tmuxInstalled": "A tmux telepítve: {version}",
+  "servers.tmuxCannotInstall": "Innen nem telepíthető a tmux — telepítsd a szerveren kézzel."
 }

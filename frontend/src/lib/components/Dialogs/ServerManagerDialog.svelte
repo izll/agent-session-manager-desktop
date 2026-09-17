@@ -1,7 +1,7 @@
 <script lang="ts">
   import { claimKeyForDialog } from '../../utils/dialogKeys';
   import * as App from '../../../../wailsjs/go/main/App';
-  import type { main } from '../../../../wailsjs/go/models';
+  import type { main, remote } from '../../../../wailsjs/go/models';
   import Select from '../common/Select.svelte';
   import ConfirmDialog from './ConfirmDialog.svelte';
   import { t } from '../../i18n';
@@ -52,6 +52,14 @@
   let askPassword = false;
   let attemptPassword = '';
   let attemptPassphrase = '';
+
+  // Installing tmux on the server. Offered when the test finds none, because
+  // without a multiplexer nothing here works at all — but shown as a plan
+  // first: this installs software on someone's machine, and the exact command
+  // belongs in front of them before they agree to it.
+  let installPlan: remote.MultiplexerPlan | null = null;
+  let installing = false;
+  let installedVersion = '';
 
   let lastShow = false;
   $: {
@@ -203,6 +211,43 @@
   // The translator is passed in rather than read inside: called from markup, a
   // helper that reaches for a store on its own gives Svelte nothing to watch,
   // and the step names would keep the language they were first rendered in.
+  async function planInstall(srv: Server) {
+    const generation = ++operationGeneration;
+    error = '';
+    try {
+      const plan = await App.PlanServerMultiplexerInstall(srv.id, attemptPassword, attemptPassphrase);
+      if (!show || generation !== operationGeneration) return;
+      installPlan = plan;
+    } catch (e) {
+      if (!show || generation !== operationGeneration) return;
+      error = String(e);
+    }
+  }
+
+  async function runInstall(srv: Server) {
+    if (!installPlan || installing) return;
+    const generation = ++operationGeneration;
+    installing = true;
+    error = '';
+    try {
+      const version = await App.InstallServerMultiplexer(
+        srv.id, attemptPassword, attemptPassphrase, installPlan);
+      if (!show || generation !== operationGeneration) return;
+      installedVersion = version;
+      installPlan = null;
+      await runTest(srv);
+    } catch (e) {
+      if (!show || generation !== operationGeneration) return;
+      error = String(e);
+    } finally {
+      if (generation === operationGeneration) installing = false;
+    }
+  }
+
+  // Whether the test found the server unusable for want of tmux.
+  $: multiplexerMissing = (testResult?.steps || []).some(
+    step => step.name === 'multiplexer' && step.status === 'failed');
+
   function stepLabel(translate: (key: string) => string, name: string): string {
     return translate('servers.step.' + name);
   }
@@ -446,6 +491,30 @@
                         </span>
                       {/each}
 
+                      {#if multiplexerMissing}
+                        <div class="install-offer">
+                          {#if installedVersion}
+                            <p>{$t('servers.tmuxInstalled').replace('{version}', installedVersion)}</p>
+                          {:else if installPlan}
+                            {#if installPlan.possible}
+                              <p>{$t('servers.tmuxWillRun')}</p>
+                              <code>{installPlan.command}</code>
+                              <button class="btn small" on:click={() => runInstall(srv)} disabled={installing}>
+                                {installing ? $t('servers.tmuxInstalling') : $t('servers.tmuxInstallRun')}
+                              </button>
+                            {:else}
+                              <p>{$t('servers.tmuxCannotInstall')}</p>
+                              {#if installPlan.reason}<code>{installPlan.reason}</code>{/if}
+                            {/if}
+                          {:else}
+                            <p>{$t('servers.tmuxMissing')}</p>
+                            <button class="btn small" on:click={() => planInstall(srv)}>
+                              {$t('servers.tmuxInstallOffer')}
+                            </button>
+                          {/if}
+                        </div>
+                      {/if}
+
                       {#if testResult.hostKeyChanged}
                         <div class="host-key danger">
                           <p>{$t('servers.hostKeyChanged')}</p>
@@ -638,6 +707,34 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .install-offer {
+    margin-top: 7px;
+    padding: 8px 10px;
+    border-radius: 6px;
+    background: rgba(96, 165, 250, 0.08);
+    border: 1px solid rgba(96, 165, 250, 0.25);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    align-items: flex-start;
+  }
+
+  .install-offer p {
+    margin: 0;
+    font-size: 11px;
+    color: #d4d4d8;
+  }
+
+  .install-offer code {
+    font-size: 11px;
+    color: #e4e4e7;
+    background: rgba(0, 0, 0, 0.3);
+    padding: 4px 7px;
+    border-radius: 4px;
+    word-break: break-all;
+    line-height: 1.5;
   }
 
   .host-key {

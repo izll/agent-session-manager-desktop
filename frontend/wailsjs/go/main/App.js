@@ -414,6 +414,10 @@ export function InstallMultiplexer() {
   return window['go']['main']['App']['InstallMultiplexer']();
 }
 
+export function InstallServerMultiplexer(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['InstallServerMultiplexer'](arg1, arg2, arg3, arg4);
+}
+
 export function InvalidateSessionFileIndex(arg1) {
   return window['go']['main']['App']['InvalidateSessionFileIndex'](arg1);
 }
@@ -500,6 +504,10 @@ export function PerformUpdate(arg1) {
 
 export function PermanentlyDeleteTrashItem(arg1, arg2) {
   return window['go']['main']['App']['PermanentlyDeleteTrashItem'](arg1, arg2);
+}
+
+export function PlanServerMultiplexerInstall(arg1, arg2, arg3) {
+  return window['go']['main']['App']['PlanServerMultiplexerInstall'](arg1, arg2, arg3);
 }
 
 export function QuickReplyTab(arg1, arg2, arg3, arg4) {

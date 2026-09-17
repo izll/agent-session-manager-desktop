@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"time"
 
 	"asmgr-desktop/remote"
 	"asmgr-desktop/session"
@@ -80,6 +81,72 @@ func (a *App) AcceptServerHostKey(serverID, fingerprint string) error {
 		}
 		return fmt.Errorf("server %q not found", serverID)
 	})
+}
+
+// PlanServerMultiplexerInstall reports how tmux would be installed on a server.
+//
+// Nothing is installed by this call. The plan carries the exact command so the
+// user sees what would run on their machine before agreeing to it — this is
+// software being installed on someone's server, and a button that does it
+// quietly would be the wrong shape for that.
+func (a *App) PlanServerMultiplexerInstall(serverID, password, passphrase string) (*remote.MultiplexerPlan, error) {
+	client, closeClient, err := a.connectServer(serverID, password, passphrase)
+	if err != nil {
+		return nil, err
+	}
+	defer closeClient()
+
+	ctx, cancel := context.WithTimeout(a.ctx, remote.CommandTimeout)
+	defer cancel()
+	return remote.PlanMultiplexerInstall(ctx, client)
+}
+
+// InstallServerMultiplexer installs tmux, and reports the version that ends up
+// there.
+//
+// The plan is passed back in rather than worked out again, so what runs is
+// what the user was shown.
+func (a *App) InstallServerMultiplexer(serverID, password, passphrase string,
+	plan remote.MultiplexerPlan) (string, error) {
+
+	client, closeClient, err := a.connectServer(serverID, password, passphrase)
+	if err != nil {
+		return "", err
+	}
+	defer closeClient()
+
+	// A package manager fetching and unpacking takes longer than an ordinary
+	// command, and being cut off half way through leaves the server's package
+	// database locked.
+	ctx, cancel := context.WithTimeout(a.ctx, 10*time.Minute)
+	defer cancel()
+
+	log.Printf("[InstallServerMultiplexer] server=%s running: %s", serverID, plan.Command)
+	version, err := remote.InstallMultiplexer(ctx, client, &plan)
+	if err != nil {
+		return "", err
+	}
+	log.Printf("[InstallServerMultiplexer] server=%s installed %s", serverID, version)
+	return version, nil
+}
+
+// connectServer opens a connection for one call and returns how to close it.
+func (a *App) connectServer(serverID, password, passphrase string) (*remote.Client, func(), error) {
+	target, creds, err := a.buildTarget(serverID, password, passphrase)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	ctx, cancel := context.WithTimeout(a.ctx, remote.DialTimeout)
+	defer cancel()
+
+	// nil: a server whose key has not been accepted cannot be installed onto
+	// either. The test is where that decision is made, deliberately.
+	client, err := remote.Dial(ctx, target, creds, nil)
+	if err != nil {
+		return nil, nil, err
+	}
+	return client, func() { client.Close() }, nil
 }
 
 // missingPasswordError says the server authenticates with a password and none

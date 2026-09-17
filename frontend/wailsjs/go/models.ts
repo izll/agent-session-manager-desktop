@@ -1898,6 +1898,26 @@ export namespace remote {
 	        this.detail = source["detail"];
 	    }
 	}
+	export class MultiplexerPlan {
+	    command: string;
+	    packageManager: string;
+	    needsSudo: boolean;
+	    possible: boolean;
+	    reason?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new MultiplexerPlan(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.command = source["command"];
+	        this.packageManager = source["packageManager"];
+	        this.needsSudo = source["needsSudo"];
+	        this.possible = source["possible"];
+	        this.reason = source["reason"];
+	    }
+	}
 
 }
 
