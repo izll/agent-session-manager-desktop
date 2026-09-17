@@ -2158,8 +2158,8 @@ func (i *Instance) GetWindowList() []WindowInfo {
 
 	sessionName := i.TmuxSessionName()
 	// Format: index:name:active_flag:pane_dead
-	cmd := TmuxCommand("list-windows", "-t", sessionName, "-F", "#{window_index}:#{window_name}:#{window_active}:#{pane_dead}")
-	output, err := cmd.Output()
+	output, err := i.tmuxOutput("list-windows", "-t", sessionName,
+		"-F", "#{window_index}:#{window_name}:#{window_active}:#{pane_dead}")
 	if err != nil {
 		return nil
 	}
@@ -2475,8 +2475,7 @@ func (i *Instance) IsAliveContext(ctx context.Context) bool {
 	sessionName := i.TmuxSessionName()
 	commandCtx, cancel := context.WithTimeout(ctx, TmuxCommandTimeout)
 	defer cancel()
-	cmd := TmuxCommandContext(commandCtx, "has-session", "-t", sessionName)
-	return cmd.Run() == nil
+	return i.tmuxRunContext(commandCtx, "has-session", "-t", sessionName) == nil
 }
 
 // ResizePane resizes the tmux pane to the specified dimensions
@@ -2526,8 +2525,7 @@ func (i *Instance) GetPreview(lines int) (string, error) {
 	// -S -lines means start from 'lines' back in history
 	// -e preserves colors, -J joins wrapped lines
 	startLine := fmt.Sprintf("-%d", lines)
-	cmd := TmuxCommand("capture-pane", "-t", sessionName, "-p", "-e", "-J", "-S", startLine)
-	output, err := cmd.Output()
+	output, err := i.tmuxOutput("capture-pane", "-t", sessionName, "-p", "-e", "-J", "-S", startLine)
 	if err != nil {
 		return "", fmt.Errorf("failed to capture pane: %w", err)
 	}
@@ -2588,8 +2586,7 @@ func (i *Instance) GetLastLine() string {
 	target := i.GetCaptureTarget(0)
 	// Capture last 50 lines with colors (-e flag preserves ANSI escape sequences)
 	// -J flag joins wrapped lines (prevents terminal width wrapping issues)
-	cmd := TmuxCommand("capture-pane", "-t", target, "-p", "-e", "-J", "-S", "-50")
-	output, err := cmd.Output()
+	output, err := i.tmuxOutput("capture-pane", "-t", target, "-p", "-e", "-J", "-S", "-50")
 	if err != nil {
 		return "..."
 	}
@@ -2689,8 +2686,7 @@ func (i *Instance) GetStatusInfoForWindowContext(ctx context.Context, windowIdx 
 	target := i.GetCaptureTargetContext(ctx, windowIdx)
 	commandCtx, cancel := context.WithTimeout(ctx, TmuxCommandTimeout)
 	defer cancel()
-	cmd := TmuxCommandContext(commandCtx, "capture-pane", "-t", target, "-p", "-e", "-J", "-S", "-50")
-	output, err := cmd.Output()
+	output, err := i.tmuxOutputContext(commandCtx, "capture-pane", "-t", target, "-p", "-e", "-J", "-S", "-50")
 	if err != nil {
 		result.StatusLine = "..."
 		return result
@@ -2758,8 +2754,7 @@ func (i *Instance) GetLastLineForWindow(windowIdx int, agent AgentType) string {
 	}
 
 	target := i.GetCaptureTarget(windowIdx)
-	cmd := TmuxCommand("capture-pane", "-t", target, "-p", "-e", "-J", "-S", "-50")
-	output, err := cmd.Output()
+	output, err := i.tmuxOutput("capture-pane", "-t", target, "-p", "-e", "-J", "-S", "-50")
 	if err != nil {
 		return "..."
 	}

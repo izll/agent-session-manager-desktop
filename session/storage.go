@@ -1885,6 +1885,9 @@ func (s *Storage) GetInstance(id string) (*Instance, error) {
 
 	for _, inst := range instances {
 		if inst.ID == id {
+			// A session that runs on a server needs its commands pointed
+			// there before anything is done with it.
+			routeLoaded([]*Instance{inst})
 			return inst, nil
 		}
 	}

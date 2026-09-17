@@ -125,3 +125,25 @@ func (i *Instance) tmuxOutput(args ...string) ([]byte, error) {
 func (i *Instance) tmuxOutputContext(ctx context.Context, args ...string) ([]byte, error) {
 	return i.exec().Output(ctx, args...)
 }
+
+// RouteInstance is called whenever an instance is loaded from storage, so
+// whoever owns the connections can point its commands at the right machine.
+//
+// A hook rather than a direct call: the connections belong to the application
+// layer, which knows about SSH and keyrings, and this package must not. Left
+// nil, every session runs locally — which is what the app does before it has
+// connected to anything.
+var RouteInstance func(*Instance)
+
+// routeLoaded applies the hook to instances just read from disk.
+func routeLoaded(instances []*Instance) {
+	route := RouteInstance
+	if route == nil {
+		return
+	}
+	for _, inst := range instances {
+		if inst != nil && inst.ServerID != "" {
+			route(inst)
+		}
+	}
+}

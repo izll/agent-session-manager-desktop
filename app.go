@@ -42,6 +42,9 @@ type App struct {
 	projectSwitching    bool
 	projectShuttingDown bool
 	termServer          *TerminalServer
+	// servers holds one live connection per remote machine, shared by every
+	// session that runs there.
+	servers             *serverPool
 	dictation           *DictationService
 	activityStats       *ActivityStatsRecorder
 	previewCancel       context.CancelFunc
@@ -104,7 +107,8 @@ type ptySession struct {
 // NewApp creates a new App application struct
 func NewApp() *App {
 	return &App{
-		ptys: make(map[string]*ptySession),
+		ptys:    make(map[string]*ptySession),
+		servers: newServerPool(),
 	}
 }
 
@@ -117,6 +121,17 @@ func (a *App) startup(ctx context.Context) {
 	// to a Finder-started app while the same binary works from a terminal. This
 	// is also why the TUI never hit it: a terminal launch inherits a real PATH.
 	session.EnsureToolPath()
+
+	// Sessions that run on a server need their commands pointed there as soon
+	// as they are read from disk — before the sidebar polls them, before the
+	// terminal attaches. Installed here rather than called from each place
+	// that loads one, because every place that forgets is a session quietly
+	// managed against the wrong machine.
+	session.RouteInstance = func(inst *session.Instance) {
+		if err := a.routeSessionCommands(inst); err != nil {
+			log.Printf("[servers] session %s stays unreachable: %v", inst.Name, err)
+		}
+	}
 
 	// Clear the "before" files left by external diffs. Done here rather than
 	// when each editor closes: we never learn when that is, and deleting one
@@ -376,6 +391,13 @@ func (a *App) shutdown(ctx context.Context) {
 			log.Printf("[terminal] shutdown did not complete cleanly: %v", err)
 		}
 		cancel()
+	}
+	// Close the server connections after the terminals that were using them,
+	// and before the project lock is released: a helper process ending is what
+	// tells the far end nobody is listening. The tmux sessions there carry on,
+	// which is the whole point of running them on a server.
+	if a.servers != nil {
+		a.servers.closeAll()
 	}
 	// An MCP client may still be inside its npx/startup handshake while its
 	// Wails request holds the project read lock. Cancel and reap those starts
