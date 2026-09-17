@@ -1274,5 +1274,9 @@
   "servers.fromSshConfigTitle": "Machines in ~/.ssh/config",
   "servers.noSshConfig": "No hosts found in ~/.ssh/config.",
   "servers.useThis": "Use this",
-  "servers.alreadyAdded": "already added"
+  "servers.alreadyAdded": "already added",
+  "servers.pickDirectory": "Choose a directory on the server",
+  "servers.goToPath": "Go",
+  "servers.useThisDirectory": "Use this directory",
+  "servers.emptyDirectory": "Nothing here."
 }

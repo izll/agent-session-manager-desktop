@@ -1,8 +1,11 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
+	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/google/uuid"
@@ -337,4 +340,119 @@ func serverListHas(servers []session.Server, host remote.SSHConfigHost) bool {
 		}
 	}
 	return false
+}
+
+// RemoteDirEntryInfo is one item in a directory on a server.
+type RemoteDirEntryInfo struct {
+	Name  string `json:"name"`
+	IsDir bool   `json:"isDir"`
+	Size  int64  `json:"size"`
+}
+
+// RemoteDirListing is one directory as the browser sees it.
+type RemoteDirListing struct {
+	// Path is the directory that was actually read, resolved: the caller may
+	// have asked for "~" or a relative path, and the field the user edits
+	// should end up holding something they can read back.
+	Path string `json:"path"`
+	// Parent is empty at the root, which is how the browser knows to stop
+	// offering a way up.
+	Parent  string               `json:"parent"`
+	Entries []RemoteDirEntryInfo `json:"entries"`
+}
+
+// ListServerDirectory reads a directory on a server, for choosing a working
+// directory without leaving the app.
+//
+// The native folder picker cannot serve this: it opens on this computer, and
+// the path a remote session needs is one that exists on the server. A path
+// typed by hand works too — this only saves the typing.
+func (a *App) ListServerDirectory(serverID, path string) (*RemoteDirListing, error) {
+	connection, err := a.connectionFor(serverID)
+	if err != nil {
+		return nil, err
+	}
+
+	ctx, cancel := context.WithTimeout(a.ctx, remote.CommandTimeout)
+	defer cancel()
+
+	// Resolved on the server: "~" means the server's home, and a relative path
+	// means relative to it. Doing this here would use the wrong home.
+	target := strings.TrimSpace(path)
+	if target == "" {
+		target = "~"
+	}
+
+	// One command: the resolved path, then the entries. Two round trips to
+	// open one directory is a visible pause while browsing.
+	// Sorted here rather than by the shell: "sort -t'\t'" does not mean a tab
+	// to a shell, it means the two characters, and sort refuses it outright —
+	// "multi-character tab". Ordering a few dozen names in Go costs nothing.
+	script := fmt.Sprintf(
+		`cd %s 2>/dev/null || cd ~ ; pwd; find . -maxdepth 1 -mindepth 1 -printf '%%y\t%%s\t%%f\n' 2>/dev/null`,
+		shellQuoteForServer(target))
+
+	result, err := connection.helper.Run(ctx, script)
+	if err != nil {
+		return nil, err
+	}
+	if result.ExitCode != 0 && result.Output == "" {
+		return nil, fmt.Errorf("could not read %s: %s", path, strings.TrimSpace(result.Stderr))
+	}
+
+	lines := strings.Split(strings.TrimRight(result.Output, "\n"), "\n")
+	if len(lines) == 0 {
+		return nil, fmt.Errorf("could not read %s", path)
+	}
+
+	listing := &RemoteDirListing{Path: strings.TrimSpace(lines[0])}
+	if listing.Path != "/" {
+		if slash := strings.LastIndex(listing.Path, "/"); slash >= 0 {
+			listing.Parent = listing.Path[:slash]
+			if listing.Parent == "" {
+				listing.Parent = "/"
+			}
+		}
+	}
+
+	for _, line := range lines[1:] {
+		fields := strings.SplitN(line, "\t", 3)
+		if len(fields) != 3 {
+			continue
+		}
+		// Hidden entries are skipped: a home directory is mostly dotfiles, and
+		// none of them is a project.
+		if strings.HasPrefix(fields[2], ".") {
+			continue
+		}
+		size, _ := strconv.ParseInt(fields[1], 10, 64)
+		listing.Entries = append(listing.Entries, RemoteDirEntryInfo{
+			Name:  fields[2],
+			IsDir: fields[0] == "d",
+			Size:  size,
+		})
+	}
+
+	// Directories first, then by name: this is a picker for a working
+	// directory, and the folders are what is being looked for.
+	sort.SliceStable(listing.Entries, func(left, right int) bool {
+		if listing.Entries[left].IsDir != listing.Entries[right].IsDir {
+			return listing.Entries[left].IsDir
+		}
+		return strings.ToLower(listing.Entries[left].Name) <
+			strings.ToLower(listing.Entries[right].Name)
+	})
+	return listing, nil
+}
+
+// shellQuoteForServer quotes a path for a command run on a server.
+//
+// Not through the executor's quoting: this value goes inside a script, so it
+// needs quoting of its own. A "~" is left bare on purpose — quoted, the shell
+// would take it for a directory with that name rather than the home it means.
+func shellQuoteForServer(path string) string {
+	if path == "~" || strings.HasPrefix(path, "~/") {
+		return path
+	}
+	return "'" + strings.ReplaceAll(path, "'", `'\''`) + "'"
 }

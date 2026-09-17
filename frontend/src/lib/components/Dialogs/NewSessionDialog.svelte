@@ -8,6 +8,7 @@
   import { get } from 'svelte/store';
   import { activeProjectId } from '../../stores/projects';
   import AgentIcon from '../common/AgentIcon.svelte';
+  import RemoteDirPicker from './RemoteDirPicker.svelte';
   import * as App from '../../../../wailsjs/go/main/App';
   import type { main } from '../../../../wailsjs/go/models';
   import { t } from '../../i18n';
@@ -34,6 +35,9 @@
   // session was before remote support, and what most still are.
   let serverId = '';
   let servers: main.ServerInfo[] = [];
+  // The native folder picker opens on this computer, which is the wrong
+  // machine once a server is chosen.
+  let showRemotePicker = false;
   let groupInitialized = false;
   let extraArgs = '';
   let operationGeneration = 0;
@@ -369,6 +373,12 @@
     const generation = operationGeneration;
     const initialPath = path;
     try {
+      if (serverId) {
+        // A path on the server cannot be chosen with a picker that browses
+        // this computer's disk.
+        showRemotePicker = true;
+        return;
+      }
       const selectedPath = await App.BrowseDirectory(initialPath || '');
       if (selectedPath && show && generation === operationGeneration && path === initialPath) {
         path = selectedPath;
@@ -644,6 +654,13 @@
     </div>
   </div>
 {/if}
+
+<RemoteDirPicker
+  bind:show={showRemotePicker}
+  {serverId}
+  startPath={path}
+  on:chosen={e => { path = e.detail; }}
+/>
 
 <style>
   /* Component-specific: wider dialog for agent grid */

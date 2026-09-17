@@ -7,6 +7,7 @@
   import { BrowserOpenURL } from '../../../../wailsjs/runtime/runtime';
   import { get } from 'svelte/store';
   import * as App from '../../../../wailsjs/go/main/App';
+  import RemoteDirPicker from './RemoteDirPicker.svelte';
   import AgentIcon from '../common/AgentIcon.svelte';
   import { t } from '../../i18n';
   import { activeProjectId } from '../../stores/projects';
@@ -31,6 +32,9 @@
   $: targetSession = $sessions.find(s => s.id === (sessionId || $selectedSessionId));
   $: sessionServerId = targetSession?.serverId || '';
 
+  // The native folder picker browses this computer; a tab on a server needs
+  // a path that exists there.
+  let showRemotePicker = false;
   let serverAgents: Agent[] = [];
   let agentsGeneration = 0;
   $: void refreshAgents(sessionServerId);
@@ -79,6 +83,10 @@
     const targetSessionId = sessionId;
     const initialWorkDir = workDir;
     try {
+      if (sessionServerId) {
+        showRemotePicker = true;
+        return;
+      }
       const dir = await App.BrowseDirectory(initialWorkDir || sessionPath);
       if (dir && show && generation === operationGeneration && sessionId === targetSessionId &&
           workDir === initialWorkDir) workDir = dir;
@@ -332,6 +340,13 @@
     </div>
   </div>
 {/if}
+
+<RemoteDirPicker
+  bind:show={showRemotePicker}
+  serverId={sessionServerId}
+  startPath={workDir || sessionPath}
+  on:chosen={e => { workDir = e.detail; }}
+/>
 
 <style>
   /* Component-specific: wider dialog for this component */

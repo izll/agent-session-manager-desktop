@@ -1274,5 +1274,9 @@
   "servers.fromSshConfigTitle": "Gépek a ~/.ssh/config fájlból",
   "servers.noSshConfig": "Nincs gép a ~/.ssh/config fájlban.",
   "servers.useThis": "Ezt választom",
-  "servers.alreadyAdded": "már felvéve"
+  "servers.alreadyAdded": "már felvéve",
+  "servers.pickDirectory": "Válassz könyvtárat a szerveren",
+  "servers.goToPath": "Ugrás",
+  "servers.useThisDirectory": "Ezt a könyvtárat választom",
+  "servers.emptyDirectory": "Itt nincs semmi."
 }

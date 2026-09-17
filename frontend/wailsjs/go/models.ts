@@ -1179,6 +1179,56 @@ export namespace main {
 	        this.isLocked = source["isLocked"];
 	    }
 	}
+	export class RemoteDirEntryInfo {
+	    name: string;
+	    isDir: boolean;
+	    size: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new RemoteDirEntryInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.isDir = source["isDir"];
+	        this.size = source["size"];
+	    }
+	}
+	export class RemoteDirListing {
+	    path: string;
+	    parent: string;
+	    entries: RemoteDirEntryInfo[];
+	
+	    static createFrom(source: any = {}) {
+	        return new RemoteDirListing(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.path = source["path"];
+	        this.parent = source["parent"];
+	        this.entries = this.convertValues(source["entries"], RemoteDirEntryInfo);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class SSHConfigHostInfo {
 	    alias: string;
 	    hostName: string;

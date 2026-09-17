@@ -230,6 +230,8 @@ export function ListGitBranches(arg1:string,arg2:number,arg3:string):Promise<mai
 
 export function ListOnlineSchemes():Promise<Array<main.OnlineSchemeInfo>>;
 
+export function ListServerDirectory(arg1:string,arg2:string):Promise<main.RemoteDirListing>;
+
 export function ListSessionDirectory(arg1:string,arg2:string,arg3:number,arg4:string):Promise<session.BrowseListing>;
 
 export function LogFrontend(arg1:string):Promise<void>;

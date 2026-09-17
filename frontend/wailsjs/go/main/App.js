@@ -454,6 +454,10 @@ export function ListOnlineSchemes() {
   return window['go']['main']['App']['ListOnlineSchemes']();
 }
 
+export function ListServerDirectory(arg1, arg2) {
+  return window['go']['main']['App']['ListServerDirectory'](arg1, arg2);
+}
+
 export function ListSessionDirectory(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['ListSessionDirectory'](arg1, arg2, arg3, arg4);
 }
