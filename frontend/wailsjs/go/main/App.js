@@ -178,6 +178,10 @@ export function GetAgents() {
   return window['go']['main']['App']['GetAgents']();
 }
 
+export function GetAgentsForServer(arg1) {
+  return window['go']['main']['App']['GetAgentsForServer'](arg1);
+}
+
 export function GetAllTasks() {
   return window['go']['main']['App']['GetAllTasks']();
 }

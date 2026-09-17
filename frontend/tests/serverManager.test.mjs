@@ -234,3 +234,47 @@ test('the placement strings are translated', () => {
     assert.notEqual(en[key], hu[key], `${key} is still English in hu.json`);
   }
 });
+
+// A tab is created inside its session, so it runs wherever that session runs.
+// The agents offered have to come from that machine: one installed here but
+// not there would be offered and then fail to start, and one installed there
+// but not here would be marked missing with an offer to install it locally,
+// where it would do nothing.
+test('agent lists come from the machine the session runs on', () => {
+  const newTab = readFileSync(
+    new URL('../src/lib/components/Dialogs/NewTabDialog.svelte', import.meta.url), 'utf8');
+  const newSession = readFileSync(
+    new URL('../src/lib/components/Dialogs/NewSessionDialog.svelte', import.meta.url), 'utf8');
+
+  for (const [name, src] of [['new tab', newTab], ['new session', newSession]]) {
+    assert.match(src, /loadAgentsForServer/,
+      `the ${name} dialog asks this computer which agents exist`);
+    assert.match(src, /availableAgents/,
+      `the ${name} dialog renders the local list regardless of where the session runs`);
+    assert.ok(!/\{#each \$agents[ .]/.test(src),
+      `the ${name} dialog still iterates the local store in its markup`);
+  }
+
+  // The tab dialog has to work out the server from its session rather than
+  // being told: it is opened from several places.
+  assert.match(newTab, /targetSession\?\.serverId/,
+    'the tab dialog does not work out which machine its session runs on');
+});
+
+// The shared store describes this computer and several views read it at once.
+// A remote answer replacing it would leave every other view describing the
+// wrong machine.
+test('the remote agent list does not overwrite the shared store', () => {
+  const store = readFileSync(
+    new URL('../src/lib/stores/agents.ts', import.meta.url), 'utf8');
+
+  const fn = store.slice(store.indexOf('export async function loadAgentsForServer'));
+  assert.ok(!/agents\.set/.test(fn.slice(0, fn.indexOf('\n}'))),
+    'loadAgentsForServer writes into the shared store, so opening a remote ' +
+    'dialog would change what every other view shows');
+
+  // A server that cannot be answered for reports nothing rather than falling
+  // back to the local list, which would claim agents the server does not have.
+  assert.match(fn, /return \[\];/,
+    'a failure falls back to something other than an empty list');
+});

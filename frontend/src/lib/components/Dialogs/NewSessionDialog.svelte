@@ -3,7 +3,7 @@
   import { BrowserOpenURL } from '../../../../wailsjs/runtime/runtime';
   import { autoFocusDialog } from '../../utils/dialogActions';
   import { createEventDispatcher, onDestroy } from 'svelte';
-  import { agents, loadAgents } from '../../stores/agents';
+  import { agents, loadAgents, loadAgentsForServer, type Agent } from '../../stores/agents';
   import { sessions, groups, selectedSession, createSession, startSession, assignToGroup } from '../../stores/sessions';
   import { get } from 'svelte/store';
   import { activeProjectId } from '../../stores/projects';
@@ -17,7 +17,7 @@
   // The agent the user has picked, and whether its command is on PATH. The
   // backend answers this with the list, so the dialog can say so before
   // anything is filled in rather than failing at the end.
-  $: chosenAgent = $agents.find((a) => a.type === selectedAgent);
+  $: chosenAgent = availableAgents.find((a) => a.type === selectedAgent);
   $: agentMissing = !!chosenAgent && chosenAgent.installed === false;
 
   const dispatch = createEventDispatcher();
@@ -111,6 +111,30 @@
     }
   }
 
+  // Which agents are available where this session will run. The store holds
+  // this computer's answer, which is the wrong machine for a remote session:
+  // an agent installed here but not there would be offered and then fail to
+  // start, and one installed there but not here would be marked missing with
+  // an offer to install it locally, where it would do nothing.
+  let serverAgents: Agent[] = [];
+  let agentsForGeneration = 0;
+  $: void refreshAgentsFor(serverId);
+
+  async function refreshAgentsFor(id: string) {
+    if (!id) {
+      serverAgents = [];
+      return;
+    }
+    const generation = ++agentsForGeneration;
+    const list = await loadAgentsForServer(id);
+    if (generation !== agentsForGeneration) return;
+    serverAgents = list;
+  }
+
+  // The list the picker shows: the server's when one is chosen, this
+  // computer's otherwise.
+  $: availableAgents = serverId ? serverAgents : $agents;
+
   $: serverOptions = [
     { value: '', label: $t('servers.thisComputer') },
     ...servers.map(s => ({ value: s.id, label: s.displayName })),
@@ -174,7 +198,7 @@
     }
 
     // Check if agent supports resume
-    const agentConfig = $agents.find(a => a.type === agent);
+    const agentConfig = availableAgents.find(a => a.type === agent);
     if (!agentConfig?.supportsResume) {
       availableSessions = [];
       return;
@@ -413,7 +437,7 @@
         <div class="form-group">
           <span class="form-label">{$t('newSession.agentType')}</span>
           <div class="agent-grid">
-            {#each $agents as agent (agent.type)}
+            {#each availableAgents as agent (agent.type)}
               <button
                 type="button"
                 class="agent-btn {selectedAgent === agent.type ? 'selected' : ''}"

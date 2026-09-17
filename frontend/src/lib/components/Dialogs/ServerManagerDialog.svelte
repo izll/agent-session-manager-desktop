@@ -538,23 +538,63 @@
                     </div>
                   </div>
                   <div class="row-actions">
+                    <!-- Drawn rather than typed: the arrows and the exchange
+                         mark exist as characters, but they come from whatever
+                         font has them and sit at whatever size and baseline
+                         that font chose — beside the app's own icons they read
+                         as something pasted in. -->
                     <button
                       class="icon-btn"
                       title={$t('servers.test')}
                       disabled={testing}
-                      on:click={() => runTest(srv)}>⇄</button>
+                      on:click={() => runTest(srv)}
+                    >
+                      <!-- Two arrows passing: a round trip to the machine. -->
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                           stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M4 8h13l-3-3"/>
+                        <path d="M20 16H7l3 3"/>
+                      </svg>
+                    </button>
                     <button
                       class="icon-btn"
                       title={$t('servers.moveUp')}
                       disabled={index === 0}
-                      on:click={() => move(srv, -1)}>▲</button>
+                      on:click={() => move(srv, -1)}
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                           stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M6 14l6-6 6 6"/>
+                      </svg>
+                    </button>
                     <button
                       class="icon-btn"
                       title={$t('servers.moveDown')}
                       disabled={index === servers.length - 1}
-                      on:click={() => move(srv, 1)}>▼</button>
-                    <button class="icon-btn" title={$t('common.edit')} on:click={() => startEdit(srv)}>✎</button>
-                    <button class="icon-btn danger" title={$t('common.delete')} on:click={() => askDelete(srv)}>×</button>
+                      on:click={() => move(srv, 1)}
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                           stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M6 10l6 6 6-6"/>
+                      </svg>
+                    </button>
+                    <button class="icon-btn" title={$t('common.edit')} on:click={() => startEdit(srv)}>
+                      <!-- A pencil. -->
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                           stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 20h9"/>
+                        <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>
+                      </svg>
+                    </button>
+                    <button class="icon-btn danger" title={$t('common.delete')} on:click={() => askDelete(srv)}>
+                      <!-- A bin, not a cross: this removes the entry rather
+                           than closing anything. -->
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                           stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/>
+                        <path d="M10 11v6M14 11v6"/>
+                      </svg>
+                    </button>
                   </div>
                 </li>
                 {#if testedId === srv.id && (testing || testResult)}
@@ -668,6 +708,9 @@
   .toolbar {
     display: flex;
     justify-content: flex-end;
+    /* Written when there was one button here; a second one arrived and the two
+       sat against each other. */
+    gap: 8px;
     margin-bottom: 12px;
   }
 
@@ -734,6 +777,15 @@
     height: 26px;
     cursor: pointer;
     font-size: 13px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+  }
+
+  .icon-btn svg {
+    width: 14px;
+    height: 14px;
   }
 
   .icon-btn:hover:not(:disabled) {

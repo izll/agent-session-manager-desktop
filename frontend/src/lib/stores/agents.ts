@@ -25,6 +25,31 @@ export async function loadAgents() {
   }
 }
 
+/**
+ * Which agents are installed on a server.
+ *
+ * Asked separately rather than through the shared store: the store holds what
+ * this computer has, and several dialogs read it at once. A remote answer
+ * replacing it would leave every other view describing the wrong machine.
+ *
+ * An empty server id answers about this computer, so a caller with a
+ * possibly-remote session does not have to branch.
+ */
+export async function loadAgentsForServer(serverId: string): Promise<Agent[]> {
+  try {
+    if (!serverId) {
+      return (await App.GetAgents()) as Agent[];
+    }
+    return (await App.GetAgentsForServer(serverId)) as Agent[];
+  } catch (e) {
+    console.error('Failed to load agents for server:', e);
+    // Empty rather than the local list: claiming a server has agents it does
+    // not is worse than showing none, because the failure then happens at
+    // start-up with a worse message.
+    return [];
+  }
+}
+
 export function getAgentIcon(agentType: string): string {
   const icons: Record<string, string> = {
     'claude': '🤖',

@@ -3,7 +3,7 @@
   import { autoFocusDialog } from '../../utils/dialogActions';
   import { createEventDispatcher } from 'svelte';
   import { selectedSessionId, loadSessions, selectWindow, sessions } from '../../stores/sessions';
-  import { agents } from '../../stores/agents';
+  import { agents, loadAgentsForServer, type Agent } from '../../stores/agents';
   import { BrowserOpenURL } from '../../../../wailsjs/runtime/runtime';
   import { get } from 'svelte/store';
   import * as App from '../../../../wailsjs/go/main/App';
@@ -26,7 +26,29 @@
 
   // Same as the new-session dialog: the list already says whether the command
   // is on PATH, so the offer can appear before the tab is submitted.
-  $: chosenAgent = $agents.find((a) => a.type === selectedAgent);
+  // A tab is created inside its session, so it runs wherever the session
+  // runs. The agents offered have to be that machine's, not this one's.
+  $: targetSession = $sessions.find(s => s.id === (sessionId || $selectedSessionId));
+  $: sessionServerId = targetSession?.serverId || '';
+
+  let serverAgents: Agent[] = [];
+  let agentsGeneration = 0;
+  $: void refreshAgents(sessionServerId);
+
+  async function refreshAgents(id: string) {
+    if (!id) {
+      serverAgents = [];
+      return;
+    }
+    const generation = ++agentsGeneration;
+    const list = await loadAgentsForServer(id);
+    if (generation !== agentsGeneration) return;
+    serverAgents = list;
+  }
+
+  $: availableAgents = sessionServerId ? serverAgents : $agents;
+
+  $: chosenAgent = availableAgents.find((a) => a.type === selectedAgent);
   $: agentMissing = tabType === 'agent' && !!chosenAgent && chosenAgent.installed === false;
   let userTouchedName = false;
   let operationGeneration = 0;
@@ -228,7 +250,7 @@
           <div class="form-group">
             <span class="form-label">{$t('newTab.agentLabel')}</span>
             <div class="agent-grid">
-              {#each $agents.filter(a => a.type !== 'terminal') as agent}
+              {#each availableAgents.filter(a => a.type !== 'terminal') as agent}
                 <button
                   type="button"
                   class="agent-btn {selectedAgent === agent.type ? 'selected' : ''}"

@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"asmgr-desktop/mcp"
+	"asmgr-desktop/remote"
 	"asmgr-desktop/session"
 	"asmgr-desktop/session/filters"
 	"asmgr-desktop/updater"
@@ -4768,6 +4769,22 @@ type AgentInfo struct {
 
 // GetAgents returns available agents
 func (a *App) GetAgents() []AgentInfo {
+	return a.agentsFor("")
+}
+
+// GetAgentsForServer reports which agents are installed on a server.
+//
+// The same list, asked of a different machine. Without this the new-session
+// and new-tab dialogs answer from this computer's PATH — which is wrong in
+// both directions for a remote session: an agent installed here but not there
+// is offered and then fails to start, and one installed there but not here is
+// marked missing with an offer to install it locally, where it would do
+// nothing.
+func (a *App) GetAgentsForServer(serverID string) []AgentInfo {
+	return a.agentsFor(serverID)
+}
+
+func (a *App) agentsFor(serverID string) []AgentInfo {
 	// Ordered by how often they are reached for, not alphabetically: this list
 	// is the order of the buttons in the new-tab dialog, and the first two are
 	// most of the clicks.
@@ -4782,6 +4799,13 @@ func (a *App) GetAgents() []AgentInfo {
 		{Type: "opencode", Name: "OpenCode", Icon: "💻"},
 		{Type: "custom", Name: "Custom", Icon: "⚙️"},
 		{Type: "terminal", Name: "Terminal", Icon: "🖥️"},
+	}
+
+	// Asked once, before the loop: ten separate questions to a server would be
+	// ten round trips while a dialog waits.
+	var remoteAgents map[string]bool
+	if serverID != "" {
+		remoteAgents = a.installedAgentsOn(serverID)
 	}
 
 	// The capabilities come from the agent configuration rather than being
@@ -4805,13 +4829,57 @@ func (a *App) GetAgents() []AgentInfo {
 		// Terminal runs the user's shell and Custom runs whatever they name,
 		// so neither has a command of its own to look for.
 		if config.Command != "" {
-			_, lookErr := exec.LookPath(config.Command)
-			agents[at].Installed = lookErr == nil
+			if serverID == "" {
+				_, lookErr := exec.LookPath(config.Command)
+				agents[at].Installed = lookErr == nil
+			} else {
+				agents[at].Installed = remoteAgents[config.Command]
+			}
 		} else {
 			agents[at].Installed = true
 		}
 	}
 	return agents
+}
+
+// installedAgentsOn asks a server which agent commands it has.
+//
+// One command for all of them rather than one each: every round trip is a
+// pause in front of someone choosing an agent, and there are ten to ask about.
+//
+// A server that cannot be reached comes back empty, which marks every agent as
+// missing. That is the honest answer — nothing can be started there — and the
+// dialog already knows how to show it.
+func (a *App) installedAgentsOn(serverID string) map[string]bool {
+	found := make(map[string]bool)
+
+	connection, err := a.connectionFor(serverID)
+	if err != nil {
+		log.Printf("[GetAgentsForServer] cannot reach %s: %v", serverID, err)
+		return found
+	}
+
+	var script strings.Builder
+	for _, config := range session.AgentConfigs {
+		if config.Command == "" {
+			continue
+		}
+		fmt.Fprintf(&script, "command -v %s >/dev/null 2>&1 && echo %s; ",
+			config.Command, config.Command)
+	}
+
+	ctx, cancel := context.WithTimeout(a.ctx, remote.CommandTimeout)
+	defer cancel()
+
+	result, err := connection.helper.Run(ctx, script.String())
+	if err != nil {
+		log.Printf("[GetAgentsForServer] %s did not answer: %v", serverID, err)
+		return found
+	}
+	for _, name := range strings.Fields(result.Output) {
+		found[name] = true
+	}
+	return found
 }
 
 // ============================================================================

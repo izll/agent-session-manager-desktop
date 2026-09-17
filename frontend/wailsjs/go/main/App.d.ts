@@ -92,6 +92,8 @@ export function GetActivities():Promise<Record<string, string>>;
 
 export function GetAgents():Promise<Array<main.AgentInfo>>;
 
+export function GetAgentsForServer(arg1:string):Promise<Array<main.AgentInfo>>;
+
 export function GetAllTasks():Promise<Array<main.TaskOverviewItem>>;
 
 export function GetAppLog():Promise<main.AppLog>;
