@@ -9,8 +9,10 @@
   import * as App from '../../../../wailsjs/go/main/App';
   import RemoteDirPicker from './RemoteDirPicker.svelte';
   import AgentIcon from '../common/AgentIcon.svelte';
+  import Select from '../common/Select.svelte';
   import { t } from '../../i18n';
   import { activeProjectId } from '../../stores/projects';
+  import type { main } from '../../../../wailsjs/go/models';
 
   export let show = false;
   export let sessionId = '';
@@ -32,12 +34,50 @@
   $: targetSession = $sessions.find(s => s.id === (sessionId || $selectedSessionId));
   $: sessionServerId = targetSession?.serverId || '';
 
+  // Where this tab runs. A tab does not have to follow its session: work that
+  // belongs to the same project — checking a database, watching a log — can
+  // live on a server while the session is open on local files.
+  //
+  // Starts on the session's own machine, which is what a tab always did.
+  let tabServerId = '';
+  let servers: main.ServerInfo[] = [];
+  let serversLoadedFor = false;
+  $: if (show && !serversLoadedFor) {
+    serversLoadedFor = true;
+    void loadServers();
+  }
+  $: if (!show) {
+    serversLoadedFor = false;
+    tabServerId = '';
+  }
+
+  async function loadServers() {
+    try {
+      servers = (await App.GetServers()) || [];
+    } catch {
+      // Without a readable list the picker simply does not appear, which is
+      // the behaviour for anyone who has no servers configured.
+      servers = [];
+    }
+  }
+
+  // The machine this tab will be created on: its own choice when one was made,
+  // the session's otherwise.
+  $: effectiveServerId = tabServerId || sessionServerId;
+
+  $: serverOptions = [
+    { value: '', label: sessionServerId
+      ? ($t('servers.sameAsSession') || $t('servers.thisComputer'))
+      : $t('servers.thisComputer') },
+    ...servers.filter(s => s.id !== sessionServerId).map(s => ({ value: s.id, label: s.displayName })),
+  ];
+
   // The native folder picker browses this computer; a tab on a server needs
   // a path that exists there.
   let showRemotePicker = false;
   let serverAgents: Agent[] = [];
   let agentsGeneration = 0;
-  $: void refreshAgents(sessionServerId);
+  $: void refreshAgents(effectiveServerId);
 
   async function refreshAgents(id: string) {
     if (!id) {
@@ -50,7 +90,7 @@
     serverAgents = list;
   }
 
-  $: availableAgents = sessionServerId ? serverAgents : $agents;
+  $: availableAgents = effectiveServerId ? serverAgents : $agents;
 
   $: chosenAgent = availableAgents.find((a) => a.type === selectedAgent);
   $: agentMissing = tabType === 'agent' && !!chosenAgent && chosenAgent.installed === false;
@@ -83,7 +123,7 @@
     const targetSessionId = sessionId;
     const initialWorkDir = workDir;
     try {
-      if (sessionServerId) {
+      if (effectiveServerId) {
         showRemotePicker = true;
         return;
       }
@@ -124,6 +164,15 @@
       return;
     }
 
+    // A tab on a server cannot fall back to the session's path: that path is
+    // on this computer and almost certainly does not exist there, so the
+    // multiplexer would refuse to create the window. Asked for here, in the
+    // user's language, rather than letting the backend answer in English.
+    if (tabServerId && !workDir.trim()) {
+      error = $t('newTab.workDirRequiredOnServer');
+      return;
+    }
+
     const generation = operationGeneration;
     const submitted = {
       isAgent: tabType === 'agent',
@@ -131,13 +180,15 @@
       name: name.trim(),
       extraArgs: extraArgs.trim(),
       workDir: workDir.trim(),
+      serverId: tabServerId,
       type: tabType,
     };
     isSubmitting = true;
     error = '';
 
     try {
-      const newIdx = await App.CreateTab(targetSessionId, submitted.isAgent, submitted.agent,
+      const newIdx = await App.CreateTabOnServer(targetSessionId, submitted.serverId,
+        submitted.isAgent, submitted.agent,
         submitted.name, submitted.extraArgs, submitted.workDir, targetProjectId);
       await loadSessions();
       if (!show || generation !== operationGeneration || sessionId !== targetSessionId ||
@@ -288,6 +339,23 @@
           </div>
         {/if}
 
+        <!-- Which machine this tab runs on. Shown only when there is another
+             machine to choose: with no servers configured the field would
+             always say the same thing. -->
+        {#if servers.length > 0}
+          <div class="form-group">
+            <span class="form-label">{$t('servers.runsOn')}</span>
+            <Select
+              value={tabServerId}
+              options={serverOptions}
+              on:change={e => { tabServerId = e.detail; }}
+            />
+            {#if tabServerId}
+              <p class="field-hint">{$t('servers.tabRunsOnHint')}</p>
+            {/if}
+          </div>
+        {/if}
+
         <!-- Working directory (optional; defaults to the session's path) -->
         <div class="form-group">
           <label class="form-label" for="tab-workdir">{$t('newTab.workDir')}</label>
@@ -296,7 +364,7 @@
               id="tab-workdir"
               type="text"
               bind:value={workDir}
-              placeholder={sessionPath || $t('newTab.workDirPlaceholder')}
+              placeholder={tabServerId ? $t('newTab.workDirOnServer') : (sessionPath || $t('newTab.workDirPlaceholder'))}
               class="form-input"
             />
             <button type="button" class="browse-btn" on:click={browseWorkDir}>{$t('newTab.browse')}</button>
@@ -343,8 +411,8 @@
 
 <RemoteDirPicker
   bind:show={showRemotePicker}
-  serverId={sessionServerId}
-  startPath={workDir || sessionPath}
+  serverId={effectiveServerId}
+  startPath={workDir || (tabServerId ? '' : sessionPath)}
   on:chosen={e => { workDir = e.detail; }}
 />
 
@@ -473,6 +541,15 @@
     background: rgba(var(--accent-rgb), 0.15);
     border-color: rgba(var(--accent-rgb), 0.4);
     color: var(--accent-light);
+  }
+
+  /* A one-line explanation under a field. The new-session dialog uses the
+     same class name with no style of its own, so this is what it should look
+     like there too. */
+  .field-hint {
+    margin: 4px 0 0;
+    font-size: 11px;
+    color: #8b8b93;
   }
 
   .workdir-row { display: flex; gap: 8px; }

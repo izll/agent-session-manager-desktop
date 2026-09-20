@@ -32,6 +32,8 @@ export function CreateGroup(arg1:string,arg2:string):Promise<main.GroupInfo>;
 
 export function CreateProject(arg1:string):Promise<main.ProjectInfo>;
 
+export function CreateServerDirectory(arg1:string,arg2:string,arg3:string):Promise<main.RemoteDirListing>;
+
 export function CreateSession(arg1:string,arg2:string,arg3:string,arg4:boolean,arg5:string,arg6:string):Promise<main.SessionInfo>;
 
 export function CreateSessionFromTemplate(arg1:string,arg2:string,arg3:string,arg4:string):Promise<main.SessionInfo>;
@@ -39,6 +41,8 @@ export function CreateSessionFromTemplate(arg1:string,arg2:string,arg3:string,ar
 export function CreateSessionOnServer(arg1:string,arg2:string,arg3:string,arg4:boolean,arg5:string,arg6:string,arg7:string):Promise<main.SessionInfo>;
 
 export function CreateTab(arg1:string,arg2:boolean,arg3:string,arg4:string,arg5:string,arg6:string,arg7:string):Promise<number>;
+
+export function CreateTabOnServer(arg1:string,arg2:string,arg3:boolean,arg4:string,arg5:string,arg6:string,arg7:string,arg8:string):Promise<number>;
 
 export function CreateTask(arg1:string,arg2:string,arg3:string,arg4:string,arg5:Array<string>,arg6:string):Promise<main.TaskInfo>;
 
@@ -224,6 +228,8 @@ export function IsDevMode():Promise<boolean>;
 
 export function KeyringAvailable():Promise<boolean>;
 
+export function KillServerSession(arg1:string,arg2:string):Promise<void>;
+
 export function ListBackgroundAgents():Promise<Array<main.BackgroundAgentInfo>>;
 
 export function ListGitBranches(arg1:string,arg2:number,arg3:string):Promise<main.GitBranchList>;
@@ -231,6 +237,8 @@ export function ListGitBranches(arg1:string,arg2:number,arg3:string):Promise<mai
 export function ListOnlineSchemes():Promise<Array<main.OnlineSchemeInfo>>;
 
 export function ListServerDirectory(arg1:string,arg2:string):Promise<main.RemoteDirListing>;
+
+export function ListServerSessions(arg1:string):Promise<Array<main.RemoteSessionInfo>>;
 
 export function ListSessionDirectory(arg1:string,arg2:string,arg3:number,arg4:string):Promise<session.BrowseListing>;
 

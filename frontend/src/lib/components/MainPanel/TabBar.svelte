@@ -13,6 +13,7 @@
   import { agents } from '../../stores/agents';
   import { get } from 'svelte/store';
   import { t } from '../../i18n';
+  import { describeBackendError } from '../../utils/backendError';
   import { matchesShortcut } from '../../stores/shortcuts';
   import { focusTerminal } from '../../utils/focus';
   import { tabStatuses } from '../../stores/statusLines';
@@ -1505,7 +1506,7 @@
       // overwrite that replacement cycle's UI.
       if (target === extraArgsTarget && target.generation === extraArgsGeneration) {
         console.error('Failed to save extra args:', e);
-        errorMessage = `Failed to save extra args: ${e}`;
+        errorMessage = $t('tabBar.extraArgsFailed', { error: describeBackendError(e) });
         errorToastRevision++;
         showErrorToast = true;
       }
@@ -1556,7 +1557,7 @@
         await loadWindowsForSession(target.sessionId, currentSessionStatus, visible, target.projectId);
       }
     } catch (e) {
-      errorMessage = `Failed to delete tab: ${e}`;
+      errorMessage = $t('tabBar.deleteTabFailed', { error: describeBackendError(e) });
       errorToastRevision++;
       showErrorToast = true;
     }
@@ -1695,7 +1696,7 @@
         await restartTab($selectedSession.id, $selectedWindowIdx);
       } catch (e) {
         console.error('Restart tab failed:', e);
-        errorMessage = `Failed to restart tab: ${e}`;
+        errorMessage = $t('tabBar.restartTabFailed', { error: describeBackendError(e) });
         errorToastRevision++;
         showErrorToast = true;
       }
@@ -1708,7 +1709,7 @@
         dispatch('requestStart');
       } catch (e) {
         console.error('Start failed:', e);
-        errorMessage = `Failed to start session: ${e}`;
+        errorMessage = $t('tabBar.startSessionFailed', { error: describeBackendError(e) });
         errorToastRevision++;
         showErrorToast = true;
       }
@@ -1731,7 +1732,7 @@
       if (projectId !== get(activeProjectId)) return;
       focusTerminal();
     } catch (e) {
-      errorMessage = `Failed to refresh: ${e}`;
+      errorMessage = $t('tabBar.refreshFailed', { error: describeBackendError(e) });
       errorToastRevision++;
       showErrorToast = true;
     }
@@ -1749,7 +1750,7 @@
     try {
       await deleteSession(target.sessionId);
     } catch (e) {
-      errorMessage = `Failed to delete session: ${e}`;
+      errorMessage = $t('tabBar.deleteSessionFailed', { error: describeBackendError(e) });
       errorToastRevision++;
       showErrorToast = true;
     }
@@ -1802,6 +1803,24 @@
   // Which tabs hide their status line in the session list — for the small
   // eye-off badge on the tab header. Reactive map (not a plain function) so
   // store updates re-render it.
+  // Which server each tab runs on, empty for a tab on this computer.
+  //
+  // A tab can sit on a server while its session runs here, and where it runs
+  // changes what typing into it does and which machine's files it touches —
+  // so the bar says so, unless the user has turned the marker off.
+  $: tabServerByIdx = (() => {
+    const m: Record<number, string> = {};
+    if (!$selectedSession) return m;
+    const sessionServer = ($selectedSession as any).serverName || '';
+    const perTab = ($selectedSession as any).tabServerNames || {};
+    for (const fw of ($selectedSession.followedWindows || [])) {
+      // A tab pinned to a server is named by the backend; one that simply
+      // follows its session takes the session's machine.
+      m[fw.index] = perTab[fw.index] || sessionServer;
+    }
+    return m;
+  })();
+
   $: tabHidesStatusByIdx = (() => {
     const m: Record<number, boolean> = {};
     if (!$selectedSession) return m;
@@ -1885,6 +1904,16 @@
             {:else}
               <!-- svelte-ignore a11y-no-static-element-interactions -->
               <span class="tab-name" on:dblclick|stopPropagation={() => startTabRename(win.Index, win.Name)}>{win.Name}</span>
+            {/if}
+            {#if tabServerByIdx[win.Index] && !$settings.hideRemoteBadge}
+              <span
+                class="tab-remote-badge"
+                title={$t('servers.onServer').replace('{server}', tabServerByIdx[win.Index])}
+              >
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/>
+                </svg>
+              </span>
             {/if}
             {#if tabHidesStatusByIdx[win.Index]}
               <span class="tab-nostatus-badge" title={$t('tabBar.statusHiddenBadge')}>
@@ -2460,6 +2489,16 @@
   .tab-rename-input:focus {
     border-color: rgba(var(--accent-rgb), 0.7);
     box-shadow: 0 0 0 2px rgba(var(--accent-rgb), 0.2);
+  }
+
+  /* The marker for a tab that runs on a server. Sized and coloured like the
+     other tab badges so the bar keeps one visual language. */
+  .tab-remote-badge {
+    display: flex;
+    align-items: center;
+    flex: none;
+    color: #7dd3fc;
+    opacity: 0.85;
   }
 
   .tab-nostatus-badge {

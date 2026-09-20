@@ -8,6 +8,7 @@
   import { get } from 'svelte/store';
   import { activeProjectId } from '../../stores/projects';
   import AgentIcon from '../common/AgentIcon.svelte';
+  import Select from '../common/Select.svelte';
   import RemoteDirPicker from './RemoteDirPicker.svelte';
   import * as App from '../../../../wailsjs/go/main/App';
   import type { main } from '../../../../wailsjs/go/models';
@@ -138,6 +139,11 @@
   // The list the picker shows: the server's when one is chosen, this
   // computer's otherwise.
   $: availableAgents = serverId ? serverAgents : $agents;
+
+  $: groupOptions = [
+    { value: '', label: $t('newSession.noGroup') },
+    ...$groups.map(group => ({ value: group.id, label: group.name })),
+  ];
 
   $: serverOptions = [
     { value: '', label: $t('servers.thisComputer') },
@@ -501,12 +507,12 @@
              to read a field that always says the same thing. -->
         {#if servers.length > 0}
           <div class="form-group">
-            <label class="form-label" for="server">{$t('servers.runsOn')}</label>
-            <select id="server" bind:value={serverId} class="form-input form-select">
-              {#each serverOptions as option (option.value)}
-                <option value={option.value}>{option.label}</option>
-              {/each}
-            </select>
+            <span class="form-label">{$t('servers.runsOn')}</span>
+            <Select
+              value={serverId}
+              options={serverOptions}
+              on:change={e => { serverId = e.detail; }}
+            />
             {#if serverId}
               <p class="field-hint">{$t('servers.runsOnHint')}</p>
             {/if}
@@ -516,13 +522,12 @@
         <!-- Group -->
         {#if $groups.length > 0}
           <div class="form-group">
-            <label class="form-label" for="group">{$t('newSession.group')}</label>
-            <select id="group" bind:value={selectedGroupId} class="form-input form-select">
-              <option value="">{$t('newSession.noGroup')}</option>
-              {#each $groups as group (group.id)}
-                <option value={group.id}>{group.name}</option>
-              {/each}
-            </select>
+            <span class="form-label">{$t('newSession.group')}</span>
+            <Select
+              value={selectedGroupId}
+              options={groupOptions}
+              on:change={e => { selectedGroupId = e.detail; }}
+            />
           </div>
         {/if}
 
@@ -839,20 +844,6 @@
     outline: none;
     border-color: rgba(var(--accent-rgb), 0.5);
     box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.1);
-  }
-
-  .form-select {
-    appearance: none;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
-    background-repeat: no-repeat;
-    background-position: right 12px center;
-    padding-right: 36px;
-    cursor: pointer;
-  }
-
-  .form-select option {
-    background: #1f2937;
-    color: white;
   }
 
   .form-options {

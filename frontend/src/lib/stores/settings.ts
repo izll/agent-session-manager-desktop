@@ -3,6 +3,7 @@ import * as App from '../../../wailsjs/go/main/App';
 import { defaultTerminalRenderer } from '../utils/terminal';
 import { reportError } from './appErrors';
 import { activeProjectId } from './projects';
+import { t } from '../i18n';
 
 export type TerminalRenderer = 'canvas' | 'webgl' | 'dom';
 
@@ -45,6 +46,8 @@ export interface Settings {
   /** YOLO shows unless hidden; the resume marker is opt-in. */
   hideYoloBadge: boolean;
   showResumeBadge: boolean;
+  /** Hides the marker on tabs that run on a server. Shown by default. */
+  hideRemoteBadge: boolean;
   splitView: boolean;
   markedSessionId: string;
   /** Session selected when the app last closed, so it reopens there. */
@@ -137,6 +140,7 @@ function defaultSettings(): Settings {
     dictationSendWithoutEnter: false,
     hideYoloBadge: false,
     showResumeBadge: false,
+    hideRemoteBadge: false,
     splitView: false,
     markedSessionId: '',
     lastSessionId: '',
@@ -222,7 +226,7 @@ export async function loadSettings(expectedRevision?: number): Promise<boolean> 
     console.error('Failed to load settings:', e);
     if (context === settingsContextGeneration && generation === settingsLoadGeneration) {
       settingsContextReady = false;
-      reportError(`Could not load settings: ${e}`);
+      reportError(get(t)('error.settingsLoadFailed', { error: String(e) }));
     }
     return false;
   }
@@ -270,7 +274,7 @@ export async function saveSettings(newSettings: Partial<Settings>, expectedProje
     // Reload puts the UI back to what is actually stored, which without a word
     // looks like the app undoing the user's change by itself — worse than the
     // failure, because it reads as the app being broken rather than the save.
-    reportError(`Could not save settings: ${e}`);
+    reportError(get(t)('error.settingsSaveFailed', { error: String(e) }));
     // A newer optimistic edit either has a queued save or has already won.
     // Its UI must not be overwritten by a recovery read started for this
     // failed, older save; loadSettings checks again after its own await.

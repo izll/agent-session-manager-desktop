@@ -198,6 +198,168 @@
     }
   }
 
+  // What is running on a server, and whose it is.
+  //
+  // A server is shared: it can hold sessions from this computer, from another
+  // of the user's machines, and ones started by hand. Listed here so a session
+  // that this app has lost track of — or that belongs somewhere else — is
+  // visible rather than running unseen until the machine is rebooted.
+  let sessionsFor = '';
+  let serverSessions: main.RemoteSessionInfo[] = [];
+  let loadingSessions = false;
+  let sessionsError = '';
+  let showViews = false;
+  // Which row has its multiplexer id shown. One at a time: the id is wanted
+  // occasionally and in the way the rest of the time.
+  let detailsFor = '';
+  // The listing has a generation of its own.
+  //
+  // operationGeneration is shared by eleven operations in this dialog, and
+  // every one of them bumps it — so a connection test, a save or a host-key
+  // accept starting while the listing was in flight made its reply look stale
+  // and it was thrown away, leaving whatever was on screen before. The
+  // listing only needs protection from a NEWER listing.
+  let sessionsGeneration = 0;
+
+  async function loadServerSessions(srv: Server) {
+    if (sessionsFor === srv.id) {
+      // Second press closes it.
+      sessionsFor = '';
+      serverSessions = [];
+      return;
+    }
+    const generation = ++sessionsGeneration;
+    sessionsFor = srv.id;
+    serverSessions = [];
+    sessionsError = '';
+    loadingSessions = true;
+    try {
+      const list = await App.ListServerSessions(srv.id);
+      if (!show || generation !== sessionsGeneration) return;
+      serverSessions = (list || []) as main.RemoteSessionInfo[];
+    } catch (e) {
+      if (!show || generation !== sessionsGeneration) return;
+      sessionsError = String(e);
+    } finally {
+      if (generation === sessionsGeneration) loadingSessions = false;
+    }
+  }
+
+  // The helper sessions the app creates to show one window are bookkeeping,
+  // not work, so they are hidden until asked for.
+  $: visibleSessions = showViews
+    ? serverSessions
+    : serverSessions.filter(s => !s.view);
+  $: hiddenViewCount = serverSessions.filter(s => s.view).length;
+
+  // Stopping a session on a server ends whatever is running in it, which is
+  // the whole point of it being there — so it is asked about first.
+  let killTarget: main.RemoteSessionInfo | null = null;
+  let killing = false;
+  function askKill(entry: main.RemoteSessionInfo) {
+    killTarget = entry;
+  }
+
+  async function confirmKill() {
+    const entry = killTarget;
+    const serverId = sessionsFor;
+    if (!entry || !serverId || killing) return;
+    const generation = ++operationGeneration;
+    killing = true;
+    try {
+      await App.KillServerSession(serverId, entry.name);
+      if (!show || generation !== operationGeneration) return;
+      killTarget = null;
+      const srv = servers.find(s => s.id === serverId);
+      if (srv) {
+        // Reopen the list so it shows what is actually left. Its own
+        // generation guards it, so this cannot be discarded by the kill.
+        sessionsFor = '';
+        await loadServerSessions(srv);
+      }
+    } catch (e) {
+      if (!show || generation !== operationGeneration) return;
+      sessionsError = String(e);
+      killTarget = null;
+    } finally {
+      if (generation === operationGeneration) killing = false;
+    }
+  }
+
+  // The translator is passed in rather than read inside: a helper that reads a
+  // store gives Svelte nothing to watch, so the text would keep the language
+  // it had when the list was first drawn. The project has a test for exactly
+  // this mistake.
+  function describeOwner(translate: (key: string) => string, entry: main.RemoteSessionInfo): string {
+    // A view belongs to the app by construction — the app is the only thing
+    // that creates them — so saying "started by hand" about one was simply
+    // wrong: they carry no ownership tags because nothing tags them, not
+    // because nobody knows where they came from.
+    if (entry.view) return translate('servers.sessionView');
+    if (entry.ours) return translate('servers.sessionOurs');
+    if (entry.thisMachine) return translate('servers.sessionLostTrack');
+    if (entry.owner) return translate('servers.sessionOtherMachine').replace('{machine}', entry.owner);
+    return translate('servers.sessionUntagged');
+  }
+
+  function formatCreated(unixSeconds: number): string {
+    if (!unixSeconds) return '';
+    return new Date(unixSeconds * 1000).toLocaleString();
+  }
+
+  // A step's detail is a key when the backend had something to say in the
+  // user's language, and a plain value — a path, a version, a fingerprint —
+  // when it did not. Both arrive in the same field.
+  //
+  // The translator is passed in rather than read inside, or Svelte would have
+  // nothing to watch and the text would keep whatever language it was first
+  // drawn in.
+  function describeStepDetail(translate: (key: string) => string, detail: string): string {
+    if (!detail.startsWith('detail.')) return detail;
+    const [key, ...values] = detail.split('|');
+    const text = translate(key);
+    if (text === key) return values.length > 0 ? values.join(' ') : key;
+    return values.reduce((message, value, index) =>
+      message.split(`{${index}}`).join(value), text);
+  }
+
+  // The connection test can find agents in a directory the server's
+  // non-interactive shell does not have on its PATH. Applying it here saves
+  // the user reopening the editor to retype a path we already know.
+  let applyingPath = false;
+  async function applySuggestedExtraPath(srv: Server) {
+    const suggested = testResult?.suggestedExtraPath;
+    if (!suggested || applyingPath) return;
+    const generation = ++operationGeneration;
+    applyingPath = true;
+    try {
+      const updated = await App.SaveServer({
+        id: srv.id,
+        name: srv.name,
+        host: srv.host,
+        port: srv.port,
+        user: srv.user,
+        authMethod: srv.authMethod,
+        keyPath: srv.keyPath,
+        jumpHostId: srv.jumpHostId,
+        // The only field this changes. Everything else is carried across
+        // unchanged, because SaveServer replaces the whole entry.
+        extraPath: suggested,
+        isDefault: srv.isDefault,
+        password: '',
+      } as main.ServerSaveRequest);
+      if (!show || generation !== operationGeneration) return;
+      servers = (updated || []) as Server[];
+      const refreshed = servers.find(s => s.id === srv.id);
+      if (refreshed) await runTest(refreshed);
+    } catch (e) {
+      if (!show || generation !== operationGeneration) return;
+      error = String(e);
+    } finally {
+      if (generation === operationGeneration) applyingPath = false;
+    }
+  }
+
   // Accepting a key is a separate call that carries the fingerprint the user
   // was shown — a key that changed between the test and the click must not be
   // accepted on the strength of the earlier prompt.
@@ -545,6 +707,20 @@
                          as something pasted in. -->
                     <button
                       class="icon-btn"
+                      class:active={sessionsFor === srv.id}
+                      title={$t('servers.listSessions')}
+                      on:click={() => loadServerSessions(srv)}
+                    >
+                      <!-- Stacked layers: what is running on the machine. -->
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                           stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="3" y="4" width="18" height="6" rx="1"/>
+                        <rect x="3" y="14" width="18" height="6" rx="1"/>
+                        <path d="M7 7h.01M7 17h.01"/>
+                      </svg>
+                    </button>
+                    <button
+                      class="icon-btn"
                       title={$t('servers.test')}
                       disabled={testing}
                       on:click={() => runTest(srv)}
@@ -597,6 +773,79 @@
                     </button>
                   </div>
                 </li>
+                {#if sessionsFor === srv.id}
+                  <li class="result">
+                    {#if loadingSessions}
+                      <span class="result-line pending">{$t('common.loading')}</span>
+                    {:else if sessionsError}
+                      <div class="error-line">{sessionsError}</div>
+                    {:else if visibleSessions.length === 0}
+                      <span class="result-line pending">{$t('servers.noSessions')}</span>
+                    {:else}
+                      <ul class="session-list">
+                        {#each visibleSessions as entry (entry.name)}
+                          <li class="session-row" class:foreign={!entry.ours}>
+                            <span class="session-main">
+                              <!-- The tab's name leads. Putting the session
+                                   first buried it: a session with no project
+                                   tag falls back to its raw multiplexer name,
+                                   which fills the whole line on its own and
+                                   the tab name was never reached. -->
+                              <span class="session-name" title={entry.name}>
+                                {entry.view && entry.viewOf
+                                  ? $t('servers.sessionViewOf').replace('{window}', entry.viewOf)
+                                  : (entry.project || entry.name)}
+                              </span>
+                              <span class="session-owner">
+                                {#if entry.view && entry.viewSession}{entry.viewSession} · {/if}{describeOwner($t, entry)}
+                              </span>
+                            </span>
+                            <span class="session-meta">
+                              {#if entry.path}<span class="session-path" title={entry.path}>{entry.path}</span>{/if}
+                              <span>{$t('servers.sessionWindows').replace('{n}', String(entry.windows))}</span>
+                              {#if entry.attached}<span class="session-attached">{$t('servers.sessionAttached')}</span>{/if}
+                              {#if entry.created}<span>{formatCreated(entry.created)}</span>{/if}
+                            </span>
+                            <button
+                              class="icon-btn"
+                              class:active={detailsFor === entry.name}
+                              title={$t('servers.sessionDetails')}
+                              on:click={() => (detailsFor = detailsFor === entry.name ? '' : entry.name)}
+                            >
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                   stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="12" cy="12" r="10"/>
+                                <path d="M12 16v-4M12 8h.01"/>
+                              </svg>
+                            </button>
+                            <button
+                              class="icon-btn danger"
+                              title={$t('servers.killSession')}
+                              on:click={() => askKill(entry)}
+                            >
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                   stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M18 6L6 18M6 6l12 12"/>
+                              </svg>
+                            </button>
+                          </li>
+                          {#if detailsFor === entry.name}
+                            <li class="session-details">
+                              <code>{entry.name}</code>
+                            </li>
+                          {/if}
+                        {/each}
+                      </ul>
+                    {/if}
+                    {#if hiddenViewCount > 0}
+                      <button class="link-btn" on:click={() => (showViews = !showViews)}>
+                        {showViews
+                          ? $t('servers.hideViewSessions')
+                          : $t('servers.showViewSessions').replace('{n}', String(hiddenViewCount))}
+                      </button>
+                    {/if}
+                  </li>
+                {/if}
                 {#if testedId === srv.id && (testing || testResult)}
                   <li class="result">
                     {#if testing}
@@ -608,9 +857,23 @@
                             {step.status === 'ok' ? '✓' : step.status === 'failed' ? '✗' : '!'}
                           </span>
                           <span class="step-name">{stepLabel($t, step.name)}</span>
-                          {#if step.detail}<span class="step-detail">{step.detail}</span>{/if}
+                          {#if step.detail}<span class="step-detail">{describeStepDetail($t, step.detail)}</span>{/if}
                         </span>
                       {/each}
+
+                      {#if testResult.suggestedExtraPath}
+                        <div class="install-offer">
+                          <p>{$t('servers.extraPathOffer')}</p>
+                          <code>{testResult.suggestedExtraPath}</code>
+                          <button
+                            class="btn-secondary small"
+                            disabled={applyingPath}
+                            on:click={() => applySuggestedExtraPath(srv)}
+                          >
+                            {applyingPath ? $t('servers.extraPathApplying') : $t('servers.extraPathApply')}
+                          </button>
+                        </div>
+                      {/if}
 
                       {#if multiplexerMissing}
                         <div class="install-offer">
@@ -690,6 +953,20 @@
     showDelete = false;
     deleteTarget = null;
   }}
+/>
+
+<!-- Stopping a session on a server ends what is running in it, and that work
+     is the reason it lives there. Always asked, never assumed. -->
+<ConfirmDialog
+  show={killTarget !== null}
+  title={$t('servers.killSessionTitle')}
+  message={killTarget
+    ? $t('servers.killSessionMessage')
+        .replace('{name}', killTarget.project || killTarget.name)
+        .replace('{owner}', describeOwner($t, killTarget))
+    : ''}
+  on:confirm={confirmKill}
+  on:cancel={() => (killTarget = null)}
 />
 
 <style>
@@ -819,12 +1096,16 @@
     display: flex;
     align-items: baseline;
     gap: 7px;
-    font-size: 11px;
+    /* The connection test is read closely — a fingerprint is compared
+       character by character — so it is set at body size rather than the
+       11px used for labels elsewhere in the dialog. */
+    font-size: 13px;
+    line-height: 1.5;
     color: #a1a1aa;
   }
 
   .result-line .mark {
-    width: 12px;
+    width: 14px;
     flex: none;
     text-align: center;
   }
@@ -844,6 +1125,113 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .session-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .session-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 7px 8px;
+    border-radius: 5px;
+    /* Body size, like the connection test's lines: this is a list of things
+       running on someone's machine, read to decide what to stop — not a row
+       of labels. */
+    font-size: 13px;
+    line-height: 1.5;
+  }
+
+  .session-row:hover {
+    background: rgba(255, 255, 255, 0.04);
+  }
+
+  /* A session this app does not own is dimmed rather than hidden: it is on
+     the machine and using it, and pretending otherwise is how it ends up
+     running unseen. */
+  .session-row.foreign {
+    opacity: 0.75;
+  }
+
+  .session-main {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+    flex: 1;
+  }
+
+  .session-name {
+    color: #e4e4e7;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .session-owner {
+    font-size: 12px;
+    color: #8b8b93;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .session-meta {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: #71717a;
+    font-size: 12px;
+    flex: none;
+  }
+
+  .session-path {
+    max-width: 240px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: 'JetBrains Mono', 'Menlo', monospace;
+  }
+
+  .session-attached {
+    color: #4ade80;
+  }
+
+  .session-details {
+    padding: 2px 8px 8px 8px;
+  }
+
+  .session-details code {
+    font-family: 'JetBrains Mono', 'Menlo', monospace;
+    font-size: 11px;
+    color: #8b8b93;
+    word-break: break-all;
+  }
+
+  .icon-btn.danger:hover {
+    color: #f87171;
+  }
+
+  .icon-btn.active {
+    color: var(--accent);
+  }
+
+  .link-btn {
+    align-self: flex-start;
+    background: none;
+    border: none;
+    padding: 6px 0;
+    color: #8b8b93;
+    font-size: 12px;
+    cursor: pointer;
+    text-decoration: underline;
   }
 
   .import-panel {

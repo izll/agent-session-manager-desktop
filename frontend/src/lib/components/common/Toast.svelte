@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onDestroy } from 'svelte';
   import { fade, fly } from 'svelte/transition';
+  import { claimToastSlot, releaseToastSlot, toastSlotHeight } from './toastSlots';
 
   export let message = '';
   export let variant: 'error' | 'success' | 'warning' | 'info' = 'error';
@@ -18,6 +19,26 @@
   export let revision = 0;
 
   let timeoutId: ReturnType<typeof setTimeout>;
+
+  // Which slot in the lane this toast occupies while it is visible.
+  //
+  // Claimed when it appears and released when it goes, so two toasts showing
+  // together stack instead of overlapping, and a gap left by one that closes
+  // is reused by the next.
+  let slot = -1;
+  $: slotOffset = 20 + Math.max(slot, 0) * toastSlotHeight;
+
+  $: {
+    if (show && slot < 0) slot = claimToastSlot();
+    if (!show && slot >= 0) {
+      releaseToastSlot(slot);
+      slot = -1;
+    }
+  }
+
+  onDestroy(() => {
+    if (slot >= 0) releaseToastSlot(slot);
+  });
 
   $: {
     // Both values are deliberate dependencies. A replacement notification
@@ -71,7 +92,7 @@
 {#if show}
   <div
     class="toast"
-    style="background: {variantConfig.bg}; border-color: {variantConfig.border}"
+    style="top: {slotOffset}px; background: {variantConfig.bg}; border-color: {variantConfig.border}"
     transition:fly={{ y: -20, duration: 200 }}
     role="alert"
   >
@@ -112,9 +133,14 @@
 {/if}
 
 <style>
+  /* Toasts share one lane down the right-hand side.
+     Several Toast instances are mounted at once — session errors, tab errors,
+     folder errors, dictation — and each was positioned at the same fixed
+     point, so two showing together drew directly on top of each other and
+     both became unreadable. Each now takes the next free slot in a shared
+     lane, claimed on mount and released on destroy. */
   .toast {
     position: fixed;
-    top: 20px;
     right: 20px;
     display: flex;
     align-items: center;

@@ -2,6 +2,7 @@ import { writable, get } from 'svelte/store';
 import * as App from '../../../wailsjs/go/main/App';
 import { afterUnsavedChanges } from './unsavedChanges';
 import { dismissUndo } from './undo';
+import { t } from '../i18n';
 
 export interface Project {
   id: string;
@@ -52,7 +53,7 @@ export async function loadProjects() {
     activeProjectId.set(currentId);
   } catch (e) {
     console.error('Failed to load projects:', e);
-    reportError(`Could not load projects: ${e}`);
+    reportError(get(t)('error.projectsLoadFailed', { error: String(e) }));
   }
 }
 

@@ -406,6 +406,7 @@ export namespace main {
 	    needsPassphrase: boolean;
 	    needsPassword: boolean;
 	    ok: boolean;
+	    suggestedExtraPath?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new ConnectionTestResult(source);
@@ -420,6 +421,7 @@ export namespace main {
 	        this.needsPassphrase = source["needsPassphrase"];
 	        this.needsPassword = source["needsPassword"];
 	        this.ok = source["ok"];
+	        this.suggestedExtraPath = source["suggestedExtraPath"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -1229,6 +1231,42 @@ export namespace main {
 		    return a;
 		}
 	}
+	export class RemoteSessionInfo {
+	    name: string;
+	    windows: number;
+	    attached: boolean;
+	    created: number;
+	    owner?: string;
+	    project?: string;
+	    path?: string;
+	    agent?: string;
+	    ours: boolean;
+	    thisMachine: boolean;
+	    view: boolean;
+	    viewSession?: string;
+	    viewOf?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new RemoteSessionInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.windows = source["windows"];
+	        this.attached = source["attached"];
+	        this.created = source["created"];
+	        this.owner = source["owner"];
+	        this.project = source["project"];
+	        this.path = source["path"];
+	        this.agent = source["agent"];
+	        this.ours = source["ours"];
+	        this.thisMachine = source["thisMachine"];
+	        this.view = source["view"];
+	        this.viewSession = source["viewSession"];
+	        this.viewOf = source["viewOf"];
+	    }
+	}
 	export class SSHConfigHostInfo {
 	    alias: string;
 	    hostName: string;
@@ -1371,6 +1409,7 @@ export namespace main {
 	    resumeSessionId: string;
 	    serverId?: string;
 	    serverName?: string;
+	    tabServerNames?: Record<number, string>;
 	    followedWindows: session.FollowedWindow[];
 	    mainWindowStopped: boolean;
 	    updatedAt?: string;
@@ -1408,6 +1447,7 @@ export namespace main {
 	        this.resumeSessionId = source["resumeSessionId"];
 	        this.serverId = source["serverId"];
 	        this.serverName = source["serverName"];
+	        this.tabServerNames = source["tabServerNames"];
 	        this.followedWindows = this.convertValues(source["followedWindows"], session.FollowedWindow);
 	        this.mainWindowStopped = source["mainWindowStopped"];
 	        this.updatedAt = source["updatedAt"];
@@ -1526,6 +1566,7 @@ export namespace main {
 	    dictationSendWithoutEnter: boolean;
 	    hideYoloBadge: boolean;
 	    showResumeBadge: boolean;
+	    hideRemoteBadge: boolean;
 	    splitView: boolean;
 	    markedSessionId: string;
 	    lastSessionId: string;
@@ -1584,6 +1625,7 @@ export namespace main {
 	        this.dictationSendWithoutEnter = source["dictationSendWithoutEnter"];
 	        this.hideYoloBadge = source["hideYoloBadge"];
 	        this.showResumeBadge = source["showResumeBadge"];
+	        this.hideRemoteBadge = source["hideRemoteBadge"];
 	        this.splitView = source["splitView"];
 	        this.markedSessionId = source["markedSessionId"];
 	        this.lastSessionId = source["lastSessionId"];
@@ -1716,6 +1758,7 @@ export namespace main {
 	    statusLine: string;
 	    spinnerText: string;
 	    yolo: boolean;
+	    unreachable?: boolean;
 	    hideStatusLine: boolean;
 	
 	    static createFrom(source: any = {}) {
@@ -1731,6 +1774,7 @@ export namespace main {
 	        this.statusLine = source["statusLine"];
 	        this.spinnerText = source["spinnerText"];
 	        this.yolo = source["yolo"];
+	        this.unreachable = source["unreachable"];
 	        this.hideStatusLine = source["hideStatusLine"];
 	    }
 	}
@@ -2385,6 +2429,7 @@ export namespace session {
 	    background_color?: string;
 	    work_dir?: string;
 	    hide_status_line?: boolean;
+	    server_id?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new FollowedWindow(source);
@@ -2409,6 +2454,7 @@ export namespace session {
 	        this.background_color = source["background_color"];
 	        this.work_dir = source["work_dir"];
 	        this.hide_status_line = source["hide_status_line"];
+	        this.server_id = source["server_id"];
 	    }
 	}
 	

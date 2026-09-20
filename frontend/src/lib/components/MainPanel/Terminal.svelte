@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy, createEventDispatcher } from 'svelte';
   import { sessions, selectedSessionId, selectedWindowIdx, loadSessions } from '../../stores/sessions';
+  import { tabStatuses } from '../../stores/statusLines';
   import { settings } from '../../stores/settings';
   import { activeProjectId } from '../../stores/projects';
   import { get } from 'svelte/store';
@@ -607,6 +608,16 @@
     return !!sess.followedWindows?.find((w: any) => w.index === targetWindowIdx)?.stopped;
   })();
 
+  // Whether this tab's machine is answering for it.
+  //
+  // Reported by the poller, which knows whether the route to that server
+  // exists. A tab whose server is unreachable is not idle — it is waiting on a
+  // network, and its work is running out of sight — so the placeholder says
+  // that instead of showing one of the idle jokes.
+  $: remoteUnreachable = !!(targetSessionId
+    ? $tabStatuses[targetSessionId]?.find((t: any) => t.windowIdx === targetWindowIdx)?.unreachable
+    : false);
+
   // Show placeholder when no running session is active, and over a parked tab:
   // what tmux leaves in that pane is the bare words "Pane is dead", which
   // reads as a crash rather than as a tab waiting to be started.
@@ -625,8 +636,19 @@
   // A parked tab shows the same placeholder as an empty pane — one icon above
   // one line of text — with its own pair rather than a shape of its own.
   const parkedIcon = '⏸️';
-  $: placeholderIcon = parkedTab ? parkedIcon : placeholderIcons[placeholderIdx];
-  $: placeholderKey = parkedTab ? 'terminal.tabParked' : placeholderKeys[placeholderIdx];
+  // One place decides both, so the two can never disagree about which state
+  // the pane is in.
+  const unreachableIcon = '🔌';
+  $: placeholderIcon = remoteUnreachable
+    ? unreachableIcon
+    : parkedTab
+      ? parkedIcon
+      : placeholderIcons[placeholderIdx];
+  $: placeholderKey = remoteUnreachable
+    ? 'terminal.serverUnreachable'
+    : parkedTab
+      ? 'terminal.tabParked'
+      : placeholderKeys[placeholderIdx];
 
   let placeholderIdx = 0;
   $: if (showPlaceholder) {
@@ -741,7 +763,7 @@
     const session = getCurrentSession();
     if (!session || !pool) return;
     if (session.status !== 'running') {
-      error = 'Session is not running';
+      error = $t('error.sessionNotRunning');
       return;
     }
 

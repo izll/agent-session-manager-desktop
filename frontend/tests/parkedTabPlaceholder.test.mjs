@@ -75,10 +75,30 @@ test('the parked state uses the same placeholder shape as a stopped session', ()
 
 // What differs between the two states is the pair, not the markup.
 test('the icon and message are chosen in one place', () => {
-  assert.match(termSrc, /\$: placeholderIcon = parkedTab \? parkedIcon : placeholderIcons\[placeholderIdx\]/,
-    'the icon choice is gone, or is made somewhere other than the one place');
-  assert.match(termSrc, /\$: placeholderKey = parkedTab \? 'terminal\.tabParked' : placeholderKeys\[placeholderIdx\]/,
-    'the message choice is gone, or is made somewhere other than the one place');
+  // One assignment each, whatever states there are to choose between. A third
+  // state was added later (a tab whose server is unreachable), so the shape is
+  // checked rather than the exact pair: what matters is that the icon and the
+  // message are decided together, in one statement, and cannot disagree.
+  const iconChoice = termSrc.match(/\$: placeholderIcon = [\s\S]*?;\n/);
+  const keyChoice = termSrc.match(/\$: placeholderKey = [\s\S]*?;\n/);
+
+  assert.ok(iconChoice, 'the icon choice is gone, or is made somewhere other than the one place');
+  assert.ok(keyChoice, 'the message choice is gone, or is made somewhere other than the one place');
+
+  assert.equal(termSrc.match(/\$: placeholderIcon =/g).length, 1,
+    'the icon is chosen in more than one place');
+  assert.equal(termSrc.match(/\$: placeholderKey =/g).length, 1,
+    'the message is chosen in more than one place');
+
+  // Every state the icon knows about is a state the message knows about too.
+  for (const state of ['parkedTab', 'remoteUnreachable']) {
+    assert.ok(iconChoice[0].includes(state), `the icon ignores ${state}`);
+    assert.ok(keyChoice[0].includes(state), `the message ignores ${state}`);
+  }
+  assert.ok(iconChoice[0].includes('placeholderIcons[placeholderIdx]'),
+    'the ordinary empty pane lost its icon');
+  assert.ok(keyChoice[0].includes('placeholderKeys[placeholderIdx]'),
+    'the ordinary empty pane lost its message');
 });
 
 test('the message is translated, not hardcoded', () => {

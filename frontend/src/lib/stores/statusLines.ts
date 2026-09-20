@@ -31,6 +31,10 @@ export interface TabStatusInfo {
   spinnerText: string;
   yolo: boolean;
   hideStatusLine: boolean;
+  // Set when this tab's machine did not answer for it. A tab on an
+  // unreachable server is not idle — its work is running out of sight — so
+  // the pane says so rather than showing an idle placeholder.
+  unreachable?: boolean;
 }
 
 // Map of session ID to array of tab statuses (only for multi-tab sessions)

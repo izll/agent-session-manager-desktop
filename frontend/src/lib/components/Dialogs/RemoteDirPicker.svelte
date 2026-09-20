@@ -3,7 +3,7 @@
   import { autoFocusDialog } from '../../utils/dialogActions';
   import * as App from '../../../../wailsjs/go/main/App';
   import type { main } from '../../../../wailsjs/go/models';
-  import { createEventDispatcher } from 'svelte';
+  import { createEventDispatcher, tick } from 'svelte';
   import { t } from '../../i18n';
 
   export let show = false;
@@ -21,6 +21,58 @@
   // path does not fight with a listing that arrives a moment later.
   let typedPath = '';
 
+  // Creating a directory while browsing. Closed until asked for: the picker is
+  // for choosing somewhere, and most of the time that place already exists.
+  let creating = false;
+  let newName = '';
+  let createError = '';
+  let createInFlight = false;
+  let newNameRef: HTMLInputElement | null = null;
+
+  function startCreating() {
+    creating = true;
+    newName = '';
+    createError = '';
+    // The field is rendered by this same change, so focusing has to wait for
+    // it to exist.
+    void tick().then(() => newNameRef?.focus());
+  }
+
+  function cancelCreating() {
+    creating = false;
+    newName = '';
+    createError = '';
+  }
+
+  async function createDirectory() {
+    if (createInFlight) return;
+    const parent = listing?.path || typedPath;
+    const name = newName.trim();
+    if (!name) {
+      createError = $t('servers.folderNameRequired');
+      return;
+    }
+
+    const current = generation;
+    createInFlight = true;
+    createError = '';
+    try {
+      const result = await App.CreateServerDirectory(serverId, parent, name);
+      if (!show || current !== generation) return;
+      // The backend returns the refreshed listing, so the new folder appears
+      // without a second round trip.
+      listing = result;
+      typedPath = result?.path || parent;
+      creating = false;
+      newName = '';
+    } catch (e) {
+      if (!show || current !== generation) return;
+      createError = String(e);
+    } finally {
+      if (current === generation) createInFlight = false;
+    }
+  }
+
   let lastShow = false;
   $: {
     if (show && !lastShow) {
@@ -31,6 +83,7 @@
       generation++;
       listing = null;
       error = '';
+      cancelCreating();
     }
     lastShow = show;
   }
@@ -98,7 +151,41 @@
           <button class="btn-secondary small" on:click={() => open(typedPath)}>
             {$t('servers.goToPath')}
           </button>
+          <button
+            class="btn-secondary small"
+            title={$t('servers.newFolder')}
+            disabled={!listing}
+            on:click={startCreating}
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" stroke-width="2" stroke-linecap="round">
+              <path d="M4 20h16a1 1 0 0 0 1-1V8a1 1 0 0 0-1-1h-7.5L10 4H4a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1z"/>
+              <path d="M12 11v6M9 14h6"/>
+            </svg>
+          </button>
         </div>
+
+        {#if creating}
+          <div class="create-row">
+            <input
+              bind:this={newNameRef}
+              bind:value={newName}
+              spellcheck="false"
+              placeholder={$t('servers.newFolderName')}
+              on:keydown={e => {
+                if (e.key === 'Enter') { e.preventDefault(); void createDirectory(); }
+                if (e.key === 'Escape') { e.stopPropagation(); cancelCreating(); }
+              }}
+            />
+            <button class="btn-secondary small" on:click={cancelCreating}>
+              {$t('common.cancel')}
+            </button>
+            <button class="btn-primary small" disabled={createInFlight} on:click={createDirectory}>
+              {$t('servers.createFolder')}
+            </button>
+          </div>
+          {#if createError}<div class="error-line">{createError}</div>{/if}
+        {/if}
 
         {#if loading}
           <p class="empty">{$t('common.loading')}</p>
@@ -157,9 +244,42 @@
     gap: 10px;
   }
 
-  .path-row {
+  .path-row,
+  .create-row {
     display: flex;
     gap: 8px;
+  }
+
+  .create-row input {
+    flex: 1;
+    background: rgba(0, 0, 0, 0.25);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+    padding: 7px 9px;
+    color: #e4e4e7;
+    font-size: 13px;
+  }
+
+  .create-row input:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+
+  /* The icon button keeps the row's height without the label's width: the
+     path is the long thing in this row and deserves the space. */
+  .path-row button svg {
+    display: block;
+  }
+
+  .btn-primary.small {
+    padding: 5px 11px;
+    font-size: 12px;
+  }
+
+  .btn-secondary:disabled,
+  .btn-primary:disabled {
+    opacity: 0.5;
+    cursor: default;
   }
 
   .path-row input {

@@ -58,6 +58,10 @@ export function CreateProject(arg1) {
   return window['go']['main']['App']['CreateProject'](arg1);
 }
 
+export function CreateServerDirectory(arg1, arg2, arg3) {
+  return window['go']['main']['App']['CreateServerDirectory'](arg1, arg2, arg3);
+}
+
 export function CreateSession(arg1, arg2, arg3, arg4, arg5, arg6) {
   return window['go']['main']['App']['CreateSession'](arg1, arg2, arg3, arg4, arg5, arg6);
 }
@@ -72,6 +76,10 @@ export function CreateSessionOnServer(arg1, arg2, arg3, arg4, arg5, arg6, arg7) 
 
 export function CreateTab(arg1, arg2, arg3, arg4, arg5, arg6, arg7) {
   return window['go']['main']['App']['CreateTab'](arg1, arg2, arg3, arg4, arg5, arg6, arg7);
+}
+
+export function CreateTabOnServer(arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8) {
+  return window['go']['main']['App']['CreateTabOnServer'](arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8);
 }
 
 export function CreateTask(arg1, arg2, arg3, arg4, arg5, arg6) {
@@ -442,6 +450,10 @@ export function KeyringAvailable() {
   return window['go']['main']['App']['KeyringAvailable']();
 }
 
+export function KillServerSession(arg1, arg2) {
+  return window['go']['main']['App']['KillServerSession'](arg1, arg2);
+}
+
 export function ListBackgroundAgents() {
   return window['go']['main']['App']['ListBackgroundAgents']();
 }
@@ -456,6 +468,10 @@ export function ListOnlineSchemes() {
 
 export function ListServerDirectory(arg1, arg2) {
   return window['go']['main']['App']['ListServerDirectory'](arg1, arg2);
+}
+
+export function ListServerSessions(arg1) {
+  return window['go']['main']['App']['ListServerSessions'](arg1);
 }
 
 export function ListSessionDirectory(arg1, arg2, arg3, arg4) {

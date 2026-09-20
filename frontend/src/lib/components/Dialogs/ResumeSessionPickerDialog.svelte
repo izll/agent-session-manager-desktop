@@ -145,7 +145,7 @@
       {/if}
 
       <div class="session-info">
-        <span class="label">Session:</span>
+        <span class="label">{$t('bgAgents.session')}</span>
         <span class="value">{session?.name || ''}</span>
       </div>
 

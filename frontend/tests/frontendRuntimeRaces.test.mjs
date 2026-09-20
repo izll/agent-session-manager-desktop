@@ -261,7 +261,8 @@ assert.match(tabBar, /sessionId=\{tabColorSessionId\}/,
   'the tab color dialog must not receive the live selected session beside an old tab snapshot');
 assert.match(tabBar, /sessionId=\{newTabSessionId\}/);
 assert.match(tabBar, /sessionId=\{quickTerminalSessionId\}/);
-assert.match(newTabDialog, /App\.CreateTab\(targetSessionId/);
+assert.match(newTabDialog, /App\.CreateTabOnServer\(targetSessionId/,
+  'the tab must be created for the session captured at submit, not the live selection');
 assert.match(newTabDialog, /get\(selectedSessionId\) === targetSessionId/);
 assert.match(newSessionDialog, /const generation = \+\+resumeLookupGeneration/);
 assert.match(newSessionDialog, /clearTimeout\(pathDebounceTimer\)/,

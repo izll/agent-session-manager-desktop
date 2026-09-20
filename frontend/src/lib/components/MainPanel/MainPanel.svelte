@@ -495,6 +495,17 @@
   // when there is no pane to ask).
   $: currentTabPath = liveTabPath || configuredTabPath;
 
+  // The machine the selected tab runs on, empty for this computer. A tab can
+  // sit on a server while its session runs here.
+  $: currentTabServer = (() => {
+    const s = currentSession;
+    if (!s) return '';
+    const idx = $selectedWindowIdx ?? 0;
+    const perTab = (s as any).tabServerNames || {};
+    if (perTab[idx]) return perTab[idx];
+    return (s as any).serverName || '';
+  })();
+
   // Covers both refresh triggers at once: currentTabPath changes when the
   // session changes, when the tab changes, and when a `cd` moves the pane into
   // another repository. Off means we never ask at all.
@@ -949,8 +960,20 @@
           </svg>
         </button>
 
-        <!-- Path -->
-        <div class="status-item" title={currentTabPath}>
+        <!-- Path, with the machine it is on when that is not this computer.
+             The same path string means a different file depending on where the
+             tab runs, so the bar says which. -->
+        <div class="status-item" title={currentTabServer
+          ? `${currentTabServer}:${currentTabPath}`
+          : currentTabPath}>
+          {#if currentTabServer}
+            <span class="status-remote" title={$t('servers.onServer').replace('{server}', currentTabServer)}>
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/>
+              </svg>
+              <span class="status-remote-name">{currentTabServer}</span>
+            </span>
+          {/if}
           <span class="status-path">{truncatePath(currentTabPath)}</span>
         </div>
 
@@ -1290,6 +1313,25 @@
   /* The folder icon doubles as the button that opens it, so it has to look
      clickable without growing the status bar — hence a bare button reset with
      hover feedback rather than a control of its own. */
+  /* The machine a remote tab runs on, shown before its path. Tinted rather
+     than boxed: it is a qualifier on the path beside it, not a separate
+     status of its own. */
+  .status-remote {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    margin-right: 6px;
+    color: #7dd3fc;
+  }
+
+  .status-remote-name {
+    font-size: 11px;
+    max-width: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   .status-folder {
     background: none;
     border: none;

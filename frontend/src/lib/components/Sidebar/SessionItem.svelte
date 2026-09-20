@@ -380,7 +380,7 @@
            use the live pane state; when not running fall back to the stored
            launch flag so the marker is still visible while stopped. -->
       {#if (sessionStatus === 'running' ? singleTabYolo : session.autoYes) && showYolo}
-        <span class="badge yolo" title="Bypass permissions (YOLO)">Y</span>
+        <span class="badge yolo" title={$t("sessionItem.yoloTooltip")}>Y</span>
       {/if}
     </div>
   </div>
@@ -395,19 +395,19 @@
           <div class="status-text busy tab-status">
             <span>{tab.spinnerText || tab.statusLine || ''}</span>
             {#if $settings?.showAgentIcons}<AgentIcon agent={tab.agent} size="xs" />{/if}
-            {#if tab.yolo && showYolo}<span class="badge yolo" title="Bypass permissions (YOLO)">Y</span>{/if}
+            {#if tab.yolo && showYolo}<span class="badge yolo" title={$t("sessionItem.yoloTooltip")}>Y</span>{/if}
           </div>
         {:else if tab.activity === 'waiting'}
           <div class="status-text waiting tab-status">
             <span>{$t('sessionItem.waitingInput')}</span>
             {#if $settings?.showAgentIcons}<AgentIcon agent={tab.agent} size="xs" />{/if}
-            {#if tab.yolo && showYolo}<span class="badge yolo" title="Bypass permissions (YOLO)">Y</span>{/if}
+            {#if tab.yolo && showYolo}<span class="badge yolo" title={$t("sessionItem.yoloTooltip")}>Y</span>{/if}
           </div>
         {:else if tabRowVisible(tab)}
           <div class="status-text tab-status">
             <span>{tab.statusLine}</span>
             {#if $settings?.showAgentIcons}<AgentIcon agent={tab.agent} size="xs" />{/if}
-            {#if tab.yolo && showYolo}<span class="badge yolo" title="Bypass permissions (YOLO)">Y</span>{/if}
+            {#if tab.yolo && showYolo}<span class="badge yolo" title={$t("sessionItem.yoloTooltip")}>Y</span>{/if}
           </div>
         {/if}
       {/each}

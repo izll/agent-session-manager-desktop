@@ -952,6 +952,25 @@
               </button>
             </label>
 
+            <!-- Shown by default, so the setting is phrased as showing it and
+                 stored as its opposite: a stored boolean's zero value has to
+                 mean "visible". -->
+            <label class="setting-item">
+              <span class="setting-info">
+                <span class="setting-label">{$t('settings.showRemoteBadge')}</span>
+                <span class="setting-desc">{$t('settings.showRemoteBadgeDesc')}</span>
+              </span>
+              <button
+                class="toggle-btn"
+                class:active={!$settings.hideRemoteBadge}
+                on:click={() => saveSettings({ hideRemoteBadge: !$settings.hideRemoteBadge })}
+              >
+                <span class="toggle-track">
+                  <span class="toggle-thumb"></span>
+                </span>
+              </button>
+            </label>
+
             <label class="setting-item">
               <span class="setting-info">
                 <span class="setting-label">{$t('settings.compactList')}</span>
