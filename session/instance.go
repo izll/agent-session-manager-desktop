@@ -1038,8 +1038,16 @@ func (i *Instance) startWithResume(resumeID string, onlyWindowIdx int) error {
 	// tries fails on its own terms — "exec: no such file", repeated once per
 	// call. Said plainly once, before any of them run, and with how to install
 	// it, since a user meeting this has no other way to find out.
-	if err := CheckMultiplexer(); err != nil {
-		return err
+	//
+	// This computer's multiplexer, so only for a session that runs here. A
+	// session on a server uses the multiplexer THERE — which the connection
+	// test checks, and which is the whole point of running it remotely — and
+	// refusing to start it because this machine has no tmux would be refusing
+	// over something that is not used.
+	if !i.IsRemote() {
+		if err := CheckMultiplexer(); err != nil {
+			return err
+		}
 	}
 
 	// Held for the whole start: releasing after the existence check would

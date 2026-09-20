@@ -2,6 +2,7 @@ package session
 
 import (
 	"context"
+	"os"
 	"strings"
 	"testing"
 )
@@ -738,5 +739,41 @@ func TestTheViewPrefixMatchesWhatARemoteAttachCreates(t *testing.T) {
 	if !strings.HasPrefix(whatRemoteCreates, prefix) {
 		t.Errorf("cleanup looks for %q, which does not match %q",
 			prefix, whatRemoteCreates)
+	}
+}
+
+// Starting a session on a server must not depend on this computer having a
+// multiplexer.
+//
+// The check exists so a user without tmux is told so plainly rather than
+// meeting "exec: no such file" once per command. But it asks about THIS
+// machine, and a remote session uses the multiplexer on the server — checked
+// by the connection test, and the whole reason for running it there. Refusing
+// to start over a program that is never used is refusing for no reason.
+//
+// Found on a macOS build runner, which has no tmux: every remote lifecycle
+// test failed there while passing everywhere tmux happens to be installed.
+func TestARemoteSessionDoesNotNeedALocalMultiplexer(t *testing.T) {
+	source, err := os.ReadFile("instance.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := strings.ReplaceAll(string(source), "\r\n", "\n")
+
+	at := strings.Index(text, "func (i *Instance) startWithResume(")
+	if at < 0 {
+		t.Fatal("startWithResume is gone; this test needs rewriting")
+	}
+	end := strings.Index(text[at:], "\n}\n")
+	body := text[at : at+end]
+
+	checkAt := strings.Index(body, "CheckMultiplexer()")
+	if checkAt < 0 {
+		t.Fatal("the multiplexer check is gone; a user without tmux will meet " +
+			"one failure per command instead of being told once")
+	}
+	if !strings.Contains(body[:checkAt], "!i.IsRemote()") {
+		t.Error("a session on a server is refused when THIS computer has no " +
+			"multiplexer, which is not the one it would use")
 	}
 }
