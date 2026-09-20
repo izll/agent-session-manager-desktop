@@ -6,6 +6,53 @@ Entries describe what changed for someone using the app. Internal refactoring,
 test and CI work is left out unless it changed behaviour. Dates are release
 dates; the format follows [Keep a Changelog](https://keepachangelog.com).
 
+## 1.1.0 — 2026-09-21
+
+### Added
+
+- **A tab can run on a server while its session stays on this computer.** Work
+  that belongs to a project but not to its files — watching a database, reading
+  a log, deploying — no longer needs a second session kept open just to reach
+  the machine. The New Tab dialog asks where the tab should run, and one placed
+  on a server keeps working after this computer is shut down.
+- **The server manager lists what is running on a machine.** Sessions are shown
+  with whose they are: this app's, started here but no longer tracked, from
+  another of your machines, or started by hand. Any of them can be stopped from
+  here, after a confirmation — the work inside ends with it.
+- **Agents installed where the server's PATH cannot see them are now found
+  automatically.** An agent under `~/.local/bin`, where Claude's own installer
+  puts it, is invisible to the non-interactive shell an SSH command gets. The
+  connection now looks for it and uses the directory it finds, instead of
+  reporting the server as having no agents.
+- **A tab that runs on a server is marked in the tab bar, and the status bar
+  names the machine.** The same path means a different file depending on where
+  the tab runs. The marker can be turned off in Settings; it is on by default.
+- **Directories can be created on the server while choosing one.** The picker
+  steps into the new folder rather than leaving you outside it.
+
+### Fixed
+
+- **Two failure messages appeared as raw identifiers in every language.** The
+  text behind `error.sessionNotRunning` — what a stopped session's terminal
+  says — did not exist in any locale, so the key itself reached the screen.
+- **The remote-servers feature was English everywhere but Hungarian.** 91
+  strings across 18 languages: the server manager, the connection test, the
+  directory picker and the session list.
+- **A remote tab's status line and activity dot never moved.** Both asked
+  whether the session's own machine was running the multiplexer — which, for a
+  local session with a tab on a server, is this computer, where it is not.
+- **Closing a tab that ran on a server crashed the app.** A remote tab attaches
+  over SSH and has no local process, and the detach path killed one anyway.
+- **One slow server could freeze every panel.** Connections were built while
+  holding the lock that the sidebar, the tab bar and every terminal attach go
+  through, so the window stopped responding for as long as the server took to
+  answer — or for the full timeout when it never did.
+- **Tabs sharing a server drew into a band of dead rows.** A multiplexer sizes
+  a window to its smallest client, so with three tabs open the smallest decided
+  for all of them. Each tab now attaches through a view of its own window.
+- **Two error toasts shown together were unreadable**, drawn on top of each
+  other rather than stacked.
+
 ## 1.0.4 — 2026-09-16
 
 ### Fixed
