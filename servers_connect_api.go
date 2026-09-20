@@ -22,6 +22,9 @@ type ConnectionTestResult struct {
 	NeedsPassphrase bool               `json:"needsPassphrase"`
 	NeedsPassword   bool               `json:"needsPassword"`
 	OK              bool               `json:"ok"`
+	// SuggestedExtraPath is a directory holding agents the server's
+	// non-interactive shell cannot see, offered for the extra PATH setting.
+	SuggestedExtraPath string `json:"suggestedExtraPath,omitempty"`
 }
 
 // TestServerConnection reports what a server offers, step by step.
@@ -59,6 +62,8 @@ func (a *App) TestServerConnection(serverID, password, passphrase string) (*Conn
 		HostKeyChanged:  result.HostKeyChanged,
 		NeedsPassphrase: result.NeedsPassphrase,
 		OK:              result.OK,
+
+		SuggestedExtraPath: result.SuggestedExtraPath,
 	}, nil
 }
 

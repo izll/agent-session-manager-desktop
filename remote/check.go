@@ -50,6 +50,13 @@ type CheckResult struct {
 	NeedsPassphrase bool `json:"needsPassphrase,omitempty"`
 	// OK is true when a session could actually be run on this server.
 	OK bool `json:"ok"`
+	// SuggestedExtraPath is a directory holding agents that the server's
+	// non-interactive shell cannot see.
+	//
+	// Carried as a value rather than only mentioned in a step's text so the
+	// UI can offer to apply it. Finding the agent and then making the user
+	// retype the path is the sort of half-help that reads as no help.
+	SuggestedExtraPath string `json:"suggestedExtraPath,omitempty"`
 }
 
 func (r *CheckResult) add(name string, status StepStatus, detail string) {
@@ -100,8 +107,7 @@ func Check(ctx context.Context, target *Target, creds *Credentials,
 		result.add(StepMultiplexer, StepOK, strings.TrimSpace(string(version)))
 		result.OK = true
 	} else {
-		result.add(StepMultiplexer, StepFailed,
-			"tmux is not installed on this server, or is not on the PATH of a non-interactive shell")
+		result.add(StepMultiplexer, StepFailed, "detail.tmuxMissing")
 	}
 
 	// uname is how a Unix server names its architecture, and its absence says
@@ -112,25 +118,25 @@ func Check(ctx context.Context, target *Target, creds *Credentials,
 	trimmed := strings.TrimSpace(string(arch))
 	switch {
 	case archErr != nil || trimmed == "":
-		result.add(StepArch, StepFailed,
-			"this does not look like a Unix server — sessions can only run on Linux or macOS")
+		result.add(StepArch, StepFailed, "detail.notAUnixServer")
 		result.OK = false
 	case normaliseArch(trimmed) == "":
 		// The helper is shipped for amd64 and arm64. Anything else cannot run
 		// it, and saying so now beats failing at install time.
-		result.add(StepArch, StepFailed, fmt.Sprintf("unsupported architecture %q", trimmed))
+		result.add(StepArch, StepFailed, "detail.unsupportedArchitecture|"+trimmed)
 		result.OK = false
 	default:
 		result.add(StepArch, StepOK, trimmed)
 	}
 
-	agentsStatus, agentsDetail := agentStatus(ctx, client, target)
+	agentsStatus, agentsDetail, suggestedPath := agentStatus(ctx, client, target)
 	result.add(StepAgents, agentsStatus, agentsDetail)
+	result.SuggestedExtraPath = suggestedPath
 	return result
 }
 
 // agentStatus lists the agents present on the server.
-func agentStatus(ctx context.Context, client *Client, target *Target) (StepStatus, string) {
+func agentStatus(ctx context.Context, client *Client, target *Target) (StepStatus, string, string) {
 	// One command rather than one per agent: each is a round trip, and this
 	// runs while a dialog waits.
 	var builder strings.Builder
@@ -138,15 +144,133 @@ func agentStatus(ctx context.Context, client *Client, target *Target) (StepStatu
 		fmt.Fprintf(&builder, "command -v %s >/dev/null 2>&1 && echo %s; ", command, command)
 	}
 
+	// "true" at the end so the command succeeds even when nothing was found.
+	//
+	// Every probe is a `command -v ... && echo ...`, and the exit status of the
+	// whole line is that of the last one — so a server with no agents on its
+	// PATH answered with status 1, which was read as "could not ask" rather
+	// than "asked, found none". The step then reported itself skipped and the
+	// search for agents installed off the PATH never ran at all, which is
+	// exactly the case it exists for.
+	builder.WriteString("true")
+
 	out, err := client.Run(ctx, withExtraPath(target, builder.String()))
 	if err != nil {
-		return StepSkipped, ""
+		return StepSkipped, "", ""
 	}
 	found := strings.Fields(strings.TrimSpace(string(out)))
 	if len(found) == 0 {
-		return StepAttention, "no agents found — check the extra PATH setting"
+		// Nothing on the PATH is not the same as nothing installed. An SSH
+		// command runs a non-interactive shell, which reads no profile, so an
+		// agent in ~/.local/bin — where Claude's own installer puts it — is
+		// invisible here while being perfectly runnable.
+		//
+		// Looking in the usual places turns "no agents found" into something
+		// the user can act on, and names the exact value the extra PATH field
+		// wants.
+		if dir, names := agentsOffThePath(ctx, client, target); dir != "" {
+			return StepAttention,
+				"detail.agentsOffThePath|" + strings.Join(names, ", ") + "|" + dir, dir
+		}
+		// Attention, not a failure: a server with no agent still runs terminal
+		// sessions, which is a large part of why someone adds one. The line
+		// says what is missing and what it costs, so the server is not read as
+		// broken when it is merely bare.
+		return StepAttention, "detail.noAgentsFound", ""
 	}
-	return StepOK, strings.Join(found, ", ")
+	return StepOK, strings.Join(found, ", "), ""
+}
+
+// DiscoverAgentPath returns a directory holding agents that the server's
+// non-interactive shell cannot see, or empty when there is nothing to add.
+//
+// Exported so a connection can apply it without the user being asked. Finding
+// the directory and then requiring someone to copy it into a settings field is
+// work the program can do itself: the answer is the same either way, and the
+// user learns about the problem only as a tab that will not start.
+func DiscoverAgentPath(ctx context.Context, client *Client, target *Target) string {
+	// Only when nothing is reachable as things stand. A server whose agents
+	// are already on the PATH needs no addition, and probing for one would
+	// risk preferring some other copy over the one it is set up to use.
+	var builder strings.Builder
+	for _, command := range AgentCommands {
+		fmt.Fprintf(&builder, "command -v %s >/dev/null 2>&1 && echo %s; ", command, command)
+	}
+	builder.WriteString("true")
+
+	out, err := client.Run(ctx, withExtraPath(target, builder.String()))
+	if err != nil {
+		return ""
+	}
+	if len(strings.Fields(strings.TrimSpace(string(out)))) > 0 {
+		return ""
+	}
+
+	dir, _ := agentsOffThePath(ctx, client, target)
+	return dir
+}
+
+// agentDirectories are where an agent commonly lands when it is not on a
+// non-interactive shell's PATH.
+//
+// Kept short and specific: this runs while a dialog waits, and a wide search
+// of the filesystem would be both slow and a good way to find something that
+// is not what the user meant.
+var agentDirectories = []string{
+	"$HOME/.local/bin",
+	"$HOME/bin",
+	"$HOME/.npm-global/bin",
+	"/usr/local/bin",
+	"/opt/homebrew/bin",
+}
+
+// agentsOffThePath looks for agents in the usual install locations and reports
+// the first directory holding any, with their names.
+func agentsOffThePath(ctx context.Context, client *Client, target *Target) (string, []string) {
+	var builder strings.Builder
+	// Each directory is reported with what it holds, so one round trip answers
+	// both "where" and "which".
+	for _, dir := range agentDirectories {
+		for _, command := range AgentCommands {
+			fmt.Fprintf(&builder, `[ -x %s/%s ] && echo "%s %s"; `, dir, command, dir, command)
+		}
+	}
+
+	// Same reasoning as above: none of these tests finding anything is an
+	// answer, not a failure to ask.
+	builder.WriteString("true")
+
+	out, err := client.Run(ctx, builder.String())
+	if err != nil {
+		return "", nil
+	}
+
+	return firstDirectoryWithAgents(string(out))
+}
+
+// firstDirectoryWithAgents groups the probe's output by directory and returns
+// the first one, with what it holds.
+//
+// Split out so it can be tested without a server.
+func firstDirectoryWithAgents(out string) (string, []string) {
+	// Grouped by directory, keeping the probe's order: the first match is the
+	// most likely place and the one worth recommending.
+	byDirectory := make(map[string][]string)
+	var order []string
+	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+		fields := strings.Fields(strings.TrimSpace(line))
+		if len(fields) != 2 {
+			continue
+		}
+		if _, seen := byDirectory[fields[0]]; !seen {
+			order = append(order, fields[0])
+		}
+		byDirectory[fields[0]] = append(byDirectory[fields[0]], fields[1])
+	}
+	if len(order) == 0 {
+		return "", nil
+	}
+	return order[0], byDirectory[order[0]]
 }
 
 // withExtraPath prefixes a command with the PATH addition configured for the
@@ -212,11 +336,12 @@ func classifyDialError(result *CheckResult, target *Target, err error) {
 func describeAuth(target *Target) string {
 	switch target.AuthMethod {
 	case "password":
-		return "password"
+		return "detail.authPassword"
 	case "key":
+		// The path itself, which is the useful part and needs no translating.
 		return target.KeyPath
 	default:
-		return "ssh-agent"
+		return "detail.authAgent"
 	}
 }
 

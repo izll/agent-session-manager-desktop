@@ -96,12 +96,45 @@ func (e *Executor) command(args []string) string {
 func firstLine(candidates ...string) string {
 	for _, candidate := range candidates {
 		for _, line := range strings.Split(candidate, "\n") {
-			if trimmed := strings.TrimSpace(line); trimmed != "" {
-				return trimmed
+			trimmed := strings.TrimSpace(line)
+			if trimmed == "" || isLoginShellNoise(trimmed) {
+				continue
 			}
+			return trimmed
 		}
 	}
 	return "no output"
+}
+
+// isLoginShellNoise reports whether a line came from the shell rather than
+// from the command.
+//
+// Commands run through a login shell — the one way an agent under ~/.local/bin
+// is on the PATH at all — and a login shell's own startup files write to
+// stderr. The first line of stderr is therefore often not the failure: a tab
+// that could not be created reported "mesg: ttyname failed" while the real
+// reason, "can't find session", sat on the line below and never reached the
+// user.
+//
+// Matched on the known emitters rather than on wording, which is localised:
+// the message above arrives in whatever language the server is set to.
+func isLoginShellNoise(line string) bool {
+	for _, prefix := range loginShellNoisePrefixes {
+		if strings.HasPrefix(line, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+// loginShellNoisePrefixes are the programs a login shell commonly runs that
+// complain when there is no terminal attached.
+var loginShellNoisePrefixes = []string{
+	"mesg:",
+	"stty:",
+	"tput:",
+	"bash: cannot set terminal process group",
+	"bash: no job control in this shell",
 }
 
 // RunShell runs a command other than tmux in a directory on the server.
