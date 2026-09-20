@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"sort"
@@ -93,10 +94,10 @@ func (a *App) GetServers() ([]ServerInfo, error) {
 // SaveServer creates or updates one entry and returns the saved list.
 func (a *App) SaveServer(req ServerSaveRequest) ([]ServerInfo, error) {
 	if strings.TrimSpace(req.Host) == "" {
-		return nil, fmt.Errorf("a server needs a host")
+		return nil, fmt.Errorf("error.serverNeedsHost")
 	}
 	if strings.TrimSpace(req.User) == "" {
-		return nil, fmt.Errorf("a server needs a user")
+		return nil, fmt.Errorf("error.serverNeedsUser")
 	}
 
 	id := strings.TrimSpace(req.ID)
@@ -183,7 +184,7 @@ func (a *App) applyServerPassword(id string, req ServerSaveRequest) error {
 // DeleteServer removes an entry and its stored password.
 func (a *App) DeleteServer(id string) ([]ServerInfo, error) {
 	if strings.TrimSpace(id) == "" {
-		return nil, fmt.Errorf("no server given")
+		return nil, fmt.Errorf("error.noServerGiven")
 	}
 
 	// A session pointing at a deleted server would have nowhere to run and no
@@ -194,8 +195,7 @@ func (a *App) DeleteServer(id string) ([]ServerInfo, error) {
 	}
 	for _, inst := range instances {
 		if inst.ServerID == id {
-			return nil, fmt.Errorf("this server still runs sessions (%q) — move or delete them first",
-				inst.Name)
+			return nil, fmt.Errorf("error.serverStillRunsSessions|%s", inst.Name)
 		}
 	}
 
@@ -397,12 +397,12 @@ func (a *App) ListServerDirectory(serverID, path string) (*RemoteDirListing, err
 		return nil, err
 	}
 	if result.ExitCode != 0 && result.Output == "" {
-		return nil, fmt.Errorf("could not read %s: %s", path, strings.TrimSpace(result.Stderr))
+		return nil, fmt.Errorf("error.couldNotReadDirectory|%s|%s", path, firstMessageLine(result.Stderr))
 	}
 
 	lines := strings.Split(strings.TrimRight(result.Output, "\n"), "\n")
 	if len(lines) == 0 {
-		return nil, fmt.Errorf("could not read %s", path)
+		return nil, fmt.Errorf("error.couldNotReadDirectory|%s|", path)
 	}
 
 	listing := &RemoteDirListing{Path: strings.TrimSpace(lines[0])}
@@ -443,6 +443,423 @@ func (a *App) ListServerDirectory(serverID, path string) (*RemoteDirListing, err
 			strings.ToLower(listing.Entries[right].Name)
 	})
 	return listing, nil
+}
+
+// CreateServerDirectory makes one new directory on a server and returns the
+// refreshed listing of where it was made.
+//
+// Offered because the alternative is leaving the app: a tab on a server often
+// wants a directory that does not exist there yet, and the picker would
+// otherwise be able to show that it is missing but not to fix it.
+//
+// One level only, inside the directory being browsed. A name is a name here,
+// not a path — see validateNewDirectoryName.
+func (a *App) CreateServerDirectory(serverID, parent, name string) (*RemoteDirListing, error) {
+	cleanName, err := validateNewDirectoryName(name)
+	if err != nil {
+		return nil, err
+	}
+
+	connection, err := a.connectionFor(serverID)
+	if err != nil {
+		return nil, err
+	}
+
+	ctx, cancel := context.WithTimeout(a.ctx, remote.CommandTimeout)
+	defer cancel()
+
+	target := strings.TrimSpace(parent)
+	if target == "" {
+		target = "~"
+	}
+
+	// mkdir without -p: the parent is a directory the user is looking at, and
+	// -p would silently succeed on a name that already exists, reporting a
+	// creation that did not happen.
+	script := fmt.Sprintf("cd %s && mkdir %s",
+		shellQuoteForServer(target), shellQuoteForServer(cleanName))
+
+	result, err := connection.helper.Run(ctx, script)
+	if err != nil {
+		return nil, err
+	}
+	if result.ExitCode != 0 {
+		message := strings.TrimSpace(result.Stderr)
+		if message == "" {
+			message = strings.TrimSpace(result.Output)
+		}
+		if message == "" {
+			message = fmt.Sprintf("could not create %s", cleanName)
+		}
+		return nil, errors.New(message)
+	}
+
+	// The listing returned is of the new directory itself, not of where it was
+	// made: someone who creates a folder while choosing one is going to work in
+	// it, and stopping outside it would mean a second click to step in.
+	//
+	// Built by listing the parent first, so the path comes back resolved by the
+	// server — "~/x" and a relative parent both become something absolute that
+	// the picker can then navigate from.
+	parentListing, err := a.ListServerDirectory(serverID, target)
+	if err != nil {
+		return nil, err
+	}
+	base := parentListing.Path
+	if base == "/" {
+		base = ""
+	}
+	return a.ListServerDirectory(serverID, base+"/"+cleanName)
+}
+
+// firstMessageLine reduces a command's error output to one line.
+//
+// A message carried in a translation key cannot contain the separator, and a
+// multi-line one would not fit a dialog anyway.
+func firstMessageLine(text string) string {
+	for _, line := range strings.Split(text, "\n") {
+		if trimmed := strings.TrimSpace(line); trimmed != "" {
+			return strings.ReplaceAll(trimmed, "|", " ")
+		}
+	}
+	return ""
+}
+
+// validateNewDirectoryName checks that a name is a single directory name.
+//
+// The value is quoted before it reaches the shell, so this is not about
+// quoting: it is about what the name is allowed to mean. A name containing a
+// separator would create — or write into — somewhere other than the directory
+// on screen, and ".." would climb out of it. Both are refused rather than
+// sanitised, because a silently altered name is worse than a rejected one.
+func validateNewDirectoryName(name string) (string, error) {
+	cleaned := strings.TrimSpace(name)
+	if cleaned == "" {
+		return "", errors.New("error.folderNameRequired")
+	}
+	if strings.ContainsAny(cleaned, "/\\") {
+		return "", errors.New("error.folderNameHasSeparator")
+	}
+	if cleaned == "." || cleaned == ".." {
+		return "", errors.New("error.folderNameIsDotted")
+	}
+	// A leading "-" would be read as an option by mkdir rather than a name.
+	if strings.HasPrefix(cleaned, "-") {
+		return "", errors.New("error.folderNameStartsWithDash")
+	}
+	return cleaned, nil
+}
+
+// RemoteSessionInfo is one multiplexer session found on a server.
+type RemoteSessionInfo struct {
+	Name string `json:"name"`
+	// Windows is how many windows it holds, which is the one thing `tmux ls`
+	// says about a session's size.
+	Windows int `json:"windows"`
+	// Attached says something is currently watching it.
+	Attached bool `json:"attached"`
+	// Created is the session's start time, as a Unix timestamp.
+	//
+	// Not the multiplexer's own formatted string: tmux 2.6 — which is what
+	// the servers people actually have tend to run — leaves
+	// session_created_string empty, so the number is the one thing that can
+	// be relied on. The frontend formats it in the user's locale anyway.
+	Created int64 `json:"created"`
+	// Owner, Project, Path and Agent come from the options the app writes when
+	// it creates a session. Empty for a session started by hand, or by a
+	// version that did not write them.
+	Owner   string `json:"owner,omitempty"`
+	Project string `json:"project,omitempty"`
+	Path    string `json:"path,omitempty"`
+	Agent   string `json:"agent,omitempty"`
+	// Ours says this computer created it — the owner matches, and it is in
+	// this app's storage.
+	Ours bool `json:"ours"`
+	// ThisMachine says the owner tag names this computer, whether or not the
+	// session is still in storage. A session tagged with this machine but
+	// missing from storage is one this computer lost track of.
+	ThisMachine bool `json:"thisMachine"`
+	// View marks the helper sessions the app creates to show one window. They
+	// are listed so the picture is complete, but they are not work.
+	View bool `json:"view"`
+	// ViewSession names the session a view belongs to, as the user knows it:
+	// the project name when the session carries one, the raw session name
+	// otherwise. A server can hold several sessions, and a tab name alone —
+	// "Terminal" — says nothing about which.
+	ViewSession string `json:"viewSession,omitempty"`
+	// ViewOf names the tab a view session shows, for the ones that are views.
+	//
+	// The tab's own name, not its index: the index is an internal number the
+	// user never sees anywhere else — remote tabs are numbered from 100 so
+	// they cannot collide with local ones — and showing it explains nothing.
+	// The session name alone is no better, being the base name with a number
+	// tacked on and truncated in any list.
+	ViewOf string `json:"viewOf,omitempty"`
+}
+
+// ListServerSessions reports the multiplexer sessions on a server.
+//
+// A server is shared. The same machine can hold sessions from this computer,
+// from another of the user's machines, and ones started by hand — and they all
+// look alike in a listing. What the app creates is tagged with the machine,
+// project and path behind it, so a session can say where it came from instead
+// of being an unexplained name.
+func (a *App) ListServerSessions(serverID string) ([]RemoteSessionInfo, error) {
+	connection, err := a.connectionFor(serverID)
+	if err != nil {
+		return nil, err
+	}
+
+	ctx, cancel := context.WithTimeout(a.ctx, remote.CommandTimeout)
+	defer cancel()
+
+	// One command for everything, including the tags: a listing that needed a
+	// round trip per session would be slow on exactly the server that has a
+	// lot of them.
+	const format = "#{session_name}\t#{session_windows}\t#{session_attached}\t" +
+		"#{session_created}\t#{@asmgr_owner}\t#{@asmgr_project}\t" +
+		"#{@asmgr_path}\t#{@asmgr_agent}"
+	output, err := connection.executor.Output(ctx, "list-sessions", "-F", format)
+	if err != nil {
+		// No server running is an empty list, not a failure: a server with
+		// nothing on it is a perfectly ordinary state.
+		return []RemoteSessionInfo{}, nil
+	}
+
+	known := a.knownSessionNames()
+	thisMachine := session.MachineIdentity()
+	tabNames := a.viewTabNames(ctx, connection)
+
+	// Resolved in two passes: the first reads every session, the second names
+	// the views from what the first found. A view's base session is the one
+	// that knows the project — the view itself carries no tags.
+	var sessions []RemoteSessionInfo
+	projectOf := make(map[string]string)
+	for _, line := range strings.Split(strings.TrimSpace(string(output)), "\n") {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		fields := strings.Split(line, "\t")
+		if len(fields) < 4 {
+			continue
+		}
+		at := func(index int) string {
+			if index < len(fields) {
+				return strings.TrimSpace(fields[index])
+			}
+			return ""
+		}
+
+		info := RemoteSessionInfo{
+			Name:     at(0),
+			Attached: at(2) == "1",
+
+			Owner:       at(4),
+			Project:     at(5),
+			Path:        at(6),
+			Agent:       at(7),
+			View:        strings.HasPrefix(at(0), "asmgr_view_"),
+			ThisMachine: thisMachine != "" && at(4) == thisMachine,
+		}
+		if info.View {
+			info.ViewOf = tabNames[at(0)]
+			info.ViewSession = baseSessionOf(at(0))
+		}
+		fmt.Sscanf(at(1), "%d", &info.Windows)
+		fmt.Sscanf(at(3), "%d", &info.Created)
+		info.Ours = known[info.Name]
+		if !info.View {
+			// The readable name for the row itself, by the same rule.
+			info.Project = sessionDisplayName(info.Name, info.Project)
+		}
+		if !info.View {
+			projectOf[info.Name] = sessionDisplayName(info.Name, info.Project)
+		}
+		sessions = append(sessions, info)
+	}
+
+	// Now that every session has been seen, give each view the name of the
+	// session behind it.
+	//
+	// The readable name in both cases: the project tag when there is one, and
+	// otherwise the name recovered from the session id.
+	for at := range sessions {
+		if !sessions[at].View {
+			continue
+		}
+		if name := projectOf[sessions[at].ViewSession]; name != "" {
+			sessions[at].ViewSession = name
+		} else {
+			sessions[at].ViewSession = sessionDisplayName(sessions[at].ViewSession, "")
+		}
+	}
+
+	// Work first, then the app's own view sessions: the views are bookkeeping,
+	// and a list that leads with them buries what the user came to look at.
+	sort.SliceStable(sessions, func(left, right int) bool {
+		if sessions[left].View != sessions[right].View {
+			return !sessions[left].View
+		}
+		return sessions[left].Name < sessions[right].Name
+	})
+	return sessions, nil
+}
+
+// KillServerSession stops one multiplexer session on a server.
+//
+// Whatever runs inside it ends with it, which is exactly what makes a session
+// on a server worth having — so this is never done on the app's own initiative.
+// The caller asks first.
+func (a *App) KillServerSession(serverID, sessionName string) error {
+	name := strings.TrimSpace(sessionName)
+	if name == "" {
+		return fmt.Errorf("error.noSessionGiven")
+	}
+	// A name is a name, not a target expression. Without this a value
+	// containing a colon would address a window, and one starting with "-"
+	// would be read as an option.
+	if strings.ContainsAny(name, ":.") || strings.HasPrefix(name, "-") {
+		return fmt.Errorf("error.notASessionName|%s", name)
+	}
+
+	connection, err := a.connectionFor(serverID)
+	if err != nil {
+		return err
+	}
+
+	ctx, cancel := context.WithTimeout(a.ctx, remote.CommandTimeout)
+	defer cancel()
+
+	if err := connection.executor.Run(ctx, "kill-session", "-t", name); err != nil {
+		return err
+	}
+	log.Printf("[servers] killed session %s on %s", name, serverID)
+	return nil
+}
+
+// sessionDisplayName is the readable name of a multiplexer session.
+//
+// The project tag when the session carries one. Failing that, the name is
+// recovered from the session id itself: the app builds them as
+// "asm_<agent>_<name>_<timestamp>", so the name is in there — which matters
+// for every session created before the app started tagging them, and those are
+// exactly the ones a user is most likely to be looking at right now.
+//
+// Falls back to the raw id when it does not have that shape, since a session
+// started by hand can be called anything.
+func sessionDisplayName(sessionID, projectTag string) string {
+	if projectTag != "" {
+		return projectTag
+	}
+	if !strings.HasPrefix(sessionID, "asm_") {
+		return sessionID
+	}
+	rest := sessionID[len("asm_"):]
+
+	// The timestamp at the end: everything after the last underscore, provided
+	// it is all digits.
+	lastUnderscore := strings.LastIndex(rest, "_")
+	if lastUnderscore <= 0 {
+		return sessionID
+	}
+	for _, character := range rest[lastUnderscore+1:] {
+		if character < '0' || character > '9' {
+			return sessionID
+		}
+	}
+
+	// The agent at the front: everything before the first underscore.
+	firstUnderscore := strings.Index(rest, "_")
+	if firstUnderscore < 0 || firstUnderscore >= lastUnderscore {
+		return sessionID
+	}
+	if name := rest[firstUnderscore+1 : lastUnderscore]; name != "" {
+		return name
+	}
+	return sessionID
+}
+
+// baseSessionOf returns the multiplexer session a view belongs to.
+//
+// A view is named "asmgr_view_<session>_<window index>", so the session is
+// what sits between the prefix and the trailing index. Returns empty when the
+// name does not have that shape.
+func baseSessionOf(viewName string) string {
+	const prefix = "asmgr_view_"
+	if !strings.HasPrefix(viewName, prefix) {
+		return ""
+	}
+	rest := viewName[len(prefix):]
+	at := strings.LastIndex(rest, "_")
+	if at <= 0 {
+		return ""
+	}
+	// Only when what follows is an index; a session name can contain
+	// underscores of its own, and cutting at the wrong one would invent a
+	// session that does not exist.
+	for _, character := range rest[at+1:] {
+		if character < '0' || character > '9' {
+			return ""
+		}
+	}
+	if at+1 == len(rest) {
+		return ""
+	}
+	return rest[:at]
+}
+
+// viewTabNames maps each view session to the name of the tab it shows.
+//
+// A view holds the linked window itself, and that window carries the tab's
+// name — so the readable answer is already on the server. Asked with one
+// list-windows across every session rather than one per view: this runs while
+// a dialog waits, and a round trip per session would be slowest on the server
+// with the most of them.
+//
+// A view that cannot be resolved is simply left without a name, which the
+// caller renders as the session name.
+func (a *App) viewTabNames(ctx context.Context, connection *serverConnection) map[string]string {
+	names := make(map[string]string)
+
+	output, err := connection.executor.Output(ctx, "list-windows", "-a",
+		"-F", "#{session_name}\t#{window_index}\t#{window_name}")
+	if err != nil {
+		return names
+	}
+
+	for _, line := range strings.Split(strings.TrimSpace(string(output)), "\n") {
+		fields := strings.Split(line, "\t")
+		if len(fields) != 3 {
+			continue
+		}
+		sessionName := strings.TrimSpace(fields[0])
+		if !strings.HasPrefix(sessionName, "asmgr_view_") {
+			continue
+		}
+		// A view holds its placeholder at index 0 and the linked window at the
+		// index it came from; the placeholder is not what the view is of.
+		if strings.TrimSpace(fields[1]) == "0" {
+			continue
+		}
+		if name := strings.TrimSpace(fields[2]); name != "" {
+			names[sessionName] = name
+		}
+	}
+	return names
+}
+
+// knownSessionNames is the set of multiplexer session names this app holds in
+// storage, across every project.
+func (a *App) knownSessionNames() map[string]bool {
+	known := make(map[string]bool)
+	instances, _, _, err := a.storage.LoadAllWithSettings()
+	if err != nil {
+		return known
+	}
+	for _, inst := range instances {
+		known[inst.TmuxSessionName()] = true
+	}
+	return known
 }
 
 // shellQuoteForServer quotes a path for a command run on a server.

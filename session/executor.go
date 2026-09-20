@@ -146,6 +146,76 @@ func (i *Instance) exec() Executor {
 	return ExecutorFor(i.ID)
 }
 
+// execOn returns the executor for one machine this session reaches.
+//
+// A session's own commands go through exec(); a command aimed at one tab goes
+// through this, because a tab may sit on a different machine than its session.
+// The empty server is this computer.
+//
+// Registered per (session, server) rather than per session, so one session
+// spanning two machines keeps two routes at once.
+func (i *Instance) execOn(serverID string) Executor {
+	if serverID == "" {
+		return LocalExecutor
+	}
+	if serverID == i.ServerID {
+		return ExecutorFor(i.ID)
+	}
+	return ExecutorFor(tabExecutorKey(i.ID, serverID))
+}
+
+// WindowReachable reports whether the machine a tab runs on is answering.
+//
+// A tab on this computer is always reachable. A tab on a server is reachable
+// when its route exists — which the app registers once the connection is open
+// and clears when it drops — so this is a map lookup rather than a probe, and
+// safe to ask on a polling path.
+func (i *Instance) WindowReachable(windowIdx int) bool {
+	serverID := i.serverForWindow(windowIdx)
+	if serverID == "" {
+		return true
+	}
+	return i.execOn(serverID) != LocalExecutor
+}
+
+// ExecutorOn is execOn for callers outside this package.
+func (i *Instance) ExecutorOn(serverID string) Executor {
+	return i.execOn(serverID)
+}
+
+// tabExecutorKey names the route for a tab that runs away from its session.
+func tabExecutorKey(sessionID, serverID string) string {
+	return sessionID + "\x00" + serverID
+}
+
+// SetTabExecutor routes one session's tabs on one server.
+//
+// Separate from SetExecutor so a session can hold several at once: its own,
+// and one per server its tabs reach.
+func SetTabExecutor(sessionID, serverID string, executor Executor) {
+	SetExecutor(tabExecutorKey(sessionID, serverID), executor)
+}
+
+// ClearTabExecutor drops the route for one session's tabs on one server.
+func ClearTabExecutor(sessionID, serverID string) {
+	ClearExecutor(tabExecutorKey(sessionID, serverID))
+}
+
+// tmuxRunOn issues one command for a tab on a given machine.
+func (i *Instance) tmuxRunOn(serverID string, args ...string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), TmuxCommandTimeout)
+	defer cancel()
+	return i.execOn(serverID).Run(ctx, args...)
+}
+
+// tmuxOutputOn issues one command for a tab on a given machine and returns its
+// output.
+func (i *Instance) tmuxOutputOn(serverID string, args ...string) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), TmuxCommandTimeout)
+	defer cancel()
+	return i.execOn(serverID).Output(ctx, args...)
+}
+
 // IsRemote reports whether this session runs on a server.
 func (i *Instance) IsRemote() bool {
 	return i.ServerID != ""
@@ -191,7 +261,13 @@ func routeLoaded(instances []*Instance) {
 		return
 	}
 	for _, inst := range instances {
-		if inst != nil && inst.ServerID != "" {
+		if inst == nil {
+			continue
+		}
+		// A session with no server of its own may still have tabs on one, so
+		// the question is whether anything about it is remote — not whether
+		// the session itself is.
+		if inst.ServerID != "" || inst.hasRemoteTab() {
 			route(inst)
 		}
 	}

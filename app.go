@@ -46,6 +46,14 @@ type App struct {
 	// servers holds one live connection per remote machine, shared by every
 	// session that runs there.
 	servers             *serverPool
+	// The last completed sidebar sweep, shared by every reader so one pass
+	// over the servers serves them all.
+	sidebarSnapshotMu sync.RWMutex
+	sidebarSnapshot   SidebarUpdate
+	sidebarSnapshotAt time.Time
+	// connecting deduplicates background dials, so routing a hundred sessions
+	// does not queue a hundred connections to the same server.
+	connecting sync.Map
 	dictation           *DictationService
 	activityStats       *ActivityStatsRecorder
 	previewCancel       context.CancelFunc
@@ -1202,6 +1210,11 @@ type SessionInfo struct {
 	// ServerName is the display name, so the sidebar can mark a session
 	// without looking every server up itself.
 	ServerName        string                   `json:"serverName,omitempty"`
+	// TabServerNames maps a tab's window index to the display name of the
+	// machine it runs on, for the tabs that run somewhere other than the
+	// session itself. Kept beside the tabs rather than inside FollowedWindow,
+	// which is stored on disk and must not carry a name that can change.
+	TabServerNames map[int]string `json:"tabServerNames,omitempty"`
 	FollowedWindows   []session.FollowedWindow `json:"followedWindows"`
 	MainWindowStopped bool                     `json:"mainWindowStopped"`
 	// UpdatedAt is when this session last did anything, for the activity
@@ -1231,10 +1244,15 @@ func (a *App) GetSessions() ([]SessionInfo, error) {
 		return nil, err
 	}
 
+	// No per-session status probe here.
+	//
+	// LoadAll has already refreshed status, concurrently and with a worker
+	// cap. Repeating it serially cost a round trip per session — three, with
+	// the liveness checks inside instanceToSessionInfo — so a handful of
+	// sessions on a slow server turned an ordinary list refresh into a wait of
+	// tens of seconds, every time the list reloaded.
 	result := make([]SessionInfo, len(instances))
 	for i, inst := range instances {
-		// Update status from tmux
-		inst.UpdateStatus()
 		result[i] = a.instanceToSessionInfo(inst)
 	}
 	return result, nil
@@ -1251,10 +1269,35 @@ func (a *App) GetProjectGitSummaries(projectID string) ([]ProjectGitSummary, err
 	return collectProjectGitSummaries(a.ctx, instances), nil
 }
 
+// tabServerNames names the machines this session's tabs run on.
+//
+// Only the tabs that sit somewhere other than the session itself: a name on
+// every tab of a local session would be noise, and the session already carries
+// its own.
+func (a *App) tabServerNames(inst *session.Instance) map[int]string {
+	var names map[int]string
+	for _, window := range inst.FollowedWindows {
+		if window.ServerID == "" || window.ServerID == inst.ServerID {
+			continue
+		}
+		if names == nil {
+			names = make(map[int]string, 2)
+		}
+		names[window.Index] = a.serverDisplayName(window.ServerID)
+	}
+	return names
+}
+
 func (a *App) instanceToSessionInfo(inst *session.Instance) SessionInfo {
 	mainStopped := inst.MainWindowStopped
 	// Auto-detect dead main pane from tmux (handles pre-existing sessions)
-	if inst.Status == session.StatusRunning && !mainStopped {
+	//
+	// Skipped for a session on a server: this is a probe per session on a path
+	// the session list walks in full, and the answer only corrects state for
+	// sessions that predate the app's own bookkeeping. Paying a round trip per
+	// remote session for it made an ordinary list refresh wait on the network.
+	// A remote session's parked main window is reported by the poller instead.
+	if inst.Status == session.StatusRunning && !mainStopped && inst.ServerID == "" {
 		if inst.IsMainWindowDead() {
 			mainStopped = true
 			inst.MainWindowStopped = true
@@ -1277,6 +1320,7 @@ func (a *App) instanceToSessionInfo(inst *session.Instance) SessionInfo {
 		ResumeSessionID:    inst.ResumeSessionID,
 		ServerID:           inst.ServerID,
 		ServerName:         a.serverDisplayName(inst.ServerID),
+		TabServerNames:     a.tabServerNames(inst),
 		FollowedWindows:    inst.FollowedWindows,
 		MainWindowStopped:  mainStopped,
 		UpdatedAt:          formatSessionTimestamp(lastActivityTime(inst)),
@@ -2385,6 +2429,32 @@ func (a *App) SetGroupColor(id, color, bgColor string, fullRow bool, expectedPro
 // CreateTab creates a new tab and returns the new tmux window index so the
 // frontend can switch to (and focus) it immediately.
 func (a *App) CreateTab(sessionID string, isAgent bool, agent string, name string, extraArgs string, workDir string, expectedProjectID string) (int, error) {
+	return a.CreateTabOnServer(sessionID, "", isAgent, agent, name, extraArgs, workDir, expectedProjectID)
+}
+
+// CreateTabOnServer creates a tab that runs on a given server.
+//
+// serverID empty keeps the tab on the session's own machine, which is what
+// CreateTab has always done. A tab placed on a server runs there on its own —
+// its own multiplexer window, its own working directory — so a session open on
+// local files can hold a tab watching a database or a log on a machine that
+// stays up when this computer does not.
+func (a *App) CreateTabOnServer(sessionID string, serverID string, isAgent bool, agent string, name string, extraArgs string, workDir string, expectedProjectID string) (int, error) {
+	// Connect BEFORE taking the mutation lock.
+	//
+	// The lock is exclusive and every mutating method in the app goes through
+	// it, while a dial can take the dial timeout plus the helper install — so
+	// building the connection under it froze everything else for minutes.
+	// Nothing about connecting needs the lock: it touches no session state.
+	var tabConnection *serverConnection
+	if serverID != "" {
+		connection, connErr := a.connectionFor(serverID)
+		if connErr != nil {
+			return -1, connErr
+		}
+		tabConnection = connection
+	}
+
 	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return -1, err
@@ -2395,16 +2465,22 @@ func (a *App) CreateTab(sessionID string, isAgent bool, agent string, name strin
 		return -1, err
 	}
 
+	// Route the tab now that the session is known. The connection is already
+	// open, so this is a map write.
+	if tabConnection != nil && serverID != inst.ServerID {
+		session.SetTabExecutor(inst.ID, serverID, tabConnection.executor)
+	}
+
 	newIdx := -1
 	if isAgent {
 		agentType := session.AgentType(agent)
-		idx, err := inst.NewAgentWindow(name, agentType, "", extraArgs, workDir)
+		idx, err := inst.NewAgentWindowOn(serverID, name, agentType, "", extraArgs, workDir)
 		if err != nil {
 			return -1, err
 		}
 		newIdx = idx
 	} else {
-		idx, err := inst.NewWindowWithName(name, workDir)
+		idx, err := inst.NewWindowWithNameOn(serverID, name, workDir)
 		if err != nil {
 			return -1, err
 		}
@@ -2720,6 +2796,13 @@ type TabStatusInfo struct {
 	// bar, so the sidebar follows a Shift+Tab toggle inside Claude, not just the
 	// stored launch flag. "auto mode" is NOT yolo and reports false here.
 	Yolo bool `json:"yolo"`
+	// Unreachable says this tab's machine did not answer for it.
+	//
+	// Separate from "no activity": a tab on a server that cannot be reached is
+	// not idle, and showing it as idle claims to know something about work
+	// that is running out of sight. The pane says so instead of picking one of
+	// the idle placeholders.
+	Unreachable bool `json:"unreachable,omitempty"`
 	// HideStatusLine: per-tab user preference — the session list omits this
 	// tab's status line row when set.
 	HideStatusLine bool `json:"hideStatusLine"`
@@ -2740,9 +2823,57 @@ type SidebarUpdate struct {
 	observations []activityObservation
 }
 
+// sidebarSweepBudget is how long one pass over every session may take.
+//
+// Above the emitter's tick so an ordinary pass is never cut short, and far
+// below the point where a wedged server would make the sidebar look frozen.
+const sidebarSweepBudget = 5 * time.Second
+
+// maxConcurrentSidebarSessions caps the fan-out, matching the cap the storage
+// layer already applies to its own status refresh.
+const maxConcurrentSidebarSessions = 16
+
 // GetSidebarUpdates returns activity and status line data in one call (single LoadAll)
+//
+// Served from the last completed sweep rather than starting one.
+//
+// Four separate timers used to ask for this — the 1s emitter, a 2s activities
+// timer, a 2s status-line timer and a 3s attention watcher — and each ran a
+// full pass over every session, including the remote round trips. Four
+// concurrent sweeps of the same servers, three of them throwing away all but
+// one field. The emitter keeps sweeping on its own schedule; everyone else
+// reads what it last produced.
 func (a *App) GetSidebarUpdates() SidebarUpdate {
+	if snapshot, fresh := a.lastSidebarSnapshot(); fresh {
+		return snapshot
+	}
 	return a.getSidebarUpdates(context.Background())
+}
+
+// sidebarSnapshotTTL is how long a completed sweep is served to other readers.
+//
+// Longer than the emitter's own tick, so a reader between two ticks is always
+// served from cache; short enough that a first caller before any sweep has
+// finished still gets fresh data rather than nothing.
+const sidebarSnapshotTTL = 3 * time.Second
+
+// rememberSidebarSnapshot stores a completed sweep for the other readers.
+func (a *App) rememberSidebarSnapshot(update SidebarUpdate) {
+	a.sidebarSnapshotMu.Lock()
+	a.sidebarSnapshot = update
+	a.sidebarSnapshotAt = time.Now()
+	a.sidebarSnapshotMu.Unlock()
+}
+
+// lastSidebarSnapshot returns the most recent sweep, and whether it is recent
+// enough to serve.
+func (a *App) lastSidebarSnapshot() (SidebarUpdate, bool) {
+	a.sidebarSnapshotMu.RLock()
+	defer a.sidebarSnapshotMu.RUnlock()
+	if a.sidebarSnapshotAt.IsZero() || time.Since(a.sidebarSnapshotAt) > sidebarSnapshotTTL {
+		return SidebarUpdate{}, false
+	}
+	return a.sidebarSnapshot, true
 }
 
 func (a *App) getSidebarUpdates(ctx context.Context) SidebarUpdate {
@@ -2820,7 +2951,16 @@ func (a *App) getSidebarUpdates(ctx context.Context) SidebarUpdate {
 		// Auto-detect Claude session ID for followed windows (tabs)
 		for idx := range inst.FollowedWindows {
 			fw := &inst.FollowedWindows[idx]
-			if fw.Agent == session.AgentClaude {
+			// Only for tabs on this computer.
+			//
+			// The lookup asks the local multiplexer for a pane pid and then
+			// reads that process's command line. For a tab on a server the
+			// index belongs to another machine's multiplexer, and tmux answers
+			// for whatever pane it does have — so the LOCAL session's
+			// conversation id was written onto every remote tab, which then
+			// tried to resume a conversation that does not exist there and
+			// came up with "no conversation found".
+			if fw.Agent == session.AgentClaude && fw.RunsOn(inst.ServerID) == "" {
 				if sid := getClaudeSessionIDFromTmuxWindowContext(ctx, inst.TmuxSessionName(), fw.Index); sid != "" && sid != fw.ResumeSessionID {
 					log.Printf("[SidebarPoll] refreshed Claude conversation ID for tab=%s/%d", inst.ID, fw.Index)
 					fw.ResumeSessionID = sid
@@ -2888,11 +3028,34 @@ func (a *App) getSidebarUpdates(ctx context.Context) SidebarUpdate {
 	}
 	resultsCh := make(chan sessionResult, len(jobs))
 
+	// A deadline per session, and a cap on how many run at once.
+	//
+	// Without the deadline one session on a slow server withheld the entire
+	// tick — the results channel is drained after every goroutine finishes —
+	// so the sidebar stopped updating for local sessions too. Without the cap,
+	// every session on an unreachable server held a goroutine and a pending
+	// helper request for the full command timeout, on every tick of every
+	// poller.
+	//
+	// A session that misses the deadline simply contributes nothing this pass
+	// and is picked up by the next one; its last known state stays on screen.
+	sweepCtx, cancelSweep := context.WithTimeout(ctx, sidebarSweepBudget)
+	defer cancelSweep()
+	slots := make(chan struct{}, maxConcurrentSidebarSessions)
+
 	var wg sync.WaitGroup
 	for _, job := range jobs {
 		wg.Add(1)
 		go func(inst *session.Instance) {
 			defer wg.Done()
+			select {
+			case slots <- struct{}{}:
+				defer func() { <-slots }()
+			case <-sweepCtx.Done():
+				return
+			}
+
+			ctx := sweepCtx
 
 			mainAgent := inst.Agent
 			if mainAgent == "" {
@@ -2951,6 +3114,7 @@ func (a *App) getSidebarUpdates(ctx context.Context) SidebarUpdate {
 					StatusLine:     line,
 					SpinnerText:    info.SpinnerText,
 					Yolo:           inst.DetectYoloForWindowContext(ctx, w.idx),
+					Unreachable:    !inst.WindowReachable(w.idx),
 					HideStatusLine: w.hideLine,
 				})
 
@@ -3077,6 +3241,10 @@ func (a *App) startPreviewPolling(ctx context.Context) {
 			}
 
 			data := a.getSidebarUpdates(ctx)
+			// Every other reader is served from this, so one sweep covers the
+			// activity timer, the status-line timer and the attention watcher
+			// as well.
+			a.rememberSidebarSnapshot(data)
 			// Drop a completed snapshot if the user switched projects while
 			// tmux captures were running. The snapshot itself carries the ID
 			// captured atomically with its instance list, so A→B→A is safe.
@@ -3429,6 +3597,19 @@ func (a *App) RedrawWindow(sessionID string, windowIdx int, expectedProjectID st
 	inst, err := a.storage.GetInstance(sessionID)
 	if err != nil {
 		return err
+	}
+
+	// Nothing to do for a pane on a server, and it is worth returning before
+	// asking whether the session is alive.
+	//
+	// This is called by an idle repaint timer, not by the user, and it holds
+	// the mutation lock that every other mutating method waits on. The work
+	// below is local-only — resize-window and refresh-client against this
+	// computer's multiplexer — so for a remote pane it achieved nothing while
+	// paying a remote round trip for the liveness check, on a timer. A remote
+	// terminal is resized over its own SSH channel instead.
+	if inst.ServerForWindow(windowIdx) != "" {
+		return nil
 	}
 	if !inst.IsAlive() {
 		return fmt.Errorf("error.sessionNotRunning")
@@ -4030,6 +4211,7 @@ type SettingsInfo struct {
 	DictationSendWithoutEnter bool   `json:"dictationSendWithoutEnter"`
 	HideYoloBadge             bool   `json:"hideYoloBadge"`
 	ShowResumeBadge           bool   `json:"showResumeBadge"`
+	HideRemoteBadge           bool   `json:"hideRemoteBadge"`
 	SplitView                 bool   `json:"splitView"`
 	MarkedSessionID           string `json:"markedSessionId"`
 	LastSessionID             string `json:"lastSessionId"`
@@ -4151,6 +4333,7 @@ func (a *App) GetSettings() (*SettingsInfo, error) {
 		DictationSendWithoutEnter: settings.DictationSendWithoutEnter,
 		HideYoloBadge:             settings.HideYoloBadge,
 		ShowResumeBadge:           settings.ShowResumeBadge,
+		HideRemoteBadge:           settings.HideRemoteBadge,
 		SplitView:                 settings.SplitView,
 		MarkedSessionID:           settings.MarkedSessionID,
 		LastSessionID:             settings.LastSessionID,
@@ -4237,6 +4420,7 @@ func (a *App) SaveSettings(settings SettingsInfo, expectedProjectID string) erro
 		current.DictationSendWithoutEnter = settings.DictationSendWithoutEnter
 		current.HideYoloBadge = settings.HideYoloBadge
 		current.ShowResumeBadge = settings.ShowResumeBadge
+		current.HideRemoteBadge = settings.HideRemoteBadge
 		current.SplitView = settings.SplitView
 		current.MarkedSessionID = settings.MarkedSessionID
 		current.LastSessionID = settings.LastSessionID
@@ -4868,15 +5052,28 @@ func (a *App) installedAgentsOn(serverID string) map[string]bool {
 			config.Command, config.Command)
 	}
 
+	// Ends successfully even when nothing matched: every probe is a
+	// `command -v ... && echo ...`, so the line's exit status is the last
+	// one's, and "no agents here" would otherwise look like a failed command.
+	script.WriteString("true")
+
 	ctx, cancel := context.WithTimeout(a.ctx, remote.CommandTimeout)
 	defer cancel()
 
-	result, err := connection.helper.Run(ctx, script.String())
+	// Through the executor rather than the helper directly, so the server's
+	// extra PATH is applied.
+	//
+	// Asked without it, an agent installed in ~/.local/bin — which is where
+	// Claude's own installer puts it — is reported missing, and the dialog
+	// then refuses to start a session that would have run perfectly well. The
+	// same PATH is what the agent is eventually launched with, so this asks
+	// the question the way the answer will be used.
+	stdout, _, _, err := connection.executor.RunShell(ctx, "", "sh", "-c", script.String())
 	if err != nil {
 		log.Printf("[GetAgentsForServer] %s did not answer: %v", serverID, err)
 		return found
 	}
-	for _, name := range strings.Fields(result.Output) {
+	for _, name := range strings.Fields(string(stdout)) {
 		found[name] = true
 	}
 	return found

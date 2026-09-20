@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -95,5 +97,37 @@ func TestCachedPaneCurrentPathReusesAndExpires(t *testing.T) {
 	}
 	if calls != 2 {
 		t.Fatalf("expected two queries, got %d", calls)
+	}
+}
+
+// A tab on a server must not be described by this computer's multiplexer.
+//
+// tmux does not fail when asked about a window index it does not have — it
+// answers for the current pane instead. So the status bar under a remote tab
+// showed the LOCAL session's directory, confidently and wrongly. The tab's
+// configured directory is the answer, and it is already known here.
+func TestARemoteTabIsNotDescribedByTheLocalMultiplexer(t *testing.T) {
+	source, err := os.ReadFile("tab_working_dir.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := strings.ReplaceAll(string(source), "\r\n", "\n")
+
+	at := strings.Index(text, "func (a *App) GetTabWorkingDirectory(")
+	if at < 0 {
+		t.Fatal("GetTabWorkingDirectory is gone; this test needs rewriting")
+	}
+	end := strings.Index(text[at:], "\n}\n")
+	body := text[at : at+end]
+
+	guardAt := strings.Index(body, `inst.ServerForWindow(windowIdx) != ""`)
+	queryAt := strings.Index(body, "cachedPaneCurrentPath(")
+
+	if guardAt < 0 {
+		t.Fatal("a remote tab is no longer answered from its configured directory; " +
+			"the local multiplexer will answer for the wrong pane")
+	}
+	if queryAt >= 0 && guardAt > queryAt {
+		t.Error("the local pane is queried before the remote tab is ruled out")
 	}
 }

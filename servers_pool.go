@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -133,8 +134,7 @@ func (a *App) connectionFor(serverID string) (*serverConnection, error) {
 	if server.HostKey == "" {
 		// Connecting would mean accepting whatever key answers, which is the
 		// decision the connection test exists to put in front of the user.
-		return nil, fmt.Errorf("%s has not been checked yet — open Settings › Remote servers "+
-			"and test the connection first", server.DisplayName())
+		return nil, fmt.Errorf("error.serverNotChecked|%s", server.DisplayName())
 	}
 
 	target, creds, err := a.buildTarget(serverID, "", "")
@@ -146,7 +146,7 @@ func (a *App) connectionFor(serverID string) (*serverConnection, error) {
 	defer cancelDial()
 	client, err := remote.Dial(dialCtx, target, creds, nil)
 	if err != nil {
-		return nil, fmt.Errorf("could not reach %s: %w", server.DisplayName(), err)
+		return nil, fmt.Errorf("error.couldNotReachServer|%s|%s", server.DisplayName(), firstMessageLine(err.Error()))
 	}
 
 	setupCtx, cancelSetup := context.WithTimeout(a.ctx, 2*time.Minute)
@@ -154,19 +154,43 @@ func (a *App) connectionFor(serverID string) (*serverConnection, error) {
 
 	if _, err := remote.EnsureHelper(setupCtx, client, helperBinaryFor); err != nil {
 		client.Close()
-		return nil, fmt.Errorf("could not set up %s: %w", server.DisplayName(), err)
+		return nil, fmt.Errorf("error.couldNotSetUpServer|%s|%s", server.DisplayName(), firstMessageLine(err.Error()))
 	}
 
 	helper, err := remote.StartHelper(client)
 	if err != nil {
 		client.Close()
-		return nil, fmt.Errorf("could not start the helper on %s: %w", server.DisplayName(), err)
+		return nil, fmt.Errorf("error.couldNotStartHelper|%s|%s", server.DisplayName(), firstMessageLine(err.Error()))
+	}
+
+	// Find the agents ourselves when the server's PATH does not reach them.
+	//
+	// An agent installed in ~/.local/bin — where Claude's own installer puts
+	// it — is invisible to a non-interactive SSH shell, so every tab using it
+	// failed to start. The program can see where it is; asking the user to
+	// copy that directory into a settings field is work it can do itself.
+	//
+	// Only when the configured PATH finds nothing: a server already set up
+	// correctly is left alone, and discovery never overrides a deliberate
+	// choice.
+	extraPath := server.ExtraPath
+	if strings.TrimSpace(extraPath) == "" {
+		discoverCtx, cancelDiscover := context.WithTimeout(a.ctx, remote.CommandTimeout)
+		if found := remote.DiscoverAgentPath(discoverCtx, client, target); found != "" {
+			extraPath = found
+			log.Printf("[servers] %s: agents found in %s, which is not on its PATH; using it",
+				server.DisplayName(), found)
+			// Remembered, so the next connection starts with it and the server
+			// editor shows what is in force rather than an empty field.
+			a.rememberDiscoveredPath(serverID, found)
+		}
+		cancelDiscover()
 	}
 
 	connection := &serverConnection{
 		client:   client,
 		helper:   helper,
-		executor: remote.NewExecutor(helper, server.DisplayName(), server.ExtraPath),
+		executor: remote.NewExecutor(helper, server.DisplayName(), extraPath),
 	}
 	// When the helper ends — the network dropped, the server rebooted, someone
 	// killed it — the connection is marked so the next use builds a fresh one
@@ -179,6 +203,27 @@ func (a *App) connectionFor(serverID string) (*serverConnection, error) {
 	a.servers.put(serverID, connection)
 	log.Printf("[servers] connected to %s", server.DisplayName())
 	return connection, nil
+}
+
+// rememberDiscoveredPath stores a PATH addition that was found rather than
+// configured.
+//
+// Written back so it survives a restart and is visible in the editor: a value
+// in force but not shown would be a setting the user cannot reason about.
+func (a *App) rememberDiscoveredPath(serverID, path string) {
+	err := a.storage.UpdateServers(func(list *session.ServerList) error {
+		for index := range list.Servers {
+			if list.Servers[index].ID == serverID && strings.TrimSpace(list.Servers[index].ExtraPath) == "" {
+				list.Servers[index].ExtraPath = path
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		// The connection works either way; this only means the next one will
+		// have to look again.
+		log.Printf("[servers] could not store the discovered PATH for %s: %v", serverID, err)
+	}
 }
 
 // markFailed records that a server's connection has stopped answering, so the
@@ -222,19 +267,91 @@ func (a *App) ReconnectServer(serverID string) error {
 // Called whenever a session is loaded or started. A session with no server
 // keeps running locally, which is what the empty executor means.
 func (a *App) routeSessionCommands(inst *session.Instance) error {
-	if inst == nil || inst.ServerID == "" {
+	if inst == nil {
 		return nil
 	}
-	connection, err := a.connectionFor(inst.ServerID)
-	if err != nil {
-		// The session stays unroutable rather than silently falling back to
-		// this computer: running it here would start an agent in the wrong
-		// place, against a directory that may not exist.
-		session.ClearExecutor(inst.ID)
-		return err
+
+	// Never dial from here.
+	//
+	// This runs inside Storage.GetInstance, which holds the storage lock that
+	// every other part of the app goes through — the sidebar poller, the tab
+	// bar, each terminal attach. Building an SSH connection under that lock
+	// froze the entire window for as long as the server took to answer, and a
+	// server that is simply unreachable froze it for the full dial timeout.
+	//
+	// So routing uses connections that already exist, and asks for the missing
+	// ones to be built in the background. The session is routed a moment later
+	// instead of the app stopping until it can be.
+	return a.routeUsingReadyConnections(inst)
+}
+
+// routeUsingReadyConnections points a session at the connections already open,
+// and starts building any that are missing.
+func (a *App) routeUsingReadyConnections(inst *session.Instance) error {
+	var missing []string
+	if inst.ServerID != "" {
+		if connection := a.servers.get(inst.ServerID); connection != nil {
+			session.SetExecutor(inst.ID, connection.executor)
+		} else {
+			session.ClearExecutor(inst.ID)
+			missing = append(missing, inst.ServerID)
+		}
 	}
-	session.SetExecutor(inst.ID, connection.executor)
+	for _, serverID := range tabServers(inst) {
+		if connection := a.servers.get(serverID); connection != nil {
+			session.SetTabExecutor(inst.ID, serverID, connection.executor)
+			continue
+		}
+		session.ClearTabExecutor(inst.ID, serverID)
+		missing = append(missing, serverID)
+	}
+
+	for _, serverID := range missing {
+		a.connectInBackground(serverID)
+	}
+	if len(missing) > 0 {
+		return fmt.Errorf("not connected yet")
+	}
 	return nil
+}
+
+// connectInBackground builds a server's connection off the caller's goroutine.
+//
+// Deduplicated per server: routing runs on every session load, and without
+// this a sidebar poll would queue one dial per session per pass.
+func (a *App) connectInBackground(serverID string) {
+	if _, already := a.connecting.LoadOrStore(serverID, true); already {
+		return
+	}
+	go func() {
+		defer a.connecting.Delete(serverID)
+		if _, err := a.connectionFor(serverID); err != nil {
+			log.Printf("[servers] could not connect to %s: %v", serverID, err)
+		}
+	}()
+}
+
+
+// tabServers lists the servers this session's tabs sit on, other than the
+// session's own machine.
+func tabServers(inst *session.Instance) []string {
+	var servers []string
+	for _, window := range inst.FollowedWindows {
+		if window.ServerID == "" || window.ServerID == inst.ServerID {
+			continue
+		}
+		known := false
+		for _, existing := range servers {
+			if existing == window.ServerID {
+				known = true
+				break
+			}
+		}
+		if !known {
+			servers = append(servers, window.ServerID)
+		}
+	}
+	return servers
 }
 
 // helperBinaryFor supplies the helper for a server's architecture.

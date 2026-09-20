@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -298,6 +299,405 @@ type FollowedWindow struct {
 	BackgroundColor  string    `json:"background_color,omitempty"`   // Tab background color (empty uses the theme default)
 	WorkDir          string    `json:"work_dir,omitempty"`           // Tab working directory (empty = session path)
 	HideStatusLine   bool      `json:"hide_status_line,omitempty"`   // Don't show this tab's status line in the session list
+	// ServerID names the machine this tab runs on, empty meaning the session's
+	// own machine.
+	//
+	// A tab can live somewhere other than its session: the work it does there
+	// — reading a database, watching a log, deploying — has nothing to do with
+	// the files the session is open on, and asking the user to keep a second
+	// session around just to reach the server put that work a window away from
+	// the work it belongs to.
+	//
+	// Empty for every tab that existed before this, which reads as "wherever
+	// the session runs" — exactly the old behaviour, with no migration.
+	ServerID string `json:"server_id,omitempty"`
+}
+
+// Window indexes stay unique across the machines a session spans.
+//
+// The index is how everything addresses a tab — the UI, the terminal socket,
+// the status poller, the quick-jump list — and changing that identity would
+// touch every one of them. So instead of making the index ambiguous and
+// carrying a machine alongside it everywhere, the indexes themselves are kept
+// from colliding: tabs on a server are created at an index no local tab will
+// be given, with `new-window -t name:N`, which asks the multiplexer for a
+// specific slot.
+//
+// remoteWindowIndexBase is where a server's tabs start. tmux hands out low
+// numbers from 0, and a session with dozens of local tabs is not a thing that
+// happens, so the two ranges cannot meet in practice.
+const remoteWindowIndexBase = 100
+
+// remoteWindowIndexSpan is how much room each server gets inside that range,
+// so two servers cannot collide with each other either.
+const remoteWindowIndexSpan = 100
+
+// serverForWindow says which machine a window index refers to.
+//
+// The UI addresses tabs by index, because that is what a multiplexer window
+// is. The index is unique across machines (see remoteWindowIndexBase), so this
+// is a lookup rather than a guess.
+//
+// A tab that is not in the followed list is the session's own main window,
+// which always runs where the session does.
+// hasRemoteTab reports whether any tab sits on a machine of its own.
+func (i *Instance) hasRemoteTab() bool {
+	for _, window := range i.FollowedWindows {
+		if window.ServerID != "" && window.ServerID != i.ServerID {
+			return true
+		}
+	}
+	return false
+}
+
+// ServerForWindow is serverForWindow for callers outside this package — the
+// terminal attach, which has to open its channel to the machine holding the
+// tab rather than the one holding the session.
+func (i *Instance) ServerForWindow(windowIdx int) string {
+	return i.serverForWindow(windowIdx)
+}
+
+func (i *Instance) serverForWindow(windowIdx int) string {
+	for _, window := range i.FollowedWindows {
+		if window.Index == windowIdx {
+			return window.RunsOn(i.ServerID)
+		}
+	}
+	return i.ServerID
+}
+
+// RunsOn names the machine this tab's commands go to.
+//
+// A tab with no server of its own runs wherever its session runs, which is
+// what every tab did before tabs could be placed individually.
+func (fw FollowedWindow) RunsOn(sessionServerID string) string {
+	if fw.ServerID != "" {
+		return fw.ServerID
+	}
+	return sessionServerID
+}
+
+// ensureAgentOnServer checks that a tab's command exists where it will run.
+//
+// Without this the tab is created, the command is not found, the pane exits at
+// once and the multiplexer replaces whatever the shell printed with the words
+// "Pane is dead" — so the one line that explains the failure ("claude: command
+// not found") is gone by the time anyone looks. Asked beforehand, the failure
+// can say what is wrong and what to do about it.
+//
+// Only for a command we know the name of: a custom command may be a shell
+// construct rather than a program, and a terminal tab runs the login shell.
+func (i *Instance) ensureAgentOnServer(serverID, command string) error {
+	if serverID == "" || command == "" {
+		return nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), TmuxCommandTimeout)
+	defer cancel()
+
+	shell, isShell := i.execOn(serverID).(ShellExecutor)
+	if !isShell {
+		// No way to ask; let the start proceed rather than refuse on a guess.
+		return nil
+	}
+	_, _, exitCode, err := shell.RunShell(ctx, "", "command", "-v", command)
+	if err != nil {
+		// The server could not be asked. Same reasoning: a failure to check is
+		// not a failure of the check.
+		return nil
+	}
+	if exitCode != 0 {
+		// Look for it in the usual places before giving up, so the message can
+		// name the directory instead of describing the problem in general. The
+		// user is looking at this error, not at the server manager, and being
+		// told a path they can paste beats being told a setting exists.
+		// Reported as a translation key with its values, so the message the
+		// user reads is in their language. The convention — "error.<name>"
+		// with values after a pipe — is the one the storage layer already
+		// uses; the frontend resolves it.
+		if found := i.findAgentOffPath(ctx, shell, command); found != "" {
+			return fmt.Errorf("error.agentFoundOffPath|%s|%s", command, found)
+		}
+		return fmt.Errorf("error.agentNotOnServerPath|%s", command)
+	}
+	return nil
+}
+
+// resumeIDExistsOnServer reports whether a conversation exists on the machine
+// a tab runs on.
+//
+// The local check reads this computer's ~/.claude, which is the wrong disk for
+// a tab on a server: a conversation started here does not exist there, and one
+// started there is invisible here. Passed to the agent anyway, it answers "no
+// conversation found" and the tab is left showing that instead of working.
+//
+// Unknown agents and unreadable servers return true, matching the local
+// behaviour: when the check cannot be made, the agent is allowed to try.
+func (i *Instance) resumeIDExistsOnServer(serverID string, agent AgentType, resumeID string) bool {
+	if serverID == "" || resumeID == "" {
+		return true
+	}
+	if !IsSafeResumeID(resumeID) {
+		return false
+	}
+
+	// Only the agents whose storage layout is known. Anything else is left to
+	// the agent to decide, as it is locally.
+	var probe string
+	switch agent {
+	case AgentClaude:
+		probe = fmt.Sprintf(`ls "$HOME/.claude/projects"/*/%s.jsonl >/dev/null 2>&1`, resumeID)
+	case AgentCodex:
+		probe = fmt.Sprintf(`ls "$HOME/.codex/sessions"/*%s* >/dev/null 2>&1`, resumeID)
+	default:
+		return true
+	}
+
+	shell, isShell := i.execOn(serverID).(ShellExecutor)
+	if !isShell {
+		return true
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), TmuxCommandTimeout)
+	defer cancel()
+
+	_, _, exitCode, err := shell.RunShell(ctx, "", "sh", "-c", probe)
+	if err != nil {
+		return true
+	}
+	return exitCode == 0
+}
+
+// autoYesRefusedAsRoot reports whether an agent will refuse its auto-yes flag
+// because the server logs in as root.
+//
+// Claude and Cursor both reject --dangerously-skip-permissions under root, by
+// design: the flag turns off the confirmations that stop an agent doing
+// damage, and root is where that damage is unbounded. The refusal is printed
+// and the agent exits, which in a tab reads as a pane that died for no reason.
+//
+// Knowing it in advance lets the tab start without the flag, with the reason
+// said once, rather than not start at all.
+func (i *Instance) autoYesRefusedAsRoot(serverID string, config AgentConfig) bool {
+	if serverID == "" || config.AutoYesFlag == "" {
+		return false
+	}
+	// Only the agents that actually refuse. Others accept the flag as root,
+	// and dropping it silently would take away something the user asked for.
+	if !strings.Contains(config.AutoYesFlag, "dangerously-skip-permissions") {
+		return false
+	}
+
+	shell, isShell := i.execOn(serverID).(ShellExecutor)
+	if !isShell {
+		return false
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), TmuxCommandTimeout)
+	defer cancel()
+
+	stdout, _, exitCode, err := shell.RunShell(ctx, "", "id", "-u")
+	if err != nil || exitCode != 0 {
+		return false
+	}
+	return strings.TrimSpace(string(stdout)) == "0"
+}
+
+// findAgentOffPath looks for a command in the directories an agent commonly
+// lands in when a non-interactive shell cannot see it.
+//
+// Returns the directory, or empty when the command is genuinely absent.
+func (i *Instance) findAgentOffPath(ctx context.Context, shell ShellExecutor, command string) string {
+	for _, dir := range agentSearchDirectories {
+		stdout, _, exitCode, err := shell.RunShell(ctx, "",
+			"sh", "-c", fmt.Sprintf("[ -x %s/%s ] && echo %s", dir, command, dir))
+		if err != nil || exitCode != 0 {
+			continue
+		}
+		if found := strings.TrimSpace(string(stdout)); found != "" {
+			return found
+		}
+	}
+	return ""
+}
+
+// agentSearchDirectories mirrors the list the connection test uses, so the two
+// cannot disagree about where an agent might be.
+var agentSearchDirectories = []string{
+	"$HOME/.local/bin",
+	"$HOME/bin",
+	"$HOME/.npm-global/bin",
+	"/usr/local/bin",
+	"/opt/homebrew/bin",
+}
+
+// ensureRemoteSessionFor makes sure this session has a multiplexer session on
+// a server before a tab is put there.
+//
+// A session that runs here has no session on the server at all until its first
+// tab goes there, so the first one creates it. The same name is used, which is
+// unambiguous because it is a different machine's multiplexer.
+//
+// The placeholder window it is created with is left alone: killing it would
+// end the session, and tabs are added beside it.
+func (i *Instance) ensureRemoteSessionFor(serverID, workDir string) error {
+	sessionName := i.TmuxSessionName()
+	if err := i.tmuxRunOn(serverID, "has-session", "-t", sessionName); err == nil {
+		return nil
+	}
+
+	// Detached, and holding nothing but a shell: the tabs are what the user
+	// asked for, and this window only keeps the session alive.
+	if err := i.tmuxRunOn(serverID, "new-session", "-d", "-s", sessionName, "-c", workDir); err != nil {
+		return fmt.Errorf("error.couldNotStartRemoteSession")
+	}
+
+	// remain-on-exit for the whole session, set before any tab exists.
+	//
+	// Per window it is set just after the window is created, which is too late
+	// for the case that matters most: an agent that is not on the server's
+	// PATH dies instantly, and the window disappears before the option can be
+	// applied. The tab then has nothing to attach to, and the terminal shows
+	// an empty placeholder instead of the error the pane was holding.
+	//
+	// Set with -g, as the default for windows yet to be created. remain-on-exit
+	// is a window option: applied to the session it reaches the windows that
+	// already exist, and a tab created afterwards is born without it —
+	// measured on tmux 2.6, where the failing window vanished exactly as
+	// before. The global default is what a new window inherits.
+	_ = i.tmuxRunOn(serverID, "set-option", "-t", sessionName, "-g", "remain-on-exit", "on")
+
+	i.tagRemoteSession(serverID, sessionName)
+	return nil
+}
+
+// Session options carrying who a multiplexer session on a server belongs to.
+//
+// A server is shared: the same machine can hold sessions from this computer,
+// from another of the user's machines, and ones someone started by hand. They
+// all look alike in `tmux ls` — a name and a window count — so anything that
+// wants to say "this one is yours, that one is not" has to ask the session
+// itself.
+//
+// Stored as tmux user options rather than in a file on the server: they live
+// and die with the session, they need no cleanup, and `list-sessions -F` reads
+// them for every session in one command. A file would have to be kept in step
+// with sessions it does not own, and would outlive them.
+const (
+	sessionOwnerOption   = "@asmgr_owner"
+	sessionProjectOption = "@asmgr_project"
+	sessionPathOption    = "@asmgr_path"
+	sessionAgentOption   = "@asmgr_agent"
+)
+
+// tagRemoteSession records who this session belongs to.
+//
+// Best-effort: a multiplexer that rejects a user option still runs the
+// session, and the tagging is for telling sessions apart afterwards, not for
+// running them.
+func (i *Instance) tagRemoteSession(serverID, sessionName string) {
+	for option, value := range map[string]string{
+		sessionOwnerOption:   MachineIdentity(),
+		sessionProjectOption: i.Name,
+		sessionPathOption:    i.Path,
+		sessionAgentOption:   string(i.Agent),
+	} {
+		if value == "" {
+			continue
+		}
+		_ = i.tmuxRunOn(serverID, "set-option", "-t", sessionName, option, value)
+	}
+}
+
+// machineIdentity is resolved once: the hostname does not change while the
+// app runs, and asking the system for it on every session creation would be
+// work for nothing.
+var machineIdentity struct {
+	sync.Once
+	value string
+}
+
+// MachineIdentity names this computer, for marking what it owns on a server.
+//
+// The hostname, which is what a user recognises when looking at a list of
+// sessions and deciding which are theirs. Empty when it cannot be read, in
+// which case the session is simply left untagged rather than tagged with
+// something misleading.
+func MachineIdentity() string {
+	machineIdentity.Do(func() {
+		name, err := os.Hostname()
+		if err != nil {
+			return
+		}
+		machineIdentity.value = strings.TrimSpace(name)
+	})
+	return machineIdentity.value
+}
+
+// nextRemoteWindowIndex picks a free index for a new tab on a server.
+//
+// Each server gets its own band inside the remote range, so two servers cannot
+// collide; within a band the next free slot is taken. Returns the index to ask
+// the multiplexer for.
+func (i *Instance) nextRemoteWindowIndex(serverID string) int {
+	base := remoteWindowIndexBase + remoteWindowIndexSpan*i.serverBand(serverID)
+
+	used := make(map[int]bool, len(i.FollowedWindows))
+	for _, window := range i.FollowedWindows {
+		used[window.Index] = true
+	}
+	for candidate := base; candidate < base+remoteWindowIndexSpan; candidate++ {
+		if !used[candidate] {
+			return candidate
+		}
+	}
+	// A band with a hundred tabs in it is not a situation to design for, but
+	// silently reusing an index would corrupt the list. Past the end, keep
+	// counting: the result is still unique among the tabs we hold.
+	highest := base
+	for _, window := range i.FollowedWindows {
+		if window.Index > highest {
+			highest = window.Index
+		}
+	}
+	return highest + 1
+}
+
+// serverBand gives each server a stable position in the remote index range,
+// in the order the session first used them.
+func (i *Instance) serverBand(serverID string) int {
+	seen := make([]string, 0, 4)
+	for _, window := range i.FollowedWindows {
+		remote := window.ServerID
+		if remote == "" {
+			continue
+		}
+		known := false
+		for _, existing := range seen {
+			if existing == remote {
+				known = true
+				break
+			}
+		}
+		if !known {
+			seen = append(seen, remote)
+		}
+	}
+	for band, existing := range seen {
+		if existing == serverID {
+			return band
+		}
+	}
+	return len(seen)
+}
+
+// sameMachine reports whether two tab descriptors run in the same place.
+//
+// The tmux window index only identifies a window within one multiplexer, so
+// two tabs on different machines can both be window 2 without being the same
+// tab. Everything that used to match on the index alone has to ask this as
+// well, or deleting a tab on a server takes the local tab of the same number
+// with it.
+func (fw FollowedWindow) sameMachine(sessionServerID, otherServerID string) bool {
+	return fw.RunsOn(sessionServerID) == otherServerID
 }
 
 // GetAgentConfig returns the agent configuration for this instance
@@ -482,6 +882,16 @@ func (i *Instance) GetCaptureTargetContext(ctx context.Context, windowIdx int) s
 	}
 
 	baseTarget := cacheKey
+
+	// A tab on a server is captured from its own window directly.
+	//
+	// The mirror sessions this looks for are a local device: they are created
+	// by the terminal handler on this computer, and a remote tab is attached
+	// over SSH with no mirror at all. Searching for one on the server finds
+	// nothing and costs a round trip per poll.
+	if i.serverForWindow(windowIdx) != "" {
+		return baseTarget
+	}
 
 	// List tmux sessions matching the GUI pattern for this window
 	prefix := fmt.Sprintf("%s_gui_%d_", baseName, windowIdx)
@@ -1080,6 +1490,28 @@ func tmuxWindowExistsContext(ctx context.Context, sessionName string, windowIdx 
 	return tmuxWindowIndexListed(output, windowIdx)
 }
 
+// windowExistsContext asks the machine a tab lives on whether its window is
+// still there.
+//
+// The package-level tmuxWindowExistsContext always asks this computer, which
+// is right for a session that runs here and wrong for a tab on a server: the
+// window genuinely is not here, so every stop, restart and delete of such a
+// tab would refuse with "not found".
+func (i *Instance) windowExistsContext(ctx context.Context, sessionName string, windowIdx int) bool {
+	serverID := i.serverForWindow(windowIdx)
+	if serverID == "" {
+		return tmuxWindowExistsContext(ctx, sessionName, windowIdx)
+	}
+	commandCtx, cancel := context.WithTimeout(ctx, TmuxCommandTimeout)
+	defer cancel()
+	output, err := i.execOn(serverID).Output(commandCtx,
+		"list-windows", "-t", sessionName, "-F", "#{window_index}")
+	if err != nil {
+		return false
+	}
+	return tmuxWindowIndexListed(output, windowIdx)
+}
+
 func tmuxWindowIndexListed(output []byte, windowIdx int) bool {
 	for _, line := range strings.Split(strings.TrimSpace(string(output)), "\n") {
 		var listedIdx int
@@ -1128,7 +1560,18 @@ func (i *Instance) restoreFollowedWindows(onlyWindowIdx int) {
 		}
 		// Drop the saved resume ID if it no longer exists on disk so the
 		// tab boots fresh instead of dying with "No conversation found".
-		if resumeID != "" && !ResumeIDExistsForDir(fw.Agent, resumeID, tabDir) {
+		// Asked on the machine the tab runs on. The local check reads this
+		// computer's disk, which for a tab on a server is the wrong one in
+		// both directions — and a conversation that does not exist there is
+		// exactly what makes the agent answer "no conversation found".
+		tabServerID := fw.RunsOn(i.ServerID)
+		conversationAvailable := func(id string) bool {
+			if tabServerID != "" {
+				return i.resumeIDExistsOnServer(tabServerID, fw.Agent, id)
+			}
+			return ResumeIDExistsForDir(fw.Agent, id, tabDir)
+		}
+		if resumeID != "" && !conversationAvailable(resumeID) {
 			log.Printf("[restoreFollowedWindows] saved conversation unavailable for agent=%s tab=%q — starting fresh", fw.Agent, fw.Name)
 			resumeID = ""
 			fw.ResumeSessionID = ""
@@ -1155,6 +1598,13 @@ func (i *Instance) restoreFollowedWindows(onlyWindowIdx int) {
 			} else {
 				args := []string{}
 				autoYes := fw.AutoYes || i.AutoYes
+				// Same as on restart: an agent that refuses this flag as root
+				// would exit at once, and the tab would come back dead.
+				if autoYes && i.autoYesRefusedAsRoot(fw.RunsOn(i.ServerID), config) {
+					log.Printf("[restoreFollowedWindows] %s refuses %s as root on the server; starting without it",
+						config.Command, config.AutoYesFlag)
+					autoYes = false
+				}
 
 				// Handle resume subcommands (codex resume, q chat --resume) vs flags (claude --resume)
 				if config.SupportsResume && config.ResumeIsSubcommand {
@@ -1274,16 +1724,18 @@ func (i *Instance) StopContext(ctx context.Context) error {
 
 	sessionName := i.TmuxSessionName()
 
-	// Kill all linked GUI sessions first (they share the same tmux session group).
-	// Format: <sessionName>_gui_<N>_<timestamp>
-	out, _ := i.tmuxOutputContext(ctx, "list-sessions", "-F", "#{session_name}")
-	if out != nil {
-		prefix := sessionName + "_gui_"
-		for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
-			if strings.HasPrefix(line, prefix) {
-				_ = i.tmuxRunContext(ctx, "kill-session", "-t", line)
-			}
-		}
+	// Kill the view sessions first, wherever they are.
+	//
+	// Two shapes, because there are two kinds: the local mirrors created by
+	// the terminal handler (<session>_gui_<N>_<millis>) and the ones a remote
+	// attach makes on the server (asmgr_view_<session>_<N>). Left behind, each
+	// is a session that outlives the thing it was a view of — visible in
+	// `tmux ls` on the server for as long as the machine stays up.
+	// The session's own machine first — which is this computer for a local
+	// session, and the server for one that runs there.
+	i.killViewSessionsOn(ctx, i.ServerID, sessionName)
+	for _, serverID := range i.tabServerIDs() {
+		i.killViewSessionsOn(ctx, serverID, sessionName)
 	}
 
 	// Kill the base tmux session
@@ -1305,6 +1757,57 @@ func (i *Instance) StopContext(ctx context.Context) error {
 	i.UpdatedAt = time.Now()
 
 	return nil
+}
+
+// killViewSessionsOn removes the view sessions belonging to this session on
+// one machine.
+//
+// A view is a session that exists only to show one window: killing it leaves
+// the window and whatever runs in it untouched, which is why this can be done
+// without care for what the user has open.
+func (i *Instance) killViewSessionsOn(ctx context.Context, serverID, sessionName string) {
+	executor := i.execOn(serverID)
+	if serverID == i.ServerID {
+		// The session's own route, which is the local executor for a local
+		// session and the server's for a remote one.
+		executor = i.exec()
+	}
+	out, err := executor.Output(ctx, "list-sessions", "-F", "#{session_name}")
+	if err != nil {
+		return
+	}
+	localPrefix := sessionName + "_gui_"
+	remotePrefix := remoteViewPrefix(sessionName)
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		name := strings.TrimSpace(line)
+		if name == "" {
+			continue
+		}
+		if strings.HasPrefix(name, localPrefix) || strings.HasPrefix(name, remotePrefix) {
+			_ = executor.Run(ctx, "kill-session", "-t", name)
+		}
+	}
+}
+
+// remoteViewPrefix is what a remote attach names its view sessions.
+//
+// Kept beside the multiplexer code rather than in the remote package so the
+// two cannot drift: one side creates these names, the other has to recognise
+// them to clean them up.
+func remoteViewPrefix(sessionName string) string {
+	return "asmgr_view_" + sanitiseViewName(sessionName)
+}
+
+// remoteViewName is the view belonging to one window, matching what a remote
+// attach creates for it.
+func remoteViewName(sessionName string, windowIdx int) string {
+	return fmt.Sprintf("%s_%d", remoteViewPrefix(sessionName), windowIdx)
+}
+
+// sanitiseViewName removes the characters a multiplexer reads as part of a
+// target, so a session name can be used inside another session's name.
+func sanitiseViewName(name string) string {
+	return strings.NewReplacer(":", "_", ".", "_", "$", "_").Replace(name)
 }
 
 func (i *Instance) Attach() error {
@@ -1333,15 +1836,38 @@ func (i *Instance) NewWindow() error {
 
 // NewWindowWithName creates a new tmux window with a specific name
 func (i *Instance) NewWindowWithName(name string, workDir string) (int, error) {
-	if workDir == "" {
+	return i.NewWindowWithNameOn("", name, workDir)
+}
+
+// NewWindowWithNameOn creates a terminal tab on a given machine.
+//
+// serverID empty means the session's own machine. A terminal is the tab type
+// that works on any server at all, including one with no agent installed, so
+// this is the path most remote tabs take.
+func (i *Instance) NewWindowWithNameOn(serverID string, name string, workDir string) (int, error) {
+	if workDir == "" && serverID == "" {
 		workDir = i.Path
+	}
+	if workDir == "" {
+		return -1, fmt.Errorf("error.tabNeedsWorkDirOnServer")
 	}
 	if i.Status != StatusRunning {
 		return -1, fmt.Errorf("instance not running")
 	}
 
 	sessionName := i.TmuxSessionName()
-	output, err := i.newWindowOutput(sessionName, workDir, name, false, nil)
+	remote := serverID != "" && serverID != i.ServerID
+	if remote {
+		if err := i.ensureRemoteSessionFor(serverID, workDir); err != nil {
+			return -1, err
+		}
+	}
+	createTarget := sessionName
+	if remote {
+		createTarget = fmt.Sprintf("%s:%d", sessionName, i.nextRemoteWindowIndex(serverID))
+	}
+	output, err := i.tmuxOutputOn(serverID,
+		newTmuxWindowArgs(createTarget, workDir, name, false, nil)...)
 	if err != nil {
 		return -1, err
 	}
@@ -1360,9 +1886,10 @@ func (i *Instance) NewWindowWithName(name string, workDir string) (int, error) {
 			}
 			return ""
 		}(),
-		Index: newIdx,
-		Agent: AgentTerminal,
-		Name:  name,
+		Index:    newIdx,
+		Agent:    AgentTerminal,
+		Name:     name,
+		ServerID: serverID,
 	})
 
 	// Clear TabOrder since a new window was added
@@ -1370,9 +1897,9 @@ func (i *Instance) NewWindowWithName(name string, workDir string) (int, error) {
 
 	// Set remain-on-exit so window stays open when command exits (shows as stopped)
 	target := fmt.Sprintf("%s:%d", sessionName, newIdx)
-	i.tmuxRun("set-option", "-w", "-t", target, "remain-on-exit", "on")
+	i.tmuxRunOn(serverID, "set-option", "-w", "-t", target, "remain-on-exit", "on")
 	// Disable automatic-rename so the window keeps the user-specified name
-	i.tmuxRun("set-option", "-w", "-t", target, "automatic-rename", "off")
+	i.tmuxRunOn(serverID, "set-option", "-w", "-t", target, "automatic-rename", "off")
 
 	return newIdx, nil
 }
@@ -1410,7 +1937,7 @@ func (i *Instance) StopWindowContext(ctx context.Context, windowIdx int) error {
 	if !ok {
 		return fmt.Errorf("cannot identify main tmux window for session %s", sessionName)
 	}
-	if !tmuxWindowExistsContext(ctx, sessionName, windowIdx) {
+	if !i.windowExistsContext(ctx, sessionName, windowIdx) {
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return fmt.Errorf("timed out locating tmux window: %w", ctxErr)
 		}
@@ -1438,7 +1965,8 @@ func (i *Instance) StopWindowContext(ctx context.Context, windowIdx int) error {
 
 	// Followed window: stop the process but keep the window (dead pane)
 	target := fmt.Sprintf("%s:%d", sessionName, windowIdx)
-	err := i.tmuxRunContext(ctx, respawnPaneArgs(nil, target, "exit", "0")...)
+	err := i.execOn(i.serverForWindow(windowIdx)).Run(ctx,
+		respawnPaneArgs(nil, target, "exit", "0")...)
 	if err != nil {
 		return fmt.Errorf("failed to stop window %s: %w", target, err)
 	}
@@ -1466,7 +1994,20 @@ func (i *Instance) RestartWindowWithResume(windowIdx int, resumeID string) error
 	if !ok {
 		return fmt.Errorf("cannot identify main tmux window for session %s", sessionName)
 	}
-	if !tmuxWindowExists(sessionName, windowIdx) {
+	// A window that is gone is recreated rather than refused.
+	//
+	// The tab's descriptor still holds everything needed to build it — the
+	// agent, the arguments, the directory, the conversation to resume — so
+	// there is nothing to gain by telling the user the window is missing and
+	// leaving them to delete a tab they wanted. A window can go missing for
+	// ordinary reasons: killed on the server, or started before the
+	// multiplexer was told to keep dead panes.
+	//
+	// Only followed tabs. The session's own main window going missing means
+	// something else has happened to the session, and recreating it here would
+	// paper over that.
+	windowMissing := !i.windowExistsContext(context.Background(), sessionName, windowIdx)
+	if windowMissing && windowIdx == mainWindowIdx {
 		return fmt.Errorf("tmux window %s:%d not found", sessionName, windowIdx)
 	}
 	target := fmt.Sprintf("%s:%d", sessionName, windowIdx)
@@ -1557,7 +2098,8 @@ func (i *Instance) RestartWindowWithResume(windowIdx int, resumeID string) error
 	}
 
 	// Followed window: find the agent config and restart
-	fwSliceIdx, collapseDuplicates, err := selectFollowedWindowForRestart(i.FollowedWindows, windowIdx)
+	fwSliceIdx, collapseDuplicates, err := selectFollowedWindowForRestart(
+		i.FollowedWindows, windowIdx, i.ServerID, i.serverForWindow(windowIdx))
 	if err != nil {
 		return err
 	}
@@ -1586,13 +2128,39 @@ func (i *Instance) RestartWindowWithResume(windowIdx int, resumeID string) error
 		}
 		args := []string{}
 		autoYes := fw.AutoYes || i.AutoYes
+		// An agent that refuses its auto-yes flag as root would print the
+		// refusal and exit, leaving a pane that died with no explanation left
+		// on screen. Starting without the flag is the usable outcome.
+		if autoYes && i.autoYesRefusedAsRoot(i.serverForWindow(windowIdx), config) {
+			log.Printf("[RestartWindow] %s refuses %s as root on the server; starting without it",
+				config.Command, config.AutoYesFlag)
+			autoYes = false
+		}
 		// Use provided resume ID, or saved one from the tab
 		tabResumeID := resumeID
 		if tabResumeID == "" {
 			tabResumeID = fw.ResumeSessionID
 		}
-		if tabResumeID != "" && !ResumeIDExistsForDir(fw.Agent, tabResumeID, i.Path) {
-			log.Printf("[RestartWindow] saved tab conversation unavailable; starting fresh for session=%s window=%d", i.ID, windowIdx)
+		// Same as on start: the conversation has to exist where the tab runs.
+		restartServerID := i.serverForWindow(windowIdx)
+		conversationAvailable := tabResumeID == ""
+		if !conversationAvailable {
+			if restartServerID != "" {
+				conversationAvailable = i.resumeIDExistsOnServer(restartServerID, fw.Agent, tabResumeID)
+			} else {
+				conversationAvailable = ResumeIDExistsForDir(fw.Agent, tabResumeID, i.Path)
+			}
+		}
+		if tabResumeID != "" && !conversationAvailable {
+			// Named, and with the machine it was looked for on: a conversation
+			// dropped here means the tab restarts without its history, which
+			// is worth being able to trace afterwards.
+			where := "this computer"
+			if restartServerID != "" {
+				where = "server " + restartServerID
+			}
+			log.Printf("[RestartWindow] conversation %s not found on %s; starting fresh for session=%s window=%d",
+				tabResumeID, where, i.ID, windowIdx)
 			tabResumeID = ""
 			fw.ResumeSessionID = ""
 		}
@@ -1644,9 +2212,43 @@ func (i *Instance) RestartWindowWithResume(windowIdx int, resumeID string) error
 	if fw.Agent == AgentTerminal {
 		dirFlags = restartDirArgs(fw.WorkDir)
 	}
-	tmuxArgs := respawnPaneArgs(dirFlags, target, argv...)
-	if err := i.tmuxRun(tmuxArgs...); err != nil {
-		return fmt.Errorf("failed to restart window %d: %w", windowIdx, err)
+	tabServer := i.serverForWindow(windowIdx)
+	if fw.Agent != AgentCustom && fw.Agent != AgentTerminal {
+		if err := i.ensureAgentOnServer(tabServer, AgentConfigs[fw.Agent].Command); err != nil {
+			return err
+		}
+	}
+	if windowMissing {
+		// Recreated at its own index, so everything that addresses this tab by
+		// number — the terminal socket, the status poller, the quick-jump list
+		// — still points at it afterwards.
+		tabDir := fw.WorkDir
+		if tabDir == "" {
+			tabDir = i.Path
+		}
+		// The multiplexer session on the server may be gone too — a reboot, or
+		// its last window closing — and a window cannot be created inside a
+		// session that does not exist. Rebuilding it is the same work as the
+		// first tab on that server did.
+		if tabServer != "" && tabServer != i.ServerID {
+			if err := i.ensureRemoteSessionFor(tabServer, tabDir); err != nil {
+				return err
+			}
+		}
+		if _, err := i.tmuxOutputOn(tabServer,
+			newTmuxWindowArgs(target, tabDir, fw.Name, false, argv)...); err != nil {
+			return fmt.Errorf("failed to recreate window %d: %w", windowIdx, err)
+		}
+		// The options a tab is created with, which respawn-pane would have
+		// left in place.
+		_ = i.tmuxRunOn(tabServer, "set-option", "-w", "-t", target, "remain-on-exit", "on")
+		_ = i.tmuxRunOn(tabServer, "set-option", "-w", "-t", target, "automatic-rename", "off")
+		log.Printf("[RestartWindow] recreated missing window %s", target)
+	} else {
+		tmuxArgs := respawnPaneArgs(dirFlags, target, argv...)
+		if err := i.tmuxRunOn(tabServer, tmuxArgs...); err != nil {
+			return fmt.Errorf("failed to restart window %d: %w", windowIdx, err)
+		}
 	}
 
 	fw.Stopped = false
@@ -1687,12 +2289,13 @@ func (i *Instance) RestopWindow(windowIdx int) error {
 	}
 
 	target := fmt.Sprintf("%s:%d", i.TmuxSessionName(), windowIdx)
-	setErr := i.tmuxRun("set-option", "-w", "-t", target, "remain-on-exit", "on")
+	tabServer := i.serverForWindow(windowIdx)
+	setErr := i.tmuxRunOn(tabServer, "set-option", "-w", "-t", target, "remain-on-exit", "on")
 	if setErr != nil {
 		return fmt.Errorf("failed to prepare stopped window %s: %w", target, setErr)
 	}
 
-	stopErr := i.tmuxRun(respawnPaneArgs(nil, target, "exit", "0")...)
+	stopErr := i.tmuxRunOn(tabServer, respawnPaneArgs(nil, target, "exit", "0")...)
 	if stopErr != nil {
 		return fmt.Errorf("failed to restore stopped window %s: %w", target, stopErr)
 	}
@@ -1710,10 +2313,17 @@ func (i *Instance) RestopWindow(windowIdx int) error {
 	return nil
 }
 
-func selectFollowedWindowForRestart(windows []FollowedWindow, windowIdx int) (sliceIdx int, collapseDuplicates bool, err error) {
+// selectFollowedWindowForRestart finds the descriptor for one window on one
+// machine.
+//
+// sessionServerID and serverID together say which machine: only tabs that run
+// there are considered, because a window index is unique within a multiplexer
+// and not across them. Returned indexes are into the full slice, so the caller
+// can keep using them to address the tab it owns.
+func selectFollowedWindowForRestart(windows []FollowedWindow, windowIdx int, sessionServerID, serverID string) (sliceIdx int, collapseDuplicates bool, err error) {
 	var matches []int
 	for idx := range windows {
-		if windows[idx].Index == windowIdx {
+		if windows[idx].Index == windowIdx && windows[idx].sameMachine(sessionServerID, serverID) {
 			matches = append(matches, idx)
 		}
 	}
@@ -1798,9 +2408,18 @@ func (i *Instance) deleteLiveWindow(windowIdx int) error {
 		// tmux silently falls back to the current window for a missing numeric
 		// target, so check exact membership before kill-window. Otherwise stale
 		// metadata could delete the main agent.
-		if tmuxWindowExists(sessionName, windowIdx) {
-			killErr := i.tmuxRun("kill-window", "-t", target)
-			if tmuxWindowExists(sessionName, windowIdx) {
+		if i.windowExistsContext(context.Background(), sessionName, windowIdx) {
+			tabServer := i.serverForWindow(windowIdx)
+			// The view of this window goes with it. A view is a session whose
+			// only purpose is to show one window; with that window gone it
+			// holds nothing but its own placeholder shell, and would sit in
+			// `tmux ls` indefinitely.
+			if tabServer != "" {
+				_ = i.tmuxRunOn(tabServer, "kill-session", "-t",
+					remoteViewName(sessionName, windowIdx))
+			}
+			killErr := i.tmuxRunOn(tabServer, "kill-window", "-t", target)
+			if i.windowExistsContext(context.Background(), sessionName, windowIdx) {
 				if killErr != nil {
 					return fmt.Errorf("failed to delete live tmux window %s: %w", target, killErr)
 				}
@@ -1815,12 +2434,20 @@ func (i *Instance) deleteLiveWindow(windowIdx int) error {
 }
 
 func (i *Instance) removeWindowMetadata(windowIdx int) {
-	// A tmux index identifies exactly one real window. Remove every matching
-	// descriptor so older duplicate-index corruption cannot leave phantom tabs
-	// behind after the real window is deleted.
+	i.removeWindowMetadataOn(windowIdx, i.serverForWindow(windowIdx))
+}
+
+// removeWindowMetadataOn drops the descriptors for one window on one machine.
+//
+// A tmux index identifies exactly one real window *within one multiplexer*.
+// Every matching descriptor is removed so older duplicate-index corruption
+// cannot leave phantom tabs behind — but only among the tabs that run in the
+// same place, because a tab on a server and a tab here can both be window 2
+// while being entirely different tabs.
+func (i *Instance) removeWindowMetadataOn(windowIdx int, serverID string) {
 	filtered := i.FollowedWindows[:0]
 	for _, window := range i.FollowedWindows {
-		if window.Index != windowIdx {
+		if window.Index != windowIdx || !window.sameMachine(i.ServerID, serverID) {
 			filtered = append(filtered, window)
 		}
 	}
@@ -2175,12 +2802,126 @@ func (i *Instance) GetWindowList() []WindowInfo {
 		return nil
 	}
 
+	// One listing per machine this session reaches.
+	//
+	// A window index only means something inside one multiplexer, so a session
+	// with tabs on a server has its windows split across two of them. Asking
+	// only the session's own machine — which is what this did — left every
+	// remote tab out of the tab bar entirely.
+	windows := i.windowsOn(i.ServerID, i.tabServerIDs())
+
+	// A tab that answered from nowhere is still a tab. Without this a server
+	// that is slow, unreachable or merely still connecting would make its tabs
+	// vanish from the bar mid-session, which reads as losing work rather than
+	// as losing a connection.
+	return i.appendMissingTabs(windows)
+}
+
+// tabServerIDs lists the servers this session's tabs sit on, other than the
+// machine the session itself runs on.
+func (i *Instance) tabServerIDs() []string {
+	var servers []string
+	for _, window := range i.FollowedWindows {
+		remote := window.ServerID
+		if remote == "" || remote == i.ServerID {
+			continue
+		}
+		known := false
+		for _, existing := range servers {
+			if existing == remote {
+				known = true
+				break
+			}
+		}
+		if !known {
+			servers = append(servers, remote)
+		}
+	}
+	return servers
+}
+
+// windowsOn lists the windows on the session's own machine and on each of the
+// given servers.
+//
+// Asked in parallel, each under its own timeout: the tab bar is drawn from
+// this, and one unreachable server must not decide how long the others take.
+func (i *Instance) windowsOn(ownServerID string, tabServers []string) []WindowInfo {
+	machines := append([]string{ownServerID}, tabServers...)
+
+	lists := make([][]WindowInfo, len(machines))
+	var wg sync.WaitGroup
+	for at, serverID := range machines {
+		wg.Add(1)
+		go func(at int, serverID string) {
+			defer wg.Done()
+			lists[at] = i.listWindowsOn(serverID)
+		}(at, serverID)
+	}
+	wg.Wait()
+
+	var windows []WindowInfo
+	for _, list := range lists {
+		windows = append(windows, list...)
+	}
+	return windows
+}
+
+// appendMissingTabs adds the tabs that no machine answered for.
+//
+// They are marked dead, which is how the bar already draws a tab whose pane
+// has exited — the tab is there, and selecting it says so, rather than the
+// tab disappearing while its work is still running on the far side.
+func (i *Instance) appendMissingTabs(windows []WindowInfo) []WindowInfo {
+	listed := make(map[int]bool, len(windows))
+	for _, window := range windows {
+		listed[window.Index] = true
+	}
+	for _, followed := range i.FollowedWindows {
+		if listed[followed.Index] {
+			continue
+		}
+		windows = append(windows, WindowInfo{
+			Index:           followed.Index,
+			Name:            followed.Name,
+			Followed:        true,
+			Agent:           followed.Agent,
+			Dead:            true,
+			TextColor:       followed.TextColor,
+			BackgroundColor: followed.BackgroundColor,
+		})
+	}
+	sort.SliceStable(windows, func(left, right int) bool {
+		return windows[left].Index < windows[right].Index
+	})
+	return windows
+}
+
+// listWindowsOn reads one machine's windows for this session.
+func (i *Instance) listWindowsOn(serverID string) []WindowInfo {
 	sessionName := i.TmuxSessionName()
 	// Format: index:name:active_flag:pane_dead
-	output, err := i.tmuxOutput("list-windows", "-t", sessionName,
+	output, err := i.tmuxOutputOn(serverID, "list-windows", "-t", sessionName,
 		"-F", "#{window_index}:#{window_name}:#{window_active}:#{pane_dead}")
 	if err != nil {
 		return nil
+	}
+
+	// On a server, only the indexes this session actually has tabs for.
+	//
+	// The multiplexer session there was created with a placeholder window to
+	// keep it alive, and that window belongs to no tab. Listed alongside the
+	// local windows it collided with the session's own main window — same
+	// index 0, two different machines — and replaced it in the tab bar, which
+	// then drew the server's idle shell where the session's agent should be
+	// and marked the real local tabs dead.
+	var wanted map[int]bool
+	if serverID != "" && serverID != i.ServerID {
+		wanted = make(map[int]bool, len(i.FollowedWindows))
+		for _, followed := range i.FollowedWindows {
+			if followed.ServerID == serverID {
+				wanted[followed.Index] = true
+			}
+		}
 	}
 
 	var windows []WindowInfo
@@ -2197,6 +2938,10 @@ func (i *Instance) GetWindowList() []WindowInfo {
 		if len(parts) >= 4 {
 			var idx int
 			fmt.Sscanf(parts[0], "%d", &idx)
+
+			if wanted != nil && !wanted[idx] {
+				continue
+			}
 
 			// Get agent type if followed
 			var agent AgentType
@@ -2227,14 +2972,43 @@ func (i *Instance) GetWindowList() []WindowInfo {
 
 // NewAgentWindow creates a new tmux window running the specified agent
 func (i *Instance) NewAgentWindow(name string, agent AgentType, customCmd string, extraArgs string, workDir string) (int, error) {
-	if workDir == "" {
+	return i.NewAgentWindowOn("", name, agent, customCmd, extraArgs, workDir)
+}
+
+// NewAgentWindowOn creates an agent tab on a given machine.
+//
+// serverID empty means the session's own machine, which is what every caller
+// wanted before tabs could be placed individually. A tab on a server gets its
+// own multiplexer session there — the same name, on a different machine — and
+// an index from the remote range so it cannot collide with a local tab.
+func (i *Instance) NewAgentWindowOn(serverID string, name string, agent AgentType, customCmd string, extraArgs string, workDir string) (int, error) {
+	if workDir == "" && serverID == "" {
 		workDir = i.Path
+	}
+	if workDir == "" {
+		// A tab on a server has no reason to default to a path from this
+		// computer: it almost certainly does not exist there, and the
+		// multiplexer would refuse to create the window at all.
+		return -1, fmt.Errorf("error.tabNeedsWorkDirOnServer")
 	}
 	if i.Status != StatusRunning {
 		return -1, fmt.Errorf("instance not running")
 	}
 
 	sessionName := i.TmuxSessionName()
+	remote := serverID != "" && serverID != i.ServerID
+	if remote {
+		if err := i.ensureRemoteSessionFor(serverID, workDir); err != nil {
+			return -1, err
+		}
+		// Before the window exists, so a missing agent is reported rather than
+		// leaving a tab whose pane died with its explanation erased.
+		if agent != AgentCustom && agent != AgentTerminal {
+			if err := i.ensureAgentOnServer(serverID, AgentConfigs[agent].Command); err != nil {
+				return -1, err
+			}
+		}
+	}
 
 	// Build agent command based on agent type (argv form, no shell)
 	config := AgentConfigs[agent]
@@ -2248,8 +3022,11 @@ func (i *Instance) NewAgentWindow(name string, agent AgentType, customCmd string
 			return -1, fmt.Errorf("unsupported agent %q", agent)
 		}
 		args := []string{}
-		// Use instance's AutoYes setting for the new agent too
-		if i.AutoYes && config.SupportsAutoYes && config.AutoYesFlag != "" {
+		// Use instance's AutoYes setting for the new agent too — unless the
+		// agent refuses it as root on the server, in which case passing it
+		// would make the tab exit the moment it starts.
+		if i.AutoYes && config.SupportsAutoYes && config.AutoYesFlag != "" &&
+			!i.autoYesRefusedAsRoot(serverID, config) {
 			args = append(args, config.AutoYesFlag)
 		}
 		// For agents supporting --session-id, pre-assign a session ID
@@ -2262,7 +3039,14 @@ func (i *Instance) NewAgentWindow(name string, agent AgentType, customCmd string
 
 	// Create new window with the agent command as separate argv elements
 	// (tmux execs directly, no `sh -c`).
-	output, err := i.newWindowOutput(sessionName, workDir, name, false, argv)
+	target := sessionName
+	if remote {
+		// Ask for a specific slot, so the index stays unique across the
+		// machines this session spans.
+		target = fmt.Sprintf("%s:%d", sessionName, i.nextRemoteWindowIndex(serverID))
+	}
+	output, err := i.tmuxOutputOn(serverID,
+		newTmuxWindowArgs(target, workDir, name, false, argv)...)
 	if err != nil {
 		return -1, err
 	}
@@ -2286,16 +3070,17 @@ func (i *Instance) NewAgentWindow(name string, agent AgentType, customCmd string
 		CustomCommand:   customCmd,
 		ExtraArgs:       extraArgs,
 		ResumeSessionID: generatedSessionID,
+		ServerID:        serverID,
 	})
 
 	// Clear TabOrder since a new window was added
 	i.TabOrder = nil
 
 	// Set remain-on-exit so window stays open when command exits (shows as stopped)
-	target := fmt.Sprintf("%s:%d", sessionName, newIdx)
-	i.tmuxRun("set-option", "-w", "-t", target, "remain-on-exit", "on")
+	windowTarget := fmt.Sprintf("%s:%d", sessionName, newIdx)
+	i.tmuxRunOn(serverID, "set-option", "-w", "-t", windowTarget, "remain-on-exit", "on")
 	// Disable automatic-rename so the window keeps the user-specified name
-	i.tmuxRun("set-option", "-w", "-t", target, "automatic-rename", "off")
+	i.tmuxRunOn(serverID, "set-option", "-w", "-t", windowTarget, "automatic-rename", "off")
 
 	i.CaptureCodexResumeIDs()
 
@@ -2497,6 +3282,22 @@ func (i *Instance) IsAliveContext(ctx context.Context) bool {
 	return i.tmuxRunContext(commandCtx, "has-session", "-t", sessionName) == nil
 }
 
+// windowAliveContext asks whether the multiplexer holding one tab is running.
+//
+// The session-wide check asks the machine the SESSION runs on, which for a tab
+// on a server is the wrong one: the local multiplexer knows nothing about that
+// session, so the check failed and every per-tab reading — the status line,
+// the activity dot — was skipped before it began.
+func (i *Instance) windowAliveContext(ctx context.Context, windowIdx int) bool {
+	serverID := i.serverForWindow(windowIdx)
+	if serverID == "" {
+		return i.IsAliveContext(ctx)
+	}
+	commandCtx, cancel := context.WithTimeout(ctx, TmuxCommandTimeout)
+	defer cancel()
+	return i.execOn(serverID).Run(commandCtx, "has-session", "-t", i.TmuxSessionName()) == nil
+}
+
 // ResizePane resizes the tmux pane to the specified dimensions
 func (i *Instance) ResizePane(width, height int) error {
 	if !i.IsAlive() {
@@ -2689,7 +3490,7 @@ func (i *Instance) GetStatusInfoForWindow(windowIdx int, agent AgentType) Status
 // poller, which shutdown must be able to reap before project teardown.
 func (i *Instance) GetStatusInfoForWindowContext(ctx context.Context, windowIdx int, agent AgentType) StatusInfo {
 	result := StatusInfo{}
-	if !i.IsAliveContext(ctx) {
+	if !i.windowAliveContext(ctx, windowIdx) {
 		result.StatusLine = "stopped"
 		return result
 	}
@@ -2705,7 +3506,11 @@ func (i *Instance) GetStatusInfoForWindowContext(ctx context.Context, windowIdx 
 	target := i.GetCaptureTargetContext(ctx, windowIdx)
 	commandCtx, cancel := context.WithTimeout(ctx, TmuxCommandTimeout)
 	defer cancel()
-	output, err := i.tmuxOutputContext(commandCtx, "capture-pane", "-t", target, "-p", "-e", "-J", "-S", "-50")
+	// Through the window's own executor: a tab on a server has its pane
+	// there, and capturing from this computer's multiplexer returns nothing —
+	// which is why the status line for a remote agent never moved.
+	output, err := i.execOn(i.serverForWindow(windowIdx)).Output(commandCtx,
+		"capture-pane", "-t", target, "-p", "-e", "-J", "-S", "-50")
 	if err != nil {
 		result.StatusLine = "..."
 		return result

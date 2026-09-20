@@ -69,7 +69,10 @@ func AttachTerminal(client *Client, target string, extraPath string,
 		return nil, err
 	}
 
-	if err := session.Start(attachCommand(target, extraPath)); err != nil {
+	// One mirror per window, named after it, so two attaches to the same tab
+	// reuse one rather than stacking up.
+	mirror := mirrorNameFor(target)
+	if err := session.Start(mirrorAttachCommand(target, mirror, extraPath, columns, rows)); err != nil {
 		session.Close()
 		return nil, fmt.Errorf("could not attach to the session: %w", err)
 	}
@@ -77,26 +80,68 @@ func AttachTerminal(client *Client, target string, extraPath string,
 	return &TerminalStream{session: session, stdin: stdin, stdout: stdout}, nil
 }
 
-// attachCommand builds the command line that attaches to a window.
+// mirrorAttachCommand builds a command that attaches through a mirror session
+// of this window alone.
 //
-// The locale is set on the command line rather than through the SSH protocol's
-// environment request: servers accept only what their AcceptEnv allows, which
-// by default is nothing useful, and a rejected variable is not reported. This
-// way it either works or the shell says why.
+// Why a mirror rather than attaching to the session directly: every tab of a
+// session attaches to the SAME multiplexer session, and a multiplexer sizes a
+// window to the smallest client watching it. With three tabs open the smallest
+// one decided the size for all of them, and the extra rows came back as a band
+// of dots the terminal could not use — measured on a live server, clients at
+// 223x60, 223x60 and 223x66 leaving six rows dead.
 //
-// UTF-8 is not optional here. Without it, tmux mangles every accented
-// character and every box-drawing character an agent draws — which is most of
-// what an agent draws.
-func attachCommand(target, extraPath string) string {
+// The mirror holds one linked window — the same window object, so the agent
+// inside it is untouched — and nothing else attaches to it, so its size is
+// this tab's size alone. The local terminal solves the same problem the same
+// way; this is that device on the far side.
+//
+// The mirror is named after the window so a reconnection reuses it rather than
+// accumulating one per attach: creating it is allowed to fail, which is what
+// happens when it is already there.
+func mirrorAttachCommand(target, mirror, extraPath string, columns, rows int) string {
 	var builder strings.Builder
 	if extra := strings.TrimSpace(extraPath); extra != "" {
 		builder.WriteString("export PATH=")
 		builder.WriteString(shellQuote(extra))
 		builder.WriteString(":$PATH; ")
 	}
-	builder.WriteString("env LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 tmux attach-session -t ")
-	builder.WriteString(shellQuote(target))
+	builder.WriteString("env LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 sh -c ")
+
+	// Built as one shell command so the whole sequence runs on the far side in
+	// a single round trip: create-or-reuse the mirror, link this window into
+	// it, then attach. A link that fails — the window vanished between the
+	// listing and now — falls back to attaching to the session itself, which
+	// is what this did before and is still better than no terminal.
+	inner := fmt.Sprintf(
+		"tmux new-session -d -s %s -x %d -y %d 2>/dev/null; "+
+			"tmux link-window -k -s %s -t %s 2>/dev/null; "+
+			"tmux set-option -t %s status off 2>/dev/null; "+
+			"exec tmux attach-session -t %s 2>/dev/null || exec tmux attach-session -t %s",
+		shellQuote(mirror), columns, rows,
+		shellQuote(target), shellQuote(mirror+":"+windowPart(target)),
+		shellQuote(mirror),
+		shellQuote(mirror+":"+windowPart(target)),
+		shellQuote(target))
+	builder.WriteString(shellQuote(inner))
 	return builder.String()
+}
+
+// windowPart returns the window index from a "session:index" target.
+func windowPart(target string) string {
+	if at := strings.LastIndex(target, ":"); at >= 0 {
+		return target[at+1:]
+	}
+	return target
+}
+
+
+// mirrorNameFor names the mirror belonging to one window.
+//
+// Derived from the target rather than randomised so a reattach finds the same
+// mirror: a new name per attach would leave the old ones behind, each still
+// counted as a client watching the window.
+func mirrorNameFor(target string) string {
+	return "asmgr_view_" + strings.NewReplacer(":", "_", ".", "_", "$", "_").Replace(target)
 }
 
 // Read carries the server's output towards the browser.

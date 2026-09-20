@@ -63,6 +63,19 @@ func (a *App) GetTabWorkingDirectory(sessionID string, windowIdx int) string {
 		return configured
 	}
 
+	// A tab on a server is answered from its configured directory.
+	//
+	// The live query asks this computer's multiplexer, and for an index it
+	// does not have, tmux does not fail — it silently answers for the current
+	// pane. So the status bar showed the LOCAL session's directory under a
+	// remote tab. Asking the server instead would be a round trip on a path
+	// the status bar polls every two seconds, for a value that only changes
+	// when someone types `cd`; the configured directory is the honest answer
+	// and costs nothing.
+	if inst.ServerForWindow(windowIdx) != "" {
+		return configured
+	}
+
 	target := fmt.Sprintf("%s:%d", inst.TmuxSessionName(), windowIdx)
 	reported := a.cachedPaneCurrentPath(target, queryTmuxPaneCurrentPath)
 	return resolveTabWorkingDir(reported, configured)

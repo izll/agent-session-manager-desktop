@@ -861,7 +861,7 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 	// all three attempts in well under a second.
 	running := false
 	for attempt := 0; attempt < 3; attempt++ {
-		if err := terminalTmuxRun(handlerCtx, "has-session", "-t", tmuxSession); err == nil {
+		if err := ts.sessionAliveProbe(handlerCtx, inst, winIdx, tmuxSession); err == nil {
 			running = true
 			break
 		}
@@ -917,7 +917,16 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 	// contains ONLY that window, so no other window's activity can ever reach
 	// this mirror. Each tab is now truly isolated.
 	attachTarget := linkedName
-	if !session.MirrorSupported() {
+	if inst.ServerForWindow(winIdx) != "" {
+		// A tab on a server is attached directly, with no mirror.
+		//
+		// The mirror is built out of local multiplexer commands — new-session,
+		// link-window — against a session that is not on this machine. They
+		// would fail, and the attach would then be aimed at a mirror name that
+		// exists nowhere. The isolation a mirror buys is a local optimisation;
+		// correctness here is attaching to the session that actually exists.
+		attachTarget = tmuxSession
+	} else if !session.MirrorSupported() {
 		// Straight to the session itself. psmux accepts link-window and reports
 		// success, but the window does not arrive: the mirror is left holding
 		// only its own placeholder shell, which is what the terminal then
@@ -996,21 +1005,21 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 	// windows, manual or not). The frontend therefore also re-announces the
 	// active tab's size on every switch; this option stops the churn, that
 	// keeps the visible tab correct.
-	_ = terminalTmuxRun(handlerCtx, "set-option", "-t", attachTarget, "window-size", "manual")
-	_ = terminalTmuxRun(handlerCtx, "set-window-option", "-t", attachTarget, "aggressive-resize", "off")
+	ts.attachSetupRun(handlerCtx, inst, winIdx, "set-option", "-t", attachTarget, "window-size", "manual")
+	ts.attachSetupRun(handlerCtx, inst, winIdx, "set-window-option", "-t", attachTarget, "aggressive-resize", "off")
 
 	// Hide tmux status bar in the session (the desktop app has its own UI)
-	_ = terminalTmuxRun(handlerCtx, "set-option", "-t", attachTarget, "status", "off")
+	ts.attachSetupRun(handlerCtx, inst, winIdx, "set-option", "-t", attachTarget, "status", "off")
 
 	// Let focus reach the agent. Without it Claude Code prints a notice into its
 	// own UI — "tmux focus-events off · add 'set -g focus-events on' to
 	// ~/.tmux.conf and reattach" — which lands in the middle of its frame and
 	// reads as a rendering fault. Set globally because it is a server option;
 	// psmux accepts it, verified before relying on it.
-	_ = terminalTmuxRun(handlerCtx, "set-option", "-g", "focus-events", "on")
+	ts.attachSetupRun(handlerCtx, inst, winIdx, "set-option", "-g", "focus-events", "on")
 
 	// Select the target window in the session
-	_ = terminalTmuxRun(handlerCtx, "select-window", "-t", fmt.Sprintf("%s:%d", attachTarget, winIdx))
+	ts.attachSetupRun(handlerCtx, inst, winIdx, "select-window", "-t", fmt.Sprintf("%s:%d", attachTarget, winIdx))
 
 	// Attach to the session, by id rather than by name.
 	//
@@ -1034,9 +1043,16 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 	// every line wrapped in the wrong place until the user pressed Refresh.
 	attachedToOwnMirror := attachTarget == linkedName
 
-	if id := session.SessionIDForContext(handlerCtx, attachTarget); id != "" && id != attachTarget {
-		log.Printf("[ws] attaching by id %s (%s)", id, attachTarget)
-		attachTarget = id
+	// Resolving the name to a session id is a local lookup, and it exists to
+	// work around a psmux ambiguity between two clients on this machine. A
+	// remote session is addressed by name over its own SSH channel, where that
+	// ambiguity cannot arise, and asking this computer's multiplexer about a
+	// name it has never heard of can only mislead.
+	if inst.ServerForWindow(winIdx) == "" {
+		if id := session.SessionIDForContext(handlerCtx, attachTarget); id != "" && id != attachTarget {
+			log.Printf("[ws] attaching by id %s (%s)", id, attachTarget)
+			attachTarget = id
+		}
 	}
 	// Name the window in the attach target, so this connection is pinned to the
 	// tab it belongs to.
@@ -1070,7 +1086,7 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 	// instead: there is no local process to give a pty to, and the stream the
 	// rest of this handler works with is the same either way.
 	var ptmx session.TerminalStream
-	if remoteStream, handled := ts.attachRemote(inst, windowTarget); handled {
+	if remoteStream, handled := ts.attachRemote(inst, winIdx, windowTarget); handled {
 		ptmx, err = remoteStream.stream, remoteStream.err
 	} else {
 		ptmx, err = session.StartTerminal(cmd)
@@ -1099,10 +1115,13 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 		// the connection map now (Stop has already snapshotted it), so release it
 		// synchronously instead of leaving an untracked multiplexer child behind.
 		tc.closeTransport()
+		// Wait as well as Kill is inside the guard: Wait on a command that was
+		// never started returns an error rather than panicking, but calling it
+		// says something ran, and a remote attach has no process at all.
 		if cmd.Process != nil {
 			_ = cmd.Process.Kill()
+			_ = cmd.Wait()
 		}
-		_ = cmd.Wait()
 		if attachedToOwnMirror {
 			_ = terminalTmuxRun(handlerCtx, "kill-session", "-t", linkedName)
 		}
@@ -1272,8 +1291,15 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 			// holding for a hidden tab is dead weight until the conn is
 			// collected — up to the full limit, per closed tab.
 			tc.discardHeldWhileHidden()
-			_ = cmd.Process.Kill()
-			_ = cmd.Wait()
+			// Only a local attach has a process of its own. A tab on a server
+			// is attached over an SSH channel, so StartTerminal is never
+			// called and cmd.Process stays nil — killing it crashed the whole
+			// app the moment such a tab was closed. Closing the stream, just
+			// above, is what ends a remote attach.
+			if cmd.Process != nil {
+				_ = cmd.Process.Kill()
+				_ = cmd.Wait()
+			}
 
 			// Clean up the linked tmux session (only if it was created)
 			if attachedToOwnMirror {
