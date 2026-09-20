@@ -98,7 +98,15 @@ func (a *App) startAttentionWatcher(parent context.Context) {
 				continue
 			}
 
-			upd := a.getSidebarUpdates(ctx)
+			// The emitter's last sweep rather than one of our own: this
+			// watcher ran a full pass over every session — remote round trips
+			// included — every three seconds, alongside the emitter doing the
+			// same thing every second. An empty snapshot means no sweep has
+			// finished recently, and there is nothing to compare yet.
+			upd, fresh := a.lastSidebarSnapshot()
+			if !fresh {
+				continue
+			}
 			namesProjectID, instances, _, namesErr := a.storage.LoadAllWithProjectSnapshotContext(ctx)
 			if namesErr != nil || !sidebarUpdateMatchesProject(upd, settingsProjectID) ||
 				namesProjectID != settingsProjectID ||

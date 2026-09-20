@@ -159,9 +159,24 @@ select:focus {
   border-color: rgba(var(--accent-rgb), 0.5);
 }
 
+/* The dropdown list is drawn by the platform, not by the page: it is a native
+   menu that happens to be told two colours. Padding, radius, hover colour and
+   spacing set here are ignored under WebKitGTK, so only the properties that
+   actually take effect are set — anything else would read as styling that
+   silently does nothing.
+
+   Line height is one of the few that does land, and it keeps a long list of
+   server names from running together. */
 select option {
   background: var(--bg-raised);
   color: white;
+  padding: 6px 10px;
+  line-height: 1.6;
+}
+
+select option:checked {
+  background: var(--bg-sunken);
+  font-weight: 600;
 }
 
 /* ============================================

@@ -261,7 +261,7 @@ func (i *Instance) DetectActivityForWindowWithValidity(windowIdx int) (SessionAc
 // DetectActivityForWindowWithValidityContext is the cancellable form used by
 // lifecycle-owned polling work.
 func (i *Instance) DetectActivityForWindowWithValidityContext(ctx context.Context, windowIdx int) (SessionActivity, bool) {
-	if !i.IsAliveContext(ctx) {
+	if !i.windowAliveContext(ctx, windowIdx) {
 		return ActivityIdle, false
 	}
 
@@ -286,10 +286,14 @@ func (i *Instance) DetectActivityForWindowWithValidityContext(ctx context.Contex
 		return ActivityIdle, true
 	}
 
+	// Through the window's own executor: a tab on a server has its pane there,
+	// and capturing from this computer's multiplexer found nothing at all — so
+	// a remote agent always read as idle, however busy it was, while the poll
+	// still paid for the round trips that gate this.
 	commandCtx, cancel := context.WithTimeout(ctx, TmuxCommandTimeout)
 	defer cancel()
-	cmd := TmuxCommandContext(commandCtx, "capture-pane", "-t", target, "-p", "-S", "-50")
-	output, err := cmd.Output()
+	output, err := i.execOn(i.serverForWindow(windowIdx)).Output(commandCtx,
+		"capture-pane", "-t", target, "-p", "-S", "-50")
 	if err != nil {
 		return ActivityIdle, false
 	}
@@ -390,7 +394,7 @@ func (i *Instance) DetectYoloForWindow(windowIdx int) bool {
 // DetectYoloForWindowContext is the cancellable form used by the preview
 // poller.
 func (i *Instance) DetectYoloForWindowContext(ctx context.Context, windowIdx int) bool {
-	if !i.IsAliveContext(ctx) {
+	if !i.windowAliveContext(ctx, windowIdx) {
 		return false
 	}
 	agent := i.Agent
@@ -416,9 +420,11 @@ func (i *Instance) DetectYoloForWindowContext(ctx context.Context, windowIdx int
 	// the mode line scrolled out of it during work, so the YOLO badge flickered
 	// off whenever the tab was busy. Capture more rows so it stays in view. Still
 	// cheap (one capture per tab per poll).
+	// Same as activity detection: the pane lives where the tab runs.
 	commandCtx, cancel := context.WithTimeout(ctx, TmuxCommandTimeout)
 	defer cancel()
-	out, err := TmuxCommandContext(commandCtx, "capture-pane", "-t", target, "-p", "-S", "-16").Output()
+	out, err := i.execOn(i.serverForWindow(windowIdx)).Output(commandCtx,
+		"capture-pane", "-t", target, "-p", "-S", "-16")
 	if err != nil {
 		return cachedYolo(target)
 	}

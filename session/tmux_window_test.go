@@ -104,7 +104,7 @@ func TestSelectFollowedWindowForRestartRepairsTerminalAlias(t *testing.T) {
 		{Index: 1, Agent: AgentCodex, Name: "codex"},
 		{Index: 1, Agent: AgentCodex, Name: "duplicate codex"},
 	}
-	index, collapse, err := selectFollowedWindowForRestart(windows, 1)
+	index, collapse, err := selectFollowedWindowForRestart(windows, 1, "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -120,7 +120,7 @@ func TestSelectFollowedWindowForRestartRejectsConflictingAgents(t *testing.T) {
 		{Index: 1, Agent: AgentCodex},
 		{Index: 1, Agent: AgentClaude},
 	}
-	if _, _, err := selectFollowedWindowForRestart(windows, 1); err == nil {
+	if _, _, err := selectFollowedWindowForRestart(windows, 1, "", ""); err == nil {
 		t.Fatal("conflicting duplicate agents were accepted")
 	}
 }
