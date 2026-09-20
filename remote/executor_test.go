@@ -2,6 +2,7 @@ package remote
 
 import (
 	"os/exec"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -37,6 +38,14 @@ func TestEveryArgumentIsQuoted(t *testing.T) {
 // POSIX escape is '\” — close, an escaped quote outside the quoting, open
 // again — and a naive count reads that as unbalanced.
 func TestQuotesInsideNamesCannotEscape(t *testing.T) {
+	// Asks a real shell to split the command, because the question is what a
+	// shell does with it — not what we believe it does. That shell is the one
+	// on the server, which is always Unix; there is none to ask on Windows,
+	// and the quoting this checks is only ever used against a Unix server.
+	if runtime.GOOS == "windows" {
+		t.Skip("no POSIX shell to ask; the quoting is only used against Unix servers")
+	}
+
 	dangerous := `it's; rm -rf /`
 	command := NewExecutor(nil, "server", "").command([]string{"new-session", "-s", dangerous})
 

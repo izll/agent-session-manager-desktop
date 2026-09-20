@@ -1,3 +1,10 @@
+//go:build !windows
+
+// The helper runs on the servers a session can be placed on, which are Linux
+// and macOS — it is never built for or shipped to Windows. Its tests drive a
+// real shell, so on Windows they fail for want of /bin/sh rather than for
+// anything about the code.
+
 package main
 
 import (

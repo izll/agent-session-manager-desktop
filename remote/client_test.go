@@ -119,8 +119,11 @@ func TestHomeIsExpandedInKeyPaths(t *testing.T) {
 		t.Errorf("expanded to %q", expanded)
 	}
 
-	// An absolute path is left alone.
-	if got, _ := expandHome("/etc/keys/id"); got != "/etc/keys/id" {
+	// An absolute path is left alone. Built for the platform: "/etc/keys/id"
+	// is not absolute on Windows, so the check would be asking whether a
+	// relative path was rewritten — which it should be.
+	absolute := filepath.Join(string(filepath.Separator), "etc", "keys", "id")
+	if got, _ := expandHome(absolute); got != absolute {
 		t.Errorf("an absolute path was rewritten to %q", got)
 	}
 }

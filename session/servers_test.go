@@ -3,6 +3,7 @@ package session
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -55,6 +56,13 @@ func TestSaveAndLoadRoundTrip(t *testing.T) {
 // The file names hosts and usernames. No other account on the machine has a
 // reason to read it.
 func TestServerFileIsNotWorldReadable(t *testing.T) {
+	// Unix permission bits. Windows does not carry them — a file written with
+	// 0600 reports 0666 — so the question has no answer there, and access is
+	// controlled by an ACL this test could not read anyway.
+	if runtime.GOOS == "windows" {
+		t.Skip("no Unix permission bits to check")
+	}
+
 	storage := testStorage(t)
 	if err := storage.SaveServers(&ServerList{Servers: []Server{
 		{ID: "a", Host: "h", User: "u", AuthMethod: AuthAgent},
