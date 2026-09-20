@@ -115,16 +115,18 @@ func TestHomeIsExpandedInKeyPaths(t *testing.T) {
 	if strings.HasPrefix(expanded, "~") {
 		t.Errorf("the tilde survived: %q", expanded)
 	}
-	if !strings.HasSuffix(expanded, filepath.Join(".ssh", "id_ed25519")) {
+	// The separator is not rewritten, and must not be: this path is typed for
+	// the SERVER, which is always Unix. On Windows the home directory arrives
+	// with backslashes and the rest keeps its forward slashes — the result is
+	// mixed, and that is correct.
+	if !strings.HasSuffix(expanded, "/.ssh/id_ed25519") {
 		t.Errorf("expanded to %q", expanded)
 	}
 
-	// An absolute path is left alone. Built for the platform: "/etc/keys/id"
-	// is not absolute on Windows, so the check would be asking whether a
-	// relative path was rewritten — which it should be.
-	absolute := filepath.Join(string(filepath.Separator), "etc", "keys", "id")
-	if got, _ := expandHome(absolute); got != absolute {
-		t.Errorf("an absolute path was rewritten to %q", got)
+	// Anything without a leading ~ is left exactly as typed, whatever it looks
+	// like on this machine: it describes a location on the server.
+	if got, _ := expandHome("/etc/keys/id"); got != "/etc/keys/id" {
+		t.Errorf("a server path was rewritten to %q", got)
 	}
 }
 
