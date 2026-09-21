@@ -105,6 +105,48 @@ func buildAgentArgv(command string, flagArgs []string, extraArgs string) []strin
 	return argv
 }
 
+// ExtraArgsSetConversation reports whether a user's extra arguments already
+// choose which conversation the agent opens.
+//
+// The app adds a conversation flag of its own — "--session-id <uuid>" for a
+// fresh one, "--resume <id>" for a stored one — so a user who types their own
+// gets both, and the agent refuses:
+//
+//	Error: --session-id can only be used with --continue or --resume
+//	       if --fork-session is also specified.
+//
+// The user's choice wins: they typed a specific conversation, which is more
+// deliberate than the one we would have generated.
+//
+// Matched on the flags every supported agent uses for this, including the
+// "=value" form, since a flag written that way is one token.
+func ExtraArgsSetConversation(extraArgs string) bool {
+	for _, token := range SplitArgs(extraArgs) {
+		name := token
+		if at := strings.Index(name, "="); at > 0 {
+			name = name[:at]
+		}
+		if conversationFlags[name] {
+			return true
+		}
+	}
+	return false
+}
+
+// conversationFlags are the ways an agent is told which conversation to open.
+//
+// Taken from the agent configurations rather than guessed: every ResumeFlag
+// and SessionIDFlag in use, plus the shorthands the CLIs accept.
+var conversationFlags = map[string]bool{
+	"--resume":       true,
+	"-r":             true,
+	"--continue":     true,
+	"-c":             true,
+	"--session-id":   true,
+	"--conversation": true,
+	"--fork-session": true,
+}
+
 // customCommandArgv splits a Custom-agent command line into argv tokens.
 // Falls back to a single token if splitting yields nothing but the input
 // was non-empty (so a weird value still launches something visible).

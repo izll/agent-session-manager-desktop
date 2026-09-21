@@ -1150,7 +1150,8 @@ func (i *Instance) startWithResume(resumeID string, onlyWindowIdx int) error {
 				// Where the agent lets us name the branch, do — otherwise the
 				// session has nothing to resume from until a poll finds what the
 				// agent chose for itself.
-				if config.SupportsSessionID && config.SessionIDFlag != "" {
+				if config.SupportsSessionID && config.SessionIDFlag != "" &&
+					!ExtraArgsSetConversation(i.ExtraArgs) {
 					newID := uuid.New().String()
 					args = append(args, config.SessionIDFlag, newID)
 					i.ResumeSessionID = newID
@@ -1196,7 +1197,8 @@ func (i *Instance) startWithResume(resumeID string, onlyWindowIdx int) error {
 						i.ResumeSessionID = resumeID
 					} else if i.ResumeSessionID != "" {
 						args = append(args, config.ResumeFlag, i.ResumeSessionID)
-					} else if config.SupportsSessionID && config.SessionIDFlag != "" {
+					} else if config.SupportsSessionID && config.SessionIDFlag != "" &&
+						!ExtraArgsSetConversation(i.ExtraArgs) {
 						// New session with pre-assigned session ID (like VS Code extension)
 						newID := uuid.New().String()
 						args = append(args, config.SessionIDFlag, newID)
@@ -1655,7 +1657,8 @@ func (i *Instance) restoreFollowedWindows(onlyWindowIdx int) {
 					}
 					if resumeID != "" && config.SupportsResume && config.ResumeFlag != "" {
 						args = append(args, config.ResumeFlag, resumeID)
-					} else if resumeID == "" && config.SupportsSessionID && config.SessionIDFlag != "" {
+					} else if resumeID == "" && config.SupportsSessionID && config.SessionIDFlag != "" &&
+						!ExtraArgsSetConversation(fw.ExtraArgs) {
 						resumeID = uuid.New().String()
 						args = append(args, config.SessionIDFlag, resumeID)
 						log.Printf("[restoreFollowedWindows] generated a conversation ID for tab %q agent=%s", fw.Name, fw.Agent)
@@ -2107,7 +2110,8 @@ func (i *Instance) RestartWindowWithResume(windowIdx int, resumeID string) error
 			if resumeID != "" && config.SupportsResume && config.ResumeFlag != "" {
 				args = append(args, config.ResumeFlag, resumeID)
 				i.ResumeSessionID = resumeID
-			} else if resumeID == "" && config.SupportsSessionID && config.SessionIDFlag != "" {
+			} else if resumeID == "" && config.SupportsSessionID && config.SessionIDFlag != "" &&
+				!ExtraArgsSetConversation(i.ExtraArgs) {
 				// No resume ID — generate a fresh --session-id so the agent doesn't
 				// prompt for resume and we can track the session for future restarts
 				newID := uuid.New().String()
@@ -2219,7 +2223,8 @@ func (i *Instance) RestartWindowWithResume(windowIdx int, resumeID string) error
 			if tabResumeID != "" && config.SupportsResume && config.ResumeFlag != "" {
 				args = append(args, config.ResumeFlag, tabResumeID)
 				fw.ResumeSessionID = tabResumeID
-			} else if tabResumeID == "" && config.SupportsSessionID && config.SessionIDFlag != "" {
+			} else if tabResumeID == "" && config.SupportsSessionID && config.SessionIDFlag != "" &&
+				!ExtraArgsSetConversation(fw.ExtraArgs) {
 				newID := uuid.New().String()
 				args = append(args, config.SessionIDFlag, newID)
 				fw.ResumeSessionID = newID
@@ -3060,7 +3065,8 @@ func (i *Instance) NewAgentWindowOn(serverID string, name string, agent AgentTyp
 			args = append(args, config.AutoYesFlag)
 		}
 		// For agents supporting --session-id, pre-assign a session ID
-		if config.SupportsSessionID && config.SessionIDFlag != "" {
+		if config.SupportsSessionID && config.SessionIDFlag != "" &&
+			!ExtraArgsSetConversation(extraArgs) {
 			generatedSessionID = uuid.New().String()
 			args = append(args, config.SessionIDFlag, generatedSessionID)
 		}
@@ -3247,7 +3253,8 @@ func (i *Instance) NewForkedTab(name string, sessionID string) (int, error) {
 	// and until then the tab has nothing to resume from. Codex assigns its own,
 	// and CaptureCodexResumeIDs picks it up.
 	forkedID := ""
-	if config.SupportsSessionID && config.SessionIDFlag != "" {
+	if config.SupportsSessionID && config.SessionIDFlag != "" &&
+		!ExtraArgsSetConversation(i.ExtraArgs) {
 		forkedID = uuid.New().String()
 		args = append(args, config.SessionIDFlag, forkedID)
 	}
