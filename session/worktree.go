@@ -1,6 +1,7 @@
 package session
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -44,11 +45,36 @@ type WorktreePlan struct {
 // Separate from the creation so the dialog can show the user what it is about
 // to do, and so the names can be tested without a repository.
 func PlanWorktree(repoRoot, sessionName string) WorktreePlan {
+	return PlanWorktreeNamed(repoRoot, sessionName, "")
+}
+
+// PlanWorktreeNamed is PlanWorktree with a branch the user chose.
+//
+// branch empty derives one from the name, which is what the dialog offers
+// before anybody edits the field. A branch given here is taken as typed, only
+// cleaned of what git refuses — a person who types a name has a reason for it,
+// and the prefix is not forced onto it either.
+func PlanWorktreeNamed(repoRoot, sessionName, branch string) WorktreePlan {
 	parent := filepath.Dir(repoRoot)
 	base := filepath.Base(repoRoot)
+
+	chosen := strings.TrimSpace(branch)
+	if chosen == "" {
+		chosen = WorktreeBranchPrefix + worktreeBranchName(sessionName)
+	} else {
+		chosen = worktreeBranchName(chosen)
+	}
+
+	// The directory follows the branch when one was given, so the two read as
+	// the same thing on disk and in git; from the session's name otherwise.
+	dirFrom := sessionName
+	if strings.TrimSpace(branch) != "" {
+		dirFrom = strings.TrimPrefix(chosen, WorktreeBranchPrefix)
+	}
+
 	return WorktreePlan{
-		Dir:      filepath.Join(parent, base+worktreeDirSuffix, worktreeDirName(sessionName)),
-		Branch:   WorktreeBranchPrefix + worktreeBranchName(sessionName),
+		Dir:      filepath.Join(parent, base+worktreeDirSuffix, worktreeDirName(dirFrom)),
+		Branch:   chosen,
 		RepoRoot: repoRoot,
 	}
 }
@@ -179,7 +205,12 @@ var asciiFolding = map[rune]string{
 // opened in a subdirectory, and a worktree is added to the repository as a
 // whole.
 func (i *Instance) RepoRootOf(path string) string {
-	out, err := i.gitOutput([]string{"-C", path, "rev-parse", "--show-toplevel"}, nil)
+	return i.RepoRootOn("", path)
+}
+
+// RepoRootOn is RepoRootOf on a named machine, for a tab placed on a server.
+func (i *Instance) RepoRootOn(serverID, path string) string {
+	out, err := i.gitOutputOn(serverID, []string{"-C", path, "rev-parse", "--show-toplevel"})
 	if err != nil {
 		return ""
 	}
@@ -192,19 +223,44 @@ func (i *Instance) RepoRootOf(path string) string {
 // already in use is not reused — that would put the session on somebody
 // else's branch — so a free one is found by adding a number.
 func (i *Instance) CreateWorktree(plan WorktreePlan) (WorktreePlan, error) {
+	return i.CreateWorktreeOn("", plan)
+}
+
+// CreateWorktreeOn creates the worktree on a named machine.
+func (i *Instance) CreateWorktreeOn(serverID string, plan WorktreePlan) (WorktreePlan, error) {
 	if plan.RepoRoot == "" {
 		return plan, fmt.Errorf("error.worktreeNeedsRepo")
 	}
 
 	// A directory that already holds something is not reused either: git
 	// would refuse, and silently working somewhere else would be worse.
-	free, err := i.freeWorktreeNames(plan)
+	free, err := i.freeWorktreeNames(serverID, plan)
 	if err != nil {
 		return plan, err
 	}
 
-	if err := os.MkdirAll(filepath.Dir(free.Dir), 0o755); err != nil {
-		return free, fmt.Errorf("error.worktreeDirNotCreated|%s", err)
+	// The parent directory is made where the worktree will be. On a server
+	// that is not this filesystem, so os.MkdirAll would make it in the wrong
+	// place — and git will not create a worktree under a directory that is not
+	// there.
+	if serverID == "" {
+		if err := os.MkdirAll(filepath.Dir(free.Dir), 0o755); err != nil {
+			return free, fmt.Errorf("error.worktreeDirNotCreated|%s", err)
+		}
+	} else if _, err := i.gitOutputOn(serverID, []string{
+		"--exec-path",
+	}); err == nil {
+		// git is reachable there; make the parent with the shell the tab uses.
+		if shell := shellExecutorOn(i.ID, serverID); shell != nil {
+			ctx, cancel := context.WithTimeout(context.Background(), GitTimeout)
+			defer cancel()
+			_, stderr, exitCode, runErr := shell.RunShell(ctx, "",
+				"mkdir", "-p", "--", pathDir(free.Dir))
+			if runErr != nil || exitCode != 0 {
+				return free, fmt.Errorf("error.worktreeDirNotCreated|%s",
+					strings.TrimSpace(string(stderr)))
+			}
+		}
 	}
 
 	// Checked with git's own validator before it is used.
@@ -213,15 +269,15 @@ func (i *Instance) CreateWorktree(plan WorktreePlan) (WorktreePlan, error) {
 	// writes. check-ref-format is the authority on what git will take, and
 	// asking it here means a name it refuses fails where it was chosen rather
 	// than deep inside `worktree add`, which reports it as an opaque failure.
-	if _, err := i.gitOutput([]string{
+	if _, err := i.gitOutputOn(serverID, []string{
 		"check-ref-format", "--branch", free.Branch,
-	}, nil); err != nil {
+	}); err != nil {
 		return free, fmt.Errorf("error.worktreeBranchRefused|%s", free.Branch)
 	}
 
-	if _, err := i.gitOutput([]string{
+	if _, err := i.gitOutputOn(serverID, []string{
 		"-C", free.RepoRoot, "worktree", "add", "-b", free.Branch, free.Dir,
-	}, nil); err != nil {
+	}); err != nil {
 		return free, fmt.Errorf("error.worktreeNotCreated|%s", gitMessage(err))
 	}
 	return free, nil
@@ -232,16 +288,15 @@ func (i *Instance) CreateWorktree(plan WorktreePlan) (WorktreePlan, error) {
 // Both have to be free together: a branch outlives the worktree it was made
 // for, so a second session with the same name would find the directory gone
 // but the branch still there, and git refuses to create it again.
-func (i *Instance) freeWorktreeNames(plan WorktreePlan) (WorktreePlan, error) {
-	taken, err := i.existingBranches(plan.RepoRoot)
+func (i *Instance) freeWorktreeNames(serverID string, plan WorktreePlan) (WorktreePlan, error) {
+	taken, err := i.existingBranches(serverID, plan.RepoRoot)
 	if err != nil {
 		return plan, err
 	}
 
 	candidate := plan
 	for attempt := 2; attempt < 100; attempt++ {
-		_, dirExists := os.Stat(candidate.Dir)
-		if !taken[candidate.Branch] && os.IsNotExist(dirExists) {
+		if !taken[candidate.Branch] && !i.pathExistsOn(serverID, candidate.Dir) {
 			return candidate, nil
 		}
 		candidate.Dir = fmt.Sprintf("%s-%d", plan.Dir, attempt)
@@ -250,10 +305,10 @@ func (i *Instance) freeWorktreeNames(plan WorktreePlan) (WorktreePlan, error) {
 	return plan, fmt.Errorf("error.worktreeNameNotFree|%s", plan.Branch)
 }
 
-func (i *Instance) existingBranches(repoRoot string) (map[string]bool, error) {
-	out, err := i.gitOutput([]string{
+func (i *Instance) existingBranches(serverID, repoRoot string) (map[string]bool, error) {
+	out, err := i.gitOutputOn(serverID, []string{
 		"-C", repoRoot, "for-each-ref", "--format=%(refname:short)", "refs/heads",
-	}, nil)
+	})
 	if err != nil {
 		return nil, fmt.Errorf("error.worktreeBranchesNotRead|%s", gitMessage(err))
 	}
@@ -288,9 +343,14 @@ func (s WorktreeState) HasWork() bool {
 // somebody pushes it, and asking git for one is an error rather than an empty
 // answer. baseSHA empty skips that half rather than guessing.
 func (i *Instance) InspectWorktree(dir, baseSHA string) WorktreeState {
+	return i.InspectWorktreeOn("", dir, baseSHA)
+}
+
+// InspectWorktreeOn is InspectWorktree on a named machine.
+func (i *Instance) InspectWorktreeOn(serverID, dir, baseSHA string) WorktreeState {
 	var state WorktreeState
 
-	if out, err := i.gitOutput([]string{"-C", dir, "status", "--porcelain"}, nil); err == nil {
+	if out, err := i.gitOutputOn(serverID, []string{"-C", dir, "status", "--porcelain"}); err == nil {
 		for _, line := range strings.Split(string(out), "\n") {
 			if strings.TrimSpace(line) != "" {
 				state.ChangedFiles++
@@ -299,9 +359,9 @@ func (i *Instance) InspectWorktree(dir, baseSHA string) WorktreeState {
 	}
 
 	if baseSHA != "" {
-		if out, err := i.gitOutput([]string{
+		if out, err := i.gitOutputOn(serverID, []string{
 			"-C", dir, "rev-list", "--count", baseSHA + "..HEAD",
-		}, nil); err == nil {
+		}); err == nil {
 			count := strings.TrimSpace(string(out))
 			if n := atoiSafe(count); n > 0 {
 				state.UnmergedCommits = n
@@ -321,24 +381,29 @@ func (i *Instance) InspectWorktree(dir, baseSHA string) WorktreeState {
 // branch whose commits went nowhere is worth keeping when the user said to
 // keep the work, and a leftover branch costs nothing but a name.
 func (i *Instance) RemoveWorktree(repoRoot, dir, branch string, force bool) error {
+	return i.RemoveWorktreeOn("", repoRoot, dir, branch, force)
+}
+
+// RemoveWorktreeOn removes a worktree on a named machine.
+func (i *Instance) RemoveWorktreeOn(serverID, repoRoot, dir, branch string, force bool) error {
 	args := []string{"-C", repoRoot, "worktree", "remove"}
 	if force {
 		args = append(args, "--force")
 	}
 	args = append(args, dir)
 
-	if _, err := i.gitOutput(args, nil); err != nil {
+	if _, err := i.gitOutputOn(serverID, args); err != nil {
 		return fmt.Errorf("error.worktreeNotRemoved|%s", gitMessage(err))
 	}
 
 	if branch != "" && force {
 		// -D rather than -d: the branch is unmerged by definition here, and
 		// the user has already said the work can go.
-		_, _ = i.gitOutput([]string{"-C", repoRoot, "branch", "-D", branch}, nil)
+		_, _ = i.gitOutputOn(serverID, []string{"-C", repoRoot, "branch", "-D", branch})
 	} else if branch != "" {
 		// -d refuses an unmerged branch, which is the right default: the
 		// worktree was clean, but the commits on it may still matter.
-		_, _ = i.gitOutput([]string{"-C", repoRoot, "branch", "-d", branch}, nil)
+		_, _ = i.gitOutputOn(serverID, []string{"-C", repoRoot, "branch", "-d", branch})
 	}
 	return nil
 }
@@ -362,4 +427,61 @@ func atoiSafe(value string) int {
 		total = total*10 + int(r-'0')
 	}
 	return total
+}
+
+// shellExecutorOn returns the shell for a tab's machine, or nil when there is
+// no live connection to it.
+func shellExecutorOn(sessionID, serverID string) ShellExecutor {
+	found, ok := executors.Load(tabExecutorKey(sessionID, serverID))
+	if !ok {
+		return nil
+	}
+	shell, isShell := found.(ShellExecutor)
+	if !isShell {
+		return nil
+	}
+	return shell
+}
+
+// pathDir is filepath.Dir for a path on the machine it names.
+//
+// A server is Unix whatever this computer is, so filepath.Dir would cut a
+// Windows desktop's path at the wrong separator and hand git a directory that
+// does not exist there.
+func pathDir(value string) string {
+	if cut := strings.LastIndex(value, "/"); cut > 0 {
+		return value[:cut]
+	}
+	return filepath.Dir(value)
+}
+
+// pathExistsOn reports whether a path is already taken on a machine.
+func (i *Instance) pathExistsOn(serverID, path string) bool {
+	if serverID == "" {
+		_, err := os.Stat(path)
+		return err == nil
+	}
+	shell := shellExecutorOn(i.ID, serverID)
+	if shell == nil {
+		// Unknown rather than free: claiming a directory on a machine that
+		// cannot be asked risks git finding something there.
+		return true
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), GitTimeout)
+	defer cancel()
+	_, _, exitCode, err := shell.RunShell(ctx, "", "test", "-e", path)
+	return err == nil && exitCode == 0
+}
+
+// discardUnusedWorktree removes a checkout made for something that then failed
+// to be created.
+//
+// Forced, because the only thing in it is what git put there a moment ago:
+// there is no work to protect, and refusing would leave the directory behind
+// for a tab that does not exist.
+func (i *Instance) discardUnusedWorktree(serverID string, plan WorktreePlan) {
+	if plan.Dir == "" {
+		return
+	}
+	_ = i.RemoveWorktreeOn(serverID, plan.RepoRoot, plan.Dir, plan.Branch, true)
 }

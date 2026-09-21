@@ -912,3 +912,22 @@ func (s *Storage) EmptyTrash() error {
 	data.Revision++
 	return s.writeStorageDataLocked(data, true)
 }
+
+// FindTrashEntry returns one item from the trash.
+//
+// The entry holds the whole record of what was deleted — a session or a tab —
+// so a caller can ask about something that is no longer in the live list.
+func (s *Storage) FindTrashEntry(id string) (*TrashEntry, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	data, err := s.loadStorageDataLocked()
+	if err != nil {
+		return nil, err
+	}
+	for _, entry := range data.Trash {
+		if entry.ID == id {
+			return entry, nil
+		}
+	}
+	return nil, fmt.Errorf("trash item %s not found", id)
+}

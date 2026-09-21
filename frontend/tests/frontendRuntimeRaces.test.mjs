@@ -261,7 +261,7 @@ assert.match(tabBar, /sessionId=\{tabColorSessionId\}/,
   'the tab color dialog must not receive the live selected session beside an old tab snapshot');
 assert.match(tabBar, /sessionId=\{newTabSessionId\}/);
 assert.match(tabBar, /sessionId=\{quickTerminalSessionId\}/);
-assert.match(newTabDialog, /App\.CreateTabResuming\(targetSessionId/,
+assert.match(newTabDialog, /App\.CreateTabWithWorktree\(targetSessionId/,
   'the tab must be created for the session captured at submit, not the live selection');
 assert.match(newTabDialog, /get\(selectedSessionId\) === targetSessionId/);
 assert.match(newSessionDialog, /const generation = \+\+resumeLookupGeneration/);

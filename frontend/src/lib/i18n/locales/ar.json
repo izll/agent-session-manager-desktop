@@ -514,6 +514,8 @@
   "newTab.resumeNeedsWorkDir": "اختر دليل عمل لعرض المحادثات السابقة.",
   "newTab.workDirPlaceholder": "الافتراضي هو مجلد الجلسة",
   "newTab.workDirOnServer": "المسار على الخادم",
+  "newTab.ownWorktree": "امنح هذه العلامة شجرة عمل خاصة بها",
+  "newTab.ownWorktreeHint": "نسخة عمل منفصلة على فرع خاص بها، حتى لا يحرّر وكيلان في هذه الجلسة الملفات نفسها.",
   "newTab.browse": "استعراض...",
   "newTab.tabName": "اسم علامة التبويب",
   "newTab.tabNamePlaceholder": "اسم علامة التبويب",

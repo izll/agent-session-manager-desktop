@@ -514,6 +514,8 @@
   "newTab.resumeNeedsWorkDir": "选择工作目录以查看以前的对话。",
   "newTab.workDirPlaceholder": "默认使用会话文件夹",
   "newTab.workDirOnServer": "服务器上的路径",
+  "newTab.ownWorktree": "为此标签页分配独立工作树",
+  "newTab.ownWorktreeHint": "位于独立分支的单独检出，这样本会话中的两个智能体不会编辑同一批文件。",
   "newTab.browse": "浏览...",
   "newTab.tabName": "标签页名称",
   "newTab.tabNamePlaceholder": "标签页名称",

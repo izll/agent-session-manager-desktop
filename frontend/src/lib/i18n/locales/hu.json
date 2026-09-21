@@ -507,6 +507,8 @@
   "newTab.resumeNeedsWorkDir": "Válassz munkakönyvtárat a korábbi beszélgetésekhez.",
   "newTab.workDirPlaceholder": "Alapból a munkamenet mappája",
   "newTab.workDirOnServer": "Elérési út a szerveren",
+  "newTab.ownWorktree": "Saját worktree ehhez a fülhöz",
+  "newTab.ownWorktreeHint": "Külön checkout saját branchen, így két agent ebben a munkamenetben nem ugyanazokat a fájlokat szerkeszti.",
   "newTab.browse": "Tallózás...",
   "newTab.tabName": "Fül neve",
   "newTab.tabNamePlaceholder": "Fül neve",

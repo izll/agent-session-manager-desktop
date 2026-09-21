@@ -1290,6 +1290,8 @@
   "servers.sameAsSession": "Same as the session",
   "servers.tabRunsOnHint": "This tab runs on the server and keeps working after the app is closed.",
   "newTab.workDirOnServer": "Path on the server",
+  "newTab.ownWorktree": "Give this tab its own worktree",
+  "newTab.ownWorktreeHint": "A separate checkout on its own branch, so two agents in this session stop editing the same files.",
   "newTab.workDirRequiredOnServer": "A tab on a server needs a working directory on that server",
   "terminal.serverUnreachable": "This tab runs on a server that is not answering. Its work continues there.",
   "settings.showRemoteBadge": "Remote tab marker",

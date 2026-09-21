@@ -167,7 +167,9 @@
     // confirmation has to say what is in it rather than warn in the abstract.
     let worktree: main.WorktreeInfo | null = null;
     try {
-      worktree = await App.SessionWorktree(item.id);
+      // The trash entry holds the whole record, session or tab alike, so one
+      // call answers for both.
+      worktree = await App.TrashedWorktree(item.id);
     } catch {
       // No worktree, or the session is already gone from storage. Either way
       // the deletion below still works; it simply has nothing extra to say.
@@ -193,7 +195,7 @@
       run: async (target) => {
         // The worktree goes first, while the session still knows where it is.
         if (discardWorktree) {
-          await App.DiscardSessionWorktree(item.id, forceDiscard);
+          await App.DiscardTrashedWorktree(item.id, forceDiscard);
           if (!operationUIIsCurrent(target)) return;
         }
         await App.PermanentlyDeleteTrashItem(item.id, target.projectId);

@@ -514,6 +514,8 @@
   "newTab.resumeNeedsWorkDir": "Elige un directorio de trabajo para ver las conversaciones anteriores.",
   "newTab.workDirPlaceholder": "Por defecto, la carpeta de la sesión",
   "newTab.workDirOnServer": "Ruta en el servidor",
+  "newTab.ownWorktree": "Dar a esta pestaña su propio worktree",
+  "newTab.ownWorktreeHint": "Una copia de trabajo separada en su propia rama, para que dos agentes de esta sesión dejen de editar los mismos archivos.",
   "newTab.browse": "Examinar...",
   "newTab.tabName": "Nombre de pestaña",
   "newTab.tabNamePlaceholder": "Nombre de pestaña",

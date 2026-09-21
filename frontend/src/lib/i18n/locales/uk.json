@@ -514,6 +514,8 @@
   "newTab.resumeNeedsWorkDir": "Виберіть робочий каталог, щоб побачити попередні розмови.",
   "newTab.workDirPlaceholder": "Типово — тека сеансу",
   "newTab.workDirOnServer": "Шлях на сервері",
+  "newTab.ownWorktree": "Власний worktree для цієї вкладки",
+  "newTab.ownWorktreeHint": "Окрема робоча копія у власній гілці, щоб два агенти в цьому сеансі не редагували ті самі файли.",
   "newTab.browse": "Огляд...",
   "newTab.tabName": "Назва вкладки",
   "newTab.tabNamePlaceholder": "Назва вкладки",

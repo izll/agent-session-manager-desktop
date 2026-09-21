@@ -514,6 +514,8 @@
   "newTab.resumeNeedsWorkDir": "Önceki konuşmaları görmek için bir çalışma dizini seçin.",
   "newTab.workDirPlaceholder": "Varsayılan: oturum klasörü",
   "newTab.workDirOnServer": "Sunucudaki yol",
+  "newTab.ownWorktree": "Bu sekmeye kendi worktree'sini ver",
+  "newTab.ownWorktreeHint": "Kendi dalında ayrı bir çalışma kopyası; böylece bu oturumdaki iki ajan aynı dosyaları düzenlemez.",
   "newTab.browse": "Gözat...",
   "newTab.tabName": "Sekme Adı",
   "newTab.tabNamePlaceholder": "Sekme adı",

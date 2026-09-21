@@ -310,6 +310,12 @@ type FollowedWindow struct {
 	BackgroundColor  string    `json:"background_color,omitempty"`   // Tab background color (empty uses the theme default)
 	WorkDir          string    `json:"work_dir,omitempty"`           // Tab working directory (empty = session path)
 	HideStatusLine   bool      `json:"hide_status_line,omitempty"`   // Don't show this tab's status line in the session list
+	// Worktree records the checkout made for this tab, when it was given one.
+	// Empty for a tab working in its session's directory, which is what every
+	// tab did before and still does by default.
+	WorktreeDir      string `json:"worktree_dir,omitempty"`
+	WorktreeBranch   string `json:"worktree_branch,omitempty"`
+	WorktreeRepoRoot string `json:"worktree_repo_root,omitempty"`
 	// ServerID names the machine this tab runs on, empty meaning the session's
 	// own machine.
 	//
@@ -3058,6 +3064,15 @@ type NewTabRequest struct {
 	// will run on — so a tab on a server resumes a conversation that server
 	// holds, not one from this computer.
 	ResumeID string
+	// Worktree gives the tab a checkout of its own.
+	//
+	// Tabs default to the session's directory, so two agents in one session
+	// edit the same files — which is the case a worktree exists for, and the
+	// commoner one: several tabs in a session is what tabs are for.
+	Worktree bool
+	// WorktreeBranch is the branch to create, or empty to derive one from the
+	// tab's name.
+	WorktreeBranch string
 }
 
 // NewAgentTab creates an agent tab, optionally resuming a conversation.
@@ -3073,6 +3088,24 @@ func (i *Instance) NewAgentTab(req NewTabRequest) (int, error) {
 		// multiplexer would refuse to create the window at all.
 		return -1, fmt.Errorf("error.tabNeedsWorkDirOnServer")
 	}
+
+	// A checkout of its own, made before the window exists so a failure leaves
+	// nothing behind. The directory it produces is what the tab then works in.
+	var worktree WorktreePlan
+	if req.Worktree {
+		repoRoot := i.RepoRootOn(serverID, workDir)
+		if repoRoot == "" {
+			return -1, fmt.Errorf("error.worktreeNeedsRepo")
+		}
+		made, err := i.CreateWorktreeOn(serverID,
+			PlanWorktreeNamed(repoRoot, name, req.WorktreeBranch))
+		if err != nil {
+			return -1, err
+		}
+		worktree = made
+		workDir = made.Dir
+	}
+
 	if i.Status != StatusRunning {
 		return -1, fmt.Errorf("instance not running")
 	}
@@ -3164,11 +3197,16 @@ func (i *Instance) NewAgentTab(req NewTabRequest) (int, error) {
 	output, err := i.tmuxOutputOn(serverID,
 		newTmuxWindowArgs(target, workDir, name, false, argv)...)
 	if err != nil {
+		// The checkout was made for a tab that will not exist; leaving it
+		// behind would put a directory and a branch on the user's disk that
+		// nothing in the app knows about.
+		i.discardUnusedWorktree(serverID, worktree)
 		return -1, err
 	}
 
 	newIdx, err := parseTmuxWindowIndex(output)
 	if err != nil {
+		i.discardUnusedWorktree(serverID, worktree)
 		return -1, fmt.Errorf("invalid new agent window index: %w", err)
 	}
 
@@ -3180,13 +3218,16 @@ func (i *Instance) NewAgentTab(req NewTabRequest) (int, error) {
 			}
 			return ""
 		}(),
-		Index:           newIdx,
-		Agent:           agent,
-		Name:            name,
-		CustomCommand:   customCmd,
-		ExtraArgs:       extraArgs,
-		ResumeSessionID: generatedSessionID,
-		ServerID:        serverID,
+		Index:            newIdx,
+		Agent:            agent,
+		Name:             name,
+		CustomCommand:    customCmd,
+		ExtraArgs:        extraArgs,
+		ResumeSessionID:  generatedSessionID,
+		ServerID:         serverID,
+		WorktreeDir:      worktree.Dir,
+		WorktreeBranch:   worktree.Branch,
+		WorktreeRepoRoot: worktree.RepoRoot,
 	})
 
 	// Clear TabOrder since a new window was added

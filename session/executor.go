@@ -304,6 +304,40 @@ func (i *Instance) gitOutput(args []string, gitEnv []string) ([]byte, error) {
 	return cmd.Output()
 }
 
+// gitOutputOn runs a git command on a named machine.
+//
+// serverID empty means this computer; anything else is the server a tab was
+// placed on. gitOutput asks the session's own machine, which is the right
+// answer for the session and the wrong one for a tab running somewhere else:
+// its repository is on that server, and a worktree made here would be made in
+// the wrong place entirely.
+func (i *Instance) gitOutputOn(serverID string, args []string) ([]byte, error) {
+	if serverID == "" || serverID == i.ServerID {
+		return i.gitOutput(args, nil)
+	}
+
+	found, ok := executors.Load(tabExecutorKey(i.ID, serverID))
+	if !ok {
+		return nil, fmt.Errorf("error.serverNotConnected")
+	}
+	shell, isShell := found.(ShellExecutor)
+	if !isShell {
+		return nil, fmt.Errorf("error.serverNotConnected")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), GitTimeout)
+	defer cancel()
+	stdout, stderr, exitCode, err := shell.RunShell(ctx, "", append([]string{"git"}, args...)...)
+	if err != nil {
+		return nil, err
+	}
+	if exitCode != 0 {
+		return stdout, fmt.Errorf("git %s failed on %s: %s",
+			args[0], shell.Describe(), strings.TrimSpace(string(stderr)))
+	}
+	return stdout, nil
+}
+
 // Reading files where a session lives.
 //
 // The file browser, the editor and the diff all read from the working

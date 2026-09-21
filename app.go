@@ -1781,6 +1781,38 @@ func (a *App) PlanWorktreeFor(path, sessionName string) (*PlannedWorktree, error
 	return &PlannedWorktree{Dir: plan.Dir, Branch: plan.Branch}, nil
 }
 
+// RepositoryRootOn is RepositoryRootOf on the machine a tab would run on.
+//
+// A tab can be placed on a server, where the repository is that server's. This
+// computer's answer would be about a different filesystem entirely.
+func (a *App) RepositoryRootOn(sessionID, serverID, path string) (string, error) {
+	if strings.TrimSpace(path) == "" {
+		return "", nil
+	}
+	if serverID == "" {
+		return a.RepositoryRootOf(path)
+	}
+	if _, err := a.connectionFor(serverID); err != nil {
+		return "", err
+	}
+
+	inst, err := a.storage.GetInstance(sessionID)
+	if err != nil {
+		return "", err
+	}
+	return inst.RepoRootOn(serverID, path), nil
+}
+
+// PlanWorktreeOn reports where a tab's worktree would go, without creating it.
+func (a *App) PlanWorktreeOn(sessionID, serverID, path, tabName, branch string) (*PlannedWorktree, error) {
+	root, err := a.RepositoryRootOn(sessionID, serverID, path)
+	if err != nil || root == "" {
+		return &PlannedWorktree{}, err
+	}
+	plan := session.PlanWorktreeNamed(root, tabName, branch)
+	return &PlannedWorktree{Dir: plan.Dir, Branch: plan.Branch}, nil
+}
+
 // WorktreeInfo describes a session's worktree and what removing it would cost.
 type WorktreeInfo struct {
 	// Dir is empty for a session that has no worktree of its own.
@@ -1793,58 +1825,91 @@ type WorktreeInfo struct {
 	HasWork         bool `json:"hasWork"`
 }
 
-// SessionWorktree reports a session's worktree, and what is in it that exists
-// nowhere else.
+// TrashedWorktree reports the worktree held by a trashed item — a session or a
+// tab — and what removing it would cost.
 //
-// Asked before deleting, so the confirmation can say what would go rather than
-// warning in the abstract. A session without a worktree answers with an empty
-// Dir, which is the signal to delete without asking.
-func (a *App) SessionWorktree(id string) (*WorktreeInfo, error) {
-	inst, err := a.storage.GetInstance(id)
+// Read from the trash entry rather than from the live session: the tab is no
+// longer in it, and the entry keeps its whole record. One call serves both
+// kinds, because the confirmation asks the same question of each.
+func (a *App) TrashedWorktree(trashID string) (*WorktreeInfo, error) {
+	entry, err := a.storage.FindTrashEntry(trashID)
 	if err != nil {
 		return nil, err
 	}
-	if inst.WorktreeDir == "" {
+
+	dir, branch, serverID, baseSHA := "", "", "", ""
+	switch {
+	case entry.Session != nil:
+		dir, branch = entry.Session.WorktreeDir, entry.Session.WorktreeBranch
+		serverID, baseSHA = entry.Session.ServerID, entry.Session.BaseCommitSHA
+	case entry.Tab != nil:
+		dir, branch = entry.Tab.WorktreeDir, entry.Tab.WorktreeBranch
+		serverID = entry.Tab.ServerID
+		// A tab has no base commit of its own; its worktree branched from
+		// wherever the session was, which is what the session recorded.
+		if parent, err := a.storage.GetInstance(entry.ParentSessionID); err == nil {
+			baseSHA = parent.BaseCommitSHA
+			if serverID == "" {
+				serverID = parent.ServerID
+			}
+		}
+	}
+	if dir == "" {
 		return &WorktreeInfo{}, nil
 	}
 
-	state := inst.InspectWorktree(inst.WorktreeDir, inst.BaseCommitSHA)
+	// A bare instance carries the id the executor routes by, so a worktree on
+	// a server is read there.
+	probe := &session.Instance{ID: entry.ParentSessionID}
+	if entry.Session != nil {
+		probe.ID = entry.Session.ID
+		probe.ServerID = entry.Session.ServerID
+	}
+	state := probe.InspectWorktreeOn(serverID, dir, baseSHA)
 	return &WorktreeInfo{
-		Dir:             inst.WorktreeDir,
-		Branch:          inst.WorktreeBranch,
+		Dir:             dir,
+		Branch:          branch,
 		ChangedFiles:    state.ChangedFiles,
 		UnmergedCommits: state.UnmergedCommits,
 		HasWork:         state.HasWork(),
 	}, nil
 }
 
-// DiscardSessionWorktree removes a session's worktree and its branch.
+// DiscardTrashedWorktree removes the worktree held by a trashed item.
 //
-// force is the user's answer to what SessionWorktree reported: without it git
-// refuses to remove a worktree holding changes, and that refusal is what stops
-// work disappearing on a mis-click.
-//
-// Called when a session is deleted for good, not when it goes to the trash: a
-// session in the trash can be restored, and restoring one whose files had been
-// deleted would give back a session pointing at nothing.
-func (a *App) DiscardSessionWorktree(id string, force bool) error {
-	inst, err := a.storage.GetInstance(id)
+// Called when the item is deleted for good, not when it goes to the trash: a
+// trashed session or tab can be restored, and restoring one whose checkout had
+// been deleted would give back something pointing at nothing.
+func (a *App) DiscardTrashedWorktree(trashID string, force bool) error {
+	entry, err := a.storage.FindTrashEntry(trashID)
 	if err != nil {
 		return err
 	}
-	if inst.WorktreeDir == "" {
+
+	dir, branch, repoRoot, serverID := "", "", "", ""
+	switch {
+	case entry.Session != nil:
+		dir, branch = entry.Session.WorktreeDir, entry.Session.WorktreeBranch
+		repoRoot, serverID = entry.Session.WorktreeRepoRoot, entry.Session.ServerID
+	case entry.Tab != nil:
+		dir, branch = entry.Tab.WorktreeDir, entry.Tab.WorktreeBranch
+		repoRoot, serverID = entry.Tab.WorktreeRepoRoot, entry.Tab.ServerID
+		if serverID == "" {
+			if parent, err := a.storage.GetInstance(entry.ParentSessionID); err == nil {
+				serverID = parent.ServerID
+			}
+		}
+	}
+	if dir == "" {
 		return nil
 	}
 
-	if err := inst.RemoveWorktree(inst.WorktreeRepoRoot, inst.WorktreeDir,
-		inst.WorktreeBranch, force); err != nil {
-		return err
+	probe := &session.Instance{ID: entry.ParentSessionID}
+	if entry.Session != nil {
+		probe.ID = entry.Session.ID
+		probe.ServerID = entry.Session.ServerID
 	}
-
-	inst.WorktreeDir = ""
-	inst.WorktreeBranch = ""
-	inst.WorktreeRepoRoot = ""
-	return a.storage.UpdateInstance(inst)
+	return probe.RemoveWorktreeOn(serverID, repoRoot, dir, branch, force)
 }
 
 func (a *App) PermanentlyDeleteTrashItem(id, expectedProjectID string) error {
@@ -2606,6 +2671,21 @@ func (a *App) CreateTabOnServer(sessionID string, serverID string, isAgent bool,
 // new-tab dialog could offer a choice. The id belongs to the machine the tab
 // will run on: a tab on a server resumes a conversation held there.
 func (a *App) CreateTabResuming(sessionID string, serverID string, isAgent bool, agent string, name string, extraArgs string, workDir string, resumeID string, expectedProjectID string) (int, error) {
+	return a.CreateTabWithWorktree(sessionID, serverID, isAgent, agent, name,
+		extraArgs, workDir, resumeID, false, "", expectedProjectID)
+}
+
+// CreateTabWithWorktree creates a tab that works in a git worktree of its own.
+//
+// worktree false is every previous caller. With it, the tab gets a checkout
+// and a branch of its own, so two agents in one session stop editing the same
+// files — which is the ordinary case, since several tabs in a session is what
+// tabs are for.
+//
+// branch empty derives one from the tab's name; a branch given is taken as
+// typed. Both the checkout and the branch are made on the machine the tab will
+// run on, not on this computer.
+func (a *App) CreateTabWithWorktree(sessionID string, serverID string, isAgent bool, agent string, name string, extraArgs string, workDir string, resumeID string, worktree bool, branch string, expectedProjectID string) (int, error) {
 	// Connect BEFORE taking the mutation lock.
 	//
 	// The lock is exclusive and every mutating method in the app goes through
@@ -2641,12 +2721,14 @@ func (a *App) CreateTabResuming(sessionID string, serverID string, isAgent bool,
 	if isAgent {
 		agentType := session.AgentType(agent)
 		idx, err := inst.NewAgentTab(session.NewTabRequest{
-			ServerID:  serverID,
-			Name:      name,
-			Agent:     agentType,
-			ExtraArgs: extraArgs,
-			WorkDir:   workDir,
-			ResumeID:  resumeID,
+			ServerID:       serverID,
+			Name:           name,
+			Agent:          agentType,
+			ExtraArgs:      extraArgs,
+			WorkDir:        workDir,
+			ResumeID:       resumeID,
+			Worktree:       worktree,
+			WorktreeBranch: branch,
 		})
 		if err != nil {
 			return -1, err

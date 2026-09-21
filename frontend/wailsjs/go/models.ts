@@ -2463,6 +2463,9 @@ export namespace session {
 	    background_color?: string;
 	    work_dir?: string;
 	    hide_status_line?: boolean;
+	    worktree_dir?: string;
+	    worktree_branch?: string;
+	    worktree_repo_root?: string;
 	    server_id?: string;
 
 	    static createFrom(source: any = {}) {
@@ -2488,6 +2491,9 @@ export namespace session {
 	        this.background_color = source["background_color"];
 	        this.work_dir = source["work_dir"];
 	        this.hide_status_line = source["hide_status_line"];
+	        this.worktree_dir = source["worktree_dir"];
+	        this.worktree_branch = source["worktree_branch"];
+	        this.worktree_repo_root = source["worktree_repo_root"];
 	        this.server_id = source["server_id"];
 	    }
 	}

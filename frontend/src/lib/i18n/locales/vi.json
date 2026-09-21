@@ -514,6 +514,8 @@
   "newTab.resumeNeedsWorkDir": "Chọn thư mục làm việc để xem các cuộc trò chuyện trước.",
   "newTab.workDirPlaceholder": "Mặc định là thư mục của phiên",
   "newTab.workDirOnServer": "Đường dẫn trên máy chủ",
+  "newTab.ownWorktree": "Cấp worktree riêng cho thẻ này",
+  "newTab.ownWorktreeHint": "Một bản checkout riêng trên nhánh riêng, để hai tác nhân trong phiên này không sửa cùng các tệp.",
   "newTab.browse": "Duyệt...",
   "newTab.tabName": "Tên tab",
   "newTab.tabNamePlaceholder": "Tên tab",

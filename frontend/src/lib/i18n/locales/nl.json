@@ -514,6 +514,8 @@
   "newTab.resumeNeedsWorkDir": "Kies een werkmap om eerdere gesprekken te zien.",
   "newTab.workDirPlaceholder": "Standaard de sessiemap",
   "newTab.workDirOnServer": "Pad op de server",
+  "newTab.ownWorktree": "Geef dit tabblad een eigen worktree",
+  "newTab.ownWorktreeHint": "Een aparte checkout op een eigen branch, zodat twee agents in deze sessie niet dezelfde bestanden bewerken.",
   "newTab.browse": "Bladeren...",
   "newTab.tabName": "Tabnaam",
   "newTab.tabNamePlaceholder": "Tabnaam",

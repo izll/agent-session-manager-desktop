@@ -514,6 +514,8 @@
   "newTab.resumeNeedsWorkDir": "Choisissez un répertoire de travail pour voir les conversations précédentes.",
   "newTab.workDirPlaceholder": "Par défaut, le dossier de la session",
   "newTab.workDirOnServer": "Chemin sur le serveur",
+  "newTab.ownWorktree": "Donner à cet onglet son propre worktree",
+  "newTab.ownWorktreeHint": "Une copie de travail séparée sur sa propre branche, pour que deux agents de cette session ne modifient plus les mêmes fichiers.",
   "newTab.browse": "Parcourir...",
   "newTab.tabName": "Nom de l'onglet",
   "newTab.tabNamePlaceholder": "Nom de l'onglet",

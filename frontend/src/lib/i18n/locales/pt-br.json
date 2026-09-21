@@ -514,6 +514,8 @@
   "newTab.resumeNeedsWorkDir": "Escolha um diretório de trabalho para ver as conversas anteriores.",
   "newTab.workDirPlaceholder": "Por padrão, a pasta da sessão",
   "newTab.workDirOnServer": "Caminho no servidor",
+  "newTab.ownWorktree": "Dar a esta aba seu próprio worktree",
+  "newTab.ownWorktreeHint": "Uma cópia de trabalho separada em seu próprio branch, para que dois agentes nesta sessão não editem os mesmos arquivos.",
   "newTab.browse": "Procurar...",
   "newTab.tabName": "Nome da Aba",
   "newTab.tabNamePlaceholder": "Nome da aba",

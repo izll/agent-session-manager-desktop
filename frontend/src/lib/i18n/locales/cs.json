@@ -514,6 +514,8 @@
   "newTab.resumeNeedsWorkDir": "Vyberte pracovní adresář pro zobrazení dřívějších konverzací.",
   "newTab.workDirPlaceholder": "Výchozí je složka relace",
   "newTab.workDirOnServer": "Cesta na serveru",
+  "newTab.ownWorktree": "Dát této kartě vlastní worktree",
+  "newTab.ownWorktreeHint": "Samostatná kopie na vlastní větvi, aby dva agenti v této relaci neupravovali stejné soubory.",
   "newTab.browse": "Procházet...",
   "newTab.tabName": "Název záložky",
   "newTab.tabNamePlaceholder": "Název záložky",

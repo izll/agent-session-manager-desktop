@@ -48,6 +48,8 @@ export function CreateTabOnServer(arg1:string,arg2:string,arg3:boolean,arg4:stri
 
 export function CreateTabResuming(arg1:string,arg2:string,arg3:boolean,arg4:string,arg5:string,arg6:string,arg7:string,arg8:string,arg9:string):Promise<number>;
 
+export function CreateTabWithWorktree(arg1:string,arg2:string,arg3:boolean,arg4:string,arg5:string,arg6:string,arg7:string,arg8:string,arg9:boolean,arg10:string,arg11:string):Promise<number>;
+
 export function CreateTask(arg1:string,arg2:string,arg3:string,arg4:string,arg5:Array<string>,arg6:string):Promise<main.TaskInfo>;
 
 export function CycleYoloMode(arg1:string,arg2:number,arg3:string):Promise<void>;
@@ -78,7 +80,7 @@ export function DetectedEditor():Promise<string>;
 
 export function DetectionPatternsVersion():Promise<number>;
 
-export function DiscardSessionWorktree(arg1:string,arg2:boolean):Promise<void>;
+export function DiscardTrashedWorktree(arg1:string,arg2:boolean):Promise<void>;
 
 export function DiscoverLocalSchemes():Promise<Array<main.ImportedScheme>>;
 
@@ -284,6 +286,8 @@ export function PlanServerMultiplexerInstall(arg1:string,arg2:string,arg3:string
 
 export function PlanWorktreeFor(arg1:string,arg2:string):Promise<main.PlannedWorktree>;
 
+export function PlanWorktreeOn(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string):Promise<main.PlannedWorktree>;
+
 export function QuickReplyTab(arg1:string,arg2:number,arg3:string,arg4:string):Promise<void>;
 
 export function ReadSessionDirectoryFile(arg1:string,arg2:string,arg3:number,arg4:string):Promise<session.BrowseFile>;
@@ -313,6 +317,8 @@ export function ReorderSession(arg1:string,arg2:number,arg3:string):Promise<void
 export function ReorderTab(arg1:string,arg2:number,arg3:number,arg4:string):Promise<void>;
 
 export function RepositoryRootOf(arg1:string):Promise<string>;
+
+export function RepositoryRootOn(arg1:string,arg2:string,arg3:string):Promise<string>;
 
 export function ResizeTerminal(arg1:string,arg2:number,arg3:number,arg4:string):Promise<void>;
 
@@ -363,8 +369,6 @@ export function SendPrompt(arg1:string,arg2:string,arg3:string):Promise<void>;
 export function SendPromptToWindow(arg1:string,arg2:number,arg3:string,arg4:string):Promise<void>;
 
 export function SendTaskToAgent(arg1:string,arg2:string,arg3:string):Promise<void>;
-
-export function SessionWorktree(arg1:string):Promise<main.WorktreeInfo>;
 
 export function SetExtraArgs(arg1:string,arg2:number,arg3:string,arg4:string):Promise<void>;
 
@@ -467,6 +471,8 @@ export function ToggleFavorite(arg1:string,arg2:string):Promise<void>;
 export function ToggleGroupCollapse(arg1:string,arg2:string):Promise<void>;
 
 export function ToggleSubtask(arg1:string,arg2:string,arg3:string,arg4:string):Promise<void>;
+
+export function TrashedWorktree(arg1:string):Promise<main.WorktreeInfo>;
 
 export function UnfinishedTasksForSession(arg1:string):Promise<Array<main.TaskInfo>>;
 

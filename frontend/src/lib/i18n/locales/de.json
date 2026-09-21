@@ -514,6 +514,8 @@
   "newTab.resumeNeedsWorkDir": "Wähle ein Arbeitsverzeichnis, um frühere Unterhaltungen zu sehen.",
   "newTab.workDirPlaceholder": "Standard ist der Sitzungsordner",
   "newTab.workDirOnServer": "Pfad auf dem Server",
+  "newTab.ownWorktree": "Eigenen Worktree für diesen Tab",
+  "newTab.ownWorktreeHint": "Ein separater Checkout auf einem eigenen Branch, damit zwei Agenten in dieser Sitzung nicht dieselben Dateien bearbeiten.",
   "newTab.browse": "Durchsuchen...",
   "newTab.tabName": "Tab-Name",
   "newTab.tabNamePlaceholder": "Tab-Name",

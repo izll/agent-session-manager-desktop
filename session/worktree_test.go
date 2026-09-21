@@ -299,3 +299,82 @@ func gitIn(t *testing.T, dir string, args ...string) string {
 	}
 	return strings.TrimSpace(string(out))
 }
+
+// --- a tab's own worktree ---
+
+// Tabs default to the session's directory, so two agents in one session edit
+// the same files. That is the case a worktree exists for, and the commoner
+// one: several tabs in a session is what tabs are for.
+func TestATabCanHaveAWorktreeOfItsOwn(t *testing.T) {
+	repo := newTestRepo(t)
+	inst := &Instance{ID: "tab-wt", Name: "session", Path: repo}
+
+	plan, err := inst.CreateWorktreeOn("", PlanWorktreeNamed(repo, "db work", ""))
+	if err != nil {
+		t.Fatalf("creating: %v", err)
+	}
+	if plan.Dir == repo {
+		t.Error("the tab was given the session's own directory")
+	}
+	if branch := gitIn(t, plan.Dir, "rev-parse", "--abbrev-ref", "HEAD"); branch != plan.Branch {
+		t.Errorf("worktree is on %q, want %q", branch, plan.Branch)
+	}
+}
+
+// A branch the user typed is used as they typed it. They had a reason for the
+// name, and the prefix is not forced onto it either.
+func TestAChosenBranchNameIsKept(t *testing.T) {
+	repo := newTestRepo(t)
+
+	plan := PlanWorktreeNamed(repo, "the tab name", "feature/login")
+	if plan.Branch != "feature/login" {
+		t.Errorf("branch = %q, want the name as typed", plan.Branch)
+	}
+	// The directory follows the branch, so the two read as the same thing.
+	if !strings.HasSuffix(plan.Dir, "feature-login") {
+		t.Errorf("directory %q does not follow the chosen branch", plan.Dir)
+	}
+
+	// Empty still derives one from the name, which is what the dialog offers
+	// before anybody edits the field.
+	derived := PlanWorktreeNamed(repo, "the tab name", "")
+	if derived.Branch != WorktreeBranchPrefix+"the-tab-name" {
+		t.Errorf("derived branch = %q", derived.Branch)
+	}
+}
+
+// What git refuses is still cleaned out of a name the user typed, or the
+// worktree fails at the last step with an opaque error.
+func TestAChosenBranchIsStillMadeLegal(t *testing.T) {
+	repo := newTestRepo(t)
+	inst := &Instance{ID: "tab-legal"}
+
+	plan, err := inst.CreateWorktreeOn("", PlanWorktreeNamed(repo, "tab", "my branch"))
+	if err != nil {
+		t.Fatalf("a branch with a space in it was refused outright: %v", err)
+	}
+	if strings.Contains(plan.Branch, " ") {
+		t.Errorf("branch %q kept a space, which git does not allow", plan.Branch)
+	}
+}
+
+// A worktree made for a tab that then fails to be created must not be left on
+// the user's disk.
+func TestAWorktreeIsNotLeftBehindWhenTheTabFails(t *testing.T) {
+	repo := newTestRepo(t)
+	inst := &Instance{ID: "tab-fail"}
+
+	plan, err := inst.CreateWorktreeOn("", PlanWorktreeNamed(repo, "doomed", ""))
+	if err != nil {
+		t.Fatalf("creating: %v", err)
+	}
+	inst.discardUnusedWorktree("", plan)
+
+	if _, err := os.Stat(plan.Dir); !os.IsNotExist(err) {
+		t.Error("the checkout outlived the tab it was made for")
+	}
+	branches := gitIn(t, repo, "for-each-ref", "--format=%(refname:short)", "refs/heads")
+	if strings.Contains(branches, plan.Branch) {
+		t.Errorf("the branch outlived the tab: %s", branches)
+	}
+}

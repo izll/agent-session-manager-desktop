@@ -514,6 +514,8 @@
   "newTab.resumeNeedsWorkDir": "以前の会話を表示するには作業ディレクトリを選択してください。",
   "newTab.workDirPlaceholder": "既定はセッションのフォルダ",
   "newTab.workDirOnServer": "サーバー上のパス",
+  "newTab.ownWorktree": "このタブ専用のワークツリー",
+  "newTab.ownWorktreeHint": "独自のブランチにある別のチェックアウト。このセッションの2つのエージェントが同じファイルを編集しなくなります。",
   "newTab.browse": "参照...",
   "newTab.tabName": "タブ名",
   "newTab.tabNamePlaceholder": "タブ名",

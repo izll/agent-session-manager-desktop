@@ -141,6 +141,69 @@
     resumeLabel = event.detail.displayName;
   }
 
+  // A checkout of its own, so two agents in one session stop editing the same
+  // files. Tabs default to the session's directory, which is what makes this
+  // worth offering here at all.
+  let useWorktree = false;
+  let worktreeBranch = '';
+  let branchTouched = false;
+  let plannedWorktree: main.PlannedWorktree | null = null;
+  let planGeneration = 0;
+
+  // Only where it can work: a directory outside a repository has nothing to
+  // make a worktree from.
+  let pathIsRepo = false;
+  let repoCheckedFor = '';
+  $: canUseWorktree = tabType === 'agent' && pathIsRepo;
+
+  $: worktreeBase = resumeWorkDir;
+  $: if (worktreeBase !== repoCheckedFor) {
+    repoCheckedFor = worktreeBase;
+    useWorktree = false;
+    void checkPathIsRepo(worktreeBase, effectiveServerId);
+  }
+
+  async function checkPathIsRepo(candidate: string, serverId: string) {
+    if (!candidate) {
+      pathIsRepo = false;
+      return;
+    }
+    try {
+      const root = await App.RepositoryRootOn(sessionId, serverId, candidate);
+      if (candidate !== repoCheckedFor) return;
+      pathIsRepo = !!root;
+    } catch {
+      if (candidate !== repoCheckedFor) return;
+      pathIsRepo = false;
+    }
+  }
+
+  // The suggested branch follows the tab's name until the user edits it; after
+  // that it is theirs and is left alone.
+  $: if (!branchTouched) worktreeBranch = '';
+
+  // Shown rather than described: the name is transformed on the way, and a
+  // user who cannot see the result has no way to know what they will get.
+  $: void refreshWorktreePlan(
+    useWorktree && canUseWorktree ? worktreeBase : '', name.trim(), worktreeBranch.trim());
+
+  async function refreshWorktreePlan(forPath: string, forName: string, forBranch: string) {
+    if (!forPath) {
+      plannedWorktree = null;
+      return;
+    }
+    const generation = ++planGeneration;
+    try {
+      const plan = await App.PlanWorktreeOn(
+        sessionId, effectiveServerId, forPath, forName, forBranch);
+      if (generation !== planGeneration) return;
+      plannedWorktree = plan?.dir ? plan : null;
+    } catch {
+      if (generation !== planGeneration) return;
+      plannedWorktree = null;
+    }
+  }
+
   $: chosenAgent = availableAgents.find((a) => a.type === selectedAgent);
   $: agentMissing = tabType === 'agent' && !!chosenAgent && chosenAgent.installed === false;
   let userTouchedName = false;
@@ -200,6 +263,10 @@
     resumeId = '';
     resumeLabel = '';
     showResumePicker = false;
+    useWorktree = false;
+    worktreeBranch = '';
+    branchTouched = false;
+    plannedWorktree = null;
     userTouchedName = false;
   }
 
@@ -237,15 +304,18 @@
       // Only when the field was actually offered: a stale id from an agent
       // the user switched away from would resume the wrong conversation.
       resumeId: tabType === 'agent' && canResume ? resumeId : '',
+      worktree: canUseWorktree && useWorktree,
+      worktreeBranch: canUseWorktree && useWorktree ? worktreeBranch.trim() : '',
     };
     isSubmitting = true;
     error = '';
 
     try {
-      const newIdx = await App.CreateTabResuming(targetSessionId, submitted.serverId,
+      const newIdx = await App.CreateTabWithWorktree(targetSessionId, submitted.serverId,
         submitted.isAgent, submitted.agent,
         submitted.name, submitted.extraArgs, submitted.workDir,
-        submitted.resumeId, targetProjectId);
+        submitted.resumeId, submitted.worktree, submitted.worktreeBranch,
+        targetProjectId);
       await loadSessions();
       if (!show || generation !== operationGeneration || sessionId !== targetSessionId ||
           targetProjectId !== get(activeProjectId)) return;
@@ -454,6 +524,32 @@
           </div>
         {/if}
 
+        <!-- A checkout of its own -->
+        {#if canUseWorktree}
+          <div class="form-group">
+            <label class="checkbox-label">
+              <input type="checkbox" bind:checked={useWorktree} class="checkbox-input" />
+              <span class="checkbox-custom"></span>
+              <span class="checkbox-text">{$t('newTab.ownWorktree')}</span>
+            </label>
+            {#if useWorktree}
+              <p class="field-hint">{$t('newTab.ownWorktreeHint')}</p>
+              <input
+                type="text"
+                class="form-input worktree-branch"
+                bind:value={worktreeBranch}
+                on:input={() => branchTouched = true}
+                placeholder={plannedWorktree?.branch || ''}
+              />
+              {#if plannedWorktree}
+                <p class="field-hint worktree-plan" title={plannedWorktree.dir}>
+                  {plannedWorktree.dir}<br />{plannedWorktree.branch}
+                </p>
+              {/if}
+            {/if}
+          </div>
+        {/if}
+
         <!-- Name -->
         <div class="form-group">
           <label class="form-label" for="tab-name">{$t('newTab.tabName')}</label>
@@ -643,6 +739,19 @@
   /* A one-line explanation under a field. The new-session dialog uses the
      same class name with no style of its own, so this is what it should look
      like there too. */
+  .worktree-branch {
+    margin-top: 8px;
+  }
+
+  /* The resolved path and branch. Monospace because they are a path and a ref:
+     the point is to read them exactly. */
+  .worktree-plan {
+    font-family: var(--font-mono, ui-monospace, monospace);
+    color: #a1a1aa;
+    overflow-wrap: anywhere;
+    line-height: 1.5;
+  }
+
   .field-hint {
     margin: 4px 0 0;
     font-size: 11px;

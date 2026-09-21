@@ -514,6 +514,8 @@
   "newTab.resumeNeedsWorkDir": "Scegli una directory di lavoro per vedere le conversazioni precedenti.",
   "newTab.workDirPlaceholder": "Per impostazione predefinita, la cartella della sessione",
   "newTab.workDirOnServer": "Percorso sul server",
+  "newTab.ownWorktree": "Assegna a questa scheda un worktree proprio",
+  "newTab.ownWorktreeHint": "Una copia di lavoro separata su un ramo proprio, così due agenti in questa sessione non modificano gli stessi file.",
   "newTab.browse": "Sfoglia...",
   "newTab.tabName": "Nome della Scheda",
   "newTab.tabNamePlaceholder": "Nome della scheda",

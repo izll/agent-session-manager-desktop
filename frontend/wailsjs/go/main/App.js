@@ -90,6 +90,10 @@ export function CreateTabResuming(arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8
   return window['go']['main']['App']['CreateTabResuming'](arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9);
 }
 
+export function CreateTabWithWorktree(arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11) {
+  return window['go']['main']['App']['CreateTabWithWorktree'](arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11);
+}
+
 export function CreateTask(arg1, arg2, arg3, arg4, arg5, arg6) {
   return window['go']['main']['App']['CreateTask'](arg1, arg2, arg3, arg4, arg5, arg6);
 }
@@ -150,8 +154,8 @@ export function DetectionPatternsVersion() {
   return window['go']['main']['App']['DetectionPatternsVersion']();
 }
 
-export function DiscardSessionWorktree(arg1, arg2) {
-  return window['go']['main']['App']['DiscardSessionWorktree'](arg1, arg2);
+export function DiscardTrashedWorktree(arg1, arg2) {
+  return window['go']['main']['App']['DiscardTrashedWorktree'](arg1, arg2);
 }
 
 export function DiscoverLocalSchemes() {
@@ -562,6 +566,10 @@ export function PlanWorktreeFor(arg1, arg2) {
   return window['go']['main']['App']['PlanWorktreeFor'](arg1, arg2);
 }
 
+export function PlanWorktreeOn(arg1, arg2, arg3, arg4, arg5) {
+  return window['go']['main']['App']['PlanWorktreeOn'](arg1, arg2, arg3, arg4, arg5);
+}
+
 export function QuickReplyTab(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['QuickReplyTab'](arg1, arg2, arg3, arg4);
 }
@@ -620,6 +628,10 @@ export function ReorderTab(arg1, arg2, arg3, arg4) {
 
 export function RepositoryRootOf(arg1) {
   return window['go']['main']['App']['RepositoryRootOf'](arg1);
+}
+
+export function RepositoryRootOn(arg1, arg2, arg3) {
+  return window['go']['main']['App']['RepositoryRootOn'](arg1, arg2, arg3);
 }
 
 export function ResizeTerminal(arg1, arg2, arg3, arg4) {
@@ -720,10 +732,6 @@ export function SendPromptToWindow(arg1, arg2, arg3, arg4) {
 
 export function SendTaskToAgent(arg1, arg2, arg3) {
   return window['go']['main']['App']['SendTaskToAgent'](arg1, arg2, arg3);
-}
-
-export function SessionWorktree(arg1) {
-  return window['go']['main']['App']['SessionWorktree'](arg1);
 }
 
 export function SetExtraArgs(arg1, arg2, arg3, arg4) {
@@ -928,6 +936,10 @@ export function ToggleGroupCollapse(arg1, arg2) {
 
 export function ToggleSubtask(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['ToggleSubtask'](arg1, arg2, arg3, arg4);
+}
+
+export function TrashedWorktree(arg1) {
+  return window['go']['main']['App']['TrashedWorktree'](arg1);
 }
 
 export function UnfinishedTasksForSession(arg1) {

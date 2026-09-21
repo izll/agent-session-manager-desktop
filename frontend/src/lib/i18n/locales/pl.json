@@ -514,6 +514,8 @@
   "newTab.resumeNeedsWorkDir": "Wybierz katalog roboczy, aby zobaczyć wcześniejsze rozmowy.",
   "newTab.workDirPlaceholder": "Domyślnie folder sesji",
   "newTab.workDirOnServer": "Ścieżka na serwerze",
+  "newTab.ownWorktree": "Nadaj tej karcie własny worktree",
+  "newTab.ownWorktreeHint": "Osobna kopia robocza na własnej gałęzi, aby dwaj agenci w tej sesji nie edytowali tych samych plików.",
   "newTab.browse": "Przeglądaj...",
   "newTab.tabName": "Nazwa karty",
   "newTab.tabNamePlaceholder": "Nazwa karty",

@@ -514,6 +514,8 @@
   "newTab.resumeNeedsWorkDir": "Välj en arbetskatalog för att se tidigare konversationer.",
   "newTab.workDirPlaceholder": "Standard är sessionsmappen",
   "newTab.workDirOnServer": "Sökväg på servern",
+  "newTab.ownWorktree": "Ge den här fliken en egen worktree",
+  "newTab.ownWorktreeHint": "En separat utcheckning på en egen gren, så att två agenter i den här sessionen inte redigerar samma filer.",
   "newTab.browse": "Bläddra...",
   "newTab.tabName": "Fliknamn",
   "newTab.tabNamePlaceholder": "Fliknamn",

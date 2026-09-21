@@ -514,6 +514,8 @@
   "newTab.resumeNeedsWorkDir": "เลือกไดเรกทอรีทำงานเพื่อดูการสนทนาก่อนหน้า",
   "newTab.workDirPlaceholder": "ค่าเริ่มต้นคือโฟลเดอร์ของเซสชัน",
   "newTab.workDirOnServer": "เส้นทางบนเซิร์ฟเวอร์",
+  "newTab.ownWorktree": "ให้แท็บนี้มีเวิร์กทรีของตัวเอง",
+  "newTab.ownWorktreeHint": "การเช็คเอาต์แยกบนสาขาของตัวเอง เพื่อให้เอเจนต์สองตัวในเซสชันนี้ไม่แก้ไขไฟล์เดียวกัน",
   "newTab.browse": "เรียกดู...",
   "newTab.tabName": "ชื่อแท็บ",
   "newTab.tabNamePlaceholder": "ชื่อแท็บ",
