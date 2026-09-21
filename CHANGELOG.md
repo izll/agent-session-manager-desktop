@@ -6,7 +6,7 @@ Entries describe what changed for someone using the app. Internal refactoring,
 test and CI work is left out unless it changed behaviour. Dates are release
 dates; the format follows [Keep a Changelog](https://keepachangelog.com).
 
-## 1.2.0 — 2026-09-21
+## 1.1.1 — 2026-09-21
 
 ### Added
 
