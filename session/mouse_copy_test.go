@@ -17,16 +17,22 @@ import (
 // zero-length selection while a Shift-held one reported 53 characters. That is
 // why the copy-on-select setting has to reach tmux's key bindings; acting on it
 // in the browser alone can never work, and for a long time didn't.
-func TestSelectModeCopiesAndLeavesCopyMode(t *testing.T) {
+func TestSelectModeCopiesOnADrag(t *testing.T) {
 	joined := strings.Join(MouseCopyBinding("copy-mode-vi", true), " ")
 
 	if !strings.Contains(joined, "MouseDragEnd1Pane") {
 		t.Errorf("the binding must fire at the end of a drag; got %q", joined)
 	}
-	if !strings.Contains(joined, "copy-selection-and-cancel") {
-		// Without -and-cancel the pane stays in copy mode and swallows the next
-		// keystroke instead of typing it.
-		t.Errorf("a drag must copy and leave copy mode; got %q", joined)
+	// copy-selection, and deliberately not copy-selection-and-cancel.
+	//
+	// This once required the -and-cancel form, on the grounds that without it
+	// the pane stays in copy mode and swallows the next keystroke. That is
+	// true of a mode entered with -H; the mode is now entered with -e, which
+	// ends by itself once the view is back at the bottom. Cancelling here also
+	// returned the view to the bottom, losing the place the user had scrolled
+	// to in order to select something there.
+	if !strings.Contains(joined, "copy-selection") {
+		t.Errorf("a drag must copy; got %q", joined)
 	}
 }
 
@@ -116,7 +122,10 @@ func TestSetMouseCopyEnabledContextHasOneOverallDeadline(t *testing.T) {
 // clicks have to follow the setting for it to mean anything.
 func TestClickSelectionFollowsTheSetting(t *testing.T) {
 	on := strings.Join(ClickSelectBinding("copy-mode-vi", "DoubleClick1Pane", "select-word", true), " ")
-	if !strings.Contains(on, "copy-selection-and-cancel") {
+	// copy-selection, not copy-selection-and-cancel: what matters is that it
+	// copies. The -and-cancel form also returns the view to the bottom, which
+	// loses the place a user scrolled to in order to select something there.
+	if !strings.Contains(on, "copy-selection") {
 		t.Errorf("in select mode a double click should copy; got %q", on)
 	}
 
@@ -171,7 +180,7 @@ func TestRootClickBindingDecides(t *testing.T) {
 	if !strings.Contains(on, "-T root") {
 		t.Errorf("the click has to be bound in the root table; got %q", on)
 	}
-	if !strings.Contains(on, "copy-selection-and-cancel") {
+	if !strings.Contains(on, "copy-selection") {
 		t.Errorf("select mode should copy on a double click; got %q", on)
 	}
 
@@ -253,42 +262,51 @@ func TestClipboardForwardingIsNotScopedToOneSession(t *testing.T) {
 	}
 }
 
-// Leaving a pane in copy mode is what made the terminal look frozen.
+// A pane must never be left in copy mode with no way out but "q".
 //
-// The mode is entered with the indicator hidden, so nothing on screen says
-// why: keystrokes go to tmux instead of the program, and the only way out is
-// "q", copy mode's own cancel key. That is exactly how it was reported —
-// typing does nothing, q gets you back. Measured on a real pane: 0 of the
-// commands typed into it ran, and 2 of 2 after q.
+// That was the bug behind what read as a freeze: the mode was entered with -H,
+// which hides the indicator, and two bindings ended without leaving it. The
+// pane then swallowed every keystroke with nothing on screen to explain why.
+// Measured on a real pane: it ran 0 of the commands typed into it, and 2 of 2
+// after q.
 //
-// Every ending that does not itself leave the mode must therefore be followed
-// by cancel. Verified against tmux 3.4 and 2.6, which both strand the pane
-// without it and both release it with it.
-func TestNoBindingLeavesThePaneInCopyMode(t *testing.T) {
-	// The endings that stay in copy mode, and so must be followed by cancel.
-	stranding := []string{"stop-selection", "clear-selection"}
-
-	leavesTheMode := func(command string) bool {
-		// copy-selection-and-cancel and cancel both end the mode themselves.
-		return strings.Contains(command, "cancel")
-	}
-
-	check := func(what string, args []string) {
-		t.Helper()
-		joined := strings.Join(args, " ")
-		for _, ending := range stranding {
-			if !strings.Contains(joined, ending) {
-				continue
+// The fix is the entry, not the ending. -e leaves the mode by itself once the
+// view is back at the bottom, so no ending has to cancel — and none may,
+// because cancelling also returns the view to the bottom, throwing away the
+// place a user had scrolled to in order to select something there.
+func TestCopyModeIsEnteredSoItCanEndByItself(t *testing.T) {
+	for _, enabled := range []bool{true, false} {
+		for key, selector := range clickSelectKeys {
+			joined := strings.Join(RootClickBinding(key, selector, enabled), " ")
+			if !strings.Contains(joined, "copy-mode -e") {
+				t.Errorf("root %s (enabled=%v) does not enter copy mode with -e, "+
+					"so the pane cannot leave the mode on its own:\n  %s",
+					key, enabled, joined)
 			}
-			if !leavesTheMode(joined) {
-				t.Errorf("%s ends with %s and never cancels, "+
-					"so the pane stays in copy mode and swallows typing:\n  %s",
-					what, ending, joined)
+			if strings.Contains(joined, "copy-mode -H") {
+				t.Errorf("root %s (enabled=%v) hides the copy-mode indicator; "+
+					"a stranded pane then gives the user nothing to go on:\n  %s",
+					key, enabled, joined)
 			}
 		}
 	}
+}
 
-	// Both settings, both key tables, every binding this package writes.
+// Nothing may end the selection by cancelling.
+//
+// cancel — and the -and-cancel endings — return the view to the bottom. A
+// selection is often made after scrolling up to find something, and jumping
+// back to the end at that moment loses exactly what the user was looking at.
+func TestNoBindingThrowsAwayTheScrollPosition(t *testing.T) {
+	check := func(what string, args []string) {
+		t.Helper()
+		joined := strings.Join(args, " ")
+		if strings.Contains(joined, "cancel") {
+			t.Errorf("%s cancels, which returns the view to the bottom and "+
+				"loses the place the user scrolled to:\n  %s", what, joined)
+		}
+	}
+
 	for _, enabled := range []bool{true, false} {
 		for _, table := range copyModeTables {
 			check("drag end", MouseCopyBinding(table, enabled))
@@ -298,32 +316,6 @@ func TestNoBindingLeavesThePaneInCopyMode(t *testing.T) {
 		}
 		for key, selector := range clickSelectKeys {
 			check("root "+key, RootClickBinding(key, selector, enabled))
-		}
-	}
-}
-
-// The separator has to be tmux's escaped semicolon, or the added cancel is not
-// part of the binding at all: a bare ";" ends bind-key, so tmux would bind the
-// first half and run the rest immediately.
-func TestTheAddedCancelIsPartOfTheBinding(t *testing.T) {
-	for _, table := range copyModeTables {
-		args := MouseCopyBinding(table, false)
-		joined := strings.Join(args, " ")
-		if !strings.Contains(joined, `\;`) {
-			t.Errorf("drag binding for %s joins its commands without an escaped "+
-				"semicolon, so the cancel never runs:\n  %s", table, joined)
-		}
-	}
-}
-
-// The root binding is a single command string rather than argv, so its own
-// separator is a plain semicolon — the string is parsed by tmux, not by exec.
-func TestTheRootBindingCancelsWithinItsCommandString(t *testing.T) {
-	for key, selector := range clickSelectKeys {
-		joined := strings.Join(RootClickBinding(key, selector, false), " ")
-		if !strings.Contains(joined, "send-keys -X cancel") {
-			t.Errorf("root binding %s does not cancel, leaving the pane in copy "+
-				"mode after a click:\n  %s", key, joined)
 		}
 	}
 }

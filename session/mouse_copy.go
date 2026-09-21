@@ -76,20 +76,20 @@ func MouseCopyBinding(table string, enabled bool) []string {
 		// send. Bound to it, shift mode copied on every plain drag and the
 		// setting appeared to do nothing — observed, with the binding verifiably
 		// on the "off" branch while the clipboard kept filling.
-		// cancel after it, or the pane is left in copy mode.
-		//
-		// clear-selection drops the selection but stays in the mode, and the
-		// mode was entered with the indicator hidden — so the pane silently
-		// swallows every keystroke and looks frozen. The way out is "q", which
-		// is copy mode's own cancel key, and that is exactly how this was
-		// reported: typing does nothing, q gets you back. Measured: a pane left
-		// this way ran 0 of the commands typed into it.
+		// No cancel here, and none needed: these bindings only ever fire in a
+		// pane that is already in copy mode, which it entered with -e. That
+		// leaves the mode by itself once the view returns to the bottom, so
+		// the pane cannot be stranded — and the user keeps the place they
+		// scrolled to instead of being thrown back to the end.
 		return []string{"bind-key", "-T", table, "MouseDragEnd1Pane",
-			"send-keys", "-X", "clear-selection", "\\;",
-			"send-keys", "-X", "cancel"}
+			"send-keys", "-X", "clear-selection"}
 	}
+	// copy-selection, not copy-selection-and-cancel. The -and-cancel half
+	// returns the view to the bottom, so finishing a drag on something
+	// scrolled up threw away the place the user had scrolled to. The mode is
+	// entered with -e and ends by itself on reaching the bottom.
 	return []string{"bind-key", "-T", table, "MouseDragEnd1Pane",
-		"send-keys", "-X", "copy-selection-and-cancel"}
+		"send-keys", "-X", "copy-selection"}
 }
 
 // ClickSelectBinding returns the binding for a double or triple click, which
@@ -119,10 +119,9 @@ func ClickSelectBinding(table, key, selector string, enabled bool) []string {
 		// to tmux instead of the program. The selection is lost on leaving,
 		// which is the lesser cost: a visible highlight is not worth a pane
 		// that ignores typing until the user discovers "q".
-		return append(args, "send-keys", "-X", "stop-selection", "\\;",
-			"send-keys", "-X", "cancel")
+		return append(args, "send-keys", "-X", "stop-selection")
 	}
-	return append(args, "send-keys", "-X", "copy-selection-and-cancel")
+	return append(args, "send-keys", "-X", "copy-selection")
 }
 
 // clickSelectKeys maps each click binding to the selection it makes.
@@ -145,27 +144,33 @@ var clickSelectKeys = map[string]string{
 // binding verifiably on the "off" branch, a double click still filled the
 // clipboard.
 //
-// The -H flag hides the copy-mode indicator, and the run-shell -d 0.3 is tmux's
-// own pause letting the selection render before it is taken. Both are kept: the
-// only change is what happens at the end.
+// The run-shell -d 0.3 is tmux's own pause, letting the selection render before
+// it is taken, and is kept.
+//
+// -e rather than tmux's -H. -H hides the copy-mode indicator, which sounds
+// tidier and was the cause of a bug that read as a freeze: a pane left in the
+// mode swallowed every keystroke with nothing on screen to say why, and the
+// only way out was "q". -e instead leaves the mode by itself once the view is
+// scrolled back to the bottom — so a selection made while scrolled up keeps
+// its place, and simply scrolling down afterwards ends the mode. Measured on
+// tmux 3.4 and 2.6: both keep scroll_position after the selection and both
+// clear pane_in_mode on reaching the bottom. -H does not exist on 2.6 at all.
 func RootClickBinding(key, selector string, enabled bool) []string {
 	// When the pane is already in a mode, or the program inside it is reading
 	// the mouse itself, the event has to pass through untouched — that is what
 	// lets an agent handle its own clicks.
 	const passthrough = "#{||:#{pane_in_mode},#{mouse_any_flag}}"
 
-	action := "copy-mode -H ; send-keys -X " + selector +
-		" ; run-shell -d 0.3 ; send-keys -X copy-selection-and-cancel"
+	// copy-selection, not copy-selection-and-cancel: the -and-cancel half
+	// returns the view to the bottom, so a double click on something scrolled
+	// up threw away the position the user had scrolled to. With -e the mode
+	// ends on its own when they scroll back down.
+	action := "copy-mode -e ; send-keys -X " + selector +
+		" ; run-shell -d 0.3 ; send-keys -X copy-selection"
 	if !enabled {
-		// Select the word, do not copy it, and leave copy mode.
-		//
-		// stop-selection alone ends the drag state but stays in the mode, and
-		// -H hid the indicator — so the pane swallowed every keystroke with
-		// nothing on screen to say why. cancel is what "q" does, and doing it
-		// here saves the user having to find that out.
-		action = "copy-mode -H ; send-keys -X " + selector +
-			" ; run-shell -d 0.3 ; send-keys -X stop-selection" +
-			" ; send-keys -X cancel"
+		// Select without copying, and likewise stay where the user is looking.
+		action = "copy-mode -e ; send-keys -X " + selector +
+			" ; run-shell -d 0.3 ; send-keys -X stop-selection"
 	}
 
 	// The branches are plain command strings, not { } blocks.
