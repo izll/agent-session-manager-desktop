@@ -1354,6 +1354,7 @@
   "error.worktreeNeedsRepo": "เวิร์กทรีต้องใช้ที่เก็บ git — โฟลเดอร์นี้ไม่ได้อยู่ในที่เก็บใด",
   "error.worktreeDirNotCreated": "ไม่สามารถสร้างโฟลเดอร์เวิร์กทรี: {0}",
   "error.worktreeNotCreated": "ไม่สามารถสร้างเวิร์กทรี: {0}",
+  "error.worktreeBranchRefused": "git ไม่ยอมรับ “{0}” เป็นชื่อสาขา",
   "error.worktreeNameNotFree": "ไม่พบชื่อที่ว่างสำหรับสาขาเวิร์กทรี {0}",
   "error.worktreeBranchesNotRead": "ไม่สามารถอ่านสาขาของที่เก็บ: {0}",
   "error.worktreeNotRemoved": "ไม่สามารถลบเวิร์กทรี: {0}",

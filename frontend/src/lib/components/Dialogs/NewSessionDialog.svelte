@@ -42,6 +42,33 @@
   let repoCheckedFor = '';
   $: canUseWorktree = pathIsRepo && !serverId;
 
+  // Where the worktree would actually land.
+  //
+  // Shown rather than described, because the session's name is transformed on
+  // the way: git will not take accents or punctuation in a branch name, so
+  // "hibajavítás" becomes "hibajav-t-s". Nobody would guess that, and the
+  // directory is on their disk afterwards.
+  let plannedWorktree: main.PlannedWorktree | null = null;
+  let planGeneration = 0;
+
+  $: void refreshWorktreePlan(useWorktree && canUseWorktree ? path.trim() : '', name.trim());
+
+  async function refreshWorktreePlan(forPath: string, forName: string) {
+    if (!forPath) {
+      plannedWorktree = null;
+      return;
+    }
+    const generation = ++planGeneration;
+    try {
+      const plan = await App.PlanWorktreeFor(forPath, forName);
+      if (generation !== planGeneration) return;
+      plannedWorktree = plan?.dir ? plan : null;
+    } catch {
+      if (generation !== planGeneration) return;
+      plannedWorktree = null;
+    }
+  }
+
   $: if (path.trim() !== repoCheckedFor) {
     repoCheckedFor = path.trim();
     useWorktree = false;
@@ -676,6 +703,11 @@
             </label>
             {#if useWorktree}
               <p class="field-hint">{$t('newSession.ownWorktreeHint')}</p>
+              {#if plannedWorktree}
+                <p class="field-hint worktree-plan" title={plannedWorktree.dir}>
+                  {plannedWorktree.dir}<br />{plannedWorktree.branch}
+                </p>
+              {/if}
             {/if}
           {/if}
 
@@ -893,10 +925,37 @@
     box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.1);
   }
 
+  /* A row of checkboxes, wrapping when they do not fit.
+     align-items: flex-start keeps a wrapped line from stretching its
+     neighbours, and the hint below the worktree box is a block of its own so
+     it sits under that checkbox rather than beside it. */
   .form-options {
     display: flex;
-    gap: 24px;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 12px 24px;
     margin-bottom: 24px;
+  }
+
+  /* No .field-hint rule existed here, so every hint in this dialog was
+     rendering as ordinary body text. */
+  .field-hint {
+    margin: 4px 0 0;
+    font-size: 11px;
+    color: #8b8b93;
+    flex-basis: 100%;
+  }
+
+  /* The resolved path and branch, shown while the worktree box is ticked.
+     Monospace because it is a path: the point is to read it exactly, and a
+     proportional font makes a long one harder to check. It wraps rather than
+     being cut — there is room under the checkbox, and a truncated path
+     answers nothing. */
+  .worktree-plan {
+    font-family: var(--font-mono, ui-monospace, monospace);
+    color: #a1a1aa;
+    overflow-wrap: anywhere;
+    line-height: 1.5;
   }
 
   .checkbox-label {

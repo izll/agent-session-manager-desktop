@@ -1756,6 +1756,31 @@ func (a *App) RepositoryRootOf(path string) (string, error) {
 	return probe.RepoRootOf(path), nil
 }
 
+// PlannedWorktree is where a session's worktree would go, shown before it is
+// created so the choice is not blind.
+type PlannedWorktree struct {
+	// Dir is empty when the path is not in a repository, which is the signal
+	// that a worktree cannot be made here.
+	Dir    string `json:"dir"`
+	Branch string `json:"branch"`
+}
+
+// PlanWorktreeFor reports the directory and branch a session of this name
+// would get, without creating anything.
+//
+// The dialog shows it while the checkbox is ticked: the name is transformed on
+// the way — accents folded, punctuation collapsed — and a user who cannot see
+// the result has no way to know what they will end up with.
+func (a *App) PlanWorktreeFor(path, sessionName string) (*PlannedWorktree, error) {
+	probe := &session.Instance{}
+	repoRoot := probe.RepoRootOf(path)
+	if repoRoot == "" {
+		return &PlannedWorktree{}, nil
+	}
+	plan := session.PlanWorktree(repoRoot, sessionName)
+	return &PlannedWorktree{Dir: plan.Dir, Branch: plan.Branch}, nil
+}
+
 // WorktreeInfo describes a session's worktree and what removing it would cost.
 type WorktreeInfo struct {
 	// Dir is empty for a session that has no worktree of its own.

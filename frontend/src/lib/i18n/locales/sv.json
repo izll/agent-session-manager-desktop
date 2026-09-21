@@ -1354,6 +1354,7 @@
   "error.worktreeNeedsRepo": "En worktree kräver ett git-förråd — den här mappen ligger inte i något",
   "error.worktreeDirNotCreated": "Worktree-mappen kunde inte skapas: {0}",
   "error.worktreeNotCreated": "Worktree kunde inte skapas: {0}",
+  "error.worktreeBranchRefused": "git accepterar inte ”{0}” som grennamn",
   "error.worktreeNameNotFree": "Inget ledigt namn hittades för worktree-grenen {0}",
   "error.worktreeBranchesNotRead": "Förrådets grenar kunde inte läsas: {0}",
   "error.worktreeNotRemoved": "Worktree kunde inte tas bort: {0}",

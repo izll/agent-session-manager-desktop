@@ -1340,6 +1340,7 @@
   "error.worktreeNeedsRepo": "A worktree needs a git repository — this folder is not in one",
   "error.worktreeDirNotCreated": "The worktree folder could not be created: {0}",
   "error.worktreeNotCreated": "The worktree could not be created: {0}",
+  "error.worktreeBranchRefused": "git will not accept “{0}” as a branch name",
   "error.worktreeNameNotFree": "No free name was found for the worktree branch {0}",
   "error.worktreeBranchesNotRead": "The repository's branches could not be read: {0}",
   "error.worktreeNotRemoved": "The worktree could not be removed: {0}",

@@ -1354,6 +1354,7 @@
   "error.worktreeNeedsRepo": "تحتاج شجرة العمل إلى مستودع git — هذا المجلد ليس داخل مستودع",
   "error.worktreeDirNotCreated": "تعذّر إنشاء مجلد شجرة العمل: {0}",
   "error.worktreeNotCreated": "تعذّر إنشاء شجرة العمل: {0}",
+  "error.worktreeBranchRefused": "لا يقبل git الاسم ”{0}“ كاسم فرع",
   "error.worktreeNameNotFree": "لم يُعثر على اسم متاح لفرع شجرة العمل {0}",
   "error.worktreeBranchesNotRead": "تعذّرت قراءة فروع المستودع: {0}",
   "error.worktreeNotRemoved": "تعذّرت إزالة شجرة العمل: {0}",

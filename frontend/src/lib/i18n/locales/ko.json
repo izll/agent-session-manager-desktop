@@ -1354,6 +1354,7 @@
   "error.worktreeNeedsRepo": "워크트리에는 git 저장소가 필요합니다 — 이 폴더는 저장소 안에 없습니다",
   "error.worktreeDirNotCreated": "워크트리 폴더를 만들 수 없습니다: {0}",
   "error.worktreeNotCreated": "워크트리를 만들 수 없습니다: {0}",
+  "error.worktreeBranchRefused": "git이 “{0}”을(를) 브랜치 이름으로 허용하지 않습니다",
   "error.worktreeNameNotFree": "워크트리 브랜치 {0}에 사용 가능한 이름이 없습니다",
   "error.worktreeBranchesNotRead": "저장소의 브랜치를 읽을 수 없습니다: {0}",
   "error.worktreeNotRemoved": "워크트리를 제거할 수 없습니다: {0}",

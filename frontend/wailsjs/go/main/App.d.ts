@@ -282,6 +282,8 @@ export function PermanentlyDeleteTrashItem(arg1:string,arg2:string):Promise<void
 
 export function PlanServerMultiplexerInstall(arg1:string,arg2:string,arg3:string):Promise<remote.MultiplexerPlan>;
 
+export function PlanWorktreeFor(arg1:string,arg2:string):Promise<main.PlannedWorktree>;
+
 export function QuickReplyTab(arg1:string,arg2:number,arg3:string,arg4:string):Promise<void>;
 
 export function ReadSessionDirectoryFile(arg1:string,arg2:string,arg3:number,arg4:string):Promise<session.BrowseFile>;

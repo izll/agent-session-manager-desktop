@@ -1354,6 +1354,7 @@
   "error.worktreeNeedsRepo": "Worktree için git deposu gerekir — bu klasör bir depo içinde değil",
   "error.worktreeDirNotCreated": "Worktree klasörü oluşturulamadı: {0}",
   "error.worktreeNotCreated": "Worktree oluşturulamadı: {0}",
+  "error.worktreeBranchRefused": "git “{0}” adını dal adı olarak kabul etmiyor",
   "error.worktreeNameNotFree": "{0} worktree dalı için boş bir ad bulunamadı",
   "error.worktreeBranchesNotRead": "Deponun dalları okunamadı: {0}",
   "error.worktreeNotRemoved": "Worktree kaldırılamadı: {0}",

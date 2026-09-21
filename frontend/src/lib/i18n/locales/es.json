@@ -1354,6 +1354,7 @@
   "error.worktreeNeedsRepo": "Un worktree necesita un repositorio git: esta carpeta no está en uno",
   "error.worktreeDirNotCreated": "No se pudo crear la carpeta del worktree: {0}",
   "error.worktreeNotCreated": "No se pudo crear el worktree: {0}",
+  "error.worktreeBranchRefused": "git no acepta «{0}» como nombre de rama",
   "error.worktreeNameNotFree": "No se encontró un nombre libre para la rama de worktree {0}",
   "error.worktreeBranchesNotRead": "No se pudieron leer las ramas del repositorio: {0}",
   "error.worktreeNotRemoved": "No se pudo eliminar el worktree: {0}",

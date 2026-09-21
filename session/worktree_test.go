@@ -13,24 +13,65 @@ import (
 // satisfy both git and the filesystem, and the lifecycle against a real
 // repository.
 
-func TestASessionNameBecomesAUsableBranchAndDirectory(t *testing.T) {
+// The branch keeps the name as typed; only what git actually refuses is
+// replaced.
+//
+// git's ref rules are a blocklist of ASCII metacharacters, not an allowlist of
+// letters — measured against check-ref-format, "hibajavítás" is a perfectly
+// legal branch name. Reducing it to ASCII was an assumption, and it turned the
+// name into something nobody would recognise.
+func TestTheBranchKeepsTheNameAsTyped(t *testing.T) {
 	cases := []struct {
 		name string
 		want string
 	}{
-		{"hibajavítás", "hibajav-t-s"},
-		{"Fix the parser", "fix-the-parser"},
-		{"feature/login", "feature-login"},
-		{"  spaced  out  ", "spaced-out"},
-		{"under_score", "under_score"},
-		{"...", "session"},
+		{"hibajavítás", "hibajavítás"},
+		{"árvíztűrő", "árvíztűrő"},
+		{"Ünnepi Kiadás", "Ünnepi-Kiadás"}, // only the space had to go
+		{"żółw", "żółw"},
+		{"日本語", "日本語"},
+		{"Fix the parser", "Fix-the-parser"},
+		{"feature/login", "feature/login"}, // a slash is legal inside a ref
+		{"a:b", "a-b"},
+		{"a~b", "a-b"},
+		{"-leading", "leading"},
+		{"trailing.", "trailing"},
 		{"", "session"},
-		{"--leading", "leading"},
 	}
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
-			if got := worktreeSlug(testCase.name); got != testCase.want {
-				t.Errorf("worktreeSlug(%q) = %q, want %q", testCase.name, got, testCase.want)
+			if got := worktreeBranchName(testCase.name); got != testCase.want {
+				t.Errorf("worktreeBranchName(%q) = %q, want %q",
+					testCase.name, got, testCase.want)
+			}
+		})
+	}
+}
+
+// The directory is a filesystem concern where the branch is not, so it is
+// reduced to ASCII — by transliterating, not by stripping. Deleting the
+// accents gives "hibajavts" and replacing them gives "hibajav-t-s"; neither
+// reads as the session it belongs to.
+func TestTheDirectoryIsTransliteratedNotStripped(t *testing.T) {
+	cases := []struct {
+		name string
+		want string
+	}{
+		{"hibajavítás", "hibajavitas"},
+		{"árvíztűrő tükörfúrógép", "arvizturo-tukorfurogep"},
+		{"Ünnepi Kiadás", "unnepi-kiadas"},
+		{"Straßen fix", "strassen-fix"}, // ß is one letter that becomes two
+		{"Łódź", "lodz"},                // ł does not decompose; it needs a table
+		{"Fix the parser", "fix-the-parser"},
+		{"feature/login", "feature-login"},
+		{"日本語", "session"}, // nothing to transliterate; the branch still has it
+		{"", "session"},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			if got := worktreeDirName(testCase.name); got != testCase.want {
+				t.Errorf("worktreeDirName(%q) = %q, want %q",
+					testCase.name, got, testCase.want)
 			}
 		})
 	}
@@ -43,7 +84,8 @@ func TestTheBranchNameIsAcceptableToGit(t *testing.T) {
 	repo := newTestRepo(t)
 
 	for _, name := range []string{
-		"hibajavítás", "feature/login", "-dash", "a...b", "Ünnepi Kiadás", "",
+		"hibajavítás", "árvíztűrő", "feature/login", "-dash", "a...b",
+		"Ünnepi Kiadás", "日本語", "a:b", "trailing.", "",
 	} {
 		plan := PlanWorktree(repo, name)
 		// check-ref-format is git's own answer to "is this a legal branch

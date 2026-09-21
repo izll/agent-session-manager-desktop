@@ -558,6 +558,10 @@ export function PlanServerMultiplexerInstall(arg1, arg2, arg3) {
   return window['go']['main']['App']['PlanServerMultiplexerInstall'](arg1, arg2, arg3);
 }
 
+export function PlanWorktreeFor(arg1, arg2) {
+  return window['go']['main']['App']['PlanWorktreeFor'](arg1, arg2);
+}
+
 export function QuickReplyTab(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['QuickReplyTab'](arg1, arg2, arg3, arg4);
 }

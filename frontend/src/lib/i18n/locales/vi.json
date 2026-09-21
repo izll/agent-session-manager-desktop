@@ -1354,6 +1354,7 @@
   "error.worktreeNeedsRepo": "Worktree cần một kho git — thư mục này không nằm trong kho nào",
   "error.worktreeDirNotCreated": "Không thể tạo thư mục worktree: {0}",
   "error.worktreeNotCreated": "Không thể tạo worktree: {0}",
+  "error.worktreeBranchRefused": "git không chấp nhận “{0}” làm tên nhánh",
   "error.worktreeNameNotFree": "Không tìm thấy tên trống cho nhánh worktree {0}",
   "error.worktreeBranchesNotRead": "Không thể đọc các nhánh của kho: {0}",
   "error.worktreeNotRemoved": "Không thể xóa worktree: {0}",

@@ -44,34 +44,88 @@ type WorktreePlan struct {
 // Separate from the creation so the dialog can show the user what it is about
 // to do, and so the names can be tested without a repository.
 func PlanWorktree(repoRoot, sessionName string) WorktreePlan {
-	slug := worktreeSlug(sessionName)
 	parent := filepath.Dir(repoRoot)
 	base := filepath.Base(repoRoot)
 	return WorktreePlan{
-		Dir:      filepath.Join(parent, base+worktreeDirSuffix, slug),
-		Branch:   WorktreeBranchPrefix + slug,
+		Dir:      filepath.Join(parent, base+worktreeDirSuffix, worktreeDirName(sessionName)),
+		Branch:   WorktreeBranchPrefix + worktreeBranchName(sessionName),
 		RepoRoot: repoRoot,
 	}
 }
 
-// worktreeSlug turns a session name into something usable as a directory and a
-// branch component.
+// worktreeBranchName is the session's name, kept as the user typed it.
 //
-// Git refuses a range of characters in a ref name, and a directory has its own
-// rules on each platform, so this keeps to letters, digits, dash and
-// underscore and lets everything else become a dash. An empty result would
-// produce the bare prefix, which is not a valid ref, so it falls back.
-func worktreeSlug(name string) string {
+// git does not need it reduced to ASCII. Its ref rules are a blocklist of
+// metacharacters, not an allowlist of letters: a branch called "hibajavítás"
+// is perfectly legal, and so are Polish and Japanese names. Measured against
+// git's own check-ref-format, which is the authority — the earlier assumption
+// that accents had to go was simply wrong, and it turned a readable name into
+// "hibajav-t-s".
+//
+// What git does reject is replaced: spaces, the metacharacters ~^:?*[\, "..",
+// a leading dash, a trailing dot. The result is checked with check-ref-format
+// before it is used, so a name this does not anticipate fails where it was
+// chosen rather than deep inside `git worktree add`.
+func worktreeBranchName(name string) string {
+	var out strings.Builder
+	lastDash := false
+	for _, r := range strings.TrimSpace(name) {
+		if refCharIsForbidden(r) {
+			if !lastDash && out.Len() > 0 {
+				out.WriteByte('-')
+				lastDash = true
+			}
+			continue
+		}
+		out.WriteRune(r)
+		lastDash = false
+	}
+	// A leading dash, a trailing dot and a ".lock" ending are each rejected by
+	// git in their own right.
+	branch := strings.Trim(out.String(), "-.")
+	branch = strings.ReplaceAll(branch, "..", "-")
+	branch = strings.TrimSuffix(branch, ".lock")
+	if branch == "" {
+		return "session"
+	}
+	return branch
+}
+
+// refCharIsForbidden reports the characters git will not take in a ref name.
+func refCharIsForbidden(r rune) bool {
+	switch r {
+	case ' ', '\t', '~', '^', ':', '?', '*', '[', '\\':
+		return true
+	}
+	// Control characters and DEL are rejected as well. Everything at or above
+	// U+0080 is passed through: git treats a ref name as opaque bytes.
+	return r < 0x20 || r == 0x7f
+}
+
+// worktreeDirName is the session's name reduced to ASCII, for the directory.
+//
+// The directory is a real filesystem concern where the branch is not: macOS
+// stores names decomposed and Linux composed, so the same accented name can
+// compare unequal between them, and Windows has its own limits. Transliterated
+// rather than stripped — "hibajavítás" becomes "hibajavitas", where deleting
+// the accents gave "hibajavts" and replacing them gave "hibajav-t-s", neither
+// of which reads as the session it belongs to.
+func worktreeDirName(name string) string {
 	var out strings.Builder
 	lastDash := false
 	for _, r := range strings.ToLower(strings.TrimSpace(name)) {
+		if folded, ok := asciiFolding[r]; ok {
+			out.WriteString(folded)
+			lastDash = false
+			continue
+		}
 		switch {
 		case r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '_':
 			out.WriteRune(r)
 			lastDash = false
 		default:
 			// Runs of punctuation collapse, and a name cannot start with a
-			// dash: git rejects a ref component beginning with one.
+			// dash.
 			if !lastDash && out.Len() > 0 {
 				out.WriteByte('-')
 				lastDash = true
@@ -80,6 +134,9 @@ func worktreeSlug(name string) string {
 	}
 	slug := strings.Trim(out.String(), "-")
 	if slug == "" {
+		// A name with nothing transliterable in it — Japanese, say. The
+		// branch still carries the real name; this only has to be a legal
+		// directory.
 		return "session"
 	}
 	// Long enough to stay readable, short enough for a path on Windows, where
@@ -89,6 +146,30 @@ func worktreeSlug(name string) string {
 		slug = strings.Trim(slug[:maxSlug], "-")
 	}
 	return slug
+}
+
+// asciiFolding maps accented letters to the plain letters they are built on.
+//
+// A table rather than Unicode decomposition, because the two cases that matter
+// most here are not decomposable: German ß is one letter that becomes "ss",
+// and Polish ł is a letter in its own right rather than an l with a mark.
+// Lower case only — the name is lowered before this is consulted.
+var asciiFolding = map[rune]string{
+	// Hungarian, and the Latin-1 letters it shares with its neighbours.
+	'á': "a", 'é': "e", 'í': "i", 'ó': "o", 'ö': "o", 'ő': "o",
+	'ú': "u", 'ü': "u", 'ű': "u",
+	// The rest of Western Europe.
+	'à': "a", 'â': "a", 'ä': "a", 'ã': "a", 'å': "a", 'æ': "ae",
+	'ç': "c", 'è': "e", 'ê': "e", 'ë': "e",
+	'ì': "i", 'î': "i", 'ï': "i",
+	'ñ': "n", 'ò': "o", 'ô': "o", 'õ': "o", 'ø': "o",
+	'ù': "u", 'û': "u", 'ý': "y", 'ÿ': "y", 'ß': "ss",
+	// Central and Eastern Europe.
+	'ā': "a", 'ă': "a", 'ą': "a", 'ć': "c", 'č': "c", 'ď': "d", 'đ': "d",
+	'ē': "e", 'ė': "e", 'ę': "e", 'ě': "e", 'ğ': "g", 'ī': "i", 'į': "i",
+	'ł': "l", 'ń': "n", 'ň': "n", 'ō': "o", 'ř': "r", 'ś': "s", 'š': "s",
+	'ť': "t", 'ū': "u", 'ů': "u", 'ų': "u", 'ź': "z", 'ż': "z", 'ž': "z",
+	'ı': "i", 'ş': "s",
 }
 
 // RepoRootOf reports the top of the working tree containing path, or an empty
@@ -124,6 +205,18 @@ func (i *Instance) CreateWorktree(plan WorktreePlan) (WorktreePlan, error) {
 
 	if err := os.MkdirAll(filepath.Dir(free.Dir), 0o755); err != nil {
 		return free, fmt.Errorf("error.worktreeDirNotCreated|%s", err)
+	}
+
+	// Checked with git's own validator before it is used.
+	//
+	// The branch keeps the name as typed, so it can hold anything a person
+	// writes. check-ref-format is the authority on what git will take, and
+	// asking it here means a name it refuses fails where it was chosen rather
+	// than deep inside `worktree add`, which reports it as an opaque failure.
+	if _, err := i.gitOutput([]string{
+		"check-ref-format", "--branch", free.Branch,
+	}, nil); err != nil {
+		return free, fmt.Errorf("error.worktreeBranchRefused|%s", free.Branch)
 	}
 
 	if _, err := i.gitOutput([]string{

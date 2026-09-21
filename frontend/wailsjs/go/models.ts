@@ -1008,6 +1008,20 @@ export namespace main {
 	        this.updated = source["updated"];
 	    }
 	}
+	export class PlannedWorktree {
+	    dir: string;
+	    branch: string;
+
+	    static createFrom(source: any = {}) {
+	        return new PlannedWorktree(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.dir = source["dir"];
+	        this.branch = source["branch"];
+	    }
+	}
 	export class PortableSessionInfo {
 	    name: string;
 	    path: string;

@@ -1354,6 +1354,7 @@
   "error.worktreeNeedsRepo": "Worktree vyžaduje git repozitář — tato složka v žádném není",
   "error.worktreeDirNotCreated": "Složku worktree se nepodařilo vytvořit: {0}",
   "error.worktreeNotCreated": "Worktree se nepodařilo vytvořit: {0}",
+  "error.worktreeBranchRefused": "git nepřijímá „{0}“ jako název větve",
   "error.worktreeNameNotFree": "Nebyl nalezen volný název pro větev worktree {0}",
   "error.worktreeBranchesNotRead": "Větve repozitáře se nepodařilo načíst: {0}",
   "error.worktreeNotRemoved": "Worktree se nepodařilo odstranit: {0}",

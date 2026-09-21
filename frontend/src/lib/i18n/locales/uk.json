@@ -1354,6 +1354,7 @@
   "error.worktreeNeedsRepo": "Для worktree потрібен git-репозиторій — ця тека не в ньому",
   "error.worktreeDirNotCreated": "Не вдалося створити теку worktree: {0}",
   "error.worktreeNotCreated": "Не вдалося створити worktree: {0}",
+  "error.worktreeBranchRefused": "git не приймає «{0}» як назву гілки",
   "error.worktreeNameNotFree": "Не знайдено вільного імені для гілки worktree {0}",
   "error.worktreeBranchesNotRead": "Не вдалося прочитати гілки репозиторію: {0}",
   "error.worktreeNotRemoved": "Не вдалося видалити worktree: {0}",

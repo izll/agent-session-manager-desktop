@@ -1354,6 +1354,7 @@
   "error.worktreeNeedsRepo": "Um worktree precisa de um repositório git — esta pasta não está em um",
   "error.worktreeDirNotCreated": "A pasta do worktree não pôde ser criada: {0}",
   "error.worktreeNotCreated": "O worktree não pôde ser criado: {0}",
+  "error.worktreeBranchRefused": "o git não aceita “{0}” como nome de branch",
   "error.worktreeNameNotFree": "Nenhum nome livre encontrado para o branch de worktree {0}",
   "error.worktreeBranchesNotRead": "Os branches do repositório não puderam ser lidos: {0}",
   "error.worktreeNotRemoved": "O worktree não pôde ser removido: {0}",

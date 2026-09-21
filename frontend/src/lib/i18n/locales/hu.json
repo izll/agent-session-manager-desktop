@@ -1354,6 +1354,7 @@
   "error.worktreeNeedsRepo": "A worktree-hez git repó kell — ez a mappa nincs egyben sem",
   "error.worktreeDirNotCreated": "A worktree mappája nem hozható létre: {0}",
   "error.worktreeNotCreated": "A worktree nem hozható létre: {0}",
+  "error.worktreeBranchRefused": "A git nem fogadja el a(z) „{0}” branch-nevet",
   "error.worktreeNameNotFree": "Nem található szabad név a(z) {0} worktree-branchhez",
   "error.worktreeBranchesNotRead": "A repó branchei nem olvashatók: {0}",
   "error.worktreeNotRemoved": "A worktree nem távolítható el: {0}",

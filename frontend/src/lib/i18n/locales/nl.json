@@ -1354,6 +1354,7 @@
   "error.worktreeNeedsRepo": "Een worktree heeft een git-repository nodig — deze map zit niet in een repository",
   "error.worktreeDirNotCreated": "De worktree-map kon niet worden aangemaakt: {0}",
   "error.worktreeNotCreated": "De worktree kon niet worden aangemaakt: {0}",
+  "error.worktreeBranchRefused": "git accepteert '{0}' niet als branchnaam",
   "error.worktreeNameNotFree": "Geen vrije naam gevonden voor de worktree-branch {0}",
   "error.worktreeBranchesNotRead": "De branches van de repository konden niet worden gelezen: {0}",
   "error.worktreeNotRemoved": "De worktree kon niet worden verwijderd: {0}",

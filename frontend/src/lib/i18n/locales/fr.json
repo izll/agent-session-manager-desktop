@@ -1354,6 +1354,7 @@
   "error.worktreeNeedsRepo": "Un worktree nécessite un dépôt git — ce dossier n'est pas dans un dépôt",
   "error.worktreeDirNotCreated": "Le dossier du worktree n'a pas pu être créé : {0}",
   "error.worktreeNotCreated": "Le worktree n'a pas pu être créé : {0}",
+  "error.worktreeBranchRefused": "git n'accepte pas « {0} » comme nom de branche",
   "error.worktreeNameNotFree": "Aucun nom libre trouvé pour la branche de worktree {0}",
   "error.worktreeBranchesNotRead": "Les branches du dépôt n'ont pas pu être lues : {0}",
   "error.worktreeNotRemoved": "Le worktree n'a pas pu être supprimé : {0}",

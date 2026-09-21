@@ -1354,6 +1354,7 @@
   "error.worktreeNeedsRepo": "Worktree wymaga repozytorium git — ten folder nie znajduje się w żadnym",
   "error.worktreeDirNotCreated": "Nie udało się utworzyć folderu worktree: {0}",
   "error.worktreeNotCreated": "Nie udało się utworzyć worktree: {0}",
+  "error.worktreeBranchRefused": "git nie akceptuje „{0}” jako nazwy gałęzi",
   "error.worktreeNameNotFree": "Nie znaleziono wolnej nazwy dla gałęzi worktree {0}",
   "error.worktreeBranchesNotRead": "Nie udało się odczytać gałęzi repozytorium: {0}",
   "error.worktreeNotRemoved": "Nie udało się usunąć worktree: {0}",

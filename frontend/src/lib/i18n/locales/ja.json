@@ -1354,6 +1354,7 @@
   "error.worktreeNeedsRepo": "ワークツリーには git リポジトリが必要です — このフォルダーはリポジトリ内にありません",
   "error.worktreeDirNotCreated": "ワークツリーのフォルダーを作成できませんでした: {0}",
   "error.worktreeNotCreated": "ワークツリーを作成できませんでした: {0}",
+  "error.worktreeBranchRefused": "git はブランチ名として「{0}」を受け付けません",
   "error.worktreeNameNotFree": "ワークツリーのブランチ {0} に空き名が見つかりません",
   "error.worktreeBranchesNotRead": "リポジトリのブランチを読み取れませんでした: {0}",
   "error.worktreeNotRemoved": "ワークツリーを削除できませんでした: {0}",

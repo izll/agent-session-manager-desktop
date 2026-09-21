@@ -1354,6 +1354,7 @@
   "error.worktreeNeedsRepo": "Для worktree нужен git-репозиторий — эта папка не находится в нём",
   "error.worktreeDirNotCreated": "Не удалось создать папку worktree: {0}",
   "error.worktreeNotCreated": "Не удалось создать worktree: {0}",
+  "error.worktreeBranchRefused": "git не принимает «{0}» как имя ветки",
   "error.worktreeNameNotFree": "Не найдено свободное имя для ветки worktree {0}",
   "error.worktreeBranchesNotRead": "Не удалось прочитать ветки репозитория: {0}",
   "error.worktreeNotRemoved": "Не удалось удалить worktree: {0}",

@@ -1354,6 +1354,7 @@
   "error.worktreeNeedsRepo": "工作树需要 git 仓库——此文件夹不在任何仓库中",
   "error.worktreeDirNotCreated": "无法创建工作树文件夹：{0}",
   "error.worktreeNotCreated": "无法创建工作树：{0}",
+  "error.worktreeBranchRefused": "git 不接受“{0}”作为分支名称",
   "error.worktreeNameNotFree": "未找到工作树分支 {0} 的可用名称",
   "error.worktreeBranchesNotRead": "无法读取仓库的分支：{0}",
   "error.worktreeNotRemoved": "无法移除工作树：{0}",
