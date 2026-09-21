@@ -61,6 +61,12 @@ test('the buttons sit outside the scrolling body, not over it', () => {
 test('making the dialog a column does not un-centre its contents', () => {
   assert.match(rule('.dialog-content'), /align-items:\s*stretch/,
     'flex children shrink to their content, so centred items move to the edge');
+
+  // stretch is not enough for the icon: it has a fixed width, so there is
+  // nothing to stretch and it stays wherever the column puts it — the left
+  // edge. Measured against the built stylesheet: 0/176 before, 130/130 after.
+  assert.match(rule('.dialog-content > .dialog-icon'), /align-self:\s*center/,
+    'a fixed-width child needs align-self; stretch cannot widen it');
 });
 
 // The buttons used to sit at the end of the form and took their spacing from

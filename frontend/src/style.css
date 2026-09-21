@@ -229,13 +229,22 @@ select option:checked {
   display: flex;
   flex-direction: column;
   /* A column of full-width rows, which is what the header/body/footer stack
-     wants. Without it the children shrink to their content and anything a
-     dialog centred with text-align — an icon on a confirmation, say — ends up
-     against the left edge instead: measured at 32px from one side and 356 from
-     the other where it had been 194/194. */
+     wants: each takes the width and lays its own contents out. */
   align-items: stretch;
   overflow: hidden;
   animation: slideIn 0.2s ease-out;
+}
+
+/* A round icon at the top of a confirmation.
+   It has a fixed width, so stretch cannot widen it and it sits wherever the
+   column puts it — which is the left edge. text-align centred it before this
+   stack became a flex column; align-self is the flex equivalent and is what
+   restores it. Measured: 0/176 from the two sides before, 88/88 after.
+   Only the icon: giving every child align-self shrinks the rows that are meant
+   to span the dialog, and the heading came out 118px wide instead of filling
+   it. */
+.dialog-content > .dialog-icon {
+  align-self: center;
 }
 
 /* The header keeps its size; the body between it and the buttons is what
