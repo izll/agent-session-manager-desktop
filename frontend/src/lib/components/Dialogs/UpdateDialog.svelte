@@ -390,6 +390,16 @@
     border-width: 2px;
   }
 
+  /* Inside a button, the spinner takes the button's own text colour.
+     The standalone one is accent on a dark panel, which reads well — but the
+     primary button's background IS that accent, so an accent spinner on it was
+     very nearly invisible. currentColor follows whatever the button sets, so
+     this holds if the button is ever restyled. */
+  .btn .spinner {
+    border-color: color-mix(in srgb, currentColor 30%, transparent);
+    border-top-color: currentColor;
+  }
+
   @keyframes spin {
     to { transform: rotate(360deg); }
   }

@@ -547,6 +547,14 @@
     animation: spin 0.8s linear infinite;
   }
 
+  /* Same as in the update dialog: an accent spinner on the accent-coloured
+     primary button is very nearly invisible. currentColor follows the button's
+     own text colour, and the standalone spinner keeps its accent. */
+  .btn .spinner {
+    border-color: color-mix(in srgb, currentColor 30%, transparent);
+    border-top-color: currentColor;
+  }
+
   .spinner.small {
     width: 16px;
     height: 16px;
