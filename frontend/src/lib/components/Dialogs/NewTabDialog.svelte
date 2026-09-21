@@ -92,6 +92,71 @@
 
   $: availableAgents = effectiveServerId ? serverAgents : $agents;
 
+  // A conversation to continue, chosen before the tab exists.
+  //
+  // Empty means a fresh one, which is what a new tab always started. The list
+  // comes from the machine the tab will run on and for the directory it will
+  // run in — a tab pointed somewhere else has different work behind it.
+  let resumeId = '';
+  let resumeOptions: main.AgentSessionInfo[] = [];
+  let resumeLoading = false;
+  let resumeError = '';
+  let resumeGeneration = 0;
+  let lastResumeKey = '';
+
+  // The directory the conversations belong to. A tab on a server must say
+  // where it runs; one on this computer falls back to the session's path.
+  $: resumeWorkDir = workDir.trim() || (effectiveServerId ? '' : sessionPath);
+
+  // Only agents that can actually resume, so the field does not appear where
+  // choosing something would do nothing.
+  $: canResume = tabType === 'agent' &&
+    (chosenAgent?.supportsResume ?? false) &&
+    // Reading another machine's history is implemented for Claude alone; for
+    // the rest a remote list would be this computer's, which resumes nothing.
+    (!effectiveServerId || selectedAgent === 'claude');
+
+  $: {
+    const key = show && canResume && resumeWorkDir
+      ? `${effectiveServerId}|${selectedAgent}|${resumeWorkDir}|${sessionId}`
+      : '';
+    if (key !== lastResumeKey) {
+      lastResumeKey = key;
+      resumeId = '';
+      resumeOptions = [];
+      resumeError = '';
+      if (key) void loadResumeOptions(key);
+      else resumeLoading = false;
+    }
+  }
+
+  async function loadResumeOptions(key: string) {
+    const generation = ++resumeGeneration;
+    resumeLoading = true;
+    try {
+      const found = await App.GetResumeSessionsOn(
+        sessionId, effectiveServerId, selectedAgent, resumeWorkDir);
+      if (generation !== resumeGeneration || key !== lastResumeKey) return;
+      resumeOptions = found || [];
+    } catch (e) {
+      if (generation !== resumeGeneration || key !== lastResumeKey) return;
+      // Not fatal: the tab can still be created with a fresh conversation, so
+      // this is said beside the field rather than blocking the dialog.
+      resumeError = String(e);
+      resumeOptions = [];
+    } finally {
+      if (generation === resumeGeneration) resumeLoading = false;
+    }
+  }
+
+  $: resumeChoices = [
+    { value: '', label: $t('newTab.resumeNew') },
+    ...resumeOptions.map(s => ({
+      value: s.id,
+      label: s.timestamp ? `${s.displayName} — ${s.timestamp}` : s.displayName,
+    })),
+  ];
+
   $: chosenAgent = availableAgents.find((a) => a.type === selectedAgent);
   $: agentMissing = tabType === 'agent' && !!chosenAgent && chosenAgent.installed === false;
   let userTouchedName = false;
@@ -148,6 +213,10 @@
     extraArgs = '';
     workDir = '';
     error = '';
+    resumeId = '';
+    resumeOptions = [];
+    resumeError = '';
+    lastResumeKey = '';
     userTouchedName = false;
   }
 
@@ -182,14 +251,18 @@
       workDir: workDir.trim(),
       serverId: tabServerId,
       type: tabType,
+      // Only when the field was actually offered: a stale id from an agent
+      // the user switched away from would resume the wrong conversation.
+      resumeId: tabType === 'agent' && canResume ? resumeId : '',
     };
     isSubmitting = true;
     error = '';
 
     try {
-      const newIdx = await App.CreateTabOnServer(targetSessionId, submitted.serverId,
+      const newIdx = await App.CreateTabResuming(targetSessionId, submitted.serverId,
         submitted.isAgent, submitted.agent,
-        submitted.name, submitted.extraArgs, submitted.workDir, targetProjectId);
+        submitted.name, submitted.extraArgs, submitted.workDir,
+        submitted.resumeId, targetProjectId);
       await loadSessions();
       if (!show || generation !== operationGeneration || sessionId !== targetSessionId ||
           targetProjectId !== get(activeProjectId)) return;
@@ -370,6 +443,31 @@
             <button type="button" class="browse-btn" on:click={browseWorkDir}>{$t('newTab.browse')}</button>
           </div>
         </div>
+
+        <!-- A conversation to continue. Placed after the working directory
+             because it is what the list is read for. -->
+        {#if canResume}
+          <div class="form-group">
+            <span class="form-label">{$t('newTab.resumeLabel')}</span>
+            {#if !resumeWorkDir}
+              <p class="field-hint">{$t('newTab.resumeNeedsWorkDir')}</p>
+            {:else if resumeLoading}
+              <p class="field-hint">{$t('newTab.resumeLoading')}</p>
+            {:else}
+              {#if resumeOptions.length > 0}
+                <Select
+                  value={resumeId}
+                  options={resumeChoices}
+                  on:change={e => { resumeId = e.detail; }}
+                />
+              {:else if resumeError}
+                <p class="field-hint resume-problem">{resumeError}</p>
+              {:else}
+                <p class="field-hint">{$t('newTab.resumeNone')}</p>
+              {/if}
+            {/if}
+          </div>
+        {/if}
 
         <!-- Name -->
         <div class="form-group">

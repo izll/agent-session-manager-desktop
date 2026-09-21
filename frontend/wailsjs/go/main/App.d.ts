@@ -44,6 +44,8 @@ export function CreateTab(arg1:string,arg2:boolean,arg3:string,arg4:string,arg5:
 
 export function CreateTabOnServer(arg1:string,arg2:string,arg3:boolean,arg4:string,arg5:string,arg6:string,arg7:string,arg8:string):Promise<number>;
 
+export function CreateTabResuming(arg1:string,arg2:string,arg3:boolean,arg4:string,arg5:string,arg6:string,arg7:string,arg8:string,arg9:string):Promise<number>;
+
 export function CreateTask(arg1:string,arg2:string,arg3:string,arg4:string,arg5:Array<string>,arg6:string):Promise<main.TaskInfo>;
 
 export function CycleYoloMode(arg1:string,arg2:number,arg3:string):Promise<void>;
@@ -159,6 +161,8 @@ export function GetProjects():Promise<Array<main.ProjectInfo>>;
 export function GetQuickJump():Promise<Array<session.QuickJumpEntry>>;
 
 export function GetResumeSessions(arg1:string,arg2:string):Promise<Array<main.AgentSessionInfo>>;
+
+export function GetResumeSessionsOn(arg1:string,arg2:string,arg3:string,arg4:string):Promise<Array<main.AgentSessionInfo>>;
 
 export function GetSSHConfigHosts():Promise<Array<main.SSHConfigHostInfo>>;
 

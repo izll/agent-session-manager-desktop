@@ -45,7 +45,7 @@ type App struct {
 	termServer          *TerminalServer
 	// servers holds one live connection per remote machine, shared by every
 	// session that runs there.
-	servers             *serverPool
+	servers *serverPool
 	// The last completed sidebar sweep, shared by every reader so one pass
 	// over the servers serves them all.
 	sidebarSnapshotMu sync.RWMutex
@@ -53,7 +53,7 @@ type App struct {
 	sidebarSnapshotAt time.Time
 	// connecting deduplicates background dials, so routing a hundred sessions
 	// does not queue a hundred connections to the same server.
-	connecting sync.Map
+	connecting          sync.Map
 	dictation           *DictationService
 	activityStats       *ActivityStatsRecorder
 	previewCancel       context.CancelFunc
@@ -1209,12 +1209,12 @@ type SessionInfo struct {
 	ServerID string `json:"serverId,omitempty"`
 	// ServerName is the display name, so the sidebar can mark a session
 	// without looking every server up itself.
-	ServerName        string                   `json:"serverName,omitempty"`
+	ServerName string `json:"serverName,omitempty"`
 	// TabServerNames maps a tab's window index to the display name of the
 	// machine it runs on, for the tabs that run somewhere other than the
 	// session itself. Kept beside the tabs rather than inside FollowedWindow,
 	// which is stored on disk and must not carry a name that can change.
-	TabServerNames map[int]string `json:"tabServerNames,omitempty"`
+	TabServerNames    map[int]string           `json:"tabServerNames,omitempty"`
 	FollowedWindows   []session.FollowedWindow `json:"followedWindows"`
 	MainWindowStopped bool                     `json:"mainWindowStopped"`
 	// UpdatedAt is when this session last did anything, for the activity
@@ -2440,6 +2440,15 @@ func (a *App) CreateTab(sessionID string, isAgent bool, agent string, name strin
 // local files can hold a tab watching a database or a log on a machine that
 // stays up when this computer does not.
 func (a *App) CreateTabOnServer(sessionID string, serverID string, isAgent bool, agent string, name string, extraArgs string, workDir string, expectedProjectID string) (int, error) {
+	return a.CreateTabResuming(sessionID, serverID, isAgent, agent, name, extraArgs, workDir, "", expectedProjectID)
+}
+
+// CreateTabResuming creates a tab that continues an existing conversation.
+//
+// resumeID empty starts a fresh one, which is what every caller did before the
+// new-tab dialog could offer a choice. The id belongs to the machine the tab
+// will run on: a tab on a server resumes a conversation held there.
+func (a *App) CreateTabResuming(sessionID string, serverID string, isAgent bool, agent string, name string, extraArgs string, workDir string, resumeID string, expectedProjectID string) (int, error) {
 	// Connect BEFORE taking the mutation lock.
 	//
 	// The lock is exclusive and every mutating method in the app goes through
@@ -2474,7 +2483,14 @@ func (a *App) CreateTabOnServer(sessionID string, serverID string, isAgent bool,
 	newIdx := -1
 	if isAgent {
 		agentType := session.AgentType(agent)
-		idx, err := inst.NewAgentWindowOn(serverID, name, agentType, "", extraArgs, workDir)
+		idx, err := inst.NewAgentTab(session.NewTabRequest{
+			ServerID:  serverID,
+			Name:      name,
+			Agent:     agentType,
+			ExtraArgs: extraArgs,
+			WorkDir:   workDir,
+			ResumeID:  resumeID,
+		})
 		if err != nil {
 			return -1, err
 		}
@@ -4168,6 +4184,44 @@ func (a *App) GetResumeSessions(agent string, path string) ([]AgentSessionInfo, 
 		return nil, err
 	}
 
+	return resumeSessionInfos(sessions, path), nil
+}
+
+// GetResumeSessionsOn lists the conversations a new tab could resume, on the
+// machine that tab would run on.
+//
+// serverID empty reads this computer and is exactly GetResumeSessions. A tab
+// placed on a server keeps its conversations there, so offering this machine's
+// would list conversations that tab could never resume.
+//
+// Only Claude can be read remotely today. The other agents store their history
+// in formats this reads through local paths, and answering with the local
+// machine's list would be worse than answering with none: it looks right and
+// resumes nothing. They return an empty list, which the dialog shows as
+// "start fresh" alone.
+func (a *App) GetResumeSessionsOn(sessionID string, serverID string, agent string, path string) ([]AgentSessionInfo, error) {
+	if serverID == "" {
+		return a.GetResumeSessions(agent, path)
+	}
+	if session.AgentType(agent) != session.AgentClaude {
+		return nil, nil
+	}
+
+	// Connect first if this server has no route yet: the dialog may be the
+	// first thing to reach it, and a listing that fails because nothing had
+	// dialled would look like a server with no conversations.
+	if _, err := a.connectionFor(serverID); err != nil {
+		return nil, err
+	}
+
+	sessions, err := session.ListClaudeSessionsOn(sessionID, serverID, path)
+	if err != nil {
+		return nil, err
+	}
+	return resumeSessionInfos(sessions, path), nil
+}
+
+func resumeSessionInfos(sessions []session.AgentSession, path string) []AgentSessionInfo {
 	result := make([]AgentSessionInfo, len(sessions))
 	for i, s := range sessions {
 		result[i] = AgentSessionInfo{
@@ -4177,7 +4231,7 @@ func (a *App) GetResumeSessions(agent string, path string) ([]AgentSessionInfo, 
 			Timestamp:   s.UpdatedAt.Format("2006-01-02 15:04"),
 		}
 	}
-	return result, nil
+	return result
 }
 
 func resumeSessionDisplayName(s session.AgentSession) string {

@@ -2,8 +2,10 @@ package session
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -68,6 +70,16 @@ func GetClaudeProjectDir(projectPath string) string {
 	// The leading hyphen is not added either: it is what a Unix path's own
 	// leading separator encodes to, and a Windows path has none.
 	return filepath.Join(homeDir, ".claude", "projects", claudeProjectDirName(projectPath))
+}
+
+// claudeProjectDirIn is GetClaudeProjectDir for a named machine.
+//
+// The encoding is the agent's, not the operating system's, so it is the same
+// wherever the transcript was written; only the home directory and the path
+// separator differ. Symlinks are not resolved: the path describes a directory
+// on the machine being read, which this one cannot follow.
+func claudeProjectDirIn(files agentFiles, homeDir, projectPath string) string {
+	return files.join(homeDir, ".claude", "projects", claudeProjectDirName(projectPath))
 }
 
 func ListAgentSessions(projectPath string) ([]AgentSession, error) {
@@ -343,12 +355,21 @@ func parseSessionFile(path string, sessionID string) (*AgentSession, error) {
 		return nil, err
 	}
 	defer file.Close()
+	return parseSessionFrom(file, sessionID)
+}
 
+// parseSessionBytes parses a transcript already in hand — one read from a
+// server, where there is no local file to open.
+func parseSessionBytes(contents []byte, sessionID string) (*AgentSession, error) {
+	return parseSessionFrom(bytes.NewReader(contents), sessionID)
+}
+
+func parseSessionFrom(source io.Reader, sessionID string) (*AgentSession, error) {
 	session := &AgentSession{
 		SessionID: sessionID,
 	}
 
-	scanner := bufio.NewScanner(file)
+	scanner := bufio.NewScanner(source)
 	// Increase buffer size for large lines (some assistant responses can be >4MB)
 	buf := make([]byte, 0, 64*1024)
 	scanner.Buffer(buf, 10*1024*1024)

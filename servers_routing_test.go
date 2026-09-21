@@ -88,15 +88,17 @@ func TestCreatingARemoteTabConnectsBeforeTakingTheLock(t *testing.T) {
 	}
 	text := strings.ReplaceAll(string(source), "\r\n", "\n")
 
-	body := functionBody(t, text, "func (a *App) CreateTabOnServer(")
+	// CreateTabResuming holds the body; CreateTabOnServer is a wrapper that
+	// passes no conversation to resume.
+	body := functionBody(t, text, "func (a *App) CreateTabResuming(")
 	dialAt := strings.Index(body, "a.connectionFor(")
 	lockAt := strings.Index(body, "a.beginExpectedProjectMutation(")
 
 	if dialAt < 0 || lockAt < 0 {
-		t.Fatal("CreateTabOnServer no longer connects or no longer locks; rewrite this test")
+		t.Fatal("CreateTabResuming no longer connects or no longer locks; rewrite this test")
 	}
 	if dialAt > lockAt {
-		t.Error("CreateTabOnServer dials after taking the mutation lock; " +
+		t.Error("CreateTabResuming dials after taking the mutation lock; " +
 			"every other mutating method in the app will wait on the server")
 	}
 }

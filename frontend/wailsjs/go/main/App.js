@@ -82,6 +82,10 @@ export function CreateTabOnServer(arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8
   return window['go']['main']['App']['CreateTabOnServer'](arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8);
 }
 
+export function CreateTabResuming(arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9) {
+  return window['go']['main']['App']['CreateTabResuming'](arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9);
+}
+
 export function CreateTask(arg1, arg2, arg3, arg4, arg5, arg6) {
   return window['go']['main']['App']['CreateTask'](arg1, arg2, arg3, arg4, arg5, arg6);
 }
@@ -312,6 +316,10 @@ export function GetQuickJump() {
 
 export function GetResumeSessions(arg1, arg2) {
   return window['go']['main']['App']['GetResumeSessions'](arg1, arg2);
+}
+
+export function GetResumeSessionsOn(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['GetResumeSessionsOn'](arg1, arg2, arg3, arg4);
 }
 
 export function GetSSHConfigHosts() {

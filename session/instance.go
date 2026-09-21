@@ -3017,6 +3017,42 @@ func (i *Instance) NewAgentWindow(name string, agent AgentType, customCmd string
 // own multiplexer session there — the same name, on a different machine — and
 // an index from the remote range so it cannot collide with a local tab.
 func (i *Instance) NewAgentWindowOn(serverID string, name string, agent AgentType, customCmd string, extraArgs string, workDir string) (int, error) {
+	return i.NewAgentTab(NewTabRequest{
+		ServerID:      serverID,
+		Name:          name,
+		Agent:         agent,
+		CustomCommand: customCmd,
+		ExtraArgs:     extraArgs,
+		WorkDir:       workDir,
+	})
+}
+
+// NewTabRequest describes a tab to create.
+//
+// A struct rather than more parameters: the list had reached six positional
+// arguments of which four were strings, and a caller that transposed two of
+// them would compile and do the wrong thing.
+type NewTabRequest struct {
+	// ServerID is the machine to create the tab on; empty is the session's own.
+	ServerID string
+	Name     string
+	Agent    AgentType
+	// CustomCommand is the command line for AgentCustom, ignored otherwise.
+	CustomCommand string
+	ExtraArgs     string
+	WorkDir       string
+	// ResumeID continues an existing conversation instead of starting one.
+	//
+	// The id is the agent's own, read from its records on the machine the tab
+	// will run on — so a tab on a server resumes a conversation that server
+	// holds, not one from this computer.
+	ResumeID string
+}
+
+// NewAgentTab creates an agent tab, optionally resuming a conversation.
+func (i *Instance) NewAgentTab(req NewTabRequest) (int, error) {
+	serverID, name, agent := req.ServerID, req.Name, req.Agent
+	customCmd, extraArgs, workDir := req.CustomCommand, req.ExtraArgs, req.WorkDir
 	if workDir == "" && serverID == "" {
 		workDir = i.Path
 	}
@@ -3056,19 +3092,52 @@ func (i *Instance) NewAgentWindowOn(serverID string, name string, agent AgentTyp
 		if config.Command == "" {
 			return -1, fmt.Errorf("unsupported agent %q", agent)
 		}
-		args := []string{}
-		// Use instance's AutoYes setting for the new agent too — unless the
-		// agent refuses it as root on the server, in which case passing it
-		// would make the tab exit the moment it starts.
-		if i.AutoYes && config.SupportsAutoYes && config.AutoYesFlag != "" &&
-			!i.autoYesRefusedAsRoot(serverID, config) {
-			args = append(args, config.AutoYesFlag)
+		// A conversation to continue, if one was chosen and the agent can.
+		//
+		// Checked rather than trusted: the id comes from the dialog, and an
+		// id of an unexpected shape has no business reaching a command line.
+		resumeID := req.ResumeID
+		if resumeID != "" {
+			if !config.SupportsResume || config.ResumeFlag == "" {
+				return -1, fmt.Errorf("%s cannot resume a conversation", agent)
+			}
+			if !IsSafeResumeID(resumeID) {
+				return -1, fmt.Errorf("conversation id has an unexpected shape: %q", resumeID)
+			}
+			if agent == AgentClaude {
+				// A conversation held by a background agent makes
+				// `claude --resume` refuse to start.
+				ReleaseClaudeBackgroundAgent(resumeID)
+			}
 		}
-		// For agents supporting --session-id, pre-assign a session ID
-		if config.SupportsSessionID && config.SessionIDFlag != "" &&
-			!ExtraArgsSetConversation(extraArgs) {
-			generatedSessionID = uuid.New().String()
-			args = append(args, config.SessionIDFlag, generatedSessionID)
+
+		autoYes := i.AutoYes && config.SupportsAutoYes && config.AutoYesFlag != "" &&
+			!i.autoYesRefusedAsRoot(serverID, config)
+
+		args := []string{}
+		// Codex and Amazon Q take resume as a subcommand, so it comes first
+		// and the flags follow it — the same order the restart path uses.
+		if resumeID != "" && config.ResumeIsSubcommand {
+			args = append(args, config.ResumeFlag)
+			if autoYes {
+				args = append(args, config.AutoYesFlag)
+			}
+			args = append(args, resumeID)
+			generatedSessionID = resumeID
+		} else {
+			if autoYes {
+				args = append(args, config.AutoYesFlag)
+			}
+			if resumeID != "" {
+				args = append(args, config.ResumeFlag, resumeID)
+				generatedSessionID = resumeID
+			} else if config.SupportsSessionID && config.SessionIDFlag != "" &&
+				!ExtraArgsSetConversation(extraArgs) {
+				// No conversation chosen: name a new one, so the tab has
+				// something to resume from later.
+				generatedSessionID = uuid.New().String()
+				args = append(args, config.SessionIDFlag, generatedSessionID)
+			}
 		}
 		argv = buildAgentArgv(config.Command, args, extraArgs)
 	}

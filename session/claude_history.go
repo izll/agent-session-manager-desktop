@@ -2,6 +2,7 @@ package session
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -163,26 +164,38 @@ func isMeaningfulDisplay(s string) bool {
 // 1. history.jsonl - sessions used in this project (exact match)
 // 2. project directory - sessions with conversation content (user/assistant/summary/system)
 func ListAgentSessionsByHistory(projectPath string) ([]AgentSession, error) {
-	homeDir, err := os.UserHomeDir()
+	return listAgentSessionsByHistoryFrom(localFiles{}, projectPath)
+}
+
+// listAgentSessionsByHistoryFrom is the same listing against a given machine.
+//
+// The records live under the home directory, so the project path alone does
+// not say which machine to read: a tab on a server resumes that server's
+// conversations, not this computer's.
+func listAgentSessionsByHistoryFrom(files agentFiles, projectPath string) ([]AgentSession, error) {
+	homeDir, err := files.home()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get home directory: %w", err)
 	}
 
-	// Resolve symlinks in project path
-	realProjectPath, err := filepath.EvalSymlinks(projectPath)
-	if err == nil {
-		projectPath = realProjectPath
+	// Symlinks are resolved on this computer only. The path of a project on a
+	// server cannot be resolved from here, and a remote agent writes into its
+	// history whatever it was given, so comparing the two as they stand is
+	// what matches.
+	if _, isLocal := files.(localFiles); isLocal {
+		realProjectPath, err := filepath.EvalSymlinks(projectPath)
+		if err == nil {
+			projectPath = realProjectPath
+		}
 	}
 
 	// Map of sessionID -> session data (combined from both sources)
 	sessionData := make(map[string]sessionHistoryData)
 
 	// Source 1: Read from history.jsonl (exact project match)
-	historyPath := filepath.Join(homeDir, ".claude", "history.jsonl")
-	if file, err := os.Open(historyPath); err == nil {
-		defer file.Close()
-
-		scanner := bufio.NewScanner(file)
+	historyPath := files.join(homeDir, ".claude", "history.jsonl")
+	if contents, err := files.readFile(historyPath); err == nil {
+		scanner := bufio.NewScanner(bytes.NewReader(contents))
 		buf := make([]byte, 0, 64*1024)
 		scanner.Buffer(buf, 1024*1024)
 
@@ -202,9 +215,10 @@ func ListAgentSessionsByHistory(projectPath string) ([]AgentSession, error) {
 			}
 
 			entryProject := entry.Project
-			realEntryPath, err := filepath.EvalSymlinks(entryProject)
-			if err == nil {
-				entryProject = realEntryPath
+			if _, isLocal := files.(localFiles); isLocal {
+				if realEntryPath, err := filepath.EvalSymlinks(entryProject); err == nil {
+					entryProject = realEntryPath
+				}
 			}
 
 			// Use exact matching for resume (like Claude Code's --resume)
@@ -280,19 +294,23 @@ func ListAgentSessionsByHistory(projectPath string) ([]AgentSession, error) {
 		}
 
 		// Use session's own project directory (not the base projectPath)
-		claudeDir := GetClaudeProjectDir(st.project)
-		sessionPath := filepath.Join(claudeDir, st.id+".jsonl")
+		claudeDir := claudeProjectDirIn(files, homeDir, st.project)
+		sessionPath := files.join(claudeDir, st.id+".jsonl")
 
 		var sess *AgentSession
 
-		if _, err := os.Stat(sessionPath); os.IsNotExist(err) {
+		if !files.exists(sessionPath) {
 			// Session file doesn't exist - skip it.
 			// Claude Code shows these in its resume list, but --resume will fail
 			// with "no conversation found" if the .jsonl file is missing.
 			continue
 		} else {
 			// Session file exists - parse it
-			session, err := parseSessionFile(sessionPath, st.id)
+			contents, err := files.readFile(sessionPath)
+			if err != nil {
+				continue
+			}
+			session, err := parseSessionBytes(contents, st.id)
 			if err != nil {
 				continue
 			}
