@@ -38,30 +38,51 @@ test('the body scrolls instead of being clipped', () => {
     'the dialog must be a column for its body to be the part that gives way');
 });
 
-test('the buttons stay reachable however long the dialog gets', () => {
-  const actions = rule('.dialog-content .dialog-actions,\n.dialog-content > .dialog-footer');
-  assert.match(actions, /position:\s*sticky/,
-    'the buttons scroll away with the body');
-  assert.match(actions, /background:/,
-    'sticky buttons need a background, or content shows through them');
+test('the buttons sit outside the scrolling body, not over it', () => {
+  const actions = rule('.dialog-content > .dialog-actions,\n.dialog-content > .dialog-footer');
+  assert.match(actions, /flex-shrink:\s*0/,
+    'the buttons can be squeezed out by a long form');
+
+  // Sticky was the first attempt and it looked right: the buttons stayed put,
+  // but a sticky element overlays the scroll area without reserving room, so
+  // they covered the last field of the form. Measured — one field hidden.
+  assert.doesNotMatch(actions, /position:\s*sticky/,
+    'sticky buttons float over the form and hide its last field');
 });
 
-// The point of putting it in the shared sheet: no dialog should have to
-// remember. A local max-height is allowed — several set their own — but none
-// should need to repeat the scrolling machinery.
-test('no dialog repeats the scrolling machinery locally', () => {
+// The buttons only stay out of the way if they are a child of the dialog
+// rather than of the scrolling form. A submit button moved out of its form
+// needs form="id" to still submit it.
+test('no dialog leaves its buttons inside the scrolling body', () => {
   const dir = new URL('../src/lib/components/Dialogs/', import.meta.url);
-  const repeats = [];
+  const inside = [];
   for (const file of readdirSync(dir).filter(f => f.endsWith('.svelte'))) {
     const source = readFileSync(new URL(file, dir), 'utf8');
-    // The tell-tale is a sticky .dialog-actions: that only exists to keep the
-    // buttons reachable, which the shared sheet now does for everyone.
-    const at = source.indexOf('.dialog-actions {');
-    if (at < 0) continue;
-    if (/position:\s*sticky/.test(source.slice(at, source.indexOf('}', at)))) {
-      repeats.push(file);
+    const formAt = source.indexOf('<form');
+    if (formAt < 0) continue;
+    const formEnd = source.indexOf('</form>', formAt);
+    if (formEnd < 0) continue;
+    if (source.slice(formAt, formEnd).includes('class="dialog-actions"')) {
+      inside.push(file);
     }
   }
-  assert.deepEqual(repeats, [],
-    'these repeat what the shared sheet already does: ' + repeats.join(', '));
+  assert.deepEqual(inside, [],
+    'these keep their buttons inside the scrolling form: ' + inside.join(', '));
+});
+
+// Moving the buttons out of the form breaks the submit unless they say which
+// form they belong to.
+test('a submit button outside its form still names it', () => {
+  const dir = new URL('../src/lib/components/Dialogs/', import.meta.url);
+  for (const file of readdirSync(dir).filter(f => f.endsWith('.svelte'))) {
+    const source = readFileSync(new URL(file, dir), 'utf8');
+    const formAt = source.indexOf('<form');
+    if (formAt < 0) continue;
+    const formEnd = source.indexOf('</form>', formAt);
+    const afterForm = source.slice(formEnd);
+    if (!afterForm.includes('type="submit"')) continue;
+    assert.match(afterForm, /type="submit" form="[a-z-]+"/,
+      `${file}: a submit button sits outside its form without naming it, ` +
+      'so pressing it does nothing');
+  }
 });

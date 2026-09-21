@@ -328,7 +328,7 @@
         </div>
       {/if}
 
-      <form on:submit|preventDefault={handleSubmit}>
+      <form on:submit|preventDefault={handleSubmit} id="newtab-form">
         <!-- Tab Type -->
         <div class="form-group">
           <span class="form-label">{$t('newTab.tabType')}</span>
@@ -466,28 +466,28 @@
             class="form-input"
           />
         </div>
-
-        <!-- Actions -->
-        <div class="dialog-actions">
-          <button type="button" class="btn-cancel" on:click={close}>
-            {$t('common.cancel')}
-          </button>
-          <button type="submit" class="btn-primary" disabled={isSubmitting}>
-            {#if isSubmitting}
-              <svg class="spinner" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
-              </svg>
-              {$t('newTab.creating')}
-            {:else}
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <line x1="12" y1="5" x2="12" y2="19"/>
-                <line x1="5" y1="12" x2="19" y2="12"/>
-              </svg>
-              {$t('newTab.create')}
-            {/if}
-          </button>
-        </div>
       </form>
+
+      <div class="dialog-actions">
+        <button type="button" class="btn-cancel" on:click={close}>
+          {$t('common.cancel')}
+        </button>
+        <button type="submit" form="newtab-form" class="btn-primary" disabled={isSubmitting}>
+          {#if isSubmitting}
+            <svg class="spinner" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+            </svg>
+            {$t('newTab.creating')}
+          {:else}
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="12" y1="5" x2="12" y2="19"/>
+              <line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+            {$t('newTab.create')}
+          {/if}
+        </button>
+        </div>
+
     </div>
   </div>
 {/if}

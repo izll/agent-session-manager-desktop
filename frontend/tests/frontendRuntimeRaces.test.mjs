@@ -487,12 +487,12 @@ assert.doesNotMatch(quickTerminalDialog, /focusAndSelect/,
   'QuickTerminal must not leave a delayed focus callback that can select a newer draft');
 assert.match(dialogActions, /if \(node\.contains\(document\.activeElement\)\) return;/,
   'deferred dialog autofocus must not move focus or selection after user interaction');
-assert.match(newTabDialog, /<form on:submit\|preventDefault=\{handleSubmit\}>/);
+assert.match(newTabDialog, /<form on:submit\|preventDefault=\{handleSubmit\}/);
 assert.doesNotMatch(newTabDialog, /e\.key === 'Enter'/,
   'NewTab native form submit must be the sole Enter path');
 assert.match(newTabDialog, /dir && show && generation === operationGeneration && sessionId === targetSessionId/,
   'a native tab work-directory picker must not overwrite a replacement session form');
-assert.match(forkDialog, /<form on:submit\|preventDefault=\{handleSubmit\}>/);
+assert.match(forkDialog, /<form on:submit\|preventDefault=\{handleSubmit\}/);
 assert.doesNotMatch(forkDialog, /e\.key === 'Enter'/,
   'Fork native form submit must be the sole Enter path');
 assert.match(forkDialog, /dialogTarget\.projectId !== \$activeProjectId/,

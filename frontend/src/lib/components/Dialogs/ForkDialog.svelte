@@ -208,7 +208,7 @@
         </div>
       {/if}
 
-      <form on:submit|preventDefault={handleSubmit}>
+      <form on:submit|preventDefault={handleSubmit} id="fork-form">
         <!-- Fork Mode -->
         <div class="form-group">
           <span class="form-label">{$t('fork.forkTo')}</span>
@@ -282,31 +282,31 @@
           </svg>
           <span>{$t('fork.firstMessageNote')}</span>
         </p>
-
-        <!-- Actions -->
-        <div class="dialog-actions">
-          <button type="button" class="btn-cancel" on:click={close}>
-            {$t('fork.cancel')}
-          </button>
-          <button type="submit" class="btn-primary" disabled={isSubmitting}>
-            {#if isSubmitting}
-              <svg class="spinner" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
-              </svg>
-              {$t('fork.forking')}
-            {:else}
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="12" cy="18" r="3"/>
-                <circle cx="6" cy="6" r="3"/>
-                <circle cx="18" cy="6" r="3"/>
-                <path d="M6 9v3a3 3 0 003 3h6a3 3 0 003-3V9"/>
-                <path d="M12 12v3"/>
-              </svg>
-              {$t('fork.forkBtn')}
-            {/if}
-          </button>
-        </div>
       </form>
+
+      <div class="dialog-actions">
+        <button type="button" class="btn-cancel" on:click={close}>
+          {$t('fork.cancel')}
+        </button>
+        <button type="submit" form="fork-form" class="btn-primary" disabled={isSubmitting}>
+          {#if isSubmitting}
+            <svg class="spinner" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+            </svg>
+            {$t('fork.forking')}
+          {:else}
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="18" r="3"/>
+              <circle cx="6" cy="6" r="3"/>
+              <circle cx="18" cy="6" r="3"/>
+              <path d="M6 9v3a3 3 0 003 3h6a3 3 0 003-3V9"/>
+              <path d="M12 12v3"/>
+            </svg>
+            {$t('fork.forkBtn')}
+          {/if}
+        </button>
+        </div>
+
     </div>
   </div>
 {/if}

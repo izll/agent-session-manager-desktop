@@ -252,15 +252,16 @@ select option:checked {
   overflow-y: auto;
 }
 
-/* Reachable however long the content gets. The background is needed because
-   content now scrolls underneath. */
-.dialog-content .dialog-actions,
+/* Reachable however long the content gets, by sitting outside the scrolling
+   body rather than floating over it.
+   This was sticky at first, which looked right and was not: a sticky element
+   overlays the scroll area without reserving room, so the buttons covered the
+   last field of the form. Measured — one field hidden behind them. As the
+   dialog's own last child it takes its space, and the overlap is zero. */
+.dialog-content > .dialog-actions,
 .dialog-content > .dialog-footer {
-  position: sticky;
-  bottom: 0;
   flex-shrink: 0;
   background: var(--bg-raised);
-  margin-top: auto;
 }
 
 @keyframes slideIn {
