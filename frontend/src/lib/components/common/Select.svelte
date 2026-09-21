@@ -52,9 +52,31 @@
     if (!triggerRef || !dropdownRef) return;
     const rect = triggerRef.getBoundingClientRect();
     dropdownRef.style.position = 'fixed';
-    dropdownRef.style.left = `${rect.left}px`;
-    dropdownRef.style.width = `${rect.width}px`;
     dropdownRef.style.zIndex = '10000';
+
+    // As wide as its content needs, but never narrower than the control.
+    //
+    // The list is portaled to the body, so it has no width of its own to
+    // inherit — it was given the trigger's, which made a name too long for a
+    // narrow control unreadable in the one place there was room to show it.
+    // The trigger's width becomes the minimum instead, and the list grows to
+    // fit, stopping at the window edge.
+    //
+    // Measured after setting it: an option wider than the control makes the
+    // list wider than the control, and the text is no longer cut.
+    const roomToTheRight = window.innerWidth - rect.left - VIEWPORT_MARGIN;
+    dropdownRef.style.width = '';
+    dropdownRef.style.minWidth = `${rect.width}px`;
+    dropdownRef.style.maxWidth = `${Math.max(rect.width, roomToTheRight)}px`;
+
+    // Kept on screen: a list grown past the right edge is shifted back rather
+    // than left hanging off it.
+    dropdownRef.style.left = `${rect.left}px`;
+    const grown = dropdownRef.getBoundingClientRect().width;
+    const overflowRight = rect.left + grown - (window.innerWidth - VIEWPORT_MARGIN);
+    if (overflowRight > 0) {
+      dropdownRef.style.left = `${Math.max(VIEWPORT_MARGIN, rect.left - overflowRight)}px`;
+    }
 
     // Open upwards when there is not enough room below.
     //
@@ -325,9 +347,12 @@
     border-color: rgba(var(--accent-rgb), 0.6);
   }
 
-  /* The rows in the list keep to one line for the same reason: a wrapped
-     option is taller than the others, which makes the list hard to scan and
-     throws off the height the dropdown was positioned against. */
+  /* The rows keep to one line so they stay the same height — a wrapped option
+     is taller than its neighbours, which makes the list hard to scan and
+     throws off the height the dropdown was positioned against.
+     They are not normally cut, though: the list sizes itself to its widest
+     option rather than to the control, so the ellipsis is a last resort for a
+     name too long for the window. */
   :global(.select-dropdown .select-option) {
     display: block;
     width: 100%;

@@ -30,6 +30,26 @@ test('the chosen value stays on one line', () => {
     'a flex item will not shrink below its content without min-width: 0');
 });
 
+// The list sizes itself to its widest option rather than to the control, so a
+// name too long for a narrow field is readable in the one place there is room
+// for it. Measured in a browser: a 196px control opened a 209px list, and the
+// long option was no longer cut.
+test('the list is as wide as it needs, not as wide as the control', () => {
+  assert.match(select, /minWidth = `\$\{rect\.width\}px`/,
+    'the control gives the list its minimum width, not its fixed width');
+  assert.doesNotMatch(select, /dropdownRef\.style\.width = `\$\{rect\.width\}px`/,
+    'forcing the list to the control width makes long options unreadable');
+});
+
+// Grown past the right edge, the list has to come back rather than hang off
+// the window. Measured: a control at x=814 opened a list at x=799.
+test('a wide list stays on screen', () => {
+  assert.match(select, /overflowRight/,
+    'nothing brings a list grown past the right edge back on screen');
+  assert.match(select, /Math\.max\(VIEWPORT_MARGIN,/,
+    'the list can be pushed off the left edge while avoiding the right');
+});
+
 // A wrapped row is taller than its neighbours, which makes the list hard to
 // scan and throws off the height the dropdown was positioned against.
 test('the options in the list stay on one line', () => {
