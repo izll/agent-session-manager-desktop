@@ -8,6 +8,7 @@
   import { get } from 'svelte/store';
   import * as App from '../../../../wailsjs/go/main/App';
   import RemoteDirPicker from './RemoteDirPicker.svelte';
+  import ResumeSessionPickerDialog from './ResumeSessionPickerDialog.svelte';
   import AgentIcon from '../common/AgentIcon.svelte';
   import Select from '../common/Select.svelte';
   import { t } from '../../i18n';
@@ -94,15 +95,17 @@
 
   // A conversation to continue, chosen before the tab exists.
   //
-  // Empty means a fresh one, which is what a new tab always started. The list
-  // comes from the machine the tab will run on and for the directory it will
-  // run in — a tab pointed somewhere else has different work behind it.
+  // Empty means a fresh one, which is what a new tab always started. The
+  // conversations come from the machine the tab will run on and the directory
+  // it will run in — a tab pointed somewhere else has different work behind
+  // it.
+  //
+  // Picked in the same dialog that resumes an existing tab rather than in a
+  // dropdown here: the list needs a line for the prompt and a line for the
+  // time to be worth reading, which a one-line control cannot give it.
   let resumeId = '';
-  let resumeOptions: main.AgentSessionInfo[] = [];
-  let resumeLoading = false;
-  let resumeError = '';
-  let resumeGeneration = 0;
-  let lastResumeKey = '';
+  let resumeLabel = '';
+  let showResumePicker = false;
 
   // The directory the conversations belong to. A tab on a server must say
   // where it runs; one on this computer falls back to the session's path.
@@ -112,55 +115,31 @@
   // Antigravity keeps a SQLite database that would have to be copied across;
   // Amazon Q records no list at all, resuming the last conversation for a
   // directory without being told which. Both would answer with this
-  // computer's records, so the field is not offered for them on a server.
+  // computer's records, so the choice is not offered for them on a server.
   const READABLE_ON_A_SERVER = ['claude', 'codex', 'cursor', 'opencode', 'gemini'];
 
-  // Only agents that can actually resume, so the field does not appear where
-  // choosing something would do nothing.
+  // Only agents that can actually resume, so the button does not appear where
+  // pressing it would do nothing.
   $: canResume = tabType === 'agent' &&
     (chosenAgent?.supportsResume ?? false) &&
     (!effectiveServerId || READABLE_ON_A_SERVER.includes(selectedAgent));
 
-  $: {
-    const key = show && canResume && resumeWorkDir
-      ? `${effectiveServerId}|${selectedAgent}|${resumeWorkDir}|${sessionId}`
-      : '';
-    if (key !== lastResumeKey) {
-      lastResumeKey = key;
-      resumeId = '';
-      resumeOptions = [];
-      resumeError = '';
-      if (key) void loadResumeOptions(key);
-      else resumeLoading = false;
-    }
+  // A choice is only good for what it was made against. Changing the agent,
+  // the machine or the directory changes which conversations exist, so an id
+  // chosen before must not survive into a tab it does not belong to.
+  $: resumeContext = `${effectiveServerId}|${selectedAgent}|${resumeWorkDir}`;
+  let lastResumeContext = '';
+  $: if (resumeContext !== lastResumeContext) {
+    lastResumeContext = resumeContext;
+    resumeId = '';
+    resumeLabel = '';
   }
 
-  async function loadResumeOptions(key: string) {
-    const generation = ++resumeGeneration;
-    resumeLoading = true;
-    try {
-      const found = await App.GetResumeSessionsOn(
-        sessionId, effectiveServerId, selectedAgent, resumeWorkDir);
-      if (generation !== resumeGeneration || key !== lastResumeKey) return;
-      resumeOptions = found || [];
-    } catch (e) {
-      if (generation !== resumeGeneration || key !== lastResumeKey) return;
-      // Not fatal: the tab can still be created with a fresh conversation, so
-      // this is said beside the field rather than blocking the dialog.
-      resumeError = String(e);
-      resumeOptions = [];
-    } finally {
-      if (generation === resumeGeneration) resumeLoading = false;
-    }
+  function chooseResume(event: CustomEvent<{ resumeId: string; displayName: string }>) {
+    showResumePicker = false;
+    resumeId = event.detail.resumeId;
+    resumeLabel = event.detail.displayName;
   }
-
-  $: resumeChoices = [
-    { value: '', label: $t('newTab.resumeNew') },
-    ...resumeOptions.map(s => ({
-      value: s.id,
-      label: s.timestamp ? `${s.displayName} — ${s.timestamp}` : s.displayName,
-    })),
-  ];
 
   $: chosenAgent = availableAgents.find((a) => a.type === selectedAgent);
   $: agentMissing = tabType === 'agent' && !!chosenAgent && chosenAgent.installed === false;
@@ -219,9 +198,8 @@
     workDir = '';
     error = '';
     resumeId = '';
-    resumeOptions = [];
-    resumeError = '';
-    lastResumeKey = '';
+    resumeLabel = '';
+    showResumePicker = false;
     userTouchedName = false;
   }
 
@@ -456,20 +434,22 @@
             <span class="form-label">{$t('newTab.resumeLabel')}</span>
             {#if !resumeWorkDir}
               <p class="field-hint">{$t('newTab.resumeNeedsWorkDir')}</p>
-            {:else if resumeLoading}
-              <p class="field-hint">{$t('newTab.resumeLoading')}</p>
             {:else}
-              {#if resumeOptions.length > 0}
-                <Select
-                  value={resumeId}
-                  options={resumeChoices}
-                  on:change={e => { resumeId = e.detail; }}
-                />
-              {:else if resumeError}
-                <p class="field-hint resume-problem">{resumeError}</p>
-              {:else}
-                <p class="field-hint">{$t('newTab.resumeNone')}</p>
-              {/if}
+              <div class="resume-row">
+                <span class="resume-current" class:chosen={!!resumeId} title={resumeLabel}>
+                  {resumeId ? resumeLabel : $t('newTab.resumeNew')}
+                </span>
+                <button type="button" class="browse-btn" on:click={() => showResumePicker = true}>
+                  {$t('newTab.resumeChoose')}
+                </button>
+                {#if resumeId}
+                  <button
+                    type="button"
+                    class="browse-btn"
+                    on:click={() => { resumeId = ''; resumeLabel = ''; }}
+                  >{$t('common.clear')}</button>
+                {/if}
+              </div>
             {/if}
           </div>
         {/if}
@@ -517,6 +497,20 @@
   serverId={effectiveServerId}
   startPath={workDir || (tabServerId ? '' : sessionPath)}
   on:chosen={e => { workDir = e.detail; }}
+/>
+
+<!-- The same picker that resumes an existing tab. There is no session yet, so
+     it is given the agent, the directory and the machine directly, and the
+     tab's own name to show in place of a session's. -->
+<ResumeSessionPickerDialog
+  bind:show={showResumePicker}
+  session={null}
+  agentOverride={selectedAgent}
+  pathOverride={resumeWorkDir}
+  serverId={effectiveServerId}
+  subjectName={name}
+  on:select={chooseResume}
+  on:cancel={() => showResumePicker = false}
 />
 
 <style>
@@ -654,6 +648,27 @@
     font-size: 11px;
     color: #8b8b93;
   }
+
+  /* Same shape as the working-directory row: what is set, then the button
+     that changes it. The chosen conversation can be a whole sentence, so it
+     takes the space the input takes there and is cut with an ellipsis rather
+     than pushing the buttons off the edge. */
+  .resume-row { display: flex; gap: 8px; align-items: stretch; }
+  .resume-current {
+    flex: 1;
+    min-width: 0;
+    padding: 12px 16px;
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 10px;
+    font-size: 14px;
+    color: #8b8b93;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  /* A conversation actually chosen reads as a value, not as a placeholder. */
+  .resume-current.chosen { color: white; }
 
   .workdir-row { display: flex; gap: 8px; }
   .workdir-row .form-input { flex: 1; min-width: 0; }

@@ -13,9 +13,19 @@
   // a Claude-led session). Defaults to the session's own values.
   export let agentOverride: string | null = null;
   export let pathOverride: string | null = null;
+  // The machine the conversations live on, for a tab that will run on a
+  // server. Empty is this computer, which is where a session's own
+  // conversations are.
+  export let serverId = '';
+  // A name to show instead of the session's, for a tab that does not exist
+  // yet and so has no session of its own to name.
+  export let subjectName = '';
 
+  // The label travels with the id: a caller that shows what was chosen —
+  // the new-tab dialog does — would otherwise have to look it up again in a
+  // list it does not hold.
   const dispatch = createEventDispatcher<{
-    select: { resumeId: string };
+    select: { resumeId: string; displayName: string };
     cancel: void;
   }>();
 
@@ -36,8 +46,8 @@
   // pair. The override is part of the key so a Codex tab and a Claude main
   // session don't collide in the cache.
   $: {
-    const key = show && session
-      ? `${session.id}|${agentOverride ?? ''}|${pathOverride ?? ''}`
+    const key = show && (session || pathOverride)
+      ? `${session?.id ?? ''}|${agentOverride ?? ''}|${pathOverride ?? ''}|${serverId}`
       : '';
     if (key && key !== lastLoadKey) {
       lastLoadKey = key;
@@ -50,16 +60,19 @@
   }
 
   async function loadSessions(key: string) {
-    if (!session) return;
+    const agent = agentOverride || session?.agent || '';
+    const path = pathOverride || session?.path || '';
+    if (!agent || !path) return;
 
     const generation = ++loadGeneration;
-    const agent = agentOverride || session.agent;
-    const path = pathOverride || session.path;
 
     isLoadingSessions = true;
     error = '';
     try {
-      const result = await App.GetResumeSessions(agent, path);
+      // Asked of the machine the conversations are on: a tab bound for a
+      // server resumes what that server holds, not this computer's.
+      const result = await App.GetResumeSessionsOn(
+        session?.id ?? '', serverId, agent, path);
       if (!show || generation !== loadGeneration || key !== lastLoadKey) return;
       availableSessions = result || [];
       cursor = 0;
@@ -99,12 +112,12 @@
     if (cursor === 0) {
       // New session
       show = false;
-      dispatch('select', { resumeId: '' });
+      dispatch('select', { resumeId: '', displayName: '' });
     } else if (cursor > 0 && cursor <= availableSessions.length) {
       // Existing session
-      const resumeId = availableSessions[cursor - 1].id;
+      const chosen = availableSessions[cursor - 1];
       show = false;
-      dispatch('select', { resumeId });
+      dispatch('select', { resumeId: chosen.id, displayName: chosen.displayName });
     }
   }
 
@@ -147,7 +160,7 @@
 
         <div class="session-info">
           <span class="label">{$t('bgAgents.session')}</span>
-          <span class="value">{session?.name || ''}</span>
+          <span class="value">{subjectName || session?.name || ''}</span>
         </div>
 
         <div class="session-list-container">
