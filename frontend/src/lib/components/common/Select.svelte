@@ -171,7 +171,9 @@
     on:click={toggle}
     on:keydown={handleKeydown}
   >
-    <span class="select-value">{displayText}</span>
+    <!-- title, because the text is now cut rather than wrapped: without it a
+         name too long for the control could not be read at all. -->
+    <span class="select-value" title={displayText}>{displayText}</span>
     <svg class="select-arrow" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
       <polyline points="6 9 12 15 18 9"></polyline>
     </svg>
@@ -198,6 +200,7 @@
         class="select-option"
         class:selected={option.value === value}
         class:highlighted={searchable && index === highlighted}
+        title={option.label}
         on:mouseenter={() => (highlighted = index)}
         on:click={() => select(option.value)}
       >
@@ -250,9 +253,20 @@
     border-color: rgba(var(--accent-rgb), 0.5);
   }
 
+  /* One line, cut with an ellipsis rather than wrapped.
+     A long option — a group or a server whose name does not fit — made the
+     control two rows tall and pushed the rest of the form down. Measured: the
+     trigger grew from 41px to 60px in a 170px field.
+     min-width: 0 is what makes the ellipsis work at all: a flex item defaults
+     to min-width:auto, which refuses to shrink below its content, so the text
+     wraps instead of being cut. */
   .select-value {
     flex: 1;
+    min-width: 0;
     text-align: left;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .select-arrow {
@@ -311,6 +325,9 @@
     border-color: rgba(var(--accent-rgb), 0.6);
   }
 
+  /* The rows in the list keep to one line for the same reason: a wrapped
+     option is taller than the others, which makes the list hard to scan and
+     throws off the height the dropdown was positioned against. */
   :global(.select-dropdown .select-option) {
     display: block;
     width: 100%;
@@ -322,6 +339,9 @@
     text-align: left;
     cursor: pointer;
     transition: all 0.1s ease;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   :global(.select-dropdown.small .select-option) {
