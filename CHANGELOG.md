@@ -6,6 +6,43 @@ Entries describe what changed for someone using the app. Internal refactoring,
 test and CI work is left out unless it changed behaviour. Dates are release
 dates; the format follows [Keep a Changelog](https://keepachangelog.com).
 
+## 1.2.0 — 2026-09-21
+
+### Added
+
+- **A new agent tab can start on an earlier conversation.** Opening a tab
+  always began a fresh one; continuing where you left off meant creating the
+  tab, stopping it, and picking from the resume dialog. The New Tab dialog now
+  has a button that opens that same dialog, and the agent starts on whatever
+  you choose there. Choosing nothing keeps the old behaviour.
+- **The conversations offered belong to the directory the tab will run in,**
+  not to the session it is opened from. A tab is independent work and can point
+  somewhere else entirely.
+- **A tab on a server is offered that server's conversations.** Claude, Codex,
+  Cursor, OpenCode and Gemini can be read on a remote machine. Antigravity and
+  Amazon Q cannot, and show nothing rather than this computer's conversations,
+  which the tab could not have resumed.
+
+### Fixed
+
+- **Resuming listed nothing on Windows, however many conversations a project
+  had.** The transcript was looked for under a folder name built with the
+  wrong rule: `\` and `:` were left in place, so a Windows path produced a
+  name that could never exist. Every entry was then discarded as having no
+  transcript.
+- **Extra `--resume` arguments made Claude refuse to start.** The app added
+  `--session-id` of its own, so the command line asked for a new conversation
+  and an old one at once. Arguments you type now take precedence.
+- **The agent's own pane kept almost no scrollback.** The history limit was
+  applied just after the session was created, which is too late for the one
+  window it already had — but in time for every tab opened afterwards, which
+  is why those scrolled back properly and the first did not.
+- **The spinner on the update button was invisible.** It was drawn in the
+  accent colour, on a button filled with the accent colour, so the button
+  looked like it had stopped responding.
+- **The resume dialog did not look like the other dialogs.** It had overridden
+  the shared header, losing the accent title bar and the round close button.
+
 ## 1.1.0 — 2026-09-21
 
 ### Added
