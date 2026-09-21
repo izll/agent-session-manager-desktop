@@ -133,63 +133,65 @@
         </button>
       </div>
 
-      {#if error}
-        <div class="error-message">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="10"/>
-            <line x1="12" y1="8" x2="12" y2="12"/>
-            <line x1="12" y1="16" x2="12.01" y2="16"/>
-          </svg>
-          {error}
-        </div>
-      {/if}
-
-      <div class="session-info">
-        <span class="label">{$t('bgAgents.session')}</span>
-        <span class="value">{session?.name || ''}</span>
-      </div>
-
-      <div class="session-list-container">
-        {#if isLoadingSessions}
-          <div class="loading-sessions">
-            <svg class="spinner" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+      <div class="dialog-body">
+        {#if error}
+          <div class="error-message">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="12" y1="8" x2="12" y2="12"/>
+              <line x1="12" y1="16" x2="12.01" y2="16"/>
             </svg>
-            {$t('resumePicker.loading')}
-          </div>
-        {:else}
-          <div class="session-list">
-            <button
-              type="button"
-              class="session-item {cursor === 0 ? 'active' : ''}"
-              on:click={() => { cursor = 0; handleSelect(); }}
-              on:mouseenter={() => cursor = 0}
-            >
-              <span class="session-icon new">+</span>
-              <span class="session-info-inner">
-                <span class="session-name">{$t('resumePicker.startFresh')}</span>
-                <span class="session-desc">{$t('resumePicker.newConversation')}</span>
-              </span>
-            </button>
-            {#each availableSessions as sess, i (sess.id)}
-              <button
-                type="button"
-                class="session-item {cursor === i + 1 ? 'active' : ''}"
-                on:click={() => { cursor = i + 1; handleSelect(); }}
-                on:mouseenter={() => cursor = i + 1}
-              >
-                <span class="session-icon resume">↻</span>
-                <span class="session-info-inner">
-                  <span class="session-name">{sess.displayName}</span>
-                  <span class="session-desc">{sess.timestamp}</span>
-                </span>
-              </button>
-            {/each}
+            {error}
           </div>
         {/if}
+
+        <div class="session-info">
+          <span class="label">{$t('bgAgents.session')}</span>
+          <span class="value">{session?.name || ''}</span>
+        </div>
+
+        <div class="session-list-container">
+          {#if isLoadingSessions}
+            <div class="loading-sessions">
+              <svg class="spinner" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+              </svg>
+              {$t('resumePicker.loading')}
+            </div>
+          {:else}
+            <div class="session-list">
+              <button
+                type="button"
+                class="session-item {cursor === 0 ? 'active' : ''}"
+                on:click={() => { cursor = 0; handleSelect(); }}
+                on:mouseenter={() => cursor = 0}
+              >
+                <span class="session-icon new">+</span>
+                <span class="session-info-inner">
+                  <span class="session-name">{$t('resumePicker.startFresh')}</span>
+                  <span class="session-desc">{$t('resumePicker.newConversation')}</span>
+                </span>
+              </button>
+              {#each availableSessions as sess, i (sess.id)}
+                <button
+                  type="button"
+                  class="session-item {cursor === i + 1 ? 'active' : ''}"
+                  on:click={() => { cursor = i + 1; handleSelect(); }}
+                  on:mouseenter={() => cursor = i + 1}
+                >
+                  <span class="session-icon resume">↻</span>
+                  <span class="session-info-inner">
+                    <span class="session-name">{sess.displayName}</span>
+                    <span class="session-desc">{sess.timestamp}</span>
+                  </span>
+                </button>
+              {/each}
+            </div>
+          {/if}
+        </div>
       </div>
 
-      <div class="dialog-hint">
+      <div class="dialog-footer">
         {$t('resumePicker.navHint')}
       </div>
     </div>
@@ -197,41 +199,32 @@
 {/if}
 
 <style>
+  /* Header, close button and footer come from the global sheet, which is
+     what gives every dialog the same accent header band and footer strip.
+     Only the parts the list needs are set here.
+
+     The height is a maximum rather than a fixed one: the list is as long as
+     the agent's history, and a session with two conversations should not be
+     shown in a dialog sized for twenty. */
   .dialog-content {
-    padding: 24px;
-    max-width: 500px;
     max-height: 80vh;
     display: flex;
     flex-direction: column;
   }
 
-  .dialog-header {
+  .dialog-body {
+    padding: 20px 24px;
+    overflow: hidden;
     display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 20px;
+    flex-direction: column;
+    min-height: 0;
   }
 
-  .dialog-header h2 {
-    font-size: 18px;
-    font-weight: 600;
-    color: #e4e4e7;
-    margin: 0;
-  }
-
-  .close-btn {
-    background: transparent;
-    border: none;
-    color: #9ca3af;
-    cursor: pointer;
-    padding: 4px;
-    border-radius: 6px;
-    transition: all 0.15s ease;
-  }
-
-  .close-btn:hover {
-    background: rgba(255, 255, 255, 0.05);
-    color: white;
+  /* A hint, not a row of buttons — centred, and in the footer's muted type. */
+  .dialog-footer {
+    justify-content: center;
+    font-size: 13px;
+    color: #6b7280;
   }
 
   .error-message {
@@ -294,12 +287,18 @@
     to { transform: rotate(360deg); }
   }
 
+  /* Scrolls inside the body rather than against a fixed height, so the
+     dialog shrinks to a short history and the footer stays put on a long
+     one. The 2px of padding leaves room for the focus ring on the first and
+     last item, which a flush edge would clip. */
   .session-list {
     overflow-y: auto;
-    max-height: 400px;
+    flex: 1;
+    min-height: 0;
     display: flex;
     flex-direction: column;
     gap: 8px;
+    padding: 2px;
   }
 
   .session-item {
@@ -364,14 +363,5 @@
   .session-desc {
     font-size: 13px;
     color: #9ca3af;
-  }
-
-  .dialog-hint {
-    margin-top: 16px;
-    padding-top: 16px;
-    border-top: 1px solid rgba(255, 255, 255, 0.1);
-    font-size: 13px;
-    color: #6b7280;
-    text-align: center;
   }
 </style>
