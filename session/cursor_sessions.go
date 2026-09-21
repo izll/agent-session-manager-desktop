@@ -18,11 +18,15 @@ const cursorChatMetadataLimit = 1 << 20
 // cursorChatsDir returns ~/.cursor/chats, the root Cursor keeps its CLI
 // conversations under.
 func cursorChatsDir() (string, error) {
-	homeDir, err := os.UserHomeDir()
+	return cursorChatsDirIn(localFiles{})
+}
+
+func cursorChatsDirIn(files agentFiles) (string, error) {
+	homeDir, err := files.home()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(homeDir, ".cursor", "chats"), nil
+	return files.join(homeDir, ".cursor", "chats"), nil
 }
 
 // cursorProjectHash is the directory name Cursor files a project's chats under.
@@ -35,17 +39,32 @@ func cursorChatsDir() (string, error) {
 // Symlinks are resolved first so that /var and /private/var, or a home
 // reached through a link, name the same project rather than two.
 func cursorProjectHash(projectPath string) string {
+	return cursorProjectHashFor(projectPath, true)
+}
+
+// cursorProjectHashFor hashes the path, resolving it against this computer
+// only when the chats are on it.
+//
+// A path on a server cannot be resolved from here: EvalSymlinks and Abs would
+// answer about the local filesystem, turning a perfectly good remote path into
+// one that hashes to a directory the server does not have.
+func cursorProjectHashFor(projectPath string, local bool) string {
 	if projectPath == "" {
 		return ""
 	}
 	path := projectPath
-	if resolved, err := filepath.EvalSymlinks(path); err == nil {
-		path = resolved
+	if local {
+		if resolved, err := filepath.EvalSymlinks(path); err == nil {
+			path = resolved
+		}
+		if abs, err := filepath.Abs(path); err == nil {
+			path = abs
+		}
+		path = filepath.Clean(path)
+	} else {
+		path = cleanServerPath(path)
 	}
-	if abs, err := filepath.Abs(path); err == nil {
-		path = abs
-	}
-	sum := md5.Sum([]byte(filepath.Clean(path)))
+	sum := md5.Sum([]byte(path))
 	return hex.EncodeToString(sum[:])
 }
 
@@ -57,16 +76,28 @@ func cursorProjectHash(projectPath string) string {
 // timestamps) and prompt_history.json (what was actually typed). The chat id
 // is the directory name, and it is what cursor-agent --resume takes.
 func ListCursorSessions(projectPath string) ([]AgentSession, error) {
-	root, err := cursorChatsDir()
+	return listCursorSessionsFrom(localFiles{}, projectPath)
+}
+
+// listCursorSessionsFrom is the same listing against a given machine.
+//
+// The project hash is computed here rather than read, so it works the same
+// wherever the chats live — unlike a path comparison, there is nothing to
+// normalise. The path must be the one as it exists on that machine, though:
+// symlinks are only resolved for the local disk, since this side cannot
+// follow a link on a server.
+func listCursorSessionsFrom(files agentFiles, projectPath string) ([]AgentSession, error) {
+	_, isLocal := files.(localFiles)
+	root, err := cursorChatsDirIn(files)
 	if err != nil {
 		return []AgentSession{}, nil
 	}
-	hash := cursorProjectHash(projectPath)
+	hash := cursorProjectHashFor(projectPath, isLocal)
 	if hash == "" {
 		return []AgentSession{}, nil
 	}
-	projectDir := filepath.Join(root, hash)
-	entries, err := os.ReadDir(projectDir)
+	projectDir := files.join(root, hash)
+	entries, err := files.entries(projectDir)
 	if err != nil {
 		// No directory means no chats here, which is not an error to report.
 		return []AgentSession{}, nil
@@ -74,10 +105,10 @@ func ListCursorSessions(projectPath string) ([]AgentSession, error) {
 
 	var sessions []AgentSession
 	for _, entry := range entries {
-		if !entry.IsDir() {
+		if !entry.IsDir {
 			continue
 		}
-		chatID := entry.Name()
+		chatID := entry.Name
 		// The id goes on a command line; refuse anything that is not a plain
 		// identifier rather than trusting a directory name.
 		if !IsSafeResumeID(chatID) {
@@ -90,15 +121,15 @@ func ListCursorSessions(projectPath string) ([]AgentSession, error) {
 			UpdatedAtMs     int64  `json:"updatedAtMs"`
 			HasConversation bool   `json:"hasConversation"`
 		}
-		metaPath := filepath.Join(projectDir, chatID, "meta.json")
-		if data, readErr := readFileAtMost(metaPath, cursorChatMetadataLimit); readErr == nil {
+		metaPath := files.join(projectDir, chatID, "meta.json")
+		if data, readErr := files.readHead(metaPath, cursorChatMetadataLimit); readErr == nil {
 			_ = json.Unmarshal(data, &meta)
 		}
 
 		// A chat that was opened and never used has no conversation to return
 		// to. Cursor records that directly; where it does not, an empty prompt
 		// history says the same thing.
-		prompts := readCursorPromptHistory(filepath.Join(projectDir, chatID, "prompt_history.json"))
+		prompts := readCursorPromptHistory(files, files.join(projectDir, chatID, "prompt_history.json"))
 		if !meta.HasConversation && len(prompts) == 0 {
 			continue
 		}
@@ -121,7 +152,7 @@ func ListCursorSessions(projectPath string) ([]AgentSession, error) {
 			label = chatID
 		}
 
-		createdAt, updatedAt := cursorChatTimes(projectDir, chatID, meta.CreatedAtMs, meta.UpdatedAtMs)
+		createdAt, updatedAt := cursorChatTimes(files, projectDir, chatID, meta.CreatedAtMs, meta.UpdatedAtMs)
 		messageCount := len(prompts)
 		if messageCount == 0 {
 			messageCount = 1
@@ -148,8 +179,8 @@ func ListCursorSessions(projectPath string) ([]AgentSession, error) {
 // readCursorPromptHistory returns the prompts typed into one chat, newest last.
 // A missing or unreadable file is an empty history, not an error: the chat may
 // simply never have been used.
-func readCursorPromptHistory(path string) []string {
-	data, err := readFileAtMost(path, cursorChatMetadataLimit)
+func readCursorPromptHistory(files agentFiles, path string) []string {
+	data, err := files.readHead(path, cursorChatMetadataLimit)
 	if err != nil {
 		return nil
 	}
@@ -169,10 +200,15 @@ func readCursorPromptHistory(path string) []string {
 // cursorChatTimes prefers the timestamps Cursor records and falls back to the
 // directory's own, so a chat with a malformed meta.json still sorts sensibly
 // rather than landing at the epoch.
-func cursorChatTimes(projectDir, chatID string, createdMs, updatedMs int64) (time.Time, time.Time) {
+func cursorChatTimes(files agentFiles, projectDir, chatID string, createdMs, updatedMs int64) (time.Time, time.Time) {
+	// The directory's own time is a local-disk fallback. Asking a server for
+	// it would cost a round trip per chat to improve the ordering of chats
+	// whose metadata is already broken.
 	var fallback time.Time
-	if info, err := os.Stat(filepath.Join(projectDir, chatID)); err == nil {
-		fallback = info.ModTime()
+	if _, isLocal := files.(localFiles); isLocal {
+		if info, err := os.Stat(filepath.Join(projectDir, chatID)); err == nil {
+			fallback = info.ModTime()
+		}
 	}
 	createdAt, updatedAt := fallback, fallback
 	if createdMs > 0 {

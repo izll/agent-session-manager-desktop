@@ -2,9 +2,6 @@ package session
 
 import (
 	"encoding/json"
-	"io"
-	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -14,34 +11,33 @@ const openCodeSessionMetadataLimit = 1 << 20
 
 // ListOpenCodeSessions lists all OpenCode sessions for the given project path
 func ListOpenCodeSessions(projectPath string) ([]AgentSession, error) {
+	return listOpenCodeSessionsFrom(localFiles{}, projectPath)
+}
+
+// listOpenCodeSessionsFrom is the same listing against a given machine.
+func listOpenCodeSessionsFrom(files agentFiles, projectPath string) ([]AgentSession, error) {
 	// OpenCode stores sessions at ~/.local/share/opencode/storage/session
-	homeDir, err := os.UserHomeDir()
+	homeDir, err := files.home()
 	if err != nil {
 		return []AgentSession{}, nil
 	}
 
-	sessionDir := filepath.Join(homeDir, ".local", "share", "opencode", "storage", "session")
-	if _, err := os.Stat(sessionDir); os.IsNotExist(err) {
+	sessionDir := files.join(homeDir, ".local", "share", "opencode", "storage", "session")
+
+	// Newest first and capped, so a store that has grown for years does not
+	// have to be read in full to show the recent conversations.
+	paths, err := files.findFiles(sessionDir, ".json", agentSessionScanLimit)
+	if err != nil {
 		return []AgentSession{}, nil
 	}
 
 	var sessions []AgentSession
-	err = filepath.WalkDir(sessionDir, func(path string, entry os.DirEntry, walkErr error) error {
-		if walkErr != nil || entry.IsDir() || strings.ToLower(filepath.Ext(entry.Name())) != ".json" {
-			return nil
-		}
-		info, err := entry.Info()
-		if err != nil || info.Size() > openCodeSessionMetadataLimit {
-			return nil
-		}
-		file, err := os.Open(path)
-		if err != nil {
-			return nil
-		}
-		data, readErr := io.ReadAll(io.LimitReader(file, openCodeSessionMetadataLimit+1))
-		closeErr := file.Close()
-		if readErr != nil || closeErr != nil || len(data) > openCodeSessionMetadataLimit {
-			return nil
+	for _, path := range paths {
+		// Each record is a title and a few timestamps; anything larger is not
+		// what this thinks it is, and the read stops there either way.
+		data, readErr := files.readHead(path, openCodeSessionMetadataLimit)
+		if readErr != nil {
+			continue
 		}
 		var metadata struct {
 			ID        string `json:"id"`
@@ -55,17 +51,22 @@ func ListOpenCodeSessions(projectPath string) ([]AgentSession, error) {
 		if json.Unmarshal(data, &metadata) != nil || !pathWithinProject(metadata.Directory, projectPath) {
 			// The storage directory is global. Records without a trustworthy
 			// directory cannot safely be exposed in a project-scoped dialog.
-			return nil
+			continue
 		}
 		sessionID := metadata.ID
 		if sessionID == "" {
-			sessionID = strings.TrimSuffix(entry.Name(), filepath.Ext(entry.Name()))
+			base := path
+			if cut := strings.LastIndexAny(base, "/\\"); cut >= 0 {
+				base = base[cut+1:]
+			}
+			sessionID = strings.TrimSuffix(base, ".json")
 		}
 		if sessionID == "" {
-			return nil
+			continue
 		}
-		createdAt := info.ModTime()
-		updatedAt := info.ModTime()
+		// The record's own timestamps. A file time would need a round trip per
+		// file on a server, to order records that already carry their times.
+		var createdAt, updatedAt time.Time
 		if metadata.Time.Created > 0 {
 			createdAt = time.UnixMilli(metadata.Time.Created)
 		}
@@ -86,10 +87,6 @@ func ListOpenCodeSessions(projectPath string) ([]AgentSession, error) {
 			AgentType:    AgentOpenCode,
 			ProjectPath:  metadata.Directory,
 		})
-		return nil
-	})
-	if err != nil {
-		return []AgentSession{}, nil
 	}
 
 	// Sort by modification time, most recent first

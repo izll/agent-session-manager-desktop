@@ -2,10 +2,10 @@ package session
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 )
 
@@ -51,11 +51,26 @@ func (m codexSessionMeta) isRootCLI() bool {
 }
 
 func codexSessionsDir() (string, error) {
+	return codexSessionsDirIn(localFiles{})
+}
+
+func codexSessionsDirIn(files agentFiles) (string, error) {
+	if _, isLocal := files.(localFiles); !isLocal {
+		// CODEX_HOME is this process's environment, which says nothing about
+		// the server; and a path from here cannot be resolved against its
+		// filesystem. The default location is what a server has.
+		homeDir, err := files.home()
+		if err != nil {
+			return "", err
+		}
+		return files.join(homeDir, ".codex", "sessions"), nil
+	}
+
 	var root string
 	if codexHome := strings.TrimSpace(os.Getenv("CODEX_HOME")); codexHome != "" {
 		root = filepath.Join(codexHome, "sessions")
 	} else {
-		homeDir, err := os.UserHomeDir()
+		homeDir, err := files.home()
 		if err != nil {
 			return "", err
 		}
@@ -86,59 +101,88 @@ type codexMessage struct {
 
 // ListCodexSessions lists all Codex sessions for the given project path
 func ListCodexSessions(projectPath string) ([]AgentSession, error) {
-	// Try to list sessions from ~/.codex/sessions directory (note: sessions, not session)
-	sessionDir, err := codexSessionsDir()
+	return listCodexSessionsFrom(localFiles{}, projectPath)
+}
+
+// codexMetaLineLimit bounds the read that decides whether a file is relevant.
+//
+// Codex writes a session_meta line first, carrying the id and the working
+// directory — the two fields the filter needs. Measured across a real store,
+// that line ran to 22 KB at its longest, so 128 KB is room to spare while
+// keeping the scan affordable: the store itself was 24 GB.
+const codexMetaLineLimit = 128 << 10
+
+// codexPromptScanLimit bounds the second read, which looks for the first thing
+// the user actually typed.
+//
+// That message can sit much further in than the metadata — measured at 9 MB
+// for a tenth of the files, because everything the agent did first is written
+// before it. This is read only for sessions the filter already accepted, so
+// the cost is paid for a handful of files rather than all of them.
+const codexPromptScanLimit = 4 << 20
+
+// codexFileScanLimit bounds how many files are looked at, as opposed to how
+// many sessions come back.
+//
+// Far above the number of conversations wanted, because most of the store is
+// not conversations at all: measured on a real store, 862 files held 41
+// sessions the user had started, the rest being the agent's own subagent
+// threads. A budget counted in sessions would have been spent on those before
+// reaching the second one. Only the metadata line of each is read.
+const codexFileScanLimit = 2000
+
+// listCodexSessionsFrom is the same listing against a given machine.
+//
+// Two passes, because the store is large and most of it is irrelevant: the
+// first reads only the metadata line of each file to find the ones belonging
+// to this project, the second reads further into those alone to find a prompt
+// worth showing. Reading every file whole would be 24 GB over SSH on the store
+// this was measured against.
+func listCodexSessionsFrom(files agentFiles, projectPath string) ([]AgentSession, error) {
+	sessionDir, err := codexSessionsDirIn(files)
 	if err != nil {
 		return []AgentSession{}, nil
 	}
 
-	if _, err := os.Stat(sessionDir); os.IsNotExist(err) {
+	// By name, not by modification time. Codex files its sessions under
+	// YYYY/MM/DD with the timestamp in each filename, so the path sorts
+	// chronologically — and unlike an mtime, that survives the store being
+	// copied. On a store that had been moved, every file carried the same
+	// minute, and picking by mtime found one of a project's sessions where
+	// this finds seventeen.
+	paths, err := files.findFilesByName(sessionDir, ".jsonl", codexFileScanLimit)
+	if err != nil {
 		return []AgentSession{}, nil
 	}
 
 	var sessions []AgentSession
-
-	// Walk through ~/.codex/sessions/YYYY/MM/DD/*.jsonl files
-	err = filepath.Walk(sessionDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return nil // Skip errors
+	for _, path := range paths {
+		if len(sessions) >= agentSessionScanLimit {
+			break
 		}
-
-		// Only process .jsonl files
-		if info.IsDir() || !strings.HasSuffix(path, ".jsonl") {
-			return nil
+		head, readErr := files.readHead(path, codexMetaLineLimit)
+		if readErr != nil {
+			continue
 		}
-
-		// Parse the session file to get ID and first prompt
-		sessionID, firstPrompt, cwd := parseCodexSession(path)
+		sessionID, cwd := parseCodexMeta(head)
 		if sessionID == "" {
-			return nil // Skip if we couldn't parse
+			// Not a session the user started: most files here are the
+			// agent's own subagent threads, which parseCodexMeta rejects.
+			continue
+		}
+		if !codexSessionBelongsTo(cwd, projectPath) {
+			continue
 		}
 
-		// Skip empty sessions (those with only system messages, no real user prompt)
-		if firstPrompt == sessionID {
-			return nil // No real prompt found - empty session
+		// Only now, for a file already known to belong here.
+		firstPrompt := ""
+		if body, err := files.readHead(path, codexPromptScanLimit); err == nil {
+			firstPrompt = parseCodexFirstPrompt(body)
 		}
-
-		// Filter by CWD using path hierarchy matching
-		// Accept if: CWD matches exactly, or CWD is ancestor of projectPath, or projectPath is ancestor of CWD
-		if projectPath != "" && cwd != "" {
-			// Normalize paths (add trailing slash for comparison)
-			normalizedCWD := cwd
-			if !strings.HasSuffix(normalizedCWD, "/") {
-				normalizedCWD += "/"
-			}
-			normalizedProject := projectPath
-			if !strings.HasSuffix(normalizedProject, "/") {
-				normalizedProject += "/"
-			}
-
-			// Check if paths are related (one is ancestor of the other)
-			if cwd != projectPath &&
-				!strings.HasPrefix(normalizedProject, normalizedCWD) &&
-				!strings.HasPrefix(normalizedCWD, normalizedProject) {
-				return nil // Skip sessions from unrelated directories
-			}
+		if firstPrompt == "" {
+			// A session with no prompt of its own is one the user never spoke
+			// in; showing it would offer an empty conversation to resume.
+			continue
 		}
 
 		sessions = append(sessions, AgentSession{
@@ -146,88 +190,88 @@ func ListCodexSessions(projectPath string) ([]AgentSession, error) {
 			FirstPrompt:  firstPrompt,
 			LastPrompt:   firstPrompt, // We only read the first prompt
 			MessageCount: 1,
-			CreatedAt:    info.ModTime(),
-			UpdatedAt:    info.ModTime(),
 			AgentType:    AgentCodex,
 		})
-
-		return nil
-	})
-
-	if err != nil {
-		return []AgentSession{}, nil
 	}
 
-	// Sort by modification time, most recent first
-	sort.Slice(sessions, func(i, j int) bool {
-		return sessions[i].UpdatedAt.After(sessions[j].UpdatedAt)
-	})
-
+	// findFiles already returns newest first, which is the order wanted here.
 	return sessions, nil
 }
 
-// parseCodexSession parses a Codex JSONL file and extracts session ID, first prompt, and CWD
-func parseCodexSession(path string) (sessionID, firstPrompt, cwd string) {
-	file, err := os.Open(path)
-	if err != nil {
-		return "", "", ""
+// codexSessionBelongsTo reports whether a session's working directory and the
+// project are the same tree — either may be an ancestor of the other.
+func codexSessionBelongsTo(cwd, projectPath string) bool {
+	if projectPath == "" || cwd == "" {
+		return true
 	}
-	defer file.Close()
+	if cwd == projectPath {
+		return true
+	}
+	normalisedCWD := cwd
+	if !strings.HasSuffix(normalisedCWD, "/") {
+		normalisedCWD += "/"
+	}
+	normalisedProject := projectPath
+	if !strings.HasSuffix(normalisedProject, "/") {
+		normalisedProject += "/"
+	}
+	return strings.HasPrefix(normalisedProject, normalisedCWD) ||
+		strings.HasPrefix(normalisedCWD, normalisedProject)
+}
 
-	scanner := bufio.NewScanner(file)
+// parseCodexMeta reads the session_meta line Codex writes first, which carries
+// the id and the directory the session ran in.
+//
+// Byte-based rather than file-based so the same parser serves a local file and
+// a bounded read from a server.
+func parseCodexMeta(head []byte) (sessionID, cwd string) {
+	scanner := bufio.NewScanner(bytes.NewReader(head))
+	scanner.Buffer(make([]byte, 64*1024), codexMetaLineLimit)
+	if !scanner.Scan() {
+		return "", ""
+	}
+	var meta codexSessionMeta
+	if err := json.Unmarshal(scanner.Bytes(), &meta); err != nil {
+		return "", ""
+	}
+	if meta.Type != "session_meta" || !meta.isRoot() {
+		return "", ""
+	}
+	return meta.Payload.ID, meta.Payload.CWD
+}
+
+// parseCodexFirstPrompt finds the first thing the user typed, skipping the
+// instructions and environment blocks the agent inserts before it.
+//
+// An empty result means none was found within what was read; the caller treats
+// that as a session with nothing worth resuming, which is also what it means
+// when the file genuinely holds no user message.
+func parseCodexFirstPrompt(body []byte) string {
+	scanner := bufio.NewScanner(bytes.NewReader(body))
 	scanner.Buffer(make([]byte, 64*1024), 1024*1024)
-	lineNum := 0
-
 	for scanner.Scan() {
-		lineNum++
-		line := scanner.Text()
-
-		// First line should be session_meta
-		if lineNum == 1 {
-			var meta codexSessionMeta
-			if err := json.Unmarshal([]byte(line), &meta); err == nil {
-				if meta.Type == "session_meta" && meta.isRoot() {
-					sessionID = meta.Payload.ID
-					cwd = meta.Payload.CWD
-				}
-			}
+		var msg codexMessage
+		if err := json.Unmarshal(scanner.Bytes(), &msg); err != nil {
 			continue
 		}
-
-		// Look for first user message
-		if firstPrompt == "" {
-			var msg codexMessage
-			if err := json.Unmarshal([]byte(line), &msg); err == nil {
-				if msg.Type == "response_item" && msg.Payload.Type == "message" && msg.Payload.Role == "user" {
-					// Get the first text content
-					for _, content := range msg.Payload.Content {
-						if content.Type == "input_text" && content.Text != "" {
-							// Skip AGENTS.md instructions and environment context
-							if !strings.HasPrefix(content.Text, "# AGENTS.md") &&
-								!strings.HasPrefix(content.Text, "<environment_context>") {
-								firstPrompt = content.Text
-								// Limit length for display
-								if len(firstPrompt) > 100 {
-									firstPrompt = firstPrompt[:97] + "..."
-								}
-								break
-							}
-						}
-					}
-				}
+		if msg.Type != "response_item" || msg.Payload.Type != "message" ||
+			msg.Payload.Role != "user" {
+			continue
+		}
+		for _, content := range msg.Payload.Content {
+			if content.Type != "input_text" || content.Text == "" {
+				continue
 			}
-		}
-
-		// Stop after finding both
-		if sessionID != "" && firstPrompt != "" {
-			break
+			if strings.HasPrefix(content.Text, "# AGENTS.md") ||
+				strings.HasPrefix(content.Text, "<environment_context>") {
+				continue
+			}
+			prompt := content.Text
+			if len(prompt) > 100 {
+				prompt = prompt[:97] + "..."
+			}
+			return prompt
 		}
 	}
-
-	// If no first prompt found, use session ID
-	if firstPrompt == "" {
-		firstPrompt = sessionID
-	}
-
-	return sessionID, firstPrompt, cwd
+	return ""
 }

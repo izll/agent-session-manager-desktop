@@ -4194,17 +4194,14 @@ func (a *App) GetResumeSessions(agent string, path string) ([]AgentSessionInfo, 
 // placed on a server keeps its conversations there, so offering this machine's
 // would list conversations that tab could never resume.
 //
-// Only Claude can be read remotely today. The other agents store their history
-// in formats this reads through local paths, and answering with the local
-// machine's list would be worse than answering with none: it looks right and
-// resumes nothing. They return an empty list, which the dialog shows as
-// "start fresh" alone.
+// Claude, Codex, Cursor, OpenCode and Gemini can be read on a server. The
+// remaining two cannot and answer with an empty list: Antigravity keeps a
+// SQLite database that would have to be copied across to be read, and Amazon Q
+// records no list at all — it resumes the last conversation for a directory
+// without being told which.
 func (a *App) GetResumeSessionsOn(sessionID string, serverID string, agent string, path string) ([]AgentSessionInfo, error) {
 	if serverID == "" {
 		return a.GetResumeSessions(agent, path)
-	}
-	if session.AgentType(agent) != session.AgentClaude {
-		return nil, nil
 	}
 
 	// Connect first if this server has no route yet: the dialog may be the
@@ -4214,7 +4211,8 @@ func (a *App) GetResumeSessionsOn(sessionID string, serverID string, agent strin
 		return nil, err
 	}
 
-	sessions, err := session.ListClaudeSessionsOn(sessionID, serverID, path)
+	sessions, err := session.ListAgentSessionsOn(
+		sessionID, serverID, session.AgentType(agent), path)
 	if err != nil {
 		return nil, err
 	}

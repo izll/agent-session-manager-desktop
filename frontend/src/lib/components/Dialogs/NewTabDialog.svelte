@@ -108,13 +108,18 @@
   // where it runs; one on this computer falls back to the session's path.
   $: resumeWorkDir = workDir.trim() || (effectiveServerId ? '' : sessionPath);
 
+  // The agents whose stored conversations can be read on another machine.
+  // Antigravity keeps a SQLite database that would have to be copied across;
+  // Amazon Q records no list at all, resuming the last conversation for a
+  // directory without being told which. Both would answer with this
+  // computer's records, so the field is not offered for them on a server.
+  const READABLE_ON_A_SERVER = ['claude', 'codex', 'cursor', 'opencode', 'gemini'];
+
   // Only agents that can actually resume, so the field does not appear where
   // choosing something would do nothing.
   $: canResume = tabType === 'agent' &&
     (chosenAgent?.supportsResume ?? false) &&
-    // Reading another machine's history is implemented for Claude alone; for
-    // the rest a remote list would be this computer's, which resumes nothing.
-    (!effectiveServerId || selectedAgent === 'claude');
+    (!effectiveServerId || READABLE_ON_A_SERVER.includes(selectedAgent));
 
   $: {
     const key = show && canResume && resumeWorkDir

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -36,6 +37,63 @@ func (f *fakeFiles) readFile(path string) ([]byte, error) {
 		return nil, fmt.Errorf("no such file: %s", path)
 	}
 	return []byte(contents), nil
+}
+
+func (f *fakeFiles) readHead(path string, n int64) ([]byte, error) {
+	contents, err := f.readFile(path)
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(contents)) > n {
+		return contents[:n], nil
+	}
+	return contents, nil
+}
+
+// entries and findFiles answer from the same map, so a fake machine is
+// described by its files alone.
+func (f *fakeFiles) entries(dir string) ([]agentDirEntry, error) {
+	prefix := strings.TrimSuffix(dir, "/") + "/"
+	seen := map[string]bool{}
+	var listed []agentDirEntry
+	for full := range f.byPath {
+		if !strings.HasPrefix(full, prefix) {
+			continue
+		}
+		rest := strings.TrimPrefix(full, prefix)
+		name, _, nested := strings.Cut(rest, "/")
+		if name == "" || seen[name] {
+			continue
+		}
+		seen[name] = true
+		listed = append(listed, agentDirEntry{Name: name, IsDir: nested})
+	}
+	sort.Slice(listed, func(a, b int) bool { return listed[a].Name < listed[b].Name })
+	return listed, nil
+}
+
+func (f *fakeFiles) findFilesByName(dir, suffix string, limit int) ([]string, error) {
+	found, err := f.findFiles(dir, suffix, limit)
+	if err != nil {
+		return nil, err
+	}
+	sort.Sort(sort.Reverse(sort.StringSlice(found)))
+	return found, nil
+}
+
+func (f *fakeFiles) findFiles(dir, suffix string, limit int) ([]string, error) {
+	prefix := strings.TrimSuffix(dir, "/") + "/"
+	var found []string
+	for full := range f.byPath {
+		if strings.HasPrefix(full, prefix) && strings.HasSuffix(full, suffix) {
+			found = append(found, full)
+		}
+	}
+	sort.Strings(found)
+	if len(found) > limit {
+		found = found[:limit]
+	}
+	return found, nil
 }
 
 func (f *fakeFiles) exists(path string) bool {
@@ -435,4 +493,157 @@ func TestTheLocalListingIsUnchanged(t *testing.T) {
 	if len(found) != 1 || found[0].SessionID != sessionID {
 		t.Errorf("the local listing returned %d conversations", len(found))
 	}
+}
+
+// --- the other agents, read on a server ---------------------------------
+
+// Codex stores far more files than conversations: most are the agent's own
+// subagent threads. A budget counted in conversations would be spent on those
+// before reaching the second real one.
+func TestCodexSkipsSubagentThreadsOnAServer(t *testing.T) {
+	const project = "/srv/work/api"
+	root := "/home/deploy/.codex/sessions/2026/09/18"
+
+	meta := func(id, cwd string, subagent bool) string {
+		source := `"cli"`
+		if subagent {
+			source = `{"subagent":{"thread_spawn":{}}}`
+		}
+		return fmt.Sprintf(
+			`{"type":"session_meta","payload":{"id":%q,"cwd":%q,"source":%s}}`+"\n"+
+				`{"type":"response_item","payload":{"type":"message","role":"user",`+
+				`"content":[{"type":"input_text","text":"look at the parser"}]}}`+"\n",
+			id, cwd, source)
+	}
+
+	files := &fakeFiles{homeDir: "/home/deploy", byPath: map[string]string{
+		root + "/rollout-2026-09-18T10-00-00-aaa.jsonl": meta("aaa", project, true),
+		root + "/rollout-2026-09-18T11-00-00-bbb.jsonl": meta("bbb", project, false),
+		root + "/rollout-2026-09-18T12-00-00-ccc.jsonl": meta("ccc", "/srv/elsewhere", false),
+	}}
+
+	found, err := listCodexSessionsFrom(files, project)
+	if err != nil {
+		t.Fatalf("listing failed: %v", err)
+	}
+	if len(found) != 1 {
+		t.Fatalf("got %d conversations, want only the root one for this project", len(found))
+	}
+	if found[0].SessionID != "bbb" {
+		t.Errorf("listed %q; a subagent thread or another project got through", found[0].SessionID)
+	}
+}
+
+// The metadata that decides whether a file is relevant sits at its start, so
+// only that much is read of each. Reading whole files would be 24 GB on a
+// store this was measured against.
+func TestCodexOnlyReadsTheHeadOfEachFile(t *testing.T) {
+	const project = "/srv/work/api"
+	path := "/home/deploy/.codex/sessions/2026/09/18/rollout-2026-09-18T10-00-00-aaa.jsonl"
+
+	files := &readLimitRecorder{fakeFiles: fakeFiles{
+		homeDir: "/home/deploy",
+		byPath: map[string]string{path: fmt.Sprintf(
+			`{"type":"session_meta","payload":{"id":"aaa","cwd":%q,"source":"cli"}}`+"\n"+
+				`{"type":"response_item","payload":{"type":"message","role":"user",`+
+				`"content":[{"type":"input_text","text":"look at the parser"}]}}`+"\n", project)},
+	}}
+
+	if _, err := listCodexSessionsFrom(files, project); err != nil {
+		t.Fatalf("listing failed: %v", err)
+	}
+	if files.fullReads != 0 {
+		t.Errorf("read %d whole files; the store can be gigabytes", files.fullReads)
+	}
+	if len(files.heads) == 0 {
+		t.Fatal("nothing was read")
+	}
+	// The first read is the cheap one that decides relevance.
+	if files.heads[0] > codexMetaLineLimit {
+		t.Errorf("first read asked for %d bytes, more than the metadata limit", files.heads[0])
+	}
+}
+
+// Cursor files a project's chats under a directory named for the hash of the
+// path. The hash is computed here, so it must be computed from the path as the
+// SERVER spells it — resolving it against this computer would name a directory
+// the server does not have.
+func TestCursorHashesTheServersPathAsGiven(t *testing.T) {
+	const project = "/srv/work/api"
+	hash := cursorProjectHashFor(project, false)
+	if hash == cursorProjectHashFor("", false) {
+		t.Fatal("no hash was produced")
+	}
+
+	chat := "11111111-2222-3333-4444-555555555555"
+	base := "/home/deploy/.cursor/chats/" + hash + "/" + chat
+	files := &fakeFiles{homeDir: "/home/deploy", byPath: map[string]string{
+		base + "/meta.json":           `{"title":"the parser","hasConversation":true}`,
+		base + "/prompt_history.json": `["look at the parser"]`,
+	}}
+
+	found, err := listCursorSessionsFrom(files, project)
+	if err != nil {
+		t.Fatalf("listing failed: %v", err)
+	}
+	if len(found) != 1 || found[0].SessionID != chat {
+		t.Fatalf("got %d chats from the server", len(found))
+	}
+}
+
+// OpenCode's store is global, so each record names the directory it belongs
+// to. One from another project must not be offered here.
+func TestOpenCodeKeepsToTheProjectOnAServer(t *testing.T) {
+	const project = "/srv/work/api"
+	dir := "/home/deploy/.local/share/opencode/storage/session"
+
+	files := &fakeFiles{homeDir: "/home/deploy", byPath: map[string]string{
+		dir + "/aaa.json": fmt.Sprintf(
+			`{"id":"aaa","directory":%q,"title":"the parser","time":{"created":1,"updated":2}}`, project),
+		dir + "/bbb.json": `{"id":"bbb","directory":"/srv/elsewhere","title":"other work"}`,
+	}}
+
+	found, err := listOpenCodeSessionsFrom(files, project)
+	if err != nil {
+		t.Fatalf("listing failed: %v", err)
+	}
+	if len(found) != 1 || found[0].SessionID != "aaa" {
+		t.Fatalf("got %d conversations; another project's leaked in", len(found))
+	}
+}
+
+// The two that cannot be read remotely must answer empty rather than with this
+// computer's records.
+func TestUnreadableAgentsAnswerEmptyRatherThanLocally(t *testing.T) {
+	SetTabExecutor("s-unreadable", "srv-1", &shellRecorder{
+		scriptedExecutor: *newScriptedExecutor(),
+	})
+	t.Cleanup(func() { ClearTabExecutor("s-unreadable", "srv-1") })
+
+	for _, agent := range []AgentType{AgentAntigravity, AgentAmazonQ} {
+		found, err := ListAgentSessionsOn("s-unreadable", "srv-1", agent, "/srv/work/api")
+		if err != nil {
+			t.Errorf("%s: %v", agent, err)
+		}
+		if len(found) != 0 {
+			t.Errorf("%s offered %d conversations from the local machine", agent, len(found))
+		}
+	}
+}
+
+// readLimitRecorder notes how much of each file was asked for.
+type readLimitRecorder struct {
+	fakeFiles
+	heads     []int64
+	fullReads int
+}
+
+func (r *readLimitRecorder) readHead(path string, n int64) ([]byte, error) {
+	r.heads = append(r.heads, n)
+	return r.fakeFiles.readHead(path, n)
+}
+
+func (r *readLimitRecorder) readFile(path string) ([]byte, error) {
+	r.fullReads++
+	return r.fakeFiles.readFile(path)
 }

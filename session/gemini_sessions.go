@@ -35,6 +35,34 @@ func (w *boundedGeminiOutput) Write(p []byte) (int, error) {
 
 // ListGeminiSessions lists all Gemini sessions for the given project path
 func ListGeminiSessions(projectPath string) ([]AgentSession, error) {
+	return listGeminiSessionsOn(nil, projectPath)
+}
+
+// ListGeminiSessionsVia lists them on the machine a shell executor reaches.
+//
+// Gemini keeps no format of its own to read: the list comes from asking the
+// CLI. That makes the remote case the simple one — the same question, asked
+// through the connection the tab's commands already use.
+func ListGeminiSessionsVia(shell ShellExecutor, projectPath string) ([]AgentSession, error) {
+	return listGeminiSessionsOn(shell, projectPath)
+}
+
+func listGeminiSessionsOn(shell ShellExecutor, projectPath string) ([]AgentSession, error) {
+	if shell != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), geminiSessionListTimeout)
+		defer cancel()
+		stdout, _, exitCode, err := shell.RunShell(ctx, projectPath, "gemini", "--list-sessions")
+		if err != nil || exitCode != 0 {
+			// Not installed there, or nothing recorded. Either way the answer
+			// is an empty list, as it is locally.
+			return []AgentSession{}, nil
+		}
+		if len(stdout) > geminiSessionListOutputLimit {
+			return []AgentSession{}, nil
+		}
+		return parseGeminiSessionList(string(stdout))
+	}
+
 	// Run gemini --list-sessions in the project directory
 	ctx, cancel := context.WithTimeout(context.Background(), geminiSessionListTimeout)
 	defer cancel()
