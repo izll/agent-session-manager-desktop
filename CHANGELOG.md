@@ -6,6 +6,45 @@ Entries describe what changed for someone using the app. Internal refactoring,
 test and CI work is left out unless it changed behaviour. Dates are release
 dates; the format follows [Keep a Changelog](https://keepachangelog.com).
 
+## 1.1.5 — 2026-09-22
+
+### Added
+
+- **A session or a tab can work in a git worktree of its own.** A checkout on
+  its own branch, in its own directory beside the project, so two agents given
+  the same project no longer edit the same files. Offered as a checkbox when
+  creating either, off by default, and only where the directory is in a git
+  repository. A tab gets the most from it: tabs share their session's directory
+  unless told otherwise, and running several agents in one session is what tabs
+  are for.
+- **The branch can be named when creating a tab.** The field shows the name
+  derived from the tab's, and takes whatever is typed over it instead. A name
+  you choose is used as you wrote it.
+- **A tab placed on a server gets its worktree there.** The checkout and the
+  branch are made on the machine the tab runs on, not on this computer.
+- **Deleting for good says what the worktree holds first** — the branch, how
+  many files changed, how many commits exist nowhere else — and nothing is
+  removed while it holds work unless you say so. Sending to the trash leaves
+  the checkout alone, so a restored session or tab still has its files.
+
+### Fixed
+
+- **A terminal could stop accepting keystrokes, with "q" the only way back.**
+  It was not frozen: the pane had been left in the multiplexer's copy mode,
+  where typing goes to the multiplexer instead of the program, and the
+  indicator that would have said so was hidden. Two of the mouse bindings
+  ended without leaving the mode.
+- **Selecting text while scrolled up jumped back to the bottom**, losing the
+  place you had scrolled to in order to select it. This one was not new — it
+  has been the behaviour whenever copy-on-select was enabled.
+- **Dialogs could grow taller than the window**, taking their own title and
+  buttons off the screen so they could neither be completed nor closed. Every
+  dialog is now bounded, with its middle scrolling and its buttons reachable.
+- **A long name made a dropdown two rows tall**, pushing the rest of the form
+  down. The list now sizes itself to its widest option rather than to the
+  control, so a name too long for a narrow field is readable where there is
+  room for it.
+
 ## 1.1.1 — 2026-09-21
 
 ### Added
