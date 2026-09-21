@@ -228,6 +228,12 @@ select option:checked {
   max-height: min(90vh, 900px);
   display: flex;
   flex-direction: column;
+  /* A column of full-width rows, which is what the header/body/footer stack
+     wants. Without it the children shrink to their content and anything a
+     dialog centred with text-align — an icon on a confirmation, say — ends up
+     against the left edge instead: measured at 32px from one side and 356 from
+     the other where it had been 194/194. */
+  align-items: stretch;
   overflow: hidden;
   animation: slideIn 0.2s ease-out;
 }
@@ -269,6 +275,12 @@ select option:checked {
 .dialog-content > .dialog-body ~ .dialog-footer {
   flex-shrink: 0;
   background: var(--bg-raised);
+  /* Its own padding, now that it is no longer inside the body.
+     The buttons used to sit at the end of the form and took their spacing
+     from it; moved out, they had a top padding and nothing below or beside
+     them, so they sat hard against the bottom edge. The dialogs set their own
+     padding-top, which still wins. */
+  padding: 16px 24px;
 }
 
 @keyframes slideIn {

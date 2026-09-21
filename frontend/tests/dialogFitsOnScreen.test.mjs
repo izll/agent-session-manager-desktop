@@ -53,6 +53,28 @@ test('the buttons sit outside the scrolling body, not over it', () => {
     'sticky buttons float over the form and hide its last field');
 });
 
+// Making .dialog-content a flex column changed what its children do: they no
+// longer take the full width by default, so anything a dialog had centred with
+// text-align — the icon on a confirmation — went hard against the left edge.
+// Measured: 32px from one side and 356 from the other, where it had been
+// 194/194.
+test('making the dialog a column does not un-centre its contents', () => {
+  assert.match(rule('.dialog-content'), /align-items:\s*stretch/,
+    'flex children shrink to their content, so centred items move to the edge');
+});
+
+// The buttons used to sit at the end of the form and took their spacing from
+// it. Moved out, they had only the top padding each dialog sets, and nothing
+// below or beside them.
+test('the moved buttons have padding of their own', () => {
+  const actions = rule('.dialog-content > form ~ .dialog-actions,\n' +
+    '.dialog-content > .dialog-body ~ .dialog-actions,\n' +
+    '.dialog-content > form ~ .dialog-footer,\n' +
+    '.dialog-content > .dialog-body ~ .dialog-footer');
+  assert.match(actions, /padding:/,
+    'the buttons sit against the bottom edge with nothing around them');
+});
+
 // The buttons only stay out of the way if they are a child of the dialog
 // rather than of the scrolling form. A submit button moved out of its form
 // needs form="id" to still submit it.
