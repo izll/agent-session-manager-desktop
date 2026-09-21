@@ -1033,6 +1033,13 @@ func (i *Instance) StartWithResume(resumeID string) error {
 	return i.startWithResume(resumeID, allWindows)
 }
 
+// scrollbackLines is how much history a pane keeps.
+//
+// Well above tmux's default of 2000 and the 10000 a stock configuration tends
+// to set: an agent working through a long task can fill that in one run, and
+// the point of scrolling back is to see what it did.
+const scrollbackLines = "50000"
+
 func (i *Instance) startWithResume(resumeID string, onlyWindowIdx int) error {
 	// Nothing below can work without the multiplexer, and every command that
 	// tries fails on its own terms — "exec: no such file", repeated once per
@@ -1220,6 +1227,19 @@ func (i *Instance) startWithResume(resumeID string, onlyWindowIdx int) error {
 		// is psmux, and a log that always said "tmux" sent debugging down the
 		// wrong path entirely.
 		log.Printf("[StartWithResume] launching session=%s agent=%s argc=%d", sessionName, i.Agent, len(argv))
+		// Scrollback, set BEFORE the session exists.
+		//
+		// A window takes its history limit when it is created, and never looks
+		// again — so setting it on the session afterwards, as this did, reached
+		// every window except the one the agent runs in. Measured: the option
+		// applied to a live session leaves window 0 at the default 10000 while
+		// a window made afterwards gets the new value.
+		//
+		// Set on the multiplexer server so the session's first window is born
+		// with it. Failure is ignored: a smaller scrollback is a worse terminal,
+		// not a broken one.
+		_ = i.tmuxRun("set-option", "-g", "history-limit", scrollbackLines)
+
 		tmuxArgs := append([]string{"new-session", "-d", "-s", sessionName, "-c", i.Path}, argv...)
 		// Recorded before the command is issued: the mark is what tells a
 		// subsequent start to wait for a slow registration rather than create a
@@ -1268,8 +1288,10 @@ func (i *Instance) startWithResume(resumeID string, onlyWindowIdx int) error {
 		// and a reader should not have to know tmux's routing rules to tell.
 		i.tmuxRun("set-option", "-w", "-t", sessionName, "remain-on-exit", "on")
 
-		// Configure tmux session for better scrolling
-		i.tmuxRun("set-option", "-t", sessionName, "history-limit", "50000")
+		// Also on the session, for the windows it will gain later: the global
+		// default above covers the first one, this covers tabs added after the
+		// server-wide value may have been changed by something else.
+		i.tmuxRun("set-option", "-t", sessionName, "history-limit", scrollbackLines)
 		i.tmuxRun("set-option", "-t", sessionName, "mouse", "on")
 
 		// Hide tmux status bar (not needed in GUI, wastes a row)
