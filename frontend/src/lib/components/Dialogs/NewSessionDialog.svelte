@@ -748,8 +748,36 @@
 
 <style>
   /* Component-specific: wider dialog for agent grid */
+  /* Bounded, so the dialog cannot grow past the window.
+     It had a width but no height, and with the agent grid, the resume list and
+     the options all open it ran off the screen — taking the title with it at
+     the top and the Create button at the bottom, so there was no way to finish
+     or to close it.
+     The header and the actions stay put and the middle scrolls: those two are
+     how the dialog is used, and they are the parts that must never be the ones
+     off screen. */
   .dialog-content {
     max-width: 480px;
+    max-height: min(90vh, 900px);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .dialog-content > :global(.dialog-header) {
+    flex-shrink: 0;
+  }
+
+  /* The form holds everything between the header and the buttons. It is the
+     scrolling part, and min-height: 0 is what allows it to shrink below its
+     content — without it a flex child refuses to, and the overflow moves back
+     out to the dialog. */
+  .dialog-content > form {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
   }
 
   /* Sits to the left of the close button, which the shared header pushes to
@@ -1002,12 +1030,20 @@
     color: #9ca3af;
   }
 
+  /* Kept at the bottom of the dialog rather than at the end of the form, so
+     the buttons are reachable however long the form gets. The background is
+     needed now that content scrolls underneath it. */
   .dialog-actions {
     display: flex;
     justify-content: flex-end;
     gap: 12px;
     padding-top: 8px;
     border-top: 1px solid rgba(255, 255, 255, 0.05);
+    position: sticky;
+    bottom: 0;
+    flex-shrink: 0;
+    background: var(--bg-raised);
+    margin-top: auto;
   }
 
   /* Component-specific: primary button with flex for spinner */
