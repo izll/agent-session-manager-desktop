@@ -74,6 +74,10 @@ export function CreateSessionOnServer(arg1, arg2, arg3, arg4, arg5, arg6, arg7) 
   return window['go']['main']['App']['CreateSessionOnServer'](arg1, arg2, arg3, arg4, arg5, arg6, arg7);
 }
 
+export function CreateSessionWithWorktree(arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8) {
+  return window['go']['main']['App']['CreateSessionWithWorktree'](arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8);
+}
+
 export function CreateTab(arg1, arg2, arg3, arg4, arg5, arg6, arg7) {
   return window['go']['main']['App']['CreateTab'](arg1, arg2, arg3, arg4, arg5, arg6, arg7);
 }
@@ -144,6 +148,10 @@ export function DetectedEditor() {
 
 export function DetectionPatternsVersion() {
   return window['go']['main']['App']['DetectionPatternsVersion']();
+}
+
+export function DiscardSessionWorktree(arg1, arg2) {
+  return window['go']['main']['App']['DiscardSessionWorktree'](arg1, arg2);
 }
 
 export function DiscoverLocalSchemes() {
@@ -606,6 +614,10 @@ export function ReorderTab(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['ReorderTab'](arg1, arg2, arg3, arg4);
 }
 
+export function RepositoryRootOf(arg1) {
+  return window['go']['main']['App']['RepositoryRootOf'](arg1);
+}
+
 export function ResizeTerminal(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['ResizeTerminal'](arg1, arg2, arg3, arg4);
 }
@@ -704,6 +716,10 @@ export function SendPromptToWindow(arg1, arg2, arg3, arg4) {
 
 export function SendTaskToAgent(arg1, arg2, arg3) {
   return window['go']['main']['App']['SendTaskToAgent'](arg1, arg2, arg3);
+}
+
+export function SessionWorktree(arg1) {
+  return window['go']['main']['App']['SessionWorktree'](arg1);
 }
 
 export function SetExtraArgs(arg1, arg2, arg3, arg4) {

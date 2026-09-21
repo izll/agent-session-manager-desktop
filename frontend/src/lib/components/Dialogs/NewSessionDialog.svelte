@@ -28,6 +28,40 @@
   let path = '';
   let selectedAgent = 'claude';
   let autoYes = false;
+
+  // A checkout of its own, on its own branch, so this session's agent does not
+  // edit the same files as another working the same project.
+  //
+  // Off by default: a session working directly in the project is what every
+  // session did before, and is still what most people want.
+  let useWorktree = false;
+  // Only offered where it can work: a directory outside a repository has
+  // nothing to make a worktree from, and a session on a server would need the
+  // checkout made there, which this does not do yet.
+  let pathIsRepo = false;
+  let repoCheckedFor = '';
+  $: canUseWorktree = pathIsRepo && !serverId;
+
+  $: if (path.trim() !== repoCheckedFor) {
+    repoCheckedFor = path.trim();
+    useWorktree = false;
+    void checkPathIsRepo(repoCheckedFor);
+  }
+
+  async function checkPathIsRepo(candidate: string) {
+    if (!candidate) {
+      pathIsRepo = false;
+      return;
+    }
+    try {
+      const root = await App.RepositoryRootOf(candidate);
+      if (candidate !== repoCheckedFor) return;
+      pathIsRepo = !!root;
+    } catch {
+      if (candidate !== repoCheckedFor) return;
+      pathIsRepo = false;
+    }
+  }
   let autoStart = true;
   let isSubmitting = false;
   let error = '';
@@ -287,6 +321,7 @@
     path = '';
     selectedAgent = 'claude';
     autoYes = false;
+    useWorktree = false;
     autoStart = true;
     error = '';
     userTouchedName = false;
@@ -332,7 +367,8 @@
     const groupId = selectedGroupId;
 
     try {
-      const session = await createSession(sessionName, sessionPath, agent, automaticYes, args, serverId);
+      const session = await createSession(sessionName, sessionPath, agent, automaticYes, args, serverId,
+        canUseWorktree && useWorktree);
       if (targetProjectId !== $activeProjectId) return;
       if (session) {
         if (groupId) {
@@ -630,6 +666,17 @@
               <span class="checkbox-custom"></span>
               <span class="checkbox-text">{$t('newSession.autoApprove')}</span>
             </label>
+          {/if}
+
+          {#if canUseWorktree}
+            <label class="checkbox-label">
+              <input type="checkbox" bind:checked={useWorktree} class="checkbox-input" />
+              <span class="checkbox-custom"></span>
+              <span class="checkbox-text">{$t('newSession.ownWorktree')}</span>
+            </label>
+            {#if useWorktree}
+              <p class="field-hint">{$t('newSession.ownWorktreeHint')}</p>
+            {/if}
           {/if}
 
           <label class="checkbox-label">

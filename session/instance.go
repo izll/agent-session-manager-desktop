@@ -220,20 +220,31 @@ type Instance struct {
 	// first start, rather than continue. Not stored: it is true of that one
 	// start and nothing after it — restarting a forked session resumes the
 	// branch, which is what ResumeSessionID holds by then.
-	ForkFrom          string           `json:"-"`
-	Color             string           `json:"color,omitempty"`               // Foreground color
-	BgColor           string           `json:"bg_color,omitempty"`            // Background color
-	FullRowColor      bool             `json:"full_row_color,omitempty"`      // Extend background to full row
-	GroupID           string           `json:"group_id,omitempty"`            // Session group ID
-	Agent             AgentType        `json:"agent,omitempty"`               // Agent type (claude, gemini, aider, custom)
-	CustomCommand     string           `json:"custom_command,omitempty"`      // Custom command for AgentCustom
-	ExtraArgs         string           `json:"extra_args,omitempty"`          // Extra CLI arguments appended to agent command
-	Notes             string           `json:"notes,omitempty"`               // User notes/comments for this session
-	FollowedWindows   []FollowedWindow `json:"followed_windows,omitempty"`    // Windows tracked as agents (window 0 is main agent)
-	BaseCommitSHA     string           `json:"base_commit_sha,omitempty"`     // Git HEAD commit at session start (for diff)
-	Favorite          bool             `json:"favorite,omitempty"`            // Whether session is marked as favorite
-	MainWindowStopped bool             `json:"main_window_stopped,omitempty"` // Main window (0) is stopped but session still running
-	MainWindowName    string           `json:"main_window_name,omitempty"`    // User-defined main tmux tab name
+	ForkFrom        string           `json:"-"`
+	Color           string           `json:"color,omitempty"`            // Foreground color
+	BgColor         string           `json:"bg_color,omitempty"`         // Background color
+	FullRowColor    bool             `json:"full_row_color,omitempty"`   // Extend background to full row
+	GroupID         string           `json:"group_id,omitempty"`         // Session group ID
+	Agent           AgentType        `json:"agent,omitempty"`            // Agent type (claude, gemini, aider, custom)
+	CustomCommand   string           `json:"custom_command,omitempty"`   // Custom command for AgentCustom
+	ExtraArgs       string           `json:"extra_args,omitempty"`       // Extra CLI arguments appended to agent command
+	Notes           string           `json:"notes,omitempty"`            // User notes/comments for this session
+	FollowedWindows []FollowedWindow `json:"followed_windows,omitempty"` // Windows tracked as agents (window 0 is main agent)
+	BaseCommitSHA   string           `json:"base_commit_sha,omitempty"`  // Git HEAD commit at session start (for diff)
+
+	// Worktree records the git worktree created for this session, when it was
+	// given one. Empty for a session working directly in its project, which
+	// is what every session did before and still does by default.
+	//
+	// The repository root is kept alongside the directory because git needs
+	// it to remove the worktree, and by then the worktree itself may be the
+	// only place the session remembers.
+	WorktreeDir       string `json:"worktree_dir,omitempty"`
+	WorktreeBranch    string `json:"worktree_branch,omitempty"`
+	WorktreeRepoRoot  string `json:"worktree_repo_root,omitempty"`
+	Favorite          bool   `json:"favorite,omitempty"`            // Whether session is marked as favorite
+	MainWindowStopped bool   `json:"main_window_stopped,omitempty"` // Main window (0) is stopped but session still running
+	MainWindowName    string `json:"main_window_name,omitempty"`    // User-defined main tmux tab name
 
 	// gitDir is where git commands for this instance run.
 	//

@@ -200,7 +200,7 @@ test('a new session can be placed on a server', () => {
 
   assert.match(dialog, /let serverId = '';/,
     'the dialog has no notion of which machine a session runs on');
-  assert.match(dialog, /createSession\([^)]*serverId\)/s,
+  assert.match(dialog, /createSession\([^)]*serverId[,)]/s,
     'the chosen server is not passed to the creation call');
 
   // The field only appears when there is a choice: someone with no servers

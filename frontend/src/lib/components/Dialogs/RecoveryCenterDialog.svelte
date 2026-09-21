@@ -2,6 +2,7 @@
   import { claimKeyForDialog } from '../../utils/dialogKeys';
   import { createEventDispatcher } from 'svelte';
   import * as App from '../../../../wailsjs/go/main/App';
+  import type { main } from '../../../../wailsjs/go/models';
   import { loadSessions, selectSession, selectWindow, invalidateSessionProject } from '../../stores/sessions';
   import { flushSettingsSaves, invalidateSettingsContext, loadSettings, settings } from '../../stores/settings';
   import { activeProjectId } from '../../stores/projects';
@@ -158,14 +159,43 @@
     }
   }
 
-  function requestPermanentDelete(item: TrashItem) {
+  async function requestPermanentDelete(item: TrashItem) {
     if (actionRunning) return;
+
+    // A session may own a git worktree — a checkout of its own, on its own
+    // branch. Deleting the session for good deletes that too, so the
+    // confirmation has to say what is in it rather than warn in the abstract.
+    let worktree: main.WorktreeInfo | null = null;
+    try {
+      worktree = await App.SessionWorktree(item.id);
+    } catch {
+      // No worktree, or the session is already gone from storage. Either way
+      // the deletion below still works; it simply has nothing extra to say.
+    }
+
     confirmTitle = $t('recovery.permanentDeleteTitle');
     confirmMessage = $t('recovery.permanentDeleteMessage', { name: item.name });
+    if (worktree?.dir) {
+      confirmMessage += '\n\n' + (worktree.hasWork
+        ? $t('recovery.worktreeHasWork', {
+            branch: worktree.branch,
+            files: worktree.changedFiles,
+            commits: worktree.unmergedCommits,
+          })
+        : $t('recovery.worktreeClean', { branch: worktree.branch }));
+    }
+
+    const discardWorktree = !!worktree?.dir;
+    const forceDiscard = !!worktree?.hasWork;
     pendingAction = {
       projectId: $activeProjectId,
       guardUnsaved: false,
       run: async (target) => {
+        // The worktree goes first, while the session still knows where it is.
+        if (discardWorktree) {
+          await App.DiscardSessionWorktree(item.id, forceDiscard);
+          if (!operationUIIsCurrent(target)) return;
+        }
         await App.PermanentlyDeleteTrashItem(item.id, target.projectId);
         if (!operationUIIsCurrent(target)) return;
         await loadRecoveryData();

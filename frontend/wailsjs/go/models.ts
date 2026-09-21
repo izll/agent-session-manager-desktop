@@ -1997,6 +1997,26 @@ export namespace main {
 		    return a;
 		}
 	}
+	export class WorktreeInfo {
+	    dir: string;
+	    branch: string;
+	    changedFiles: number;
+	    unmergedCommits: number;
+	    hasWork: boolean;
+
+	    static createFrom(source: any = {}) {
+	        return new WorktreeInfo(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.dir = source["dir"];
+	        this.branch = source["branch"];
+	        this.changedFiles = source["changedFiles"];
+	        this.unmergedCommits = source["unmergedCommits"];
+	        this.hasWork = source["hasWork"];
+	    }
+	}
 
 }
 

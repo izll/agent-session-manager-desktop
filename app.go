@@ -1350,6 +1350,19 @@ func (a *App) CreateSession(name, path string, agent string, autoYes bool, extra
 // change to session creation cannot apply to only one of them.
 func (a *App) CreateSessionOnServer(name, path string, agent string, autoYes bool,
 	extraArgs, expectedProjectID, serverID string) (*SessionInfo, error) {
+	return a.CreateSessionWithWorktree(name, path, agent, autoYes,
+		extraArgs, expectedProjectID, serverID, false)
+}
+
+// CreateSessionWithWorktree creates a session that works in a git worktree of
+// its own.
+//
+// worktree false is every previous caller: the session works directly in the
+// directory it was given. With it, a second checkout of the repository is made
+// on its own branch, and the session works there instead — so two agents can
+// be given the same project without editing the same files.
+func (a *App) CreateSessionWithWorktree(name, path string, agent string, autoYes bool,
+	extraArgs, expectedProjectID, serverID string, worktree bool) (*SessionInfo, error) {
 	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return nil, err
@@ -1386,11 +1399,48 @@ func (a *App) CreateSessionOnServer(name, path string, agent string, autoYes boo
 			return nil, err
 		}
 	}
+	// The worktree is made before the session is stored, so a failure leaves
+	// nothing behind: no half-made session in the sidebar, no directory the
+	// user did not ask for.
+	if worktree {
+		if err := a.giveSessionItsOwnWorktree(inst, path); err != nil {
+			return nil, err
+		}
+	}
+
 	if err := a.storage.AddInstance(inst); err != nil {
+		if inst.WorktreeDir != "" {
+			// Storing failed, so the session will not exist — and neither
+			// should the checkout made for it.
+			_ = inst.RemoveWorktree(inst.WorktreeRepoRoot, inst.WorktreeDir,
+				inst.WorktreeBranch, true)
+		}
 		return nil, err
 	}
 	info := a.instanceToSessionInfo(inst)
 	return &info, nil
+}
+
+// giveSessionItsOwnWorktree points a session at a fresh checkout of its
+// repository, on a branch of its own.
+func (a *App) giveSessionItsOwnWorktree(inst *session.Instance, path string) error {
+	repoRoot := inst.RepoRootOf(path)
+	if repoRoot == "" {
+		return fmt.Errorf("error.worktreeNeedsRepo")
+	}
+
+	plan, err := inst.CreateWorktree(session.PlanWorktree(repoRoot, inst.Name))
+	if err != nil {
+		return err
+	}
+
+	// The session works in the worktree: its path is what the multiplexer
+	// opens, what the agent is started in, and what the diff reads.
+	inst.Path = plan.Dir
+	inst.WorktreeDir = plan.Dir
+	inst.WorktreeBranch = plan.Branch
+	inst.WorktreeRepoRoot = plan.RepoRoot
+	return nil
 }
 
 // StartSession starts a session
@@ -1688,6 +1738,88 @@ func (a *App) RestoreTrashItem(id, expectedProjectID string) (*session.RestoreRe
 	}
 	defer done()
 	return a.storage.RestoreTrashItem(id)
+}
+
+// RepositoryRootOf reports the top of the git working tree containing path, or
+// an empty string when it is not in a repository.
+//
+// The new-session dialog asks before offering a worktree: a directory outside
+// a repository has nothing to make one from, and an option that cannot work
+// should not be shown.
+func (a *App) RepositoryRootOf(path string) (string, error) {
+	if strings.TrimSpace(path) == "" {
+		return "", nil
+	}
+	// A bare instance: this asks about a directory, not about a session, and
+	// there is no session yet when the dialog is open.
+	probe := &session.Instance{}
+	return probe.RepoRootOf(path), nil
+}
+
+// WorktreeInfo describes a session's worktree and what removing it would cost.
+type WorktreeInfo struct {
+	// Dir is empty for a session that has no worktree of its own.
+	Dir    string `json:"dir"`
+	Branch string `json:"branch"`
+	// ChangedFiles and UnmergedCommits are what would be lost. Both zero
+	// means the worktree holds nothing the repository does not already have.
+	ChangedFiles    int  `json:"changedFiles"`
+	UnmergedCommits int  `json:"unmergedCommits"`
+	HasWork         bool `json:"hasWork"`
+}
+
+// SessionWorktree reports a session's worktree, and what is in it that exists
+// nowhere else.
+//
+// Asked before deleting, so the confirmation can say what would go rather than
+// warning in the abstract. A session without a worktree answers with an empty
+// Dir, which is the signal to delete without asking.
+func (a *App) SessionWorktree(id string) (*WorktreeInfo, error) {
+	inst, err := a.storage.GetInstance(id)
+	if err != nil {
+		return nil, err
+	}
+	if inst.WorktreeDir == "" {
+		return &WorktreeInfo{}, nil
+	}
+
+	state := inst.InspectWorktree(inst.WorktreeDir, inst.BaseCommitSHA)
+	return &WorktreeInfo{
+		Dir:             inst.WorktreeDir,
+		Branch:          inst.WorktreeBranch,
+		ChangedFiles:    state.ChangedFiles,
+		UnmergedCommits: state.UnmergedCommits,
+		HasWork:         state.HasWork(),
+	}, nil
+}
+
+// DiscardSessionWorktree removes a session's worktree and its branch.
+//
+// force is the user's answer to what SessionWorktree reported: without it git
+// refuses to remove a worktree holding changes, and that refusal is what stops
+// work disappearing on a mis-click.
+//
+// Called when a session is deleted for good, not when it goes to the trash: a
+// session in the trash can be restored, and restoring one whose files had been
+// deleted would give back a session pointing at nothing.
+func (a *App) DiscardSessionWorktree(id string, force bool) error {
+	inst, err := a.storage.GetInstance(id)
+	if err != nil {
+		return err
+	}
+	if inst.WorktreeDir == "" {
+		return nil
+	}
+
+	if err := inst.RemoveWorktree(inst.WorktreeRepoRoot, inst.WorktreeDir,
+		inst.WorktreeBranch, force); err != nil {
+		return err
+	}
+
+	inst.WorktreeDir = ""
+	inst.WorktreeBranch = ""
+	inst.WorktreeRepoRoot = ""
+	return a.storage.UpdateInstance(inst)
 }
 
 func (a *App) PermanentlyDeleteTrashItem(id, expectedProjectID string) error {

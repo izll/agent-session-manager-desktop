@@ -206,10 +206,11 @@ export async function loadSessions() {
   }
 }
 
-export async function createSession(name: string, path: string, agent: string, autoYes: boolean = false, extraArgs: string = '', serverId: string = '') {
+export async function createSession(name: string, path: string, agent: string, autoYes: boolean = false, extraArgs: string = '', serverId: string = '', worktree: boolean = false) {
   const target = projectTarget();
   try {
-    const session = await App.CreateSession(name, path, agent, autoYes, extraArgs, target.projectId);
+    const session = await App.CreateSessionWithWorktree(
+      name, path, agent, autoYes, extraArgs, target.projectId, serverId, worktree);
     // The session was durably created in the project that owned the bridge
     // call, but callers must not continue a multi-step create/assign/start
     // workflow in the replacement project using the same generated id.

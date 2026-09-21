@@ -40,6 +40,8 @@ export function CreateSessionFromTemplate(arg1:string,arg2:string,arg3:string,ar
 
 export function CreateSessionOnServer(arg1:string,arg2:string,arg3:string,arg4:boolean,arg5:string,arg6:string,arg7:string):Promise<main.SessionInfo>;
 
+export function CreateSessionWithWorktree(arg1:string,arg2:string,arg3:string,arg4:boolean,arg5:string,arg6:string,arg7:string,arg8:boolean):Promise<main.SessionInfo>;
+
 export function CreateTab(arg1:string,arg2:boolean,arg3:string,arg4:string,arg5:string,arg6:string,arg7:string):Promise<number>;
 
 export function CreateTabOnServer(arg1:string,arg2:string,arg3:boolean,arg4:string,arg5:string,arg6:string,arg7:string,arg8:string):Promise<number>;
@@ -75,6 +77,8 @@ export function DetachSession(arg1:string):Promise<void>;
 export function DetectedEditor():Promise<string>;
 
 export function DetectionPatternsVersion():Promise<number>;
+
+export function DiscardSessionWorktree(arg1:string,arg2:boolean):Promise<void>;
 
 export function DiscoverLocalSchemes():Promise<Array<main.ImportedScheme>>;
 
@@ -306,6 +310,8 @@ export function ReorderSession(arg1:string,arg2:number,arg3:string):Promise<void
 
 export function ReorderTab(arg1:string,arg2:number,arg3:number,arg4:string):Promise<void>;
 
+export function RepositoryRootOf(arg1:string):Promise<string>;
+
 export function ResizeTerminal(arg1:string,arg2:number,arg3:number,arg4:string):Promise<void>;
 
 export function RestartTab(arg1:string,arg2:number,arg3:string):Promise<void>;
@@ -355,6 +361,8 @@ export function SendPrompt(arg1:string,arg2:string,arg3:string):Promise<void>;
 export function SendPromptToWindow(arg1:string,arg2:number,arg3:string,arg4:string):Promise<void>;
 
 export function SendTaskToAgent(arg1:string,arg2:string,arg3:string):Promise<void>;
+
+export function SessionWorktree(arg1:string):Promise<main.WorktreeInfo>;
 
 export function SetExtraArgs(arg1:string,arg2:number,arg3:string,arg4:string):Promise<void>;
 
