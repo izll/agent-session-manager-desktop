@@ -76,8 +76,17 @@ func MouseCopyBinding(table string, enabled bool) []string {
 		// send. Bound to it, shift mode copied on every plain drag and the
 		// setting appeared to do nothing — observed, with the binding verifiably
 		// on the "off" branch while the clipboard kept filling.
+		// cancel after it, or the pane is left in copy mode.
+		//
+		// clear-selection drops the selection but stays in the mode, and the
+		// mode was entered with the indicator hidden — so the pane silently
+		// swallows every keystroke and looks frozen. The way out is "q", which
+		// is copy mode's own cancel key, and that is exactly how this was
+		// reported: typing does nothing, q gets you back. Measured: a pane left
+		// this way ran 0 of the commands typed into it.
 		return []string{"bind-key", "-T", table, "MouseDragEnd1Pane",
-			"send-keys", "-X", "clear-selection"}
+			"send-keys", "-X", "clear-selection", "\\;",
+			"send-keys", "-X", "cancel"}
 	}
 	return []string{"bind-key", "-T", table, "MouseDragEnd1Pane",
 		"send-keys", "-X", "copy-selection-and-cancel"}
@@ -104,7 +113,14 @@ func ClickSelectBinding(table, key, selector string, enabled bool) []string {
 	if !enabled {
 		// Select but do not copy — the selection stays visible, which is what
 		// a double click is for when copy-on-select is off.
-		return append(args, "send-keys", "-X", "stop-selection")
+		//
+		// cancel after it for the same reason as the drag: stop-selection ends
+		// the drag state but leaves the pane in copy mode, where keystrokes go
+		// to tmux instead of the program. The selection is lost on leaving,
+		// which is the lesser cost: a visible highlight is not worth a pane
+		// that ignores typing until the user discovers "q".
+		return append(args, "send-keys", "-X", "stop-selection", "\\;",
+			"send-keys", "-X", "cancel")
 	}
 	return append(args, "send-keys", "-X", "copy-selection-and-cancel")
 }
@@ -141,10 +157,15 @@ func RootClickBinding(key, selector string, enabled bool) []string {
 	action := "copy-mode -H ; send-keys -X " + selector +
 		" ; run-shell -d 0.3 ; send-keys -X copy-selection-and-cancel"
 	if !enabled {
-		// Select the word and leave it visible, without copying. stop-selection
-		// ends the drag-selection state so the pane is not left mid-selection.
+		// Select the word, do not copy it, and leave copy mode.
+		//
+		// stop-selection alone ends the drag state but stays in the mode, and
+		// -H hid the indicator — so the pane swallowed every keystroke with
+		// nothing on screen to say why. cancel is what "q" does, and doing it
+		// here saves the user having to find that out.
 		action = "copy-mode -H ; send-keys -X " + selector +
-			" ; run-shell -d 0.3 ; send-keys -X stop-selection"
+			" ; run-shell -d 0.3 ; send-keys -X stop-selection" +
+			" ; send-keys -X cancel"
 	}
 
 	// The branches are plain command strings, not { } blocks.

@@ -252,3 +252,78 @@ func TestClipboardForwardingIsNotScopedToOneSession(t *testing.T) {
 		t.Fatal("ConfigureClipboardForwarding must stay callable without a session")
 	}
 }
+
+// Leaving a pane in copy mode is what made the terminal look frozen.
+//
+// The mode is entered with the indicator hidden, so nothing on screen says
+// why: keystrokes go to tmux instead of the program, and the only way out is
+// "q", copy mode's own cancel key. That is exactly how it was reported —
+// typing does nothing, q gets you back. Measured on a real pane: 0 of the
+// commands typed into it ran, and 2 of 2 after q.
+//
+// Every ending that does not itself leave the mode must therefore be followed
+// by cancel. Verified against tmux 3.4 and 2.6, which both strand the pane
+// without it and both release it with it.
+func TestNoBindingLeavesThePaneInCopyMode(t *testing.T) {
+	// The endings that stay in copy mode, and so must be followed by cancel.
+	stranding := []string{"stop-selection", "clear-selection"}
+
+	leavesTheMode := func(command string) bool {
+		// copy-selection-and-cancel and cancel both end the mode themselves.
+		return strings.Contains(command, "cancel")
+	}
+
+	check := func(what string, args []string) {
+		t.Helper()
+		joined := strings.Join(args, " ")
+		for _, ending := range stranding {
+			if !strings.Contains(joined, ending) {
+				continue
+			}
+			if !leavesTheMode(joined) {
+				t.Errorf("%s ends with %s and never cancels, "+
+					"so the pane stays in copy mode and swallows typing:\n  %s",
+					what, ending, joined)
+			}
+		}
+	}
+
+	// Both settings, both key tables, every binding this package writes.
+	for _, enabled := range []bool{true, false} {
+		for _, table := range copyModeTables {
+			check("drag end", MouseCopyBinding(table, enabled))
+			for key, selector := range clickSelectKeys {
+				check("click "+key, ClickSelectBinding(table, key, selector, enabled))
+			}
+		}
+		for key, selector := range clickSelectKeys {
+			check("root "+key, RootClickBinding(key, selector, enabled))
+		}
+	}
+}
+
+// The separator has to be tmux's escaped semicolon, or the added cancel is not
+// part of the binding at all: a bare ";" ends bind-key, so tmux would bind the
+// first half and run the rest immediately.
+func TestTheAddedCancelIsPartOfTheBinding(t *testing.T) {
+	for _, table := range copyModeTables {
+		args := MouseCopyBinding(table, false)
+		joined := strings.Join(args, " ")
+		if !strings.Contains(joined, `\;`) {
+			t.Errorf("drag binding for %s joins its commands without an escaped "+
+				"semicolon, so the cancel never runs:\n  %s", table, joined)
+		}
+	}
+}
+
+// The root binding is a single command string rather than argv, so its own
+// separator is a plain semicolon — the string is parsed by tmux, not by exec.
+func TestTheRootBindingCancelsWithinItsCommandString(t *testing.T) {
+	for key, selector := range clickSelectKeys {
+		joined := strings.Join(RootClickBinding(key, selector, false), " ")
+		if !strings.Contains(joined, "send-keys -X cancel") {
+			t.Errorf("root binding %s does not cancel, leaving the pane in copy "+
+				"mode after a click:\n  %s", key, joined)
+		}
+	}
+}
