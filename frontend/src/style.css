@@ -218,8 +218,49 @@ select option:checked {
      ones that forgot came out too narrow to read. Dialogs needing more still
      say so; none now need less. */
   max-width: min(560px, calc(100vw - 32px));
+  /* A height as well as a width.
+     There was only a width, and with overflow: hidden a dialog taller than the
+     window did not scroll — it was cut off, taking its own buttons with it.
+     The new-session dialog hit this once it grew; every other long one could.
+     Measured: a max-height alone clipped 375px and left the buttons
+     unreachable, so the rules below are the other half of it and belong with
+     it rather than in each dialog that remembers. */
+  max-height: min(90vh, 900px);
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
   animation: slideIn 0.2s ease-out;
+}
+
+/* The header keeps its size; the body between it and the buttons is what
+   gives way. A dialog that puts its content straight in .dialog-content,
+   rather than in a form or a .dialog-body, is unaffected: it simply has no
+   child to scroll, which is the behaviour it had before. */
+.dialog-content > .dialog-header {
+  flex-shrink: 0;
+}
+
+/* min-height: 0 is the part that is easy to miss: a flex child refuses to
+   shrink below its content, so without it the overflow moves back out to the
+   dialog and the max-height above does nothing. */
+.dialog-content > form,
+.dialog-content > .dialog-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* Reachable however long the content gets. The background is needed because
+   content now scrolls underneath. */
+.dialog-content .dialog-actions,
+.dialog-content > .dialog-footer {
+  position: sticky;
+  bottom: 0;
+  flex-shrink: 0;
+  background: var(--bg-raised);
+  margin-top: auto;
 }
 
 @keyframes slideIn {
