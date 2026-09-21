@@ -54,25 +54,20 @@ func GetClaudeProjectDir(projectPath string) string {
 		projectPath = realPath
 	}
 
-	// Convert path to Claude's format: /home/user/project_name -> -home-user-project-name
-	// Claude replaces: / -> -, _ -> -, space -> -, and accented chars -> -
-	var result strings.Builder
-	for _, r := range projectPath {
-		if r == '/' || r == '_' || r == ' ' {
-			result.WriteRune('-')
-		} else if r > 127 {
-			// Non-ASCII characters (accented letters, etc.) -> -
-			result.WriteRune('-')
-		} else {
-			result.WriteRune(r)
-		}
-	}
-	sanitized := result.String()
-	if strings.HasPrefix(sanitized, "-") {
-		sanitized = sanitized[1:] // Remove leading dash
-	}
-	sanitized = "-" + sanitized // Add back the leading dash Claude uses
-	return filepath.Join(homeDir, ".claude", "projects", sanitized)
+	// Claude replaces every character that is not a letter or a digit with a
+	// hyphen. This used to list the characters it had been seen to replace —
+	// "/", "_", space, and anything non-ASCII — which held on Linux and failed
+	// completely on Windows, where "\" and ":" were left in place:
+	//
+	//	built:  -C:\Users\User\Documents\asmgr-teszt
+	//	actual: C--Users-User-Documents-asmgr-teszt
+	//
+	// No transcript was ever found under that name, so the resume list came
+	// back empty however many conversations the project had.
+	//
+	// The leading hyphen is not added either: it is what a Unix path's own
+	// leading separator encodes to, and a Windows path has none.
+	return filepath.Join(homeDir, ".claude", "projects", claudeProjectDirName(projectPath))
 }
 
 func ListAgentSessions(projectPath string) ([]AgentSession, error) {
@@ -109,13 +104,18 @@ func ListAgentSessions(projectPath string) ([]AgentSession, error) {
 			continue
 		}
 
-		// Convert sanitized dir name back to path for comparison
-		// -home-izll-NetBeansProjects-foo -> /home/izll/NetBeansProjects/foo
-		dirPath := unsanitizePath(projectDir.Name())
-
-		// Match the selected directory itself or a real descendant. A raw
-		// string prefix would leak /repo2 sessions into a /repo query.
-		if !pathWithinProject(dirPath, projectPath) {
+		// Matched by encoding the path we want and comparing directory names,
+		// rather than by decoding the name back into a path.
+		//
+		// The encoding is lossy — every non-alphanumeric character becomes a
+		// hyphen — so decoding invents a path that may never have existed:
+		// "asmgr-desktop" came back as "asmgr/desktop", and on Windows
+		// "c--Project--net-app" came back as "/c//Project//net/app", matching
+		// nothing at all. That is why the resume list was empty there.
+		//
+		// The descendant case still works: a child's encoded name begins with
+		// the project's own followed by a hyphen, which is the separator.
+		if !claudeProjectDirMatches(projectDir.Name(), projectPath) {
 			continue
 		}
 
@@ -152,7 +152,10 @@ func ListAgentSessions(projectPath string) ([]AgentSession, error) {
 				} else if session.Summary != "" {
 					session.LastPrompt = session.Summary
 				}
-				session.ProjectPath = dirPath
+				// The path asked for, not one decoded from the directory name:
+				// the encoding is lossy, and a decoded name is a guess. These
+				// transcripts belong to this project or something under it.
+				session.ProjectPath = projectPath
 				sessions = append(sessions, *session)
 			}
 		}
@@ -164,21 +167,6 @@ func ListAgentSessions(projectPath string) ([]AgentSession, error) {
 	})
 
 	return sessions, nil
-}
-
-// unsanitizePath converts a sanitized directory name back to a path
-// -home-izll-NetBeansProjects -> /home/izll/NetBeansProjects
-func unsanitizePath(sanitized string) string {
-	if sanitized == "" {
-		return ""
-	}
-	// Remove leading dash and replace remaining dashes with slashes
-	// But be careful with consecutive dashes (escaped dashes in original path)
-	result := strings.ReplaceAll(sanitized, "-", "/")
-	if strings.HasPrefix(result, "/") {
-		return result
-	}
-	return "/" + result
 }
 
 // loadHistoryDisplaysPrefix loads display texts for sessions matching project prefix
@@ -268,6 +256,14 @@ func pathWithinProject(candidate, projectPath string) bool {
 	}
 	candidate = filepath.Clean(candidate)
 	projectPath = filepath.Clean(projectPath)
+	// filepath.Rel compares byte for byte, which on Windows and macOS makes
+	// "C:\Project" and "c:\Project" two different places. Lowered together
+	// where the filesystem itself does not distinguish them; left alone on
+	// Linux, where they really are different directories.
+	if caseInsensitiveFilesystem() {
+		candidate = strings.ToLower(candidate)
+		projectPath = strings.ToLower(projectPath)
+	}
 	rel, err := filepath.Rel(projectPath, candidate)
 	if err != nil {
 		return false

@@ -73,7 +73,7 @@ func GetRecentSessionsFromHistory(projectPath string) ([]string, error) {
 			entryProject = realEntryPath
 		}
 
-		if entryProject == projectPath {
+		if sameProjectPath(entryProject, projectPath) {
 			// Update latest timestamp for this session
 			if entry.Timestamp > sessionTimes[entry.SessionID] {
 				sessionTimes[entry.SessionID] = entry.Timestamp
@@ -208,7 +208,7 @@ func ListAgentSessionsByHistory(projectPath string) ([]AgentSession, error) {
 			}
 
 			// Use exact matching for resume (like Claude Code's --resume)
-			if entryProject == projectPath {
+			if sameProjectPath(entryProject, projectPath) {
 				existing, exists := sessionData[entry.SessionID]
 				trimmedDisplay := strings.TrimSpace(entry.Display)
 				displayLen := len(trimmedDisplay)
@@ -410,7 +410,7 @@ func GetActiveSessionIDFromHistory(projectPath string, afterTime time.Time) stri
 			entryProject = realEntryPath
 		}
 
-		if entryProject == projectPath {
+		if sameProjectPath(entryProject, projectPath) {
 			if entry.Timestamp > latestTimestamp {
 				latestTimestamp = entry.Timestamp
 				latestSessionID = entry.SessionID

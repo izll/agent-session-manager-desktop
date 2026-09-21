@@ -116,7 +116,7 @@ func findGeminiSlugs(data []byte, projectPath string) []string {
 
 	var slugs []string
 	for slug, proj := range projectsData.Projects {
-		if proj.Path == projectPath {
+		if sameProjectPath(proj.Path, projectPath) {
 			slugs = append(slugs, slug)
 		}
 	}
