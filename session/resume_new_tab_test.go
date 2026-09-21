@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -460,9 +461,17 @@ func TestTheResumedConversationIsRecordedOnTheTab(t *testing.T) {
 // The local listing must keep reading the local disk exactly as before.
 func TestTheLocalListingIsUnchanged(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
-	if _, err := os.UserHomeDir(); err != nil {
-		t.Skip("home directory cannot be overridden on this platform")
+	// os.UserHomeDir reads a different variable on each platform — HOME on
+	// Unix, USERPROFILE on Windows. Setting only HOME left Windows reading the
+	// real home directory, where the records this writes do not exist, so the
+	// listing came back empty and the test failed there and only there.
+	if runtime.GOOS == "windows" {
+		t.Setenv("USERPROFILE", home)
+	} else {
+		t.Setenv("HOME", home)
+	}
+	if got, err := os.UserHomeDir(); err != nil || got != home {
+		t.Skipf("the home directory cannot be redirected here: %q, %v", got, err)
 	}
 
 	const sessionID = "11111111-2222-3333-4444-555555555555"
