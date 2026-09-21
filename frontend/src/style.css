@@ -257,9 +257,16 @@ select option:checked {
    This was sticky at first, which looked right and was not: a sticky element
    overlays the scroll area without reserving room, so the buttons covered the
    last field of the form. Measured — one field hidden behind them. As the
-   dialog's own last child it takes its space, and the overlap is zero. */
-.dialog-content > .dialog-actions,
-.dialog-content > .dialog-footer {
+   dialog's own last child it takes its space, and the overlap is zero.
+
+   Only where something actually scrolls above them. A short dialog — a
+   confirmation, say — has no scrolling body, and giving its buttons a band of
+   their own drew a full-width bar across the bottom of what is otherwise a
+   small centred panel. */
+.dialog-content > form ~ .dialog-actions,
+.dialog-content > .dialog-body ~ .dialog-actions,
+.dialog-content > form ~ .dialog-footer,
+.dialog-content > .dialog-body ~ .dialog-footer {
   flex-shrink: 0;
   background: var(--bg-raised);
 }

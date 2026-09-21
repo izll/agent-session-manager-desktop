@@ -39,7 +39,10 @@ test('the body scrolls instead of being clipped', () => {
 });
 
 test('the buttons sit outside the scrolling body, not over it', () => {
-  const actions = rule('.dialog-content > .dialog-actions,\n.dialog-content > .dialog-footer');
+  const actions = rule('.dialog-content > form ~ .dialog-actions,\n' +
+    '.dialog-content > .dialog-body ~ .dialog-actions,\n' +
+    '.dialog-content > form ~ .dialog-footer,\n' +
+    '.dialog-content > .dialog-body ~ .dialog-footer');
   assert.match(actions, /flex-shrink:\s*0/,
     'the buttons can be squeezed out by a long form');
 
