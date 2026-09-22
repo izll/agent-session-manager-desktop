@@ -253,10 +253,26 @@ func geminiResumeIDExists(resumeID, projectDir string) bool {
 		}
 		// And it files sessions per directory, so an id belonging elsewhere is
 		// as good as missing.
-		if projectDir == "" || session.ProjectHash == "" {
+		//
+		// Which directory, though, has changed. Gemini used to file them under
+		// the sha256 of the path and now uses the project's name, and it reads
+		// only the scheme it currently writes. A transcript sitting in the old
+		// layout is therefore on disk, matches by id and by hash — and is still
+		// refused, with "Invalid session identifier … Searched for sessions in
+		// ~/.gemini/tmp/<name>/chats". Measured here: twelve directories in the
+		// old scheme beside two in the new, the newest of them in the new one.
+		//
+		// So the answer has to come from where the file actually sits, not from
+		// what it says about itself.
+		if projectDir == "" {
 			return true
 		}
-		return session.ProjectHash == geminiProjectHash(projectDir)
+		// Keep looking rather than answering from the first match: the same id
+		// can sit in both layouts, and whichever the glob happens to return
+		// first is not the one Gemini reads.
+		if geminiTranscriptIsForProject(path, projectDir, session.ProjectHash) {
+			return true
+		}
 	}
 	return false
 }
@@ -319,4 +335,39 @@ func geminiHasRealMessage(messages []struct {
 		}
 	}
 	return false
+}
+
+// geminiTranscriptIsForProject reports whether Gemini would find this
+// transcript when started in projectDir.
+//
+// The directory the file is in is what decides, because that is what Gemini
+// looks in. Its own projectHash field agrees for a file in the old layout, but
+// a file in the old layout is one Gemini no longer reads — so the field alone
+// answers a question nobody asked.
+func geminiTranscriptIsForProject(path, projectDir, recordedHash string) bool {
+	// .../tmp/<scope>/chats/<file>.json — the scope is two levels up.
+	scope := filepath.Base(filepath.Dir(filepath.Dir(path)))
+
+	// The current scheme: the project's directory name.
+	if scope == filepath.Base(projectDir) {
+		return true
+	}
+	// The old scheme: the sha256 of the path. Accepted only when the current
+	// scheme holds nothing for this project, because otherwise Gemini is
+	// reading the other directory and will not see this file.
+	if scope == geminiProjectHash(projectDir) && recordedHash == scope {
+		return !geminiHasNamedScope(projectDir)
+	}
+	return false
+}
+
+// geminiHasNamedScope reports whether Gemini keeps a directory for this project
+// under its current, name-based scheme.
+func geminiHasNamedScope(projectDir string) bool {
+	dir := geminiConfigDirForResume()
+	if dir == "" {
+		return false
+	}
+	info, err := os.Stat(filepath.Join(dir, "tmp", filepath.Base(projectDir), "chats"))
+	return err == nil && info.IsDir()
 }
