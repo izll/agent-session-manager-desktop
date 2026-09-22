@@ -6,6 +6,31 @@ Entries describe what changed for someone using the app. Internal refactoring,
 test and CI work is left out unless it changed behaviour. Dates are release
 dates; the format follows [Keep a Changelog](https://keepachangelog.com).
 
+## 1.1.6 — 2026-09-22
+
+### Added
+
+- **Feedback can be sent from the app**, through Help › Send feedback. Say
+  whether it is a problem or an idea, describe it, and send it as a GitHub
+  issue, by email, or copy it to the clipboard. The version and system can be
+  attached, if you want them to be. Nothing is sent by the app itself: the
+  report opens in your own browser or mail client, where you can read it over
+  and change it before it goes.
+
+### Fixed
+
+- **Reordering tabs by dragging was hard to aim.** The line showing where the
+  tab would land was always drawn on the left of the tab under the cursor, so
+  dragging rightwards pointed at the wrong gap. It now appears on the side the
+  cursor is nearest.
+- **A dropped tab sometimes did nothing at all.** The marker was cleared
+  whenever the cursor crossed anything inside a tab — its status dot, its name,
+  its close button — so it was often already gone at the moment the mouse was
+  released.
+- **A dragged tab took its new place long after the drop.** The bar waited for
+  the whole session list to be reloaded, over the network for sessions on
+  servers, before showing anything. It now rearranges immediately.
+
 ## 1.1.5 — 2026-09-22
 
 ### Added
