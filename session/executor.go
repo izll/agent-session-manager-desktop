@@ -154,15 +154,42 @@ func (i *Instance) exec() Executor {
 //
 // Registered per (session, server) rather than per session, so one session
 // spanning two machines keeps two routes at once.
+//
+// A server with no route open gets an executor that refuses, never this
+// computer's. ExecutorFor's local fallback assumes a command meant for a server
+// fails harmlessly here, and for a session's own tabs that is not true: a tab on
+// a server shares its session's name, so the local multiplexer has a session of
+// that name and the command succeeds — creating the server's window on this
+// computer instead. That is how a restart that ran before the connection was up
+// turned a server's tab into a local shell still labelled with the server.
 func (i *Instance) execOn(serverID string) Executor {
 	if serverID == "" {
 		return LocalExecutor
 	}
+	key := tabExecutorKey(i.ID, serverID)
 	if serverID == i.ServerID {
-		return ExecutorFor(i.ID)
+		key = i.ID
 	}
-	return ExecutorFor(tabExecutorKey(i.ID, serverID))
+	if found, ok := executors.Load(key); ok {
+		if executor, isExecutor := found.(Executor); isExecutor && executor != nil {
+			return executor
+		}
+	}
+	return unreachableExecutor{serverID: serverID}
 }
+
+// unreachableExecutor stands in for a server whose connection is not open.
+type unreachableExecutor struct{ serverID string }
+
+func (u unreachableExecutor) Run(context.Context, ...string) error {
+	return fmt.Errorf("error.serverNotConnected")
+}
+
+func (u unreachableExecutor) Output(context.Context, ...string) ([]byte, error) {
+	return nil, fmt.Errorf("error.serverNotConnected")
+}
+
+func (u unreachableExecutor) Describe() string { return "unreachable:" + u.serverID }
 
 // WindowReachable reports whether the machine a tab runs on is answering.
 //
@@ -175,7 +202,8 @@ func (i *Instance) WindowReachable(windowIdx int) bool {
 	if serverID == "" {
 		return true
 	}
-	return i.execOn(serverID) != LocalExecutor
+	_, unreachable := i.execOn(serverID).(unreachableExecutor)
+	return !unreachable
 }
 
 // ExecutorOn is execOn for callers outside this package.

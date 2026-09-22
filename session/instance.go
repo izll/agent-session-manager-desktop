@@ -347,14 +347,24 @@ type FollowedWindow struct {
 // be given, with `new-window -t name:N`, which asks the multiplexer for a
 // specific slot.
 //
-// remoteWindowIndexBase is where a server's tabs start. tmux hands out low
-// numbers from 0, and a session with dozens of local tabs is not a thing that
-// happens, so the two ranges cannot meet in practice.
-const remoteWindowIndexBase = 100
+// remoteWindowIndexBase is where a server's tabs start.
+//
+// tmux hands local tabs the lowest free number, refilling gaps (measured: with
+// 0–4 open and 2 closed, the next window is 2 again), so the local range only
+// reaches this far with that many tabs open at once. It was 100, and a hundred
+// tabs in one session is a real workload rather than a curiosity — past it the
+// local multiplexer would hand out an index a server's tab already holds.
+// Ten thousand is out of reach; tmux 2.6 and 3.4 both accept indexes far
+// larger (checked up to 2,000,000).
+//
+// Tabs created under the old value keep their indexes: which machine a tab is
+// on is read from its record, not inferred from the number.
+const remoteWindowIndexBase = 10000
 
 // remoteWindowIndexSpan is how much room each server gets inside that range,
-// so two servers cannot collide with each other either.
-const remoteWindowIndexSpan = 100
+// so two servers cannot collide with each other either — and the same reasoning
+// as above applies to how many tabs one server can hold.
+const remoteWindowIndexSpan = 10000
 
 // serverForWindow says which machine a window index refers to.
 //
@@ -674,6 +684,37 @@ func MachineIdentity() string {
 		machineIdentity.value = strings.TrimSpace(name)
 	})
 	return machineIdentity.value
+}
+
+// legacyRemoteWindowIndexBase is where servers' tabs started before the range
+// moved to remoteWindowIndexBase. No tab on a server was ever given an index
+// below it, so one that has one did not get it from a server.
+const legacyRemoteWindowIndexBase = 100
+
+// renumberStrayRemoteTabs moves tabs that name a server but hold a local index
+// into that server's range.
+//
+// Restarting a session used to rebuild every tab in the local multiplexer,
+// servers' tabs included, and record the local index it was given while
+// keeping the server. The record then contradicted itself: the attach asked
+// the server for a window it never had, and the tab did nothing when clicked.
+// The index alone identifies these, since no server tab was ever numbered
+// below legacyRemoteWindowIndexBase.
+//
+// The new index is simply unused on that server, so starting the tab creates
+// its window there.
+func (i *Instance) renumberStrayRemoteTabs() {
+	for at := range i.FollowedWindows {
+		fw := i.FollowedWindows[at]
+		if fw.ServerID == "" || fw.ServerID == i.ServerID ||
+			fw.Index >= legacyRemoteWindowIndexBase {
+			continue
+		}
+		next := i.nextRemoteWindowIndex(fw.ServerID)
+		log.Printf("[tab] %s: tab %q names server %s but held local index %d; "+
+			"moving it to %d", i.ID, fw.Name, fw.ServerID, fw.Index, next)
+		i.FollowedWindows[at].Index = next
+	}
 }
 
 // nextRemoteWindowIndex picks a free index for a new tab on a server.
@@ -1615,6 +1656,8 @@ func (i *Instance) restoreFollowedWindows(onlyWindowIdx int) {
 	chosenNewIdx := 0
 	chosenFound := false
 
+	i.renumberStrayRemoteTabs()
+
 	// Store old followed windows and clear the list (will be repopulated)
 	oldWindows := i.FollowedWindows
 	i.FollowedWindows = nil
@@ -1634,6 +1677,23 @@ func (i *Instance) restoreFollowedWindows(onlyWindowIdx int) {
 		if tabDir == "" {
 			tabDir = i.Path
 		}
+		// A tab on another machine is not this session's to rebuild.
+		//
+		// Its window lives in that server's multiplexer, which does not stop
+		// when this session does: it is usually still running, and if it is
+		// not, starting the tab recreates it there at its own index. Building
+		// it here put the server's tab into the local multiplexer — a local
+		// shell at a local index, still labelled with the server — and the
+		// attach then asked the server for a window it never had.
+		//
+		// Kept before the conversation check below, which asks the server and
+		// would drop the saved conversation whenever the server had not
+		// answered yet.
+		if fw.ServerID != "" && fw.ServerID != i.ServerID {
+			i.FollowedWindows = append(i.FollowedWindows, fw)
+			continue
+		}
+
 		// Drop the saved resume ID if it no longer exists on disk so the
 		// tab boots fresh instead of dying with "No conversation found".
 		// Asked on the machine the tab runs on. The local check reads this
@@ -3525,7 +3585,12 @@ func (i *Instance) windowAliveContext(ctx context.Context, windowIdx int) bool {
 	}
 	commandCtx, cancel := context.WithTimeout(ctx, TmuxCommandTimeout)
 	defer cancel()
-	return i.execOn(serverID).Run(commandCtx, "has-session", "-t", i.TmuxSessionName()) == nil
+	// The window, not only the session. A server's session outlives any one
+	// of its tabs — another tab keeps it open — so asking about the session
+	// called a tab alive whose window was gone, and the pane could not tell a
+	// tab waiting to be started from one that was running.
+	return i.execOn(serverID).Run(commandCtx, "has-session", "-t",
+		fmt.Sprintf("%s:%d", i.TmuxSessionName(), windowIdx)) == nil
 }
 
 // ResizePane resizes the tmux pane to the specified dimensions

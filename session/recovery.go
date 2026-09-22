@@ -754,7 +754,11 @@ func (s *Storage) RestoreTrashItem(id string) (*RestoreResult, error) {
 		running := parent.Status == StatusRunning && parent.IsAlive()
 		if running {
 			workDir := restored.WorkDir
-			newIndex, err := parent.NewWindowWithName(restored.Name, workDir)
+			// On the tab's own machine, not the session's. A tab restored
+			// onto the local multiplexer while it still names a server gets a
+			// local index, and the attach then asks that server about a window
+			// it never created.
+			newIndex, err := parent.NewWindowWithNameOn(restored.ServerID, restored.Name, workDir)
 			if err != nil {
 				return nil, err
 			}
@@ -772,7 +776,7 @@ func (s *Storage) RestoreTrashItem(id string) (*RestoreResult, error) {
 			}
 		} else {
 			parent.Status = StatusStopped
-			restored.Index = nextStoredWindowIndex(parent)
+			restored.Index = nextStoredWindowIndex(parent, restored.ServerID)
 			restored.Stopped = true
 			insertFollowedWindow(parent, restored, entry.OriginalPosition)
 		}
@@ -861,9 +865,26 @@ func restoreTabOrder(saved []int, oldIndex, newIndex int, instance *Instance) []
 	return result
 }
 
-func nextStoredWindowIndex(instance *Instance) int {
+// nextStoredWindowIndex picks an index for a tab being restored onto a session
+// that is not running, so no multiplexer is there to hand one out.
+//
+// The machine matters. Indexes are kept unique across the machines a session
+// spans by giving each server its own band (see remoteWindowIndexBase), and a
+// tab restored into the local range while it still names a server is a record
+// that contradicts itself: the attach asks that server for a window it never
+// created, and the tab reads as doing nothing when clicked.
+func nextStoredWindowIndex(instance *Instance, serverID string) int {
+	if serverID != "" && serverID != instance.ServerID {
+		return instance.nextRemoteWindowIndex(serverID)
+	}
 	next := 1
 	for _, tab := range instance.FollowedWindows {
+		// A remote tab's index lives in its server's band and says nothing
+		// about the local range. Counting it would put the restored tab past
+		// it — onto remoteWindowIndexBase, the index a server's tab holds.
+		if tab.ServerID != "" && tab.ServerID != instance.ServerID {
+			continue
+		}
 		if tab.Index >= next {
 			next = tab.Index + 1
 		}

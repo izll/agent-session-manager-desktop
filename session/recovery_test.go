@@ -482,3 +482,158 @@ func TestBackupIDRejectsWindowsDevicesAndNonGeneratedNames(t *testing.T) {
 		}
 	}
 }
+
+// A tab restored from the trash must keep the range its machine owns.
+//
+// Window indexes are how everything addresses a tab, and they are kept unique
+// across the machines a session spans by giving each server a band starting at
+// remoteWindowIndexBase (see instance.go). Restoring ignored that: it asked
+// for the next index after the highest one held, which for a session whose
+// tabs are local is a low, local number.
+//
+// The restored record then said two contradictory things — a local index and a
+// server of its own — and the session's own multiplexer had no such window.
+// Clicking the tab looked like nothing happening at all: the attach asked the
+// server, correctly, whether it held that window, the server said no, and the
+// socket was refused before it ever opened.
+func TestRestoringARemoteTabKeepsItInItsServersIndexRange(t *testing.T) {
+	storage := newRecoveryTestStorage(t)
+	const serverID = "srv-web"
+	instance := &Instance{
+		ID:        "session-1",
+		Name:      "API",
+		Path:      "/tmp/api",
+		Status:    StatusStopped,
+		Agent:     AgentClaude,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+		FollowedWindows: []FollowedWindow{
+			{Index: 7, Agent: AgentClaude, Name: "local"},
+			{Index: 100, Agent: AgentTerminal, Name: "Terminal", ServerID: serverID},
+		},
+	}
+	if err := storage.SaveAll([]*Instance{instance}, []*Group{}, DefaultSettings()); err != nil {
+		t.Fatal(err)
+	}
+	if err := storage.TrashTab(instance.ID, 100); err != nil {
+		t.Fatal(err)
+	}
+	trash, err := storage.ListTrash()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(trash) != 1 {
+		t.Fatalf("unexpected trash: %#v", trash)
+	}
+	if _, err := storage.RestoreTrashItem(trash[0].ID); err != nil {
+		t.Fatal(err)
+	}
+
+	restored, err := storage.GetInstance(instance.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var tab *FollowedWindow
+	for at := range restored.FollowedWindows {
+		if restored.FollowedWindows[at].ServerID == serverID {
+			tab = &restored.FollowedWindows[at]
+		}
+	}
+	if tab == nil {
+		t.Fatal("the restored tab lost the server it runs on")
+	}
+	if tab.Index < remoteWindowIndexBase {
+		t.Errorf("the tab runs on %s but was restored at index %d, which is a "+
+			"local index: the session's own multiplexer has no such window, so "+
+			"clicking the tab refuses the attach and nothing happens",
+			serverID, tab.Index)
+	}
+}
+
+// The other direction: a local tab restored into a session that also has a tab
+// on a server must stay in the local range.
+//
+// Counting the remote tab's index as if it were local put the restored tab at
+// remoteWindowIndexBase — the very index the server's tab already held, so two
+// records claimed one window.
+func TestRestoringALocalTabBesideARemoteOneStaysLocal(t *testing.T) {
+	storage := newRecoveryTestStorage(t)
+	instance := &Instance{
+		ID:        "session-1",
+		Name:      "API",
+		Path:      "/tmp/api",
+		Status:    StatusStopped,
+		Agent:     AgentClaude,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+		FollowedWindows: []FollowedWindow{
+			{Index: 3, Agent: AgentClaude, Name: "local"},
+			{Index: 7, Agent: AgentTerminal, Name: "to restore"},
+			{Index: 100, Agent: AgentTerminal, Name: "remote", ServerID: "srv-web"},
+		},
+	}
+	if err := storage.SaveAll([]*Instance{instance}, []*Group{}, DefaultSettings()); err != nil {
+		t.Fatal(err)
+	}
+	if err := storage.TrashTab(instance.ID, 7); err != nil {
+		t.Fatal(err)
+	}
+	trash, err := storage.ListTrash()
+	if err != nil || len(trash) != 1 {
+		t.Fatalf("unexpected trash: %#v, %v", trash, err)
+	}
+	result, err := storage.RestoreTrashItem(trash[0].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.WindowIdx >= remoteWindowIndexBase {
+		t.Errorf("a local tab was restored at index %d, inside the servers' range "+
+			"— and onto the index the remote tab already holds", result.WindowIdx)
+	}
+	restored, err := storage.GetInstance(instance.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := map[int]bool{}
+	for _, tab := range restored.FollowedWindows {
+		if seen[tab.Index] {
+			t.Errorf("two tabs share index %d", tab.Index)
+		}
+		seen[tab.Index] = true
+	}
+}
+
+// A session with a hundred-odd local tabs is a real workload. The servers'
+// range used to start at 100, where the local multiplexer — which hands out the
+// lowest free number — would arrive after a hundred tabs and give out an index
+// a server's tab already held.
+func TestManyLocalTabsDoNotReachTheServersRange(t *testing.T) {
+	// The order that actually collides: the server's tab is made while the
+	// session is small, and the local tabs grow past it afterwards.
+	early := &Instance{ID: "young", FollowedWindows: []FollowedWindow{
+		{Index: 1, Agent: AgentTerminal}, {Index: 2, Agent: AgentClaude},
+	}}
+	if idx := early.nextRemoteWindowIndex("srv-a"); idx < 1000 {
+		t.Errorf("a server's tab in a small session got index %d; the local "+
+			"multiplexer reaches that number once the session has %d tabs open",
+			idx, idx)
+	}
+
+	instance := &Instance{ID: "busy"}
+	for idx := 1; idx <= 500; idx++ {
+		instance.FollowedWindows = append(instance.FollowedWindows,
+			FollowedWindow{Index: idx, Agent: AgentTerminal})
+	}
+	first := instance.nextRemoteWindowIndex("srv-a")
+	if first <= 500 {
+		t.Fatalf("a server's first tab got index %d, among the local tabs", first)
+	}
+
+	instance.FollowedWindows = append(instance.FollowedWindows,
+		FollowedWindow{Index: first, ServerID: "srv-a"})
+	second := instance.nextRemoteWindowIndex("srv-b")
+	if second-first < 500 {
+		t.Errorf("the second server's band starts at %d, only %d after the "+
+			"first's — a busy server would run into it", second, second-first)
+	}
+}
