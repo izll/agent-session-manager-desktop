@@ -63,7 +63,17 @@ func (ts *TerminalServer) sessionAliveProbe(ctx context.Context, inst *session.I
 	// holds the window being attached to.
 	serverID := inst.ServerForWindow(winIdx)
 	if serverID == "" {
-		return terminalTmuxRun(ctx, "has-session", "-t", tmuxSession)
+		if err := terminalTmuxRun(ctx, "has-session", "-t", tmuxSession); err != nil {
+			return err
+		}
+		// The window too, for the same reason as the remote branch below: a
+		// local tab whose window died — an agent that is not installed dies
+		// the instant it opens — passed on the strength of the session
+		// existing, and the attach then printed the multiplexer's own "can't
+		// find window N" into the pane. It reappeared on every reconnect,
+		// which is what made it flicker.
+		return terminalTmuxRun(ctx, "has-session", "-t",
+			fmt.Sprintf("%s:%d", tmuxSession, winIdx))
 	}
 	if err := inst.ExecutorOn(serverID).Run(ctx, "has-session", "-t", tmuxSession); err != nil {
 		return err

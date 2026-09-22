@@ -181,3 +181,36 @@ func min(a, b int) int {
 	}
 	return b
 }
+
+// The window is checked on this computer too, not only on a server.
+//
+// A local tab whose window died — an agent that is not installed dies the
+// instant it opens — passed the probe on the strength of the session existing.
+// The attach then printed the multiplexer's own "can't find window N" into the
+// pane, and the reconnect brought it back every 750ms. Measured: `has-session
+// -t <session>` succeeds for a session whose window 8 is gone, while
+// `has-session -t <session>:8` refuses it — so asking the narrower question is
+// what turns this into the ordinary "not running" path.
+func TestTheLocalProbeAsksAboutTheWindowToo(t *testing.T) {
+	source, err := os.ReadFile("terminal_ws_remote.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	probe := string(source)
+	at := strings.Index(probe, "func (ts *TerminalServer) sessionAliveProbe")
+	if at < 0 {
+		t.Fatal("sessionAliveProbe is gone; this test needs rewriting")
+	}
+	body := probe[at:]
+	end := strings.Index(body, "\n}\n")
+	if end < 0 {
+		t.Fatal("could not find the end of sessionAliveProbe")
+	}
+	body = body[:end]
+
+	local := body[:strings.Index(body, "inst.ExecutorOn(serverID)")]
+	if !strings.Contains(local, "%s:%d") {
+		t.Error("the local branch asks only whether the session exists, so a tab " +
+			"whose window is gone attaches and the multiplexer prints its own error")
+	}
+}

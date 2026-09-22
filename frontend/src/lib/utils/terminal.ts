@@ -86,6 +86,15 @@ export interface TerminalInstance {
   /** Invalidates overlapping attaches and delayed reconnect callbacks. */
   connectionGeneration: number;
   reconnectTimer?: ReturnType<typeof setTimeout>;
+  /**
+   * Failed reconnects in a row, reset by a successful attach.
+   *
+   * A tab whose window is gone — an agent that is not installed dies the
+   * instant it opens — refuses every attach, and retrying on a timer made the
+   * multiplexer's own error reappear every 750ms. That flicker is what the
+   * user sees; the tab is simply not there.
+   */
+  reconnectFailures?: number;
   cleanup: () => void;
   dataDisposable: IDisposable | null;
   resizeDisposable: IDisposable | null;
@@ -924,6 +933,9 @@ export async function attachToSession(
 
       ws.onopen = () => {
         clearTimeout(timeout);
+        // A connection that opened clears the budget, so a long-running tab
+        // that drops once an hour never exhausts it.
+        terminalInstance.reconnectFailures = 0;
         resolve();
       };
 
@@ -1091,6 +1103,21 @@ export async function attachToSession(
       // Only for an unexpected close: detachFromSession() clears this handler
       // before closing, so a deliberate detach never lands here.
       if (closedSessionId === null || closedSessionId === undefined || closedProjectId === null) return;
+
+      // Give up after a few tries rather than retrying for ever.
+      //
+      // A dropped client is worth reconnecting to; a window that no longer
+      // exists is not, and there is no way to tell them apart from here — the
+      // attach is refused before the socket opens, so the close carries no
+      // status. A handful of attempts covers the multiplexer being slow to
+      // answer and stops short of a loop nobody asked for.
+      const maxReconnects = 4;
+      terminalInstance.reconnectFailures = (terminalInstance.reconnectFailures ?? 0) + 1;
+      if (terminalInstance.reconnectFailures > maxReconnects) {
+        void LogFrontend(`[term] giving up on session=${closedSessionId} win=${closedWindowIdx} ` +
+          `after ${maxReconnects} reconnects`);
+        return;
+      }
       const delay = 750;
       terminalInstance.reconnectTimer = setTimeout(() => {
         terminalInstance.reconnectTimer = undefined;
