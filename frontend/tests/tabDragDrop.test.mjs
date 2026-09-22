@@ -126,3 +126,38 @@ test('the in-flight mark is visible but does not flash on every drop', () => {
   assert.match(bar, /@media \(prefers-reduced-motion: reduce\)[\s\S]{0,400}tab-moving/,
     'the pulse keeps animating for someone who asked for less motion');
 });
+
+// The wait is not the write — it is the reload after it, which refreshes every
+// session's status, over the network for the ones on servers. The bar used to
+// sit unchanged for all of that, so the tab appeared in its new place long
+// after the mouse was released.
+test('the tabs rearrange on drop, before the backend is asked', () => {
+  const drop = bar.slice(bar.indexOf('async function handleTabDrop'));
+  const beforeAwait = drop.slice(0, drop.indexOf('await reorderTab'));
+
+  assert.match(beforeAwait, /windows = rearranged/,
+    'the bar is not rearranged until the backend answers');
+  assert.match(beforeAwait, /const previousOrder = windows/,
+    'the previous order is not kept, so a failed reorder cannot be undone');
+
+  // An order the backend rejected must not stay on screen.
+  assert.match(drop, /windows = previousOrder/,
+    'a failed reorder leaves the bar showing an order that does not exist');
+});
+
+// The poll sorts by the order held in the session store, which is still the
+// one from before the drop until the reload lands. Left alone it would put the
+// tab back where it was, in front of the user, and move it again a moment
+// later.
+test('the poll does not undo the rearrangement while it is in flight', () => {
+  const at = bar.indexOf('const list = await App.GetWindowList');
+  const poll = bar.slice(at, at + 900);
+  assert.match(poll, /if \(movingTabWindowIdx !== null\) return;/,
+    'the poll re-sorts by the stale order while a reorder is in flight');
+
+  // The guard is read in the poll, which comes first in the file, so the
+  // declaration has to precede it: a `let` used before its declaration throws
+  // rather than reading as undefined.
+  assert.ok(bar.indexOf('let movingTabWindowIdx') < at,
+    'movingTabWindowIdx is declared after the poll that reads it');
+});

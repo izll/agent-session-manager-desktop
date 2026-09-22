@@ -457,6 +457,17 @@
   const dispatch = createEventDispatcher();
 
   let windows: session.WindowInfo[] = [];
+
+  // The tab being moved, while the move is in flight.
+  //
+  // Declared beside `windows` because both the drop handler and the poll read
+  // it, and the poll comes first in the file: a `let` used before its
+  // declaration is a runtime error, not a hoisted undefined.
+  //
+  // The reorder is applied to `windows` at once and confirmed by the reload
+  // afterwards; this marks the gap between the two, during which the poll
+  // must not sort by the order the store still holds.
+  let movingTabWindowIdx: number | null = null;
   let lastSessionId: string | null = null;
   let lastProjectId = '';
   let pollTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -1047,6 +1058,13 @@
     try {
       const list = await App.GetWindowList(sessionId);
       if (generation !== windowsLoadGeneration || projectId !== get(activeProjectId) || sessionId !== get(selectedSessionId)) return;
+      // Not while a reorder is in flight.
+      //
+      // The order here comes from the session store, which still holds the
+      // one from before the drop until the reload lands. Sorting by it would
+      // put the tab back where it was, in front of the user, and then move it
+      // again a moment later.
+      if (movingTabWindowIdx !== null) return;
       windows = sortWindowsByTabOrder(list || [], sess.tabOrder);
 
       // Start polling if not already
@@ -1148,15 +1166,6 @@
   let draggingTabIndex: number | null = null;
   let dragOverTabIndex: number | null = null;
   let droppedTabWindowIdx: number | null = null;
-  // The tab being moved, while the move is in flight.
-  //
-  // Reordering waits on the backend — it takes an exclusive project lock,
-  // writes the store to disk, and the sidebar is reloaded afterwards — so the
-  // bar does not change at the moment the mouse is released. Without a mark
-  // for that gap the drop reads as having been ignored, which is how it was
-  // reported.
-  let movingTabWindowIdx: number | null = null;
-
   // Which side of the hovered tab the drop would land on.
   //
   // The marker used to be a border on the left of the target whichever way the
@@ -1239,6 +1248,22 @@
 
     if (fromPos === toPos) return;
 
+    // Moved here first, before the backend is asked.
+    //
+    // The wait is not the write — it is the reload after it, which refreshes
+    // every session's status, over the network for the ones on servers. The
+    // bar used to sit unchanged for all of that, so the tab appeared in its
+    // new place long after the mouse was released.
+    //
+    // The rearrangement is the same one the backend performs, so the reload
+    // confirms what is already on screen instead of announcing it. If the
+    // reorder fails, the saved order is put back.
+    const previousOrder = windows;
+    const rearranged = [...windows];
+    const [moved] = rearranged.splice(fromPos, 1);
+    rearranged.splice(toPos, 0, moved);
+    windows = rearranged;
+
     // Marked before the wait, cleared after it however it ends: a failed
     // reorder that left the tab marked would look like one still in progress.
     movingTabWindowIdx = draggedWinIdx ?? null;
@@ -1249,6 +1274,9 @@
       setTimeout(() => { droppedTabWindowIdx = null; }, 500);
     } catch (err) {
       console.error('Failed to reorder tab:', err);
+      // Back to where it was: the tab is not in the order the backend holds,
+      // and leaving it moved would show an order that does not exist.
+      windows = previousOrder;
     } finally {
       movingTabWindowIdx = null;
     }
