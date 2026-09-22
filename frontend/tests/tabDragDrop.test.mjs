@@ -90,3 +90,39 @@ test('a tab lands in the gap the marker pointed at', () => {
     assert.equal(got.join(''), want, `${what}: toPos=${toPos}`);
   }
 });
+
+// Reordering waits on the backend — an exclusive project lock, a write to
+// disk, and a sidebar reload after it — so the bar does not change at the
+// moment the mouse is released. With nothing to show for that gap the drop
+// reads as having been ignored.
+test('the tab being moved is marked while the move is in flight', () => {
+  assert.match(bar, /class:tab-moving=\{movingTabWindowIdx === win\.Index\}/,
+    'nothing marks the tab while the reorder is waiting on the backend');
+
+  const drop = bar.slice(bar.indexOf('async function handleTabDrop'));
+  assert.match(drop, /movingTabWindowIdx = draggedWinIdx/,
+    'the mark is not set before the wait');
+
+  // A failed reorder that left the tab marked would look like one still in
+  // progress, so it is cleared however the wait ends.
+  assert.match(drop, /finally \{\s*movingTabWindowIdx = null;/,
+    'the mark is not cleared when the reorder fails');
+});
+
+// Measured in a browser against the built stylesheet: the animation runs at
+// 900ms with a 150ms delay, and the background moves from 0.1 to 0.28 alpha.
+test('the in-flight mark is visible but does not flash on every drop', () => {
+  // The declarations of the rule, not a fixed window of characters: the
+  // comment inside it is longer than the rule.
+  const at = bar.indexOf('.tab.tab-moving {');
+  const moving = bar.slice(at, bar.indexOf('}', at));
+  assert.match(moving, /animation: tab-moving-pulse/);
+
+  // Most moves land in well under a second. Without the delay the pulse would
+  // flash once on every successful drop, which is noise rather than feedback.
+  assert.match(moving, /0\.15s/,
+    'the pulse starts immediately and flashes on every drop');
+
+  assert.match(bar, /@media \(prefers-reduced-motion: reduce\)[\s\S]{0,400}tab-moving/,
+    'the pulse keeps animating for someone who asked for less motion');
+});

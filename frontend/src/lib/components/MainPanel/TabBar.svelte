@@ -1148,6 +1148,15 @@
   let draggingTabIndex: number | null = null;
   let dragOverTabIndex: number | null = null;
   let droppedTabWindowIdx: number | null = null;
+  // The tab being moved, while the move is in flight.
+  //
+  // Reordering waits on the backend — it takes an exclusive project lock,
+  // writes the store to disk, and the sidebar is reloaded afterwards — so the
+  // bar does not change at the moment the mouse is released. Without a mark
+  // for that gap the drop reads as having been ignored, which is how it was
+  // reported.
+  let movingTabWindowIdx: number | null = null;
+
   // Which side of the hovered tab the drop would land on.
   //
   // The marker used to be a border on the left of the target whichever way the
@@ -1230,6 +1239,9 @@
 
     if (fromPos === toPos) return;
 
+    // Marked before the wait, cleared after it however it ends: a failed
+    // reorder that left the tab marked would look like one still in progress.
+    movingTabWindowIdx = draggedWinIdx ?? null;
     try {
       await reorderTab(sessionId, fromPos, toPos);
       // Trigger flash on the moved tab
@@ -1237,6 +1249,8 @@
       setTimeout(() => { droppedTabWindowIdx = null; }, 500);
     } catch (err) {
       console.error('Failed to reorder tab:', err);
+    } finally {
+      movingTabWindowIdx = null;
     }
   }
 
@@ -1908,6 +1922,7 @@
             class:tab-drop-before={dragOverTabIndex === winArrayIdx && !dragOverAfter}
             class:tab-drop-after={dragOverTabIndex === winArrayIdx && dragOverAfter}
             class:tab-dropped={droppedTabWindowIdx === win.Index}
+            class:tab-moving={movingTabWindowIdx === win.Index}
             style={tabStyle(win)}
             draggable={true}
             on:click={() => { if (renamingTabIndex === null) handleTabClick(win.Index); }}
@@ -2470,6 +2485,37 @@
 
   .tab.tab-dropped {
     animation: tab-drop-flash 0.5s ease-out;
+  }
+
+  /* While the move is in flight.
+     The reorder waits on the backend and on the reload that follows it, so
+     the bar does not change at the moment the mouse is released — the drop
+     reads as ignored. This says the tab is on its way.
+     A pulse rather than a spinner: a spinner in a tab would compete with the
+     agent's own status dot, which means something else entirely. */
+  .tab.tab-moving {
+    /* The delay matters: a move usually lands in well under a second, and
+       without it the pulse would flash once on every successful drop. It only
+       becomes visible when the wait is long enough to be worth explaining. */
+    animation: tab-moving-pulse 0.9s ease-in-out 0.15s infinite;
+  }
+
+  @keyframes tab-moving-pulse {
+    0%, 100% {
+      background: rgba(var(--accent-rgb), 0.10);
+    }
+    50% {
+      background: rgba(var(--accent-rgb), 0.28);
+    }
+  }
+
+  /* Nothing moves for someone who asked not to be moved. The pulse is a
+     colour change, which is safe; the delay above is what keeps it quiet. */
+  @media (prefers-reduced-motion: reduce) {
+    .tab.tab-moving {
+      animation: none;
+      background: rgba(var(--accent-rgb), 0.18);
+    }
   }
 
   @keyframes tab-drop-flash {
