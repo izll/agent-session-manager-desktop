@@ -1337,6 +1337,7 @@
   "error.agentFoundOffPath": "「{0}」はサーバーの {1} にインストールされていますが、PATH に含まれていません。{1} をサーバーの追加 PATH 設定に加えてください",
   "error.agentNotOnServerPath": "「{0}」はサーバーの PATH にありません。サーバーが検索しない場所にインストールされている場合は、そのディレクトリを追加 PATH 設定に加えてください",
   "error.agentNotOnPath": "「{0}」が PATH にありません — 別のツールバージョンの下にインストールされたか、このタブの作成後に削除された可能性があります",
+  "error.agentNotOnPathInstall": "「{0}」が PATH にありません。次でインストールしてください:  {1}",
   "tabBar.extraArgsFailed": "引数を保存できませんでした: {error}",
   "tabBar.deleteTabFailed": "タブを削除できませんでした: {error}",
   "tabBar.restartTabFailed": "タブを再起動できませんでした: {error}",

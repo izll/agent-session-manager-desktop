@@ -1337,6 +1337,7 @@
   "error.agentFoundOffPath": "A(z) „{0}” telepítve van a szerveren itt: {1}, de ez nincs a PATH-ján — add hozzá a(z) {1} útvonalat a szerver extra PATH beállításához",
   "error.agentNotOnServerPath": "A(z) „{0}” nincs a szerver PATH-ján — ha olyan helyen van telepítve, ahol a szerver nem keres, add hozzá azt a könyvtárat a szerver extra PATH beállításához",
   "error.agentNotOnPath": "A(z) „{0}” nincs a PATH-on — lehet, hogy másik eszközverzió alá települt, vagy törölték a fül létrehozása óta",
+  "error.agentNotOnPathInstall": "A(z) „{0}” nincs a PATH-on. Telepítsd ezzel:  {1}",
   "tabBar.extraArgsFailed": "Az argumentumokat nem sikerült menteni: {error}",
   "tabBar.deleteTabFailed": "A fület nem sikerült törölni: {error}",
   "tabBar.restartTabFailed": "A fület nem sikerült újraindítani: {error}",

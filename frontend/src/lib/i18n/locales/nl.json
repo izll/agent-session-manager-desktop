@@ -1337,6 +1337,7 @@
   "error.agentFoundOffPath": "‘{0}’ is op de server geïnstalleerd in {1}, wat niet op het PATH staat — voeg {1} toe aan de extra PATH-instelling van de server",
   "error.agentNotOnServerPath": "‘{0}’ staat niet op het PATH van de server — als het op een plek staat waar de server niet zoekt, voeg die map toe aan de extra PATH-instelling",
   "error.agentNotOnPath": "'{0}' staat niet in het PATH — het is mogelijk onder een andere toolversie geïnstalleerd, of verwijderd sinds dit tabblad is gemaakt",
+  "error.agentNotOnPathInstall": "'{0}' staat niet in het PATH. Installeer het met:  {1}",
   "tabBar.extraArgsFailed": "De argumenten konden niet worden opgeslagen: {error}",
   "tabBar.deleteTabFailed": "Het tabblad kon niet worden verwijderd: {error}",
   "tabBar.restartTabFailed": "Het tabblad kon niet opnieuw worden gestart: {error}",

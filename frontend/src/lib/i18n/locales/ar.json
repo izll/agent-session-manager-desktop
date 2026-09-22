@@ -1337,6 +1337,7 @@
   "error.agentFoundOffPath": "«{0}» مثبَّت على الخادم في {1}، وهو ليس ضمن مسار PATH — أضف {1} إلى إعداد PATH الإضافي للخادم",
   "error.agentNotOnServerPath": "«{0}» غير موجود في PATH الخادم — إذا كان مثبتًا في مكان لا يبحث فيه الخادم، فأضف ذلك الدليل إلى إعداد PATH الإضافي",
   "error.agentNotOnPath": "‏”{0}“ غير موجود في PATH — ربما جرى تثبيته ضمن إصدار أداة مختلف، أو أُزيل منذ إنشاء هذه العلامة",
+  "error.agentNotOnPathInstall": "‏”{0}“ غير موجود في PATH. ثبّته بواسطة:  {1}",
   "tabBar.extraArgsFailed": "تعذّر حفظ الوسائط: {error}",
   "tabBar.deleteTabFailed": "تعذّر حذف علامة التبويب: {error}",
   "tabBar.restartTabFailed": "تعذّرت إعادة تشغيل علامة التبويب: {error}",

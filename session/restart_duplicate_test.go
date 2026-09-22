@@ -104,3 +104,58 @@ func TestARestartSaysWhenTheAgentIsGoneFromPath(t *testing.T) {
 		t.Errorf("an empty command was treated as missing: %v", err)
 	}
 }
+
+// A tab whose agent is missing keeps its place.
+//
+// The window dies the instant it opens, so the multiplexer stops listing it —
+// and a tab that vanishes from the bar reads as work lost rather than as a
+// program that is not installed. It stays, marked dead, so it can be seen and
+// started again once the agent is there.
+func TestATabWithNoWindowStaysInTheBar(t *testing.T) {
+	inst := &Instance{
+		ID: "s", Status: StatusRunning,
+		FollowedWindows: []FollowedWindow{
+			{Index: 1, Agent: AgentTerminal, Name: "Terminal"},
+			{Index: 8, Agent: AgentCodex, Name: "nesting codex"},
+		},
+	}
+
+	// Only window 1 is listed; 8 died before it could be.
+	listed := inst.appendMissingTabs([]WindowInfo{{Index: 1, Name: "Terminal"}})
+
+	var found *WindowInfo
+	for idx := range listed {
+		if listed[idx].Index == 8 {
+			found = &listed[idx]
+		}
+	}
+	if found == nil {
+		t.Fatal("the tab disappeared from the bar when its window died")
+	}
+	if !found.Dead {
+		t.Error("the tab is shown as alive, so nothing says why it is empty")
+	}
+	if found.Name != "nesting codex" {
+		t.Errorf("the tab lost its name: %q", found.Name)
+	}
+}
+
+// The error has to say what to do about it. Someone who wanted to start a tab
+// should not have to go looking for install instructions.
+func TestTheMissingAgentErrorSaysHowToInstallIt(t *testing.T) {
+	inst := &Instance{ID: "probe"}
+
+	err := inst.ensureAgentOnServer("", "codex")
+	if err == nil {
+		t.Skip("codex is installed here")
+	}
+	if !strings.Contains(err.Error(), AgentConfigs[AgentCodex].InstallCommand) {
+		t.Errorf("the error does not say how to install it: %v", err)
+	}
+
+	// And an agent with no single install line falls back to naming the
+	// command, rather than quoting one that may be wrong for this system.
+	if installCommandFor("asmgr-no-such-agent-xyz") != "" {
+		t.Error("an unknown command was given an install line")
+	}
+}

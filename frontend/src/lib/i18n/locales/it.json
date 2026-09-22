@@ -1337,6 +1337,7 @@
   "error.agentFoundOffPath": "«{0}» è installato sul server in {1}, che non è nel suo PATH — aggiungi {1} all'impostazione PATH aggiuntivo del server",
   "error.agentNotOnServerPath": "«{0}» non è nel PATH del server — se è installato dove il server non cerca, aggiungi quella directory all'impostazione PATH aggiuntivo",
   "error.agentNotOnPath": "«{0}» non è nel PATH — potrebbe essere stato installato con un'altra versione dello strumento, o rimosso da quando questa scheda è stata creata",
+  "error.agentNotOnPathInstall": "«{0}» non è nel PATH. Installalo con:  {1}",
   "tabBar.extraArgsFailed": "Impossibile salvare gli argomenti: {error}",
   "tabBar.deleteTabFailed": "Impossibile eliminare la scheda: {error}",
   "tabBar.restartTabFailed": "Impossibile riavviare la scheda: {error}",

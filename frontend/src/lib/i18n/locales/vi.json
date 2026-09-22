@@ -1337,6 +1337,7 @@
   "error.agentFoundOffPath": "“{0}” được cài trên máy chủ tại {1}, nhưng đường dẫn đó không có trong PATH — hãy thêm {1} vào cài đặt PATH bổ sung của máy chủ",
   "error.agentNotOnServerPath": "“{0}” không có trong PATH của máy chủ — nếu nó được cài ở nơi máy chủ không tìm, hãy thêm thư mục đó vào cài đặt PATH bổ sung",
   "error.agentNotOnPath": "“{0}” không có trong PATH — có thể đã được cài dưới phiên bản công cụ khác, hoặc bị xóa kể từ khi tạo thẻ này",
+  "error.agentNotOnPathInstall": "“{0}” không có trong PATH. Cài đặt bằng:  {1}",
   "tabBar.extraArgsFailed": "Không lưu được tham số: {error}",
   "tabBar.deleteTabFailed": "Không xóa được tab: {error}",
   "tabBar.restartTabFailed": "Không khởi động lại được tab: {error}",

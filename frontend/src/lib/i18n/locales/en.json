@@ -1349,6 +1349,7 @@
   "error.agentFoundOffPath": "“{0}” is installed on the server in {1}, which is not on its PATH — add {1} to the server's extra PATH setting",
   "error.agentNotOnServerPath": "“{0}” is not on the server's PATH — if it is installed somewhere the server does not search, add that directory in the server's extra PATH setting",
   "error.agentNotOnPath": "“{0}” is not on PATH — it may have been installed under a different tool version, or removed since this tab was created",
+  "error.agentNotOnPathInstall": "“{0}” is not on PATH. Install it with:  {1}",
   "error.serverNotChecked": "{0} has not been checked yet — open Settings › Remote servers and test the connection first",
   "error.serverNotConnected": "The server is not connected — open Settings › Remote servers and test the connection first",
   "error.couldNotReachServer": "Could not reach {0}: {1}",

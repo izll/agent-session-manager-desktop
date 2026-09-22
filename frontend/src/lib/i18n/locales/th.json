@@ -1337,6 +1337,7 @@
   "error.agentFoundOffPath": "“{0}” ติดตั้งบนเซิร์ฟเวอร์ที่ {1} ซึ่งไม่อยู่ใน PATH — เพิ่ม {1} ในการตั้งค่า PATH เพิ่มเติมของเซิร์ฟเวอร์",
   "error.agentNotOnServerPath": "“{0}” ไม่อยู่ใน PATH ของเซิร์ฟเวอร์ — หากติดตั้งในที่ที่เซิร์ฟเวอร์ไม่ค้นหา ให้เพิ่มไดเรกทอรีนั้นในการตั้งค่า PATH เพิ่มเติม",
   "error.agentNotOnPath": "ไม่พบ “{0}” ใน PATH — อาจถูกติดตั้งไว้ภายใต้เครื่องมือเวอร์ชันอื่น หรือถูกลบไปหลังจากสร้างแท็บนี้",
+  "error.agentNotOnPathInstall": "ไม่พบ “{0}” ใน PATH ติดตั้งด้วย:  {1}",
   "tabBar.extraArgsFailed": "บันทึกอาร์กิวเมนต์ไม่สำเร็จ: {error}",
   "tabBar.deleteTabFailed": "ลบแท็บไม่สำเร็จ: {error}",
   "tabBar.restartTabFailed": "เริ่มแท็บใหม่ไม่สำเร็จ: {error}",

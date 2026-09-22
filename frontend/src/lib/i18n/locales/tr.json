@@ -1337,6 +1337,7 @@
   "error.agentFoundOffPath": "“{0}” sunucuda {1} konumunda kurulu, ancak orası PATH'inde değil — {1} yolunu sunucunun ek PATH ayarına ekleyin",
   "error.agentNotOnServerPath": "“{0}” sunucunun PATH'inde değil — sunucunun aramadığı bir yerde kuruluysa, o dizini ek PATH ayarına ekleyin",
   "error.agentNotOnPath": "“{0}” PATH üzerinde değil — başka bir araç sürümü altına kurulmuş ya da bu sekme oluşturulduğundan beri kaldırılmış olabilir",
+  "error.agentNotOnPathInstall": "“{0}” PATH üzerinde değil. Şununla kurun:  {1}",
   "tabBar.extraArgsFailed": "Argümanlar kaydedilemedi: {error}",
   "tabBar.deleteTabFailed": "Sekme silinemedi: {error}",
   "tabBar.restartTabFailed": "Sekme yeniden başlatılamadı: {error}",

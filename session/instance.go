@@ -83,6 +83,11 @@ type AgentConfig struct {
 	ForkFlag         string
 	ForkIsSubcommand bool
 
+	// InstallCommand is what installs it, for the agents whose installer is a
+	// single line worth quoting. Empty where the answer is "see the page" —
+	// telling someone to run a command that is not the right one for their
+	// system is worse than pointing them at the instructions.
+	InstallCommand string
 	// InstallURL is the agent's own installation page.
 	//
 	// Opened in a browser when the command is missing, rather than printing a
@@ -126,6 +131,7 @@ var AgentConfigs = map[AgentType]AgentConfig{
 	},
 	AgentGemini: {
 		Command:         "gemini",
+		InstallCommand:  "npm install -g @google/gemini-cli",
 		InstallURL:      "https://github.com/google-gemini/gemini-cli",
 		SupportsResume:  true,
 		SupportsAutoYes: false,
@@ -140,6 +146,7 @@ var AgentConfigs = map[AgentType]AgentConfig{
 	},
 	AgentCodex: {
 		Command:         "codex",
+		InstallCommand:  "npm install -g @openai/codex",
 		InstallURL:      "https://github.com/openai/codex",
 		SupportsResume:  true,
 		SupportsAutoYes: true,
@@ -418,6 +425,12 @@ func (i *Instance) ensureAgentOnServer(serverID, command string) error {
 	}
 	if serverID == "" {
 		if _, err := exec.LookPath(command); err != nil {
+			// With the command that installs it, where there is one worth
+			// quoting: the message is read by someone who wanted to start a
+			// tab, not to go looking for instructions.
+			if install := installCommandFor(command); install != "" {
+				return fmt.Errorf("error.agentNotOnPathInstall|%s|%s", command, install)
+			}
 			return fmt.Errorf("error.agentNotOnPath|%s", command)
 		}
 		return nil
@@ -4359,4 +4372,15 @@ func (i *Instance) windowNameAt(serverID, sessionName string, windowIdx int) str
 		return ""
 	}
 	return strings.TrimSpace(string(out))
+}
+
+// installCommandFor finds the install line for a command, by the name the
+// agent is started with.
+func installCommandFor(command string) string {
+	for _, config := range AgentConfigs {
+		if config.Command == command {
+			return config.InstallCommand
+		}
+	}
+	return ""
 }

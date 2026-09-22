@@ -1337,6 +1337,7 @@
   "error.agentFoundOffPath": "„{0}“ je na serveru nainstalován v {1}, což není v jeho PATH — přidej {1} do dodatečného nastavení PATH serveru",
   "error.agentNotOnServerPath": "„{0}“ není v PATH serveru — pokud je nainstalován tam, kde server nehledá, přidej ten adresář do dodatečného nastavení PATH",
   "error.agentNotOnPath": "„{0}“ není v PATH — mohl být nainstalován pod jinou verzí nástroje nebo odstraněn od vytvoření této karty",
+  "error.agentNotOnPathInstall": "„{0}“ není v PATH. Nainstalujte příkazem:  {1}",
   "tabBar.extraArgsFailed": "Argumenty se nepodařilo uložit: {error}",
   "tabBar.deleteTabFailed": "Kartu se nepodařilo smazat: {error}",
   "tabBar.restartTabFailed": "Kartu se nepodařilo restartovat: {error}",
