@@ -6,6 +6,33 @@ Entries describe what changed for someone using the app. Internal refactoring,
 test and CI work is left out unless it changed behaviour. Dates are release
 dates; the format follows [Keep a Changelog](https://keepachangelog.com).
 
+## 1.1.8 — 2026-09-22
+
+### Fixed
+
+- **A tab on a server stopped working after its session was restarted.**
+  Restarting rebuilt every tab on this computer, including tabs that belong to
+  a server, so the tab became a local shell that was still labelled with the
+  server. After that, clicking it did nothing. Tabs on a server are now left
+  on their server, and starting one recreates its window there. Tabs already
+  broken this way are fixed the next time their session is restarted.
+- **Commands meant for a server no longer run on this computer when the
+  connection is not up yet.** This happened most often right after a start.
+  They now fail and say that the server is not connected.
+- **A tab restored from the trash could land on the wrong machine**, or take
+  the same number as another tab. It now comes back on the machine it was on.
+- **Clicking a tab that cannot be opened now says why**, instead of showing an
+  idle placeholder as if nothing had gone wrong.
+- **A tab waiting to be started on its server is shown as parked**, not as a
+  connection error. This is the normal state after a session restart until
+  the tab is started with ▶.
+
+### Changed
+
+- **Tabs on servers are numbered from 10000**, so a session with a hundred or
+  more local tabs no longer collides with them. Existing tabs keep their
+  numbers.
+
 ## 1.1.7 — 2026-09-22
 
 ### Fixed
