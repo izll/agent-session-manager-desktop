@@ -1929,6 +1929,7 @@ func (i *Instance) NewWindowWithNameOn(serverID string, name string, workDir str
 	if err != nil {
 		return -1, fmt.Errorf("invalid new terminal window index: %w", err)
 	}
+	i.claimWindowIndex(newIdx, serverID)
 	i.FollowedWindows = append(i.FollowedWindows, FollowedWindow{
 		WorkDir: func() string {
 			if workDir != i.Path {
@@ -2149,8 +2150,14 @@ func (i *Instance) RestartWindowWithResume(windowIdx int, resumeID string) error
 	}
 
 	// Followed window: find the agent config and restart
-	fwSliceIdx, collapseDuplicates, err := selectFollowedWindowForRestart(
-		i.FollowedWindows, windowIdx, i.ServerID, i.serverForWindow(windowIdx))
+	// The multiplexer's own name for the window, which settles which record
+	// belongs to it when more than one claims the index.
+	windowName := ""
+	if !windowMissing {
+		windowName = i.windowNameAt(i.serverForWindow(windowIdx), sessionName, windowIdx)
+	}
+	fwSliceIdx, collapseDuplicates, err := selectFollowedWindowNamed(
+		i.FollowedWindows, windowIdx, i.ServerID, i.serverForWindow(windowIdx), windowName)
 	if err != nil {
 		return err
 	}
@@ -2373,6 +2380,21 @@ func (i *Instance) RestopWindow(windowIdx int) error {
 // and not across them. Returned indexes are into the full slice, so the caller
 // can keep using them to address the tab it owns.
 func selectFollowedWindowForRestart(windows []FollowedWindow, windowIdx int, sessionServerID, serverID string) (sliceIdx int, collapseDuplicates bool, err error) {
+	return selectFollowedWindowNamed(windows, windowIdx, sessionServerID, serverID, "")
+}
+
+// selectFollowedWindowNamed is the same choice with the multiplexer's own name
+// for the window, when it can be had.
+//
+// That name settles what the records cannot. A window whose descriptor
+// outlived it leaves its record behind, and the multiplexer later gives the
+// number to a new window — so two tabs end up on one index, disagreeing about
+// which agent runs there. Refusing is right when there is nothing to go on,
+// but the multiplexer knows: the window it actually has is named after one of
+// them. Seen on a real session — a codex record with no window of its own sat
+// on index 4 beside the claude tab that held it, and stopping that tab left
+// neither able to start.
+func selectFollowedWindowNamed(windows []FollowedWindow, windowIdx int, sessionServerID, serverID, windowName string) (sliceIdx int, collapseDuplicates bool, err error) {
 	var matches []int
 	for idx := range windows {
 		if windows[idx].Index == windowIdx && windows[idx].sameMachine(sessionServerID, serverID) {
@@ -2384,6 +2406,25 @@ func selectFollowedWindowForRestart(windows []FollowedWindow, windowIdx int, ses
 	}
 	if len(matches) == 1 {
 		return matches[0], false, nil
+	}
+
+	// The window the multiplexer has is named after exactly one of them.
+	if windowName != "" {
+		named := -1
+		for _, idx := range matches {
+			if windows[idx].Name == windowName {
+				if named >= 0 {
+					// Two records with the same name as well: nothing here
+					// tells them apart, so fall through to the agent check.
+					named = -1
+					break
+				}
+				named = idx
+			}
+		}
+		if named >= 0 {
+			return named, true, nil
+		}
 	}
 
 	// Older versions could store the active Terminal tab's index for a newly
@@ -3209,6 +3250,10 @@ func (i *Instance) NewAgentTab(req NewTabRequest) (int, error) {
 		i.discardUnusedWorktree(serverID, worktree)
 		return -1, fmt.Errorf("invalid new agent window index: %w", err)
 	}
+
+	// The multiplexer gave us this index; anything still claiming it is a
+	// record that outlived its window.
+	i.claimWindowIndex(newIdx, serverID)
 
 	// Add to followed windows with agent info
 	i.FollowedWindows = append(i.FollowedWindows, FollowedWindow{
@@ -4258,4 +4303,46 @@ func recentlyStarted(sessionName string) bool {
 		return false
 	}
 	return true
+}
+
+// claimWindowIndex drops any stale record already sitting on a window index
+// before a new tab takes it.
+//
+// The index comes from the multiplexer, so it is real; what can be stale is an
+// older record that still claims it. That happens when a window dies and its
+// descriptor outlives it — the multiplexer then reuses the number for the next
+// window, and the session ends up with two tabs on one index.
+//
+// Two of those are worse than one lost: a restart cannot tell which agent the
+// window runs, so it refuses with "conflicting duplicate agent metadata" and
+// neither tab starts. Measured on a real session: a codex descriptor with no
+// window of its own sat on index 4 beside the claude tab that actually held
+// it, and stopping the claude tab left both unstartable.
+//
+// Only records for the same machine are dropped: a tab on a server has its own
+// index space, and an index there says nothing about one here.
+func (i *Instance) claimWindowIndex(windowIdx int, serverID string) {
+	kept := i.FollowedWindows[:0]
+	for _, fw := range i.FollowedWindows {
+		if fw.Index == windowIdx && fw.sameMachine(i.ServerID, serverID) {
+			log.Printf("[tab] dropping stale descriptor for %s:%d agent=%s name=%q — "+
+				"the index has been given to a new tab", i.ID, windowIdx, fw.Agent, fw.Name)
+			continue
+		}
+		kept = append(kept, fw)
+	}
+	i.FollowedWindows = kept
+}
+
+// windowNameAt asks the multiplexer what a window is called.
+//
+// Empty when it cannot be had — a window that is gone, a server that is not
+// answering — and callers treat that as "no help", not as "no name".
+func (i *Instance) windowNameAt(serverID, sessionName string, windowIdx int) string {
+	out, err := i.tmuxOutputOn(serverID, "display-message", "-p", "-t",
+		fmt.Sprintf("%s:%d", sessionName, windowIdx), "#{window_name}")
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
 }
