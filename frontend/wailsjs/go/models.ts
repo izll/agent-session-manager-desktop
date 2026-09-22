@@ -596,6 +596,42 @@ export namespace main {
 	        this.removed = source["removed"];
 	    }
 	}
+	export class FeedbackLinks {
+	    github: string;
+	    email: string;
+	    text: string;
+	    truncated: boolean;
+
+	    static createFrom(source: any = {}) {
+	        return new FeedbackLinks(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.github = source["github"];
+	        this.email = source["email"];
+	        this.text = source["text"];
+	        this.truncated = source["truncated"];
+	    }
+	}
+	export class FeedbackReport {
+	    kind: string;
+	    summary: string;
+	    detail: string;
+	    includeSystem: boolean;
+
+	    static createFrom(source: any = {}) {
+	        return new FeedbackReport(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.kind = source["kind"];
+	        this.summary = source["summary"];
+	        this.detail = source["detail"];
+	        this.includeSystem = source["includeSystem"];
+	    }
+	}
 	export class ForkResult {
 	    sessionId: string;
 

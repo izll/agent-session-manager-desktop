@@ -155,6 +155,7 @@
   import GlobalSearchDialog from './lib/components/Dialogs/GlobalSearchDialog.svelte';
   import BgAgentsDialog from './lib/components/Dialogs/BgAgentsDialog.svelte';
   import HelpDialog from './lib/components/Dialogs/HelpDialog.svelte';
+  import FeedbackDialog from './lib/components/Dialogs/FeedbackDialog.svelte';
   import UpdateDialog from './lib/components/Dialogs/UpdateDialog.svelte';
   import ImportDialog from './lib/components/Dialogs/ImportDialog.svelte';
   import SessionFileDialog from './lib/components/Dialogs/SessionFileDialog.svelte';
@@ -271,6 +272,7 @@
   let showBgAgents = false;
 
   let showHelpDialog = false;
+  let showFeedbackDialog = false;
   let showUpdateDialog = false;
   /** Version found by the daily background check; drives the header dot. */
   let availableUpdate = '';
@@ -352,7 +354,7 @@
   let prevAnyDialogOpen = false;
   $: anyDialogOpen =
     showNewSessionDialog || showNewGroupDialog || showGlobalSearch || showBgAgents ||
-    showHelpDialog || showUpdateDialog || showImportDialog || showFileImportDialog ||
+    showHelpDialog || showFeedbackDialog || showUpdateDialog || showImportDialog || showFileImportDialog ||
     showSettingsDialog || showRecoveryCenter || showCommandPalette || showColorDialog || showDeleteConfirm ||
     showLogDialog || showQuickJump || showGitHistory || quickJumpPrompt || quickJumpNaming ||
     showCommandPicker || showCommandManager || showServerManager || showTemplateDialog ||
@@ -1754,7 +1756,11 @@
   <NewGroupDialog bind:show={showNewGroupDialog} />
   <BgAgentsDialog bind:show={showBgAgents} />
 <GlobalSearchDialog bind:show={showGlobalSearch} />
-  <HelpDialog bind:show={showHelpDialog} />
+  <HelpDialog
+    bind:show={showHelpDialog}
+    on:feedback={() => { showHelpDialog = false; showFeedbackDialog = true; }}
+  />
+  <FeedbackDialog bind:show={showFeedbackDialog} />
   <UpdateDialog
     bind:show={showUpdateDialog}
     on:installed={() => availableUpdate = ''}

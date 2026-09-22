@@ -135,6 +135,9 @@
       </div>
 
       <div class="dialog-footer">
+        <button class="btn-feedback" on:click={() => dispatch('feedback')}>
+          {$t('feedback.open')}
+        </button>
         <button class="btn-close" on:click={close}>
           {$t('help.close')}
           <kbd>Esc</kbd>
@@ -255,5 +258,22 @@
     border-radius: 4px;
     font-size: 12px;
     color: var(--accent-light);
+  }
+
+  /* Sits to the left of the close button, which the footer pushes right. */
+  .btn-feedback {
+    margin-right: auto;
+    padding: 8px 14px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.04);
+    color: #d4d4d8;
+    font-size: 13px;
+    cursor: pointer;
+  }
+
+  .btn-feedback:hover {
+    border-color: rgba(var(--accent-rgb), 0.5);
+    color: var(--accent-pale);
   }
 </style>

@@ -26,6 +26,8 @@ export function ClearLog(arg1:string):Promise<void>;
 
 export function CloseTab(arg1:string,arg2:number,arg3:string):Promise<void>;
 
+export function ComposeFeedback(arg1:main.FeedbackReport):Promise<main.FeedbackLinks>;
+
 export function CreateBackup(arg1:string):Promise<void>;
 
 export function CreateGroup(arg1:string,arg2:string):Promise<main.GroupInfo>;

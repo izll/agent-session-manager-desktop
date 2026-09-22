@@ -46,6 +46,10 @@ export function CloseTab(arg1, arg2, arg3) {
   return window['go']['main']['App']['CloseTab'](arg1, arg2, arg3);
 }
 
+export function ComposeFeedback(arg1) {
+  return window['go']['main']['App']['ComposeFeedback'](arg1);
+}
+
 export function CreateBackup(arg1) {
   return window['go']['main']['App']['CreateBackup'](arg1);
 }
