@@ -1,6 +1,9 @@
 package session
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 // Two records on one index, disagreeing about the agent.
 //
@@ -66,5 +69,38 @@ func TestAnUnrecognisedWindowNameDoesNotDecide(t *testing.T) {
 	}
 	if _, _, err := selectFollowedWindowNamed(windows, 4, "", "", "something else"); err == nil {
 		t.Error("a name matching neither record was used to choose between them")
+	}
+}
+
+// A tab restarted weeks after it was created can find its agent gone.
+//
+// The agent was verified when the session was made, and that was taken as
+// settled — but PATH changes. Switching node versions is enough: globally
+// installed agents live under the version they were installed with, so codex
+// disappears while node and npm stay. The tab then started, died instantly,
+// and the multiplexer answered "can't find window N" from then on, which says
+// nothing about why.
+func TestARestartSaysWhenTheAgentIsGoneFromPath(t *testing.T) {
+	inst := &Instance{ID: "probe"}
+
+	// A name nothing could plausibly install.
+	err := inst.ensureAgentOnServer("", "asmgr-no-such-agent-xyz")
+	if err == nil {
+		t.Fatal("a missing agent was not noticed before the tab was started")
+	}
+	if !strings.Contains(err.Error(), "asmgr-no-such-agent-xyz") {
+		t.Errorf("the message does not name the command: %v", err)
+	}
+
+	// Something every system has, to show the check is not simply refusing.
+	if err := inst.ensureAgentOnServer("", "sh"); err != nil {
+		t.Errorf("a command that is on PATH was refused: %v", err)
+	}
+
+	// Nothing to look up is not a failure: a terminal tab runs the login
+	// shell, and a custom command may be a shell construct rather than a
+	// program.
+	if err := inst.ensureAgentOnServer("", ""); err != nil {
+		t.Errorf("an empty command was treated as missing: %v", err)
 	}
 }

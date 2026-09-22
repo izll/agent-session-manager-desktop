@@ -1336,6 +1336,7 @@
   "servers.sessionDetails": "Mostrar o id do multiplexador",
   "error.agentFoundOffPath": "“{0}” está instalado no servidor em {1}, que não está no seu PATH — adicione {1} à configuração de PATH extra do servidor",
   "error.agentNotOnServerPath": "“{0}” não está no PATH do servidor — se estiver instalado onde o servidor não procura, adicione esse diretório à configuração de PATH extra",
+  "error.agentNotOnPath": "“{0}” não está no PATH — pode ter sido instalado em outra versão da ferramenta, ou removido desde que esta aba foi criada",
   "tabBar.extraArgsFailed": "Não foi possível salvar os argumentos: {error}",
   "tabBar.deleteTabFailed": "Não foi possível excluir a aba: {error}",
   "tabBar.restartTabFailed": "Não foi possível reiniciar a aba: {error}",

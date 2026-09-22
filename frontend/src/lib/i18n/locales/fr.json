@@ -1336,6 +1336,7 @@
   "servers.sessionDetails": "Afficher l'identifiant du multiplexeur",
   "error.agentFoundOffPath": "« {0} » est installé sur le serveur dans {1}, qui n'est pas sur son PATH — ajoutez {1} au paramètre PATH supplémentaire du serveur",
   "error.agentNotOnServerPath": "« {0} » n'est pas sur le PATH du serveur — s'il est installé à un endroit que le serveur ne consulte pas, ajoutez ce répertoire au paramètre PATH supplémentaire",
+  "error.agentNotOnPath": "« {0} » n'est pas dans le PATH — il a pu être installé sous une autre version de l'outil, ou supprimé depuis la création de cet onglet",
   "tabBar.extraArgsFailed": "Impossible d'enregistrer les arguments : {error}",
   "tabBar.deleteTabFailed": "Impossible de supprimer l'onglet : {error}",
   "tabBar.restartTabFailed": "Impossible de redémarrer l'onglet : {error}",

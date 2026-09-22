@@ -1336,6 +1336,7 @@
   "servers.sessionDetails": "Multiplexer-ID anzeigen",
   "error.agentFoundOffPath": "„{0}“ ist auf dem Server in {1} installiert, was nicht auf dessen PATH liegt — füge {1} zur zusätzlichen PATH-Einstellung des Servers hinzu",
   "error.agentNotOnServerPath": "„{0}“ liegt nicht auf dem PATH des Servers — wenn es an einem Ort installiert ist, den der Server nicht durchsucht, füge dieses Verzeichnis zur zusätzlichen PATH-Einstellung hinzu",
+  "error.agentNotOnPath": "„{0}“ ist nicht im PATH — es wurde vielleicht unter einer anderen Werkzeugversion installiert oder seit Erstellung dieses Tabs entfernt",
   "tabBar.extraArgsFailed": "Die Argumente konnten nicht gespeichert werden: {error}",
   "tabBar.deleteTabFailed": "Der Tab konnte nicht gelöscht werden: {error}",
   "tabBar.restartTabFailed": "Der Tab konnte nicht neu gestartet werden: {error}",

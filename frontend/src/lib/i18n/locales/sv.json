@@ -1336,6 +1336,7 @@
   "servers.sessionDetails": "Visa multiplexerns id",
   "error.agentFoundOffPath": "”{0}” är installerat på servern i {1}, som inte finns i dess PATH — lägg till {1} i serverns extra PATH-inställning",
   "error.agentNotOnServerPath": "”{0}” finns inte i serverns PATH — om det är installerat där servern inte söker, lägg till den katalogen i den extra PATH-inställningen",
+  "error.agentNotOnPath": "”{0}” finns inte i PATH — den kan ha installerats under en annan verktygsversion, eller tagits bort sedan fliken skapades",
   "tabBar.extraArgsFailed": "Argumenten kunde inte sparas: {error}",
   "tabBar.deleteTabFailed": "Fliken kunde inte tas bort: {error}",
   "tabBar.restartTabFailed": "Fliken kunde inte startas om: {error}",

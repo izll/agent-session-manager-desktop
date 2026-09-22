@@ -404,8 +404,22 @@ func (fw FollowedWindow) RunsOn(sessionServerID string) string {
 //
 // Only for a command we know the name of: a custom command may be a shell
 // construct rather than a program, and a terminal tab runs the login shell.
+//
+// This computer is checked too. It used to return here for a local tab, on the
+// reasoning that the agent was verified when the session was created — but a
+// tab can be restarted weeks later, and what is on PATH changes. Switching
+// node versions is enough: the globally installed agents live under the
+// version they were installed with, so codex disappears while node and npm
+// stay. The tab then started, died instantly, and the multiplexer reported
+// "can't find window 2" from then on, which says nothing about the cause.
 func (i *Instance) ensureAgentOnServer(serverID, command string) error {
-	if serverID == "" || command == "" {
+	if command == "" {
+		return nil
+	}
+	if serverID == "" {
+		if _, err := exec.LookPath(command); err != nil {
+			return fmt.Errorf("error.agentNotOnPath|%s", command)
+		}
 		return nil
 	}
 

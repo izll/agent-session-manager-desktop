@@ -1336,6 +1336,7 @@
   "servers.sessionDetails": "Pokaż identyfikator multipleksera",
   "error.agentFoundOffPath": "„{0}” jest zainstalowany na serwerze w {1}, którego nie ma w jego PATH — dodaj {1} do dodatkowego ustawienia PATH serwera",
   "error.agentNotOnServerPath": "„{0}” nie znajduje się w PATH serwera — jeśli jest zainstalowany tam, gdzie serwer nie szuka, dodaj ten katalog do dodatkowego ustawienia PATH",
+  "error.agentNotOnPath": "„{0}” nie znajduje się w PATH — mógł zostać zainstalowany w innej wersji narzędzia albo usunięty od czasu utworzenia tej karty",
   "tabBar.extraArgsFailed": "Nie udało się zapisać argumentów: {error}",
   "tabBar.deleteTabFailed": "Nie udało się usunąć karty: {error}",
   "tabBar.restartTabFailed": "Nie udało się ponownie uruchomić karty: {error}",

@@ -1336,6 +1336,7 @@
   "servers.sessionDetails": "Mostrar el id del multiplexor",
   "error.agentFoundOffPath": "«{0}» está instalado en el servidor en {1}, que no está en su PATH — añade {1} al ajuste de PATH adicional del servidor",
   "error.agentNotOnServerPath": "«{0}» no está en el PATH del servidor — si está instalado donde el servidor no busca, añade ese directorio al ajuste de PATH adicional",
+  "error.agentNotOnPath": "«{0}» no está en el PATH: puede haberse instalado con otra versión de la herramienta, o haberse eliminado desde que se creó esta pestaña",
   "tabBar.extraArgsFailed": "No se pudieron guardar los argumentos: {error}",
   "tabBar.deleteTabFailed": "No se pudo eliminar la pestaña: {error}",
   "tabBar.restartTabFailed": "No se pudo reiniciar la pestaña: {error}",

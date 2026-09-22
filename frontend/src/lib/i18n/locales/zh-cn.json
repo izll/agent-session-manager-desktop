@@ -1336,6 +1336,7 @@
   "servers.sessionDetails": "显示复用器 ID",
   "error.agentFoundOffPath": "“{0}”已安装在服务器的 {1} 中，但该路径不在其 PATH 内 — 请将 {1} 添加到服务器的额外 PATH 设置",
   "error.agentNotOnServerPath": "“{0}”不在服务器的 PATH 中 — 如果它安装在服务器不搜索的位置，请将该目录添加到额外 PATH 设置",
+  "error.agentNotOnPath": "“{0}”不在 PATH 中——可能安装在另一个工具版本下，或在创建此标签页后被删除",
   "tabBar.extraArgsFailed": "无法保存参数：{error}",
   "tabBar.deleteTabFailed": "无法删除标签页：{error}",
   "tabBar.restartTabFailed": "无法重启标签页：{error}",
