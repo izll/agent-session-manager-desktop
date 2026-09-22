@@ -1,7 +1,6 @@
 package session
 
 import (
-	"os"
 	"strings"
 	"testing"
 )
@@ -22,18 +21,15 @@ import (
 // "Esc" from the attention inbox, so it is the requested action rather than an
 // assumption.
 func TestSendingATaskPressesNoEscape(t *testing.T) {
-	source, err := os.ReadFile("instance.go")
-	if err != nil {
-		t.Fatalf("reading instance.go: %v", err)
-	}
+	source := readSource(t, "instance.go")
 
-	start := strings.Index(string(source), "func (i *Instance) SendTaskToAgent")
+	start := strings.Index(source, "func (i *Instance) SendTaskToAgent")
 	if start < 0 {
 		// Named differently? Fall back to scanning the whole file rather than
 		// silently passing.
 		start = 0
 	}
-	body := string(source)[start:]
+	body := source[start:]
 	if end := strings.Index(body, "\n}\n"); end > 0 && start > 0 {
 		body = body[:end]
 	}

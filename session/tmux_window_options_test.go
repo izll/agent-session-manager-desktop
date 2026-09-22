@@ -57,5 +57,8 @@ func readSource(t *testing.T, name string) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return string(data)
+	// Normalised: git checks the repository out with CRLF on Windows, where a
+	// pattern written with "\n" — "\n}\n" for the end of a function, above all
+	// — matches nothing, and a guard that finds nothing stops guarding.
+	return strings.ReplaceAll(string(data), "\r\n", "\n")
 }

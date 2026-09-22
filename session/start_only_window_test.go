@@ -1,7 +1,6 @@
 package session
 
 import (
-	"os"
 	"strings"
 	"testing"
 )
@@ -58,18 +57,8 @@ func TestIsMainWindowIndexWorksOnAStoppedSession(t *testing.T) {
 // tabs it marks stopped. Reimplementing the rule in the test would check
 // nothing, so the source of the rule is read instead.
 func TestRestoreFollowedWindowsParksEveryTabButTheChosenOne(t *testing.T) {
-	src, err := os.ReadFile("instance.go")
-	if err != nil {
-		t.Fatalf("cannot read instance.go: %v", err)
-	}
-	at := strings.Index(string(src), "func (i *Instance) restoreFollowedWindows(")
-	if at < 0 {
-		t.Fatal("restoreFollowedWindows is gone")
-	}
-	body := string(src)[at:]
-	if end := strings.Index(body, "\n}\n"); end > 0 {
-		body = body[:end]
-	}
+	body := functionBody(t, readSource(t, "instance.go"),
+		"func (i *Instance) restoreFollowedWindows(")
 
 	if !strings.Contains(body, "onlyWindowIdx != allWindows && originalIdx != onlyWindowIdx") {
 		t.Error("the tabs the user did not pick are no longer parked, so " +
@@ -94,18 +83,8 @@ func TestAllWindowsIsNotARealIndex(t *testing.T) {
 // main window it would otherwise select is the one about to be parked, which
 // reads as "it started everything except the one I asked for".
 func TestRestoreFollowedWindowsSelectsTheChosenTab(t *testing.T) {
-	src, err := os.ReadFile("instance.go")
-	if err != nil {
-		t.Fatalf("cannot read instance.go: %v", err)
-	}
-	at := strings.Index(string(src), "func (i *Instance) restoreFollowedWindows(")
-	if at < 0 {
-		t.Fatal("restoreFollowedWindows is gone")
-	}
-	body := string(src)[at:]
-	if end := strings.Index(body, "\n}\n"); end > 0 {
-		body = body[:end]
-	}
+	body := functionBody(t, readSource(t, "instance.go"),
+		"func (i *Instance) restoreFollowedWindows(")
 
 	if !strings.Contains(body, "originalIdx == onlyWindowIdx") {
 		t.Error("nothing records where the chosen tab landed, so the view cannot follow it")
@@ -127,15 +106,8 @@ func TestRestoreFollowedWindowsSelectsTheChosenTab(t *testing.T) {
 // An ordinary start still ends on the session's own agent: that is the window
 // the user is there to look at.
 func TestOrdinaryStartStillSelectsTheMainWindow(t *testing.T) {
-	src, err := os.ReadFile("instance.go")
-	if err != nil {
-		t.Fatalf("cannot read instance.go: %v", err)
-	}
-	at := strings.Index(string(src), "func (i *Instance) restoreFollowedWindows(")
-	body := string(src)[at:]
-	if end := strings.Index(body, "\n}\n"); end > 0 {
-		body = body[:end]
-	}
+	body := functionBody(t, readSource(t, "instance.go"),
+		"func (i *Instance) restoreFollowedWindows(")
 
 	if !strings.Contains(body, "if mainWindowIdx, ok := i.getMainWindowIndex(); ok {") {
 		t.Error("the main-window selection is gone, so a normal start lands on the last tab created")

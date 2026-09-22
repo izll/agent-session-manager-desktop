@@ -129,18 +129,8 @@ func TestKnownEditorsAreOrdered(t *testing.T) {
 // per-file jumps it must NOT reuse the window: the file buttons are a
 // convenience, this one would be a loss.
 func TestFolderOpenDoesNotReuseTheWindow(t *testing.T) {
-	source, err := os.ReadFile("external_editor.go")
-	if err != nil {
-		t.Fatal(err)
-	}
-	at := strings.Index(string(source), "func (a *App) OpenFolderInEditor")
-	if at < 0 {
-		t.Fatal("OpenFolderInEditor is gone")
-	}
-	body := string(source)[at:]
-	if end := strings.Index(body, "\n}\n"); end > 0 {
-		body = body[:end]
-	}
+	body := functionBody(t, readSourceFile(t, "external_editor.go"),
+		"func (a *App) OpenFolderInEditor")
 	// The call, not the whole body: the comment above it explains why the flag
 	// is absent, and matching that made the test fail on its own rationale.
 	call := body[strings.Index(body, "return startEditor("):]

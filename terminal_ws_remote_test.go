@@ -192,21 +192,8 @@ func min(a, b int) int {
 // `has-session -t <session>:8` refuses it — so asking the narrower question is
 // what turns this into the ordinary "not running" path.
 func TestTheLocalProbeAsksAboutTheWindowToo(t *testing.T) {
-	source, err := os.ReadFile("terminal_ws_remote.go")
-	if err != nil {
-		t.Fatal(err)
-	}
-	probe := string(source)
-	at := strings.Index(probe, "func (ts *TerminalServer) sessionAliveProbe")
-	if at < 0 {
-		t.Fatal("sessionAliveProbe is gone; this test needs rewriting")
-	}
-	body := probe[at:]
-	end := strings.Index(body, "\n}\n")
-	if end < 0 {
-		t.Fatal("could not find the end of sessionAliveProbe")
-	}
-	body = body[:end]
+	body := functionBody(t, readSourceFile(t, "terminal_ws_remote.go"),
+		"func (ts *TerminalServer) sessionAliveProbe")
 
 	local := body[:strings.Index(body, "inst.ExecutorOn(serverID)")]
 	if !strings.Contains(local, "%s:%d") {

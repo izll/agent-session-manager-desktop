@@ -63,20 +63,8 @@ func TestNoRefreshClientWithSessionName(t *testing.T) {
 // The helper must resolve clients before refreshing them; refreshing by
 // session name is exactly the bug it exists to prevent.
 func TestRefreshSessionClientsResolvesClientsFirst(t *testing.T) {
-	b, err := os.ReadFile("tmux.go")
-	if err != nil {
-		t.Fatalf("reading tmux.go: %v", err)
-	}
-	src := string(b)
-
-	start := strings.Index(src, "func RefreshSessionClientsContext(")
-	if start < 0 {
-		t.Fatal("RefreshSessionClientsContext not found")
-	}
-	body := src[start:]
-	if end := strings.Index(body, "\n}\n"); end > 0 {
-		body = body[:end]
-	}
+	body := functionBody(t, readSource(t, "tmux.go"),
+		"func RefreshSessionClientsContext(")
 
 	if !strings.Contains(body, `"list-clients"`) {
 		t.Error("RefreshSessionClients does not look up clients — refreshing by " +

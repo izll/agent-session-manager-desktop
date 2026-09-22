@@ -2,7 +2,6 @@ package main
 
 import (
 	"net/url"
-	"os"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -173,13 +172,4 @@ func codeWithoutComments(source string) string {
 		out.WriteByte('\n')
 	}
 	return out.String()
-}
-
-func readSourceFile(t *testing.T, name string) string {
-	t.Helper()
-	data, err := os.ReadFile(name)
-	if err != nil {
-		t.Fatalf("reading %s: %v", name, err)
-	}
-	return string(data)
 }
