@@ -35,6 +35,9 @@ export interface TabStatusInfo {
   // unreachable server is not idle — its work is running out of sight — so
   // the pane says so rather than showing an idle placeholder.
   unreachable?: boolean;
+  // Set when this tab's server answered but holds no window for it: the tab
+  // is waiting to be started there, not failing.
+  missing?: boolean;
 }
 
 // Map of session ID to array of tab statuses (only for multi-tab sessions)

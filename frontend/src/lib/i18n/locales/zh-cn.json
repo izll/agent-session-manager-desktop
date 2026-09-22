@@ -782,6 +782,7 @@
   "terminal.notFound": "404：未找到终端活动",
   "terminal.tabParked": "此标签页已挂起，正在等待启动…",
   "terminal.serverUnreachable": "此标签页运行在一台未响应的服务器上。工作仍在那里继续。",
+  "terminal.attachFailed": "无法打开此标签页。",
   "error.sessionNotFound": "未找到会话",
   "error.groupNotFound": "未找到分组",
   "error.windowNotFound": "未找到窗口",

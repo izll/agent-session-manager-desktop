@@ -1309,6 +1309,7 @@
   "newTab.ownWorktreeHint": "A separate checkout on its own branch, so two agents in this session stop editing the same files.",
   "newTab.workDirRequiredOnServer": "A tab on a server needs a working directory on that server",
   "terminal.serverUnreachable": "This tab runs on a server that is not answering. Its work continues there.",
+  "terminal.attachFailed": "This tab could not be opened.",
   "settings.showRemoteBadge": "Remote tab marker",
   "settings.showRemoteBadgeDesc": "Shows a cloud on tabs that run on a server, and names the machine in the status bar.",
   "servers.newFolder": "New folder",

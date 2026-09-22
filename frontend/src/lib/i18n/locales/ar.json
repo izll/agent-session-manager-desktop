@@ -782,6 +782,7 @@
   "terminal.notFound": "404: لم يتم العثور على نشاط الطرفية",
   "terminal.tabParked": "علامة التبويب هذه متوقفة، في انتظار البدء…",
   "terminal.serverUnreachable": "تعمل علامة التبويب هذه على خادم لا يستجيب. العمل مستمر هناك.",
+  "terminal.attachFailed": "تعذّر فتح علامة التبويب هذه.",
   "error.sessionNotFound": "الجلسة غير موجودة",
   "error.groupNotFound": "المجموعة غير موجودة",
   "error.windowNotFound": "النافذة غير موجودة",

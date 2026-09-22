@@ -3058,9 +3058,30 @@ type TabStatusInfo struct {
 	// that is running out of sight. The pane says so instead of picking one of
 	// the idle placeholders.
 	Unreachable bool `json:"unreachable,omitempty"`
+	// Missing says this tab's server answered but holds no window for it.
+	//
+	// Not an error: the server's multiplexer keeps running on its own, and
+	// after this computer restarts a session the tab is simply waiting to be
+	// started, which recreates its window there. Without this the pane could
+	// only say that attaching failed.
+	Missing bool `json:"missing,omitempty"`
 	// HideStatusLine: per-tab user preference — the session list omits this
 	// tab's status line row when set.
 	HideStatusLine bool `json:"hideStatusLine"`
+}
+
+// tabWindowMissing reports a tab on a server whose server answered but has no
+// live window for it.
+//
+// Read from the activity check the poll has already made, which fails for
+// exactly that — so no extra round trip per tab per poll. That check also
+// fails on a passing capture error, which the pane only consults once an
+// attach has failed, so a stray reading there costs nothing.
+func tabWindowMissing(inst *session.Instance, windowIdx int, activityValid bool) bool {
+	if activityValid || inst.ServerForWindow(windowIdx) == "" {
+		return false
+	}
+	return inst.WindowReachable(windowIdx)
 }
 
 // SidebarUpdate contains combined activity and status line data
@@ -3370,6 +3391,7 @@ func (a *App) getSidebarUpdates(ctx context.Context) SidebarUpdate {
 					SpinnerText:    info.SpinnerText,
 					Yolo:           inst.DetectYoloForWindowContext(ctx, w.idx),
 					Unreachable:    !inst.WindowReachable(w.idx),
+					Missing:        tabWindowMissing(inst, w.idx, activityValid),
 					HideStatusLine: w.hideLine,
 				})
 

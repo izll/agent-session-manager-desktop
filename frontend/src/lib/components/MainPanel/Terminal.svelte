@@ -276,6 +276,9 @@
               currentTargetSessionId() !== sessionId ||
               currentTargetWindowIdx() !== targetWindowIdx) return;
           isAttached = true;
+          // Every successful attach clears the last failure, or the reason a
+          // previous one failed would stay on screen behind a working pane.
+          error = '';
           if (active && focusOwner && focusAllowed) {
             requestAnimationFrame(() => requestAnimationFrame(focusActive));
           }
@@ -391,6 +394,7 @@
                 currentTargetSessionId() !== currentId ||
                 currentTargetWindowIdx() !== initialWindowIdx) return;
             isAttached = true;
+            error = '';
           } catch (e) {
             if (!mounted || operationRevision !== poolChangeGeneration ||
                 get(activeProjectId) !== initialProjectId ||
@@ -456,6 +460,7 @@
               sessionId !== currentTargetSessionId() ||
               restartWindowIdx !== currentTargetWindowIdx()) return;
           isAttached = true;
+          error = '';
         } catch (e) {
           if (!mounted || operationRevision !== poolChangeGeneration ||
               get(activeProjectId) !== restartProjectId ||
@@ -566,6 +571,8 @@
             get(activeProjectId) !== projectId ||
             currentTargetSessionId() !== newSessionId || currentTargetWindowIdx() !== newWindowIdx) return;
         isAttached = true;
+        error = '';
+        error = '';
         // Ensure the freshly-shown terminal grabs focus on session/tab switch.
         // pool.show() focuses internally, but a couple of rAFs later we focus
         // again in case layout/visibility wasn't settled the first time — this
@@ -618,6 +625,15 @@
     ? $tabStatuses[targetSessionId]?.find((t: any) => t.windowIdx === targetWindowIdx)?.unreachable
     : false);
 
+  // A tab whose server answered but has no window for it is waiting to be
+  // started, not broken: the server's multiplexer runs on its own, and after
+  // this computer restarts the session the tab comes back without a window
+  // there until it is started. The attach does fail — there is nothing to
+  // attach to — but saying so reads as an error for what is a parked tab.
+  $: remoteMissing = !!(targetSessionId
+    ? $tabStatuses[targetSessionId]?.find((t: any) => t.windowIdx === targetWindowIdx)?.missing
+    : false);
+
   // Show placeholder when no running session is active, and over a parked tab:
   // what tmux leaves in that pane is the bare words "Pane is dead", which
   // reads as a crash rather than as a tab waiting to be started.
@@ -639,14 +655,24 @@
   // One place decides both, so the two can never disagree about which state
   // the pane is in.
   const unreachableIcon = '🔌';
-  $: placeholderIcon = remoteUnreachable
-    ? unreachableIcon
-    : parkedTab
-      ? parkedIcon
-      : placeholderIcons[placeholderIdx];
+  // An attach that failed outranks every other placeholder.
+  //
+  // The error was recorded and never shown: the pane fell back to one of the
+  // idle jokes, so a tab that could not attach at all was indistinguishable
+  // from one that simply had nothing running. Clicking it looked like nothing
+  // happening, and the only record of why was the log.
+  const failedIcon = '⚠️';
+  $: attachFailed = !isAttached && !parkedTab && !remoteMissing && error !== '';
+  $: placeholderIcon = attachFailed
+    ? failedIcon
+    : remoteUnreachable
+      ? unreachableIcon
+      : parkedTab || remoteMissing
+        ? parkedIcon
+        : placeholderIcons[placeholderIdx];
   $: placeholderKey = remoteUnreachable
     ? 'terminal.serverUnreachable'
-    : parkedTab
+    : parkedTab || remoteMissing
       ? 'terminal.tabParked'
       : placeholderKeys[placeholderIdx];
 
@@ -777,6 +803,7 @@
           get(activeProjectId) !== projectId ||
           currentTargetSessionId() !== session.id || currentTargetWindowIdx() !== windowIdx) return;
       isAttached = true;
+      error = '';
     } catch (e) {
       if (!mounted || operationRevision !== poolChangeGeneration ||
           get(activeProjectId) !== projectId ||
@@ -830,9 +857,14 @@
     </div>
   {/if}
   {#if showPlaceholder}
-    <div class="terminal-placeholder" class:parked={parkedTab}>
-      <span class="placeholder-icon" class:parked={parkedTab}>{placeholderIcon}</span>
-      <p class="placeholder-msg">{$t(placeholderKey)}</p>
+    <div class="terminal-placeholder" class:parked={parkedTab || remoteMissing}>
+      <span class="placeholder-icon" class:parked={parkedTab || remoteMissing}>{placeholderIcon}</span>
+      {#if attachFailed}
+        <p class="placeholder-msg">{$t('terminal.attachFailed')}</p>
+        <p class="placeholder-detail">{error}</p>
+      {:else}
+        <p class="placeholder-msg">{$t(placeholderKey)}</p>
+      {/if}
     </div>
   {/if}
 </div>
@@ -971,6 +1003,20 @@
     color: rgba(228, 228, 231, 0.3);
     margin: 0;
     letter-spacing: 0.03em;
+  }
+
+  /* The reason an attach failed. Dimmer than the heading but readable, and
+     wrapped: a backend error can be a sentence, and one cut off at the pane's
+     edge is no more useful than the joke it replaced. */
+  .placeholder-detail {
+    max-width: 44ch;
+    margin: 8px 0 0;
+    font-family: 'JetBrains Mono', 'Menlo', 'Monaco', 'Consolas', monospace;
+    font-size: 11px;
+    line-height: 1.5;
+    color: rgba(252, 165, 165, 0.75);
+    text-align: center;
+    overflow-wrap: anywhere;
   }
 
   .terminal-pool-container :global(.terminal-pool-entry) {

@@ -782,6 +782,7 @@
   "terminal.notFound": "404: Nie znaleziono aktywności terminala",
   "terminal.tabParked": "Ta karta jest odstawiona i czeka na start...",
   "terminal.serverUnreachable": "Ta karta działa na serwerze, który nie odpowiada. Praca trwa tam dalej.",
+  "terminal.attachFailed": "Nie udało się otworzyć tej karty.",
   "error.sessionNotFound": "Nie znaleziono sesji",
   "error.groupNotFound": "Nie znaleziono grupy",
   "error.windowNotFound": "Nie znaleziono okna",

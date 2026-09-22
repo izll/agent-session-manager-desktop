@@ -782,6 +782,7 @@
   "terminal.notFound": "404: Atividade do terminal não encontrada",
   "terminal.tabParked": "Esta aba está parada, aguardando um início...",
   "terminal.serverUnreachable": "Esta aba roda em um servidor que não está respondendo. O trabalho continua lá.",
+  "terminal.attachFailed": "Não foi possível abrir esta aba.",
   "error.sessionNotFound": "Sessão não encontrada",
   "error.groupNotFound": "Grupo não encontrado",
   "error.windowNotFound": "Janela não encontrada",

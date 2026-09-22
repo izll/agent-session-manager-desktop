@@ -782,6 +782,7 @@
   "terminal.notFound": "404: Terminal activiteit niet gevonden",
   "terminal.tabParked": "Dit tabblad staat geparkeerd en wacht op een start...",
   "terminal.serverUnreachable": "Dit tabblad draait op een server die niet reageert. Het werk gaat daar door.",
+  "terminal.attachFailed": "Dit tabblad kon niet worden geopend.",
   "error.sessionNotFound": "Sessie niet gevonden",
   "error.groupNotFound": "Groep niet gevonden",
   "error.windowNotFound": "Venster niet gevonden",

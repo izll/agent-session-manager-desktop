@@ -773,6 +773,7 @@
   "terminal.notFound": "404: Terminál aktivitás nem található",
   "terminal.tabParked": "Ez a fül parkol, indításra vár...",
   "terminal.serverUnreachable": "Ez a fül olyan szerveren fut, ami nem válaszol. A munka ott tovább megy.",
+  "terminal.attachFailed": "Ezt a fület nem sikerült megnyitni.",
   "error.sessionNotFound": "Munkamenet nem található",
   "error.groupNotFound": "Csoport nem található",
   "error.windowNotFound": "Ablak nem található",

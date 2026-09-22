@@ -782,6 +782,7 @@
   "terminal.notFound": "404 : Activité du terminal introuvable",
   "terminal.tabParked": "Cet onglet est en attente d'un démarrage…",
   "terminal.serverUnreachable": "Cet onglet s'exécute sur un serveur qui ne répond pas. Le travail s'y poursuit.",
+  "terminal.attachFailed": "Cet onglet n'a pas pu être ouvert.",
   "error.sessionNotFound": "Session introuvable",
   "error.groupNotFound": "Groupe introuvable",
   "error.windowNotFound": "Fenêtre introuvable",

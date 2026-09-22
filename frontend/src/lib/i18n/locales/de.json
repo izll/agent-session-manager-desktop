@@ -782,6 +782,7 @@
   "terminal.notFound": "404: Terminal-Aktivität nicht gefunden",
   "terminal.tabParked": "Dieser Tab ist geparkt und wartet auf einen Start …",
   "terminal.serverUnreachable": "Dieser Tab läuft auf einem Server, der nicht antwortet. Die Arbeit läuft dort weiter.",
+  "terminal.attachFailed": "Dieser Tab konnte nicht geöffnet werden.",
   "error.sessionNotFound": "Sitzung nicht gefunden",
   "error.groupNotFound": "Gruppe nicht gefunden",
   "error.windowNotFound": "Fenster nicht gefunden",

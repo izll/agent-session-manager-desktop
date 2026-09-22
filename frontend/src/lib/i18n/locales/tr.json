@@ -782,6 +782,7 @@
   "terminal.notFound": "404: Terminal etkinliği bulunamadı",
   "terminal.tabParked": "Bu sekme beklemeye alındı, başlatılmayı bekliyor...",
   "terminal.serverUnreachable": "Bu sekme yanıt vermeyen bir sunucuda çalışıyor. İş orada devam ediyor.",
+  "terminal.attachFailed": "Bu sekme açılamadı.",
   "error.sessionNotFound": "Oturum bulunamadı",
   "error.groupNotFound": "Grup bulunamadı",
   "error.windowNotFound": "Pencere bulunamadı",

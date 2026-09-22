@@ -782,6 +782,7 @@
   "terminal.notFound": "404: 터미널 활동을 찾을 수 없음",
   "terminal.tabParked": "이 탭은 대기 중이며, 시작을 기다리고 있습니다…",
   "terminal.serverUnreachable": "이 탭은 응답하지 않는 서버에서 실행 중입니다. 작업은 그곳에서 계속됩니다.",
+  "terminal.attachFailed": "이 탭을 열 수 없었습니다.",
   "error.sessionNotFound": "세션을 찾을 수 없습니다",
   "error.groupNotFound": "그룹을 찾을 수 없습니다",
   "error.windowNotFound": "창을 찾을 수 없습니다",

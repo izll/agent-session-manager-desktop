@@ -1809,6 +1809,7 @@ export namespace main {
 	    spinnerText: string;
 	    yolo: boolean;
 	    unreachable?: boolean;
+	    missing?: boolean;
 	    hideStatusLine: boolean;
 
 	    static createFrom(source: any = {}) {
@@ -1825,6 +1826,7 @@ export namespace main {
 	        this.spinnerText = source["spinnerText"];
 	        this.yolo = source["yolo"];
 	        this.unreachable = source["unreachable"];
+	        this.missing = source["missing"];
 	        this.hideStatusLine = source["hideStatusLine"];
 	    }
 	}

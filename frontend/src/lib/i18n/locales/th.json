@@ -782,6 +782,7 @@
   "terminal.notFound": "404: ไม่พบกิจกรรมเทอร์มินัล",
   "terminal.tabParked": "แท็บนี้ถูกพักไว้ กำลังรอการเริ่มต้น…",
   "terminal.serverUnreachable": "แท็บนี้ทำงานบนเซิร์ฟเวอร์ที่ไม่ตอบสนอง งานยังดำเนินต่อที่นั่น",
+  "terminal.attachFailed": "ไม่สามารถเปิดแท็บนี้ได้",
   "error.sessionNotFound": "ไม่พบเซสชัน",
   "error.groupNotFound": "ไม่พบกลุ่ม",
   "error.windowNotFound": "ไม่พบหน้าต่าง",

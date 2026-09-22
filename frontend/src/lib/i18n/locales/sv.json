@@ -782,6 +782,7 @@
   "terminal.notFound": "404: Terminalaktivitet hittades inte",
   "terminal.tabParked": "Den här fliken är parkerad och väntar på start...",
   "terminal.serverUnreachable": "Den här fliken körs på en server som inte svarar. Arbetet fortsätter där.",
+  "terminal.attachFailed": "Den här fliken kunde inte öppnas.",
   "error.sessionNotFound": "Sessionen hittades inte",
   "error.groupNotFound": "Gruppen hittades inte",
   "error.windowNotFound": "Fönstret hittades inte",

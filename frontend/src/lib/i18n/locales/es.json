@@ -782,6 +782,7 @@
   "terminal.notFound": "404: Actividad del terminal no encontrada",
   "terminal.tabParked": "Esta pestaña está aparcada, esperando un inicio...",
   "terminal.serverUnreachable": "Esta pestaña se ejecuta en un servidor que no responde. Su trabajo continúa allí.",
+  "terminal.attachFailed": "No se ha podido abrir esta pestaña.",
   "error.sessionNotFound": "Sesión no encontrada",
   "error.groupNotFound": "Grupo no encontrado",
   "error.windowNotFound": "Ventana no encontrada",

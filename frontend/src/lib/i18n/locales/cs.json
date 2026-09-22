@@ -782,6 +782,7 @@
   "terminal.notFound": "404: Aktivita terminálu nenalezena",
   "terminal.tabParked": "Tato karta je odstavená a čeká na spuštění...",
   "terminal.serverUnreachable": "Tato karta běží na serveru, který neodpovídá. Práce tam pokračuje.",
+  "terminal.attachFailed": "Tuto kartu se nepodařilo otevřít.",
   "error.sessionNotFound": "Relace nenalezena",
   "error.groupNotFound": "Skupina nenalezena",
   "error.windowNotFound": "Okno nenalezeno",

@@ -782,6 +782,7 @@
   "terminal.notFound": "404: Attività del terminale non trovata",
   "terminal.tabParked": "Questa scheda è in attesa di un avvio...",
   "terminal.serverUnreachable": "Questa scheda è su un server che non risponde. Il lavoro prosegue lì.",
+  "terminal.attachFailed": "Non è stato possibile aprire questa scheda.",
   "error.sessionNotFound": "Sessione non trovata",
   "error.groupNotFound": "Gruppo non trovato",
   "error.windowNotFound": "Finestra non trovata",

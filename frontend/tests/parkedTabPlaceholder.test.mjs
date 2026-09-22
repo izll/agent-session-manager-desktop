@@ -67,7 +67,9 @@ test('the parked state uses the same placeholder shape as a stopped session', ()
   assert.ok(!/\{#if parkedTab\}/.test(block),
     'the parked state has a branch of its own again, which is what let it ' +
     'drift away from the placeholder every other empty pane shows');
-  assert.match(block, /class="placeholder-icon" class:parked=\{parkedTab\}/,
+  // A tab waiting on its server to be started wears the same look, so the
+  // binding may name that state beside parkedTab.
+  assert.match(block, /class="placeholder-icon" class:parked=\{parkedTab( \|\| remoteMissing)?\}/,
     'the parked icon is not the placeholder icon');
   assert.match(block, /class="placeholder-msg"/, 'the message is not the placeholder message');
   assert.ok(!/parked-dots/.test(termSrc), 'the dots are still in the component');
