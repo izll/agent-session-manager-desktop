@@ -6,6 +6,32 @@ Entries describe what changed for someone using the app. Internal refactoring,
 test and CI work is left out unless it changed behaviour. Dates are release
 dates; the format follows [Keep a Changelog](https://keepachangelog.com).
 
+## 1.1.7 — 2026-09-22
+
+### Fixed
+
+- **A tab whose agent is no longer installed now says so.** It reported
+  "can't find window", which describes the symptom rather than the cause: the
+  window really was gone, because the agent died the instant it opened. The
+  message names the command and, where the installer is a single line, gives
+  it. An agent verified when the session was created can still disappear later
+  — switching tool versions is enough, since globally installed agents live
+  under the version they were installed with.
+- **That error no longer flickers in the pane.** Attaching asked only whether
+  the session existed, not whether the window did, and the reconnect then
+  retried for ever — bringing the error back every three-quarters of a second.
+  The tab stays in the bar, marked dead, and can be started again once its
+  agent is back.
+- **A tab could become unstartable after being stopped**, with "window N has
+  conflicting duplicate agent metadata". Two records had come to share one
+  window number, and neither could be shown to be the right one. The
+  multiplexer's own name for the window now settles it, and new tabs no longer
+  create the situation.
+- **Gemini refused to resume a conversation that was on disk.** Gemini changed
+  where it keeps them — by project name rather than by a hash of the path —
+  and reads only the current layout, so conversations from before the change
+  were offered but could not be opened.
+
 ## 1.1.6 — 2026-09-22
 
 ### Added
