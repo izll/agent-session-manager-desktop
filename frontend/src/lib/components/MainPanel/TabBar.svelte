@@ -1148,6 +1148,12 @@
   let draggingTabIndex: number | null = null;
   let dragOverTabIndex: number | null = null;
   let droppedTabWindowIdx: number | null = null;
+  // Which side of the hovered tab the drop would land on.
+  //
+  // The marker used to be a border on the left of the target whichever way the
+  // tab came from, so dragging rightwards pointed at the wrong gap: drop on
+  // the tab after B and the line appeared before it.
+  let dragOverAfter = false;
 
   function handleTabDragStart(e: DragEvent, arrayIdx: number) {
     draggingTabIndex = arrayIdx;
@@ -1160,6 +1166,7 @@
   function handleTabDragEnd() {
     draggingTabIndex = null;
     dragOverTabIndex = null;
+    dragOverAfter = false;
   }
 
   function handleTabDragOver(e: DragEvent, arrayIdx: number) {
@@ -1169,9 +1176,22 @@
       e.dataTransfer.dropEffect = 'move';
     }
     dragOverTabIndex = arrayIdx;
+    // Past the middle means after it. Without this the line always sat on the
+    // left, so it pointed at the wrong gap for half of every drag.
+    const box = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    dragOverAfter = e.clientX > box.left + box.width / 2;
   }
 
   function handleTabDragLeave(e: DragEvent, arrayIdx: number) {
+    // Only when the cursor has actually left the tab.
+    //
+    // dragleave fires for every child as well — the status dot, the name, the
+    // close button — so clearing on any of them made the marker flicker as the
+    // cursor crossed a tab, and left it cleared under the cursor at the moment
+    // of the drop. That is the "I let go and nothing happened".
+    const leaving = e.currentTarget as HTMLElement;
+    const entering = e.relatedTarget as Node | null;
+    if (entering && leaving.contains(entering)) return;
     if (dragOverTabIndex === arrayIdx) {
       dragOverTabIndex = null;
     }
@@ -1179,21 +1199,36 @@
 
   async function handleTabDrop(e: DragEvent, arrayIdx: number) {
     e.preventDefault();
-    if (draggingTabIndex === null || draggingTabIndex === arrayIdx) {
-      draggingTabIndex = null;
+    if (draggingTabIndex === null) {
       dragOverTabIndex = null;
+      dragOverAfter = false;
       return;
     }
     const sessionId = get(selectedSessionId);
-    if (!sessionId) return;
+    if (!sessionId) {
+      draggingTabIndex = null;
+      dragOverTabIndex = null;
+      dragOverAfter = false;
+      return;
+    }
 
     const fromPos = draggingTabIndex;
-    const toPos = arrayIdx;
+    // Where the marker was pointing, which is not always the tab under the
+    // cursor: past its middle the drop belongs after it.
+    let toPos = dragOverAfter ? arrayIdx + 1 : arrayIdx;
+    // Removing the dragged tab first shifts everything after it down one, so
+    // a target to its right has to come back by one to land where the line
+    // was drawn.
+    if (fromPos < toPos) toPos--;
+
     // Remember which window was dragged for flash animation
     const draggedWinIdx = windows[fromPos]?.Index;
 
     draggingTabIndex = null;
     dragOverTabIndex = null;
+    dragOverAfter = false;
+
+    if (fromPos === toPos) return;
 
     try {
       await reorderTab(sessionId, fromPos, toPos);
@@ -1870,7 +1905,8 @@
             class:dead={win.Dead}
             class:stopped={currentSessionStatus !== 'running'}
             class:tab-dragging={draggingTabIndex === winArrayIdx}
-            class:tab-drag-over={dragOverTabIndex === winArrayIdx && draggingTabIndex !== winArrayIdx}
+            class:tab-drop-before={dragOverTabIndex === winArrayIdx && !dragOverAfter}
+            class:tab-drop-after={dragOverTabIndex === winArrayIdx && dragOverAfter}
             class:tab-dropped={droppedTabWindowIdx === win.Index}
             style={tabStyle(win)}
             draggable={true}
@@ -2401,9 +2437,35 @@
     transform: scale(0.95);
   }
 
-  .tab.tab-drag-over {
-    border-left: 2px solid var(--accent-light);
-    background: rgba(var(--accent-rgb), 0.1);
+  /* A line in the gap the tab will land in, on the side the cursor is nearest.
+     It used to be a left border whichever way the tab came from, so half of
+     every drag pointed at the wrong gap. Drawn as an overlay rather than a
+     border so it does not move the tabs around while dragging over them. */
+  .tab.tab-drop-before,
+  .tab.tab-drop-after {
+    position: relative;
+  }
+
+  .tab.tab-drop-before::after,
+  .tab.tab-drop-after::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    bottom: 2px;
+    width: 3px;
+    background: var(--accent-light);
+    border-radius: 2px;
+    /* Enough to read at a glance against the tab beside it. */
+    box-shadow: 0 0 6px rgba(var(--accent-rgb), 0.8);
+    pointer-events: none;
+  }
+
+  .tab.tab-drop-before::after {
+    left: -2px;
+  }
+
+  .tab.tab-drop-after::after {
+    right: -2px;
   }
 
   .tab.tab-dropped {
