@@ -255,7 +255,13 @@ func TestTheRepositoryRootIsFoundFromASubdirectory(t *testing.T) {
 	if resolved, err := filepath.EvalSymlinks(repo); err == nil {
 		repo = resolved
 	}
-	if got != repo {
+
+	// Compared through filepath.Clean, because git answers with forward
+	// slashes on Windows — "D:/a/tmp/repo" where filepath builds
+	// "D:\a\tmp\repo". The two name the same directory and the Windows
+	// filepath functions accept either, which this test asserted away by
+	// comparing the strings: it failed there and only there.
+	if filepath.Clean(got) != filepath.Clean(repo) {
 		t.Errorf("repository root from a subdirectory = %q, want %q", got, repo)
 	}
 }
