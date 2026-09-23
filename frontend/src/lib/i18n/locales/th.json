@@ -631,6 +631,7 @@
   "color.bgColors": "สีพื้นหลัง",
   "color.customGradient": "ไล่สีแบบกำหนดเอง",
   "color.custom": "กำหนดเอง",
+  "color.customColor": "สีกำหนดเอง",
   "color.customGradientAdd": "สี",
   "color.customGradientRemove": "ลบสีนี้",
   "color.customGradientStop": "สี {n}",

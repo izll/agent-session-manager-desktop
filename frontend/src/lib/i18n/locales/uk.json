@@ -631,6 +631,7 @@
   "color.bgColors": "Кольори фону",
   "color.customGradient": "Власний градієнт",
   "color.custom": "Власний",
+  "color.customColor": "Власний колір",
   "color.customGradientAdd": "Колір",
   "color.customGradientRemove": "Видалити цей колір",
   "color.customGradientStop": "Колір {n}",

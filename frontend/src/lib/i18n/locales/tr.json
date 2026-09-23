@@ -631,6 +631,7 @@
   "color.bgColors": "Arka Plan Renkleri",
   "color.customGradient": "Özel gradyan",
   "color.custom": "Özel",
+  "color.customColor": "Özel renk",
   "color.customGradientAdd": "Renk",
   "color.customGradientRemove": "Bu rengi kaldır",
   "color.customGradientStop": "Renk {n}",

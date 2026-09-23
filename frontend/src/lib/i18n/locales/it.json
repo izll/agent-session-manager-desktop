@@ -631,6 +631,7 @@
   "color.bgColors": "Colori dello Sfondo",
   "color.customGradient": "Gradiente personalizzato",
   "color.custom": "Personalizzato",
+  "color.customColor": "Colore personalizzato",
   "color.customGradientAdd": "Colore",
   "color.customGradientRemove": "Rimuovi questo colore",
   "color.customGradientStop": "Colore {n}",

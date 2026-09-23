@@ -631,6 +631,7 @@
   "color.bgColors": "Hintergrundfarben",
   "color.customGradient": "Eigener Farbverlauf",
   "color.custom": "Eigene",
+  "color.customColor": "Eigene Farbe",
   "color.customGradientAdd": "Farbe",
   "color.customGradientRemove": "Diese Farbe entfernen",
   "color.customGradientStop": "Farbe {n}",

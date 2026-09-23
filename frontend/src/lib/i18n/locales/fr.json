@@ -631,6 +631,7 @@
   "color.bgColors": "Couleurs d'arrière-plan",
   "color.customGradient": "Dégradé personnalisé",
   "color.custom": "Personnalisé",
+  "color.customColor": "Couleur personnalisée",
   "color.customGradientAdd": "Couleur",
   "color.customGradientRemove": "Supprimer cette couleur",
   "color.customGradientStop": "Couleur {n}",

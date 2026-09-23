@@ -631,6 +631,7 @@
   "color.bgColors": "배경 색상",
   "color.customGradient": "사용자 지정 그라데이션",
   "color.custom": "사용자 지정",
+  "color.customColor": "사용자 지정 색상",
   "color.customGradientAdd": "색상",
   "color.customGradientRemove": "이 색상 제거",
   "color.customGradientStop": "색상 {n}",

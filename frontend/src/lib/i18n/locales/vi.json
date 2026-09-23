@@ -631,6 +631,7 @@
   "color.bgColors": "Màu nền",
   "color.customGradient": "Dải màu tùy chỉnh",
   "color.custom": "Tùy chỉnh",
+  "color.customColor": "Màu tùy chỉnh",
   "color.customGradientAdd": "Màu",
   "color.customGradientRemove": "Xóa màu này",
   "color.customGradientStop": "Màu {n}",

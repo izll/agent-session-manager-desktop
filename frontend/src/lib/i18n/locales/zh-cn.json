@@ -631,6 +631,7 @@
   "color.bgColors": "背景颜色",
   "color.customGradient": "自定义渐变",
   "color.custom": "自定义",
+  "color.customColor": "自定义颜色",
   "color.customGradientAdd": "颜色",
   "color.customGradientRemove": "移除此颜色",
   "color.customGradientStop": "颜色 {n}",

@@ -20,8 +20,10 @@
     isCustomGradient,
     gradientTextStyle,
     getNameStyle,
+    isHexColor,
   } from '../../utils/rowColors';
   import CustomGradientDialog from './CustomGradientDialog.svelte';
+  import CustomColorDialog from './CustomColorDialog.svelte';
 
   export let show = false;
   export let session: Session | null = null;
@@ -40,6 +42,10 @@
 
   // The custom gradient editor, opened from the last swatch of the grid.
   let showCustom = false;
+  // The custom background editor, the same swatch in background mode. A
+  // background is a flat colour — a chip or a row tint — so it gets a single
+  // colour where the text gets a gradient.
+  let showCustomBg = false;
   let overlayEl: HTMLDivElement;
   let targetProjectId = '';
   let targetId = '';
@@ -56,8 +62,9 @@
       selectedBgColor = target!.bgColor || '';
       fullRowColor = target!.fullRowColor || false;
       colorMode = 'text';
-      // Each opening starts with the editor shut. See the reset below.
+      // Each opening starts with the editors shut. See the reset below.
       showCustom = false;
+      showCustomBg = false;
       targetProjectId = $activeProjectId;
       targetId = target!.id;
       targetKind = kind;
@@ -71,6 +78,7 @@
       // and the editor popped up on its own the next time a colour dialog
       // opened, for whichever row that was.
       showCustom = false;
+      showCustomBg = false;
       targetCaptured = false;
       targetProjectId = '';
       targetId = '';
@@ -121,6 +129,14 @@
   function applyCustomGradient(e: CustomEvent<string>) {
     selectedColor = e.detail;
   }
+
+  function applyCustomBackground(e: CustomEvent<string>) {
+    selectedBgColor = e.detail;
+  }
+
+  // A background that is a colour of its own rather than one of the swatches.
+  $: customBgChosen = isHexColor(selectedBgColor) &&
+    !colorOptions.some(option => option.color.toUpperCase() === selectedBgColor.toUpperCase());
 
   // Back to this dialog's overlay, or its own keys (Escape, Tab, F) would do
   // nothing until it was clicked: the editor took focus and then went away.
@@ -292,10 +308,10 @@
                 <span class="color-name">{option.name}</span>
               </button>
             {/each}
-            <!-- Last in the grid, for the text colour only: a gradient
-                 background is never drawn (the chip and the row tint are flat
-                 colours), so offering one there would do nothing. Shows the
-                 custom gradient itself once one is chosen. -->
+            <!-- Last in the grid. For the text a custom gradient; for the
+                 background a custom colour, since a gradient background is
+                 never drawn (the chip and the row tint are flat colours).
+                 Each shows what was chosen once there is something. -->
             {#if colorMode === 'text'}
               <button
                 class="color-btn custom-btn"
@@ -306,6 +322,20 @@
               >
                 {#if isCustomGradient(selectedColor)}
                   <span class="color-swatch gradient-swatch" style={getGradientSwatchStyle(selectedColor)}></span>
+                {:else}
+                  <span class="color-swatch custom-swatch">+</span>
+                {/if}
+                <span class="color-name">{$t('color.custom')}</span>
+              </button>
+            {:else}
+              <button
+                class="color-btn custom-btn"
+                class:selected={customBgChosen}
+                on:click={() => (showCustomBg = true)}
+                title={$t('color.customColor')}
+              >
+                {#if customBgChosen}
+                  <span class="color-swatch" style="background: {selectedBgColor};"></span>
                 {:else}
                   <span class="color-swatch custom-swatch">+</span>
                 {/if}
@@ -328,6 +358,15 @@
     initial={selectedColor}
     name={target.name}
     on:apply={applyCustomGradient}
+    on:close={customClosed}
+  />
+
+  <CustomColorDialog
+    bind:show={showCustomBg}
+    initial={selectedBgColor}
+    textColor={selectedColor}
+    name={target.name}
+    on:apply={applyCustomBackground}
     on:close={customClosed}
   />
 {/if}

@@ -622,6 +622,7 @@
   "color.bgColors": "Háttérszínek",
   "color.customGradient": "Egyedi gradiens",
   "color.custom": "Egyedi",
+  "color.customColor": "Egyedi szín",
   "color.customGradientAdd": "Szín",
   "color.customGradientRemove": "Szín eltávolítása",
   "color.customGradientStop": "{n}. szín",

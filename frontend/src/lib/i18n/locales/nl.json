@@ -631,6 +631,7 @@
   "color.bgColors": "Achtergrondkleuren",
   "color.customGradient": "Aangepast verloop",
   "color.custom": "Aangepast",
+  "color.customColor": "Aangepaste kleur",
   "color.customGradientAdd": "Kleur",
   "color.customGradientRemove": "Deze kleur verwijderen",
   "color.customGradientStop": "Kleur {n}",

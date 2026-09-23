@@ -631,6 +631,7 @@
   "color.bgColors": "Bakgrundsfärger",
   "color.customGradient": "Egen gradient",
   "color.custom": "Egen",
+  "color.customColor": "Egen färg",
   "color.customGradientAdd": "Färg",
   "color.customGradientRemove": "Ta bort den här färgen",
   "color.customGradientStop": "Färg {n}",

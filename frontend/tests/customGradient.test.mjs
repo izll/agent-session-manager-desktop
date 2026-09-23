@@ -143,3 +143,34 @@ test('every new string is translated', () => {
     assert.match(strings['color.customGradientStop'], /\{n\}/, `${name} lost {n}`);
   }
 });
+
+// The background got a custom swatch too. A background is a flat colour — a
+// chip or a row tint; a gradient is never drawn there — so it opens a single
+// colour editor rather than the gradient one.
+test('the background has a custom colour of its own', () => {
+  const grid = dialog.slice(dialog.indexOf('<div class="color-grid">'));
+  const gridBody = grid.slice(0, grid.indexOf('<div class="dialog-footer">'));
+  assert.match(gridBody, /\{:else\}\s*<button\s+class="color-btn custom-btn"[\s\S]{0,200}showCustomBg = true/,
+    'background mode has no custom swatch');
+  assert.match(dialog, /<CustomColorDialog[\s\S]{0,300}on:apply=\{applyCustomBackground\}/);
+  assert.match(dialog, /function applyCustomBackground[\s\S]{0,80}selectedBgColor = e\.detail/,
+    'the custom colour is not applied to the background');
+  // Opened and closed like the gradient editor, or it pops up on its own.
+  assert.equal(dialog.match(/^\s+showCustomBg = false;/gm)?.length, 2,
+    'the background editor is not shut when the colour dialog opens and closes');
+
+  const colorEditor = readFileSync(
+    new URL('../src/lib/components/Dialogs/CustomColorDialog.svelte', import.meta.url), 'utf8');
+  assert.match(colorEditor, /use:portal/, 'inside the colour dialog, Escape would close both');
+  assert.match(colorEditor, /disabled=\{!color\}/, 'a half-typed colour could be applied');
+  assert.match(colorEditor, /isHexColor\(hex\)/,
+    'the value goes into a style attribute and must be a strict hex colour');
+});
+
+test('the custom colour title is translated everywhere', () => {
+  const dir = new URL('../src/lib/i18n/locales/', import.meta.url);
+  for (const name of readdirSync(dir).filter((n) => n.endsWith('.json'))) {
+    const strings = JSON.parse(readFileSync(new URL(name, dir), 'utf8'));
+    assert.ok(strings['color.customColor']?.trim(), `${name} has no color.customColor`);
+  }
+});

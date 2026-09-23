@@ -627,6 +627,7 @@
   "color.bgColors": "Background Colors",
   "color.customGradient": "Custom gradient",
   "color.custom": "Custom",
+  "color.customColor": "Custom color",
   "color.customGradientAdd": "Color",
   "color.customGradientRemove": "Remove this color",
   "color.customGradientStop": "Color {n}",

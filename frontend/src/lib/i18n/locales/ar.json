@@ -631,6 +631,7 @@
   "color.bgColors": "ألوان الخلفية",
   "color.customGradient": "تدرج مخصص",
   "color.custom": "مخصص",
+  "color.customColor": "لون مخصص",
   "color.customGradientAdd": "لون",
   "color.customGradientRemove": "إزالة هذا اللون",
   "color.customGradientStop": "اللون {n}",

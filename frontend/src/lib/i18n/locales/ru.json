@@ -631,6 +631,7 @@
   "color.bgColors": "Цвета фона",
   "color.customGradient": "Свой градиент",
   "color.custom": "Свой",
+  "color.customColor": "Свой цвет",
   "color.customGradientAdd": "Цвет",
   "color.customGradientRemove": "Удалить этот цвет",
   "color.customGradientStop": "Цвет {n}",
