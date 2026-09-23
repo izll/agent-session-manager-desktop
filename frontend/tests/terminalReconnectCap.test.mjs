@@ -10,9 +10,10 @@ const terminal = readFileSync(
 // on a timer made the multiplexer's own "can't find window N" reappear every
 // 750ms, which is the flicker the user sees.
 //
-// The close carries no status, because the attach is refused before the socket
-// opens, so a dropped client and a window that no longer exists look identical
-// from here. A few attempts cover the first and stop short of a loop.
+// A refusal the backend can name arrives as a close with a reason and is never
+// retried (terminalRefusal.test.mjs). What is left closed without one, so a
+// dropped client and a window that vanished mid-attach look identical from
+// here. A few attempts cover the first and stop short of a loop.
 test('reconnecting gives up rather than retrying for ever', () => {
   const close = terminal.slice(terminal.indexOf('ws.onclose'));
   assert.match(close, /reconnectFailures/,

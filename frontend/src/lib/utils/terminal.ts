@@ -2,6 +2,7 @@ import { Terminal, type IDisposable } from '@xterm/xterm';
 import { matchesDictationHotkey } from './dictationHotkey';
 import { keyClaimedByDialog } from './dialogKeys';
 import { guardImeCommits } from './imeCommit';
+import { refusalFromClose, type TerminalRefusal } from './terminalRefusal';
 import { FitAddon } from '@xterm/addon-fit';
 import { SearchAddon } from '@xterm/addon-search';
 import { CanvasAddon } from '@xterm/addon-canvas';
@@ -885,6 +886,18 @@ export function sendVisibility(terminalInstance: TerminalInstance, visible: bool
   }
 }
 
+/**
+ * Dispatched from a terminal's element, bubbling, when the backend refused
+ * its attach. The pane that shows that tab listens for it on its container.
+ */
+export const TERMINAL_REFUSED_EVENT = 'terminal:refused';
+
+export interface TerminalRefusedDetail extends TerminalRefusal {
+  sessionId: string;
+  projectId: string;
+  windowIdx: number;
+}
+
 export async function attachToSession(
   terminalInstance: TerminalInstance,
   sessionId: string,
@@ -1107,13 +1120,32 @@ export async function attachToSession(
       // before closing, so a deliberate detach never lands here.
       if (closedSessionId === null || closedSessionId === undefined || closedProjectId === null) return;
 
+      // A refusal is a verdict, not a dropped connection: the backend
+      // completed the handshake only to say why it would not attach. Retrying
+      // would get the same answer — and since the handshake did complete,
+      // every retry would reset the failure budget below and never run out.
+      // The pane is told instead, so it can say why rather than sitting black.
+      const refusal = refusalFromClose(ev.code, ev.reason);
+      if (refusal) {
+        void LogFrontend(`[term] attach refused session=${closedSessionId} win=${closedWindowIdx}: ` +
+          `${refusal.reason}${refusal.detail ? ` (${refusal.detail})` : ''}`);
+        const detail: TerminalRefusedDetail = {
+          ...refusal,
+          sessionId: closedSessionId,
+          projectId: closedProjectId,
+          windowIdx: closedWindowIdx,
+        };
+        terminal.element?.dispatchEvent(new CustomEvent(TERMINAL_REFUSED_EVENT, { detail, bubbles: true }));
+        return;
+      }
+
       // Give up after a few tries rather than retrying for ever.
       //
       // A dropped client is worth reconnecting to; a window that no longer
-      // exists is not, and there is no way to tell them apart from here — the
-      // attach is refused before the socket opens, so the close carries no
-      // status. A handful of attempts covers the multiplexer being slow to
-      // answer and stops short of a loop nobody asked for.
+      // exists is not. A refusal the backend can name arrives as one (see
+      // above); what is left here closed without a reason, so a handful of
+      // attempts covers the multiplexer being slow to answer and stops short
+      // of a loop nobody asked for.
       const maxReconnects = 4;
       terminalInstance.reconnectFailures = (terminalInstance.reconnectFailures ?? 0) + 1;
       if (terminalInstance.reconnectFailures > maxReconnects) {

@@ -8,7 +8,8 @@
   import { EventsOn } from '../../../../wailsjs/runtime/runtime';
   import { LogFrontend, SetTabFontSize } from '../../../../wailsjs/go/main/App';
   import { TerminalPool } from '../../utils/terminalPool';
-  import { setTerminalRenderer, setTerminalCopyMode, setTerminalFontFamily, setTerminalThemeContext, defaultTerminalRenderer } from '../../utils/terminal';
+  import { setTerminalRenderer, setTerminalCopyMode, setTerminalFontFamily, setTerminalThemeContext, defaultTerminalRenderer, TERMINAL_REFUSED_EVENT, type TerminalRefusedDetail } from '../../utils/terminal';
+  import { refusalMessageKey } from '../../utils/terminalRefusal';
   import { t } from '../../i18n';
   import { matchesShortcut } from '../../stores/shortcuts';
   import '@xterm/xterm/css/xterm.css';
@@ -136,6 +137,31 @@
     const id = currentTargetSessionId();
     if (!id) return null;
     return get(sessions).find(s => s.id === id) || null;
+  }
+
+  // The backend refused this pane's attach and said why.
+  //
+  // It arrives after the socket opened, so the show that started it has
+  // already reported success; the pane has to be taken back down, or it sits
+  // black with a live-looking cursor over a tab that has nothing behind it.
+  // Another pane's tab, or this pane's previous one, is none of its business.
+  function handleAttachRefused(e: CustomEvent<TerminalRefusedDetail>) {
+    const refusal = e.detail;
+    if (!refusal || !pool) return;
+    if (refusal.projectId !== get(activeProjectId) ||
+        refusal.sessionId !== currentTargetSessionId() ||
+        refusal.windowIdx !== currentTargetWindowIdx()) return;
+    // A session that stopped drops its terminal, and the reconnect that
+    // follows is refused as not running. The pane already says the session is
+    // stopped, which is the whole story; "could not be opened" over it would
+    // report a fault where the user simply stopped something.
+    if (getCurrentSession()?.status !== 'running') return;
+    // A show still settling for this tab would mark it attached again.
+    poolChangeGeneration++;
+    pool.hideAll();
+    isAttached = false;
+    const message = $t(refusalMessageKey(refusal));
+    error = refusal.detail ? `${message} (${refusal.detail})` : message;
   }
 
   // Focus the active terminal (called via 'terminal:focus' global event)
@@ -310,6 +336,7 @@
     // next time. Saving is best-effort — a failed write must not undo what the
     // user just did on screen.
     poolContainerEl.addEventListener('terminal:fontsize', handleFontSizeGesture as EventListener);
+    poolContainerEl.addEventListener(TERMINAL_REFUSED_EVENT, handleAttachRefused as EventListener);
 
     window.addEventListener('terminal:reset-fontsize', handleResetFontSizeEvent as EventListener);
     window.addEventListener('terminal:focus', handleFocusEvent);
@@ -481,6 +508,7 @@
     pendingTimeouts.clear();
     if (fontSizeSaveTimer) clearTimeout(fontSizeSaveTimer);
     poolContainerEl?.removeEventListener('terminal:fontsize', handleFontSizeGesture as EventListener);
+    poolContainerEl?.removeEventListener(TERMINAL_REFUSED_EVENT, handleAttachRefused as EventListener);
     if (unsubRestarted) unsubRestarted();
     if (stopGraceTimer) clearTimeout(stopGraceTimer);
     const oldPool = pool;

@@ -19,6 +19,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode/utf8"
 
 	"asmgr-desktop/session"
 
@@ -769,6 +770,70 @@ func (ts *TerminalServer) registerConnection(connID string, tc *termConn) (regis
 	return true
 }
 
+// Close codes for an attach that was turned down, from the range RFC 6455
+// leaves to applications. The reason that goes with each is a short key the
+// frontend translates; the number only marks the close as a verdict rather
+// than a dropped connection, which is what stops the frontend retrying it.
+const (
+	closeSessionNotRunning = 4001
+	closeSessionNotFound   = 4002
+	closeProjectLocked     = 4003
+	closeAttachFailed      = 4004
+)
+
+// A close frame's payload is at most 125 bytes, two of which are the code.
+const maxCloseReasonBytes = 123
+
+// refuseAttach turns an attach down in a way the pane can explain.
+//
+// An HTTP error sent before the upgrade never reaches the page: the browser's
+// WebSocket reports every refused handshake as the same bare failure, with no
+// status and no body, so the pane could only ever say "connection failed" —
+// for a session that had stopped, for a project another instance holds, for
+// anything. A refusal the user should read about is therefore sent as a
+// completed handshake followed at once by a close frame that names it. A
+// client that did not ask for a WebSocket still gets the plain HTTP status.
+//
+// Security refusals — a bad token, a foreign origin — stay plain HTTP errors
+// on purpose: there is nothing to explain to a caller that is not the app,
+// and upgrading for it would hand a socket to exactly who the check keeps out.
+func refuseAttach(w http.ResponseWriter, r *http.Request, status, code int, reason string) {
+	if !websocket.IsWebSocketUpgrade(r) {
+		http.Error(w, reason, status)
+		return
+	}
+	ws, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		// The upgrader has already answered with an HTTP error of its own.
+		log.Printf("WebSocket upgrade for refusal error: %v", err)
+		return
+	}
+	closeWithReason(ws, code, reason)
+}
+
+// closeWithReason sends a close frame carrying code and reason, then drops the
+// connection.
+func closeWithReason(ws *websocket.Conn, code int, reason string) {
+	_ = ws.WriteControl(websocket.CloseMessage,
+		websocket.FormatCloseMessage(code, truncateCloseReason(reason)),
+		time.Now().Add(terminalWSWriteTimeout))
+	_ = ws.Close()
+}
+
+// truncateCloseReason fits a reason into a close frame without splitting a
+// multi-byte character, which the browser would reject as invalid UTF-8 and
+// report as a protocol error instead of the reason.
+func truncateCloseReason(reason string) string {
+	if len(reason) <= maxCloseReasonBytes {
+		return reason
+	}
+	cut := maxCloseReasonBytes
+	for cut > 0 && !utf8.RuneStart(reason[cut]) {
+		cut--
+	}
+	return reason[:cut]
+}
+
 // handleTerminal handles WebSocket connections
 func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request) {
 	handlerCtx, handlerDone, allowed := ts.beginHandler()
@@ -812,7 +877,7 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 	if ts.beginAttach != nil {
 		release, allowed := ts.beginAttach(expectedProjectID)
 		if !allowed {
-			http.Error(w, "project locked by another instance", http.StatusConflict)
+			refuseAttach(w, r, http.StatusConflict, closeProjectLocked, "project-locked")
 			log.Printf("[terminal] refused attach: project locked by another instance")
 			return
 		}
@@ -834,7 +899,8 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 	// Get session instance
 	inst, err := ts.storage.GetInstance(sessionID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
+		log.Printf("[ws] refused attach: %v", err)
+		refuseAttach(w, r, http.StatusNotFound, closeSessionNotFound, "session-not-found")
 		return
 	}
 
@@ -874,12 +940,12 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 		}
 	}
 	if !running {
-		http.Error(w, "session not running", http.StatusNotFound)
+		refuseAttach(w, r, http.StatusNotFound, closeSessionNotRunning, "session-not-running")
 		log.Printf("[ws] refused attach: %s is not running", tmuxSession)
 		return
 	}
 
-	// Upgrade only after every check that can still return an HTTP error. Once
+	// Upgrade only after every check that can still refuse the attach. Once
 	// hijacked, http.Error cannot reach the client and an early return would
 	// leave a successfully-opened WebSocket hanging without a close frame.
 	ws, err := upgrader.Upgrade(w, r, nil)
@@ -1096,9 +1162,15 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 		if attachedToOwnMirror {
 			_ = terminalTmuxRun(handlerCtx, "kill-session", "-t", linkedName)
 		}
+		// Said in a close frame rather than as text in the pane: text went
+		// into an xterm the placeholder covers, and the close that followed
+		// carried no status, so the frontend retried an attach that fails
+		// the same way every time. The detail is kept for the placeholder —
+		// for a server it is the only clue whether the network or the login
+		// is at fault.
+		log.Printf("[ws] attach failed for %s: %v", windowTarget, err)
 		if handlerCtx.Err() == nil {
-			_ = ws.SetWriteDeadline(time.Now().Add(terminalWSWriteTimeout))
-			_ = ws.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf("Error: %v", err)))
+			closeWithReason(ws, closeAttachFailed, fmt.Sprintf("attach-failed: %v", err))
 		}
 		return
 	}
