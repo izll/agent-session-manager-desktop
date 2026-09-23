@@ -3253,6 +3253,7 @@ func (a *App) getSidebarUpdates(ctx context.Context) SidebarUpdate {
 		saveTerminalDirs = true
 	}
 
+	terminalDirs := map[string]map[int]string{}
 	for _, inst := range instances {
 		if ctx.Err() != nil {
 			return result
@@ -3360,12 +3361,17 @@ func (a *App) getSidebarUpdates(ctx context.Context) SidebarUpdate {
 		}
 
 		if mayPersist && saveTerminalDirs {
-			if err := a.storage.RecordTerminalDirsForProject(projectID, inst.ID, inst.TerminalDirsNow(ctx)); err != nil {
-				log.Printf("[SidebarPoll] failed to save terminal directories for session=%s: %v", inst.ID, err)
+			if dirs := inst.TerminalDirsNow(ctx); len(dirs) > 0 {
+				terminalDirs[inst.ID] = dirs
 			}
 		}
 
 		jobs = append(jobs, detectJob{inst: inst})
+	}
+	if mayPersist && len(terminalDirs) > 0 {
+		if err := a.storage.RecordTerminalDirsForProject(projectID, terminalDirs); err != nil {
+			log.Printf("[SidebarPoll] failed to save terminal directories: %v", err)
+		}
 	}
 
 	// Phase 2: run detection in parallel. isSpinnerAnimating() sleeps 60ms

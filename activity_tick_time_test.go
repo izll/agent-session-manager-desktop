@@ -18,7 +18,8 @@ func TestThePollSavesTerminalDirectories(t *testing.T) {
 	poll := source[at:]
 	poll = poll[:strings.Index(poll, "\n}\n")]
 	if !strings.Contains(poll, "if mayPersist && saveTerminalDirs {") ||
-		!strings.Contains(poll, "a.storage.RecordTerminalDirsForProject(projectID, inst.ID, inst.TerminalDirsNow(ctx))") {
+		!strings.Contains(poll, "terminalDirs[inst.ID] = dirs") ||
+		!strings.Contains(poll, "a.storage.RecordTerminalDirsForProject(projectID, terminalDirs)") {
 		t.Error("the poll does not save where the terminal tabs are, so a restart " +
 			"brings them back where they were last stopped")
 	}

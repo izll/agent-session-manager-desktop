@@ -98,7 +98,7 @@ func TestRecordingTerminalDirsTouchesNothingElse(t *testing.T) {
 	}
 
 	// Tab 1 went back to the root; tab 2 is an agent and must not move.
-	if err := storage.RecordTerminalDirsForProject("", "session-1", map[int]string{1: "", 2: root}); err != nil {
+	if err := storage.RecordTerminalDirsForProject("", map[string]map[int]string{"session-1": {1: "", 2: root}}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -174,7 +174,7 @@ func TestBookkeepingWritesMakeNoBackup(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if err := storage.RecordTerminalDirsForProject("", "s", map[int]string{1: sub}); err != nil {
+	if err := storage.RecordTerminalDirsForProject("", map[string]map[int]string{"s": {1: sub}}); err != nil {
 		t.Fatal(err)
 	}
 

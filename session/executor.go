@@ -140,12 +140,20 @@ func ClearExecutor(sessionID string) {
 
 // ExecutorFor returns where this session's commands should run.
 func ExecutorFor(sessionID string) Executor {
-	if found, ok := executors.Load(sessionID); ok {
+	if executor := registeredExecutor(sessionID); executor != nil {
+		return executor
+	}
+	return LocalExecutor
+}
+
+// registeredExecutor is the executor registered under key, or nil.
+func registeredExecutor(key string) Executor {
+	if found, ok := executors.Load(key); ok {
 		if executor, isExecutor := found.(Executor); isExecutor && executor != nil {
 			return executor
 		}
 	}
-	return LocalExecutor
+	return nil
 }
 
 // exec returns this instance's executor.
@@ -185,10 +193,8 @@ func (i *Instance) execOn(serverID string) Executor {
 	if serverID == i.ServerID {
 		key = i.ID
 	}
-	if found, ok := executors.Load(key); ok {
-		if executor, isExecutor := found.(Executor); isExecutor && executor != nil {
-			return executor
-		}
+	if executor := registeredExecutor(key); executor != nil {
+		return executor
 	}
 	return unreachableExecutor{serverID: serverID}
 }

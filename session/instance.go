@@ -2068,11 +2068,6 @@ func (i *Instance) NewWindow() error {
 	return i.tmuxRun("new-window", "-t", sessionName, "-c", i.Path)
 }
 
-// NewWindowWithName creates a new tmux window with a specific name
-func (i *Instance) NewWindowWithName(name string, workDir string) (int, error) {
-	return i.NewWindowWithNameOn("", name, workDir)
-}
-
 // NewWindowWithNameOn creates a terminal tab on a given machine.
 //
 // serverID empty means the session's own machine. A terminal is the tab type

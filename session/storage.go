@@ -1657,14 +1657,17 @@ func (s *Storage) UpdateInstanceForProject(projectID string, instance *Instance)
 	return fmt.Errorf("instance not found")
 }
 
-// RecordTerminalDirsForProject stores where a session's terminal tabs are,
-// as read by Instance.TerminalDirsNow while the session runs.
+// RecordTerminalDirsForProject stores where the sessions' terminal tabs are,
+// as read by Instance.TerminalDirsNow while they run: session ID to window
+// index to directory.
 //
 // Only the WorkDir of the named terminal tabs is written, onto what is on disk
 // now: the poll that read the directories loaded its instances a moment ago,
-// and saving those back whole would undo anything changed in between.
-func (s *Storage) RecordTerminalDirsForProject(projectID, instanceID string, dirs map[int]string) error {
-	if len(dirs) == 0 {
+// and saving those back whole would undo anything changed in between. One
+// write for all of them — the poll gathers a tick's worth first, rather than
+// reloading the store once per session.
+func (s *Storage) RecordTerminalDirsForProject(projectID string, dirsBySession map[string]map[int]string) error {
+	if len(dirsBySession) == 0 {
 		return nil
 	}
 	s.mu.Lock()
@@ -1682,7 +1685,8 @@ func (s *Storage) RecordTerminalDirsForProject(projectID, instanceID string, dir
 	}
 	changed := false
 	for _, current := range instances {
-		if current.ID != instanceID {
+		dirs, ok := dirsBySession[current.ID]
+		if !ok {
 			continue
 		}
 		for idx := range current.FollowedWindows {
