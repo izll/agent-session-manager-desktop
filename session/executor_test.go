@@ -2,6 +2,7 @@ package session
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"testing"
 )
@@ -127,5 +128,39 @@ func TestRouteHookIsOptional(t *testing.T) {
 	if len(routed) != 2 || routed[0] != "remote-1" || routed[1] != "remote-2" {
 		t.Errorf("routed = %v; local sessions should not be routed and nils should "+
 			"not reach the hook", routed)
+	}
+}
+
+// A session on a server whose connection is not open ran its own commands on
+// this computer: ExecutorFor falls back to the local multiplexer, so starting
+// it launched the agent here, in the home directory, while it was recorded as
+// running on the server. Its git and file reads fell back the same way.
+func TestAServerSessionWithNoConnectionRunsNothingHere(t *testing.T) {
+	inst := &Instance{ID: "remote-session", Name: "remote-session", ServerID: "srv"}
+
+	if _, unreachable := inst.exec().(unreachableExecutor); !unreachable {
+		t.Errorf("an unconnected server session's commands go to %s", inst.exec().Describe())
+	}
+	if err := inst.tmuxRun("new-session", "-d", "-s", "remote-session"); err == nil ||
+		!strings.Contains(err.Error(), "error.serverNotConnected") {
+		t.Errorf("starting it did not refuse: %v", err)
+	}
+
+	if _, err := inst.gitOutput([]string{"status"}, nil); err == nil {
+		t.Error("git ran for an unconnected server session")
+	}
+	if _, err := inst.readFileWhereSessionLives("/etc/hostname", 64); err == nil {
+		t.Error("a file was read from this computer for an unconnected server session")
+	}
+	if _, err := inst.listDirectoryWhereSessionLives("/tmp"); err == nil {
+		t.Error("an unconnected server session's listing fell back to this computer")
+	}
+
+	// Once connected, its commands go there.
+	server := &recordingExecutor{}
+	SetExecutor(inst.ID, server)
+	t.Cleanup(func() { ClearExecutor(inst.ID) })
+	if err := inst.tmuxRun("has-session"); err != nil || len(server.seen()) != 1 {
+		t.Errorf("a connected server session's command did not reach it: %v %v", err, server.seen())
 	}
 }

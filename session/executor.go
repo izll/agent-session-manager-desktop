@@ -80,11 +80,18 @@ func ShellExecutorFor(sessionID string) ShellExecutor {
 
 // shellExec returns this instance's shell executor, or nil for a local
 // session.
-func (i *Instance) shellExec() ShellExecutor {
+//
+// A session on a server whose connection is not open is an error, not nil:
+// nil tells every caller to take the local path, which ran git and read files
+// on this computer at the server's path.
+func (i *Instance) shellExec() (ShellExecutor, error) {
 	if i.ServerID == "" {
-		return nil
+		return nil, nil
 	}
-	return ShellExecutorFor(i.ID)
+	if shell := ShellExecutorFor(i.ID); shell != nil {
+		return shell, nil
+	}
+	return nil, fmt.Errorf("error.serverNotConnected")
 }
 
 // localExecutor runs commands on this computer, exactly as before.
@@ -142,7 +149,15 @@ func ExecutorFor(sessionID string) Executor {
 }
 
 // exec returns this instance's executor.
+//
+// For a session on a server this is execOn's rule: a server whose connection
+// is not open refuses. ExecutorFor falls back to this computer, and a session
+// started through that fallback ran its agent here — in the home directory,
+// with its auto-yes flag — while being recorded as running on the server.
 func (i *Instance) exec() Executor {
+	if i.ServerID != "" {
+		return i.execOn(i.ServerID)
+	}
 	return ExecutorFor(i.ID)
 }
 
@@ -309,7 +324,11 @@ func routeLoaded(instances []*Instance) {
 // carried across: it exists to stop git reading the developer's own config,
 // which is a local concern, and the server's git has its own.
 func (i *Instance) gitOutput(args []string, gitEnv []string) ([]byte, error) {
-	if shell := i.shellExec(); shell != nil {
+	shell, err := i.shellExec()
+	if err != nil {
+		return nil, err
+	}
+	if shell != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), GitTimeout)
 		defer cancel()
 
@@ -381,7 +400,10 @@ type RemoteDirEntry struct {
 
 // readFileWhereSessionLives reads a file from the machine this session runs on.
 func (i *Instance) readFileWhereSessionLives(path string, limit int64) ([]byte, error) {
-	shell := i.shellExec()
+	shell, err := i.shellExec()
+	if err != nil {
+		return nil, err
+	}
 	if shell == nil {
 		return readFileAtMost(path, limit)
 	}
@@ -406,7 +428,10 @@ func (i *Instance) readFileWhereSessionLives(path string, limit int64) ([]byte, 
 // listDirectoryWhereSessionLives lists a directory on the machine this session
 // runs on.
 func (i *Instance) listDirectoryWhereSessionLives(path string) ([]RemoteDirEntry, error) {
-	shell := i.shellExec()
+	shell, err := i.shellExec()
+	if err != nil {
+		return nil, err
+	}
 	if shell == nil {
 		return nil, nil // Caller falls back to the local listing.
 	}

@@ -40,8 +40,8 @@ func (s *shellRecorder) lastRun() []string {
 // through the same code as before.
 func TestLocalSessionsStillReadLocally(t *testing.T) {
 	inst := &Instance{ID: "local-1"}
-	if inst.shellExec() != nil {
-		t.Error("a local session was given a shell executor")
+	if shell, err := inst.shellExec(); shell != nil || err != nil {
+		t.Errorf("a local session was given a shell executor (%v) or an error (%v)", shell, err)
 	}
 
 	entries, err := inst.listDirectoryWhereSessionLives("/tmp")
