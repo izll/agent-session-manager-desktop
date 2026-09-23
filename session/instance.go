@@ -720,6 +720,29 @@ func (i *Instance) renumberStrayRemoteTabs() map[int]int {
 	return moved
 }
 
+// terminalRestartDirArgs is where a terminal tab restarts.
+//
+// An empty WorkDir means "at the session's own directory" — the capture
+// writes it when the tab cd's back to the root — so it restarts there, not
+// with no -c at all, which put the shell back in the directory the pane was
+// first created in. Measured on tmux 3.4 through the real stop and restart.
+//
+// A tab on a server has its directory there: checking it against this
+// computer's filesystem, as restartDirArgs does, only ever discarded it.
+func (i *Instance) terminalRestartDirArgs(fw FollowedWindow) []string {
+	if i.windowOnAnotherMachine(fw.Index) {
+		if dir := strings.TrimSpace(fw.WorkDir); filepath.IsAbs(dir) {
+			return []string{"-c", dir}
+		}
+		return nil
+	}
+	dir := fw.WorkDir
+	if strings.TrimSpace(dir) == "" {
+		dir = i.Path
+	}
+	return restartDirArgs(dir)
+}
+
 // windowOnAnotherMachine reports whether a tab runs somewhere other than its
 // session.
 func (i *Instance) windowOnAnotherMachine(windowIdx int) bool {
@@ -2421,7 +2444,7 @@ func (i *Instance) RestartWindowWithResume(windowIdx int, resumeID string) error
 	// the conversation it resumes.
 	var dirFlags []string
 	if fw.Agent == AgentTerminal {
-		dirFlags = restartDirArgs(fw.WorkDir)
+		dirFlags = i.terminalRestartDirArgs(*fw)
 	}
 	tabServer := i.serverForWindow(windowIdx)
 	if fw.Agent != AgentCustom && fw.Agent != AgentTerminal {

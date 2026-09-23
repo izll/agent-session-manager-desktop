@@ -46,23 +46,14 @@ func (i *Instance) captureTerminalWorkingDir(windowIdx int, query paneDirQuery) 
 	if i.Status != StatusRunning {
 		return false
 	}
+	ctx, cancel := context.WithTimeout(context.Background(), terminalDirCaptureTimeout)
+	defer cancel()
 	for idx := range i.FollowedWindows {
 		window := &i.FollowedWindows[idx]
 		if window.Index != windowIdx {
 			continue
 		}
-		if !isTerminalTab(window.Agent) || window.Stopped {
-			return false
-		}
-
-		ctx, cancel := context.WithTimeout(context.Background(), terminalDirCaptureTimeout)
-		defer cancel()
-
-		target := fmt.Sprintf("%s:%d", i.TmuxSessionName(), window.Index)
-		// Back at the session's own directory is "" and is saved like any
-		// other move, the same as the running capture does; treating it as
-		// nothing to save kept a subdirectory the tab had already left.
-		dir, ok := classifyCapturedDir(query(ctx, target), i.Path)
+		dir, ok := i.readTerminalTabDir(ctx, *window, query)
 		if !ok || dir == window.WorkDir {
 			return false
 		}
@@ -81,28 +72,19 @@ func (i *Instance) captureTerminalWorkingDirs(query paneDirQuery) bool {
 	if i.Status != StatusRunning {
 		return false
 	}
-
 	ctx, cancel := context.WithTimeout(context.Background(), terminalDirCaptureTimeout)
 	defer cancel()
 
-	sessionName := i.TmuxSessionName()
 	changed := false
-
 	for idx := range i.FollowedWindows {
 		window := &i.FollowedWindows[idx]
-		if !isTerminalTab(window.Agent) || window.Stopped {
-			continue
-		}
-
-		target := fmt.Sprintf("%s:%d", sessionName, window.Index)
-		dir, ok := classifyCapturedDir(query(ctx, target), i.Path)
+		dir, ok := i.readTerminalTabDir(ctx, *window, query)
 		if !ok || dir == window.WorkDir {
 			continue
 		}
 		window.WorkDir = dir
 		changed = true
 	}
-
 	if changed {
 		i.UpdatedAt = time.Now()
 	}
@@ -120,28 +102,78 @@ func (i *Instance) captureTerminalWorkingDirs(query paneDirQuery) bool {
 // A tab back at the session's own directory maps to "" — no directory of its
 // own — so that returning to the root is remembered too. A tab whose directory
 // could not be read is absent, which leaves what is stored alone.
+//
+// Bounded by its own deadline whatever the caller passes: the sidebar poll
+// calls this while holding the project lock, and a tab sitting in a network
+// mount that stopped answering would otherwise hold it for good.
 func (i *Instance) TerminalDirsNow(ctx context.Context) map[int]string {
 	return i.terminalDirsNow(ctx, queryPaneCurrentPath)
 }
 
 func (i *Instance) terminalDirsNow(ctx context.Context, query paneDirQuery) map[int]string {
 	dirs := map[int]string{}
-	// The query asks the local multiplexer, which knows nothing of a server's
-	// panes.
-	if i.Status != StatusRunning || i.ServerID != "" {
+	if i.Status != StatusRunning {
 		return dirs
 	}
-	sessionName := i.TmuxSessionName()
+	ctx, cancel := context.WithTimeout(ctx, terminalDirCaptureTimeout)
+	defer cancel()
 	for _, window := range i.FollowedWindows {
-		if !isTerminalTab(window.Agent) || window.Stopped || window.ServerID != "" {
-			continue
-		}
-		target := fmt.Sprintf("%s:%d", sessionName, window.Index)
-		if dir, ok := classifyCapturedDir(query(ctx, target), i.Path); ok {
+		if dir, ok := i.readTerminalTabDir(ctx, window, query); ok {
 			dirs[window.Index] = dir
 		}
 	}
 	return dirs
+}
+
+// readTerminalTabDir reads where one terminal tab is. ok false means "leave
+// the stored directory alone": not a running terminal, not on this computer,
+// or not answered in time.
+//
+// One reader for the stop-time captures and the running one, so they cannot
+// disagree again. They did: the stop captures still asked the local
+// multiplexer about tabs on a server, which answered for a local pane, and
+// that local path — or, after the root rule, an empty one — overwrote the
+// server tab's own directory.
+func (i *Instance) readTerminalTabDir(ctx context.Context, window FollowedWindow, query paneDirQuery) (string, bool) {
+	if !isTerminalTab(window.Agent) || window.Stopped {
+		return "", false
+	}
+	// The query asks the local multiplexer, which knows nothing of a server's
+	// panes — neither a server session's nor a server tab's.
+	if i.ServerID != "" || window.ServerID != "" {
+		return "", false
+	}
+	target := fmt.Sprintf("%s:%d", i.TmuxSessionName(), window.Index)
+	reported := query(ctx, target)
+	if ctx.Err() != nil {
+		return "", false
+	}
+	return classifyCapturedDirWithin(ctx, reported, i.Path)
+}
+
+// classifyCapturedDirWithin is classifyCapturedDir under a deadline.
+//
+// The checks stat the path and resolve symlinks, and neither can be
+// interrupted: on a network mount whose server stopped answering they block
+// indefinitely. They run aside, and an answer that does not come in time is
+// treated as unreadable. The goroutine left behind ends whenever the
+// filesystem does answer.
+func classifyCapturedDirWithin(ctx context.Context, reported, sessionPath string) (string, bool) {
+	type answer struct {
+		dir string
+		ok  bool
+	}
+	result := make(chan answer, 1)
+	go func() {
+		dir, ok := classifyCapturedDir(reported, sessionPath)
+		result <- answer{dir, ok}
+	}()
+	select {
+	case got := <-result:
+		return got.dir, got.ok
+	case <-ctx.Done():
+		return "", false
+	}
 }
 
 // classifyCapturedDir decides what a reported directory means for the tab.
@@ -215,10 +247,30 @@ func restartDirArgs(dir string) []string {
 
 // queryPaneCurrentPath asks the multiplexer where a pane is. tmux tracks this
 // itself, so there is no process tree to walk here.
+//
+// The window's index comes back with the path and has to match. For a window
+// that no longer exists tmux does not fail: measured, `display-message -t
+// s:7` with no window 7 answers for window 0 with status 0 — so a tab whose
+// window had been killed was saved with another pane's directory.
 func queryPaneCurrentPath(ctx context.Context, target string) string {
-	output, err := TmuxCommandContext(ctx, "display-message", "-p", "-t", target, "#{pane_current_path}").Output()
+	output, err := TmuxCommandContext(ctx, "display-message", "-p", "-t", target,
+		"#{window_index}\t#{pane_current_path}").Output()
 	if err != nil {
 		return ""
 	}
-	return string(output)
+	return paneAnswerFor(target, string(output))
+}
+
+// paneAnswerFor returns the path from a "<index>\t<path>" answer, or "" when
+// the answer is about a different window than the target names.
+func paneAnswerFor(target, answer string) string {
+	index, path, found := strings.Cut(strings.TrimRight(answer, "\r\n"), "\t")
+	if !found {
+		return ""
+	}
+	colon := strings.LastIndex(target, ":")
+	if colon < 0 || strings.TrimSpace(index) != target[colon+1:] {
+		return ""
+	}
+	return path
 }

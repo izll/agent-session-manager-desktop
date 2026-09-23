@@ -194,3 +194,72 @@ func TestBookkeepingWritesMakeNoBackup(t *testing.T) {
 		t.Errorf("the bookkeeping was not saved: %+v", saved)
 	}
 }
+
+// The stop-time captures asked the local multiplexer about a tab on a server;
+// it answered for a local pane, and that path — or "" for the session root —
+// overwrote the server tab's own directory.
+func TestStoppingLeavesAServerTabsDirectoryAlone(t *testing.T) {
+	root := t.TempDir()
+	inst := &Instance{ID: "mixed", Name: "mixed", Path: root, Status: StatusRunning,
+		FollowedWindows: []FollowedWindow{
+			{Index: 10000, Agent: AgentTerminal, ServerID: "srv", WorkDir: "/srv/app"},
+		}}
+	atLocalRoot := func(context.Context, string) string { return root }
+
+	inst.captureTerminalWorkingDirs(atLocalRoot)
+	inst.captureTerminalWorkingDir(10000, atLocalRoot)
+	if got := inst.FollowedWindows[0].WorkDir; got != "/srv/app" {
+		t.Errorf("stopping overwrote the server tab's directory with %q", got)
+	}
+}
+
+// The poll saves these while holding the project lock, so a pane that does
+// not answer must not hold it.
+func TestReadingTerminalDirsIsBounded(t *testing.T) {
+	inst := &Instance{ID: "slow", Name: "slow", Path: t.TempDir(), Status: StatusRunning,
+		FollowedWindows: []FollowedWindow{{Index: 1, Agent: AgentTerminal}}}
+	stuck := func(ctx context.Context, _ string) string {
+		<-ctx.Done() // a multiplexer that never answers
+		return "/somewhere"
+	}
+	started := time.Now()
+	dirs := inst.terminalDirsNow(context.Background(), stuck)
+	if elapsed := time.Since(started); elapsed > terminalDirCaptureTimeout+2*time.Second {
+		t.Errorf("reading took %v with no answer", elapsed)
+	}
+	if len(dirs) != 0 {
+		t.Errorf("a path that arrived after the deadline was used: %v", dirs)
+	}
+}
+
+// For a window that no longer exists tmux answers for window 0, with status
+// 0. The answer names its window, and one about another window is refused.
+func TestAnAnswerAboutAnotherWindowIsRefused(t *testing.T) {
+	if got := paneAnswerFor("sess:1", "1\t/home/u/proj/sub\n"); got != "/home/u/proj/sub" {
+		t.Errorf("the right window's answer was refused: %q", got)
+	}
+	if got := paneAnswerFor("sess:7", "0\t/home/u/elsewhere\n"); got != "" {
+		t.Errorf("an answer about window 0 was taken for window 7: %q", got)
+	}
+	if got := paneAnswerFor("sess:7", "/no/index/in/it\n"); got != "" {
+		t.Errorf("an answer without its window was accepted: %q", got)
+	}
+}
+
+// Back at the root is stored as "", and a restart has to put the shell there,
+// not in the directory the pane was first created in.
+func TestATerminalAtTheRootRestartsAtTheRoot(t *testing.T) {
+	root := t.TempDir()
+	inst := &Instance{ID: "r", Name: "r", Path: root,
+		FollowedWindows: []FollowedWindow{
+			{Index: 1, Agent: AgentTerminal, WorkDir: ""},
+			{Index: 10000, Agent: AgentTerminal, ServerID: "srv", WorkDir: "/srv/only/there"},
+		}}
+	if got := inst.terminalRestartDirArgs(inst.FollowedWindows[0]); len(got) != 2 || got[1] != root {
+		t.Errorf("a tab at the root restarts with %v, want -c %s", got, root)
+	}
+	// A server path does not exist here and must not be checked here.
+	if got := inst.terminalRestartDirArgs(inst.FollowedWindows[1]); len(got) != 2 || got[1] != "/srv/only/there" {
+		t.Errorf("a server tab restarts with %v, want its own directory", got)
+	}
+}
