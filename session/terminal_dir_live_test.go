@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func mustMkdir(t *testing.T, dir string) {
@@ -145,5 +146,51 @@ func TestStoppingRemembersAReturnToTheRoot(t *testing.T) {
 	if !single.captureTerminalWorkingDir(1, atRoot) || single.FollowedWindows[0].WorkDir != "" {
 		t.Errorf("stopping the tab kept %q for a tab back at the root",
 			single.FollowedWindows[0].WorkDir)
+	}
+}
+
+// What the app records about itself while running is not a user's edit and
+// makes no backup. The activity time was saved on every tick while an agent
+// worked, and each save added an automatic backup, crowding the real recovery
+// history out.
+func TestBookkeepingWritesMakeNoBackup(t *testing.T) {
+	storage := newRecoveryTestStorage(t)
+	root := t.TempDir()
+	sub := filepath.Join(root, "sub")
+	mustMkdir(t, sub)
+	inst := &Instance{ID: "s", Name: "s", Path: root,
+		FollowedWindows: []FollowedWindow{{Index: 1, Agent: AgentTerminal}}}
+	if err := storage.SaveAll([]*Instance{inst}, []*Group{}, DefaultSettings()); err != nil {
+		t.Fatal(err)
+	}
+	before, err := storage.ListBackups()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for tick := 1; tick <= 3; tick++ {
+		at := time.Now().Add(time.Duration(tick) * time.Second)
+		if err := storage.RecordActivityForProject("", map[string]time.Time{"s": at}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := storage.RecordTerminalDirsForProject("", "s", map[int]string{1: sub}); err != nil {
+		t.Fatal(err)
+	}
+
+	after, err := storage.ListBackups()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(after) != len(before) {
+		t.Errorf("bookkeeping writes added %d backups", len(after)-len(before))
+	}
+	// And they were saved all the same.
+	saved, err := storage.GetInstance("s")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if saved.FollowedWindows[0].WorkDir != sub || saved.LastActiveAt.IsZero() {
+		t.Errorf("the bookkeeping was not saved: %+v", saved)
 	}
 }

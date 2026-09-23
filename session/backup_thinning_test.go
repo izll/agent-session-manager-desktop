@@ -144,7 +144,7 @@ func TestBackupCeilingEvictsFutureBeforeCurrentBackup(t *testing.T) {
 	for index := 0; index < backupHardCeiling+1; index++ {
 		times = append(times, now.Add(time.Duration(index+1)*24*time.Hour))
 	}
-	remove := backupCeilingRemovalIndex(times[len(times)-1], len(times), now)
+	remove := backupCeilingRemovalIndex(times, now)
 	if remove == 0 || !times[remove].After(now) {
 		t.Fatalf("ceiling selected index %d (%v), want a future entry instead of current", remove, times[remove])
 	}
@@ -165,5 +165,38 @@ func TestBackupTimeReadsTheFilename(t *testing.T) {
 	}
 	if got := backupTime("short"); !got.IsZero() {
 		t.Errorf("a name shorter than the layout should give the zero time, got %v", got)
+	}
+}
+
+// A store saved every second filled the unthinned last hour past the ceiling,
+// and the ceiling deleted the oldest first: after about 200 busy seconds every
+// hourly, daily and weekly backup was gone. The ceiling now takes from the
+// last hour, which is where the excess is.
+func TestTheCeilingKeepsTheOlderHistory(t *testing.T) {
+	now := time.Date(2026, time.September, 23, 12, 0, 0, 0, time.UTC)
+	var times []time.Time
+	// A fortnight of daily backups and a day of hourly ones...
+	for day := 13; day >= 1; day-- {
+		times = append(times, now.Add(-time.Duration(day)*24*time.Hour))
+	}
+	for hour := 23; hour >= 2; hour-- {
+		times = append(times, now.Add(-time.Duration(hour)*time.Hour))
+	}
+	older := len(times)
+	// ...then one a second for the last few minutes.
+	for second := backupHardCeiling; second >= 0; second-- {
+		times = append(times, now.Add(-time.Duration(second)*time.Second))
+	}
+
+	for len(times) > backupHardCeiling {
+		remove := backupCeilingRemovalIndex(times, now)
+		if remove < older {
+			t.Fatalf("the ceiling deleted %v, part of the older history, while the "+
+				"last hour held %d backups", times[remove], len(times)-older)
+		}
+		if remove == len(times)-1 {
+			t.Fatal("the ceiling deleted the newest backup")
+		}
+		times = append(times[:remove], times[remove+1:]...)
 	}
 }

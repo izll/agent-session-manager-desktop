@@ -272,7 +272,11 @@ func pruneTaskBackupDir(dir, projectID string) error {
 	}
 	ceilingNow := time.Now().UTC()
 	for len(remaining) > backupHardCeiling {
-		removeIndex := backupCeilingRemovalIndex(remaining[len(remaining)-1].time, len(remaining), ceilingNow)
+		times := make([]time.Time, len(remaining))
+		for index, backup := range remaining {
+			times[index] = backup.time
+		}
+		removeIndex := backupCeilingRemovalIndex(times, ceilingNow)
 		if err := os.Remove(filepath.Join(dir, remaining[removeIndex].entry.Name())); err != nil {
 			return err
 		}

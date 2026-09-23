@@ -1513,6 +1513,26 @@ func (s *Storage) saveAllLocked(instances []*Instance, groups []*Group, settings
 	return s.writeStorageDataLocked(storageData, true)
 }
 
+// saveBookkeepingLocked saves like saveAllLocked but writes no backup.
+//
+// For what the app records about itself while running — when an agent was
+// last active, where a terminal tab is — not for anything the user changed.
+// Those writes come every tick while an agent works, and each one used to add
+// an automatic backup, crowding the real recovery history out of retention.
+// A backup is for restoring a user's edit; none of these is one.
+func (s *Storage) saveBookkeepingLocked(instances []*Instance, groups []*Group, settings *Settings) error {
+	storageData, err := s.loadStorageDataLocked()
+	if err != nil {
+		return err
+	}
+	storageData.SchemaVersion = recoverySchemaVersion
+	storageData.Revision++
+	storageData.Instances = instances
+	storageData.Groups = groups
+	storageData.Settings = settings
+	return s.writeStorageDataLocked(storageData, false)
+}
+
 func (s *Storage) writeStorageDataLocked(storageData *StorageData, createBackup bool) error {
 	data, err := json.MarshalIndent(storageData, "", "  ")
 	if err != nil {
@@ -1678,7 +1698,7 @@ func (s *Storage) RecordTerminalDirsForProject(projectID, instanceID string, dir
 	if !changed {
 		return nil
 	}
-	return s.saveAllLocked(instances, groups, settings)
+	return s.saveBookkeepingLocked(instances, groups, settings)
 }
 
 // MergeResumeSessionIDsForProject atomically records detected conversation IDs
@@ -2337,5 +2357,5 @@ func (s *Storage) RecordActivityForProject(projectID string, seen map[string]tim
 	if !changed {
 		return nil
 	}
-	return s.saveAllLocked(instances, groups, settings)
+	return s.saveBookkeepingLocked(instances, groups, settings)
 }

@@ -253,7 +253,11 @@ func pruneBackupDir(dir string) error {
 	sort.Slice(remaining, func(i, j int) bool { return remaining[i].Name() < remaining[j].Name() })
 	ceilingNow := time.Now().UTC()
 	for len(remaining) > backupHardCeiling {
-		removeIndex := backupCeilingRemovalIndex(backupTime(remaining[len(remaining)-1].Name()), len(remaining), ceilingNow)
+		times := make([]time.Time, len(remaining))
+		for index, entry := range remaining {
+			times[index] = backupTime(entry.Name())
+		}
+		removeIndex := backupCeilingRemovalIndex(times, ceilingNow)
 		if err := os.Remove(filepath.Join(dir, remaining[removeIndex].Name())); err != nil {
 			return err
 		}

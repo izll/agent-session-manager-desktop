@@ -102,15 +102,29 @@ func backupsToKeep(times []time.Time, now time.Time) map[int]bool {
 }
 
 // backupCeilingRemovalIndex chooses what to drop after retention still leaves
-// too many managed entries. Ordinarily that is the oldest (index zero). If a
-// clock jump or corrupt but well-formed names put entries in the future, drop
-// the farthest-future one first; otherwise those names consume the ceiling and
-// can evict the valid present-day backup that triggered pruning.
+// too many managed entries. times is ascending.
 //
-// newest is the last timestamp in an ascending filename/timestamp list.
-func backupCeilingRemovalIndex(newest time.Time, count int, now time.Time) int {
-	if count > 0 && newest.After(now) {
+// If a clock jump or corrupt but well-formed names put entries in the future,
+// the farthest-future one goes first; otherwise those names consume the
+// ceiling and can evict the valid present-day backup that triggered pruning.
+//
+// Otherwise the oldest of the last hour's backups goes, not the oldest
+// overall. The last hour is the one band kept unthinned, so it is the only
+// one that can grow past the ceiling — as it did while a store was saved every
+// second — and taking the oldest overall then deleted the hourly, daily and
+// weekly history first, which is exactly what the bands exist to keep. The
+// newest is never chosen. Only when the last hour holds nothing removable is
+// the oldest overall taken.
+func backupCeilingRemovalIndex(times []time.Time, now time.Time) int {
+	count := len(times)
+	if count > 0 && times[count-1].After(now) {
 		return count - 1
+	}
+	for index := 0; index < count-1; index++ {
+		age := now.Sub(times[index])
+		if age >= 0 && age <= backupBands[0].within {
+			return index
+		}
 	}
 	return 0
 }
