@@ -1748,6 +1748,7 @@ export namespace main {
 	    statusLines: Record<string, string>;
 	    spinnerTexts: Record<string, string>;
 	    tabStatuses: Record<string, Array<TabStatusInfo>>;
+	    tabAvailability: Record<string, Array<TabAvailability>>;
 	    lastActive: Record<string, string>;
 
 	    static createFrom(source: any = {}) {
@@ -1761,6 +1762,7 @@ export namespace main {
 	        this.statusLines = source["statusLines"];
 	        this.spinnerTexts = source["spinnerTexts"];
 	        this.tabStatuses = this.convertValues(source["tabStatuses"], Array<TabStatusInfo>, true);
+	        this.tabAvailability = this.convertValues(source["tabAvailability"], Array<TabAvailability>, true);
 	        this.lastActive = source["lastActive"];
 	    }
 
@@ -1804,6 +1806,22 @@ export namespace main {
 	        this.status = source["status"];
 	        this.done = source["done"];
 	        this.createdAt = source["createdAt"];
+	    }
+	}
+	export class TabAvailability {
+	    windowIdx: number;
+	    unreachable?: boolean;
+	    missing?: boolean;
+
+	    static createFrom(source: any = {}) {
+	        return new TabAvailability(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.windowIdx = source["windowIdx"];
+	        this.unreachable = source["unreachable"];
+	        this.missing = source["missing"];
 	    }
 	}
 	export class TabStatusInfo {
