@@ -1232,7 +1232,6 @@
   "history.merge": "合并提交",
   "help.actionGitHistory": "提交历史",
   "history.commits": "提交",
-  "history.unpushedShort": "未推送",
   "history.unpushedTitle": "此提交目前仅在本机上",
   "history.wholeFile": "显示整个文件",
   "history.maximise": "最大化",

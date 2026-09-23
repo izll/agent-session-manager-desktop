@@ -1232,7 +1232,6 @@
   "history.merge": "Commit de merge",
   "help.actionGitHistory": "Histórico de commits",
   "history.commits": "Commits",
-  "history.unpushedShort": "sem push",
   "history.unpushedTitle": "Por enquanto este commit está só nesta máquina",
   "history.wholeFile": "Mostrar o arquivo inteiro",
   "history.maximise": "Maximizar",

@@ -1232,7 +1232,6 @@
   "history.merge": "マージコミット",
   "help.actionGitHistory": "コミット履歴",
   "history.commits": "コミット",
-  "history.unpushedShort": "未プッシュ",
   "history.unpushedTitle": "このコミットは今のところこのマシンにのみあります",
   "history.wholeFile": "ファイル全体を表示",
   "history.maximise": "最大化",

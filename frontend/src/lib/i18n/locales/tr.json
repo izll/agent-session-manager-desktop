@@ -1232,7 +1232,6 @@
   "history.merge": "Birleştirme commit'i",
   "help.actionGitHistory": "Commit geçmişi",
   "history.commits": "Commit'ler",
-  "history.unpushedShort": "push edilmedi",
   "history.unpushedTitle": "Bu commit şimdilik yalnızca bu makinede",
   "history.wholeFile": "Dosyanın tamamını göster",
   "history.maximise": "Büyüt",

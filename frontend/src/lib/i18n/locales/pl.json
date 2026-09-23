@@ -1232,7 +1232,6 @@
   "history.merge": "Commit scalenia",
   "help.actionGitHistory": "Historia commitów",
   "history.commits": "Commity",
-  "history.unpushedShort": "bez pusha",
   "history.unpushedTitle": "Ten commit jest na razie tylko na tym komputerze",
   "history.wholeFile": "Pokaż cały plik",
   "history.maximise": "Maksymalizuj",

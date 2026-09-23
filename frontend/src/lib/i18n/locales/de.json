@@ -1232,7 +1232,6 @@
   "history.merge": "Merge-Commit",
   "help.actionGitHistory": "Commit-Verlauf",
   "history.commits": "Commits",
-  "history.unpushedShort": "nicht gepusht",
   "history.unpushedTitle": "Dieser Commit ist bisher nur auf diesem Rechner",
   "history.wholeFile": "Ganze Datei anzeigen",
   "history.maximise": "Maximieren",

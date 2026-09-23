@@ -1232,7 +1232,6 @@
   "history.merge": "병합 커밋",
   "help.actionGitHistory": "커밋 기록",
   "history.commits": "커밋",
-  "history.unpushedShort": "푸시 안 됨",
   "history.unpushedTitle": "이 커밋은 아직 이 컴퓨터에만 있습니다",
   "history.wholeFile": "전체 파일 보기",
   "history.maximise": "최대화",

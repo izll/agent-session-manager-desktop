@@ -36,8 +36,15 @@ test('the badge refreshes on its own while the window has focus', () => {
 test('the history marks each unpushed commit and says how many', () => {
   assert.match(history, /class:unpushed=\{commit\.unpushed\}/,
     'unpushed commits look like every other commit in the list');
-  assert.match(history, /\{#if commit\.unpushed\}[\s\S]{0,200}unpushed-tag/,
-    'an unpushed commit carries no label saying so');
+  // Marked by the hash's colour and a tooltip, not by a tag of its own: a tag
+  // at the start of the meta line pushed that row's hash, author and date out
+  // of line with every other row.
+  assert.match(history, /class:unpushed-hash=\{commit\.unpushed\}/,
+    'an unpushed commit\'s hash looks like any other');
+  assert.match(history, /title=\{commit\.unpushed \? \$t\('history\.unpushedTitle'\)/,
+    'nothing says what the mark means');
+  assert.doesNotMatch(history, /unpushed-tag/,
+    'the tag is back at the start of the meta line, misaligning the row');
   assert.match(history, /unpushedTotal = page\.unpushed/,
     'the list does not take the branch-wide count from the page');
   // The summary sits outside the half-opacity title, which a child cannot undo.
@@ -51,7 +58,7 @@ test('every new string is translated', () => {
   const dir = new URL('../src/lib/i18n/locales/', import.meta.url);
   for (const name of readdirSync(dir).filter((n) => n.endsWith('.json'))) {
     const strings = JSON.parse(readFileSync(new URL(name, dir), 'utf8'));
-    for (const key of ['gitBranch.unpushed', 'history.unpushedShort', 'history.unpushedTitle']) {
+    for (const key of ['gitBranch.unpushed', 'history.unpushedTitle']) {
       assert.ok(strings[key]?.trim(), `${name} has no ${key}`);
     }
     assert.match(strings['gitBranch.unpushed'], /\{count\}/,

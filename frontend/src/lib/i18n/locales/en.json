@@ -1224,7 +1224,6 @@
   "history.merge": "Merge commit",
   "help.actionGitHistory": "Commit history",
   "history.commits": "Commits",
-  "history.unpushedShort": "not pushed",
   "history.unpushedTitle": "This commit is only on this machine so far",
   "history.wholeFile": "Show the whole file",
   "history.maximise": "Maximise",

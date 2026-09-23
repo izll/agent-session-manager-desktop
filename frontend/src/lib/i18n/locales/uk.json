@@ -1232,7 +1232,6 @@
   "history.merge": "Коміт злиття",
   "help.actionGitHistory": "Історія комітів",
   "history.commits": "Коміти",
-  "history.unpushedShort": "не запушено",
   "history.unpushedTitle": "Цей коміт поки що є лише на цьому комп'ютері",
   "history.wholeFile": "Показати весь файл",
   "history.maximise": "Розгорнути",

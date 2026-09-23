@@ -1232,7 +1232,6 @@
   "history.merge": "Commit hợp nhất",
   "help.actionGitHistory": "Lịch sử commit",
   "history.commits": "Commit",
-  "history.unpushedShort": "chưa push",
   "history.unpushedTitle": "Commit này hiện chỉ có trên máy này",
   "history.wholeFile": "Hiện toàn bộ tệp",
   "history.maximise": "Phóng to",

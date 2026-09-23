@@ -1232,7 +1232,6 @@
   "history.merge": "إيداع دمج",
   "help.actionGitHistory": "سجل الإيداعات",
   "history.commits": "الإيداعات",
-  "history.unpushedShort": "غير مدفوع",
   "history.unpushedTitle": "هذا الإيداع موجود على هذا الجهاز فقط حتى الآن",
   "history.wholeFile": "عرض الملف كاملًا",
   "history.maximise": "تكبير",

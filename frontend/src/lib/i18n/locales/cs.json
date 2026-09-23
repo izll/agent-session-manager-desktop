@@ -1232,7 +1232,6 @@
   "history.merge": "Merge commit",
   "help.actionGitHistory": "Historie commitů",
   "history.commits": "Commity",
-  "history.unpushedShort": "nepushnuto",
   "history.unpushedTitle": "Tento commit je zatím jen na tomto počítači",
   "history.wholeFile": "Zobrazit celý soubor",
   "history.maximise": "Maximalizovat",

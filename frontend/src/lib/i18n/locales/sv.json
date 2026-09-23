@@ -1232,7 +1232,6 @@
   "history.merge": "Merge-commit",
   "help.actionGitHistory": "Commithistorik",
   "history.commits": "Commits",
-  "history.unpushedShort": "ej pushad",
   "history.unpushedTitle": "Den här committen finns hittills bara på den här datorn",
   "history.wholeFile": "Visa hela filen",
   "history.maximise": "Maximera",

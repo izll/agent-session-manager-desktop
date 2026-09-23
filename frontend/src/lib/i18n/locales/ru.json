@@ -1232,7 +1232,6 @@
   "history.merge": "Коммит слияния",
   "help.actionGitHistory": "История коммитов",
   "history.commits": "Коммиты",
-  "history.unpushedShort": "не запушен",
   "history.unpushedTitle": "Этот коммит пока есть только на этом компьютере",
   "history.wholeFile": "Показать файл целиком",
   "history.maximise": "Развернуть",

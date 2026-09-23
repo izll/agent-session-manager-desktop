@@ -1232,7 +1232,6 @@
   "history.merge": "Merge commit",
   "help.actionGitHistory": "Commit előzmények",
   "history.commits": "Commitok",
-  "history.unpushedShort": "nincs pusholva",
   "history.unpushedTitle": "Ez a commit egyelőre csak ezen a gépen van",
   "history.wholeFile": "Teljes fájl megjelenítése",
   "history.maximise": "Teljes méret",

@@ -1232,7 +1232,6 @@
   "history.merge": "คอมมิตผสาน",
   "help.actionGitHistory": "ประวัติคอมมิต",
   "history.commits": "คอมมิต",
-  "history.unpushedShort": "ยังไม่พุช",
   "history.unpushedTitle": "ตอนนี้คอมมิตนี้อยู่บนเครื่องนี้เท่านั้น",
   "history.wholeFile": "แสดงทั้งไฟล์",
   "history.maximise": "ขยายเต็ม",

@@ -171,7 +171,7 @@
     </svg>
     <span class="git-branch-name">{$gitBranch.branch}</span>
     {#if unpushed > 0}
-      <span class="git-unpushed-badge" title={$t('gitBranch.unpushed', { count: unpushed })}>↑{unpushed}</span>
+      <span class="git-unpushed-badge" title={$t('gitBranch.unpushed', { count: unpushed })}>↑ {unpushed}</span>
     {/if}
     {#if behind}
       <span class="git-branch-counts">{behind}</span>

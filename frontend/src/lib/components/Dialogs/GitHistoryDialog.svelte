@@ -985,6 +985,7 @@
                 class="commit-row"
                 class:selected={commit.hash === selectedHash}
                 class:unpushed={commit.unpushed}
+                title={commit.unpushed ? $t('history.unpushedTitle') : undefined}
                 data-commit={index}
                 role="option"
                 aria-selected={commit.hash === selectedHash}
@@ -998,10 +999,10 @@
                   {commit.subject}
                 </div>
                 <div class="commit-meta">
-                  {#if commit.unpushed}
-                    <span class="unpushed-tag" title={$t('history.unpushedTitle')}>↑ {$t('history.unpushedShort')}</span>
-                  {/if}
-                  <span class="hash">{commit.shortHash}</span>
+                  <!-- The mark is the hash's colour, not a tag of its own: a tag
+                       at the start of this line pushed the hash, author and date
+                       of unpushed commits out of line with every other row. -->
+                  <span class="hash" class:unpushed-hash={commit.unpushed}>{commit.shortHash}</span>
                   <span class="author">{commit.author}</span>
                   <span class="date">{when(commit.committed)}</span>
                 </div>
@@ -1468,12 +1469,18 @@
   .commit-row.unpushed {
     border-left-color: rgba(251, 191, 36, 0.7);
   }
-  .unpushed-tag {
-    flex: 0 0 auto;
-    color: #fcd34d;
-    font-weight: 600;
+  .commit-row.selected.unpushed {
+    border-left-color: rgba(251, 191, 36, 0.7);
   }
+  .unpushed-hash {
+    color: #fcd34d;
+  }
+  /* As wide as its words: stretched across the column, a sentence this short
+     sat at the left of a long empty bar. */
   .unpushed-summary {
+    width: fit-content;
+    max-width: calc(100% - 24px);
+    box-sizing: border-box;
     margin: 2px 12px 6px;
     padding: 3px 8px;
     border-radius: 6px;
@@ -1486,9 +1493,13 @@
   .commit-row:hover {
     background: rgba(255, 255, 255, 0.04);
   }
+  /* The selection uses the same stripe as the unpushed mark, rather than a
+     shadow of its own beside it: two stripes side by side read as a glitch.
+     On an unpushed commit the stripe stays amber, and the background is what
+     says it is selected. */
   .commit-row.selected {
     background: rgba(255, 255, 255, 0.09);
-    box-shadow: inset 2px 0 0 var(--accent, #61afef);
+    border-left-color: var(--accent, #61afef);
   }
   .commit-subject {
     overflow: hidden;
@@ -1501,6 +1512,9 @@
   }
   .commit-meta {
     display: flex;
+    /* The hash is monospace and the rest is not; aligned by their tops, the
+       hash sat visibly higher than the author and the date beside it. */
+    align-items: baseline;
     gap: 8px;
     margin-top: 3px;
     font-size: 0.75em;
@@ -1696,18 +1710,26 @@
   }
   .selected-stats {
     display: flex;
+    flex-shrink: 0;
     gap: 6px;
     font-size: 0.9em;
+    white-space: nowrap;
   }
+  /* The buttons keep their size and the path gives way, which it can: it is
+     already cut from the directory end. Squeezed, "Changes only" wrapped onto
+     two lines and the row stretched the arrows beside it to match. */
   .selected-nav {
     margin-left: auto;
     display: flex;
+    flex-shrink: 0;
+    align-items: center;
     gap: 4px;
   }
   .nav-btn {
     padding: 2px 7px;
     font-size: 11px;
     line-height: 1.4;
+    white-space: nowrap;
     cursor: pointer;
     border-radius: 4px;
     border: 1px solid rgba(255, 255, 255, 0.18);
