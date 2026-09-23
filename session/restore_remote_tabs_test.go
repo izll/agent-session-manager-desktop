@@ -1,6 +1,7 @@
 package session
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -26,6 +27,9 @@ func TestRestartingASessionLeavesServersTabsToTheirServers(t *testing.T) {
 	}
 	SetExecutor(inst.ID, local)
 	t.Cleanup(func() { ClearExecutor(inst.ID) })
+	// Connected, with no window at the stray tab's old index.
+	SetTabExecutor(inst.ID, "srv", newScriptedExecutor())
+	t.Cleanup(func() { ClearTabExecutor(inst.ID, "srv") })
 
 	inst.restoreFollowedWindows(allWindows)
 
@@ -169,6 +173,8 @@ func TestTheChosenTabFollowsItsRenumbering(t *testing.T) {
 	}
 	SetExecutor(inst.ID, local)
 	t.Cleanup(func() { ClearExecutor(inst.ID) })
+	SetTabExecutor(inst.ID, "srv", newScriptedExecutor())
+	t.Cleanup(func() { ClearTabExecutor(inst.ID, "srv") })
 
 	chosen := inst.restoreFollowedWindows(8)
 	if chosen < remoteWindowIndexBase || chosen != inst.FollowedWindows[0].Index {
@@ -255,5 +261,40 @@ func TestStartingOnlyAServerTabReachesTheServer(t *testing.T) {
 	}
 	if !strings.Contains(body, "i.startServerTabIfIdle(onlyWindowIdx)") {
 		t.Error("\"only this tab\" on a server tab never starts it")
+	}
+}
+
+// A stray tab started before the renumbering has its window on the server at
+// the old index. Renumbering only the record hid that window, and the next
+// start launched a second agent on the same conversation beside it. The window
+// moves with the record.
+func TestRenumberingMovesAWindowThatIsRunning(t *testing.T) {
+	server := newScriptedExecutor()
+	server.answers["list-windows"] = "3\n" // the stray tab's window is there
+	inst := &Instance{ID: "stray-live", Name: "stray-live", Status: StatusRunning,
+		FollowedWindows: []FollowedWindow{{Index: 3, Agent: AgentClaude, ServerID: "srv"}}}
+	SetTabExecutor(inst.ID, "srv", server)
+	t.Cleanup(func() { ClearTabExecutor(inst.ID, "srv") })
+
+	moved := inst.renumberStrayRemoteTabs()
+
+	next := inst.FollowedWindows[0].Index
+	if next < remoteWindowIndexBase || moved[3] != next {
+		t.Fatalf("the tab was not renumbered: index %d, moved %v", next, moved)
+	}
+	moves := server.commandsNamed("move-window")
+	want := []string{"move-window", "-s", "stray-live:3", "-t", fmt.Sprintf("stray-live:%d", next)}
+	if len(moves) != 1 || strings.Join(moves[0], " ") != strings.Join(want, " ") {
+		t.Errorf("the running window was not moved with the record: %v", moves)
+	}
+}
+
+// Without an answer from the server there is no telling whether a window is
+// running at the old index, so nothing is renumbered until it can be asked.
+func TestRenumberingWaitsForTheServer(t *testing.T) {
+	inst := &Instance{ID: "stray-offline", Name: "stray-offline", Status: StatusRunning,
+		FollowedWindows: []FollowedWindow{{Index: 3, Agent: AgentClaude, ServerID: "srv"}}}
+	if moved := inst.renumberStrayRemoteTabs(); len(moved) != 0 || inst.FollowedWindows[0].Index != 3 {
+		t.Errorf("renumbered without asking the server: %v, index %d", moved, inst.FollowedWindows[0].Index)
 	}
 }

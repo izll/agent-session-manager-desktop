@@ -701,17 +701,38 @@ const legacyRemoteWindowIndexBase = 100
 // The index alone identifies these, since no server tab was ever numbered
 // below legacyRemoteWindowIndexBase.
 //
-// The new index is simply unused on that server, so starting the tab creates
-// its window there.
+// The server is asked first, and nothing moves without its answer. Starting
+// a stray tab before this ran creates its window on the server at the stray
+// index; renumbering only the record then hid that window — the listing keeps
+// to the server's band — and the next start launched a second agent on the
+// same conversation beside it. A window found at the old index is moved to
+// the new one with it, so the agent keeps running under the index it will be
+// found by. A server that cannot be asked leaves the tab as it is until a
+// later start can.
 func (i *Instance) renumberStrayRemoteTabs() map[int]int {
 	moved := map[int]int{}
+	sessionName := i.TmuxSessionName()
 	for at := range i.FollowedWindows {
 		fw := i.FollowedWindows[at]
 		if fw.ServerID == "" || fw.ServerID == i.ServerID ||
 			fw.Index >= legacyRemoteWindowIndexBase {
 			continue
 		}
+		if _, unreachable := i.execOn(fw.ServerID).(unreachableExecutor); unreachable {
+			log.Printf("[tab] %s: tab %q holds local index %d but server %s is not "+
+				"connected; renumbering it later", i.ID, fw.Name, fw.Index, fw.ServerID)
+			continue
+		}
 		next := i.nextRemoteWindowIndex(fw.ServerID)
+		if i.windowExistsContext(context.Background(), sessionName, fw.Index) {
+			if err := i.tmuxRunOn(fw.ServerID, "move-window", "-s",
+				fmt.Sprintf("%s:%d", sessionName, fw.Index), "-t",
+				fmt.Sprintf("%s:%d", sessionName, next)); err != nil {
+				log.Printf("[tab] %s: could not move window %d to %d on %s: %v; "+
+					"leaving the tab as it is", i.ID, fw.Index, next, fw.ServerID, err)
+				continue
+			}
+		}
 		log.Printf("[tab] %s: tab %q names server %s but held local index %d; "+
 			"moving it to %d", i.ID, fw.Name, fw.ServerID, fw.Index, next)
 		moved[fw.Index] = next
