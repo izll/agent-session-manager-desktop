@@ -861,7 +861,6 @@
   "settings.gitBranchOff": "Не показувати",
   "gitBranch.tooltip": "Гілка: {branch}",
   "gitBranch.tooltipUpstream": "upstream: {upstream}",
-  "gitBranch.tooltipAhead": "попереду на {count}",
   "gitBranch.tooltipBehind": "позаду на {count}",
   "gitBranch.unpushed": "Незапушених комітів: {count}",
   "gitBranch.listTitle": "Гілки",

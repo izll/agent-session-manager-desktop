@@ -861,7 +861,6 @@
   "settings.gitBranchOff": "Non mostrare",
   "gitBranch.tooltip": "Branch: {branch}",
   "gitBranch.tooltipUpstream": "upstream: {upstream}",
-  "gitBranch.tooltipAhead": "{count} avanti",
   "gitBranch.tooltipBehind": "{count} indietro",
   "gitBranch.unpushed": "Commit non ancora pushati: {count}",
   "gitBranch.listTitle": "Branch",

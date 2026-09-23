@@ -861,7 +861,6 @@
   "settings.gitBranchOff": "Ne jelenjen meg",
   "gitBranch.tooltip": "Ág: {branch}",
   "gitBranch.tooltipUpstream": "távoli ág: {upstream}",
-  "gitBranch.tooltipAhead": "{count} előrébb",
   "gitBranch.tooltipBehind": "{count} lemaradás",
   "gitBranch.unpushed": "{count} commit még nincs pusholva",
   "gitBranch.listTitle": "Branchek",

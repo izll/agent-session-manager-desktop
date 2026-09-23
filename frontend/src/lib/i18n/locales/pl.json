@@ -861,7 +861,6 @@
   "settings.gitBranchOff": "Nie pokazuj",
   "gitBranch.tooltip": "Gałąź: {branch}",
   "gitBranch.tooltipUpstream": "upstream: {upstream}",
-  "gitBranch.tooltipAhead": "{count} do przodu",
   "gitBranch.tooltipBehind": "{count} do tyłu",
   "gitBranch.unpushed": "Commity bez pusha: {count}",
   "gitBranch.listTitle": "Gałęzie",

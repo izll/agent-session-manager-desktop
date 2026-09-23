@@ -861,7 +861,6 @@
   "settings.gitBranchOff": "عدم الإظهار",
   "gitBranch.tooltip": "الفرع: {branch}",
   "gitBranch.tooltipUpstream": "المصدر: {upstream}",
-  "gitBranch.tooltipAhead": "{count} للأمام",
   "gitBranch.tooltipBehind": "{count} للخلف",
   "gitBranch.unpushed": "إيداعات لم تُدفع بعد: {count}",
   "gitBranch.listTitle": "الفروع",

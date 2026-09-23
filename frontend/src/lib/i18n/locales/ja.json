@@ -861,7 +861,6 @@
   "settings.gitBranchOff": "表示しない",
   "gitBranch.tooltip": "ブランチ: {branch}",
   "gitBranch.tooltipUpstream": "上流: {upstream}",
-  "gitBranch.tooltipAhead": "{count} 件先行",
   "gitBranch.tooltipBehind": "{count} 件遅延",
   "gitBranch.unpushed": "未プッシュのコミット {count} 件",
   "gitBranch.listTitle": "ブランチ",

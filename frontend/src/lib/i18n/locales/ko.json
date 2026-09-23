@@ -861,7 +861,6 @@
   "settings.gitBranchOff": "표시하지 않음",
   "gitBranch.tooltip": "브랜치: {branch}",
   "gitBranch.tooltipUpstream": "업스트림: {upstream}",
-  "gitBranch.tooltipAhead": "{count}개 앞섬",
   "gitBranch.tooltipBehind": "{count}개 뒤처짐",
   "gitBranch.unpushed": "푸시되지 않은 커밋 {count}개",
   "gitBranch.listTitle": "브랜치",

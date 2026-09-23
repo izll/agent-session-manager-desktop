@@ -861,7 +861,6 @@
   "settings.gitBranchOff": "No mostrar",
   "gitBranch.tooltip": "Rama: {branch}",
   "gitBranch.tooltipUpstream": "upstream: {upstream}",
-  "gitBranch.tooltipAhead": "{count} por delante",
   "gitBranch.tooltipBehind": "{count} por detrás",
   "gitBranch.unpushed": "Commits aún sin push: {count}",
   "gitBranch.listTitle": "Ramas",

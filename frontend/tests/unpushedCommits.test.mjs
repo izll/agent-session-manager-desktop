@@ -66,5 +66,8 @@ test('every new string is translated', () => {
     }
     assert.match(strings['gitBranch.unpushed'], /\{count\}/,
       `${name}: gitBranch.unpushed lost its {count}, so the number is not shown`);
+    // The unpushed badge replaced the ahead count; nothing shows this any more.
+    assert.equal(strings['gitBranch.tooltipAhead'], undefined,
+      `${name} still carries the unused gitBranch.tooltipAhead`);
   }
 });

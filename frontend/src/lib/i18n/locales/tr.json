@@ -861,7 +861,6 @@
   "settings.gitBranchOff": "Gösterme",
   "gitBranch.tooltip": "Dal: {branch}",
   "gitBranch.tooltipUpstream": "üst kaynak: {upstream}",
-  "gitBranch.tooltipAhead": "{count} ileride",
   "gitBranch.tooltipBehind": "{count} geride",
   "gitBranch.unpushed": "{count} commit henüz push edilmedi",
   "gitBranch.listTitle": "Dallar",

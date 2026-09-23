@@ -861,7 +861,6 @@
   "settings.gitBranchOff": "Nezobrazovat",
   "gitBranch.tooltip": "Větev: {branch}",
   "gitBranch.tooltipUpstream": "upstream: {upstream}",
-  "gitBranch.tooltipAhead": "{count} napřed",
   "gitBranch.tooltipBehind": "{count} pozadu",
   "gitBranch.unpushed": "Nepushnuté commity: {count}",
   "gitBranch.listTitle": "Větve",

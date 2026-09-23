@@ -861,7 +861,6 @@
   "settings.gitBranchOff": "Visa inte",
   "gitBranch.tooltip": "Gren: {branch}",
   "gitBranch.tooltipUpstream": "uppström: {upstream}",
-  "gitBranch.tooltipAhead": "{count} före",
   "gitBranch.tooltipBehind": "{count} efter",
   "gitBranch.unpushed": "Commits som ännu inte pushats: {count}",
   "gitBranch.listTitle": "Grenar",

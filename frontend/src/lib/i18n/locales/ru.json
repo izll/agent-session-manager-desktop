@@ -861,7 +861,6 @@
   "settings.gitBranchOff": "Не показывать",
   "gitBranch.tooltip": "Ветка: {branch}",
   "gitBranch.tooltipUpstream": "upstream: {upstream}",
-  "gitBranch.tooltipAhead": "впереди на {count}",
   "gitBranch.tooltipBehind": "позади на {count}",
   "gitBranch.unpushed": "Незапушенных коммитов: {count}",
   "gitBranch.listTitle": "Ветки",

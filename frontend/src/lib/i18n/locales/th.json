@@ -861,7 +861,6 @@
   "settings.gitBranchOff": "ไม่แสดง",
   "gitBranch.tooltip": "สาขา: {branch}",
   "gitBranch.tooltipUpstream": "ต้นทาง: {upstream}",
-  "gitBranch.tooltipAhead": "นำหน้า {count}",
   "gitBranch.tooltipBehind": "ตามหลัง {count}",
   "gitBranch.unpushed": "{count} คอมมิตยังไม่ได้พุช",
   "gitBranch.listTitle": "สาขา",

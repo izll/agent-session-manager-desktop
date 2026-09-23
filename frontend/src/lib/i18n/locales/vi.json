@@ -861,7 +861,6 @@
   "settings.gitBranchOff": "Không hiển thị",
   "gitBranch.tooltip": "Nhánh: {branch}",
   "gitBranch.tooltipUpstream": "upstream: {upstream}",
-  "gitBranch.tooltipAhead": "vượt trước {count}",
   "gitBranch.tooltipBehind": "chậm hơn {count}",
   "gitBranch.unpushed": "{count} commit chưa được push",
   "gitBranch.listTitle": "Nhánh",

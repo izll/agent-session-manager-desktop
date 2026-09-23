@@ -861,7 +861,6 @@
   "settings.gitBranchOff": "不显示",
   "gitBranch.tooltip": "分支：{branch}",
   "gitBranch.tooltipUpstream": "上游：{upstream}",
-  "gitBranch.tooltipAhead": "领先 {count} 个提交",
   "gitBranch.tooltipBehind": "落后 {count} 个提交",
   "gitBranch.unpushed": "{count} 个提交尚未推送",
   "gitBranch.listTitle": "分支",

@@ -861,7 +861,6 @@
   "settings.gitBranchOff": "Niet tonen",
   "gitBranch.tooltip": "Branch: {branch}",
   "gitBranch.tooltipUpstream": "upstream: {upstream}",
-  "gitBranch.tooltipAhead": "{count} voor",
   "gitBranch.tooltipBehind": "{count} achter",
   "gitBranch.unpushed": "Nog niet gepushte commits: {count}",
   "gitBranch.listTitle": "Branches",
