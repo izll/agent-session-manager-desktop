@@ -703,7 +703,8 @@ const legacyRemoteWindowIndexBase = 100
 //
 // The new index is simply unused on that server, so starting the tab creates
 // its window there.
-func (i *Instance) renumberStrayRemoteTabs() {
+func (i *Instance) renumberStrayRemoteTabs() map[int]int {
+	moved := map[int]int{}
 	for at := range i.FollowedWindows {
 		fw := i.FollowedWindows[at]
 		if fw.ServerID == "" || fw.ServerID == i.ServerID ||
@@ -713,8 +714,42 @@ func (i *Instance) renumberStrayRemoteTabs() {
 		next := i.nextRemoteWindowIndex(fw.ServerID)
 		log.Printf("[tab] %s: tab %q names server %s but held local index %d; "+
 			"moving it to %d", i.ID, fw.Name, fw.ServerID, fw.Index, next)
+		moved[fw.Index] = next
 		i.FollowedWindows[at].Index = next
 	}
+	return moved
+}
+
+// windowOnAnotherMachine reports whether a tab runs somewhere other than its
+// session.
+func (i *Instance) windowOnAnotherMachine(windowIdx int) bool {
+	server := i.serverForWindow(windowIdx)
+	return server != "" && server != i.ServerID
+}
+
+// paneRunning reports whether a tab's pane exists and has not exited, asked
+// on the machine the tab runs on. Anything it cannot establish reads as not
+// running, which only ever leads to the tab being started.
+func (i *Instance) paneRunning(windowIdx int) bool {
+	target := fmt.Sprintf("%s:%d", i.TmuxSessionName(), windowIdx)
+	output, err := i.tmuxOutputOn(i.serverForWindow(windowIdx),
+		"display-message", "-p", "-t", target, "#{pane_dead}")
+	return err == nil && strings.TrimSpace(string(output)) == "0"
+}
+
+// startServerTabIfIdle starts a tab on a server unless it is already running
+// there. Starting a running one would kill it (respawn-pane -k); a window that
+// is gone is recreated at its own index by RestartWindowWithResume.
+func (i *Instance) startServerTabIfIdle(windowIdx int) error {
+	for at := range i.FollowedWindows {
+		if i.FollowedWindows[at].Index == windowIdx {
+			i.FollowedWindows[at].Stopped = false
+		}
+	}
+	if i.windowExistsContext(context.Background(), i.TmuxSessionName(), windowIdx) && i.paneRunning(windowIdx) {
+		return nil
+	}
+	return i.RestartWindowWithResume(windowIdx, "")
 }
 
 // nextRemoteWindowIndex picks a free index for a new tab on a server.
@@ -1440,7 +1475,16 @@ func (i *Instance) startWithResume(resumeID string, onlyWindowIdx int) error {
 	i.saveBaseCommit()
 
 	// Restore followed windows (tabs) if any
-	i.restoreFollowedWindows(onlyWindowIdx)
+	onlyWindowIdx = i.restoreFollowedWindows(onlyWindowIdx)
+
+	// "Only this tab" on a tab on a server: the loop above leaves server tabs
+	// to their server, so nothing started it, and the session came up with
+	// every local tab parked and the chosen one not running either.
+	if onlyWindowIdx != allWindows && i.windowOnAnotherMachine(onlyWindowIdx) {
+		if err := i.startServerTabIfIdle(onlyWindowIdx); err != nil {
+			return err
+		}
+	}
 
 	// "Only this tab" for a followed window means the session's own agent must
 	// not run either. The window has to exist first — it is what the session
@@ -1645,9 +1689,12 @@ func tmuxWindowIndexListed(output []byte, windowIdx int) bool {
 // onlyWindowIdx names the one tab that should come back running; every other
 // is brought back as a stopped placeholder. Pass allWindows to start them all,
 // which is what an ordinary session start does.
-func (i *Instance) restoreFollowedWindows(onlyWindowIdx int) {
+//
+// Returns onlyWindowIdx as it stands after stray server tabs were renumbered:
+// the index the user chose may be one of them.
+func (i *Instance) restoreFollowedWindows(onlyWindowIdx int) int {
 	if len(i.FollowedWindows) == 0 {
-		return
+		return onlyWindowIdx
 	}
 
 	sessionName := i.TmuxSessionName()
@@ -1656,7 +1703,9 @@ func (i *Instance) restoreFollowedWindows(onlyWindowIdx int) {
 	chosenNewIdx := 0
 	chosenFound := false
 
-	i.renumberStrayRemoteTabs()
+	if moved, ok := i.renumberStrayRemoteTabs()[onlyWindowIdx]; ok && onlyWindowIdx != allWindows {
+		onlyWindowIdx = moved
+	}
 
 	// Store old followed windows and clear the list (will be repopulated)
 	oldWindows := i.FollowedWindows
@@ -1668,15 +1717,6 @@ func (i *Instance) restoreFollowedWindows(onlyWindowIdx int) {
 		// already knows how to bring a tab back as a dead pane, and reusing it
 		// keeps one description of what a stopped tab looks like.
 		originalIdx := fw.Index
-		if onlyWindowIdx != allWindows && originalIdx != onlyWindowIdx {
-			fw.Stopped = true
-		}
-		var windowArgs []string
-		resumeID := fw.ResumeSessionID
-		tabDir := fw.WorkDir
-		if tabDir == "" {
-			tabDir = i.Path
-		}
 		// A tab on another machine is not this session's to rebuild.
 		//
 		// Its window lives in that server's multiplexer, which does not stop
@@ -1688,10 +1728,22 @@ func (i *Instance) restoreFollowedWindows(onlyWindowIdx int) {
 		//
 		// Kept before the conversation check below, which asks the server and
 		// would drop the saved conversation whenever the server had not
-		// answered yet.
+		// answered yet — and before "only this tab" marks the other tabs
+		// stopped: a server tab is still running there, and a stopped mark
+		// over a running agent is what let Start kill it.
 		if fw.ServerID != "" && fw.ServerID != i.ServerID {
 			i.FollowedWindows = append(i.FollowedWindows, fw)
 			continue
+		}
+
+		if onlyWindowIdx != allWindows && originalIdx != onlyWindowIdx {
+			fw.Stopped = true
+		}
+		var windowArgs []string
+		resumeID := fw.ResumeSessionID
+		tabDir := fw.WorkDir
+		if tabDir == "" {
+			tabDir = i.Path
 		}
 
 		// Drop the saved resume ID if it no longer exists on disk so the
@@ -1825,11 +1877,12 @@ func (i *Instance) restoreFollowedWindows(onlyWindowIdx int) {
 	// asked for".
 	if chosenFound {
 		i.tmuxRun("select-window", "-t", fmt.Sprintf("%s:%d", sessionName, chosenNewIdx))
-		return
+		return chosenNewIdx
 	}
 	if mainWindowIdx, ok := i.getMainWindowIndex(); ok {
 		i.tmuxRun("select-window", "-t", fmt.Sprintf("%s:%d", sessionName, mainWindowIdx))
 	}
+	return onlyWindowIdx
 }
 
 func (i *Instance) Stop() error {
@@ -2258,6 +2311,18 @@ func (i *Instance) RestartWindowWithResume(windowIdx int, resumeID string) error
 	fw := &i.FollowedWindows[fwSliceIdx]
 
 	log.Printf("[RestartWindow] found fw: index=%d agent=%s name=%q has_resume=%t stopped=%v", fw.Index, fw.Agent, fw.Name, fw.ResumeSessionID != "", fw.Stopped)
+
+	// Starting a tab recorded as stopped whose pane is in fact running only
+	// corrects the record. A server keeps its tabs running when this computer
+	// stops the session, so the record can say stopped while the agent works
+	// on — and respawn-pane -k below would kill it mid-task. A running tab the
+	// user asks to restart is not recorded as stopped and is restarted as
+	// before.
+	if fw.Stopped && !windowMissing && i.paneRunning(windowIdx) {
+		log.Printf("[RestartWindow] tab %s/%d is already running; clearing its stopped mark", i.ID, windowIdx)
+		fw.Stopped = false
+		return nil
+	}
 
 	var argv []string
 	if fw.Agent == AgentTerminal {
