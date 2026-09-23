@@ -9,6 +9,7 @@ import {
   ungroupedSessions,
 } from './sessions';
 import { settings } from './settings';
+import { showSessionView } from './navigation';
 import {
   buildSidebarOrder,
   resolveActiveEntry,
@@ -48,17 +49,32 @@ export const activeSidebarEntry = derived(
   ([$cursor, $selectedId, $order]) => resolveActiveEntry($cursor, $selectedId, $order),
 );
 
-/** Select a session from one particular row of the list. */
+/**
+ * Select a session from one particular row of the list.
+ *
+ * Clicking the session that is already selected still opens it. It used to be
+ * skipped as a no-op, and with it went the switch to the session view that
+ * selectSession makes — so from the dashboard or the task list, clicking the
+ * highlighted row did nothing at all. Only the view is changed here, not the
+ * selection: re-selecting would re-resolve the tab and write the same session
+ * and tab back to storage, for a session nobody left.
+ */
 export function selectSidebarEntry(id: string, section: SidebarSection) {
   cursor.set({ id, section });
   if (get(selectedSessionId) !== id) selectSession(id);
+  else showSessionView();
 }
 
 function step(delta: 1 | -1) {
   const entry = stepEntry(get(sidebarOrder), get(activeSidebarEntry), delta);
-  // Moving between the two copies of one session keeps the selection and moves
-  // only the cursor, which is what makes the next step continue from there.
-  if (entry) selectSidebarEntry(entry.id, entry.section);
+  if (!entry) return;
+  // Moving between the two copies of one session moves only the cursor, which
+  // is what makes the next step continue from there. It is not a click on the
+  // session: the selection is unchanged, so neither is the view — a step taken
+  // on the dashboard does not throw the user out of it just for passing over
+  // the favourite's second row.
+  if (entry.id === get(selectedSessionId)) cursor.set(entry);
+  else selectSidebarEntry(entry.id, entry.section);
 }
 
 export function selectPrevSession() {
