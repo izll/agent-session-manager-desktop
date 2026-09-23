@@ -3468,12 +3468,12 @@ func (a *App) getSidebarUpdates(ctx context.Context) SidebarUpdate {
 	// "waiting" counts as activity — a session holding a permission prompt is
 	// very much where the work is, and often the one to go back to.
 	//
-	// One timestamp for the whole tick. Each session used to get its own
-	// time.Now(), taken in whatever order its poll happened to finish, so the
-	// sessions working at the same moment swapped places every two seconds —
-	// the list reshuffled under the cursor while stepping through it. Sharing
-	// the time makes them tie, and ties sort by name, so the order moves only
-	// when a session actually starts or stops working.
+	// One timestamp for the whole tick, so every session seen working in it
+	// carries the same time. This alone does not keep their order stable —
+	// the stamp is sent to the second, and a session that misses a busy
+	// reading in one tick still falls a second behind — which is why the
+	// sidebar treats everything active within the last minute as working now
+	// and orders those by name (utils/activityOrder.ts).
 	activeNow := make(map[string]time.Time)
 	tickTime := time.Now()
 	for sr := range resultsCh {

@@ -7,44 +7,18 @@ const storeSrc = readFileSync(
 const treeSrc = readFileSync(
   new URL('../src/lib/components/Sidebar/SessionTree.svelte', import.meta.url), 'utf8');
 
-// The comparator, lifted out of the store so it can be run here. The store
-// itself pulls in Svelte and the Wails bindings, neither of which exists under
-// plain node.
-// The comparator, lifted out of the store so it can be run here. The store
-// itself pulls in Svelte and the Wails bindings, neither of which exists under
-// plain node. Its timeOf helper reads the live poll map, so the extraction
-// supplies an empty one — the fallback path is what these cases exercise.
-const comparator = (() => {
-  const at = storeSrc.indexOf('export const sessionsByActivity');
-  assert.ok(at > 0, 'sessionsByActivity is gone');
-  const from = storeSrc.indexOf('.sort((a, b) => {', at);
-  assert.ok(from > 0, 'the sort call is gone');
+// The comparator is a plain function the store calls, so it runs here as it is.
+const { compareByActivity, RECENTLY_ACTIVE_MS } = await import('../src/lib/utils/activityOrder.ts');
 
-  const timeOfAt = storeSrc.indexOf('const timeOf =', at);
-  assert.ok(timeOfAt > 0 && timeOfAt < from, 'the time lookup is gone');
-  // Brace-matched rather than matched on indentation, which moves.
-  const timeOf = (() => {
-    let d = 0;
-    for (let i = storeSrc.indexOf('{', timeOfAt); i < storeSrc.length; i++) {
-      if (storeSrc[i] === '{') d++;
-      else if (storeSrc[i] === '}' && --d === 0) {
-        return storeSrc.slice(timeOfAt, i + 1).replace(/: Session/g, '') + ';';
-      }
-    }
-    throw new Error('the time lookup is unbalanced');
-  })();
-
-  const open = from + '.sort('.length;
-  let depth = 0, end = -1;
-  for (let i = storeSrc.indexOf('{', open); i < storeSrc.length; i++) {
-    if (storeSrc[i] === '{') depth++;
-    else if (storeSrc[i] === '}' && --depth === 0) { end = i + 1; break; }
-  }
-  assert.ok(end > 0, 'the comparator body is unbalanced');
-
-  const body = storeSrc.slice(open, end).replace(/: Session/g, '');
-  return eval(`(($lastActive) => { ${timeOf} return ${body}; })`)({});
-})();
+// Well after every timestamp below, so none counts as working now unless a
+// test says so.
+const NOW = Date.parse('2026-10-01T00:00:00Z');
+const timeOf = (s) => {
+  const parsed = s.updatedAt ? Date.parse(s.updatedAt) : 0;
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+const comparator = (a, b) =>
+  compareByActivity({ name: a.name, time: timeOf(a) }, { name: b.name, time: timeOf(b) }, NOW);
 
 const at = (name, updatedAt, extra = {}) => ({ name, updatedAt, ...extra });
 
@@ -117,4 +91,27 @@ test('the live poll time takes precedence over the loaded one', () => {
   const timeOf = storeSrc.slice(timeOfAt, storeSrc.indexOf('\n    };', timeOfAt));
   assert.match(timeOf, /\$lastActive\[s\.id\] \|\| s\.updatedAt/,
     'the loaded timestamp is not overridden by the live one');
+});
+
+// Sessions working at the same time swapped places whenever one of them got no
+// busy reading in a tick: its time fell a second behind and it dropped below
+// the others until the next tick, moving rows under the cursor while stepping.
+test('sessions working now keep a stable order by name', () => {
+  const now = Date.parse('2026-09-23T12:00:00Z');
+  const entry = (name, secondsAgo) => ({ name, time: now - secondsAgo * 1000 });
+  const tickA = [entry('beta', 0), entry('alpha', 2), entry('old', 3600)];
+  const tickB = [entry('beta', 2), entry('alpha', 0), entry('old', 3600)];
+  const order = (list) => [...list].sort((x, y) => compareByActivity(x, y, now)).map(e => e.name);
+  assert.deepEqual(order(tickA), ['alpha', 'beta', 'old']);
+  assert.deepEqual(order(tickB), ['alpha', 'beta', 'old'],
+    'a session that missed one busy reading swapped places with the other');
+});
+
+test('a session that finished a while ago falls back to its place by time', () => {
+  const now = Date.parse('2026-09-23T12:00:00Z');
+  const recent = { name: 'zulu', time: now - 1000 };
+  const earlier = { name: 'alpha', time: now - RECENTLY_ACTIVE_MS - 5000 };
+  const older = { name: 'beta', time: now - 3 * RECENTLY_ACTIVE_MS };
+  const sorted = [older, earlier, recent].sort((x, y) => compareByActivity(x, y, now));
+  assert.deepEqual(sorted.map(e => e.name), ['zulu', 'alpha', 'beta']);
 });

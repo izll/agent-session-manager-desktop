@@ -1,5 +1,6 @@
 import { writable, derived, get } from 'svelte/store';
 import { lastActive } from './statusLines';
+import { compareByActivity } from '../utils/activityOrder';
 import * as App from '../../../wailsjs/go/main/App';
 import type { main } from '../../../wailsjs/go/models';
 import { showSessionView } from './navigation';
@@ -90,14 +91,14 @@ export const sessionsByActivity = derived(
       const stamp = $lastActive[s.id] || s.updatedAt;
       // A session with no recorded activity sorts last rather than first: an
       // empty timestamp is "never", not "the beginning of time".
-      return stamp ? Date.parse(stamp) : 0;
+      const parsed = stamp ? Date.parse(stamp) : 0;
+      // An unparseable stamp is NaN, and a NaN in a comparison silently leaves
+      // the array in whatever order it started in.
+      return Number.isFinite(parsed) ? parsed : 0;
     };
-    return [...$sessions].sort((a, b) => {
-      const at = timeOf(a);
-      const bt = timeOf(b);
-      if (bt !== at) return bt - at;
-      return a.name.localeCompare(b.name);
-    });
+    const now = Date.now();
+    return [...$sessions].sort((a, b) =>
+      compareByActivity({ name: a.name, time: timeOf(a) }, { name: b.name, time: timeOf(b) }, now));
   },
 );
 
