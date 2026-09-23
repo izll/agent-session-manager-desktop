@@ -16,13 +16,13 @@ const places = [
   ['session list', '../src/lib/components/Sidebar/SessionItem.svelte', 'nameStyle'],
   ['group header', '../src/lib/components/Sidebar/GroupItem.svelte', 'nameStyle'],
   ['quick jump', '../src/lib/components/Dialogs/QuickJumpDialog.svelte', 'row.style'],
-  ['colour dialog preview', '../src/lib/components/Dialogs/SessionColorDialog.svelte', 'getPreviewStyle()'],
+  ['colour dialog preview', '../src/lib/components/Dialogs/SessionColorDialog.svelte', 'getPreviewStyle(selectedColor, selectedBgColor)'],
 ];
 
 for (const [where, path, chipStyle] of places) {
   test(`${where}: a gradient name keeps its background chip`, () => {
     const src = read(path);
-    const escaped = chipStyle.replace(/[.()]/g, (c) => `\\${c}`);
+    const escaped = chipStyle.replace(/[.(),]/g, (c) => `\\${c}`);
     // The chip's span, with the gradient span directly inside it.
     const nested = new RegExp(`style=\\{${escaped}\\}><span [^>]*style=`);
     assert.match(src, nested,
