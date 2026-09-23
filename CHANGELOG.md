@@ -6,6 +6,54 @@ Entries describe what changed for someone using the app. Internal refactoring,
 test and CI work is left out unless it changed behaviour. Dates are release
 dates; the format follows [Keep a Changelog](https://keepachangelog.com).
 
+## 1.1.10 — 2026-09-24
+
+### Added
+
+- **A custom background colour.** In background mode, the colour picker's
+  "Custom" swatch opens an editor with a colour picker and a hex field. A
+  preview shows the name as the sidebar will show it.
+
+### Fixed
+
+- **The automatic backups were wiped while an agent worked.** Every second
+  of agent activity wrote a new backup. Within a few minutes this pushed out
+  every hourly, daily and weekly backup. Routine bookkeeping now makes no
+  backups, and when there are too many backups the recent ones are thinned
+  instead of the older history.
+- **Starting a tab could kill an agent that was still running on a
+  server.** "Start only this tab" marked server tabs as stopped while they
+  kept running, and Start then restarted them. Server tabs now keep their
+  state, and a tab that is already running is left alone. "Start only this
+  tab" on a server tab now actually starts it.
+- **A session hosted on a server could start on this computer** when its
+  server was not connected yet. It now reports that the server is not
+  connected.
+- **Terminal tabs lost their directory after a machine restart.** The
+  directory is now saved while the session runs. A tab back at the project
+  root is remembered and restarts there. A tab on a server keeps its own
+  directory. A network folder that stops answering can no longer freeze
+  the app.
+- **Restoring a server tab from the trash often failed.** It now works after
+  an app restart and for a tab created in the session's own folder.
+- **When a tab cannot be opened, the reason is shown**, translated. An error
+  from one tab no longer appears on another. A server tab waiting to be
+  started shows as parked, and one whose server is not answering says so.
+  This now also works for terminal tabs and single-tab sessions.
+- **Sorted by activity, sessions working at the same time no longer swap
+  places.**
+- **Clicking the session that is already selected** returns to it from the
+  dashboard or the task list.
+- **Alt+↑/↓ in the terminal** is only held back when it actually steps
+  through sessions. If you rebind it or turn it off, it reaches the
+  terminal again.
+- **The unpushed-commit count** is no longer wrong in shallow or
+  single-branch clones. Git warnings are no longer counted as commits.
+- **Colour picker:** the preview now follows what you pick, draws no name
+  chip when "full row" is on, and shows gradient names correctly. The
+  gradient editor no longer opens by itself, and it cannot apply a
+  half-typed colour.
+
 ## 1.1.9 — 2026-09-23
 
 ### Added
