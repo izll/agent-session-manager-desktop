@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -752,7 +753,11 @@ func (i *Instance) renumberStrayRemoteTabs() map[int]int {
 // computer's filesystem, as restartDirArgs does, only ever discarded it.
 func (i *Instance) terminalRestartDirArgs(fw FollowedWindow) []string {
 	if i.windowOnAnotherMachine(fw.Index) {
-		if dir := strings.TrimSpace(fw.WorkDir); filepath.IsAbs(dir) {
+		// path, not filepath: a server's path is a POSIX one whatever this
+		// computer is, and on Windows filepath.IsAbs wants a drive letter —
+		// so "/srv/app" was discarded and the tab restarted wherever the
+		// server's shell began.
+		if dir := strings.TrimSpace(fw.WorkDir); path.IsAbs(dir) {
 			return []string{"-c", dir}
 		}
 		return nil
