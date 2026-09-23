@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy, createEventDispatcher } from 'svelte';
   import { sessions, selectedSessionId, selectedWindowIdx, loadSessions } from '../../stores/sessions';
-  import { tabStatuses } from '../../stores/statusLines';
+  import { tabAvailability } from '../../stores/statusLines';
   import { settings } from '../../stores/settings';
   import { activeProjectId } from '../../stores/projects';
   import { get } from 'svelte/store';
@@ -666,18 +666,21 @@
   // exists. A tab whose server is unreachable is not idle — it is waiting on a
   // network, and its work is running out of sight — so the placeholder says
   // that instead of showing one of the idle jokes.
-  $: remoteUnreachable = !!(targetSessionId
-    ? $tabStatuses[targetSessionId]?.find((t: any) => t.windowIdx === targetWindowIdx)?.unreachable
-    : false);
+  //
+  // Read from tabAvailability, which covers every tab. tabStatuses, where this
+  // used to look, carries only agent tabs and only for sessions with more than
+  // one, so a terminal tab or a session's single agent tab never showed it.
+  $: availability = targetSessionId
+    ? $tabAvailability[targetSessionId]?.find(tab => tab.windowIdx === targetWindowIdx)
+    : undefined;
+  $: remoteUnreachable = !!availability?.unreachable;
 
   // A tab whose server answered but has no window for it is waiting to be
   // started, not broken: the server's multiplexer runs on its own, and after
   // this computer restarts the session the tab comes back without a window
   // there until it is started. The attach does fail — there is nothing to
   // attach to — but saying so reads as an error for what is a parked tab.
-  $: remoteMissing = !!(targetSessionId
-    ? $tabStatuses[targetSessionId]?.find((t: any) => t.windowIdx === targetWindowIdx)?.missing
-    : false);
+  $: remoteMissing = !!availability?.missing;
 
   // Show placeholder when no running session is active, and over a parked tab:
   // what tmux leaves in that pane is the bare words "Pane is dead", which

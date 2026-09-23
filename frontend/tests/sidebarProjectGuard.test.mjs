@@ -48,6 +48,7 @@ const result = await build({
           export const spinnerTexts = sink('__spinnerTexts');
           export const tabStatuses = sink('__tabStatuses');
           export const lastActive = sink('__lastActive');
+          export const tabAvailability = sink('__tabAvailability');
         `,
         loader: 'js',
       }));
@@ -67,8 +68,11 @@ globalThis.__sidebarHandler({
   spinnerTexts: {},
   tabStatuses: {},
   lastActive: { shared: '2026-09-04T08:36:56Z' },
+  tabAvailability: { shared: [{ windowIdx: 10000, missing: true }] },
 });
 assert.equal(globalThis.__activities, undefined, 'a late old-project event must be ignored');
+assert.equal(globalThis.__tabAvailability, undefined,
+  'an old project\'s unavailable tabs must not mark the new project\'s panes');
 assert.equal(globalThis.__statusLines, undefined, 'old-project status must not reach the active store');
 // Session IDs are project-local, so an old project's activity times would
 // reorder the new project's list by another project's work.

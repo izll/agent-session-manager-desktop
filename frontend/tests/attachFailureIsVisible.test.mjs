@@ -83,3 +83,14 @@ test('a tab missing on its server reads as parked, not as failed', () => {
   assert.match(key.slice(0, 300), /remoteMissing\s*\?\s*'terminal\.tabParked'|parkedTab \|\| remoteMissing\s*\?\s*'terminal\.tabParked'/,
     'a tab waiting on its server does not say it is waiting to be started');
 });
+
+// The pane read unreachable and missing from tabStatuses, which carries only
+// agent tabs and only for sessions with more than one — so a terminal tab, or
+// a session's single agent tab, never showed either mark. It reads the
+// availability map, which covers every tab.
+test('the pane reads availability for every tab, not only multi-agent ones', () => {
+  assert.match(termSrc, /\$tabAvailability\[targetSessionId\]/,
+    'the pane does not read the per-tab availability');
+  assert.doesNotMatch(termSrc, /\$tabStatuses\[targetSessionId\][^;]*\.(unreachable|missing)/,
+    'unreachable/missing still come from tabStatuses, which drops terminal tabs');
+});

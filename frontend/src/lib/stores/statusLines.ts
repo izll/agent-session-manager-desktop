@@ -18,6 +18,23 @@ export const statusLines = writable<Record<string, string>>({});
  */
 export const lastActive = writable<Record<string, string>>({});
 
+/** A tab that cannot be shown right now, and why. */
+export interface TabAvailability {
+  windowIdx: number;
+  // Its server did not answer for it.
+  unreachable?: boolean;
+  // Its server answered but holds no window for it: waiting to be started.
+  missing?: boolean;
+}
+
+/**
+ * Per session, the tabs that are unreachable or missing on their server —
+ * every such tab, terminal or agent, in any session. tabStatuses carries only
+ * agent tabs and only for sessions with more than one, so a pane reading these
+ * marks from there never saw them for a terminal tab or a single agent tab.
+ */
+export const tabAvailability = writable<Record<string, TabAvailability[]>>({});
+
 // Map of session ID to spinner text (e.g. "Thinking...", "Puzzling...")
 export const spinnerTexts = writable<Record<string, string>>({});
 

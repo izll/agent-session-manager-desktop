@@ -1,5 +1,5 @@
 import { activities } from './activities';
-import { statusLines, spinnerTexts, tabStatuses, lastActive } from './statusLines';
+import { statusLines, spinnerTexts, tabStatuses, lastActive, tabAvailability } from './statusLines';
 import { EventsOn, EventsOff } from '../../../wailsjs/runtime/runtime';
 import { get } from 'svelte/store';
 import { activeProjectId } from './projects';
@@ -17,6 +17,7 @@ let lastStatusLinesJSON = '';
 let lastSpinnerTextsJSON = '';
 let lastTabStatusesJSON = '';
 let lastActiveJSON = '';
+let lastTabAvailabilityJSON = '';
 
 /** Drop project-scoped payload and its equality cache before target changes. */
 export function invalidateSidebarProject() {
@@ -25,11 +26,13 @@ export function invalidateSidebarProject() {
   lastSpinnerTextsJSON = '';
   lastTabStatusesJSON = '';
   lastActiveJSON = '';
+  lastTabAvailabilityJSON = '';
   activities.set({});
   statusLines.set({});
   spinnerTexts.set({});
   tabStatuses.set({});
   lastActive.set({});
+  tabAvailability.set({});
 }
 
 function handleUpdate(data: any) {
@@ -46,6 +49,7 @@ function handleUpdate(data: any) {
   const nextSpinnerTexts = data.spinnerTexts || {};
   const nextTabStatuses = data.tabStatuses || {};
   const nextLastActive = data.lastActive || {};
+  const nextTabAvailability = data.tabAvailability || {};
 
   const a = JSON.stringify(nextActivities);
   if (a !== lastActivitiesJSON) {
@@ -70,6 +74,11 @@ function handleUpdate(data: any) {
   // The activity ordering needs these every tick: the session list itself is
   // reloaded only on events, so without this a session showing a live activity
   // dot was still ordered by the timestamp it was loaded with at startup.
+  const av = JSON.stringify(nextTabAvailability);
+  if (av !== lastTabAvailabilityJSON) {
+    lastTabAvailabilityJSON = av;
+    tabAvailability.set(nextTabAvailability);
+  }
   const la = JSON.stringify(nextLastActive);
   if (la !== lastActiveJSON) {
     lastActiveJSON = la;

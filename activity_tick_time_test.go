@@ -23,3 +23,24 @@ func TestThePollSavesTerminalDirectories(t *testing.T) {
 			"brings them back where they were last stopped")
 	}
 }
+
+// The pane read a tab's unreachable and missing marks from TabStatuses, which
+// carries only agent tabs and only for sessions with more than one — so a
+// terminal tab, or a session's single agent tab, never showed either. Every
+// such tab goes into TabAvailability, taken before that filter.
+func TestEveryUnavailableTabIsReported(t *testing.T) {
+	source := readSourceFile(t, "app.go")
+	at := strings.Index(source, "for _, ts := range tabStatuses {")
+	if at < 0 {
+		t.Fatal("the per-tab loop is gone; this test needs rewriting")
+	}
+	loop := source[at:]
+	loop = loop[:strings.Index(loop, "if ts.Agent != string(session.AgentTerminal) {")]
+	if !strings.Contains(loop, "if ts.Unreachable || ts.Missing {") ||
+		!strings.Contains(loop, "sr.unavailable = append(sr.unavailable") {
+		t.Error("unavailable tabs are collected after the agent filter, or not at all")
+	}
+	if !strings.Contains(source, "result.TabAvailability[sr.instID] = sr.unavailable") {
+		t.Error("the collected tabs never reach the update")
+	}
+}
