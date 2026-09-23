@@ -11,6 +11,7 @@
     customGradient,
     getGradientCSS,
     gradientStops,
+    gradientTextStyle,
     isHexColor,
     MIN_GRADIENT_STOPS,
     MAX_GRADIENT_STOPS,
@@ -147,7 +148,7 @@
         <div class="preview">
           <!-- The same two layers the sidebar uses: clip to the letters on an
                inline span of its own. -->
-          <span class="preview-name" style="background-image: {css}; -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;">{name}</span>
+          <span class="preview-name" style={gradientTextStyle(value)}>{name}</span>
         </div>
 
         <div class="bar" style="background-image: {css};"></div>

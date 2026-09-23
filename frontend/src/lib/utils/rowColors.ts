@@ -117,6 +117,30 @@ export function getGradientCSS(colorValue: string): string {
   return isGradient(colorValue) ? UNKNOWN_GRADIENT_CSS : colorValue;
 }
 
+/**
+ * The style that paints a gradient onto the letters of a name.
+ *
+ * One definition for every place that draws a gradient name, which each used
+ * to spell out on its own — six copies, not all alike: one used
+ * `color: transparent` where the others used -webkit-text-fill-color, and a
+ * fix made in one did not reach the rest.
+ *
+ * background-image, not the `background` shorthand: the shorthand resets every
+ * background-* longhand it does not mention, background-clip included, so next
+ * to a stylesheet rule setting the clip it painted the gradient as a solid bar
+ * with the name invisible inside it.
+ *
+ * It goes on an element of its own, inside anything that draws a background
+ * chip: the clip applies to the element's whole background, so a chip on the
+ * same element is clipped away with it. `extra` is appended as is, for the
+ * callers that also set a weight or a display.
+ */
+export function gradientTextStyle(color: string, extra = ''): string {
+  const style = `background-image: ${getGradientCSS(color)}; -webkit-background-clip: text; ` +
+    'background-clip: text; -webkit-text-fill-color: transparent;';
+  return extra ? `${style} ${extra}` : style;
+}
+
 /** Black or white, whichever stays readable on the given background. */
 export function getContrastColor(bgColor: string): string {
   if (!bgColor || bgColor === 'auto') return '#FFFFFF';

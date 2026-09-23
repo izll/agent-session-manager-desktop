@@ -20,7 +20,7 @@
   import { activeProjectId } from '../../stores/projects';
   import { UnfinishedTasksForSession } from '../../../../wailsjs/go/main/App';
   import {
-    getGradientCSS,
+    gradientTextStyle,
     getNameStyle,
     getRowBackgroundStyle,
     isGradient as isGradientColor,
@@ -82,7 +82,6 @@
   }
   $: sessionStatus = session.status as 'running' | 'paused' | 'stopped';
   $: isGradient = isGradientColor(session.color);
-  $: displayColor = isGradient ? getGradientCSS(session.color) : session.color;
   $: rowStyle = getRowBackgroundStyle(session.bgColor, session.fullRowColor);
   $: nameStyle = getNameStyle(session.color, session.bgColor, session.fullRowColor);
 
@@ -368,7 +367,7 @@
                background-clip: text clips a background to the letters, so on
                a single element it clipped the chip away and the chosen
                background colour was lost. -->
-          <span style={nameStyle}><span style="background: {displayColor}; -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; font-weight: {isSelected ? 800 : 600};">{session.name}</span></span>
+          <span style={nameStyle}><span style={gradientTextStyle(session.color, `font-weight: ${isSelected ? 800 : 600};`)}>{session.name}</span></span>
         {:else}
           <span style={nameStyle}>{session.name}</span>
         {/if}

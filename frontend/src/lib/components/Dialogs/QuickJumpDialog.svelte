@@ -21,7 +21,7 @@
   import { t } from '../../i18n';
   import { sessions } from '../../stores/sessions';
   import { activeProjectId } from '../../stores/projects';
-  import { getGradientCSS, getNameStyle, getContrastColor, isGradient } from '../../utils/rowColors';
+  import { getGradientCSS, getNameStyle, getContrastColor, gradientTextStyle, isGradient } from '../../utils/rowColors';
   import { activities } from '../../stores/activities';
   import { tabStatuses } from '../../stores/statusLines';
   import { autoFocusDialog } from '../../utils/dialogActions';
@@ -168,9 +168,7 @@
    */
   function sessionGradientStyle(session: any): string {
     if (!session || !isGradient(session.color ?? '')) return '';
-    return `background: ${getGradientCSS(session.color)};` +
-      ' -webkit-background-clip: text; -webkit-text-fill-color: transparent;' +
-      ' background-clip: text; font-weight: 600;';
+    return gradientTextStyle(session.color, 'font-weight: 600;');
   }
 
   /**

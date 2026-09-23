@@ -19,6 +19,7 @@
     getGradientCSS,
     isGradient,
     isCustomGradient,
+    gradientTextStyle,
   } from '../../utils/rowColors';
   import CustomGradientDialog from './CustomGradientDialog.svelte';
 
@@ -182,20 +183,11 @@
     // Not a gradient at all: nothing to clip. (An unreadable gradient comes
     // back as a grey one, which is safe to paint.)
     if (css === gradientName) return '';
-    // background-image, not the `background` shorthand.
-    //
-    // The shorthand resets every background-* longhand it does not mention, and
-    // that includes background-clip — so an inline `background: ...` put the
-    // clip back to border-box and beat the stylesheet's `background-clip: text`
-    // by being inline. The gradient then filled the whole box, with the name
-    // invisible inside it. Measured: clip came out as "border-box" with the
-    // rule for `text` present and more specific.
-    //
-    // The clip and the fill colour are set here too, for the same reason: an
-    // inline declaration is what this element's own rule is competing with, so
-    // everything that has to survive belongs on the same side of that contest.
-    return `background-image: ${css}; -webkit-background-clip: text; ` +
-      `background-clip: text; -webkit-text-fill-color: transparent; display: inline-block;`;
+    // The shared style (see gradientTextStyle for why it is background-image
+    // and not the shorthand). inline-block for the reason the .gradient-text
+    // rule below gives, repeated inline so it holds whatever the stylesheet
+    // does.
+    return gradientTextStyle(gradientName, 'display: inline-block;');
   }
 </script>
 
@@ -421,9 +413,6 @@
        The sidebar never hit this: there the gradient span sits inside another
        span, so it stays inline. */
     display: inline-block;
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
   }
 
   .mode-section {

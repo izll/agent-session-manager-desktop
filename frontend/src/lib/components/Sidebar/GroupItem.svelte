@@ -14,7 +14,7 @@
   import { activeProjectId } from '../../stores/projects';
   import SessionColorDialog from '../Dialogs/SessionColorDialog.svelte';
   import {
-    getGradientCSS,
+    gradientTextStyle,
     getNameStyle,
     getRowBackgroundStyle,
     isGradient as isGradientColor,
@@ -42,7 +42,6 @@
 
   // Group colours are rendered exactly like a session row's, via the shared helpers.
   $: isGradient = isGradientColor(group.color);
-  $: displayColor = getGradientCSS(group.color);
   $: headerStyle = getRowBackgroundStyle(group.bgColor, group.fullRowColor);
   $: nameStyle = getNameStyle(group.color, group.bgColor, group.fullRowColor);
 
@@ -387,7 +386,7 @@
         {#if isGradient}
           <!-- Chip outside, gradient inside: on one element the text clip
                takes the background colour with it. -->
-          <span style={nameStyle}><span style="background: {displayColor}; -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">{group.name}</span></span>
+          <span style={nameStyle}><span style={gradientTextStyle(group.color)}>{group.name}</span></span>
         {:else}
           <span style={nameStyle}>{group.name}</span>
         {/if}

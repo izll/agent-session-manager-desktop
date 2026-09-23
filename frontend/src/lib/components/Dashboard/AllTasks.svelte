@@ -15,7 +15,7 @@
   import { activeProjectId, selectProject } from '../../stores/projects';
   import { showSessionView, goBack } from '../../stores/navigation';
   import Select from '../common/Select.svelte';
-  import { isGradient, getGradientCSS } from '../../utils/rowColors';
+  import { isGradient, gradientTextStyle } from '../../utils/rowColors';
   import { autoFocusDialog } from '../../utils/dialogActions';
 
   type OverviewTask = {
@@ -328,7 +328,7 @@
             on:click={() => toggleGroup(group.key)}
             style={group.color
               ? (isGradient(group.color)
-                  ? `background:${getGradientCSS(group.color)};-webkit-background-clip:text;background-clip:text;color:transparent;`
+                  ? gradientTextStyle(group.color)
                   : `color:${group.color}`)
               : ''}
           >{group.label}</button>
