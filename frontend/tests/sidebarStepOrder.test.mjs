@@ -101,8 +101,8 @@ test('clicking a row records which copy it was, and the cursor row stays in view
 // and it runs for keyup as well as keydown.
 test('one press steps once, with the terminal focused too', () => {
   const terminal = read('../src/lib/utils/terminal.ts');
-  const at = terminal.indexOf("event.altKey && (event.key === 'ArrowUp' || event.key === 'ArrowDown')");
-  assert.ok(at > 0, 'the terminal no longer refuses Alt+Up/Down, so the pane would receive it');
+  const at = terminal.indexOf('if (isSessionStepKey(event))');
+  assert.ok(at > 0, 'the terminal no longer refuses the step keys, so the pane would receive them');
   const branch = terminal.slice(at, terminal.indexOf('}', at));
   assert.match(branch, /return false/);
   assert.doesNotMatch(branch, /dispatchEvent/, 'the terminal steps a second time');

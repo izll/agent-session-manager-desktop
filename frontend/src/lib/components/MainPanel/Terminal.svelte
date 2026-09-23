@@ -11,8 +11,14 @@
   import { setTerminalRenderer, setTerminalCopyMode, setTerminalFontFamily, setTerminalThemeContext, defaultTerminalRenderer, TERMINAL_REFUSED_EVENT, type TerminalRefusedDetail } from '../../utils/terminal';
   import { refusalMessageKey } from '../../utils/terminalRefusal';
   import { t } from '../../i18n';
-  import { matchesShortcut } from '../../stores/shortcuts';
+  import { matchesShortcut, shortcutForEvent } from '../../stores/shortcuts';
+  import { registerShortcutResolver } from '../../utils/sessionStepKeys';
   import '@xterm/xterm/css/xterm.css';
+
+  // Every terminal is made by a pool this component owns, so handing the
+  // shortcut store over here is in place before any terminal can see a key.
+  // Why it is handed over rather than imported: see sessionStepKeys.ts.
+  registerShortcutResolver(shortcutForEvent);
 
   let poolContainerEl: HTMLElement;
   let pool: TerminalPool | null = null;
