@@ -634,6 +634,7 @@
   "color.customGradientAdd": "颜色",
   "color.customGradientRemove": "移除此颜色",
   "color.customGradientStop": "颜色 {n}",
+  "color.customGradientInvalid": "还不是有效颜色：请按 #RRGGBB 格式输入",
   "color.none": "无",
   "color.auto": "自动",
   "color.cancel": "取消",

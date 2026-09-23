@@ -634,6 +634,7 @@
   "color.customGradientAdd": "色",
   "color.customGradientRemove": "この色を削除",
   "color.customGradientStop": "色 {n}",
+  "color.customGradientInvalid": "まだ色として認識できません。#RRGGBB の形式で入力してください",
   "color.none": "なし",
   "color.auto": "自動",
   "color.cancel": "キャンセル",

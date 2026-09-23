@@ -634,6 +634,7 @@
   "color.customGradientAdd": "Колір",
   "color.customGradientRemove": "Видалити цей колір",
   "color.customGradientStop": "Колір {n}",
+  "color.customGradientInvalid": "Це ще не колір: введіть його у форматі #RRGGBB",
   "color.none": "немає",
   "color.auto": "авто",
   "color.cancel": "Скасувати",

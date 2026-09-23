@@ -634,6 +634,7 @@
   "color.customGradientAdd": "Цвет",
   "color.customGradientRemove": "Удалить этот цвет",
   "color.customGradientStop": "Цвет {n}",
+  "color.customGradientInvalid": "Это ещё не цвет: введите его в формате #RRGGBB",
   "color.none": "нет",
   "color.auto": "авто",
   "color.cancel": "Отмена",

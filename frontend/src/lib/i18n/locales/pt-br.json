@@ -634,6 +634,7 @@
   "color.customGradientAdd": "Cor",
   "color.customGradientRemove": "Remover esta cor",
   "color.customGradientStop": "Cor {n}",
+  "color.customGradientInvalid": "Ainda não é uma cor: digite no formato #RRGGBB",
   "color.none": "nenhum",
   "color.auto": "automático",
   "color.cancel": "Cancelar",

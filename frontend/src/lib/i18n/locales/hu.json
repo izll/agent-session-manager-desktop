@@ -625,6 +625,7 @@
   "color.customGradientAdd": "Szín",
   "color.customGradientRemove": "Szín eltávolítása",
   "color.customGradientStop": "{n}. szín",
+  "color.customGradientInvalid": "Ez még nem szín: #RRGGBB formában add meg",
   "color.none": "nincs",
   "color.auto": "automatikus",
   "color.cancel": "Mégse",

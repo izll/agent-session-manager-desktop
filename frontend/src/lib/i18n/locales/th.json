@@ -634,6 +634,7 @@
   "color.customGradientAdd": "สี",
   "color.customGradientRemove": "ลบสีนี้",
   "color.customGradientStop": "สี {n}",
+  "color.customGradientInvalid": "ยังไม่ใช่สี: ให้ป้อนในรูปแบบ #RRGGBB",
   "color.none": "ไม่มี",
   "color.auto": "อัตโนมัติ",
   "color.cancel": "ยกเลิก",

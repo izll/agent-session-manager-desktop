@@ -634,6 +634,7 @@
   "color.customGradientAdd": "لون",
   "color.customGradientRemove": "إزالة هذا اللون",
   "color.customGradientStop": "اللون {n}",
+  "color.customGradientInvalid": "ليس لونًا بعد: أدخله بالصيغة #RRGGBB",
   "color.none": "بدون",
   "color.auto": "تلقائي",
   "color.cancel": "إلغاء",

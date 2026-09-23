@@ -634,6 +634,7 @@
   "color.customGradientAdd": "Renk",
   "color.customGradientRemove": "Bu rengi kaldır",
   "color.customGradientStop": "Renk {n}",
+  "color.customGradientInvalid": "Henüz bir renk değil: #RRGGBB biçiminde girin",
   "color.none": "yok",
   "color.auto": "otomatik",
   "color.cancel": "İptal",

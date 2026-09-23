@@ -634,6 +634,7 @@
   "color.customGradientAdd": "Màu",
   "color.customGradientRemove": "Xóa màu này",
   "color.customGradientStop": "Màu {n}",
+  "color.customGradientInvalid": "Chưa phải là màu: hãy nhập theo dạng #RRGGBB",
   "color.none": "không",
   "color.auto": "tự động",
   "color.cancel": "Hủy",

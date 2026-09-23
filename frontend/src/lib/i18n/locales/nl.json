@@ -634,6 +634,7 @@
   "color.customGradientAdd": "Kleur",
   "color.customGradientRemove": "Deze kleur verwijderen",
   "color.customGradientStop": "Kleur {n}",
+  "color.customGradientInvalid": "Nog geen kleur: voer die in als #RRGGBB",
   "color.none": "geen",
   "color.auto": "auto",
   "color.cancel": "Annuleren",

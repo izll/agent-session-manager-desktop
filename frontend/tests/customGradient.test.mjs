@@ -104,10 +104,39 @@ test('the preview does not guard against a gradient style that cannot be empty',
     'the preview\'s explanation sits on the wrong function');
 });
 
+// A half-typed hex was dropped silently: the field said "#12" while the stop
+// kept its old colour, and Apply applied that old colour. What is applied has
+// to be what the fields say.
+test('a field that is not a colour is marked and holds Apply back', () => {
+  assert.match(editor, /class="hex"[\s\S]{0,120}value=\{texts\[index\]\}/,
+    'the field shows the stop, not what was typed, so the two can disagree unseen');
+  assert.match(editor, /class:invalid=\{invalid\[index\]\}/, 'an unreadable field looks like any other');
+  assert.match(editor, /aria-invalid=\{invalid\[index\]\}/);
+
+  const typed = editor.slice(editor.indexOf('function typeStop'));
+  const body = typed.slice(0, typed.indexOf('\n  }\n'));
+  assert.ok(body.indexOf('texts[index] = input') >= 0 &&
+    body.indexOf('texts[index] = input') < body.indexOf('return'),
+    'a value that is not a colour is lost before it is recorded');
+
+  assert.match(editor, /\$: invalid = texts\.map\(/);
+  assert.match(editor, /disabled=\{!value \|\| anyInvalid\}/, 'Apply is offered over an unreadable field');
+  const apply = editor.slice(editor.indexOf('function apply()'));
+  assert.match(apply.slice(0, 80), /if \(!value \|\| anyInvalid\) return;/,
+    'Enter still applies over an unreadable field');
+});
+
+test('Enter is left to a focused button, by the shared rule', () => {
+  const at = editor.indexOf('function handleKeydown');
+  const body = editor.slice(at, editor.indexOf('\n  }\n', at));
+  assert.match(body, /e\.key === 'Enter' && !dialogEnterBelongsToControl\(e\)/);
+  assert.doesNotMatch(body, /instanceof HTMLButtonElement/, 'a copy of the rule is kept by hand');
+});
+
 test('every new string is translated', () => {
   const dir = new URL('../src/lib/i18n/locales/', import.meta.url);
   const keys = ['color.customGradient', 'color.custom', 'color.customGradientAdd',
-    'color.customGradientRemove', 'color.customGradientStop'];
+    'color.customGradientRemove', 'color.customGradientStop', 'color.customGradientInvalid'];
   for (const name of readdirSync(dir).filter((n) => n.endsWith('.json'))) {
     const strings = JSON.parse(readFileSync(new URL(name, dir), 'utf8'));
     for (const key of keys) assert.ok(strings[key]?.trim(), `${name} has no ${key}`);

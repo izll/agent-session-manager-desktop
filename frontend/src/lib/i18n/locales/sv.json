@@ -634,6 +634,7 @@
   "color.customGradientAdd": "Färg",
   "color.customGradientRemove": "Ta bort den här färgen",
   "color.customGradientStop": "Färg {n}",
+  "color.customGradientInvalid": "Ännu ingen färg: ange den som #RRGGBB",
   "color.none": "ingen",
   "color.auto": "auto",
   "color.cancel": "Avbryt",

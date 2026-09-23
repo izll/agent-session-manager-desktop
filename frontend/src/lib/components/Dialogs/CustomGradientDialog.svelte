@@ -1,7 +1,7 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
   import { claimKeyForDialog } from '../../utils/dialogKeys';
-  import { autoFocusDialog } from '../../utils/dialogActions';
+  import { autoFocusDialog, dialogEnterBelongsToControl } from '../../utils/dialogActions';
   // Into <body>, like the colour dialog it opens from: that one is portalled
   // too, and a dialog rendered inside it would share its keydown handler, so
   // Escape here would close both.
@@ -26,6 +26,15 @@
 
   const DEFAULT_STOPS = ['#FF6B6B', '#6C9EFF'];
   let stops: string[] = [...DEFAULT_STOPS];
+  // What each stop's hex field says, kept apart from the stop itself so a
+  // half-typed value can sit in its field while it is being typed.
+  //
+  // It used to be dropped silently instead: the field showed "#12" while the
+  // stop kept its old colour, and Apply applied that old colour — something
+  // the dialog was not showing. A field that does not hold a colour is now
+  // marked, and Apply waits until every field does, so what is applied is
+  // always what the fields say.
+  let texts: string[] = [...stops];
   let seeded = false;
 
   // Seeded once per opening. A preset or a custom gradient is taken over as
@@ -40,6 +49,7 @@
     } else {
       stops = [...DEFAULT_STOPS];
     }
+    texts = [...stops];
     seeded = true;
   } else if (!show) {
     seeded = false;
@@ -47,24 +57,46 @@
 
   $: value = customGradient(stops);
   $: css = getGradientCSS(value);
+  $: invalid = texts.map(text => stopFromText(text) === null);
+  $: anyInvalid = invalid.some(Boolean);
 
-  function setStop(index: number, input: string) {
+  /** The colour a hex field names, or null while it names none. */
+  function stopFromText(input: string): string | null {
     let hex = input.trim();
     if (!hex.startsWith('#')) hex = '#' + hex;
-    // A half-typed value stays in its field and changes nothing yet.
-    if (!isHexColor(hex)) return;
-    stops[index] = hex.toUpperCase();
+    return isHexColor(hex) ? hex.toUpperCase() : null;
+  }
+
+  function typeStop(index: number, input: string) {
+    texts[index] = input;
+    texts = texts;
+    // A half-typed value stays in its field, marked, and changes nothing yet.
+    const hex = stopFromText(input);
+    if (hex === null) return;
+    stops[index] = hex;
     stops = stops;
+  }
+
+  function pickStop(index: number, input: string) {
+    const hex = stopFromText(input);
+    if (hex === null) return;
+    stops[index] = hex;
+    texts[index] = hex;
+    stops = stops;
+    texts = texts;
   }
 
   function addStop() {
     if (stops.length >= MAX_GRADIENT_STOPS) return;
-    stops = [...stops, stops[stops.length - 1]];
+    const last = stops[stops.length - 1];
+    stops = [...stops, last];
+    texts = [...texts, last];
   }
 
   function removeStop(index: number) {
     if (stops.length <= MIN_GRADIENT_STOPS) return;
     stops = stops.filter((_, at) => at !== index);
+    texts = texts.filter((_, at) => at !== index);
   }
 
   function close() {
@@ -73,7 +105,7 @@
   }
 
   function apply() {
-    if (!value) return;
+    if (!value || anyInvalid) return;
     dispatch('apply', value);
     close();
   }
@@ -85,7 +117,7 @@
     if (e.key === 'Escape') {
       claimKeyForDialog();
       close();
-    } else if (e.key === 'Enter' && !(e.target instanceof HTMLButtonElement)) {
+    } else if (e.key === 'Enter' && !dialogEnterBelongsToControl(e)) {
       claimKeyForDialog();
       apply();
     }
@@ -127,16 +159,19 @@
                 type="color"
                 value={stop.toLowerCase()}
                 aria-label={$t('color.customGradientStop', { n: index + 1 })}
-                on:input={(e) => setStop(index, e.currentTarget.value)}
+                on:input={(e) => pickStop(index, e.currentTarget.value)}
               />
               <input
                 type="text"
                 class="hex"
-                value={stop}
+                class:invalid={invalid[index]}
+                value={texts[index]}
                 maxlength="7"
                 spellcheck="false"
                 aria-label={$t('color.customGradientStop', { n: index + 1 })}
-                on:input={(e) => setStop(index, e.currentTarget.value)}
+                aria-invalid={invalid[index]}
+                title={invalid[index] ? $t('color.customGradientInvalid') : undefined}
+                on:input={(e) => typeStop(index, e.currentTarget.value)}
               />
               {#if stops.length > MIN_GRADIENT_STOPS}
                 <button
@@ -156,7 +191,7 @@
 
       <div class="dialog-actions">
         <button class="btn-cancel" on:click={close}>{$t('color.cancel')}</button>
-        <button class="btn-primary" on:click={apply} disabled={!value}>{$t('color.apply')}</button>
+        <button class="btn-primary" on:click={apply} disabled={!value || anyInvalid}>{$t('color.apply')}</button>
       </div>
     </div>
   </div>
@@ -229,6 +264,12 @@
   .hex:focus {
     outline: none;
     border-color: rgba(var(--accent-rgb), 0.5);
+  }
+
+  /* After :focus, so the field being typed into still shows it is wrong. */
+  .hex.invalid {
+    border-color: rgba(239, 68, 68, 0.7);
+    color: #fca5a5;
   }
 
   .remove {

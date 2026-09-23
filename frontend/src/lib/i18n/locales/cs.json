@@ -634,6 +634,7 @@
   "color.customGradientAdd": "Barva",
   "color.customGradientRemove": "Odebrat tuto barvu",
   "color.customGradientStop": "Barva {n}",
+  "color.customGradientInvalid": "Zatím to není barva: zadejte ji jako #RRGGBB",
   "color.none": "žádná",
   "color.auto": "auto",
   "color.cancel": "Zrušit",

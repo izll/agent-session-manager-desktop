@@ -634,6 +634,7 @@
   "color.customGradientAdd": "색상",
   "color.customGradientRemove": "이 색상 제거",
   "color.customGradientStop": "색상 {n}",
+  "color.customGradientInvalid": "아직 색상이 아닙니다. #RRGGBB 형식으로 입력하세요",
   "color.none": "없음",
   "color.auto": "자동",
   "color.cancel": "취소",
