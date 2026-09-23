@@ -16,7 +16,7 @@ const places = [
   ['session list', '../src/lib/components/Sidebar/SessionItem.svelte', 'nameStyle'],
   ['group header', '../src/lib/components/Sidebar/GroupItem.svelte', 'nameStyle'],
   ['quick jump', '../src/lib/components/Dialogs/QuickJumpDialog.svelte', 'row.style'],
-  ['colour dialog preview', '../src/lib/components/Dialogs/SessionColorDialog.svelte', 'getPreviewStyle(selectedColor, selectedBgColor)'],
+  ['colour dialog preview', '../src/lib/components/Dialogs/SessionColorDialog.svelte', 'getPreviewStyle(selectedColor, selectedBgColor, fullRowColor)'],
 ];
 
 for (const [where, path, chipStyle] of places) {
@@ -67,4 +67,22 @@ test('every gradient name is painted by the one shared style', async () => {
     const inline = code.match(/style=["{`][^\n]*background-clip/);
     assert.equal(inline, null, `${path} still writes its own clip: ${inline?.[0]}`);
   }
+});
+
+// With "full row" the list tints the row and draws no chip behind the name.
+// The preview kept its own style, which ignored the setting and drew the chip
+// anyway; it now takes the list's.
+test('the preview name follows "full row" as the list does', async () => {
+  const { getNameStyle } = await import('../src/lib/utils/rowColors.ts');
+  assert.match(getNameStyle('#FFFFFF', '#FF6B6B', false), /background-color: #FF6B6B/);
+  assert.doesNotMatch(getNameStyle('#FFFFFF', '#FF6B6B', true), /background-color/,
+    'with full row the name still gets its own chip');
+
+  const dialog = read('../src/lib/components/Dialogs/SessionColorDialog.svelte');
+  const at = dialog.indexOf('function getPreviewStyle(');
+  const body = dialog.slice(at, dialog.indexOf('\n  }\n', at));
+  assert.match(body, /return getNameStyle\(fg, bg, fullRow\)/,
+    'the preview computes its own style instead of the list\'s');
+  assert.match(dialog, /getPreviewStyle\(selectedColor, selectedBgColor, fullRowColor\)/,
+    'the preview is not told whether full row is on');
 });

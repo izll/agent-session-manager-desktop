@@ -15,11 +15,11 @@
     colorOptions,
     gradientOptions,
     gradients,
-    getContrastColor,
     getGradientCSS,
     isGradient,
     isCustomGradient,
     gradientTextStyle,
+    getNameStyle,
   } from '../../utils/rowColors';
   import CustomGradientDialog from './CustomGradientDialog.svelte';
 
@@ -136,31 +136,19 @@
     }
   }
 
-  // Get preview style for session name
+  // The preview name's style: the one the sidebar gives the name, from the
+  // same function, so the preview cannot show what the list will not. It kept
+  // its own copy, which ignored "full row" — ticking it tinted the row and
+  // still drew the chip behind the name, where the list draws no chip.
   //
   // The colours are parameters, not read from the component, on purpose. A
   // call with no arguments in the template is compiled untracked — Svelte 5's
   // legacy mode keeps Svelte 4's rule that a template only depends on what it
-  // names — so picking a background (or a plain text colour) never updated the
-  // preview. Only "full row" did, because that styles the row from
-  // selectedBgColor directly.
-  function getPreviewStyle(fg: string, bg: string): string {
-    let style = '';
-
-    if (bg && bg !== 'auto' && !isGradient(bg)) {
-      style += `background-color: ${bg};`;
-    }
-
-    if (fg && fg !== 'auto' && !isGradient(fg)) {
-      style += `color: ${fg};`;
-    } else if (fg === 'auto' && bg && !isGradient(bg)) {
-      style += `color: ${getContrastColor(bg)};`;
-    } else if (!fg && bg && !isGradient(bg)) {
-      style += `color: ${getContrastColor(bg)};`;
-    }
-
-    return style;
+  // names — so picking a colour never updated the preview.
+  function getPreviewStyle(fg: string, bg: string, fullRow: boolean): string {
+    return getNameStyle(fg, bg, fullRow);
   }
+
 
   /**
    * A gradient as a plain background, for the swatches in the grid.
@@ -235,9 +223,9 @@
                    and the gradient shows through them as bars either side. -->
               <!-- The background chip goes around the gradient, not on it:
                    the text clip would take the chip with it. -->
-              <span class="preview-name" style={getPreviewStyle(selectedColor, selectedBgColor)}><span class="gradient-text" style={getGradientTextStyle(selectedColor)}>{target.name}</span></span>
+              <span class="preview-name" style={getPreviewStyle(selectedColor, selectedBgColor, fullRowColor)}><span class="gradient-text" style={getGradientTextStyle(selectedColor)}>{target.name}</span></span>
             {:else}
-              <span class="preview-name" style={getPreviewStyle(selectedColor, selectedBgColor)}>
+              <span class="preview-name" style={getPreviewStyle(selectedColor, selectedBgColor, fullRowColor)}>
                 {target.name}
               </span>
             {/if}
