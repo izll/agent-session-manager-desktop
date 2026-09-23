@@ -444,6 +444,7 @@
         await pool.destroy(sessionId);
         if (!mounted || operationRevision !== poolChangeGeneration || !pool) return;
         isAttached = false;
+        error = '';
 
         // Wait for new tmux session to be ready
         await new Promise(r => setTimeout(r, 800));
@@ -508,6 +509,13 @@
     const sessionChanged = lastSessionId !== newSessionId;
     const windowChanged = lastWindowIdx !== newWindowIdx;
 
+    // The attach error belongs to the tab it happened on. It is one variable
+    // for the whole pane and only a successful attach used to clear it, so
+    // after one tab failed, the placeholder went on showing that failure over
+    // whatever came next: a stopped session selected afterwards, or a running
+    // tab whose own attach had not finished yet.
+    if (projectChanged || sessionChanged || windowChanged) error = '';
+
     // Project switches can reuse the exact same session/window/status tuple.
     // Tear down A's sockets before showing B: keeping the old keyed entries
     // leaves rejected reconnect timers and dead xterms resident forever, and
@@ -554,6 +562,7 @@
       // Don't destroy yet, just hide
       pool.hideAll();
       isAttached = false;
+      error = '';
       return;
     }
 
@@ -565,13 +574,14 @@
         if (!mounted || generation !== poolChangeGeneration ||
             get(activeProjectId) !== projectId || !pool) return;
       }
+      // A new attempt starts without the last one's verdict.
+      error = '';
       try {
         await pool.show(projectId, newSessionId, newWindowIdx, () => mounted && active && focusOwner && focusAllowed, themeCtxFor(newSessionId, newWindowIdx));
         if (!mounted || generation !== poolChangeGeneration ||
             get(activeProjectId) !== projectId ||
             currentTargetSessionId() !== newSessionId || currentTargetWindowIdx() !== newWindowIdx) return;
         isAttached = true;
-        error = '';
         error = '';
         // Ensure the freshly-shown terminal grabs focus on session/tab switch.
         // pool.show() focuses internally, but a couple of rAFs later we focus
@@ -596,6 +606,7 @@
     if (!newSessionId || newStatus !== 'running') {
       pool.hideAll();
       isAttached = false;
+      error = '';
     }
   }
 
@@ -661,8 +672,13 @@
   // idle jokes, so a tab that could not attach at all was indistinguishable
   // from one that simply had nothing running. Clicking it looked like nothing
   // happening, and the only record of why was the log.
+  //
+  // Except over the states that already say what is wrong: a tab on a server
+  // that is not answering fails to attach too, and "could not be opened" with
+  // a bare connection error in place of "the server is not answering" hid the
+  // one explanation the user could act on.
   const failedIcon = '⚠️';
-  $: attachFailed = !isAttached && !parkedTab && !remoteMissing && error !== '';
+  $: attachFailed = !isAttached && !parkedTab && !remoteMissing && !remoteUnreachable && error !== '';
   $: placeholderIcon = attachFailed
     ? failedIcon
     : remoteUnreachable
