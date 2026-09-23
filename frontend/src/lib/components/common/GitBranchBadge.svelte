@@ -3,7 +3,8 @@
   import { t } from '../../i18n';
   import {
     gitBranch,
-    formatAheadBehind,
+    formatBehind,
+    unpushedCount,
     listGitBranches,
     currentGitTarget,
     type GitBranchEntry
@@ -25,15 +26,16 @@
   /** Drops replies from a listing whose menu has already been closed/reopened. */
   let listGeneration = 0;
 
-  $: aheadBehind = formatAheadBehind($gitBranch);
+  $: behind = formatBehind($gitBranch);
+  $: unpushed = unpushedCount($gitBranch);
   $: tooltip = (() => {
     if (!$gitBranch) return '';
     const parts = [$t('gitBranch.tooltip', { branch: $gitBranch.branch })];
     if ($gitBranch.upstream) {
       parts.push($t('gitBranch.tooltipUpstream', { upstream: $gitBranch.upstream }));
-      if ($gitBranch.ahead > 0) parts.push($t('gitBranch.tooltipAhead', { count: $gitBranch.ahead }));
       if ($gitBranch.behind > 0) parts.push($t('gitBranch.tooltipBehind', { count: $gitBranch.behind }));
     }
+    if (unpushed > 0) parts.push($t('gitBranch.unpushed', { count: unpushed }));
     return parts.join(' · ');
   })();
 
@@ -168,8 +170,11 @@
       <path d="M18 9a9 9 0 01-9 9"/>
     </svg>
     <span class="git-branch-name">{$gitBranch.branch}</span>
-    {#if aheadBehind}
-      <span class="git-branch-counts">{aheadBehind}</span>
+    {#if unpushed > 0}
+      <span class="git-unpushed-badge" title={$t('gitBranch.unpushed', { count: unpushed })}>↑{unpushed}</span>
+    {/if}
+    {#if behind}
+      <span class="git-branch-counts">{behind}</span>
     {/if}
     <svg class="git-branch-chevron" class:open={isOpen} width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
       <polyline points="6 9 12 15 18 9"/>
@@ -275,6 +280,26 @@
   .git-branch-counts {
     font-size: 12px;
     color: var(--accent-light);
+  }
+
+  /* A count, not a label: a filled pill so it reads at a glance, in the warm
+     colour the app uses for "needs attention" rather than the accent, which
+     the badge around it already wears. */
+  .git-unpushed-badge {
+    display: inline-flex;
+    align-items: center;
+    min-width: 18px;
+    height: 16px;
+    padding: 0 5px;
+    border-radius: 8px;
+    background: rgba(251, 191, 36, 0.18);
+    border: 1px solid rgba(251, 191, 36, 0.45);
+    color: #fcd34d;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1;
+    justify-content: center;
+    font-variant-numeric: tabular-nums;
   }
 
   /* The chevron is the only affordance saying the badge opens something; it

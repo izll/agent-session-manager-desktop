@@ -695,6 +695,8 @@ export namespace main {
 	    upstream: string;
 	    ahead: number;
 	    behind: number;
+	    unpushed: number;
+	    hasRemote: boolean;
 
 	    static createFrom(source: any = {}) {
 	        return new GitBranchInfo(source);
@@ -708,6 +710,8 @@ export namespace main {
 	        this.upstream = source["upstream"];
 	        this.ahead = source["ahead"];
 	        this.behind = source["behind"];
+	        this.unpushed = source["unpushed"];
+	        this.hasRemote = source["hasRemote"];
 	    }
 	}
 	export class GitBranchList {
@@ -758,6 +762,7 @@ export namespace main {
 	    committed: string;
 	    refs?: string[];
 	    parents?: string[];
+	    unpushed?: boolean;
 
 	    static createFrom(source: any = {}) {
 	        return new GitCommit(source);
@@ -774,6 +779,7 @@ export namespace main {
 	        this.committed = source["committed"];
 	        this.refs = source["refs"];
 	        this.parents = source["parents"];
+	        this.unpushed = source["unpushed"];
 	    }
 	}
 	export class GitHistoryPage {
@@ -783,6 +789,7 @@ export namespace main {
 	    commits: GitCommit[];
 	    hasMore: boolean;
 	    skip: number;
+	    unpushed: number;
 
 	    static createFrom(source: any = {}) {
 	        return new GitHistoryPage(source);
@@ -796,6 +803,7 @@ export namespace main {
 	        this.commits = this.convertValues(source["commits"], GitCommit);
 	        this.hasMore = source["hasMore"];
 	        this.skip = source["skip"];
+	        this.unpushed = source["unpushed"];
 	    }
 
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

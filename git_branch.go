@@ -25,6 +25,11 @@ type GitBranchInfo struct {
 	Upstream   string `json:"upstream"`
 	Ahead      int    `json:"ahead"`
 	Behind     int    `json:"behind"`
+	// Unpushed counts the commits on no remote branch, including on a branch
+	// that has never been pushed and so has no upstream to be ahead of.
+	// Meaningful only when HasRemote is set.
+	Unpushed  int  `json:"unpushed"`
+	HasRemote bool `json:"hasRemote"`
 }
 
 type gitBranchCacheEntry struct {
@@ -115,6 +120,8 @@ func readGitBranch(ctx context.Context, path string) GitBranchInfo {
 	} else if output, err = runDashboardGit(ctx, path, "rev-parse", "--short", "HEAD"); err == nil {
 		info.Branch = "detached@" + strings.TrimSpace(output)
 	}
+
+	info.Unpushed, info.HasRemote = countUnpushed(ctx, path)
 
 	if output, err = runDashboardGit(ctx, path, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"); err == nil {
 		info.Upstream = strings.TrimSpace(output)

@@ -55,6 +55,9 @@
 
   let commits: main.GitCommit[] = [];
   let hasMore = false;
+  // Commits of the whole branch on no remote branch yet — not only the loaded
+  // pages', so the title can say it before the list is scrolled that far.
+  let unpushedTotal = 0;
   let nextSkip = 0;
   let loading = false;
   let loadingMore = false;
@@ -298,6 +301,7 @@
     branches = [];
     currentBranch = '';
     commits = [];
+    unpushedTotal = 0;
     selectedHash = '';
     files = [];
     selectedPath = '';
@@ -336,6 +340,7 @@
       diffGeneration++;
       loading = true;
       commits = [];
+      unpushedTotal = 0;
       nextSkip = 0;
       selectedHash = '';
       files = [];
@@ -358,6 +363,7 @@
       }
       error = '';
       commits = reset ? (page.commits ?? []) : [...commits, ...(page.commits ?? [])];
+      if (reset) unpushedTotal = page.unpushed ?? 0;
       hasMore = page.hasMore;
       nextSkip = page.skip;
       if (reset && commits.length > 0) void selectCommit(commits[0].hash, target, repository);
@@ -961,6 +967,11 @@
               on:click={() => (commitsCollapsed = true)}
             >‹</button>
           </div>
+          <!-- Below the title rather than in it: the title is drawn at half
+               opacity, which nothing inside it can undo. -->
+          {#if unpushedTotal > 0}
+            <div class="unpushed-summary">{$t('gitBranch.unpushed', { count: unpushedTotal })}</div>
+          {/if}
           {#if loading}
             <p class="pane-note">{$t('common.loading')}</p>
           {:else if error}
@@ -973,6 +984,7 @@
               <div
                 class="commit-row"
                 class:selected={commit.hash === selectedHash}
+                class:unpushed={commit.unpushed}
                 data-commit={index}
                 role="option"
                 aria-selected={commit.hash === selectedHash}
@@ -986,6 +998,9 @@
                   {commit.subject}
                 </div>
                 <div class="commit-meta">
+                  {#if commit.unpushed}
+                    <span class="unpushed-tag" title={$t('history.unpushedTitle')}>↑ {$t('history.unpushedShort')}</span>
+                  {/if}
                   <span class="hash">{commit.shortHash}</span>
                   <span class="author">{commit.author}</span>
                   <span class="date">{when(commit.committed)}</span>
@@ -1444,7 +1459,29 @@
   .commit-row {
     padding: 8px 12px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    /* Every row reserves the stripe, so marking one does not shift its text. */
+    border-left: 3px solid transparent;
     cursor: pointer;
+  }
+  /* Only on this machine so far. The warm colour the header badge uses, so
+     the two read as the same thing. */
+  .commit-row.unpushed {
+    border-left-color: rgba(251, 191, 36, 0.7);
+  }
+  .unpushed-tag {
+    flex: 0 0 auto;
+    color: #fcd34d;
+    font-weight: 600;
+  }
+  .unpushed-summary {
+    margin: 2px 12px 6px;
+    padding: 3px 8px;
+    border-radius: 6px;
+    background: rgba(251, 191, 36, 0.12);
+    border: 1px solid rgba(251, 191, 36, 0.35);
+    color: #fcd34d;
+    font-size: 0.78em;
+    font-weight: 600;
   }
   .commit-row:hover {
     background: rgba(255, 255, 255, 0.04);

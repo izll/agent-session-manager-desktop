@@ -8,6 +8,10 @@ export interface GitBranchInfo {
   upstream: string;
   ahead: number;
   behind: number;
+  /** Commits on no remote branch — also on a branch never pushed, which has
+   *  no upstream to be ahead of. Meaningful only when hasRemote is set. */
+  unpushed: number;
+  hasRemote: boolean;
 }
 
 /** Branch of the currently selected tab's working directory, or null. */
@@ -105,11 +109,19 @@ export function currentGitTarget(): GitRepositoryTarget | null {
   return currentTarget ? { ...currentTarget } : null;
 }
 
-/** Formats the ahead/behind suffix; empty when in sync or without an upstream. */
-export function formatAheadBehind(info: GitBranchInfo | null): string {
-  if (!info || !info.upstream) return '';
-  const parts: string[] = [];
-  if (info.ahead > 0) parts.push(`↑${info.ahead}`);
-  if (info.behind > 0) parts.push(`↓${info.behind}`);
-  return parts.join(' ');
+/**
+ * Formats the behind suffix; empty when in sync or without an upstream.
+ *
+ * What is ahead is not here: the unpushed badge shows it, counted against
+ * every remote branch so that a branch never pushed is covered too.
+ */
+export function formatBehind(info: GitBranchInfo | null): string {
+  if (!info || !info.upstream || info.behind <= 0) return '';
+  return `↓${info.behind}`;
+}
+
+/** How many commits the badge should flag as unpushed; 0 hides it. */
+export function unpushedCount(info: GitBranchInfo | null): number {
+  if (!info || !info.hasRemote) return 0;
+  return Math.max(0, info.unpushed || 0);
 }

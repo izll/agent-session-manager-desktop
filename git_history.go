@@ -52,6 +52,8 @@ type GitCommit struct {
 	// Parents distinguishes a merge from an ordinary commit, and lets the
 	// frontend draw the shape of the history.
 	Parents []string `json:"parents,omitempty"`
+	// Unpushed says the commit is on no remote branch yet.
+	Unpushed bool `json:"unpushed,omitempty"`
 }
 
 // GitHistoryPage is one page of commits, plus what the caller needs to ask for
@@ -66,6 +68,9 @@ type GitHistoryPage struct {
 	HasMore bool `json:"hasMore"`
 	// Skip is what to pass as offset for the next page.
 	Skip int `json:"skip"`
+	// Unpushed counts the commits of the whole branch that are on no remote
+	// branch — not only this page's — so the list can say it up front.
+	Unpushed int `json:"unpushed"`
 }
 
 // GetGitHistory returns a page of commits for a working directory.
@@ -139,6 +144,11 @@ func getGitHistoryAtPath(path, branch string, skip int) (GitHistoryPage, error) 
 	if len(commits) > gitHistoryPageSize {
 		page.HasMore = true
 		commits = commits[:gitHistoryPageSize]
+	}
+	unpushed := unpushedCommitSet(ctx, path, branch)
+	page.Unpushed = len(unpushed)
+	for at := range commits {
+		commits[at].Unpushed = unpushed[commits[at].Hash]
 	}
 	page.Commits = commits
 	page.Skip = skip + len(commits)

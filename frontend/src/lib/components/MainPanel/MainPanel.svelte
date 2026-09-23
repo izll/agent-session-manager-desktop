@@ -353,10 +353,23 @@
   const PATH_POLL_MS = 2000;
   let pathPollTimer: ReturnType<typeof setInterval> | null = null;
 
+  // The branch badge rides the same timer at a fifth of its rate. A commit or
+  // a push made in a terminal is invisible to the app otherwise, and the
+  // unpushed count would stay wrong until the next tab switch — the moment
+  // after `git push` is exactly when the user looks at it. The backend caches
+  // the answer for 5s, so this is at most one git round per 10s, and only for
+  // the tab on screen while the window has focus.
+  const BRANCH_REVALIDATE_EVERY = 5;
+  let pathPollTicks = 0;
+
   function startPathPolling() {
     if (pathPollTimer) return;
     pathPollTimer = setInterval(() => {
       void refreshLiveTabPath();
+      if (++pathPollTicks % BRANCH_REVALIDATE_EVERY === 0 &&
+          $settings.gitBranchDisplay !== 'off') {
+        void revalidateGitBranch();
+      }
     }, PATH_POLL_MS);
   }
 
