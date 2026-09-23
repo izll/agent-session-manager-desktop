@@ -137,10 +137,15 @@
   }
 
   // Get preview style for session name
-  function getPreviewStyle(): string {
+  //
+  // The colours are parameters, not read from the component, on purpose. A
+  // call with no arguments in the template is compiled untracked — Svelte 5's
+  // legacy mode keeps Svelte 4's rule that a template only depends on what it
+  // names — so picking a background (or a plain text colour) never updated the
+  // preview. Only "full row" did, because that styles the row from
+  // selectedBgColor directly.
+  function getPreviewStyle(fg: string, bg: string): string {
     let style = '';
-    const fg = selectedColor;
-    const bg = selectedBgColor;
 
     if (bg && bg !== 'auto' && !isGradient(bg)) {
       style += `background-color: ${bg};`;
@@ -230,9 +235,9 @@
                    and the gradient shows through them as bars either side. -->
               <!-- The background chip goes around the gradient, not on it:
                    the text clip would take the chip with it. -->
-              <span class="preview-name" style={getPreviewStyle()}><span class="gradient-text" style={getGradientTextStyle(selectedColor)}>{target.name}</span></span>
+              <span class="preview-name" style={getPreviewStyle(selectedColor, selectedBgColor)}><span class="gradient-text" style={getGradientTextStyle(selectedColor)}>{target.name}</span></span>
             {:else}
-              <span class="preview-name" style={getPreviewStyle()}>
+              <span class="preview-name" style={getPreviewStyle(selectedColor, selectedBgColor)}>
                 {target.name}
               </span>
             {/if}

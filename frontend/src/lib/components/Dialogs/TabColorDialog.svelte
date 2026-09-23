@@ -83,7 +83,12 @@
     return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.55 ? '#111111' : '#FFFFFF';
   }
 
-  function previewStyle(): string {
+  // The colours are parameters, not read from the component, on purpose. A
+  // call with no arguments in the template is compiled untracked — Svelte 5's
+  // legacy mode keeps Svelte 4's rule that a template only depends on what it
+  // names — so the preview never updated when a colour was picked. Named in
+  // the call, they are what it depends on.
+  function previewStyle(textColor: string, backgroundColor: string): string {
     const styles: string[] = [];
     if (backgroundColor) styles.push(`background: ${backgroundColor}`);
     if (textColor === 'auto' && backgroundColor) {
@@ -152,7 +157,7 @@
       </div>
 
       <div class="dialog-body">
-        <div class="preview" style={previewStyle()}>
+        <div class="preview" style={previewStyle(textColor, backgroundColor)}>
           <span class="preview-dot"></span>
           <span>{tab.Name}</span>
         </div>
