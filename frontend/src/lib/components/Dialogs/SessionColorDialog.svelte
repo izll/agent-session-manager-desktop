@@ -55,6 +55,8 @@
       selectedBgColor = target!.bgColor || '';
       fullRowColor = target!.fullRowColor || false;
       colorMode = 'text';
+      // Each opening starts with the editor shut. See the reset below.
+      showCustom = false;
       targetProjectId = $activeProjectId;
       targetId = target!.id;
       targetKind = kind;
@@ -63,6 +65,11 @@
         (targetProjectId !== $activeProjectId || targetId !== target?.id || targetKind !== kind)) {
       close();
     } else if (!show) {
+      // The editor lives inside this dialog's {#if}, so closing the dialog
+      // takes it off screen without ever closing it: showCustom stayed true,
+      // and the editor popped up on its own the next time a colour dialog
+      // opened, for whichever row that was.
+      showCustom = false;
       targetCaptured = false;
       targetProjectId = '';
       targetId = '';
@@ -150,15 +157,6 @@
   }
 
   /**
-   * The preview's gradient, from the same helper the sidebar renders with — so
-   * what is previewed is what the list will show.
-   *
-   * It had its own copy, which differed in the case that matters: for a name it
-   * did not recognise it returned an empty string, leaving the text with
-   * `-webkit-text-fill-color: transparent` and no background to clip against.
-   * The result was an invisible name rather than a wrong colour.
-   */
-  /**
    * A gradient as a plain background, for the swatches in the grid.
    *
    * Separate from the text version below: a swatch is an empty span, and
@@ -170,6 +168,15 @@
     return `background-image: ${css};`;
   }
 
+  /**
+   * The preview's gradient, from the same helper the sidebar renders with — so
+   * what is previewed is what the list will show.
+   *
+   * It had its own copy, which differed in the case that matters: for a name it
+   * did not recognise it returned an empty string, leaving the text with
+   * `-webkit-text-fill-color: transparent` and no background to clip against.
+   * The result was an invisible name rather than a wrong colour.
+   */
   function getGradientTextStyle(gradientName: string): string {
     const css = getGradientCSS(gradientName);
     // Not a gradient at all: nothing to clip. (An unreadable gradient comes
@@ -222,10 +229,10 @@
             style={selectedBgColor && fullRowColor && !isGradient(selectedBgColor) ? `background: ${selectedBgColor}20` : ''}
           >
             <span class="preview-dot"></span>
-            <!-- Both conditions, not just isGradient: a gradient we cannot
-                 resolve has to fall through to the plain branch, or the name is
-                 clipped against nothing and disappears. -->
-            {#if isGradient(selectedColor) && getGradientTextStyle(selectedColor)}
+            <!-- Any gradient, including one that cannot be read: that one is
+                 painted grey (see getGradientCSS), so the name always has
+                 something to be clipped against. -->
+            {#if isGradient(selectedColor)}
               <!-- No whitespace around the name: on an inline-block the
                    surrounding newlines become spaces inside the clipped box,
                    and the gradient shows through them as bars either side. -->

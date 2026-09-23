@@ -83,6 +83,27 @@ test('closing the editor gives the focus back to the colour dialog', () => {
   assert.match(dialog, /function customClosed\(\)[\s\S]{0,300}overlayEl\?\.focus\(\)/);
 });
 
+// The editor sits inside the colour dialog's {#if}. Closing the dialog took it
+// off screen without closing it, so it opened again by itself the next time a
+// colour dialog came up — for whatever row that was.
+test('the editor never reopens by itself', () => {
+  const closed = dialog.slice(dialog.indexOf('} else if (!show) {'));
+  assert.match(closed.slice(0, closed.indexOf('\n    }\n')), /showCustom = false;/,
+    'closing the colour dialog leaves the editor marked open');
+  const opened = dialog.slice(dialog.indexOf('if (show && target && !targetCaptured) {'));
+  assert.match(opened.slice(0, opened.indexOf('} else if')), /showCustom = false;/,
+    'a new opening inherits the editor from the last one');
+});
+
+// Every gradient resolves to something paintable now — an unreadable one is
+// grey — so the text style can no longer come back empty for one.
+test('the preview does not guard against a gradient style that cannot be empty', () => {
+  assert.doesNotMatch(dialog, /isGradient\(selectedColor\) && getGradientTextStyle/);
+  const doc = dialog.slice(0, dialog.indexOf('function getGradientTextStyle'));
+  assert.match(doc.slice(doc.lastIndexOf('/**')), /The preview's gradient/,
+    'the preview\'s explanation sits on the wrong function');
+});
+
 test('every new string is translated', () => {
   const dir = new URL('../src/lib/i18n/locales/', import.meta.url);
   const keys = ['color.customGradient', 'color.custom', 'color.customGradientAdd',
