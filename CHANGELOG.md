@@ -6,6 +6,40 @@ Entries describe what changed for someone using the app. Internal refactoring,
 test and CI work is left out unless it changed behaviour. Dates are release
 dates; the format follows [Keep a Changelog](https://keepachangelog.com).
 
+## 1.1.9 — 2026-09-23
+
+### Added
+
+- **The header shows how many commits have not been pushed.** A badge next
+  to the branch name gives the count, including on a branch that has never
+  been pushed. The old ↑N needed an upstream branch, so it showed nothing
+  there even though every commit was only on this machine. The count also
+  updates on its own after a push made in a terminal.
+- **Commit history marks what is not pushed yet.** A summary line gives the
+  number, and each unpushed commit has an amber stripe and an amber hash.
+- **Custom gradients for session and group names.** The last swatch in the
+  colour picker, "Custom", opens an editor where you build a gradient from
+  2 to 6 colours with a live preview. You can start from a preset or from
+  the current colour.
+
+### Fixed
+
+- **A background colour chosen together with a gradient text colour was not
+  shown.** It is now drawn in the session list, group headers, quick jump
+  and the colour preview.
+- **Previous/next session skipped around the list.** It followed the stored
+  order, not the order on screen. It now follows what the sidebar shows:
+  sorting, favourites, collapsed groups and the search. It also scrolls to
+  the selected row. A favourite that is also in a group counts as two
+  stops, and stepping continues from the copy you are on.
+- **One Alt+↑/↓ in the terminal could move two or three sessions.** It now
+  moves one.
+- **Sorted by activity, sessions that were working at the same time kept
+  swapping places** every couple of seconds. They now stay in a stable
+  order.
+- **In a narrow commit history window**, the diff header buttons no longer
+  wrap onto two lines, and the commit rows line up.
+
 ## 1.1.8 — 2026-09-22
 
 ### Fixed
