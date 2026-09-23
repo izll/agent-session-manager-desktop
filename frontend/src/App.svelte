@@ -179,7 +179,8 @@
   import type { Session } from './lib/stores/sessions';
   import { error as sessionError } from './lib/stores/sessions';
   import { appError } from './lib/stores/appErrors';
-  import { sessions, loadSessions, selectSession, selectWindow, selectedSession, selectedSessionId, selectedWindowIdx, startSession, stopSession, stopTab, restartTab, restartTabWithResume, startTabOnly, deleteSession, toggleFavorite, reorderSession, selectPrevSession, selectNextSession } from './lib/stores/sessions';
+  import { sessions, loadSessions, selectSession, selectWindow, selectedSession, selectedSessionId, selectedWindowIdx, startSession, stopSession, stopTab, restartTab, restartTabWithResume, startTabOnly, deleteSession, toggleFavorite, reorderSession } from './lib/stores/sessions';
+  import { selectPrevSession, selectNextSession } from './lib/stores/sidebarOrder';
   import { activities } from './lib/stores/activities';
   import { statusLines, tabStatuses } from './lib/stores/statusLines';
   import { QuickReplyTab, ExportSessions, PendingUpdate, AddQuickJump } from '../wailsjs/go/main/App';
@@ -864,15 +865,6 @@
     }
   }
 
-  // Handle terminal navigation events (from xterm key interceptor)
-  function handleTerminalNav(e: CustomEvent<{ direction: 'up' | 'down' }>) {
-    if (e.detail.direction === 'up') {
-      selectPrevSession();
-    } else {
-      selectNextSession();
-    }
-  }
-
   function handleCommandStart() {
     handleStart();
   }
@@ -919,7 +911,6 @@
     // the app must still have shortcuts, and onDestroy can now always remove
     // exactly the listeners that this mount installed.
     window.addEventListener('keydown', handleKeydown, true);
-    window.addEventListener('terminal-nav', handleTerminalNav as EventListener);
     window.addEventListener('quickjump:add', handleQuickJumpAdd as EventListener);
     window.addEventListener('git:show-history', handleShowGitHistory);
     window.addEventListener('command:start-selected', handleCommandStart);
@@ -984,7 +975,6 @@
     if (isResizing) stopResize();
     stopOpenTaskWatch?.();
     window.removeEventListener('keydown', handleKeydown, true);
-    window.removeEventListener('terminal-nav', handleTerminalNav as EventListener);
     window.removeEventListener('quickjump:add', handleQuickJumpAdd as EventListener);
     window.removeEventListener('git:show-history', handleShowGitHistory);
     window.removeEventListener('command:start-selected', handleCommandStart);

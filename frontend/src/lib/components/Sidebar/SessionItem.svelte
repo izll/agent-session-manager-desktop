@@ -10,7 +10,8 @@
   import SaveAsTemplateDialog from '../Dialogs/SaveAsTemplateDialog.svelte';
   import ConfirmDialog from '../Dialogs/ConfirmDialog.svelte';
   import type { Session } from '../../stores/sessions';
-  import { selectSession, selectedSessionId, renameSession, deleteSession, toggleFavorite } from '../../stores/sessions';
+  import { selectedSessionId, renameSession, deleteSession, toggleFavorite } from '../../stores/sessions';
+  import { activeSidebarEntry, selectSidebarEntry, type SidebarSection } from '../../stores/sidebarOrder';
   import { settings } from '../../stores/settings';
   import { t } from '../../i18n';
   import { focusTerminal } from '../../utils/focus';
@@ -39,6 +40,12 @@
    * agent icons and badges.
    */
   export let favoriteSlot: number = 0;
+  /**
+   * Which part of the list this row is in. A favourite in a group is shown
+   * twice, and clicking or stepping onto one copy has to be told apart from
+   * the other, or the next step starts from the wrong place.
+   */
+  export let section: SidebarSection = 'list';
 
   const dispatch = createEventDispatcher();
 
@@ -60,6 +67,19 @@
   let hasUIProject = false;
 
   $: isSelected = $selectedSessionId === session.id;
+  // The copy the keyboard is on. The other copy of a selected favourite is
+  // still selected, but drawn fainter, so it is clear where the next step goes.
+  $: isCursor = !!$activeSidebarEntry && $activeSidebarEntry.id === session.id &&
+    $activeSidebarEntry.section === section;
+
+  // Keep the row the cursor is on in view. Stepping past the bottom of the
+  // list used to select sessions that were scrolled out of sight.
+  let rowEl: HTMLDivElement;
+  $: if (isCursor && rowEl) void revealRow();
+  async function revealRow() {
+    await tick();
+    rowEl?.scrollIntoView({ block: 'nearest' });
+  }
   $: sessionStatus = session.status as 'running' | 'paused' | 'stopped';
   $: isGradient = isGradientColor(session.color);
   $: displayColor = isGradient ? getGradientCSS(session.color) : session.color;
@@ -301,17 +321,19 @@
 </script>
 
 <div
+  bind:this={rowEl}
   class="session-item"
   class:selected={isSelected}
+  class:echo={isSelected && !isCursor}
   class:running={sessionStatus === 'running'}
   class:dragging={isDragging}
   class:drag-over={isDragOver}
   class:compact={$settings?.compactList}
   style={rowStyle}
   title={favoriteSlot > 0 ? $t('sidebar.favoriteShortcut', { n: favoriteSlot }) : undefined}
-  on:click={() => selectSession(session.id)}
+  on:click={() => selectSidebarEntry(session.id, section)}
   on:contextmenu={handleContextMenu}
-  on:keydown={(e) => e.key === 'Enter' && selectSession(session.id)}
+  on:keydown={(e) => e.key === 'Enter' && selectSidebarEntry(session.id, section)}
   draggable="true"
   on:dragstart={handleDragStart}
   on:dragend={handleDragEnd}
@@ -560,6 +582,13 @@
 
   .session-item.selected:hover {
     background: rgba(var(--accent-rgb), 0.2);
+  }
+
+  /* The same session, shown in its other place (favourites and its group). */
+  .session-item.selected.echo {
+    background: rgba(var(--accent-rgb), 0.06);
+    border-color: rgba(var(--accent-rgb), 0.2);
+    box-shadow: none;
   }
 
   /* Running indicator - subtle glow effect */

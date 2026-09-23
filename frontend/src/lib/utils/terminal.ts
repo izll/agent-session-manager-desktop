@@ -557,11 +557,14 @@ export function createTerminal(
       return false;
     }
 
-    // Alt+Up/Down for session navigation
+    // Alt+Up/Down steps through the sessions. The step itself is the app's
+    // shortcut handler, which listens on the window in the capture phase and
+    // so has already run by now; the pane only has to refuse the key.
+    //
+    // It used to step here as well, by dispatching an event of its own — and
+    // this handler runs for keyup as well as keydown, so one press moved two
+    // or three sessions while the terminal had focus.
     if (event.altKey && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
-      window.dispatchEvent(new CustomEvent('terminal-nav', {
-        detail: { direction: event.key === 'ArrowUp' ? 'up' : 'down' }
-      }));
       return false;
     }
 

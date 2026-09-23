@@ -724,25 +724,3 @@ export async function moveSessionToIndex(id: string, targetIndex: number) {
     throw e;
   }
 }
-
-export function selectPrevSession() {
-  const currentSessions = get(sessions);
-  const currentId = get(selectedSessionId);
-  if (!currentId || currentSessions.length === 0) return;
-
-  const currentIdx = currentSessions.findIndex(s => s.id === currentId);
-  if (currentIdx > 0) {
-    selectSession(currentSessions[currentIdx - 1].id);
-  }
-}
-
-export function selectNextSession() {
-  const currentSessions = get(sessions);
-  const currentId = get(selectedSessionId);
-  if (!currentId || currentSessions.length === 0) return;
-
-  const currentIdx = currentSessions.findIndex(s => s.id === currentId);
-  if (currentIdx < currentSessions.length - 1) {
-    selectSession(currentSessions[currentIdx + 1].id);
-  }
-}

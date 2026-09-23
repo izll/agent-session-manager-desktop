@@ -235,7 +235,7 @@
           {$t('sidebar.favorites')}
         </div>
         {#each $favorites as session, i (session.id)}
-          <SessionItem {session} index={$sessions.findIndex(s => s.id === session.id)} favoriteSlot={favoriteSlot(session.id)} activity={getActivity(session.id, $activities)} statusLine={getStatusLine(session.id, $statusLines)} spinnerText={$spinnerTexts[session.id] || ''} tabStatuses={$tabStatuses[session.id] || []} on:drop={handleSessionDrop} />
+          <SessionItem {session} section="favorites" index={$sessions.findIndex(s => s.id === session.id)} favoriteSlot={favoriteSlot(session.id)} activity={getActivity(session.id, $activities)} statusLine={getStatusLine(session.id, $statusLines)} spinnerText={$spinnerTexts[session.id] || ''} tabStatuses={$tabStatuses[session.id] || []} on:drop={handleSessionDrop} />
         {/each}
       </div>
     {/if}
