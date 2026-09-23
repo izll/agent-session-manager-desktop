@@ -758,6 +758,13 @@ func (s *Storage) RestoreTrashItem(id string) (*RestoreResult, error) {
 		running := parent.Status == StatusRunning && parent.IsAlive()
 		if running {
 			workDir := restored.WorkDir
+			// A tab created at the session's own directory is stored with no
+			// directory of its own; on a server that came back as "no
+			// directory" and the restore refused with tabNeedsWorkDirOnServer.
+			// It means the session's path, as a restart takes it.
+			if workDir == "" {
+				workDir = parent.Path
+			}
 			// On the tab's own machine, not the session's. A tab restored
 			// onto the local multiplexer while it still names a server gets a
 			// local index, and the attach then asks that server about a window
@@ -892,6 +899,17 @@ func nextStoredWindowIndex(instance *Instance, serverID string) int {
 		if tab.Index >= next {
 			next = tab.Index + 1
 		}
+	}
+	// Past any index still taken. A stray server tab — one a restart has not
+	// yet moved into its server's band — sits in the local range, and the
+	// count above deliberately skips server tabs, so a local tab restored now
+	// could land on the same number.
+	used := make(map[int]bool, len(instance.FollowedWindows))
+	for _, tab := range instance.FollowedWindows {
+		used[tab.Index] = true
+	}
+	for used[next] {
+		next++
 	}
 	return next
 }

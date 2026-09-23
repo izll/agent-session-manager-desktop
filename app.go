@@ -1735,12 +1735,51 @@ func (a *App) GetTrashItems() ([]TrashItemInfo, error) {
 }
 
 func (a *App) RestoreTrashItem(id, expectedProjectID string) (*session.RestoreResult, error) {
+	// A tab on a server needs its route before it can be rebuilt there, and
+	// nothing else provides one: routing covers the tabs a session HAS, so a
+	// session whose only tab on that server was in the trash had none after
+	// an app restart, and the restore failed as if the server were down.
+	// Connected before the lock, like creating a tab: a dial can take the
+	// dial timeout plus the helper install.
+	parentID, serverID := a.trashedTabRoute(id)
+	var tabConnection *serverConnection
+	if serverID != "" {
+		connection, err := a.connectionFor(serverID)
+		if err != nil {
+			return nil, err
+		}
+		tabConnection = connection
+	}
+
 	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return nil, err
 	}
 	defer done()
+	if tabConnection != nil {
+		session.SetTabExecutor(parentID, serverID, tabConnection.executor)
+	}
 	return a.storage.RestoreTrashItem(id)
+}
+
+// trashedTabRoute names the session and server of a trashed tab that runs on a
+// server other than its session's, or empty strings for anything else.
+func (a *App) trashedTabRoute(id string) (parentID, serverID string) {
+	entries, err := a.storage.ListTrash()
+	if err != nil {
+		return "", ""
+	}
+	for _, entry := range entries {
+		if entry.ID != id || entry.Kind != "tab" || entry.Tab == nil || entry.Tab.ServerID == "" {
+			continue
+		}
+		parent, err := a.storage.GetInstance(entry.ParentSessionID)
+		if err != nil || parent.ServerID == entry.Tab.ServerID {
+			return "", ""
+		}
+		return parent.ID, entry.Tab.ServerID
+	}
+	return "", ""
 }
 
 // RepositoryRootOf reports the top of the git working tree containing path, or
@@ -3087,6 +3126,13 @@ func tabWindowMissing(inst *session.Instance, windowIdx int, activityValid bool)
 	return inst.WindowReachable(windowIdx)
 }
 
+// TabAvailability says a tab cannot be shown right now, and why.
+type TabAvailability struct {
+	WindowIdx   int  `json:"windowIdx"`
+	Unreachable bool `json:"unreachable,omitempty"`
+	Missing     bool `json:"missing,omitempty"`
+}
+
 // SidebarUpdate contains combined activity and status line data
 type SidebarUpdate struct {
 	ProjectID    string                     `json:"projectId"`
@@ -3094,6 +3140,14 @@ type SidebarUpdate struct {
 	StatusLines  map[string]string          `json:"statusLines"`
 	SpinnerTexts map[string]string          `json:"spinnerTexts"`
 	TabStatuses  map[string][]TabStatusInfo `json:"tabStatuses"`
+	// TabAvailability lists, per session, the tabs that are unreachable or
+	// missing on their server — every such tab, whatever it runs.
+	//
+	// Kept apart from TabStatuses, which carries only agent tabs and only for
+	// sessions with more than one: the pane of a terminal tab, or of the one
+	// agent tab a session has, read its unreachable and missing marks from
+	// there and so never saw them.
+	TabAvailability map[string][]TabAvailability `json:"tabAvailability"`
 	// LastActive carries the activity-ordering timestamps, because the session
 	// list itself is only reloaded on events (startup, dialogs). Without this
 	// the sidebar showed a live activity dot on a session that the ordering
@@ -3165,11 +3219,12 @@ func (a *App) getSidebarUpdates(ctx context.Context) SidebarUpdate {
 	defer a.projectMu.RUnlock()
 
 	result := SidebarUpdate{
-		Activities:   make(map[string]string),
-		StatusLines:  make(map[string]string),
-		SpinnerTexts: make(map[string]string),
-		TabStatuses:  make(map[string][]TabStatusInfo),
-		LastActive:   make(map[string]string),
+		Activities:      make(map[string]string),
+		StatusLines:     make(map[string]string),
+		SpinnerTexts:    make(map[string]string),
+		TabStatuses:     make(map[string][]TabStatusInfo),
+		TabAvailability: make(map[string][]TabAvailability),
+		LastActive:      make(map[string]string),
 	}
 
 	projectID, instances, _, err := a.storage.LoadAllWithProjectSnapshotContext(ctx)
@@ -3324,6 +3379,7 @@ func (a *App) getSidebarUpdates(ctx context.Context) SidebarUpdate {
 		statusLine   string
 		spinnerText  string
 		agentTabs    []TabStatusInfo
+		unavailable  []TabAvailability
 		observations []activityObservation
 	}
 	resultsCh := make(chan sessionResult, len(jobs))
@@ -3443,6 +3499,11 @@ func (a *App) getSidebarUpdates(ctx context.Context) SidebarUpdate {
 				sr.spinnerText = best.SpinnerText
 			}
 			for _, ts := range tabStatuses {
+				if ts.Unreachable || ts.Missing {
+					sr.unavailable = append(sr.unavailable, TabAvailability{
+						WindowIdx: ts.WindowIdx, Unreachable: ts.Unreachable, Missing: ts.Missing,
+					})
+				}
 				if ts.Agent != string(session.AgentTerminal) {
 					sr.agentTabs = append(sr.agentTabs, ts)
 					if validActivityWindows[ts.WindowIdx] {
@@ -3486,6 +3547,9 @@ func (a *App) getSidebarUpdates(ctx context.Context) SidebarUpdate {
 		}
 		if sr.spinnerText != "" {
 			result.SpinnerTexts[sr.instID] = sr.spinnerText
+		}
+		if len(sr.unavailable) > 0 {
+			result.TabAvailability[sr.instID] = sr.unavailable
 		}
 		if len(sr.agentTabs) > 1 {
 			result.TabStatuses[sr.instID] = sr.agentTabs

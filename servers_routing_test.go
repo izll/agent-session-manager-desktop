@@ -194,3 +194,24 @@ func TestARememberedPathDoesNotOverwriteAConfiguredOne(t *testing.T) {
 		t.Error("a discovered path can overwrite one the user configured")
 	}
 }
+
+// A session whose only tab on a server was in the trash had no route to that
+// server after an app restart, so restoring the tab failed as if the server
+// were down. The restore connects first — before the mutation lock, like
+// creating a tab, since a dial can take minutes — and routes the tab.
+func TestRestoringATrashedServerTabConnectsFirst(t *testing.T) {
+	text := readSourceFile(t, "app.go")
+	body := functionBody(t, text, "func (a *App) RestoreTrashItem(")
+	connect := strings.Index(body, "a.connectionFor(serverID)")
+	lock := strings.Index(body, "a.beginExpectedProjectMutation(")
+	route := strings.Index(body, "session.SetTabExecutor(parentID, serverID, tabConnection.executor)")
+	if connect < 0 || route < 0 {
+		t.Fatal("restoring a server tab neither connects nor routes it")
+	}
+	if lock < 0 || connect > lock {
+		t.Error("the connection is built under the mutation lock, freezing the app while it dials")
+	}
+	if route < lock {
+		t.Error("the tab is routed before the session is known to be current")
+	}
+}

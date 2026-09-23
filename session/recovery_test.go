@@ -637,3 +637,68 @@ func TestManyLocalTabsDoNotReachTheServersRange(t *testing.T) {
 			"first's — a busy server would run into it", second, second-first)
 	}
 }
+
+// A server tab created at the session's own directory is stored with no
+// directory of its own. Restored into a running session, that came back as
+// "no directory" and the restore refused with tabNeedsWorkDirOnServer, leaving
+// the tab in the trash. It means the session's path.
+func TestRestoringAServerTabWithNoDirOfItsOwnUsesTheSessionPath(t *testing.T) {
+	storage := newRecoveryTestStorage(t)
+	local := newScriptedExecutor()
+	local.answers["list-windows"] = "0\t1\n"
+	server := newScriptedExecutor()
+	server.answers["new-window"] = "10000\n"
+	server.answers["list-windows"] = "10000\n"
+
+	parent := &Instance{
+		ID: "running", Name: "running", Path: "/home/u/proj", Status: StatusRunning,
+		FollowedWindows: []FollowedWindow{
+			{Index: 10000, Agent: AgentTerminal, Name: "on server", ServerID: "srv"},
+		},
+	}
+	if err := storage.SaveAll([]*Instance{parent}, []*Group{}, DefaultSettings()); err != nil {
+		t.Fatal(err)
+	}
+	SetExecutor(parent.ID, local)
+	SetTabExecutor(parent.ID, "srv", server)
+	t.Cleanup(func() { ClearExecutor(parent.ID); ClearTabExecutor(parent.ID, "srv") })
+
+	if err := storage.TrashTab(parent.ID, 10000); err != nil {
+		t.Fatal(err)
+	}
+	trash, err := storage.ListTrash()
+	if err != nil || len(trash) != 1 {
+		t.Fatalf("trash: %v %v", trash, err)
+	}
+	if _, err := storage.RestoreTrashItem(trash[0].ID); err != nil {
+		t.Fatalf("the restore failed: %v", err)
+	}
+
+	created := server.commandsNamed("new-window")
+	if len(created) == 0 {
+		t.Fatal("nothing was created on the server")
+	}
+	if !strings.Contains(strings.Join(created[0], " "), "-c /home/u/proj") {
+		t.Errorf("the window was not created at the session's path: %v", created[0])
+	}
+	restored, err := storage.GetInstance(parent.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(restored.FollowedWindows) != 1 || restored.FollowedWindows[0].WorkDir != "" {
+		t.Errorf("the tab should still have no directory of its own: %+v", restored.FollowedWindows)
+	}
+}
+
+// A stray server tab sits in the local range until a restart renumbers it.
+// Restoring a local tab into the stopped session skipped server tabs when
+// counting, and could land on the stray tab's number.
+func TestARestoredLocalTabAvoidsAStrayServerTabsIndex(t *testing.T) {
+	inst := &Instance{ID: "s", FollowedWindows: []FollowedWindow{
+		{Index: 1, Agent: AgentTerminal},
+		{Index: 2, Agent: AgentTerminal, ServerID: "srv"}, // stray: local-range index
+	}}
+	if got := nextStoredWindowIndex(inst, ""); got == 2 || got == 1 {
+		t.Errorf("the restored local tab took index %d, already held", got)
+	}
+}
