@@ -38,9 +38,9 @@ type App struct {
 	ptyDrainDone      chan struct{}
 	projectMu         sync.RWMutex
 	projectMutationMu sync.Mutex
-	// terminalDirsSavedAt is when the sidebar poll last saved where the
-	// terminal tabs are (unix nanoseconds). See terminalDirSaveInterval.
-	terminalDirsSavedAt atomic.Int64
+	// terminalDirSaves paces how often the sidebar poll saves where the
+	// terminal tabs are. See terminalDirSaveInterval.
+	terminalDirSaves    eventThrottle
 	projectTransitionMu sync.Mutex
 	projectGateMu       sync.Mutex
 	projectSwitching    bool
@@ -119,8 +119,9 @@ type ptySession struct {
 // NewApp creates a new App application struct
 func NewApp() *App {
 	return &App{
-		ptys:    make(map[string]*ptySession),
-		servers: newServerPool(),
+		ptys:             make(map[string]*ptySession),
+		servers:          newServerPool(),
+		terminalDirSaves: eventThrottle{interval: terminalDirSaveInterval},
 	}
 }
 
@@ -3247,11 +3248,7 @@ func (a *App) getSidebarUpdates(ctx context.Context) SidebarUpdate {
 	// stops anything, and the terminals came back where they had last been
 	// stopped. Not on every tick: one query per terminal tab, for a value that
 	// changes only when someone runs cd.
-	saveTerminalDirs := false
-	if now := time.Now().UnixNano(); now-a.terminalDirsSavedAt.Load() >= int64(terminalDirSaveInterval) {
-		a.terminalDirsSavedAt.Store(now)
-		saveTerminalDirs = true
-	}
+	saveTerminalDirs := a.terminalDirSaves.allow(time.Now())
 
 	terminalDirs := map[string]map[int]string{}
 	for _, inst := range instances {

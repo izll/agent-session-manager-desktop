@@ -3,6 +3,7 @@ package main
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 // Terminal directories were saved only when a session or tab was stopped, and
@@ -43,5 +44,21 @@ func TestEveryUnavailableTabIsReported(t *testing.T) {
 	}
 	if !strings.Contains(source, "result.TabAvailability[sr.instID] = sr.unavailable") {
 		t.Error("the collected tabs never reach the update")
+	}
+}
+
+// The terminal-directory saves are paced by the app's shared throttle, set to
+// terminalDirSaveInterval when the app is made.
+func TestTerminalDirSavesArePaced(t *testing.T) {
+	app := NewApp()
+	now := time.Now()
+	if !app.terminalDirSaves.allow(now) {
+		t.Fatal("the first save was held back")
+	}
+	if app.terminalDirSaves.allow(now.Add(terminalDirSaveInterval / 2)) {
+		t.Error("a second save went through inside the interval")
+	}
+	if !app.terminalDirSaves.allow(now.Add(terminalDirSaveInterval)) {
+		t.Error("a save after the interval was held back")
 	}
 }

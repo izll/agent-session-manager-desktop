@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -33,7 +34,7 @@ const terminalDirCaptureTimeout = 2 * time.Second
 // information is gone. Reports whether anything changed, so the caller knows
 // whether the instance needs saving.
 func (i *Instance) CaptureTerminalWorkingDirs() bool {
-	return i.captureTerminalWorkingDirs(queryPaneCurrentPath)
+	return i.captureTerminalWorkingDirs(sessionPaneDirs())
 }
 
 // CaptureTerminalWorkingDir records where one terminal tab currently is,
@@ -107,7 +108,7 @@ func (i *Instance) captureTerminalWorkingDirs(query paneDirQuery) bool {
 // calls this while holding the project lock, and a tab sitting in a network
 // mount that stopped answering would otherwise hold it for good.
 func (i *Instance) TerminalDirsNow(ctx context.Context) map[int]string {
-	return i.terminalDirsNow(ctx, queryPaneCurrentPath)
+	return i.terminalDirsNow(ctx, sessionPaneDirs())
 }
 
 func (i *Instance) terminalDirsNow(ctx context.Context, query paneDirQuery) map[int]string {
@@ -243,6 +244,77 @@ func restartDirArgs(dir string) []string {
 		return nil
 	}
 	return []string{"-c", trimmed}
+}
+
+// sessionPaneDirs answers for every window of a session from one listing.
+//
+// Asking window by window cost one multiplexer process per terminal tab, on a
+// poll that runs for every session. The first question lists the session's
+// panes once and the rest are answered from that. A window missing from the
+// listing answers "", which leaves its stored directory alone — the listing
+// only contains windows that exist, so the "answers for window 0 instead"
+// trap of display-message cannot arise here.
+//
+// Where the listing fails — a multiplexer without list-panes -s, say — each
+// window is asked on its own as before.
+func sessionPaneDirs() paneDirQuery {
+	var listedSession string
+	var dirs map[int]string
+	var listed bool
+	return func(ctx context.Context, target string) string {
+		colon := strings.LastIndex(target, ":")
+		if colon < 0 {
+			return queryPaneCurrentPath(ctx, target)
+		}
+		sessionName := target[:colon]
+		if sessionName != listedSession {
+			listedSession = sessionName
+			dirs, listed = listPaneDirs(ctx, sessionName)
+		}
+		if !listed {
+			return queryPaneCurrentPath(ctx, target)
+		}
+		index, err := strconv.Atoi(target[colon+1:])
+		if err != nil {
+			return ""
+		}
+		return dirs[index]
+	}
+}
+
+// listPaneDirs lists where each window of a session is: its active pane's
+// directory, which is what display-message answers for the window.
+func listPaneDirs(ctx context.Context, sessionName string) (map[int]string, bool) {
+	output, err := TmuxCommandContext(ctx, "list-panes", "-s", "-t", sessionName, "-F",
+		"#{window_index}\t#{pane_active}\t#{pane_current_path}").Output()
+	if err != nil {
+		return nil, false
+	}
+	return parsePaneDirs(string(output)), true
+}
+
+// parsePaneDirs reads list-panes output: window index, whether the pane is the
+// window's active one, and its directory. The active pane wins; a window whose
+// active pane is not marked keeps its first.
+func parsePaneDirs(output string) map[int]string {
+	dirs := map[int]string{}
+	active := map[int]bool{}
+	for _, line := range strings.Split(output, "\n") {
+		fields := strings.SplitN(strings.TrimRight(line, "\r"), "\t", 3)
+		if len(fields) != 3 {
+			continue
+		}
+		index, err := strconv.Atoi(strings.TrimSpace(fields[0]))
+		if err != nil {
+			continue
+		}
+		isActive := strings.TrimSpace(fields[1]) == "1"
+		if _, seen := dirs[index]; !seen || (isActive && !active[index]) {
+			dirs[index] = fields[2]
+			active[index] = isActive
+		}
+	}
+	return dirs
 }
 
 // queryPaneCurrentPath asks the multiplexer where a pane is. tmux tracks this

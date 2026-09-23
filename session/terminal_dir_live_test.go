@@ -2,8 +2,11 @@ package session
 
 import (
 	"context"
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 )
@@ -261,5 +264,46 @@ func TestATerminalAtTheRootRestartsAtTheRoot(t *testing.T) {
 	// A server path does not exist here and must not be checked here.
 	if got := inst.terminalRestartDirArgs(inst.FollowedWindows[1]); len(got) != 2 || got[1] != "/srv/only/there" {
 		t.Errorf("a server tab restarts with %v, want its own directory", got)
+	}
+}
+
+// One listing answers every window. The active pane is the one display-message
+// answered for, so it wins when a window is split.
+func TestPaneListingPrefersTheActivePane(t *testing.T) {
+	dirs := parsePaneDirs("0\t1\t/tmp\n1\t0\t/usr\n1\t1\t/etc\n2\t1\t/srv/a b\n")
+	want := map[int]string{0: "/tmp", 1: "/etc", 2: "/srv/a b"}
+	for index, dir := range want {
+		if dirs[index] != dir {
+			t.Errorf("window %d read as %q, want %q", index, dirs[index], dir)
+		}
+	}
+}
+
+// Against a real multiplexer: one listing, and a window that does not exist
+// answers nothing rather than another window's directory.
+func TestSessionPaneDirsAgainstTmux(t *testing.T) {
+	if _, err := exec.LookPath("tmux"); err != nil || runtime.GOOS == "windows" {
+		t.Skip("needs tmux")
+	}
+	name := fmt.Sprintf("asmgr_panedirs_%d", os.Getpid())
+	first, second := t.TempDir(), t.TempDir()
+	if out, err := exec.Command("tmux", "new-session", "-d", "-s", name, "-c", first).CombinedOutput(); err != nil {
+		t.Skipf("cannot start tmux: %v %s", err, out)
+	}
+	t.Cleanup(func() { _ = exec.Command("tmux", "kill-session", "-t", name).Run() })
+	if out, err := exec.Command("tmux", "new-window", "-d", "-t", name+":3", "-c", second).CombinedOutput(); err != nil {
+		t.Fatalf("new-window: %v %s", err, out)
+	}
+
+	query := sessionPaneDirs()
+	ctx := context.Background()
+	if got := query(ctx, name+":3"); !samePath(got, second) {
+		t.Errorf("window 3 read as %q, want %q", got, second)
+	}
+	if got := query(ctx, name+":0"); !samePath(got, first) {
+		t.Errorf("window 0 read as %q, want %q", got, first)
+	}
+	if got := query(ctx, name+":7"); got != "" {
+		t.Errorf("a window that does not exist answered %q", got)
 	}
 }
