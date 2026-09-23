@@ -69,7 +69,8 @@ type GitHistoryPage struct {
 	// Skip is what to pass as offset for the next page.
 	Skip int `json:"skip"`
 	// Unpushed counts the commits of the whole branch that are on no remote
-	// branch — not only this page's — so the list can say it up front.
+	// branch — not only this page's — so the list can say it up front. Zero
+	// when that cannot be known; see unpushedIsKnown.
 	Unpushed int `json:"unpushed"`
 }
 
@@ -145,10 +146,27 @@ func getGitHistoryAtPath(path, branch string, skip int) (GitHistoryPage, error) 
 		page.HasMore = true
 		commits = commits[:gitHistoryPageSize]
 	}
-	unpushed := unpushedCommitSet(ctx, path, branch)
-	page.Unpushed = len(unpushed)
-	for at := range commits {
-		commits[at].Unpushed = unpushed[commits[at].Hash]
+	// The same rule as the header badge, so the two never disagree about
+	// whether there is anything to push.
+	//
+	// Every page asks again rather than the dialog keeping the set between
+	// pages: the walk is bounded by the unpushed commits, not by how deep in
+	// the history the page is, so a later page costs about what the first did,
+	// and it stays right if a push lands while the dialog is open.
+	if unpushedIsKnown(ctx, path, branch) {
+		unpushed := unpushedCommitSet(ctx, path, branch)
+		for at := range commits {
+			commits[at].Unpushed = unpushed[commits[at].Hash]
+		}
+		// The set is capped; the total is not. Only a full set is its own
+		// count — past the cap git is asked for the real number, which is
+		// what the badge shows.
+		page.Unpushed = len(unpushed)
+		if len(unpushed) >= maxUnpushedListed {
+			if count, ok := countUnpushedKnown(ctx, path, branch); ok {
+				page.Unpushed = count
+			}
+		}
 	}
 	page.Commits = commits
 	page.Skip = skip + len(commits)

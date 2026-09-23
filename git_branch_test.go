@@ -15,14 +15,14 @@ func TestReadGitBranchReportsBranchName(t *testing.T) {
 	dashboardGit(t, repo, "add", "tracked.txt")
 	dashboardGit(t, repo, "commit", "-m", "initial branch commit")
 
-	info := readGitBranch(context.Background(), repo)
+	info, _ := readGitBranch(context.Background(), repo)
 	if !info.Repository {
 		t.Fatalf("expected a repository, got %#v", info)
 	}
 	if info.Branch != "main" {
 		t.Fatalf("expected branch main, got %q", info.Branch)
 	}
-	if info.Upstream != "" || info.Ahead != 0 || info.Behind != 0 {
+	if info.Upstream != "" || info.Behind != 0 {
 		t.Fatalf("expected no upstream tracking, got %#v", info)
 	}
 }
@@ -37,7 +37,7 @@ func TestReadGitBranchDetachedHead(t *testing.T) {
 	dashboardGit(t, repo, "commit", "-m", "initial branch commit")
 	dashboardGit(t, repo, "checkout", "--detach", "HEAD")
 
-	info := readGitBranch(context.Background(), repo)
+	info, _ := readGitBranch(context.Background(), repo)
 	if !info.Repository {
 		t.Fatalf("expected a repository, got %#v", info)
 	}
@@ -47,7 +47,7 @@ func TestReadGitBranchDetachedHead(t *testing.T) {
 }
 
 func TestReadGitBranchNonRepository(t *testing.T) {
-	info := readGitBranch(context.Background(), t.TempDir())
+	info, _ := readGitBranch(context.Background(), t.TempDir())
 	if info.Repository {
 		t.Fatalf("expected a non-repository, got %#v", info)
 	}

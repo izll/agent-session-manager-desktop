@@ -17,8 +17,11 @@ test('the header badge counts unpushed commits, not ahead-of-upstream', () => {
   assert.match(body, /\.unpushed\b/, 'the badge does not read the unpushed count');
   assert.doesNotMatch(body, /upstream/,
     'the badge still depends on an upstream, so a never-pushed branch shows nothing');
-  // With no remote every commit is "unpushed"; flagging them all is noise.
-  assert.match(body, /hasRemote/, 'a repository with no remote would flag every commit');
+  // With no remote every commit is "unpushed", and in a shallow or
+  // single-branch clone pushed commits look unpushed; the backend says when
+  // the count cannot be trusted, and then the badge shows nothing.
+  assert.match(body, /!info\.unpushedKnown\) return 0/,
+    'the badge shows a count the backend marked as unknown');
 
   assert.match(badge, /\{#if unpushed > 0\}[\s\S]{0,200}git-unpushed-badge/,
     'the header shows no badge for unpushed commits');

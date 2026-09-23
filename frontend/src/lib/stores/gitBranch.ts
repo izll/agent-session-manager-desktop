@@ -6,12 +6,14 @@ export interface GitBranchInfo {
   repository: boolean;
   branch: string;
   upstream: string;
-  ahead: number;
   behind: number;
   /** Commits on no remote branch — also on a branch never pushed, which has
-   *  no upstream to be ahead of. Meaningful only when hasRemote is set. */
+   *  no upstream to be ahead of. Meaningful only when unpushedKnown is set:
+   *  the backend leaves it unknown without a remote, when the remote-tracking
+   *  branches do not mirror the server (a shallow or single-branch clone), or
+   *  when counting took too long. */
   unpushed: number;
-  hasRemote: boolean;
+  unpushedKnown: boolean;
 }
 
 /** Branch of the currently selected tab's working directory, or null. */
@@ -122,6 +124,6 @@ export function formatBehind(info: GitBranchInfo | null): string {
 
 /** How many commits the badge should flag as unpushed; 0 hides it. */
 export function unpushedCount(info: GitBranchInfo | null): number {
-  if (!info || !info.hasRemote) return 0;
+  if (!info || !info.unpushedKnown) return 0;
   return Math.max(0, info.unpushed || 0);
 }

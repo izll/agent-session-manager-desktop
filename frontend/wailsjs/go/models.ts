@@ -693,10 +693,9 @@ export namespace main {
 	    repository: boolean;
 	    branch: string;
 	    upstream: string;
-	    ahead: number;
 	    behind: number;
 	    unpushed: number;
-	    hasRemote: boolean;
+	    unpushedKnown: boolean;
 
 	    static createFrom(source: any = {}) {
 	        return new GitBranchInfo(source);
@@ -708,10 +707,9 @@ export namespace main {
 	        this.repository = source["repository"];
 	        this.branch = source["branch"];
 	        this.upstream = source["upstream"];
-	        this.ahead = source["ahead"];
 	        this.behind = source["behind"];
 	        this.unpushed = source["unpushed"];
-	        this.hasRemote = source["hasRemote"];
+	        this.unpushedKnown = source["unpushedKnown"];
 	    }
 	}
 	export class GitBranchList {

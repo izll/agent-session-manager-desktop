@@ -9,11 +9,25 @@ import (
 )
 
 const (
-	// The UI asks for this on every session/tab switch and on window focus, so
-	// the git calls must be short and the answers reusable for a moment.
+	// The UI asks for this on every session/tab switch, on window focus and on
+	// a slow poll, so the git calls must be short and the answers reusable for
+	// a moment. The poll deliberately runs less often than the cache lives, so
+	// each poll reads git afresh while a burst of switches and focus events
+	// shares one answer.
 	gitBranchTimeout  = 2 * time.Second
 	gitBranchCacheTTL = 5 * time.Second
 )
+
+// gitUnpushedTimeout is the unpushed count's own budget. The count walks
+// history and is the one query here whose cost grows with the repository, so
+// it runs after the branch and upstream queries and cannot use up their time:
+// a slow count costs the badge its number, never its branch name. A variable
+// only so a test can shorten it.
+var gitUnpushedTimeout = gitBranchTimeout
+
+// countUnpushedFunc is countUnpushed, replaceable so a test can make the count
+// slow without needing a slow repository.
+var countUnpushedFunc = countUnpushed
 
 // GitBranchInfo is the branch snapshot the UI shows next to a session.
 // Repository is false for paths that aren't a work tree at all; the frontend
@@ -23,13 +37,14 @@ type GitBranchInfo struct {
 	Repository bool   `json:"repository"`
 	Branch     string `json:"branch"`
 	Upstream   string `json:"upstream"`
-	Ahead      int    `json:"ahead"`
 	Behind     int    `json:"behind"`
 	// Unpushed counts the commits on no remote branch, including on a branch
 	// that has never been pushed and so has no upstream to be ahead of.
-	// Meaningful only when HasRemote is set.
-	Unpushed  int  `json:"unpushed"`
-	HasRemote bool `json:"hasRemote"`
+	// Meaningful only when UnpushedKnown is set: without a remote, when the
+	// remote-tracking branches cannot be trusted to mirror the server, or when
+	// the count ran out of time, there is no number worth showing.
+	Unpushed      int  `json:"unpushed"`
+	UnpushedKnown bool `json:"unpushedKnown"`
 }
 
 type gitBranchCacheEntry struct {
@@ -83,14 +98,14 @@ func (a *App) getGitBranchAtPath(path string) GitBranchInfo {
 	if parent == nil {
 		parent = context.Background()
 	}
-	ctx, cancel := context.WithTimeout(parent, gitBranchTimeout)
-	defer cancel()
+	info, complete := readGitBranch(parent, normalized)
 
-	info := readGitBranch(ctx, normalized)
-
-	// A timed-out or cancelled lookup is not an answer: caching it would keep
-	// the branch hidden for the whole TTL after a transient stall.
-	if ctx.Err() == nil {
+	// A timed-out or cancelled branch lookup is not an answer: caching it would
+	// keep the branch hidden for the whole TTL after a transient stall. A count
+	// that ran out of its own time is different. The branch beside it is right,
+	// so the entry is cached with the count unknown, and the count is tried
+	// again when the entry expires rather than on every request in between.
+	if complete {
 		gitBranchMu.Lock()
 		gitBranchCache[normalized] = gitBranchCacheEntry{
 			info:      info,
@@ -105,8 +120,27 @@ func (a *App) getGitBranchAtPath(path string) GitBranchInfo {
 
 // readGitBranch runs the branch/upstream queries only — the dashboard's full
 // inspection also walks the work tree status, which is far too slow to repeat
-// on every tab switch.
-func readGitBranch(ctx context.Context, path string) GitBranchInfo {
+// on every tab switch. complete is false when the branch queries did not
+// finish; the unpushed count running out of its own time does not make it so.
+func readGitBranch(parent context.Context, path string) (info GitBranchInfo, complete bool) {
+	ctx, cancel := context.WithTimeout(parent, gitBranchTimeout)
+	defer cancel()
+	info = readGitBranchName(ctx, path)
+	if ctx.Err() != nil {
+		return info, false
+	}
+	if !info.Repository {
+		return info, true
+	}
+
+	countCtx, countCancel := context.WithTimeout(parent, gitUnpushedTimeout)
+	defer countCancel()
+	info.Unpushed, info.UnpushedKnown = countUnpushedFunc(countCtx, path, "")
+	return info, parent.Err() == nil
+}
+
+// readGitBranchName fills in everything but the unpushed count.
+func readGitBranchName(ctx context.Context, path string) GitBranchInfo {
 	info := GitBranchInfo{Path: path}
 
 	output, err := runDashboardGit(ctx, path, "rev-parse", "--is-inside-work-tree")
@@ -121,16 +155,12 @@ func readGitBranch(ctx context.Context, path string) GitBranchInfo {
 		info.Branch = "detached@" + strings.TrimSpace(output)
 	}
 
-	info.Unpushed, info.HasRemote = countUnpushed(ctx, path)
-
 	if output, err = runDashboardGit(ctx, path, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"); err == nil {
 		info.Upstream = strings.TrimSpace(output)
-		if counts, countErr := runDashboardGit(ctx, path, "rev-list", "--left-right", "--count", "HEAD...@{upstream}"); countErr == nil {
-			fields := strings.Fields(counts)
-			if len(fields) == 2 {
-				info.Ahead, _ = strconv.Atoi(fields[0])
-				info.Behind, _ = strconv.Atoi(fields[1])
-			}
+		// Only behind: what is ahead is the unpushed count, which also covers
+		// a branch with no upstream to be ahead of.
+		if count, countErr := runGitStdout(ctx, path, "rev-list", "--count", "HEAD..@{upstream}"); countErr == nil {
+			info.Behind, _ = strconv.Atoi(strings.TrimSpace(count))
 		}
 	}
 
