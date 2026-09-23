@@ -342,7 +342,11 @@
     {:else}
       <span class="session-name">
         {#if isGradient}
-          <span style="background: {displayColor}; -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; font-weight: {isSelected ? 800 : 600};">{session.name}</span>
+          <!-- Two spans: the background chip outside, the gradient inside.
+               background-clip: text clips a background to the letters, so on
+               a single element it clipped the chip away and the chosen
+               background colour was lost. -->
+          <span style={nameStyle}><span style="background: {displayColor}; -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; font-weight: {isSelected ? 800 : 600};">{session.name}</span></span>
         {:else}
           <span style={nameStyle}>{session.name}</span>
         {/if}

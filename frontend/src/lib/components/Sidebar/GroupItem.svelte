@@ -385,7 +385,9 @@
     {:else}
       <span class="group-name">
         {#if isGradient}
-          <span style="background: {displayColor}; -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">{group.name}</span>
+          <!-- Chip outside, gradient inside: on one element the text clip
+               takes the background colour with it. -->
+          <span style={nameStyle}><span style="background: {displayColor}; -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">{group.name}</span></span>
         {:else}
           <span style={nameStyle}>{group.name}</span>
         {/if}

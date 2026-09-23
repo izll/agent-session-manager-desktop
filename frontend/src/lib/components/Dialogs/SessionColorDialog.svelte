@@ -213,7 +213,9 @@
               <!-- No whitespace around the name: on an inline-block the
                    surrounding newlines become spaces inside the clipped box,
                    and the gradient shows through them as bars either side. -->
-              <span class="preview-name gradient-text" style={getGradientTextStyle(selectedColor)}>{target.name}</span>
+              <!-- The background chip goes around the gradient, not on it:
+                   the text clip would take the chip with it. -->
+              <span class="preview-name" style={getPreviewStyle()}><span class="gradient-text" style={getGradientTextStyle(selectedColor)}>{target.name}</span></span>
             {:else}
               <span class="preview-name" style={getPreviewStyle()}>
                 {target.name}
@@ -349,7 +351,7 @@
     color: #e4e4e7;
   }
 
-  .preview-name.gradient-text {
+  .gradient-text {
     /* inline-block, because background-clip:text clips to the TEXT only on an
        inline box. As a flex item this span is blockified, and the clip then
        takes the whole box — which painted the gradient as a solid bar the width

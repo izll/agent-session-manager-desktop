@@ -153,7 +153,8 @@
    */
   function sessionStyle(session: any): string {
     if (!session) return '';
-    if (isGradient(session.color ?? '')) return '';
+    // A gradient name still gets its background chip: getNameStyle adds no
+    // colour for a gradient, only the chip, which goes around the gradient.
     return getNameStyle(session.color ?? '', session.bgColor ?? '', !!session.fullRowColor);
   }
 
@@ -535,7 +536,7 @@
                        gradient has to clip to the text and nothing else:
                        padding, ellipsis and overflow belong on the element
                        around it, or they are painted over too. -->
-                  <span style={row.gradient}>{row.name}</span>
+                  <span style={row.style}><span style={row.gradient}>{row.name}</span></span>
                 {:else}
                   <span style={row.style}>{row.name}</span>
                 {/if}
