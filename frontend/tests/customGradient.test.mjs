@@ -174,3 +174,14 @@ test('the custom colour title is translated everywhere', () => {
     assert.ok(strings['color.customColor']?.trim(), `${name} has no color.customColor`);
   }
 });
+
+// The custom background editor's preview showed a gradient name in the default
+// white: the chip style carries no colour for a gradient, and the gradient
+// goes on a span of its own inside the chip, as in the sidebar.
+test('the custom background preview paints a gradient name', () => {
+  const colorEditor = readFileSync(
+    new URL('../src/lib/components/Dialogs/CustomColorDialog.svelte', import.meta.url), 'utf8');
+  assert.match(colorEditor,
+    /\{#if isGradient\(textColor\)\}\s*(<!--[\s\S]*?-->\s*)?<span class="preview-name" style=\{previewStyle\}><span style=\{gradientTextStyle\(textColor\)\}>/,
+    'a gradient text colour is not drawn in the preview');
+});

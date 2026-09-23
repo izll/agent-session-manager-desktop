@@ -6,7 +6,7 @@
   // would share that dialog's keydown handler and Escape would close both.
   import { portal } from '../../utils/portal';
   import { t } from '../../i18n';
-  import { getNameStyle, isHexColor } from '../../utils/rowColors';
+  import { getNameStyle, gradientTextStyle, isGradient, isHexColor } from '../../utils/rowColors';
 
   export let show = false;
   /** The background the colour dialog has selected now; seeds the picker. */
@@ -88,7 +88,16 @@
 
       <div class="dialog-body">
         <div class="preview">
-          <span class="preview-name" style={previewStyle}>{name}</span>
+          <!-- As the sidebar draws it: the background chip outside, and a
+               gradient text colour on a span of its own inside, since the
+               clip that paints it would take the chip with it. The chip style
+               alone carries no colour for a gradient, so without the inner
+               span the name came out in the default white. -->
+          {#if isGradient(textColor)}
+            <span class="preview-name" style={previewStyle}><span style={gradientTextStyle(textColor)}>{name}</span></span>
+          {:else}
+            <span class="preview-name" style={previewStyle}>{name}</span>
+          {/if}
         </div>
 
         <div class="picker">
