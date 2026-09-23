@@ -1637,6 +1637,50 @@ func (s *Storage) UpdateInstanceForProject(projectID string, instance *Instance)
 	return fmt.Errorf("instance not found")
 }
 
+// RecordTerminalDirsForProject stores where a session's terminal tabs are,
+// as read by Instance.TerminalDirsNow while the session runs.
+//
+// Only the WorkDir of the named terminal tabs is written, onto what is on disk
+// now: the poll that read the directories loaded its instances a moment ago,
+// and saving those back whole would undo anything changed in between.
+func (s *Storage) RecordTerminalDirsForProject(projectID, instanceID string, dirs map[int]string) error {
+	if len(dirs) == 0 {
+		return nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	originalProject := s.projectID
+	if err := s.setActiveProjectLocked(projectID); err != nil {
+		return err
+	}
+	defer s.setActiveProjectLocked(originalProject)
+
+	instances, groups, settings, err := s.loadAllWithSettingsLocked()
+	if err != nil {
+		return err
+	}
+	changed := false
+	for _, current := range instances {
+		if current.ID != instanceID {
+			continue
+		}
+		for idx := range current.FollowedWindows {
+			window := &current.FollowedWindows[idx]
+			dir, ok := dirs[window.Index]
+			if !ok || window.Agent != AgentTerminal || window.WorkDir == dir {
+				continue
+			}
+			window.WorkDir = dir
+			changed = true
+		}
+	}
+	if !changed {
+		return nil
+	}
+	return s.saveAllLocked(instances, groups, settings)
+}
+
 // MergeResumeSessionIDsForProject atomically records detected conversation IDs
 // on the latest stored instance. Sidebar polling works from an earlier
 // snapshot, so replacing the entire instance here could otherwise undo a

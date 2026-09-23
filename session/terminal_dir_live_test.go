@@ -1,0 +1,149 @@
+package session
+
+import (
+	"context"
+	"os"
+	"path/filepath"
+	"testing"
+)
+
+func mustMkdir(t *testing.T, dir string) {
+	t.Helper()
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Directories were saved only when a session or tab was stopped. A machine
+// that shuts down or restarts stops nothing — the multiplexer simply dies — so
+// every terminal came back where it had last been stopped, not where it was.
+// They are now read while the session runs; these cover the reading.
+func TestTerminalDirsAreReadWhileRunning(t *testing.T) {
+	root := t.TempDir()
+	sub := filepath.Join(root, "sub")
+	mustMkdir(t, sub)
+
+	inst := &Instance{
+		ID:     "live",
+		Name:   "live",
+		Path:   root,
+		Status: StatusRunning,
+		FollowedWindows: []FollowedWindow{
+			{Index: 1, Agent: AgentTerminal, WorkDir: ""},
+			{Index: 2, Agent: AgentTerminal, WorkDir: sub},
+			{Index: 3, Agent: AgentTerminal},
+			{Index: 4, Agent: AgentClaude},
+			{Index: 5, Agent: AgentTerminal, Stopped: true},
+			{Index: 10000, Agent: AgentTerminal, ServerID: "srv"},
+		},
+	}
+	panes := map[string]string{
+		inst.TmuxSessionName() + ":1":     sub + "\n", // cd'd into a subdirectory
+		inst.TmuxSessionName() + ":2":     root,       // cd'd back to the root
+		inst.TmuxSessionName() + ":3":     "",         // could not be read
+		inst.TmuxSessionName() + ":4":     sub,        // an agent: not ours to move
+		inst.TmuxSessionName() + ":5":     sub,        // parked
+		inst.TmuxSessionName() + ":10000": sub,        // on a server
+	}
+	query := func(_ context.Context, target string) string { return panes[target] }
+
+	got := inst.terminalDirsNow(context.Background(), query)
+
+	if dir, ok := got[1]; !ok || dir != sub {
+		t.Errorf("tab 1 moved into %s, read as %q (present %v)", sub, dir, ok)
+	}
+	// Back at the root means "no directory of its own". Treating that as
+	// nothing to save left the tab stuck in the subdirectory it had left.
+	if dir, ok := got[2]; !ok || dir != "" {
+		t.Errorf("tab 2 went back to the session root, read as %q (present %v)", dir, ok)
+	}
+	for _, idx := range []int{3, 4, 5, 10000} {
+		if _, ok := got[idx]; ok {
+			t.Errorf("tab %d should be left alone, got %q", idx, got[idx])
+		}
+	}
+}
+
+// A session on a server has its panes in that server's multiplexer; the local
+// one cannot say where they are.
+func TestTerminalDirsSkipASessionOnAServer(t *testing.T) {
+	inst := &Instance{ID: "remote", Path: t.TempDir(), Status: StatusRunning, ServerID: "srv",
+		FollowedWindows: []FollowedWindow{{Index: 1, Agent: AgentTerminal}}}
+	query := func(context.Context, string) string { return t.TempDir() }
+	if got := inst.terminalDirsNow(context.Background(), query); len(got) != 0 {
+		t.Errorf("read a server session's panes from this computer: %v", got)
+	}
+}
+
+// Saved onto what is on disk now, and only the directory: the poll read its
+// instances a moment earlier, and writing them back whole would undo changes
+// made in between.
+func TestRecordingTerminalDirsTouchesNothingElse(t *testing.T) {
+	storage := newRecoveryTestStorage(t)
+	root := t.TempDir()
+	sub := filepath.Join(root, "sub")
+	mustMkdir(t, sub)
+	current := &Instance{
+		ID:   "session-1",
+		Name: "renamed meanwhile",
+		Path: root,
+		FollowedWindows: []FollowedWindow{
+			{Index: 1, Agent: AgentTerminal, Name: "shell", WorkDir: sub},
+			{Index: 2, Agent: AgentClaude, Name: "agent", WorkDir: sub},
+		},
+	}
+	if err := storage.SaveAll([]*Instance{current}, []*Group{}, DefaultSettings()); err != nil {
+		t.Fatal(err)
+	}
+
+	// Tab 1 went back to the root; tab 2 is an agent and must not move.
+	if err := storage.RecordTerminalDirsForProject("", "session-1", map[int]string{1: "", 2: root}); err != nil {
+		t.Fatal(err)
+	}
+
+	saved, err := storage.GetInstance("session-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if saved.Name != "renamed meanwhile" {
+		t.Errorf("the save overwrote the name with %q", saved.Name)
+	}
+	for _, fw := range saved.FollowedWindows {
+		switch fw.Index {
+		case 1:
+			if fw.WorkDir != "" {
+				t.Errorf("the terminal tab was not moved back to the root: %q", fw.WorkDir)
+			}
+		case 2:
+			if fw.WorkDir != sub {
+				t.Errorf("an agent tab's directory was changed to %q", fw.WorkDir)
+			}
+		}
+	}
+}
+
+// The case the review found: the poll saved a subdirectory, the user went back
+// to the session root, and the session was stopped before the next save. The
+// stop capture treated "at the root" as nothing to save, so the tab came back
+// in the subdirectory it had left. Both stop paths now save it, as the poll
+// does.
+func TestStoppingRemembersAReturnToTheRoot(t *testing.T) {
+	root := t.TempDir()
+	sub := filepath.Join(root, "sub")
+	mustMkdir(t, sub)
+	atRoot := func(context.Context, string) string { return root }
+
+	whole := &Instance{ID: "stop-all", Name: "stop-all", Path: root, Status: StatusRunning,
+		FollowedWindows: []FollowedWindow{{Index: 1, Agent: AgentTerminal, WorkDir: sub}}}
+	if !whole.captureTerminalWorkingDirs(atRoot) || whole.FollowedWindows[0].WorkDir != "" {
+		t.Errorf("stopping the session kept %q for a tab back at the root",
+			whole.FollowedWindows[0].WorkDir)
+	}
+
+	single := &Instance{ID: "stop-one", Name: "stop-one", Path: root, Status: StatusRunning,
+		FollowedWindows: []FollowedWindow{{Index: 1, Agent: AgentTerminal, WorkDir: sub}}}
+	if !single.captureTerminalWorkingDir(1, atRoot) || single.FollowedWindows[0].WorkDir != "" {
+		t.Errorf("stopping the tab kept %q for a tab back at the root",
+			single.FollowedWindows[0].WorkDir)
+	}
+}

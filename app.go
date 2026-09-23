@@ -26,18 +26,21 @@ import (
 
 // App struct holds the application state
 type App struct {
-	ctx                 context.Context
-	storage             *session.Storage
-	historyIndex        *session.HistoryIndex
-	historyMu           sync.Mutex
-	portableImportMu    sync.Mutex
-	portableImports     map[string]portableImportSnapshot
-	portableImportIDs   []string
-	ptys                map[string]*ptySession
-	ptyMu               sync.RWMutex
-	ptyDrainDone        chan struct{}
-	projectMu           sync.RWMutex
-	projectMutationMu   sync.Mutex
+	ctx               context.Context
+	storage           *session.Storage
+	historyIndex      *session.HistoryIndex
+	historyMu         sync.Mutex
+	portableImportMu  sync.Mutex
+	portableImports   map[string]portableImportSnapshot
+	portableImportIDs []string
+	ptys              map[string]*ptySession
+	ptyMu             sync.RWMutex
+	ptyDrainDone      chan struct{}
+	projectMu         sync.RWMutex
+	projectMutationMu sync.Mutex
+	// terminalDirsSavedAt is when the sidebar poll last saved where the
+	// terminal tabs are (unix nanoseconds). See terminalDirSaveInterval.
+	terminalDirsSavedAt atomic.Int64
 	projectTransitionMu sync.Mutex
 	projectGateMu       sync.Mutex
 	projectSwitching    bool
@@ -3152,6 +3155,10 @@ func (a *App) lastSidebarSnapshot() (SidebarUpdate, bool) {
 	return a.sidebarSnapshot, true
 }
 
+// terminalDirSaveInterval is how often the poll saves where the terminal tabs
+// are. A restart loses at most this much of a cd.
+const terminalDirSaveInterval = 30 * time.Second
+
 func (a *App) getSidebarUpdates(ctx context.Context) SidebarUpdate {
 	a.projectMu.RLock()
 	mayPersist := a.projectLocked
@@ -3179,6 +3186,17 @@ func (a *App) getSidebarUpdates(ctx context.Context) SidebarUpdate {
 		inst *session.Instance
 	}
 	var jobs []detectJob
+
+	// Where the terminal tabs are, saved while the sessions run. Stopping a
+	// session saves it too, but a machine that shuts down or restarts never
+	// stops anything, and the terminals came back where they had last been
+	// stopped. Not on every tick: one query per terminal tab, for a value that
+	// changes only when someone runs cd.
+	saveTerminalDirs := false
+	if now := time.Now().UnixNano(); now-a.terminalDirsSavedAt.Load() >= int64(terminalDirSaveInterval) {
+		a.terminalDirsSavedAt.Store(now)
+		saveTerminalDirs = true
+	}
 
 	for _, inst := range instances {
 		if ctx.Err() != nil {
@@ -3283,6 +3301,12 @@ func (a *App) getSidebarUpdates(ctx context.Context) SidebarUpdate {
 		if mayPersist && needSave {
 			if err := a.storage.MergeResumeSessionIDsForProject(projectID, inst); err != nil {
 				log.Printf("[SidebarPoll] failed to save auto-detected session IDs for session=%s: %v", inst.ID, err)
+			}
+		}
+
+		if mayPersist && saveTerminalDirs {
+			if err := a.storage.RecordTerminalDirsForProject(projectID, inst.ID, inst.TerminalDirsNow(ctx)); err != nil {
+				log.Printf("[SidebarPoll] failed to save terminal directories for session=%s: %v", inst.ID, err)
 			}
 		}
 

@@ -59,8 +59,11 @@ func (i *Instance) captureTerminalWorkingDir(windowIdx int, query paneDirQuery) 
 		defer cancel()
 
 		target := fmt.Sprintf("%s:%d", i.TmuxSessionName(), window.Index)
-		dir := resolveCapturedDir(query(ctx, target), i.Path)
-		if dir == "" || dir == window.WorkDir {
+		// Back at the session's own directory is "" and is saved like any
+		// other move, the same as the running capture does; treating it as
+		// nothing to save kept a subdirectory the tab had already left.
+		dir, ok := classifyCapturedDir(query(ctx, target), i.Path)
+		if !ok || dir == window.WorkDir {
 			return false
 		}
 		window.WorkDir = dir
@@ -92,8 +95,8 @@ func (i *Instance) captureTerminalWorkingDirs(query paneDirQuery) bool {
 		}
 
 		target := fmt.Sprintf("%s:%d", sessionName, window.Index)
-		dir := resolveCapturedDir(query(ctx, target), i.Path)
-		if dir == "" || dir == window.WorkDir {
+		dir, ok := classifyCapturedDir(query(ctx, target), i.Path)
+		if !ok || dir == window.WorkDir {
 			continue
 		}
 		window.WorkDir = dir
@@ -106,33 +109,68 @@ func (i *Instance) captureTerminalWorkingDirs(query paneDirQuery) bool {
 	return changed
 }
 
+// TerminalDirsNow reads where each running terminal tab on this computer is,
+// keyed by window index, for saving while the session runs.
+//
+// Capturing only on stop missed the case that matters most: a machine that
+// is shut down or restarts never stops its sessions, the multiplexer simply
+// dies, and every terminal came back where it had last been stopped rather
+// than where it was left.
+//
+// A tab back at the session's own directory maps to "" — no directory of its
+// own — so that returning to the root is remembered too. A tab whose directory
+// could not be read is absent, which leaves what is stored alone.
+func (i *Instance) TerminalDirsNow(ctx context.Context) map[int]string {
+	return i.terminalDirsNow(ctx, queryPaneCurrentPath)
+}
+
+func (i *Instance) terminalDirsNow(ctx context.Context, query paneDirQuery) map[int]string {
+	dirs := map[int]string{}
+	// The query asks the local multiplexer, which knows nothing of a server's
+	// panes.
+	if i.Status != StatusRunning || i.ServerID != "" {
+		return dirs
+	}
+	sessionName := i.TmuxSessionName()
+	for _, window := range i.FollowedWindows {
+		if !isTerminalTab(window.Agent) || window.Stopped || window.ServerID != "" {
+			continue
+		}
+		target := fmt.Sprintf("%s:%d", sessionName, window.Index)
+		if dir, ok := classifyCapturedDir(query(ctx, target), i.Path); ok {
+			dirs[window.Index] = dir
+		}
+	}
+	return dirs
+}
+
+// classifyCapturedDir decides what a reported directory means for the tab.
+//
+// Not usable (ok false) unless it is an absolute path to a directory that
+// exists: a pane whose directory was deleted keeps reporting the old path, and
+// storing that would make the tab fail to start where it used to simply work.
+//
+// The session's own path comes back as "" with ok true — the tab's "no
+// directory of its own". Writing the path itself would turn an inherited
+// directory into a pinned one, so moving the session would leave its
+// terminals behind; skipping it would keep a subdirectory the tab had left.
+func classifyCapturedDir(reported, sessionPath string) (string, bool) {
+	trimmed := strings.TrimSpace(reported)
+	if trimmed == "" || !filepath.IsAbs(trimmed) {
+		return "", false
+	}
+	if info, err := os.Stat(trimmed); err != nil || !info.IsDir() {
+		return "", false
+	}
+	if samePath(trimmed, sessionPath) {
+		return "", true
+	}
+	return trimmed, true
+}
+
 // isTerminalTab reports whether a tab is a plain shell rather than an agent.
 func isTerminalTab(agent AgentType) bool {
 	return agent == AgentTerminal
-}
-
-// resolveCapturedDir decides whether a reported directory is worth storing.
-//
-// Rejects anything that is not an absolute path to a directory that exists: a
-// pane whose directory was deleted keeps reporting the old path, and storing
-// that would make the tab fail to start where it used to simply work.
-//
-// The session's own path is stored as empty, which is what the tab already
-// means by "no directory of its own" — writing it out would turn an inherited
-// path into a pinned one, so moving the session would leave its terminals
-// behind.
-func resolveCapturedDir(reported, sessionPath string) string {
-	trimmed := strings.TrimSpace(reported)
-	if trimmed == "" || !filepath.IsAbs(trimmed) {
-		return ""
-	}
-	if info, err := os.Stat(trimmed); err != nil || !info.IsDir() {
-		return ""
-	}
-	if samePath(trimmed, sessionPath) {
-		return ""
-	}
-	return trimmed
 }
 
 // samePath compares two paths allowing for symlinks, so /home/x and its
