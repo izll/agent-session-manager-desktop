@@ -61,15 +61,60 @@ export function isGradient(color: string): boolean {
   return !!color && color.startsWith('gradient-');
 }
 
+/**
+ * A gradient the user composed, stored in the same colour field as everything
+ * else: "gradient-custom:#FF0000,#00FF00". The prefix keeps it a gradient to
+ * every reader that only asks isGradient(), so none of them had to change.
+ */
+export const CUSTOM_GRADIENT_PREFIX = 'gradient-custom:';
+export const MIN_GRADIENT_STOPS = 2;
+export const MAX_GRADIENT_STOPS = 6;
+
+// Strict on purpose: the value ends up inside a style attribute, so anything
+// looser than a six-digit hex colour would let a stored string write CSS.
+const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
+
+export function isHexColor(value: string): boolean {
+  return HEX_COLOR.test(value);
+}
+
+export function isCustomGradient(color: string): boolean {
+  return !!color && color.startsWith(CUSTOM_GRADIENT_PREFIX);
+}
+
+/** Encodes stops as a custom gradient value; '' if they do not make one. */
+export function customGradient(stops: string[]): string {
+  if (stops.length < MIN_GRADIENT_STOPS || stops.length > MAX_GRADIENT_STOPS) return '';
+  if (!stops.every(isHexColor)) return '';
+  return CUSTOM_GRADIENT_PREFIX + stops.map(stop => stop.toUpperCase()).join(',');
+}
+
+/**
+ * The colours of any gradient, preset or custom. Null for a plain colour, an
+ * unknown preset, or a custom value that does not parse — never a partial list.
+ */
+export function gradientStops(color: string): string[] | null {
+  if (isCustomGradient(color)) {
+    const stops = color.slice(CUSTOM_GRADIENT_PREFIX.length).split(',');
+    return customGradient(stops) ? stops : null;
+  }
+  if (isGradient(color)) return gradients[color] ?? null;
+  return null;
+}
+
+// What an unreadable gradient is drawn with: a preset this build does not know,
+// or a custom value that does not parse — from an imported sessions file, say.
+// A readable grey rather than the raw string, which would otherwise be written
+// into a style attribute as it stands.
+const UNKNOWN_GRADIENT_CSS = 'linear-gradient(90deg, #9CA3AF, #9CA3AF)';
+
 /** Turns a gradient name into a CSS value; plain colours pass through unchanged. */
 export function getGradientCSS(colorValue: string): string {
-  if (isGradient(colorValue)) {
-    const colors = gradients[colorValue];
-    if (colors) {
-      return `linear-gradient(90deg, ${colors.join(', ')})`;
-    }
+  const stops = gradientStops(colorValue);
+  if (stops) {
+    return `linear-gradient(90deg, ${stops.join(', ')})`;
   }
-  return colorValue;
+  return isGradient(colorValue) ? UNKNOWN_GRADIENT_CSS : colorValue;
 }
 
 /** Black or white, whichever stays readable on the given background. */

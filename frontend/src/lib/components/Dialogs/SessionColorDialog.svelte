@@ -18,7 +18,9 @@
     getContrastColor,
     getGradientCSS,
     isGradient,
+    isCustomGradient,
   } from '../../utils/rowColors';
+  import CustomGradientDialog from './CustomGradientDialog.svelte';
 
   export let show = false;
   export let session: Session | null = null;
@@ -34,6 +36,10 @@
   let selectedBgColor = '';
   let fullRowColor = false;
   let colorMode: 'text' | 'bg' = 'text'; // Which color we're editing
+
+  // The custom gradient editor, opened from the last swatch of the grid.
+  let showCustom = false;
+  let overlayEl: HTMLDivElement;
   let targetProjectId = '';
   let targetId = '';
   let targetKind: 'session' | 'group' | '' = '';
@@ -104,6 +110,16 @@
     if (projectId === get(activeProjectId)) close();
   }
 
+  function applyCustomGradient(e: CustomEvent<string>) {
+    selectedColor = e.detail;
+  }
+
+  // Back to this dialog's overlay, or its own keys (Escape, Tab, F) would do
+  // nothing until it was clicked: the editor took focus and then went away.
+  function customClosed() {
+    overlayEl?.focus();
+  }
+
   function selectColor(color: string) {
     if (colorMode === 'text') {
       selectedColor = color;
@@ -156,10 +172,8 @@
 
   function getGradientTextStyle(gradientName: string): string {
     const css = getGradientCSS(gradientName);
-    // getGradientCSS hands back the input unchanged when it knows no such
-    // gradient. Painting that as a background would be a plain colour behind
-    // transparent text — no better than the empty string. Fall back to normal
-    // rendering instead.
+    // Not a gradient at all: nothing to clip. (An unreadable gradient comes
+    // back as a grey one, which is safe to paint.)
     if (css === gradientName) return '';
     // background-image, not the `background` shorthand.
     //
@@ -181,9 +195,11 @@
 {#if show && target}
   <div
     class="dialog-overlay" use:portal use:autoFocusDialog
+    bind:this={overlayEl}
     on:keydown={handleKeydown}
     role="dialog"
     aria-modal="true"
+    tabindex="-1"
   >
     <div class="dialog-content">
       <div class="dialog-header">
@@ -232,7 +248,7 @@
               class:active={colorMode === 'text'}
               on:click={() => colorMode = 'text'}
             >
-              {$t('color.textLabel', { color: selectedColor || $t('color.none') })}
+              {$t('color.textLabel', { color: isCustomGradient(selectedColor) ? $t('color.customGradient') : (selectedColor || $t('color.none')) })}
             </button>
             <button
               class="mode-btn"
@@ -284,6 +300,26 @@
                 <span class="color-name">{option.name}</span>
               </button>
             {/each}
+            <!-- Last in the grid, for the text colour only: a gradient
+                 background is never drawn (the chip and the row tint are flat
+                 colours), so offering one there would do nothing. Shows the
+                 custom gradient itself once one is chosen. -->
+            {#if colorMode === 'text'}
+              <button
+                class="color-btn custom-btn"
+                class:selected={isCustomGradient(selectedColor)}
+                class:gradient={isCustomGradient(selectedColor)}
+                on:click={() => (showCustom = true)}
+                title={$t('color.customGradient')}
+              >
+                {#if isCustomGradient(selectedColor)}
+                  <span class="color-swatch gradient-swatch" style={getGradientSwatchStyle(selectedColor)}></span>
+                {:else}
+                  <span class="color-swatch custom-swatch">+</span>
+                {/if}
+                <span class="color-name">{$t('color.custom')}</span>
+              </button>
+            {/if}
           </div>
         </div>
       </div>
@@ -294,6 +330,14 @@
       </div>
     </div>
   </div>
+
+  <CustomGradientDialog
+    bind:show={showCustom}
+    initial={selectedColor}
+    name={target.name}
+    on:apply={applyCustomGradient}
+    on:close={customClosed}
+  />
 {/if}
 
 <style>
@@ -328,6 +372,17 @@
     margin-bottom: 16px;
   }
 
+  /* The "custom" swatch before a gradient is chosen: an invitation, not a
+     colour. */
+  .custom-swatch {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px dashed rgba(255, 255, 255, 0.35);
+    color: #d4d4d8;
+    font-size: 14px;
+    line-height: 1;
+  }
   .session-preview {
     display: flex;
     align-items: center;
