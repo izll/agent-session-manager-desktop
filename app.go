@@ -1207,6 +1207,7 @@ type SessionInfo struct {
 	AutoYes         bool   `json:"autoYes"`
 	HideStatusLine  bool   `json:"hideStatusLine"`
 	Notes           string `json:"notes"`
+	MainTabNotes    string `json:"mainTabNotes"`
 	Favorite        bool   `json:"favorite"`
 	ResumeSessionID string `json:"resumeSessionId"`
 	// ServerID names the machine this session runs on; empty is this computer.
@@ -1320,6 +1321,7 @@ func (a *App) instanceToSessionInfo(inst *session.Instance) SessionInfo {
 		AutoYes:            inst.AutoYes,
 		HideStatusLine:     inst.HideStatusLine,
 		Notes:              inst.Notes,
+		MainTabNotes:       inst.MainTabNotes,
 		Favorite:           inst.Favorite,
 		ResumeSessionID:    inst.ResumeSessionID,
 		ServerID:           inst.ServerID,
@@ -2887,18 +2889,30 @@ func (a *App) SetTabNotes(sessionID string, windowIdx int, notes, expectedProjec
 	if err != nil {
 		return err
 	}
-	// Window 0 uses session notes
-	if windowIdx == 0 {
-		inst.Notes = notes
-		return a.storage.UpdateInstance(inst)
+	*notesField(inst, windowIdx) = notes
+	return a.storage.UpdateInstance(inst)
+}
+
+// SessionNotesWindow is the window index that addresses the session's own
+// note rather than a tab's. Negative, so no multiplexer window can have it.
+const SessionNotesWindow = -1
+
+// notesField is where the note for windowIdx is kept: the session's note for
+// SessionNotesWindow, a followed tab's own note, and otherwise the main tab's.
+//
+// The main tab is whatever is not a followed tab. It used to be recognised as
+// index 0, which is only true while tmux's base-index is 0: with base-index 1
+// the main tab's note could not be saved at all ("window not found").
+func notesField(inst *session.Instance, windowIdx int) *string {
+	if windowIdx == SessionNotesWindow {
+		return &inst.Notes
 	}
 	for i := range inst.FollowedWindows {
 		if inst.FollowedWindows[i].Index == windowIdx {
-			inst.FollowedWindows[i].Notes = notes
-			return a.storage.UpdateInstance(inst)
+			return &inst.FollowedWindows[i].Notes
 		}
 	}
-	return fmt.Errorf("error.windowNotFound")
+	return &inst.MainTabNotes
 }
 
 // SetTabColor sets the optional text and background colors for a tab.
@@ -2925,16 +2939,7 @@ func (a *App) GetTabNotes(sessionID string, windowIdx int) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	// Window 0 uses session notes
-	if windowIdx == 0 {
-		return inst.Notes, nil
-	}
-	for _, fw := range inst.FollowedWindows {
-		if fw.Index == windowIdx {
-			return fw.Notes, nil
-		}
-	}
-	return "", nil
+	return *notesField(inst, windowIdx), nil
 }
 
 // GetWindowList returns list of windows

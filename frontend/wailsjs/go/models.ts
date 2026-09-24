@@ -1461,6 +1461,7 @@ export namespace main {
 	    autoYes: boolean;
 	    hideStatusLine: boolean;
 	    notes: string;
+	    mainTabNotes: string;
 	    favorite: boolean;
 	    resumeSessionId: string;
 	    serverId?: string;
@@ -1499,6 +1500,7 @@ export namespace main {
 	        this.autoYes = source["autoYes"];
 	        this.hideStatusLine = source["hideStatusLine"];
 	        this.notes = source["notes"];
+	        this.mainTabNotes = source["mainTabNotes"];
 	        this.favorite = source["favorite"];
 	        this.resumeSessionId = source["resumeSessionId"];
 	        this.serverId = source["serverId"];

@@ -240,6 +240,14 @@ type Instance struct {
 	FollowedWindows []FollowedWindow `json:"followed_windows,omitempty"` // Windows tracked as agents (window 0 is main agent)
 	BaseCommitSHA   string           `json:"base_commit_sha,omitempty"`  // Git HEAD commit at session start (for diff)
 
+	// MainTabNotes is the session's own tab's note, kept apart from Notes.
+	//
+	// The two used to be one field: the main tab's note WAS the session's.
+	// Notes can now be written for the session as a whole or for one tab,
+	// from any tab, so the main tab needs a note of its own like every other.
+	// Existing notes stay session notes; this starts empty.
+	MainTabNotes string `json:"main_tab_notes,omitempty"`
+
 	// Worktree records the git worktree created for this session, when it was
 	// given one. Empty for a session working directly in its project, which
 	// is what every session did before and still does by default.

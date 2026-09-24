@@ -11,6 +11,39 @@
 
   export let active = false;
 
+  // Which note is open: this tab's, or the session's — the one every tab of
+  // the session shares. The session's is addressed as its own target, window
+  // SESSION_NOTES, so drafts, save queues and the unsaved-changes guard keep
+  // working unchanged: to them it is just another note.
+  const SESSION_NOTES = -1;
+  const SCOPE_KEY = 'asmgr.notesScope';
+  type NotesScope = 'tab' | 'session';
+  // Remembered across openings and restarts, per viewer: which of the two a
+  // person reaches for is a habit, not a property of any session.
+  let scope: NotesScope = readScope();
+
+  function readScope(): NotesScope {
+    try {
+      return localStorage.getItem(SCOPE_KEY) === 'session' ? 'session' : 'tab';
+    } catch {
+      return 'tab';
+    }
+  }
+
+  function setScope(next: NotesScope) {
+    if (next === scope) return;
+    scope = next;
+    try {
+      localStorage.setItem(SCOPE_KEY, next);
+    } catch {
+      // Storage unavailable: the choice holds until the view is closed.
+    }
+  }
+
+  function targetWindowIdx(): number {
+    return scope === 'session' ? SESSION_NOTES : get(selectedWindowIdx);
+  }
+
   const dispatch = createEventDispatcher();
 
   let notes = '';
@@ -338,7 +371,7 @@
   async function loadNotes(force = false) {
     const projectId = get(activeProjectId);
     const sessionId = get(selectedSessionId);
-    const windowIdx = get(selectedWindowIdx);
+    const windowIdx = targetWindowIdx();
 
     if (!sessionId) {
       loadGeneration++;
@@ -443,8 +476,10 @@
     await saveNow(lastProjectId, lastSessionId, lastWindowIdx, notes);
   }
 
-  // Watch for session/window changes
-  $: if ($activeProjectId !== lastProjectId || $selectedSessionId !== lastSessionId || $selectedWindowIdx !== lastWindowIdx) {
+  // Watch for session/window changes, and for a switch between the tab's note
+  // and the session's, which is a change of target like any other.
+  $: wantedWindowIdx = scope === 'session' ? SESSION_NOTES : $selectedWindowIdx;
+  $: if ($activeProjectId !== lastProjectId || $selectedSessionId !== lastSessionId || wantedWindowIdx !== lastWindowIdx) {
     rememberCurrentDraft();
     // Save current notes before loading new ones
     if (saveTimeout) {
@@ -530,6 +565,22 @@
 <div class="notes-container">
   <div class="notes-header">
     <span class="notes-title">{$t('notes.title')}</span>
+    <div class="scope-switch" role="group" aria-label={$t('notes.title')}>
+      <button
+        type="button"
+        class:selected={scope === 'tab'}
+        aria-pressed={scope === 'tab'}
+        title={$t('notes.scopeTabHint')}
+        on:click={() => setScope('tab')}
+      >{$t('notes.scopeTab')}</button>
+      <button
+        type="button"
+        class:selected={scope === 'session'}
+        aria-pressed={scope === 'session'}
+        title={$t('notes.scopeSessionHint')}
+        on:click={() => setScope('session')}
+      >{$t('notes.scopeSession')}</button>
+    </div>
     <div class="header-actions">
       {#if saving}
         <span class="save-indicator">{$t('notes.saving')}</span>
@@ -634,6 +685,41 @@
 {/if}
 
 <style>
+  /* Two states of one choice, drawn as one control so it reads as "which
+     note" rather than as two unrelated buttons. */
+  .scope-switch {
+    display: inline-flex;
+    /* Keeps its size in a narrow panel; squeezed, "Session" was cut to
+       "Sess" and the choice stopped reading. */
+    flex-shrink: 0;
+    margin-left: 10px;
+    /* Beside the title, not spread to the middle by the header's
+       space-between. */
+    margin-right: auto;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  .scope-switch button {
+    padding: 2px 9px;
+    border: none;
+    background: transparent;
+    color: #9ca3af;
+    font-size: 11px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .scope-switch button + button {
+    border-left: 1px solid rgba(255, 255, 255, 0.1);
+  }
+  .scope-switch button:hover {
+    color: #e4e4e7;
+  }
+  .scope-switch button.selected {
+    background: rgba(var(--accent-rgb), 0.18);
+    color: var(--accent-pale, #e4e4e7);
+  }
+
   .find-bar {
     display: flex;
     align-items: center;
@@ -730,6 +816,10 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: 8px;
+    /* A narrow panel wraps the actions onto a second line rather than
+       pushing them out of the header. */
+    flex-wrap: wrap;
     padding: 10px 16px;
     background: rgba(0, 0, 0, 0.3);
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
@@ -752,6 +842,7 @@
   .save-indicator {
     font-size: 12px;
     color: #4ade80;
+    white-space: nowrap;
   }
 
   .save-indicator.unsaved {

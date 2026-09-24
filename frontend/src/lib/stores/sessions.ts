@@ -22,6 +22,8 @@ export interface Session {
   autoYes: boolean;
   hideStatusLine: boolean;
   notes: string;
+  /** The main tab's own note; notes is the session's. */
+  mainTabNotes?: string;
   favorite: boolean;
   resumeSessionId: string;
   /** RFC3339 of the last activity, or empty when never recorded. */

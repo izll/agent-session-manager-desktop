@@ -612,10 +612,28 @@
     if (localNotesCache[cacheKey] !== undefined) {
       return localNotesCache[cacheKey];
     }
-    if ($selectedWindowIdx === 0) return currentSession.notes || '';
+    // The main tab has a note of its own now; the session's note is apart
+    // (see currentSessionNotes). And the main tab is found by its index, not
+    // by being 0, which it only is while tmux's base-index is 0.
     const fw = currentSession.followedWindows?.find(w => w.index === $selectedWindowIdx);
-    return fw?.notes || '';
+    if (fw) return fw.notes || '';
+    return currentSession.mainTabNotes || '';
   })();
+
+  // The session's own note, shared by every tab. The notes view saves it
+  // under window -1, so its local copy is cached under that key.
+  $: currentSessionNotes = (() => {
+    if (!currentSession) return '';
+    const cacheKey = `${$activeProjectId}:${currentSession.id}:-1`;
+    if (localNotesCache[cacheKey] !== undefined) return localNotesCache[cacheKey];
+    return currentSession.notes || '';
+  })();
+
+  // What the dot beside "Notes" says: which of the two notes exist.
+  $: notesDotTitle = [
+    currentTabNotes ? `${$t('notes.scopeTab')}: ${currentTabNotes}` : '',
+    currentSessionNotes ? `${$t('notes.scopeSession')}: ${currentSessionNotes}` : '',
+  ].filter(Boolean).join('\n\n');
 
   function handleNotesChange(e: CustomEvent<{ sessionId: string, windowIdx: number, notes: string }>) {
     const { sessionId, windowIdx, notes } = e.detail;
@@ -707,11 +725,12 @@
               <line x1="16" y1="17" x2="8" y2="17"/>
             </svg>
             {$t('mainPanel.notes')}
-            <!-- A dot when this tab has a note, so it is visible without
-                 opening the view. A count would be false precision: there is
-                 one note per tab, and it either exists or it doesn't. -->
-            {#if currentTabNotes}
-              <span class="tab-dot" title={currentTabNotes}></span>
+            <!-- A dot when this tab or the session has a note, so it is
+                 visible without opening the view; the tooltip says which. A
+                 count would be false precision: each note either exists or
+                 it doesn't. -->
+            {#if currentTabNotes || currentSessionNotes}
+              <span class="tab-dot" title={notesDotTitle}></span>
             {/if}
           </button>
           <!-- Always available: a task list is the app's own, stored by it and
