@@ -6,6 +6,34 @@ Entries describe what changed for someone using the app. Internal refactoring,
 test and CI work is left out unless it changed behaviour. Dates are release
 dates; the format follows [Keep a Changelog](https://keepachangelog.com).
 
+## 1.1.12 — 2026-09-24
+
+### Added
+
+- **Push and pull from the branch badge.** Clicking the ↑ count opens a
+  panel that lists the commits about to be pushed; the ↓ count does the same
+  for a pull. A branch that was never pushed can be pushed with its upstream
+  set. A pull only fast-forwards: it never merges or rebases, and a branch
+  that has diverged is shown as such instead. If a new commit lands after
+  the panel opened, nothing is pushed until it is reviewed again. Git never
+  asks for a password here, and a push or pull that hangs stops after two
+  minutes or can be cancelled. Tabs on a server show the counts only.
+- **Checkpoints.** The Checkpoints button beside the view bar saves the
+  working tree, uncommitted and untracked files included, without touching
+  the branch, the index or the stash. Restoring one rewrites only the files
+  that differ and removes files added since, and first saves the current
+  state as a checkpoint of its own, so a restore can be undone too. Each
+  worktree keeps its own checkpoints.
+- **Notes in the global search.** Session and tab notes are found by the
+  search, and opening a result shows the note on its tab.
+- **The note and task switches show which side has something in it**, and
+  the switches are larger.
+
+### Fixed
+
+- **A search result's excerpt missed the match** when the search had a
+  capital letter, and an accented letter could be cut in half at its edges.
+
 ## 1.1.11 — 2026-09-24
 
 ### Added
