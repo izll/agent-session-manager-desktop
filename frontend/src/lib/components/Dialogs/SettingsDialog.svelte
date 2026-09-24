@@ -1104,32 +1104,6 @@
               </div>
           </div>
 
-          <!-- General rather than Maintenance: this switches a view on and off,
-               like the other toggles on this tab. Maintenance is for one-off
-               actions (export, update check), not for preferences. -->
-          <div class="settings-section">
-            <h3>{$t('settings.experimental')}</h3>
-
-            <label class="setting-item">
-              <span class="setting-info">
-                <span class="setting-label">
-                  {$t('settings.taskMaster')}
-                  <span class="experimental-badge">{$t('settings.experimentalBadge')}</span>
-                </span>
-                <span class="setting-desc">{$t('settings.taskMasterDesc')}</span>
-              </span>
-              <button
-                class="toggle-btn"
-                class:active={$settings.taskMasterEnabled}
-                on:click={() => toggle('taskMasterEnabled')}
-              >
-                <span class="toggle-track">
-                  <span class="toggle-thumb"></span>
-                </span>
-              </button>
-            </label>
-          </div>
-
           <div class="settings-section">
             <h3>{$t('settings.notesTasksSection')}</h3>
 
@@ -1156,6 +1130,32 @@
                 on:change={(e) => saveSettings({ tasksDefaultFilter: e.detail as TasksDefaultFilter })}
               />
             </div>
+          </div>
+
+          <!-- General rather than Maintenance: this switches a view on and off,
+               like the other toggles on this tab. Maintenance is for one-off
+               actions (export, update check), not for preferences. -->
+          <div class="settings-section">
+            <h3>{$t('settings.experimental')}</h3>
+
+            <label class="setting-item">
+              <span class="setting-info">
+                <span class="setting-label">
+                  {$t('settings.taskMaster')}
+                  <span class="experimental-badge">{$t('settings.experimentalBadge')}</span>
+                </span>
+                <span class="setting-desc">{$t('settings.taskMasterDesc')}</span>
+              </span>
+              <button
+                class="toggle-btn"
+                class:active={$settings.taskMasterEnabled}
+                on:click={() => toggle('taskMasterEnabled')}
+              >
+                <span class="toggle-track">
+                  <span class="toggle-thumb"></span>
+                </span>
+              </button>
+            </label>
           </div>
 
         {/if}
