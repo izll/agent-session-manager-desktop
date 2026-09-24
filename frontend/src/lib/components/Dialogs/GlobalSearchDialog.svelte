@@ -2,8 +2,13 @@
   import { claimKeyForDialog } from '../../utils/dialogKeys';
   import { autoFocusDialog } from '../../utils/dialogActions';
   import { createEventDispatcher } from 'svelte';
+  import { get } from 'svelte/store';
   import * as App from '../../../../wailsjs/go/main/App';
   import { t } from '../../i18n';
+  import { sessions, selectSession, selectWindow } from '../../stores/sessions';
+  import { activeProjectId } from '../../stores/projects';
+  import { requestNoteJump } from '../../stores/noteJump';
+  import { isNoteResult, resolveNoteTarget } from '../../utils/noteSearchResult';
 
   interface HistoryEntry {
     id: string;
@@ -11,6 +16,13 @@
     content: string;
     sessionId: string;
     score: number;
+    // Set on notes only; see HistoryEntryInfo in app.go.
+    kind?: string;
+    sessionName?: string;
+    noteScope?: string;
+    tabId?: string;
+    tabName?: string;
+    windowIdx?: number;
   }
 
   export let show = false;
@@ -32,6 +44,7 @@
   let isFullscreen = false;
   let searchGeneration = 0;
   let previewGeneration = 0;
+  let notice = '';
 
   $: if (show && searchInput) {
     setTimeout(() => searchInput?.focus(), 100);
@@ -44,12 +57,14 @@
     query = '';
     results = [];
     error = '';
+    notice = '';
     selectedEntry = null;
     preview = '';
     dispatch('close');
   }
 
   function handleQueryChange() {
+    notice = '';
     searchGeneration++;
     previewGeneration++;
     loading = false;
@@ -111,6 +126,42 @@
       preview = `Error loading preview: ${e}`;
     }
     if (generation === previewGeneration) previewLoading = false;
+  }
+
+  /**
+   * Take a note result to its note: select the session and, for a tab note,
+   * the tab, then ask the notes view to open on that note with the query in
+   * its find bar. A conversation result has nowhere to go — its session may
+   * never have been an ASMGR session — so only notes open.
+   */
+  function openNote(entry: HistoryEntry) {
+    const target = resolveNoteTarget(entry, get(sessions));
+    if (!target) {
+      // Gone since the search ran. Dropped from the list rather than shown as
+      // an error, which would hide the results that are still good.
+      results = results.filter((r) => r !== entry);
+      if (selectedEntry === entry) {
+        selectedEntry = null;
+        preview = '';
+      }
+      notice = $t('search.noteGone');
+      return;
+    }
+    selectSession(target.sessionId);
+    if (target.windowIdx !== null) selectWindow(target.windowIdx);
+    requestNoteJump({
+      projectId: get(activeProjectId),
+      sessionId: target.sessionId,
+      scope: target.scope,
+      query: query.trim(),
+    });
+    close();
+  }
+
+  // A key, not the text: translated in the markup, where Svelte can see $t
+  // and re-render on a language change.
+  function noteLabelKey(entry: HistoryEntry): string {
+    return entry.noteScope === 'session' ? 'search.sessionNote' : 'search.tabNote';
   }
 
   function handleKeydown(e: KeyboardEvent) {
@@ -344,6 +395,7 @@
               </svg>
               <span>{$t('search.noQuery')}</span>
               <span class="hint">{$t('search.noQueryHint')}</span>
+              <span class="hint">{$t('search.notesHint')}</span>
             </div>
           {:else if results.length === 0}
             <div class="empty-state">
@@ -359,22 +411,46 @@
           {:else}
             <div class="results-list">
               {#each results as entry}
-                <button
-                  class="result-item"
-                  class:selected={selectedEntry === entry}
-                  on:click={() => selectEntry(entry)}
-                >
-                  <span class="agent-icon" style="color: {getAgentColor(entry.agent)}">
-                    {getAgentIcon(entry.agent)}
-                  </span>
-                  <div class="result-content">
-                    <span class="result-text">{truncate(entry.content, 100)}</span>
-                    <span class="result-meta">
-                      <span class="agent-name">{entry.agent}</span>
-                      <span class="score">{$t('search.score', { score: entry.score })}</span>
+                {#if isNoteResult(entry)}
+                  <!-- A note, not a conversation: its own icon and a badge
+                       saying which note, since "tab" and "session" notes
+                       open in different places. -->
+                  <button
+                    class="result-item note-result"
+                    class:selected={selectedEntry === entry}
+                    on:click={() => selectEntry(entry)}
+                    on:dblclick={() => openNote(entry)}
+                    title={$t('search.openNoteHint')}
+                  >
+                    <span class="agent-icon">📝</span>
+                    <div class="result-content">
+                      <span class="result-text">{truncate(entry.content, 100)}</span>
+                      <span class="result-meta">
+                        <span class="note-badge">{$t(noteLabelKey(entry))}</span>
+                        <span class="note-place">
+                          {entry.sessionName}{#if entry.noteScope === 'tab' && entry.tabName && entry.tabName !== entry.sessionName} · {entry.tabName}{/if}
+                        </span>
+                      </span>
+                    </div>
+                  </button>
+                {:else}
+                  <button
+                    class="result-item"
+                    class:selected={selectedEntry === entry}
+                    on:click={() => selectEntry(entry)}
+                  >
+                    <span class="agent-icon" style="color: {getAgentColor(entry.agent)}">
+                      {getAgentIcon(entry.agent)}
                     </span>
-                  </div>
-                </button>
+                    <div class="result-content">
+                      <span class="result-text">{truncate(entry.content, 100)}</span>
+                      <span class="result-meta">
+                        <span class="agent-name">{entry.agent}</span>
+                        <span class="score">{$t('search.score', { score: entry.score })}</span>
+                      </span>
+                    </div>
+                  </button>
+                {/if}
               {/each}
             </div>
           {/if}
@@ -385,12 +461,23 @@
           <div class="preview-panel">
             <div class="preview-header">
               <span class="preview-title">
-                <span style="color: {getAgentColor(selectedEntry.agent)}">
-                  {getAgentIcon(selectedEntry.agent)}
-                </span>
-                {$t('search.conversationPreview')}
+                {#if isNoteResult(selectedEntry)}
+                  <span>📝</span>
+                  {$t(noteLabelKey(selectedEntry))} · {selectedEntry.sessionName}{#if selectedEntry.noteScope === 'tab' && selectedEntry.tabName && selectedEntry.tabName !== selectedEntry.sessionName} · {selectedEntry.tabName}{/if}
+                {:else}
+                  <span style="color: {getAgentColor(selectedEntry.agent)}">
+                    {getAgentIcon(selectedEntry.agent)}
+                  </span>
+                  {$t('search.conversationPreview')}
+                {/if}
               </span>
               <div class="preview-nav">
+                {#if isNoteResult(selectedEntry)}
+                  {@const noteEntry = selectedEntry}
+                  <button class="open-note-btn" on:click={() => openNote(noteEntry)} title={$t('search.openNoteHint')}>
+                    {$t('search.openNote')}
+                  </button>
+                {/if}
                 {#if matchCount > 0}
                   <span class="match-counter">{currentMatchIndex + 1} / {matchCount}</span>
                   <button class="nav-btn" on:click={prevMatch} title={$t('search.prevMatch')}>
@@ -431,7 +518,9 @@
       <!-- Footer -->
       <div class="dialog-footer">
         <span class="result-count">
-          {#if results.length > 0}
+          {#if notice}
+            {notice}
+          {:else if results.length > 0}
             {results.length === 1 ? $t('search.resultCount', { count: results.length }) : $t('search.resultCountPlural', { count: results.length })}
           {:else}
             {$t('search.pressToSearch')}
@@ -779,6 +868,38 @@
 
   .score {
     color: #4b5563;
+  }
+
+  .note-badge {
+    padding: 1px 6px;
+    border-radius: 4px;
+    background: rgba(251, 191, 36, 0.15);
+    color: #fbbf24;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  .note-place {
+    color: #6b7280;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .open-note-btn {
+    padding: 3px 10px;
+    background: rgba(var(--accent-rgb), 0.2);
+    border: 1px solid rgba(var(--accent-rgb), 0.35);
+    border-radius: 6px;
+    color: var(--accent-light);
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .open-note-btn:hover {
+    background: rgba(var(--accent-rgb), 0.3);
   }
 
   /* Override global dialog-footer for search dialog layout */

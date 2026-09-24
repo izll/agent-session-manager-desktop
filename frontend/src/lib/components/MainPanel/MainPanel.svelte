@@ -1,6 +1,7 @@
 <script lang="ts">
   import { createEventDispatcher, onMount, onDestroy } from 'svelte';
   import { browserViewRequested, clearBrowserViewRequest } from '../../stores/fileJump';
+  import { notesViewRequested, clearNotesViewRequest } from '../../stores/noteJump';
   import TabBar from './TabBar.svelte';
   import Terminal from './Terminal.svelte';
   import Notes from './Notes.svelte';
@@ -203,6 +204,15 @@
     // selectView closes the diff, so opening a file from it lands on the
     // browser rather than under a diff still covering the panel.
     selectView('browser');
+  }
+
+  // The global search asks for the notes view when a note result is opened.
+  // Declared after the tab-change reset on purpose: the search selects the
+  // note's tab in the same update, and the reset would otherwise put the
+  // terminal back over the notes it has just been asked for.
+  $: if ($notesViewRequested) {
+    clearNotesViewRequest();
+    selectView('notes');
   }
 
   function selectView(view: ViewName) {

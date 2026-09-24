@@ -10,6 +10,7 @@
   import ConfirmDialog from '../Dialogs/ConfirmDialog.svelte';
   import { activeProjectId } from '../../stores/projects';
   import { settings } from '../../stores/settings';
+  import { pendingNoteJump, clearNoteJump, type NoteJump } from '../../stores/noteJump';
 
   export let active = false;
 
@@ -474,23 +475,57 @@
 
   // Reload when tab becomes active
   let wasActive = false;
+  // Set while opening the view reloads the note, so a find opened from the
+  // global search waits for the text it is to find things in.
+  let activating = false;
   $: if (active && !wasActive) {
     wasActive = true;
     applyDefaultScope();
     void activateNotes();
   } else if (!active) {
     wasActive = false;
+    activating = false;
     activationGeneration++;
   }
 
   async function activateNotes() {
     const generation = ++activationGeneration;
-    await flushPendingSave();
-    if (generation !== activationGeneration || !active) return;
-    // A keystroke made while the flush was in flight owns the textarea. A
-    // forced read here would replace it with the previous disk snapshot.
-    if (saveTimeout || notes !== lastSaved) return;
-    await loadNotes(true);
+    activating = true;
+    try {
+      await flushPendingSave();
+      if (generation !== activationGeneration || !active) return;
+      // A keystroke made while the flush was in flight owns the textarea. A
+      // forced read here would replace it with the previous disk snapshot.
+      if (saveTimeout || notes !== lastSaved) return;
+      await loadNotes(true);
+    } finally {
+      if (generation === activationGeneration) activating = false;
+    }
+  }
+
+  /**
+   * A note opened from the global search: show the note it names, with the
+   * query in the find bar and the first match selected.
+   *
+   * After the activation block above, so the note asked for wins over a
+   * default scope fixed in the settings; before the target watch below, so
+   * the scope set here is loaded in the same update. The scope is not written
+   * to localStorage: following a search result is not choosing which note to
+   * reach for next time.
+   */
+  let revealFirstMatch = false;
+  $: if (active && $pendingNoteJump) takeNoteJump($pendingNoteJump);
+
+  function takeNoteJump(jump: NoteJump) {
+    clearNoteJump();
+    // The search selected this session a moment ago; anything else means the
+    // selection has moved on, and the request is no longer the user's wish.
+    if (jump.projectId !== get(activeProjectId) || jump.sessionId !== get(selectedSessionId)) return;
+    scope = jump.scope;
+    if (!jump.query) return;
+    showFind = true;
+    findQuery = jump.query;
+    revealFirstMatch = true;
   }
 
   async function flushPendingSave() {
@@ -514,6 +549,28 @@
       void saveNow(lastProjectId, lastSessionId, lastWindowIdx, notes);
     }
     void loadNotes();
+  }
+
+  // Waits until the note the search pointed at is loaded and editable: the
+  // selection goToMatch makes is lost if the textarea is disabled afterwards
+  // for a reload. A note that matched only loosely has nothing to select, so
+  // the find bar is closed again rather than left saying "no matches".
+  $: if (revealFirstMatch && !loadingNotes && !activating && !loadError &&
+      lastSessionId === $selectedSessionId && lastWindowIdx === wantedWindowIdx) {
+    revealFirstMatch = false;
+    // After a tick, when matches has been recomputed for the loaded text.
+    // In a function, too: read here, matches would depend on this block's
+    // own assignment to showFind.
+    void tick().then(revealJumpMatch);
+  }
+
+  function revealJumpMatch() {
+    if (matches.length) {
+      goToMatch(0);
+    } else {
+      showFind = false;
+      findQuery = '';
+    }
   }
 
   // Debounced save
