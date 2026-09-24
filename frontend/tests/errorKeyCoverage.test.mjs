@@ -14,7 +14,9 @@ const localeDir = new URL('../src/lib/i18n/locales/', import.meta.url).pathname;
 test('every error key the backend reports has a translation', () => {
   const used = new Set();
   const goText = execSync(
-    `grep -rho 'error\\.[a-zA-Z][a-zA-Z0-9]*' --include='*.go' ${root} || true`,
+    // Not .claude: agent worktrees live there, each a full copy of the repo
+    // with work in progress, and their keys are not this checkout's.
+    `grep -rho 'error\\.[a-zA-Z][a-zA-Z0-9]*' --include='*.go' --exclude-dir=.claude --exclude-dir=node_modules ${root} || true`,
     { encoding: 'utf8' },
   );
   for (const key of goText.split('\n')) {
