@@ -1459,5 +1459,10 @@
   "error.settingsLoadFailed": "Impossibile caricare le impostazioni: {error}",
   "error.settingsSaveFailed": "Impossibile salvare le impostazioni: {error}",
   "error.projectsLoadFailed": "Impossibile caricare i progetti: {error}",
+  "error.checkpointsRemote": "I checkpoint funzionano solo per le schede su questo computer; questa è in esecuzione su un server",
+  "error.checkpointsNotRepository": "I checkpoint richiedono un repository git, e la directory di questa scheda non ne fa parte",
+  "error.checkpointsRootChanged": "La directory di lavoro della scheda è cambiata; riapri i checkpoint",
+  "error.checkpointNotFound": "Questo checkpoint non esiste più",
+  "error.checkpointDirectoryInTheWay": "Non è stato ripristinato nulla: {0} ora è una directory che contiene file ignorati. Spostali e riprova",
   "sessionItem.yoloTooltip": "Ignora i permessi (YOLO)"
 }

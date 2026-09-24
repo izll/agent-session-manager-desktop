@@ -1459,5 +1459,10 @@
   "error.settingsLoadFailed": "Ayarlar yüklenemedi: {error}",
   "error.settingsSaveFailed": "Ayarlar kaydedilemedi: {error}",
   "error.projectsLoadFailed": "Projeler yüklenemedi: {error}",
+  "error.checkpointsRemote": "Kontrol noktaları yalnızca bu bilgisayardaki sekmelerde çalışır; bu sekme bir sunucuda çalışıyor",
+  "error.checkpointsNotRepository": "Kontrol noktaları bir git deposu gerektirir ve bu sekmenin dizini hiçbir depoda değil",
+  "error.checkpointsRootChanged": "Sekmenin çalışma dizini değişti; kontrol noktalarını yeniden açın",
+  "error.checkpointNotFound": "Bu kontrol noktası artık yok",
+  "error.checkpointDirectoryInTheWay": "Hiçbir şey geri yüklenmedi: {0} artık yok sayılan dosyalar içeren bir dizin. Onları başka yere taşıyıp yeniden deneyin",
   "sessionItem.yoloTooltip": "İzinleri atla (YOLO)"
 }

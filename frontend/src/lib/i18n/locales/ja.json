@@ -1459,5 +1459,10 @@
   "error.settingsLoadFailed": "設定を読み込めませんでした: {error}",
   "error.settingsSaveFailed": "設定を保存できませんでした: {error}",
   "error.projectsLoadFailed": "プロジェクトを読み込めませんでした: {error}",
+  "error.checkpointsRemote": "チェックポイントはこのコンピューター上のタブでのみ使えます。このタブはサーバーで実行されています",
+  "error.checkpointsNotRepository": "チェックポイントには git リポジトリが必要ですが、このタブのディレクトリはどのリポジトリにも含まれていません",
+  "error.checkpointsRootChanged": "タブの作業ディレクトリが変わりました。チェックポイントを開き直してください",
+  "error.checkpointNotFound": "そのチェックポイントはもう存在しません",
+  "error.checkpointDirectoryInTheWay": "何も復元されませんでした: {0} は現在、無視されたファイルを含むディレクトリです。それらを移動してから再試行してください",
   "sessionItem.yoloTooltip": "権限の確認をスキップ（YOLO）"
 }

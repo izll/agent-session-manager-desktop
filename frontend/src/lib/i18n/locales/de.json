@@ -1459,5 +1459,10 @@
   "error.settingsLoadFailed": "Die Einstellungen konnten nicht geladen werden: {error}",
   "error.settingsSaveFailed": "Die Einstellungen konnten nicht gespeichert werden: {error}",
   "error.projectsLoadFailed": "Die Projekte konnten nicht geladen werden: {error}",
+  "error.checkpointsRemote": "Checkpoints gibt es nur für Tabs auf diesem Computer; dieser läuft auf einem Server",
+  "error.checkpointsNotRepository": "Checkpoints brauchen ein Git-Repository, und das Verzeichnis dieses Tabs liegt in keinem",
+  "error.checkpointsRootChanged": "Das Arbeitsverzeichnis des Tabs hat sich geändert; öffne die Checkpoints erneut",
+  "error.checkpointNotFound": "Dieser Checkpoint existiert nicht mehr",
+  "error.checkpointDirectoryInTheWay": "Nichts wurde wiederhergestellt: {0} ist jetzt ein Verzeichnis mit ignorierten Dateien. Verschiebe sie und versuche es erneut",
   "sessionItem.yoloTooltip": "Berechtigungen umgehen (YOLO)"
 }

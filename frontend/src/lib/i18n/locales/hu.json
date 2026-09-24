@@ -1459,5 +1459,10 @@
   "error.settingsLoadFailed": "A beállításokat nem sikerült betölteni: {error}",
   "error.settingsSaveFailed": "A beállításokat nem sikerült menteni: {error}",
   "error.projectsLoadFailed": "A projekteket nem sikerült betölteni: {error}",
+  "error.checkpointsRemote": "Mentési pontot csak ezen a gépen futó fülhöz lehet készíteni, ez pedig szerveren fut",
+  "error.checkpointsNotRepository": "A mentési pontokhoz git-tároló kell, ennek a fülnek a könyvtára viszont nincs benne egyben sem",
+  "error.checkpointsRootChanged": "Megváltozott a fül munkakönyvtára; nyisd meg újra a mentési pontokat",
+  "error.checkpointNotFound": "Ez a mentési pont már nem létezik",
+  "error.checkpointDirectoryInTheWay": "Semmi sem lett visszaállítva: a(z) {0} most egy könyvtár, amelyben ignorált fájlok vannak. Tedd el őket máshová, és próbáld újra",
   "sessionItem.yoloTooltip": "Engedélyek megkerülése (YOLO)"
 }

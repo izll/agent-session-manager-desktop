@@ -1459,5 +1459,10 @@
   "error.settingsLoadFailed": "تعذّر تحميل الإعدادات: {error}",
   "error.settingsSaveFailed": "تعذّر حفظ الإعدادات: {error}",
   "error.projectsLoadFailed": "تعذّر تحميل المشاريع: {error}",
+  "error.checkpointsRemote": "نقاط الحفظ متاحة فقط لعلامات التبويب على هذا الحاسوب، وهذه تعمل على خادم",
+  "error.checkpointsNotRepository": "تحتاج نقاط الحفظ إلى مستودع git، ودليل علامة التبويب هذه ليس ضمن أي مستودع",
+  "error.checkpointsRootChanged": "تغيّر دليل العمل لعلامة التبويب؛ أعد فتح نقاط الحفظ",
+  "error.checkpointNotFound": "نقطة الحفظ هذه لم تعد موجودة",
+  "error.checkpointDirectoryInTheWay": "لم تتم استعادة أي شيء: أصبح {0} دليلاً يحتوي على ملفات متجاهَلة. انقلها بعيدًا ثم حاول مرة أخرى",
   "sessionItem.yoloTooltip": "تجاوز الأذونات (YOLO)"
 }

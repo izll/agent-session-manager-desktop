@@ -1459,5 +1459,10 @@
   "error.settingsLoadFailed": "Не вдалося завантажити налаштування: {error}",
   "error.settingsSaveFailed": "Не вдалося зберегти налаштування: {error}",
   "error.projectsLoadFailed": "Не вдалося завантажити проєкти: {error}",
+  "error.checkpointsRemote": "Контрольні точки доступні лише для вкладок на цьому комп'ютері, а ця працює на сервері",
+  "error.checkpointsNotRepository": "Для контрольних точок потрібен git-репозиторій, а каталог цієї вкладки не входить до жодного",
+  "error.checkpointsRootChanged": "Робочий каталог вкладки змінився; відкрийте контрольні точки знову",
+  "error.checkpointNotFound": "Цієї контрольної точки більше немає",
+  "error.checkpointDirectoryInTheWay": "Нічого не відновлено: {0} тепер каталог з ігнорованими файлами. Перемістіть їх і спробуйте ще раз",
   "sessionItem.yoloTooltip": "Обхід дозволів (YOLO)"
 }

@@ -1459,5 +1459,10 @@
   "error.settingsLoadFailed": "Nie udało się wczytać ustawień: {error}",
   "error.settingsSaveFailed": "Nie udało się zapisać ustawień: {error}",
   "error.projectsLoadFailed": "Nie udało się wczytać projektów: {error}",
+  "error.checkpointsRemote": "Punkty kontrolne działają tylko dla kart na tym komputerze; ta działa na serwerze",
+  "error.checkpointsNotRepository": "Punkty kontrolne wymagają repozytorium git, a katalog tej karty nie należy do żadnego",
+  "error.checkpointsRootChanged": "Katalog roboczy karty się zmienił; otwórz punkty kontrolne ponownie",
+  "error.checkpointNotFound": "Ten punkt kontrolny już nie istnieje",
+  "error.checkpointDirectoryInTheWay": "Nic nie przywrócono: {0} jest teraz katalogiem z ignorowanymi plikami. Przenieś je i spróbuj ponownie",
   "sessionItem.yoloTooltip": "Pomijanie uprawnień (YOLO)"
 }

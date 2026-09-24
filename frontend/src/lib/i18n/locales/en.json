@@ -1459,5 +1459,10 @@
   "detail.noAgentsFound": "none — terminal sessions still work; check the extra PATH setting",
   "detail.authPassword": "password",
   "detail.authAgent": "ssh-agent",
-  "error.folderNameRequired": "The new folder needs a name"
+  "error.folderNameRequired": "The new folder needs a name",
+  "error.checkpointsRemote": "Checkpoints work only for tabs on this computer; this one runs on a server",
+  "error.checkpointsNotRepository": "Checkpoints need a git repository, and this tab's directory is not in one",
+  "error.checkpointsRootChanged": "The tab's working directory changed; reopen Checkpoints",
+  "error.checkpointNotFound": "That checkpoint no longer exists",
+  "error.checkpointDirectoryInTheWay": "Nothing was restored: {0} is now a directory that holds ignored files. Move them out of the way and try again"
 }

@@ -192,6 +192,106 @@ export namespace main {
 	        this.size = source["size"];
 	    }
 	}
+	export class Checkpoint {
+	    id: string;
+	    hash: string;
+	    shortHash: string;
+	    created: string;
+	    label: string;
+	    kind: string;
+	    restoredFrom?: string;
+	    session?: string;
+	    files: number;
+	    insertions: number;
+	    deletions: number;
+	    statsKnown: boolean;
+
+	    static createFrom(source: any = {}) {
+	        return new Checkpoint(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.hash = source["hash"];
+	        this.shortHash = source["shortHash"];
+	        this.created = source["created"];
+	        this.label = source["label"];
+	        this.kind = source["kind"];
+	        this.restoredFrom = source["restoredFrom"];
+	        this.session = source["session"];
+	        this.files = source["files"];
+	        this.insertions = source["insertions"];
+	        this.deletions = source["deletions"];
+	        this.statsKnown = source["statsKnown"];
+	    }
+	}
+	export class CheckpointList {
+	    root: string;
+	    checkpoints: Checkpoint[];
+
+	    static createFrom(source: any = {}) {
+	        return new CheckpointList(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.root = source["root"];
+	        this.checkpoints = this.convertValues(source["checkpoints"], Checkpoint);
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class CheckpointRestoreResult {
+	    before: Checkpoint;
+	    written: number;
+	    removed: number;
+
+	    static createFrom(source: any = {}) {
+	        return new CheckpointRestoreResult(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.before = this.convertValues(source["before"], Checkpoint);
+	        this.written = source["written"];
+	        this.removed = source["removed"];
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class ClaudeUsageWindow {
 	    utilization: number;
 	    resetsAt: string;

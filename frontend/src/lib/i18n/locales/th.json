@@ -1459,5 +1459,10 @@
   "error.settingsLoadFailed": "โหลดการตั้งค่าไม่สำเร็จ: {error}",
   "error.settingsSaveFailed": "บันทึกการตั้งค่าไม่สำเร็จ: {error}",
   "error.projectsLoadFailed": "โหลดโปรเจกต์ไม่สำเร็จ: {error}",
+  "error.checkpointsRemote": "จุดตรวจสอบใช้ได้เฉพาะแท็บบนคอมพิวเตอร์เครื่องนี้ แต่แท็บนี้ทำงานบนเซิร์ฟเวอร์",
+  "error.checkpointsNotRepository": "จุดตรวจสอบต้องใช้ที่เก็บ git แต่ไดเรกทอรีของแท็บนี้ไม่ได้อยู่ในที่เก็บใดเลย",
+  "error.checkpointsRootChanged": "ไดเรกทอรีทำงานของแท็บเปลี่ยนไปแล้ว โปรดเปิดจุดตรวจสอบใหม่",
+  "error.checkpointNotFound": "จุดตรวจสอบนี้ไม่มีอยู่แล้ว",
+  "error.checkpointDirectoryInTheWay": "ไม่ได้กู้คืนสิ่งใด: ตอนนี้ {0} เป็นไดเรกทอรีที่มีไฟล์ที่ถูกละเว้น โปรดย้ายไฟล์เหล่านั้นออกแล้วลองอีกครั้ง",
   "sessionItem.yoloTooltip": "ข้ามการขออนุญาต (YOLO)"
 }

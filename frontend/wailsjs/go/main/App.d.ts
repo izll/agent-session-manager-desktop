@@ -32,6 +32,8 @@ export function ComposeFeedback(arg1:main.FeedbackReport):Promise<main.FeedbackL
 
 export function CreateBackup(arg1:string):Promise<void>;
 
+export function CreateCheckpoint(arg1:string,arg2:number,arg3:string,arg4:string,arg5:string):Promise<main.Checkpoint>;
+
 export function CreateGroup(arg1:string,arg2:string):Promise<main.GroupInfo>;
 
 export function CreateProject(arg1:string):Promise<main.ProjectInfo>;
@@ -57,6 +59,8 @@ export function CreateTabWithWorktree(arg1:string,arg2:string,arg3:boolean,arg4:
 export function CreateTask(arg1:string,arg2:string,arg3:string,arg4:string,arg5:Array<string>,arg6:string):Promise<main.TaskInfo>;
 
 export function CycleYoloMode(arg1:string,arg2:number,arg3:string):Promise<void>;
+
+export function DeleteCheckpoint(arg1:string,arg2:number,arg3:string,arg4:string,arg5:string):Promise<void>;
 
 export function DeleteCommand(arg1:string):Promise<void>;
 
@@ -252,6 +256,8 @@ export function KillServerSession(arg1:string,arg2:string):Promise<void>;
 
 export function ListBackgroundAgents():Promise<Array<main.BackgroundAgentInfo>>;
 
+export function ListCheckpoints(arg1:string,arg2:number,arg3:string):Promise<main.CheckpointList>;
+
 export function ListGitBranches(arg1:string,arg2:number,arg3:string):Promise<main.GitBranchList>;
 
 export function ListOnlineSchemes():Promise<Array<main.OnlineSchemeInfo>>;
@@ -337,6 +343,8 @@ export function RestartTab(arg1:string,arg2:number,arg3:string):Promise<void>;
 export function RestartTabWithResume(arg1:string,arg2:number,arg3:string,arg4:string):Promise<void>;
 
 export function RestoreBackup(arg1:string,arg2:string):Promise<void>;
+
+export function RestoreCheckpoint(arg1:string,arg2:number,arg3:string,arg4:string,arg5:string):Promise<main.CheckpointRestoreResult>;
 
 export function RestoreDeletedSubtask(arg1:string,arg2:string,arg3:string,arg4:main.DeletedSubtaskSnapshot,arg5:string):Promise<void>;
 

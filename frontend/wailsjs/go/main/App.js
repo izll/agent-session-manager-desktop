@@ -58,6 +58,10 @@ export function CreateBackup(arg1) {
   return window['go']['main']['App']['CreateBackup'](arg1);
 }
 
+export function CreateCheckpoint(arg1, arg2, arg3, arg4, arg5) {
+  return window['go']['main']['App']['CreateCheckpoint'](arg1, arg2, arg3, arg4, arg5);
+}
+
 export function CreateGroup(arg1, arg2) {
   return window['go']['main']['App']['CreateGroup'](arg1, arg2);
 }
@@ -108,6 +112,10 @@ export function CreateTask(arg1, arg2, arg3, arg4, arg5, arg6) {
 
 export function CycleYoloMode(arg1, arg2, arg3) {
   return window['go']['main']['App']['CycleYoloMode'](arg1, arg2, arg3);
+}
+
+export function DeleteCheckpoint(arg1, arg2, arg3, arg4, arg5) {
+  return window['go']['main']['App']['DeleteCheckpoint'](arg1, arg2, arg3, arg4, arg5);
 }
 
 export function DeleteCommand(arg1) {
@@ -498,6 +506,10 @@ export function ListBackgroundAgents() {
   return window['go']['main']['App']['ListBackgroundAgents']();
 }
 
+export function ListCheckpoints(arg1, arg2, arg3) {
+  return window['go']['main']['App']['ListCheckpoints'](arg1, arg2, arg3);
+}
+
 export function ListGitBranches(arg1, arg2, arg3) {
   return window['go']['main']['App']['ListGitBranches'](arg1, arg2, arg3);
 }
@@ -668,6 +680,10 @@ export function RestartTabWithResume(arg1, arg2, arg3, arg4) {
 
 export function RestoreBackup(arg1, arg2) {
   return window['go']['main']['App']['RestoreBackup'](arg1, arg2);
+}
+
+export function RestoreCheckpoint(arg1, arg2, arg3, arg4, arg5) {
+  return window['go']['main']['App']['RestoreCheckpoint'](arg1, arg2, arg3, arg4, arg5);
 }
 
 export function RestoreDeletedSubtask(arg1, arg2, arg3, arg4, arg5) {

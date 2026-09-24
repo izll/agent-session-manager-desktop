@@ -1459,5 +1459,10 @@
   "error.settingsLoadFailed": "Não foi possível carregar as configurações: {error}",
   "error.settingsSaveFailed": "Não foi possível salvar as configurações: {error}",
   "error.projectsLoadFailed": "Não foi possível carregar os projetos: {error}",
+  "error.checkpointsRemote": "Os checkpoints só funcionam em abas deste computador; esta roda em um servidor",
+  "error.checkpointsNotRepository": "Os checkpoints precisam de um repositório git, e o diretório desta aba não está em nenhum",
+  "error.checkpointsRootChanged": "O diretório de trabalho da aba mudou; abra os checkpoints novamente",
+  "error.checkpointNotFound": "Esse checkpoint não existe mais",
+  "error.checkpointDirectoryInTheWay": "Nada foi restaurado: {0} agora é um diretório com arquivos ignorados. Mova-os e tente novamente",
   "sessionItem.yoloTooltip": "Ignorar permissões (YOLO)"
 }

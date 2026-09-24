@@ -1459,5 +1459,10 @@
   "error.settingsLoadFailed": "无法加载设置：{error}",
   "error.settingsSaveFailed": "无法保存设置：{error}",
   "error.projectsLoadFailed": "无法加载项目：{error}",
+  "error.checkpointsRemote": "检查点仅适用于本机上的标签页，而此标签页运行在服务器上",
+  "error.checkpointsNotRepository": "检查点需要 git 仓库，而此标签页的目录不在任何仓库中",
+  "error.checkpointsRootChanged": "标签页的工作目录已更改，请重新打开检查点",
+  "error.checkpointNotFound": "该检查点已不存在",
+  "error.checkpointDirectoryInTheWay": "未恢复任何内容：{0} 现在是一个包含被忽略文件的目录。请将这些文件移走后重试",
   "sessionItem.yoloTooltip": "跳过权限确认（YOLO）"
 }

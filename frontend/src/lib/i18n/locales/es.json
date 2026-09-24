@@ -1459,5 +1459,10 @@
   "error.settingsLoadFailed": "No se pudieron cargar los ajustes: {error}",
   "error.settingsSaveFailed": "No se pudieron guardar los ajustes: {error}",
   "error.projectsLoadFailed": "No se pudieron cargar los proyectos: {error}",
+  "error.checkpointsRemote": "Los puntos de control solo funcionan en pestañas de este equipo; esta se ejecuta en un servidor",
+  "error.checkpointsNotRepository": "Los puntos de control necesitan un repositorio git, y el directorio de esta pestaña no está en ninguno",
+  "error.checkpointsRootChanged": "El directorio de trabajo de la pestaña cambió; vuelve a abrir los puntos de control",
+  "error.checkpointNotFound": "Ese punto de control ya no existe",
+  "error.checkpointDirectoryInTheWay": "No se restauró nada: {0} ahora es un directorio con archivos ignorados. Muévelos y vuelve a intentarlo",
   "sessionItem.yoloTooltip": "Omitir permisos (YOLO)"
 }

@@ -1459,5 +1459,10 @@
   "error.settingsLoadFailed": "Kon de instellingen niet laden: {error}",
   "error.settingsSaveFailed": "Kon de instellingen niet opslaan: {error}",
   "error.projectsLoadFailed": "Kon de projecten niet laden: {error}",
+  "error.checkpointsRemote": "Checkpoints werken alleen voor tabbladen op deze computer; dit tabblad draait op een server",
+  "error.checkpointsNotRepository": "Checkpoints hebben een git-repository nodig, en de map van dit tabblad zit in geen enkele",
+  "error.checkpointsRootChanged": "De werkmap van het tabblad is gewijzigd; open de checkpoints opnieuw",
+  "error.checkpointNotFound": "Dat checkpoint bestaat niet meer",
+  "error.checkpointDirectoryInTheWay": "Er is niets hersteld: {0} is nu een map met genegeerde bestanden. Verplaats ze en probeer het opnieuw",
   "sessionItem.yoloTooltip": "Rechten omzeilen (YOLO)"
 }

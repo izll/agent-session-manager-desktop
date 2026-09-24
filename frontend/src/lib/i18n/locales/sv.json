@@ -1459,5 +1459,10 @@
   "error.settingsLoadFailed": "Kunde inte läsa in inställningarna: {error}",
   "error.settingsSaveFailed": "Kunde inte spara inställningarna: {error}",
   "error.projectsLoadFailed": "Kunde inte läsa in projekten: {error}",
+  "error.checkpointsRemote": "Kontrollpunkter fungerar bara för flikar på den här datorn; den här körs på en server",
+  "error.checkpointsNotRepository": "Kontrollpunkter kräver ett git-förråd, och den här flikens katalog ligger inte i något",
+  "error.checkpointsRootChanged": "Flikens arbetskatalog har ändrats; öppna kontrollpunkterna igen",
+  "error.checkpointNotFound": "Den kontrollpunkten finns inte längre",
+  "error.checkpointDirectoryInTheWay": "Inget återställdes: {0} är nu en katalog med ignorerade filer. Flytta undan dem och försök igen",
   "sessionItem.yoloTooltip": "Kringgå behörigheter (YOLO)"
 }

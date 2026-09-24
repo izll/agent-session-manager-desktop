@@ -1459,5 +1459,10 @@
   "error.settingsLoadFailed": "Không tải được cài đặt: {error}",
   "error.settingsSaveFailed": "Không lưu được cài đặt: {error}",
   "error.projectsLoadFailed": "Không tải được dự án: {error}",
+  "error.checkpointsRemote": "Điểm kiểm tra chỉ dùng được cho các thẻ trên máy tính này; thẻ này đang chạy trên máy chủ",
+  "error.checkpointsNotRepository": "Điểm kiểm tra cần một kho git, nhưng thư mục của thẻ này không nằm trong kho nào",
+  "error.checkpointsRootChanged": "Thư mục làm việc của thẻ đã thay đổi; hãy mở lại Điểm kiểm tra",
+  "error.checkpointNotFound": "Điểm kiểm tra này không còn tồn tại",
+  "error.checkpointDirectoryInTheWay": "Không có gì được khôi phục: {0} giờ là một thư mục chứa tệp bị bỏ qua. Hãy di chuyển chúng đi rồi thử lại",
   "sessionItem.yoloTooltip": "Bỏ qua quyền (YOLO)"
 }

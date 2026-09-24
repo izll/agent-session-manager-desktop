@@ -1459,5 +1459,10 @@
   "error.settingsLoadFailed": "Impossible de charger les paramètres : {error}",
   "error.settingsSaveFailed": "Impossible d'enregistrer les paramètres : {error}",
   "error.projectsLoadFailed": "Impossible de charger les projets : {error}",
+  "error.checkpointsRemote": "Les points de sauvegarde ne fonctionnent que pour les onglets de cet ordinateur ; celui-ci tourne sur un serveur",
+  "error.checkpointsNotRepository": "Les points de sauvegarde nécessitent un dépôt git, et le répertoire de cet onglet n'en fait pas partie",
+  "error.checkpointsRootChanged": "Le répertoire de travail de l'onglet a changé ; rouvrez les points de sauvegarde",
+  "error.checkpointNotFound": "Ce point de sauvegarde n'existe plus",
+  "error.checkpointDirectoryInTheWay": "Rien n'a été restauré : {0} est maintenant un répertoire contenant des fichiers ignorés. Déplacez-les puis réessayez",
   "sessionItem.yoloTooltip": "Contourner les autorisations (YOLO)"
 }
