@@ -6,6 +6,27 @@ Entries describe what changed for someone using the app. Internal refactoring,
 test and CI work is left out unless it changed behaviour. Dates are release
 dates; the format follows [Keep a Changelog](https://keepachangelog.com).
 
+## 1.1.11 — 2026-09-24
+
+### Added
+
+- **Notes for a tab or for the whole session.** The notes view has a
+  switch: "This tab" is the tab's own note, and "Session" is one note shared
+  by every tab of the session. Existing notes became session notes. The main
+  tab now has a note of its own, which starts empty.
+- **Tasks can be assigned to a tab.** Pick the tab in the task editor. The
+  task then shows the tab's name, and "Send to agent" sends it to that tab,
+  including a tab on a server. The task panel has an All / This tab filter.
+  If the assigned tab is stopped, the task is not sent to another agent
+  instead.
+- **Choose what the notes and task views open on**, in Settings → Notes and
+  tasks: the last used choice (the default), or a fixed one.
+
+### Fixed
+
+- **The main tab's note could not be saved with tmux base-index 1.**
+- **Dictating into a tab on a server** now reaches the server.
+
 ## 1.1.10 — 2026-09-24
 
 ### Added
