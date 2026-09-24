@@ -14,6 +14,7 @@
   import { t } from '../../i18n';
   import { offerUndo } from '../../stores/undo';
   import { toLocalInputValue, fromLocalInputValue, deadlineState } from '../../utils/taskDueDate';
+  import { describeBackendError } from '../../utils/backendError';
   import {
     tasks,
     taskFilter,
@@ -1134,7 +1135,8 @@
 
   {#if $taskError}
     <div class="error-banner">
-      {$taskError}
+      <!-- Some failures arrive as translation keys (error.assignedTabStopped). -->
+      {describeBackendError($taskError)}
     </div>
   {/if}
 

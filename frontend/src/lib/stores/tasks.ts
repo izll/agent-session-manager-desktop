@@ -48,6 +48,14 @@ export interface Task {
    * belonging to the project as a whole leaves this empty.
    */
   sessionId?: string;
+  /**
+   * The tab of that session the task is assigned to, by the tab's stable ID
+   * (a followed window's `id`, or "main" for the session's own window).
+   *
+   * May name a tab that has since been closed; the panel shows such a task as
+   * unassigned rather than dropping it.
+   */
+  tabId?: string;
 	testStrategy?: string;
 	rawJson?: string;
 }
@@ -780,7 +788,7 @@ export async function sendTaskToAgent(sessionId: string, taskId: string, request
  * keeps the feature working in both modes rather than silently doing nothing in
  * one of them.
  */
-export async function updateTaskDirect(sessionId: string, taskId: string, title: string, description: string, details: string, priority: string, dueAt?: string, sessionScoped?: boolean, requestedProvider?: TaskProvider) {
+export async function updateTaskDirect(sessionId: string, taskId: string, title: string, description: string, details: string, priority: string, dueAt?: string, sessionScoped?: boolean, requestedProvider?: TaskProvider, tabId?: string) {
   if (!sessionId || !taskId) return;
   const projectId = get(activeProjectId);
 
@@ -798,6 +806,9 @@ export async function updateTaskDirect(sessionId: string, taskId: string, title:
         priority,
         dueAt ?? '',
         sessionScoped ? sessionId : '',
+        // The direct edit rewrites the whole field, so "not changing the tab"
+        // has to send the tab it already has rather than nothing.
+        tabId ?? get(tasks).find(task => task.id === taskId)?.tabId ?? '',
         projectId,
       );
     } else {
@@ -810,6 +821,8 @@ export async function updateTaskDirect(sessionId: string, taskId: string, title:
       // the field being present, so an edit that never sends it leaves the
       // assignment alone.
       if (sessionScoped !== undefined) updates.sessionId = sessionScoped ? sessionId : '';
+      // Same presence rule: "" unassigns, an absent key leaves the tab alone.
+      if (tabId !== undefined) updates.tabId = tabId;
       await App.UpdateTask(sessionId, taskId, updates, projectId);
     }
     await reloadTasksIfActive(sessionId, projectId);

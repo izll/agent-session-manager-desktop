@@ -804,6 +804,7 @@
   "error.ptyNotFound": "Không tìm thấy phiên PTY",
   "error.forkClaudeOnly": "Phân nhánh chỉ hỗ trợ cho phiên Claude",
   "error.sessionNoPath": "Phiên không có đường dẫn dự án",
+  "error.assignedTabStopped": "Tab được giao nhiệm vụ này đang dừng. Hãy khởi động tab trước hoặc bỏ giao nhiệm vụ.",
   "error.taskMasterDisabled": "Bảng Task Master đang tắt. Hãy bật trong Cài đặt, mục Thử nghiệm.",
   "error.forkFailed": "Phân nhánh thất bại - không nhận được ID phiên",
   "bgAgents.asTabDesc": "Trở thành tab mới của phiên đang chạy đã chọn",

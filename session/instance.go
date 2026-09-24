@@ -4109,6 +4109,25 @@ func (i *Instance) SendPrompt(text string) error {
 	return i.SendPromptToWindow(text, -1)
 }
 
+// SendTaskToAgent types a task's prompt into the tab the task is assigned to,
+// or into the active window when it is assigned to none.
+//
+// A tab ID this session no longer has — the tab was closed — counts as no
+// assignment, so the prompt still goes somewhere rather than nowhere, as it
+// always did. A tab that exists but is stopped is refused instead: its pane is
+// dead, and silently handing the work to whichever agent happens to be active
+// is not what assigning it to that tab asked for.
+func (i *Instance) SendTaskToAgent(prompt, tabID string) error {
+	windowIdx := -1
+	if idx, stopped, ok := i.WindowForTabID(tabID); ok {
+		if stopped {
+			return fmt.Errorf("error.assignedTabStopped")
+		}
+		windowIdx = idx
+	}
+	return i.SendPromptToWindow(prompt, windowIdx)
+}
+
 // SendPromptToWindow sends text to one window of the session. A negative index
 // means the session's active window, which is what SendPrompt has always used.
 //
@@ -4127,7 +4146,19 @@ func (i *Instance) SendPromptToWindow(text string, windowIdx int) error {
 // it, which is what dictation often wants: speak a prompt, read it back, add to
 // it, and submit when it says what was meant.
 func (i *Instance) SendPromptToWindowWithSubmit(text string, windowIdx int, submit bool) error {
-	if !i.IsAlive() {
+	// A named window is asked about, and typed into, on the machine it runs
+	// on. A tab can sit on a server while its session runs here, and the
+	// session's own multiplexer has no window of that number — or has a
+	// different tab under it — so the text went to the wrong place or nowhere.
+	run := i.tmuxRun
+	alive := i.IsAlive
+	if windowIdx >= 0 {
+		if server := i.serverForWindow(windowIdx); server != i.ServerID {
+			run = func(args ...string) error { return i.tmuxRunOn(server, args...) }
+			alive = func() bool { return i.windowAliveContext(context.Background(), windowIdx) }
+		}
+	}
+	if !alive() {
 		return fmt.Errorf("session not running")
 	}
 
@@ -4140,18 +4171,18 @@ func (i *Instance) SendPromptToWindowWithSubmit(text string, windowIdx int, subm
 		// Multi-line text: use tmux's paste buffer with bracketed paste mode.
 		// Without this, each newline would be interpreted as Enter by the terminal,
 		// causing the prompt to be submitted line-by-line instead of as one block.
-		if err := i.tmuxRun("set-buffer", "--", text); err != nil {
+		if err := run("set-buffer", "--", text); err != nil {
 			return fmt.Errorf("failed to set tmux buffer: %w", err)
 		}
-		if err := i.tmuxRun("paste-buffer", "-p", "-t", sessionName); err != nil {
+		if err := run("paste-buffer", "-p", "-t", sessionName); err != nil {
 			// Fallback: paste without -p if not supported
-			if err2 := i.tmuxRun("paste-buffer", "-t", sessionName); err2 != nil {
+			if err2 := run("paste-buffer", "-t", sessionName); err2 != nil {
 				return fmt.Errorf("failed to paste buffer: %w", err2)
 			}
 		}
 	} else {
 		// Single-line text: use send-keys -l for simplicity
-		if err := i.tmuxRun("send-keys", "-l", "-t", sessionName, text); err != nil {
+		if err := run("send-keys", "-l", "-t", sessionName, text); err != nil {
 			return err
 		}
 	}
@@ -4172,7 +4203,7 @@ func (i *Instance) SendPromptToWindowWithSubmit(text string, windowIdx int, subm
 	if !submit {
 		return nil
 	}
-	return i.tmuxRun("send-keys", "-t", sessionName, "Enter")
+	return run("send-keys", "-t", sessionName, "Enter")
 }
 
 // IsMainWindowDead checks if the main window (0) pane is dead in tmux

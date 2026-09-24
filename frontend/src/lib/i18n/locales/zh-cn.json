@@ -804,6 +804,7 @@
   "error.ptyNotFound": "未找到 PTY 会话",
   "error.forkClaudeOnly": "分支仅支持 Claude 会话",
   "error.sessionNoPath": "会话没有项目路径",
+  "error.assignedTabStopped": "此任务所分配的标签页已停止。请先启动它，或取消分配。",
   "error.taskMasterDisabled": "Task Master 面板已关闭。请在设置的“实验性功能”中启用。",
   "error.forkFailed": "分支失败 - 未返回会话 ID",
   "bgAgents.asTabDesc": "成为所选运行中会话的新标签页",

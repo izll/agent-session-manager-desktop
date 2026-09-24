@@ -490,6 +490,7 @@ export namespace main {
 	    completedAt?: string;
 	    dueAt?: string;
 	    sessionId?: string;
+	    tabId?: string;
 	    testStrategy?: string;
 	    rawJson?: string;
 
@@ -514,6 +515,7 @@ export namespace main {
 	        this.completedAt = source["completedAt"];
 	        this.dueAt = source["dueAt"];
 	        this.sessionId = source["sessionId"];
+	        this.tabId = source["tabId"];
 	        this.testStrategy = source["testStrategy"];
 	        this.rawJson = source["rawJson"];
 	    }
@@ -956,6 +958,7 @@ export namespace main {
 	    completedAt?: string;
 	    dueAt?: string;
 	    sessionId?: string;
+	    tabId?: string;
 	    testStrategy?: string;
 	    rawJson?: string;
 
@@ -980,6 +983,7 @@ export namespace main {
 	        this.completedAt = source["completedAt"];
 	        this.dueAt = source["dueAt"];
 	        this.sessionId = source["sessionId"];
+	        this.tabId = source["tabId"];
 	        this.testStrategy = source["testStrategy"];
 	        this.rawJson = source["rawJson"];
 	    }
@@ -1871,6 +1875,7 @@ export namespace main {
 	    completedAt?: string;
 	    dueAt?: string;
 	    sessionId?: string;
+	    tabId?: string;
 
 	    static createFrom(source: any = {}) {
 	        return new TaskInfo(source);
@@ -1892,6 +1897,7 @@ export namespace main {
 	        this.completedAt = source["completedAt"];
 	        this.dueAt = source["dueAt"];
 	        this.sessionId = source["sessionId"];
+	        this.tabId = source["tabId"];
 	    }
 
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -1927,6 +1933,7 @@ export namespace main {
 	    completedAt?: string;
 	    dueAt?: string;
 	    sessionId?: string;
+	    tabId?: string;
 	    projectId: string;
 	    projectName: string;
 	    projectPath: string;
@@ -1954,6 +1961,7 @@ export namespace main {
 	        this.completedAt = source["completedAt"];
 	        this.dueAt = source["dueAt"];
 	        this.sessionId = source["sessionId"];
+	        this.tabId = source["tabId"];
 	        this.projectId = source["projectId"];
 	        this.projectName = source["projectName"];
 	        this.projectPath = source["projectPath"];
@@ -2510,6 +2518,7 @@ export namespace session {
 	}
 
 	export class FollowedWindow {
+	    id?: string;
 	    index: number;
 	    agent: string;
 	    name: string;
@@ -2538,6 +2547,7 @@ export namespace session {
 
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
 	        this.index = source["index"];
 	        this.agent = source["agent"];
 	        this.name = source["name"];

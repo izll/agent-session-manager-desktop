@@ -804,6 +804,7 @@
   "error.ptyNotFound": "Nie znaleziono sesji PTY",
   "error.forkClaudeOnly": "Rozgałęzianie jest obsługiwane tylko dla sesji Claude",
   "error.sessionNoPath": "Sesja nie ma ścieżki projektu",
+  "error.assignedTabStopped": "Karta, do której przypisano to zadanie, jest zatrzymana. Najpierw ją uruchom albo usuń przypisanie.",
   "error.taskMasterDisabled": "Panel Task Master jest wyłączony. Włącz go w Ustawieniach, w sekcji Eksperymentalne.",
   "error.forkFailed": "Rozgałęzienie nie powiodło się - nie zwrócono identyfikatora sesji",
   "bgAgents.asTabDesc": "Stanie się nową kartą wybranej uruchomionej sesji",

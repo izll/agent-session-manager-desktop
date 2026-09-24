@@ -804,6 +804,7 @@
   "error.ptyNotFound": "PTY-Sitzung nicht gefunden",
   "error.forkClaudeOnly": "Verzweigen wird nur für Claude-Sitzungen unterstützt",
   "error.sessionNoPath": "Sitzung hat keinen Projektpfad",
+  "error.assignedTabStopped": "Der Tab, dem diese Aufgabe zugewiesen ist, ist gestoppt. Starte ihn zuerst oder hebe die Zuweisung auf.",
   "error.taskMasterDisabled": "Das Task-Master-Panel ist deaktiviert. Aktivieren Sie es in den Einstellungen unter „Experimentell“.",
   "error.forkFailed": "Verzweigung fehlgeschlagen - keine Sitzungs-ID zurückgegeben",
   "bgAgents.asTabDesc": "Wird zu einem neuen Tab der gewählten laufenden Sitzung",

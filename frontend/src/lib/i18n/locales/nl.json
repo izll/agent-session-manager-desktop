@@ -804,6 +804,7 @@
   "error.ptyNotFound": "PTY-sessie niet gevonden",
   "error.forkClaudeOnly": "Afsplitsen wordt alleen ondersteund voor Claude-sessies",
   "error.sessionNoPath": "Sessie heeft geen projectpad",
+  "error.assignedTabStopped": "Het tabblad waaraan deze taak is toegewezen is gestopt. Start het eerst of hef de toewijzing op.",
   "error.taskMasterDisabled": "Het Task Master-paneel staat uit. Schakel het in bij Instellingen onder Experimenteel.",
   "error.forkFailed": "Afsplitsen mislukt - geen sessie-ID ontvangen",
   "bgAgents.asTabDesc": "Wordt een nieuw tabblad van de geselecteerde actieve sessie",

@@ -804,6 +804,7 @@
   "error.ptyNotFound": "PTY セッションが見つかりません",
   "error.forkClaudeOnly": "フォークは Claude セッションでのみサポートされています",
   "error.sessionNoPath": "セッションにプロジェクトパスがありません",
+  "error.assignedTabStopped": "このタスクが割り当てられたタブは停止しています。先に起動するか、割り当てを解除してください。",
   "error.taskMasterDisabled": "Task Master パネルは無効です。設定の「実験的機能」から有効にしてください。",
   "error.forkFailed": "フォーク失敗 - セッション ID が返されませんでした",
   "bgAgents.asTabDesc": "選択した実行中セッションの新規タブになります",

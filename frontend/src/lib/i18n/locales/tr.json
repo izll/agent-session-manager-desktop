@@ -804,6 +804,7 @@
   "error.ptyNotFound": "PTY oturumu bulunamadı",
   "error.forkClaudeOnly": "Çatallamak yalnızca Claude oturumları için desteklenir",
   "error.sessionNoPath": "Oturumun proje yolu yok",
+  "error.assignedTabStopped": "Bu görevin atandığı sekme durdurulmuş. Önce sekmeyi başlatın ya da atamayı kaldırın.",
   "error.taskMasterDisabled": "Task Master paneli kapalı. Ayarlar'daki Deneysel bölümünden açabilirsiniz.",
   "error.forkFailed": "Çatallama başarısız - oturum kimliği döndürülmedi",
   "bgAgents.asTabDesc": "Seçilen çalışan oturumun yeni bir sekmesi olur",

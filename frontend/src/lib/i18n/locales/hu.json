@@ -795,6 +795,7 @@
   "error.ptyNotFound": "PTY munkamenet nem található",
   "error.forkClaudeOnly": "Az elágaztatás csak Claude munkamenetekhez támogatott",
   "error.sessionNoPath": "A munkamenetnek nincs projekt elérési útja",
+  "error.assignedTabStopped": "A fül, amelyhez a feladat hozzá van rendelve, le van állítva. Előbb indítsd el, vagy vedd le róla a feladatot.",
   "error.taskMasterDisabled": "A Task Master panel ki van kapcsolva. A beállításokban, a Kísérleti résznél kapcsolhatod be.",
   "error.forkFailed": "Az elágaztatás sikertelen - nem érkezett munkamenet azonosító",
   "newSession.extraArgs": "Extra CLI argumentumok",

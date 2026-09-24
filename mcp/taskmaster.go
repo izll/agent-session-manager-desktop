@@ -37,7 +37,10 @@ type Task struct {
 	CompletedAt  string    `json:"completedAt,omitempty"`
 	DueAt        string    `json:"dueAt,omitempty"`
 	SessionID    string    `json:"sessionId,omitempty"`
-	TestStrategy string    `json:"testStrategy,omitempty"`
+	// TabID is the app's own field, like SessionID: the stable ID of the tab
+	// the task is assigned to, written by the direct edit and read back here.
+	TabID        string `json:"tabId,omitempty"`
+	TestStrategy string `json:"testStrategy,omitempty"`
 	// RawJSON carries provider fields this version does not know yet through a
 	// delete/Undo round trip. It is never serialized as an extra JSON property;
 	// restore_task merges the known fields back into this original object.
@@ -347,6 +350,7 @@ func taskFromMap(m map[string]interface{}) *Task {
 	task.CompletedAt = mapString(m, "completedAt")
 	task.DueAt = mapString(m, "dueAt")
 	task.SessionID = mapString(m, "sessionId")
+	task.TabID = mapString(m, "tabId")
 	task.TestStrategy = mapString(m, "testStrategy")
 
 	if tags, ok := m["tags"].([]interface{}); ok {

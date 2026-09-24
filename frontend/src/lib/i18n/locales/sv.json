@@ -804,6 +804,7 @@
   "error.ptyNotFound": "PTY-sessionen hittades inte",
   "error.forkClaudeOnly": "Förgrening stöds bara för Claude-sessioner",
   "error.sessionNoPath": "Sessionen har ingen projektsökväg",
+  "error.assignedTabStopped": "Fliken som uppgiften är tilldelad är stoppad. Starta den först eller ta bort tilldelningen.",
   "error.taskMasterDisabled": "Task Master-panelen är avstängd. Aktivera den i Inställningar under Experimentellt.",
   "error.forkFailed": "Förgrening misslyckades - inget sessions-ID returnerades",
   "bgAgents.asTabDesc": "Blir en ny flik i den valda körande sessionen",

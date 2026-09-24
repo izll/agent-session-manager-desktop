@@ -804,6 +804,7 @@
   "error.ptyNotFound": "Session PTY introuvable",
   "error.forkClaudeOnly": "La bifurcation n'est prise en charge que pour les sessions Claude",
   "error.sessionNoPath": "La session n'a pas de chemin de projet",
+  "error.assignedTabStopped": "L'onglet auquel cette tâche est assignée est arrêté. Démarrez-le d'abord ou retirez l'assignation.",
   "error.taskMasterDisabled": "Le panneau Task Master est désactivé. Activez-le dans les Paramètres, section Expérimental.",
   "error.forkFailed": "Échec de la bifurcation - aucun identifiant de session retourné",
   "bgAgents.asTabDesc": "Devient un nouvel onglet de la session en cours sélectionnée",

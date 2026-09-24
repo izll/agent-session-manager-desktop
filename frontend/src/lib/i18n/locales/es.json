@@ -804,6 +804,7 @@
   "error.ptyNotFound": "Sesión PTY no encontrada",
   "error.forkClaudeOnly": "Bifurcar solo es compatible con sesiones de Claude",
   "error.sessionNoPath": "La sesión no tiene ruta de proyecto",
+  "error.assignedTabStopped": "La pestaña asignada a esta tarea está detenida. Iníciala primero o quita la asignación.",
   "error.taskMasterDisabled": "El panel de Task Master está desactivado. Actívalo en Ajustes, en la sección Experimental.",
   "error.forkFailed": "Bifurcación fallida - no se devolvió ID de sesión",
   "bgAgents.asTabDesc": "Se convierte en una pestaña de la sesión en ejecución seleccionada",

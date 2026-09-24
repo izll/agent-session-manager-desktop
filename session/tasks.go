@@ -69,6 +69,15 @@ type Task struct {
 	// session can say what is still outstanding. Empty means the task belongs
 	// to the project as a whole rather than to any one session.
 	SessionID string `json:"sessionId,omitempty"`
+
+	// TabID assigns the task to one tab of that session — "the Codex tab works
+	// on this" — by the tab's stable ID (FollowedWindow.ID, or MainTabID).
+	// Meaningless without SessionID, which is why setting it also sets that.
+	//
+	// The tab may since have been closed. The ID is kept rather than cleared
+	// then: the task is shown as unassigned, and nothing is lost if the tab is
+	// restored from the trash under the same ID.
+	TabID string `json:"tabId,omitempty"`
 }
 
 // Overdue reports whether the deadline has passed and the task is not finished.
@@ -591,7 +600,21 @@ func (tm *TaskManager) UpdateTask(id string, updates map[string]interface{}) err
 				}
 				if raw, present := updates["sessionId"]; present {
 					if text, ok := raw.(string); ok {
+						// A tab belongs to one session. Moving the task to
+						// another one, or off every session, leaves an
+						// assignment that names a tab it cannot have — unless
+						// the same update assigns it afresh, below.
+						if text != task.SessionID {
+							task.TabID = ""
+						}
 						task.SessionID = text
+					}
+				}
+				// Empty clears the assignment. Keyed on presence, like the
+				// deadline, so an edit that does not mention the tab keeps it.
+				if raw, present := updates["tabId"]; present {
+					if text, ok := raw.(string); ok {
+						task.TabID = text
 					}
 				}
 				// Subtasks and dependencies arrive as whole lists rather than as

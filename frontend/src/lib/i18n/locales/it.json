@@ -804,6 +804,7 @@
   "error.ptyNotFound": "Sessione PTY non trovata",
   "error.forkClaudeOnly": "La biforcazione è supportata solo per le sessioni Claude",
   "error.sessionNoPath": "La sessione non ha un percorso di progetto",
+  "error.assignedTabStopped": "La scheda a cui è assegnata questa attività è ferma. Avviala prima oppure rimuovi l'assegnazione.",
   "error.taskMasterDisabled": "Il pannello Task Master è disattivato. Attivalo nelle Impostazioni, nella sezione Sperimentale.",
   "error.forkFailed": "Biforcazione fallita - nessun ID di sessione restituito",
   "bgAgents.asTabDesc": "Diventa una nuova scheda della sessione attiva selezionata",

@@ -804,6 +804,7 @@
   "error.ptyNotFound": "جلسة PTY غير موجودة",
   "error.forkClaudeOnly": "التفريع مدعوم فقط لجلسات Claude",
   "error.sessionNoPath": "الجلسة ليس لها مسار مشروع",
+  "error.assignedTabStopped": "علامة التبويب المعيّنة لهذه المهمة متوقفة. شغّلها أولاً أو ألغِ التعيين.",
   "error.taskMasterDisabled": "لوحة Task Master مُعطَّلة. فعِّلها من الإعدادات ضمن قسم «تجريبي».",
   "error.forkFailed": "فشل التفريع - لم يتم إرجاع معرف الجلسة",
   "bgAgents.asTabDesc": "يصبح علامة تبويب جديدة في الجلسة المحددة",

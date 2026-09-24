@@ -762,7 +762,7 @@ func TestUpdateTaskMasterFileDirectWritesOneProviderSnapshot(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := updateTaskMasterFileDirect(tasksFile, "7", "new", "", "", "critical", "2026-08-21T12:00:00Z", "session-one"); err != nil {
+	if err := updateTaskMasterFileDirect(tasksFile, "7", "new", "", "", "critical", "2026-08-21T12:00:00Z", "session-one", ""); err != nil {
 		t.Fatal(err)
 	}
 	readTask := func() map[string]interface{} {
@@ -788,7 +788,7 @@ func TestUpdateTaskMasterFileDirectWritesOneProviderSnapshot(t *testing.T) {
 		t.Fatalf("atomic MCP edit lost fields: %#v", task)
 	}
 
-	if err := updateTaskMasterFileDirect(tasksFile, "7", "new", "", "", "critical", "", ""); err != nil {
+	if err := updateTaskMasterFileDirect(tasksFile, "7", "new", "", "", "critical", "", "", ""); err != nil {
 		t.Fatal(err)
 	}
 	task = readTask()
@@ -806,7 +806,7 @@ func TestUpdateTaskMasterFileDirectPrefersMasterContext(t *testing.T) {
 	if err := os.WriteFile(path, []byte(data), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := updateTaskMasterFileDirect(path, "7", "updated", "", "", "high", "", ""); err != nil {
+	if err := updateTaskMasterFileDirect(path, "7", "updated", "", "", "high", "", "", ""); err != nil {
 		t.Fatal(err)
 	}
 	var root map[string]struct {
@@ -827,7 +827,7 @@ func TestUpdateTaskMasterFileDirectRejectsAmbiguousNonMasterContext(t *testing.T
 	if err := os.WriteFile(path, []byte(data), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := updateTaskMasterFileDirect(path, "7", "updated", "", "", "high", "", ""); err == nil || !strings.Contains(err.Error(), "ambiguous") {
+	if err := updateTaskMasterFileDirect(path, "7", "updated", "", "", "high", "", "", ""); err == nil || !strings.Contains(err.Error(), "ambiguous") {
 		t.Fatalf("ambiguous direct edit error = %v", err)
 	}
 	raw, _ := os.ReadFile(path)

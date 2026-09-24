@@ -804,6 +804,7 @@
   "error.ptyNotFound": "PTY relace nenalezena",
   "error.forkClaudeOnly": "Rozvětvení je podporováno pouze pro Claude relace",
   "error.sessionNoPath": "Relace nemá cestu k projektu",
+  "error.assignedTabStopped": "Karta, ke které je úkol přiřazen, je zastavená. Nejprve ji spusťte, nebo přiřazení zrušte.",
   "error.taskMasterDisabled": "Panel Task Master je vypnutý. Zapněte jej v Nastavení v sekci Experimentální.",
   "error.forkFailed": "Rozvětvení selhalo - nebylo vráceno ID relace",
   "bgAgents.asTabDesc": "Stane se novou záložkou vybrané běžící relace",

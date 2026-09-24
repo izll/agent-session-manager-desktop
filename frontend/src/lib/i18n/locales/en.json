@@ -792,6 +792,7 @@
   "error.ptyNotFound": "PTY session not found",
   "error.forkClaudeOnly": "Fork is only supported for Claude sessions",
   "error.sessionNoPath": "Session has no project path",
+  "error.assignedTabStopped": "The tab this task is assigned to is stopped. Start it first, or unassign the task.",
   "error.taskMasterDisabled": "The Task Master panel is turned off. Enable it in Settings under Experimental.",
   "error.forkFailed": "Fork failed - no session ID returned",
   "bgAgents.asTabDesc": "Becomes a new tab of the selected running session",

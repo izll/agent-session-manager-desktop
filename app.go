@@ -5521,6 +5521,10 @@ type TaskInfo struct {
 	// SessionID ties the task to one session, so closing it can warn about
 	// what is still outstanding. Empty means the task belongs to the project.
 	SessionID string `json:"sessionId,omitempty"`
+	// TabID is the stable ID of the tab the task is assigned to within that
+	// session, or empty. It may name a tab that has since been closed; the
+	// panel shows such a task as unassigned.
+	TabID string `json:"tabId,omitempty"`
 }
 
 // SubtaskInfo represents a subtask for the frontend
@@ -5553,6 +5557,7 @@ type DeletedTaskSnapshot struct {
 	CompletedAt  string                   `json:"completedAt,omitempty"`
 	DueAt        string                   `json:"dueAt,omitempty"`
 	SessionID    string                   `json:"sessionId,omitempty"`
+	TabID        string                   `json:"tabId,omitempty"`
 	TestStrategy string                   `json:"testStrategy,omitempty"`
 	RawJSON      string                   `json:"rawJson,omitempty"`
 }
@@ -5672,6 +5677,7 @@ func convertTask(t session.Task) TaskInfo {
 		CreatedAt:    t.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 		UpdatedAt:    t.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
 		SessionID:    t.SessionID,
+		TabID:        t.TabID,
 	}
 
 	if t.DueAt != nil {
@@ -5756,7 +5762,27 @@ func (a *App) UpdateTask(sessionID, taskID string, updates map[string]interface{
 		return err
 	}
 
-	return tm.UpdateTask(taskID, updates)
+	return tm.UpdateTask(taskID, tabAssignmentImpliesSession(sessionID, updates))
+}
+
+// tabAssignmentImpliesSession makes assigning a task to a tab also tie it to
+// the tab's session.
+//
+// A tab ID means nothing outside its session: the task store is shared by
+// every session open on the same directory, and "main" is every session's
+// main tab. Assigning a project-wide task to a tab without this would leave
+// it pointing at a tab of no session in particular.
+func tabAssignmentImpliesSession(sessionID string, updates map[string]interface{}) map[string]interface{} {
+	tabID, _ := updates["tabId"].(string)
+	if tabID == "" {
+		return updates
+	}
+	withSession := make(map[string]interface{}, len(updates)+1)
+	for key, value := range updates {
+		withSession[key] = value
+	}
+	withSession["sessionId"] = sessionID
+	return withSession
 }
 
 // DeleteTask deletes a task
@@ -5927,6 +5953,7 @@ func localTaskFromSnapshot(snapshot DeletedTaskSnapshot) session.Task {
 		Tags:         append([]string(nil), snapshot.Tags...),
 		Dependencies: append([]string(nil), snapshot.Dependencies...),
 		SessionID:    snapshot.SessionID,
+		TabID:        snapshot.TabID,
 	}
 	task.CreatedAt, _ = time.Parse(time.RFC3339Nano, snapshot.CreatedAt)
 	task.UpdatedAt, _ = time.Parse(time.RFC3339Nano, snapshot.UpdatedAt)
@@ -5991,6 +6018,7 @@ func mcpTaskFromSnapshot(snapshot DeletedTaskSnapshot) mcp.Task {
 		CompletedAt:  snapshot.CompletedAt,
 		DueAt:        snapshot.DueAt,
 		SessionID:    snapshot.SessionID,
+		TabID:        snapshot.TabID,
 		TestStrategy: snapshot.TestStrategy,
 		RawJSON:      snapshot.RawJSON,
 		Subtasks:     make([]mcp.Subtask, 0, len(snapshot.Subtasks)),
@@ -6057,14 +6085,35 @@ func (a *App) SendTaskToAgent(sessionID, taskID, expectedProjectID string) error
 		return err
 	}
 
+	task, err := tm.GetTask(taskID)
+	if err != nil {
+		return err
+	}
 	prompt, err := tm.FormatTaskForAgent(taskID)
 	if err != nil {
 		return err
 	}
 
-	log.Printf("[TaskManager] SendToAgent taskID=%s", taskID)
-	// Send the prompt to the active terminal
-	return a.sendPrompt(sessionID, prompt)
+	inst, err := a.storage.GetInstance(sessionID)
+	if err != nil {
+		return err
+	}
+	log.Printf("[TaskManager] SendToAgent taskID=%s tab=%q", taskID, task.TabID)
+	return inst.SendTaskToAgent(prompt, assignedTabIn(sessionID, task.SessionID, task.TabID))
+}
+
+// assignedTabIn is the tab a task is assigned to, if that tab belongs to the
+// session it is being sent from.
+//
+// The task store is shared by every session on the same directory. A task
+// given to another session's tab must not land in this session's tab of the
+// same ID — every session has a "main" — so it is sent the way an unassigned
+// task is: to the active window.
+func assignedTabIn(sessionID, taskSessionID, tabID string) string {
+	if taskSessionID != sessionID {
+		return ""
+	}
+	return tabID
 }
 
 // ============================================================================
@@ -6212,6 +6261,7 @@ type MCPTaskInfo struct {
 	CompletedAt  string           `json:"completedAt,omitempty"`
 	DueAt        string           `json:"dueAt,omitempty"`
 	SessionID    string           `json:"sessionId,omitempty"`
+	TabID        string           `json:"tabId,omitempty"`
 	TestStrategy string           `json:"testStrategy,omitempty"`
 	RawJSON      string           `json:"rawJson,omitempty"`
 }
@@ -6274,6 +6324,7 @@ func convertMCPTask(t mcp.Task) MCPTaskInfo {
 		CompletedAt:  t.CompletedAt,
 		DueAt:        t.DueAt,
 		SessionID:    t.SessionID,
+		TabID:        t.TabID,
 		TestStrategy: t.TestStrategy,
 		RawJSON:      t.RawJSON,
 	}
@@ -6604,8 +6655,12 @@ func (a *App) TaskMasterSendToAgent(sessionID, taskID, expectedProjectID string)
 	}
 
 	prompt := mcp.FormatTaskForPrompt(task)
-	log.Printf("[TaskMaster] SendToAgent taskID=%s", taskID)
-	return a.sendPrompt(sessionID, prompt)
+	inst, err := a.storage.GetInstance(sessionID)
+	if err != nil {
+		return err
+	}
+	log.Printf("[TaskMaster] SendToAgent taskID=%s tab=%q", taskID, task.TabID)
+	return inst.SendTaskToAgent(prompt, assignedTabIn(sessionID, task.SessionID, task.TabID))
 }
 
 // StopTaskMaster stops the Task Master MCP server for a project
@@ -6717,7 +6772,7 @@ func (a *App) TaskMasterSetSubtaskStatus(sessionID, subtaskID, status, expectedP
 // copy of the opt-in check. It spawns nothing, but it does write into the
 // project's .taskmaster directory, which a disabled feature has no business
 // touching either.
-func (a *App) TaskMasterUpdateTaskDirect(sessionID, taskID, title, description, details, priority, dueAt, taskSessionID, expectedProjectID string) error {
+func (a *App) TaskMasterUpdateTaskDirect(sessionID, taskID, title, description, details, priority, dueAt, taskSessionID, tabID, expectedProjectID string) error {
 	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return err
@@ -6738,14 +6793,19 @@ func (a *App) TaskMasterUpdateTaskDirect(sessionID, taskID, title, description, 
 	}
 
 	tasksFile := filepath.Join(projectPath, ".taskmaster", "tasks", "tasks.json")
-	return updateTaskMasterFileDirect(tasksFile, taskID, title, description, details, priority, dueAt, taskSessionID)
+	// Same rule as the local store's UpdateTask: a tab only means something
+	// inside its session.
+	if tabID != "" {
+		taskSessionID = sessionID
+	}
+	return updateTaskMasterFileDirect(tasksFile, taskID, title, description, details, priority, dueAt, taskSessionID, tabID)
 }
 
 // updateTaskMasterFileDirect applies every field from the edit dialog to one
 // Task Master snapshot and replaces the file once. Splitting deadline/session
 // fields into the local task store made an MCP edit partially succeed and then
 // report "task not found" from a different provider.
-func updateTaskMasterFileDirect(tasksFile, taskID, title, description, details, priority, dueAt, taskSessionID string) error {
+func updateTaskMasterFileDirect(tasksFile, taskID, title, description, details, priority, dueAt, taskSessionID, tabID string) error {
 	return mcp.MutateTaskMasterFile(tasksFile, func(root map[string]interface{}) error {
 		context, err := directEditTaskMasterContext(root, taskID)
 		if err != nil {
@@ -6770,6 +6830,13 @@ func updateTaskMasterFileDirect(tasksFile, taskID, title, description, details, 
 				delete(task, "sessionId")
 			} else {
 				task["sessionId"] = taskSessionID
+			}
+			// The dialog always sends the tab, so an empty one is a choice
+			// to unassign rather than a field left untouched.
+			if tabID == "" {
+				delete(task, "tabId")
+			} else {
+				task["tabId"] = tabID
 			}
 			return nil
 		}
