@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { createEventDispatcher, onMount, onDestroy } from 'svelte';
+  import { createEventDispatcher, onMount, onDestroy, tick } from 'svelte';
   import { browserViewRequested, clearBrowserViewRequest } from '../../stores/fileJump';
   import { notesViewRequested, clearNotesViewRequest } from '../../stores/noteJump';
   import TabBar from './TabBar.svelte';
@@ -9,6 +9,10 @@
   import FileBrowser from './FileBrowser.svelte';
   import TaskPanel from './TaskPanel.svelte';
   import ForkDialog from '../Dialogs/ForkDialog.svelte';
+  import CheckpointsDialog from '../Dialogs/CheckpointsDialog.svelte';
+  import { activities } from '../../stores/activities';
+  import { checkpointsUnavailable, sessionAgentBusy } from '../../utils/checkpoints';
+  import { focusTerminal } from '../../utils/focus';
   import { sessions, selectedSessionId, selectedWindowIdx, selectSession, selectWindow, toggleAutoYes, cycleYoloMode } from '../../stores/sessions';
   import { agents } from '../../stores/agents';
   import { tabStatuses } from '../../stores/statusLines';
@@ -518,6 +522,42 @@
   // when there is no pane to ask).
   $: currentTabPath = liveTabPath || configuredTabPath;
 
+  // Checkpoints of the tab's repository. The target is captured when the
+  // dialog opens, so switching tabs underneath it cannot point a restore at a
+  // different tree than the one the list was read from.
+  let showCheckpoints = false;
+  let checkpointsTarget = { projectId: '', sessionId: '', windowIdx: 0, root: '' };
+  $: checkpointsReason = checkpointsUnavailable({ remote: !!currentTabServer, isGitRepo: tabIsGitRepo });
+  $: checkpointsAgentBusy = sessionAgentBusy(checkpointsTarget.sessionId, $activities, $tabStatuses);
+
+  async function openCheckpoints() {
+    const sessionId = $selectedSessionId;
+    const windowIdx = $selectedWindowIdx ?? 0;
+    const projectId = $activeProjectId;
+    if (!sessionId || checkpointsReason) return;
+    // Asked afresh rather than taken from the status bar, whose answer may be
+    // a poll old: the backend compares this with the tab's directory and
+    // refuses a mismatch, and a stale path would only earn that refusal.
+    let root = currentTabPath;
+    try {
+      root = (await App.GetTabWorkingDirectory(sessionId, windowIdx)) || root;
+    } catch (e) {
+      console.error('Failed to resolve the tab working directory:', e);
+    }
+    if ($selectedSessionId !== sessionId || ($selectedWindowIdx ?? 0) !== windowIdx || $activeProjectId !== projectId) return;
+    checkpointsTarget = { projectId, sessionId, windowIdx, root };
+    showCheckpoints = true;
+  }
+
+  // App.svelte hands focus back to the terminal when one of its dialogs
+  // closes; this one lives here, so it does the same itself. After a tick,
+  // once the dialog's field is gone: focusTerminal declines while an input
+  // still has focus.
+  async function checkpointsClosed() {
+    await tick();
+    if (activeView === 'terminal' && terminalFocusAllowed) focusTerminal();
+  }
+
   // The machine the selected tab runs on, empty for this computer. A tab can
   // sit on a server while its session runs here.
   $: currentTabServer = (() => {
@@ -804,6 +844,26 @@
           </button>
         </div>
         <div class="view-tabs-right">
+          <!-- Here rather than in the history or the branch badge: a
+               checkpoint is taken of the working tree, right before handing it
+               to the agent in this tab, and this bar is what sits beside the
+               agent. Disabled with the reason, like the Diff button, outside a
+               local repository. -->
+          <button
+            class="split-btn"
+            on:click={openCheckpoints}
+            disabled={!!checkpointsReason}
+            title={checkpointsReason === 'remote'
+              ? $t('error.checkpointsRemote')
+              : checkpointsReason === 'notRepository'
+                ? $t('error.checkpointsNotRepository')
+                : $t('checkpoints.buttonTitle')}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M4 22V4a1 1 0 0 1 1-1h11l-2 4 2 4H5"/>
+            </svg>
+            {$t('checkpoints.button')}
+          </button>
           <!-- Shows the diff above the current view instead of replacing it.
                Hidden rather than disabled, unlike the Diff button beside Files:
                this one is an extra way to arrange a view that is already
@@ -1078,6 +1138,16 @@
 <Toast bind:show={showFolderError} message={folderErrorMessage} revision={folderErrorRevision} variant="error" duration={9000} />
 
 <ForkDialog bind:show={showForkDialog} />
+
+<CheckpointsDialog
+  bind:show={showCheckpoints}
+  projectId={checkpointsTarget.projectId}
+  sessionId={checkpointsTarget.sessionId}
+  windowIdx={checkpointsTarget.windowIdx}
+  root={checkpointsTarget.root}
+  agentBusy={checkpointsAgentBusy}
+  on:close={checkpointsClosed}
+/>
 
 <style>
   .main-panel {
