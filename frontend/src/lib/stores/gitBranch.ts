@@ -14,6 +14,9 @@ export interface GitBranchInfo {
    *  when counting took too long. */
   unpushed: number;
   unpushedKnown: boolean;
+  /** The tab runs on a server. The badge still shows the branch, but push
+   *  and pull are not offered: they would act on this computer's copy. */
+  onServer?: boolean;
 }
 
 /** Branch of the currently selected tab's working directory, or null. */
@@ -126,4 +129,58 @@ export function formatBehind(info: GitBranchInfo | null): string {
 export function unpushedCount(info: GitBranchInfo | null): number {
   if (!info || !info.unpushedKnown) return 0;
   return Math.max(0, info.unpushed || 0);
+}
+
+export interface GitSyncCommit {
+  hash: string;
+  shortHash: string;
+  subject: string;
+}
+
+/** What a push or pull would move; see GitSyncPreview in git_sync.go. */
+export interface GitSyncPreview {
+  direction: string;
+  branch: string;
+  head: string;
+  target: string;
+  setUpstream: boolean;
+  remotes: string[];
+  remote: string;
+  diverged: boolean;
+  commits: GitSyncCommit[];
+  total: number;
+  truncated: boolean;
+}
+
+export interface GitSyncResult {
+  ok: boolean;
+  outcome: string;
+  message: string;
+}
+
+/** Read what a push or pull of the badge's branch would move. */
+export async function getGitSyncPreview(target: GitRepositoryTarget, direction: 'push' | 'pull'): Promise<GitSyncPreview> {
+  const preview = await App.GetGitSyncPreview(target.sessionId, target.windowIdx, target.root, direction);
+  return preview as GitSyncPreview;
+}
+
+/**
+ * Push what the preview listed. The preview's head and target go back with
+ * it, so a commit made after the panel opened is refused rather than sent.
+ */
+export async function runGitPush(target: GitRepositoryTarget, preview: GitSyncPreview, remote: string): Promise<GitSyncResult> {
+  const result = await App.GitPush(target.sessionId, target.windowIdx, target.root, target.projectId,
+    preview.head, preview.target, remote);
+  return result as GitSyncResult;
+}
+
+/** Fast-forward the branch the preview was taken on. */
+export async function runGitPull(target: GitRepositoryTarget, preview: GitSyncPreview): Promise<GitSyncResult> {
+  const result = await App.GitPull(target.sessionId, target.windowIdx, target.root, target.projectId, preview.branch);
+  return result as GitSyncResult;
+}
+
+/** Stop the push or pull in progress. */
+export function cancelGitSync(): Promise<void> {
+  return App.CancelGitSync();
 }

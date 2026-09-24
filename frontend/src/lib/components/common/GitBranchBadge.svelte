@@ -10,6 +10,8 @@
     type GitBranchEntry
   } from '../../stores/gitBranch';
   import { portal } from '../../utils/portal';
+  import { canOfferPush, canOfferPull, type GitSyncDirection } from '../../utils/gitSync';
+  import GitSyncPanel from './GitSyncPanel.svelte';
 
   /** 'statusbar' matches the muted bottom-bar items; 'header' sits by the name. */
   export let variant: 'header' | 'statusbar' = 'header';
@@ -26,8 +28,16 @@
   /** Drops replies from a listing whose menu has already been closed/reopened. */
   let listGeneration = 0;
 
+  /** Which count's panel is open, if any. */
+  let syncOpen: GitSyncDirection | null = null;
+  let syncBusy = false;
+  let pushPillRef: HTMLButtonElement;
+  let pullPillRef: HTMLButtonElement;
+
   $: behind = formatBehind($gitBranch);
   $: unpushed = unpushedCount($gitBranch);
+  $: pushable = canOfferPush($gitBranch);
+  $: pullable = canOfferPull($gitBranch);
   $: tooltip = (() => {
     if (!$gitBranch) return '';
     const parts = [$t('gitBranch.tooltip', { branch: $gitBranch.branch })];
@@ -50,6 +60,9 @@
     if (key !== lastBranchKey) {
       lastBranchKey = key;
       close();
+      // A panel with a push or pull still running stays: it acts on the tab it
+      // was opened for, and closing it would hide how that ended.
+      if (!syncBusy) syncOpen = null;
     }
   }
 
@@ -110,6 +123,16 @@
     positionMenu();
   }
 
+  function toggleSync(direction: GitSyncDirection) {
+    if (syncOpen === direction) {
+      if (!syncBusy) syncOpen = null;
+      return;
+    }
+    if (syncBusy) return;
+    close();
+    syncOpen = direction;
+  }
+
   function close() {
     if (!isOpen) return;
     isOpen = false;
@@ -153,33 +176,72 @@
 
 <!-- Nothing is rendered outside a git repo: no icon, no placeholder, no gap. -->
 {#if $gitBranch && $gitBranch.branch}
-  <button
-    type="button"
-    class="git-branch git-branch-{variant}"
-    class:open={isOpen}
-    bind:this={triggerRef}
-    title={tooltip}
-    aria-haspopup="true"
-    aria-expanded={isOpen}
-    on:click|stopPropagation={toggle}
-  >
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-      <line x1="6" y1="3" x2="6" y2="15"/>
-      <circle cx="18" cy="6" r="3"/>
-      <circle cx="6" cy="18" r="3"/>
-      <path d="M18 9a9 9 0 01-9 9"/>
-    </svg>
-    <span class="git-branch-name">{$gitBranch.branch}</span>
+  <!-- Three controls side by side rather than one button: the counts open
+       their own panels, and a button inside a button is not valid HTML. -->
+  <span class="git-branch git-branch-{variant}">
+    <button
+      type="button"
+      class="git-branch-main"
+      class:open={isOpen}
+      bind:this={triggerRef}
+      title={tooltip}
+      aria-haspopup="true"
+      aria-expanded={isOpen}
+      on:click|stopPropagation={toggle}
+    >
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <line x1="6" y1="3" x2="6" y2="15"/>
+        <circle cx="18" cy="6" r="3"/>
+        <circle cx="6" cy="18" r="3"/>
+        <path d="M18 9a9 9 0 01-9 9"/>
+      </svg>
+      <span class="git-branch-name">{$gitBranch.branch}</span>
+      <svg class="git-branch-chevron" class:open={isOpen} width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polyline points="6 9 12 15 18 9"/>
+      </svg>
+    </button>
     {#if unpushed > 0}
-      <span class="git-unpushed-badge" title={$t('gitBranch.unpushed', { count: unpushed })}>↑ {unpushed}</span>
+      {#if pushable}
+        <button
+          type="button"
+          class="git-unpushed-badge git-count-action"
+          class:active={syncOpen === 'push'}
+          bind:this={pushPillRef}
+          title={`${$t('gitBranch.unpushed', { count: unpushed })} · ${$t('gitSync.pushHint')}`}
+          aria-haspopup="dialog"
+          aria-expanded={syncOpen === 'push'}
+          on:click|stopPropagation={() => toggleSync('push')}
+        >↑ {unpushed}</button>
+      {:else}
+        <span class="git-unpushed-badge" title={$t('gitBranch.unpushed', { count: unpushed })}>↑ {unpushed}</span>
+      {/if}
     {/if}
     {#if behind}
-      <span class="git-branch-counts">{behind}</span>
+      {#if pullable}
+        <button
+          type="button"
+          class="git-branch-counts git-count-action"
+          class:active={syncOpen === 'pull'}
+          bind:this={pullPillRef}
+          title={`${$t('gitBranch.tooltipBehind', { count: $gitBranch.behind })} · ${$t('gitSync.pullHint')}`}
+          aria-haspopup="dialog"
+          aria-expanded={syncOpen === 'pull'}
+          on:click|stopPropagation={() => toggleSync('pull')}
+        >{behind}</button>
+      {:else}
+        <span class="git-branch-counts">{behind}</span>
+      {/if}
     {/if}
-    <svg class="git-branch-chevron" class:open={isOpen} width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-      <polyline points="6 9 12 15 18 9"/>
-    </svg>
-  </button>
+  </span>
+{/if}
+
+{#if syncOpen}
+  <GitSyncPanel
+    direction={syncOpen}
+    anchor={syncOpen === 'push' ? pushPillRef : pullPillRef}
+    bind:busy={syncBusy}
+    on:close={() => (syncOpen = null)}
+  />
 {/if}
 
 {#if isOpen}
@@ -256,6 +318,13 @@
     gap: 6px;
     min-width: 0;
     flex-shrink: 0;
+  }
+
+  .git-branch-main {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
     background: none;
     border: none;
     padding: 0;
@@ -280,6 +349,34 @@
   .git-branch-counts {
     font-size: 12px;
     color: var(--accent-light);
+  }
+
+  /* A count that opens a panel: a button reset to look like the count it
+     was, with a hover ring so it reads as clickable on its own, apart from
+     the branch name beside it. */
+  .git-count-action {
+    font-family: inherit;
+    cursor: pointer;
+  }
+
+  button.git-branch-counts {
+    background: none;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    padding: 0 4px;
+    line-height: 16px;
+  }
+
+  button.git-branch-counts:hover,
+  button.git-branch-counts.active {
+    border-color: rgba(var(--accent-rgb), 0.45);
+    background: rgba(var(--accent-rgb), 0.12);
+  }
+
+  button.git-unpushed-badge:hover,
+  button.git-unpushed-badge.active {
+    background: rgba(251, 191, 36, 0.3);
+    border-color: rgba(251, 191, 36, 0.8);
   }
 
   /* A count, not a label: a filled pill so it reads at a glance, in the warm
@@ -309,8 +406,8 @@
     transition: transform 0.15s ease, opacity 0.15s ease;
   }
 
-  .git-branch:hover .git-branch-chevron,
-  .git-branch.open .git-branch-chevron {
+  .git-branch-main:hover .git-branch-chevron,
+  .git-branch-main.open .git-branch-chevron {
     opacity: 1;
   }
 
@@ -326,8 +423,8 @@
     color: #9ca3af;
   }
 
-  .git-branch:hover .git-branch-name,
-  .git-branch.open .git-branch-name {
+  .git-branch-main:hover .git-branch-name,
+  .git-branch-main.open .git-branch-name {
     color: #e4e4e7;
   }
 

@@ -20,6 +20,8 @@ export function AttachSession(arg1:string,arg2:number,arg3:string):Promise<strin
 
 export function BrowseDirectory(arg1:string):Promise<string>;
 
+export function CancelGitSync():Promise<void>;
+
 export function CheckForUpdate():Promise<main.UpdateInfo>;
 
 export function ClearLog(arg1:string):Promise<void>;
@@ -142,6 +144,8 @@ export function GetGitCommitFiles(arg1:string,arg2:string,arg3:number,arg4:strin
 
 export function GetGitHistory(arg1:string,arg2:string,arg3:number,arg4:number,arg5:string):Promise<main.GitHistoryPage>;
 
+export function GetGitSyncPreview(arg1:string,arg2:number,arg3:string,arg4:string):Promise<main.GitSyncPreview>;
+
 export function GetGroups():Promise<Array<main.GroupInfo>>;
 
 export function GetHistoryPreview(arg1:string):Promise<string>;
@@ -219,6 +223,10 @@ export function GetVersion():Promise<string>;
 export function GetWindowAutoYes(arg1:string,arg2:number):Promise<boolean>;
 
 export function GetWindowList(arg1:string):Promise<Array<session.WindowInfo>>;
+
+export function GitPull(arg1:string,arg2:number,arg3:string,arg4:string,arg5:string):Promise<main.GitSyncResult>;
+
+export function GitPush(arg1:string,arg2:number,arg3:string,arg4:string,arg5:string,arg6:string,arg7:string):Promise<main.GitSyncResult>;
 
 export function GlobalSearch(arg1:string):Promise<Array<main.HistoryEntryInfo>>;
 

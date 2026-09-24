@@ -45,6 +45,11 @@ type GitBranchInfo struct {
 	// the count ran out of time, there is no number worth showing.
 	Unpushed      int  `json:"unpushed"`
 	UnpushedKnown bool `json:"unpushedKnown"`
+	// OnServer says the tab runs on a server. The badge still reads the
+	// configured directory on this computer, but pushing or pulling there
+	// would act on a different checkout, so the counts are not offered as
+	// actions. Per tab, so it is never cached with the path.
+	OnServer bool `json:"onServer"`
 }
 
 type gitBranchCacheEntry struct {
@@ -65,7 +70,9 @@ func (a *App) GetGitBranch(sessionID string, windowIdx int, expectedRoot string)
 	if err != nil {
 		return GitBranchInfo{}, err
 	}
-	return a.getGitBranchAtPath(root), nil
+	info := a.getGitBranchAtPath(root)
+	info.OnServer = a.tabOnServer(sessionID, windowIdx)
+	return info, nil
 }
 
 func (a *App) gitRootSnapshot(sessionID string, windowIdx int, expectedRoot string) (string, error) {

@@ -34,6 +34,10 @@ export function BrowseDirectory(arg1) {
   return window['go']['main']['App']['BrowseDirectory'](arg1);
 }
 
+export function CancelGitSync() {
+  return window['go']['main']['App']['CancelGitSync']();
+}
+
 export function CheckForUpdate() {
   return window['go']['main']['App']['CheckForUpdate']();
 }
@@ -278,6 +282,10 @@ export function GetGitHistory(arg1, arg2, arg3, arg4, arg5) {
   return window['go']['main']['App']['GetGitHistory'](arg1, arg2, arg3, arg4, arg5);
 }
 
+export function GetGitSyncPreview(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['GetGitSyncPreview'](arg1, arg2, arg3, arg4);
+}
+
 export function GetGroups() {
   return window['go']['main']['App']['GetGroups']();
 }
@@ -432,6 +440,14 @@ export function GetWindowAutoYes(arg1, arg2) {
 
 export function GetWindowList(arg1) {
   return window['go']['main']['App']['GetWindowList'](arg1);
+}
+
+export function GitPull(arg1, arg2, arg3, arg4, arg5) {
+  return window['go']['main']['App']['GitPull'](arg1, arg2, arg3, arg4, arg5);
+}
+
+export function GitPush(arg1, arg2, arg3, arg4, arg5, arg6, arg7) {
+  return window['go']['main']['App']['GitPush'](arg1, arg2, arg3, arg4, arg5, arg6, arg7);
 }
 
 export function GlobalSearch(arg1) {

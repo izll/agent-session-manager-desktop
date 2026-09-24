@@ -698,6 +698,7 @@ export namespace main {
 	    behind: number;
 	    unpushed: number;
 	    unpushedKnown: boolean;
+	    onServer: boolean;
 
 	    static createFrom(source: any = {}) {
 	        return new GitBranchInfo(source);
@@ -712,6 +713,7 @@ export namespace main {
 	        this.behind = source["behind"];
 	        this.unpushed = source["unpushed"];
 	        this.unpushedKnown = source["unpushedKnown"];
+	        this.onServer = source["onServer"];
 	    }
 	}
 	export class GitBranchList {
@@ -823,6 +825,88 @@ export namespace main {
 		    }
 		    return a;
 		}
+	}
+	export class GitSyncCommit {
+	    hash: string;
+	    shortHash: string;
+	    subject: string;
+
+	    static createFrom(source: any = {}) {
+	        return new GitSyncCommit(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.hash = source["hash"];
+	        this.shortHash = source["shortHash"];
+	        this.subject = source["subject"];
+	    }
+	}
+	export class GitSyncPreview {
+	    direction: string;
+	    branch: string;
+	    head: string;
+	    target: string;
+	    setUpstream: boolean;
+	    remotes: string[];
+	    remote: string;
+	    diverged: boolean;
+	    commits: GitSyncCommit[];
+	    total: number;
+	    truncated: boolean;
+
+	    static createFrom(source: any = {}) {
+	        return new GitSyncPreview(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.direction = source["direction"];
+	        this.branch = source["branch"];
+	        this.head = source["head"];
+	        this.target = source["target"];
+	        this.setUpstream = source["setUpstream"];
+	        this.remotes = source["remotes"];
+	        this.remote = source["remote"];
+	        this.diverged = source["diverged"];
+	        this.commits = this.convertValues(source["commits"], GitSyncCommit);
+	        this.total = source["total"];
+	        this.truncated = source["truncated"];
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class GitSyncResult {
+	    ok: boolean;
+	    outcome: string;
+	    message: string;
+
+	    static createFrom(source: any = {}) {
+	        return new GitSyncResult(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.ok = source["ok"];
+	        this.outcome = source["outcome"];
+	        this.message = source["message"];
+	    }
 	}
 	export class GroupInfo {
 	    id: string;
