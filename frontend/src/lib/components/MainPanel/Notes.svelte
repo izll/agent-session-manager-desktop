@@ -727,11 +727,11 @@
     overflow: hidden;
   }
   .scope-switch button {
-    padding: 2px 9px;
+    padding: 4px 12px;
     border: none;
     background: transparent;
     color: #9ca3af;
-    font-size: 11px;
+    font-size: 12px;
     cursor: pointer;
     white-space: nowrap;
   }
@@ -745,9 +745,9 @@
      has something in it. */
   .scope-dot {
     display: inline-block;
-    width: 5px;
-    height: 5px;
-    margin-left: 5px;
+    width: 6px;
+    height: 6px;
+    margin-left: 6px;
     vertical-align: middle;
     border-radius: 50%;
     background: var(--accent-light);
