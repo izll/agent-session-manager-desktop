@@ -807,8 +807,10 @@ export async function updateTaskDirect(sessionId: string, taskId: string, title:
         dueAt ?? '',
         sessionScoped ? sessionId : '',
         // The direct edit rewrites the whole field, so "not changing the tab"
-        // has to send the tab it already has rather than nothing.
-        tabId ?? get(tasks).find(task => task.id === taskId)?.tabId ?? '',
+        // has to send the tab it already has rather than nothing. A task taken
+        // off the session takes no tab with it: the backend would read a tab
+        // as putting it straight back.
+        sessionScoped ? (tabId ?? get(tasks).find(task => task.id === taskId)?.tabId ?? '') : '',
         projectId,
       );
     } else {

@@ -964,7 +964,12 @@
              view. That question is only asked when the setting is on, so the
              panel costs nothing while it is off. -->
         <div class="view-panel" class:active={activeView === 'tasks'}>
-          <TaskPanel active={visible && activeView === 'tasks'} on:taskSent={() => selectView('terminal')} />
+          <TaskPanel active={visible && activeView === 'tasks'} on:taskSent={(event) => {
+            // A task assigned to a tab was typed into that tab; show it there
+            // rather than in whichever tab happened to be selected.
+            if (typeof event.detail?.windowIdx === 'number') selectWindow(event.detail.windowIdx);
+            selectView('terminal');
+          }} />
         </div>
         <div class="view-panel" class:active={activeView === 'browser'}>
           <FileBrowser active={visible && activeView === 'browser'} on:close={() => selectView('terminal')} />

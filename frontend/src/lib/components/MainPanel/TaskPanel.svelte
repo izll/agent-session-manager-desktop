@@ -3,7 +3,7 @@
   import { claimMenu, releaseMenu } from '../../utils/openMenu';
   import { autoFocusDialog, autoFocusField } from '../../utils/dialogActions';
   import { get } from 'svelte/store';
-  import { selectedSessionId } from '../../stores/sessions';
+  import { selectedSessionId, selectedSession, selectedWindowIdx } from '../../stores/sessions';
   import { settings } from '../../stores/settings';
   import { activeProjectId } from '../../stores/projects';
   import Select from '../common/Select.svelte';
@@ -15,6 +15,14 @@
   import { offerUndo } from '../../stores/undo';
   import { toLocalInputValue, fromLocalInputValue, deadlineState } from '../../utils/taskDueDate';
   import { describeBackendError } from '../../utils/backendError';
+  import {
+    sessionTabs,
+    resolveTaskTab,
+    tabIdAtWindow,
+    filterTasksByTab,
+    parseTaskTabFilter,
+    type TaskTabFilter,
+  } from '../../utils/taskTabs';
   import {
     tasks,
     taskFilter,
@@ -114,6 +122,46 @@
   let editTaskDetails = '';
   let editTaskPriority: TaskPriority = 'medium';
   let editTaskError = '';
+  // The tab the task is assigned to, as the dialog opened with it and as it is
+  // now. Only a change is sent: a task whose tab has since been closed opens
+  // as "None", and saving an unrelated edit must not erase the stored ID —
+  // the tab may yet come back from the trash.
+  let editTaskTabId = '';
+  let editTaskInitialTabId = '';
+
+  // Tabs a task can be assigned to, and the one being looked at. The list stays
+  // per session; a tab is only an assignment within it.
+  $: tabs = sessionTabs($selectedSession);
+  $: currentTabId = tabIdAtWindow(tabs, $selectedWindowIdx);
+  $: editTabOptions = [
+    { value: '', label: $t('tasks.tabNone') },
+    ...tabs.map(tab => ({ value: tab.id, label: tab.name })),
+  ];
+
+  // [All | This tab]. Remembered per viewer in localStorage: which view of the
+  // list someone prefers is theirs, not the project's, and losing it (private
+  // window, cleared storage) only means starting on "All".
+  const TAB_FILTER_STORAGE_KEY = 'asmgr.tasks.tabFilter';
+  let tabFilter: TaskTabFilter = readStoredTabFilter();
+
+  function readStoredTabFilter(): TaskTabFilter {
+    try {
+      return parseTaskTabFilter(localStorage.getItem(TAB_FILTER_STORAGE_KEY));
+    } catch {
+      return 'all';
+    }
+  }
+
+  function setTabFilter(value: TaskTabFilter) {
+    tabFilter = value;
+    try {
+      localStorage.setItem(TAB_FILTER_STORAGE_KEY, value);
+    } catch {
+      // Not remembered, which is all that is lost.
+    }
+  }
+
+  $: visibleTasks = filterTasksByTab($sortedFilteredTasks, tabFilter, currentTabId, $selectedSessionId, tabs);
 
   // Add subtask modal
   let showAddSubtaskModal = false;
@@ -247,6 +295,13 @@
 
   function handleEditPriorityChange(event: CustomEvent<string>) {
     editTaskPriority = event.detail as TaskPriority;
+  }
+
+  function handleEditTabChange(event: CustomEvent<string>) {
+    editTaskTabId = event.detail;
+    // A tab belongs to this session, so the task does too. The backend makes
+    // the same rule; ticking the box here keeps the dialog telling the truth.
+    if (editTaskTabId) editTaskSessionScoped = true;
   }
 
   // Dictation support - one controller, follows focused field in dialog
@@ -528,6 +583,9 @@
     const prompt = newTaskPrompt;
     const priority = newTaskPriority;
     const research = newTaskResearch;
+    // Added while the list shows one tab's tasks, a task goes to that tab —
+    // otherwise it would vanish from the list the moment it was created.
+    const assignToTab = tabFilter === 'tab' ? currentTabId : null;
     console.log('[TaskPanel] sessionId:', sessionId);
     if (!sessionId) {
       console.log('[TaskPanel] No sessionId, returning early');
@@ -543,7 +601,13 @@
           return;
         }
         console.log('[TaskPanel] Calling addManualTask...');
-        await addManualTask(sessionId, title, description, details, priority, operation.target.provider);
+        const created = await addManualTask(sessionId, title, description, details, priority, operation.target.provider);
+        if (created?.id && assignToTab) {
+          await updateTaskDirect(
+            sessionId, created.id, created.title, created.description || '', created.details || '',
+            created.priority, undefined, true, operation.target.provider, assignToTab,
+          );
+        }
         if (!operationIsCurrent(operation) || modalTarget !== operation.target || !showAddTaskModal) return;
         console.log('[TaskPanel] addManualTask completed');
         newTaskTitle = '';
@@ -700,10 +764,14 @@
     if (!operation) return;
     const sessionId = operation.target.sessionId;
 
+    // Where it lands, so the view can follow it there. Resolved before the
+    // send, from the same list the backend reads the assignment from.
+    const task = get(tasks).find(candidate => candidate.id === taskId);
+    const windowIdx = task ? resolveTaskTab(task, sessionId, tabs)?.windowIdx : undefined;
     try {
       await sendTaskToAgent(sessionId, taskId, operation.target.provider);
       if (!operationIsCurrent(operation)) return;
-      dispatch('taskSent', { taskId });
+      dispatch('taskSent', { taskId, windowIdx });
     } catch (e) {
       console.error('Failed to send task to agent:', e);
     }
@@ -747,6 +815,8 @@
     // the wrong hour for anyone not on UTC.
     editTaskDueAt = task.dueAt ? toLocalInputValue(task.dueAt) : '';
     editTaskSessionScoped = !!task.sessionId;
+    editTaskTabId = resolveTaskTab(task, target?.sessionId, tabs)?.id ?? '';
+    editTaskInitialTabId = editTaskTabId;
     editTaskError = '';
     showEditTaskModal = true;
     if (contextMenuTask) closeContextMenu();
@@ -772,9 +842,10 @@
     const priority = editTaskPriority;
     const dueAt = fromLocalInputValue(editTaskDueAt);
     const sessionScoped = editTaskSessionScoped;
+    const tabId = editTaskTabId !== editTaskInitialTabId ? editTaskTabId : undefined;
     try {
       console.log('[TaskPanel] calling updateTaskDirect...', { editTaskTitle, editTaskDescription, editTaskDetails, editTaskPriority });
-      await updateTaskDirect(sessionId, taskId, title, description, details, priority, dueAt, sessionScoped, operation.target.provider);
+      await updateTaskDirect(sessionId, taskId, title, description, details, priority, dueAt, sessionScoped, operation.target.provider, tabId);
       if (!operationIsCurrent(operation) || modalTarget !== operation.target || !showEditTaskModal) return;
       console.log('[TaskPanel] updateTaskDirect success');
       showEditTaskModal = false;
@@ -1034,6 +1105,18 @@
       {/if}
     </div>
     <div class="header-right">
+      <div class="tab-filter" role="group" aria-label={$t('tasks.tabFilterLabel')}>
+        <button
+          class:active={tabFilter === 'all'}
+          aria-pressed={tabFilter === 'all'}
+          on:click={() => setTabFilter('all')}
+        >{$t('tasks.tabFilterAll')}</button>
+        <button
+          class:active={tabFilter === 'tab'}
+          aria-pressed={tabFilter === 'tab'}
+          on:click={() => setTabFilter('tab')}
+        >{$t('tasks.tabFilterThisTab')}</button>
+      </div>
       <button
         class="hide-done-btn"
         class:active={$hideDone}
@@ -1143,18 +1226,21 @@
   <div class="task-list">
     {#if $isLoadingTasks}
       <div class="loading">{$t('tasks.loading')}</div>
-    {:else if $sortedFilteredTasks.length === 0}
+    {:else if visibleTasks.length === 0}
       <div class="empty">
         {#if $settings.taskMasterEnabled && !$taskMasterStatus.running}
           {$t('tasks.initHint')}
         {:else if $tasks.length === 0}
           {$t('tasks.noTasks')}
+        {:else if tabFilter === 'tab' && $sortedFilteredTasks.length > 0}
+          {$t('tasks.noTasksForTab')}
         {:else}
           {$t('tasks.noMatch')}
         {/if}
       </div>
     {:else}
-      {#each $sortedFilteredTasks as task (task.id)}
+      {#each visibleTasks as task (task.id)}
+        {@const assignedTab = resolveTaskTab(task, $selectedSessionId, tabs)}
         <div
           class="task-item"
           class:selected={$selectedTaskId === task.id}
@@ -1184,6 +1270,16 @@
                 <span class="task-name" class:completed={task.status === 'done'} title={task.title}>{task.title}</span>
                 <div class="task-meta-row">
                   <div class="optional-meta">
+                    {#if assignedTab}
+                      <span class="tab-badge" title={$t('tasks.assignedTab', { name: assignedTab.name })}>
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                          <rect x="3" y="4" width="18" height="16" rx="2"/>
+                          <path d="M3 9h18"/>
+                        </svg>
+                        {assignedTab.name}
+                      </span>
+                    {/if}
+
                     {#if task.createdAt}
                       <span class="created-at" title={new Date(task.createdAt).toLocaleString()}>
                         {formatRelativeDate(task.createdAt, $t, nowTick)}
@@ -1625,6 +1721,15 @@
           />
         </label>
         <label>
+          {$t('tasks.tab')}
+          <Select
+            value={editTaskTabId}
+            options={editTabOptions}
+            on:change={handleEditTabChange}
+          />
+          <span class="field-hint">{$t('tasks.tabHint')}</span>
+        </label>
+        <label>
           {$t('tasks.dueAt')}
           <input
             type="datetime-local"
@@ -1633,7 +1738,8 @@
           />
         </label>
         <label class="checkbox-label">
-          <input type="checkbox" bind:checked={editTaskSessionScoped} />
+          <!-- Locked while a tab is chosen: a tab is always this session's. -->
+          <input type="checkbox" bind:checked={editTaskSessionScoped} disabled={!!editTaskTabId} />
           {$t('tasks.belongsToSession')}
         </label>
       </div>
@@ -1846,6 +1952,64 @@
     display: flex;
     align-items: center;
     gap: 8px;
+  }
+
+  .tab-filter {
+    display: flex;
+    height: 28px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+
+  .tab-filter button {
+    padding: 0 8px;
+    font-size: 11px;
+    white-space: nowrap;
+    background: rgba(255, 255, 255, 0.05);
+    border: none;
+    color: #6b7280;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .tab-filter button + button {
+    border-left: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .tab-filter button:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #9ca3af;
+  }
+
+  .tab-filter button.active {
+    background: rgba(var(--accent-rgb), 0.18);
+    color: var(--accent-light);
+  }
+
+  .tab-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    max-width: 140px;
+    font-size: 10px;
+    padding: 2px 7px;
+    border-radius: 999px;
+    background: rgba(var(--accent-rgb), 0.15);
+    color: var(--accent-light);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .tab-badge svg {
+    flex-shrink: 0;
+  }
+
+  .field-hint {
+    font-size: 11px;
+    color: #6b7280;
   }
 
   .hide-done-btn {
