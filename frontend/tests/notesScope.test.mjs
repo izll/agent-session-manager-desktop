@@ -47,3 +47,25 @@ test('the scope labels are translated everywhere', () => {
     }
   }
 });
+
+// A default fixed in the settings applies each time the view is opened; the
+// switch inside the view still changes it while it stays open. "Last used"
+// leaves what was remembered.
+test('the settings can fix what the notes and task views open on', () => {
+  assert.match(notes, /\$: if \(active && !wasActive\) \{\s*wasActive = true;\s*applyDefaultScope\(\);/,
+    'opening the notes view ignores the configured default');
+  const apply = notes.slice(notes.indexOf('function applyDefaultScope'));
+  assert.match(apply.slice(0, 200), /fixed === 'tab' \|\| fixed === 'session'/);
+
+  const tasks = read('../src/lib/components/MainPanel/TaskPanel.svelte');
+  assert.match(tasks, /\$: if \(active && !wasActive\) \{\s*wasActive = true;\s*applyDefaultTabFilter\(\);/,
+    'opening the task view ignores the configured default');
+
+  const dialog = read('../src/lib/components/Dialogs/SettingsDialog.svelte');
+  assert.match(dialog, /saveSettings\(\{ notesDefaultScope: e\.detail as NotesDefaultScope \}\)/);
+  assert.match(dialog, /saveSettings\(\{ tasksDefaultFilter: e\.detail as TasksDefaultFilter \}\)/);
+
+  const settingsStore = read('../src/lib/stores/settings.ts');
+  assert.match(settingsStore, /notesDefaultScope: 'last',/, 'a fresh install does not start on "last used"');
+  assert.match(settingsStore, /tasksDefaultFilter: 'last',/);
+});

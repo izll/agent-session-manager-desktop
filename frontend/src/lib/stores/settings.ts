@@ -9,6 +9,10 @@ export type TerminalRenderer = 'canvas' | 'webgl' | 'dom';
 
 /** Where the session's git branch is shown, if anywhere. */
 export type GitBranchDisplay = 'header' | 'statusbar' | 'off';
+/** Which note the notes view opens on; 'last' is the one used last. */
+export type NotesDefaultScope = 'last' | 'tab' | 'session';
+/** Which task list the task view opens on; 'last' is the one used last. */
+export type TasksDefaultFilter = 'last' | 'all' | 'tab';
 
 /**
  * What has to happen for a terminal selection to reach the clipboard.
@@ -92,6 +96,8 @@ export interface Settings {
   terminalCopyMode: TerminalCopyMode;
   /** Where to show the session's git branch; 'header' by default. */
   gitBranchDisplay: GitBranchDisplay;
+  notesDefaultScope: NotesDefaultScope;
+  tasksDefaultFilter: TasksDefaultFilter;
   /** Show the diff's file list as a directory tree instead of a flat list. */
   diffFlatFileList: boolean;
   /**
@@ -158,6 +164,8 @@ function defaultSettings(): Settings {
     terminalShell: '',
     terminalCopyMode: 'shift',
     gitBranchDisplay: 'header',
+    notesDefaultScope: 'last',
+    tasksDefaultFilter: 'last',
     diffFlatFileList: false,
     trashRetentionDays: 0,
     taskMasterEnabled: false,

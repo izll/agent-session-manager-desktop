@@ -1644,6 +1644,8 @@ export namespace main {
 	    terminalShell: string;
 	    shellChoices: session.ShellChoice[];
 	    gitBranchDisplay: string;
+	    notesDefaultScope: string;
+	    tasksDefaultFilter: string;
 	    diffFlatFileList: boolean;
 	    trashRetentionDays: number;
 	    taskMasterEnabled: boolean;
@@ -1703,6 +1705,8 @@ export namespace main {
 	        this.terminalShell = source["terminalShell"];
 	        this.shellChoices = this.convertValues(source["shellChoices"], session.ShellChoice);
 	        this.gitBranchDisplay = source["gitBranchDisplay"];
+	        this.notesDefaultScope = source["notesDefaultScope"];
+	        this.tasksDefaultFilter = source["tasksDefaultFilter"];
 	        this.diffFlatFileList = source["diffFlatFileList"];
 	        this.trashRetentionDays = source["trashRetentionDays"];
 	        this.taskMasterEnabled = source["taskMasterEnabled"];

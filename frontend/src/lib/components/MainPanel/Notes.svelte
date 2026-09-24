@@ -8,6 +8,7 @@
   import { registerUnsavedGuard } from '../../stores/unsavedChanges';
   import ConfirmDialog from '../Dialogs/ConfirmDialog.svelte';
   import { activeProjectId } from '../../stores/projects';
+  import { settings } from '../../stores/settings';
 
   export let active = false;
 
@@ -19,8 +20,15 @@
   const SCOPE_KEY = 'asmgr.notesScope';
   type NotesScope = 'tab' | 'session';
   // Remembered across openings and restarts, per viewer: which of the two a
-  // person reaches for is a habit, not a property of any session.
+  // person reaches for is a habit, not a property of any session. Unless the
+  // settings fix a default, which then applies each time the view is opened;
+  // the switch still changes it for as long as the view stays open.
   let scope: NotesScope = readScope();
+
+  function applyDefaultScope() {
+    const fixed = get(settings)?.notesDefaultScope;
+    if (fixed === 'tab' || fixed === 'session') scope = fixed;
+  }
 
   function readScope(): NotesScope {
     try {
@@ -451,6 +459,7 @@
   let wasActive = false;
   $: if (active && !wasActive) {
     wasActive = true;
+    applyDefaultScope();
     void activateNotes();
   } else if (!active) {
     wasActive = false;

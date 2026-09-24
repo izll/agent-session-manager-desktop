@@ -184,6 +184,12 @@ type Settings struct {
 	// GitBranchDisplay places the session's git branch: "header" (default),
 	// "statusbar" or "off".
 	GitBranchDisplay string `json:"git_branch_display,omitempty"`
+	// NotesDefaultScope is which note the notes view opens on: "tab",
+	// "session", or empty for the one used last. TasksDefaultFilter is the
+	// same for the task list: "all", "tab", or empty for the last used.
+	// Empty is the default so existing configs keep today's behaviour.
+	NotesDefaultScope  string `json:"notes_default_scope,omitempty"`
+	TasksDefaultFilter string `json:"tasks_default_filter,omitempty"`
 	// The diff file list groups into a directory tree by default. Stored as a
 	// "flat" flag rather than a "tree" one so the zero value keeps the default
 	// in place — with omitempty there is no entry at all in existing configs.

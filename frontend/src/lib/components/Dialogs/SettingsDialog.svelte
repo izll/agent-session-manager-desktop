@@ -9,7 +9,7 @@
   import { setDictationHotkey } from '../../utils/dictationHotkey';
   import { createEventDispatcher, onDestroy } from 'svelte';
   import { get } from 'svelte/store';
-  import { settings, saveSettings } from '../../stores/settings';
+  import { settings, saveSettings, type NotesDefaultScope, type TasksDefaultFilter } from '../../stores/settings';
   import { activeProjectId } from '../../stores/projects';
   import * as DictationService from '../../../../wailsjs/go/main/DictationService';
   import * as App from '../../../../wailsjs/go/main/App';
@@ -158,6 +158,20 @@
     { value: 'header', label: $t('settings.gitBranchHeader') },
     { value: 'statusbar', label: $t('settings.gitBranchStatusBar') },
     { value: 'off', label: $t('settings.gitBranchOff') },
+  ];
+
+  // Which note and which task list the views open on. "Last used" keeps what
+  // the switch in the view last chose; a fixed value applies each time the
+  // view is opened.
+  $: notesDefaultOptions = [
+    { value: 'last', label: $t('settings.viewDefaultLast') },
+    { value: 'tab', label: $t('notes.scopeTab') },
+    { value: 'session', label: $t('notes.scopeSession') },
+  ];
+  $: tasksDefaultOptions = [
+    { value: 'last', label: $t('settings.viewDefaultLast') },
+    { value: 'all', label: $t('tasks.tabFilterAll') },
+    { value: 'tab', label: $t('tasks.tabFilterThisTab') },
   ];
 
   function changeGitBranchDisplay(v: string) {
@@ -1114,6 +1128,34 @@
                 </span>
               </button>
             </label>
+          </div>
+
+          <div class="settings-section">
+            <h3>{$t('settings.notesTasksSection')}</h3>
+
+            <div class="setting-item input-item">
+              <span class="setting-info">
+                <span class="setting-label">{$t('settings.notesDefaultScope')}</span>
+                <span class="setting-desc">{$t('settings.notesDefaultScopeDesc')}</span>
+              </span>
+              <Select
+                value={$settings.notesDefaultScope || 'last'}
+                options={notesDefaultOptions}
+                on:change={(e) => saveSettings({ notesDefaultScope: e.detail as NotesDefaultScope })}
+              />
+            </div>
+
+            <div class="setting-item input-item">
+              <span class="setting-info">
+                <span class="setting-label">{$t('settings.tasksDefaultFilter')}</span>
+                <span class="setting-desc">{$t('settings.tasksDefaultFilterDesc')}</span>
+              </span>
+              <Select
+                value={$settings.tasksDefaultFilter || 'last'}
+                options={tasksDefaultOptions}
+                on:change={(e) => saveSettings({ tasksDefaultFilter: e.detail as TasksDefaultFilter })}
+              />
+            </div>
           </div>
 
         {/if}

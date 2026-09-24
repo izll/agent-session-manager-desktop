@@ -152,6 +152,14 @@
     }
   }
 
+  // A default fixed in the settings applies each time the panel is opened; the
+  // toggle still changes it for as long as the panel stays open. "last" keeps
+  // whatever was used last, as remembered above.
+  function applyDefaultTabFilter() {
+    const fixed = get(settings)?.tasksDefaultFilter;
+    if (fixed === 'all' || fixed === 'tab') tabFilter = fixed;
+  }
+
   function setTabFilter(value: TaskTabFilter) {
     tabFilter = value;
     try {
@@ -467,6 +475,7 @@
   let wasActive = false;
   $: if (active && !wasActive) {
     wasActive = true;
+    applyDefaultTabFilter();
     loadTasksIfNeeded(true);
   } else if (!active) {
     wasActive = false;

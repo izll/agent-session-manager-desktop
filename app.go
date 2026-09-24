@@ -4614,6 +4614,26 @@ func resumeSessionDisplayName(s session.AgentSession) string {
 // Settings
 // ============================================================================
 
+// lastUsedIfUnset names the stored empty value of a view default: "last",
+// open on whatever was used last.
+func lastUsedIfUnset(value string) string {
+	if value == "" {
+		return "last"
+	}
+	return value
+}
+
+// storedViewDefault keeps one of the allowed fixed values and stores anything
+// else — "last" included — as empty, which is "the one used last".
+func storedViewDefault(value string, allowed ...string) string {
+	for _, option := range allowed {
+		if value == option {
+			return value
+		}
+	}
+	return ""
+}
+
 // SettingsInfo represents settings for frontend
 type SettingsInfo struct {
 	CompactList     bool `json:"compactList"`
@@ -4647,6 +4667,8 @@ type SettingsInfo struct {
 	// no way to know which platform it is running on.
 	ShellChoices       []session.ShellChoice `json:"shellChoices"`
 	GitBranchDisplay   string                `json:"gitBranchDisplay"`
+	NotesDefaultScope  string                `json:"notesDefaultScope"`
+	TasksDefaultFilter string                `json:"tasksDefaultFilter"`
 	DiffFlatFileList   bool                  `json:"diffFlatFileList"`
 	TrashRetentionDays int                   `json:"trashRetentionDays"`
 	TaskMasterEnabled  bool                  `json:"taskMasterEnabled"`
@@ -4766,6 +4788,8 @@ func (a *App) GetSettings() (*SettingsInfo, error) {
 		TerminalCopyMode:          copyMode,
 		TerminalFontFamily:        settings.TerminalFontFamily,
 		GitBranchDisplay:          branchDisplay,
+		NotesDefaultScope:         lastUsedIfUnset(settings.NotesDefaultScope),
+		TasksDefaultFilter:        lastUsedIfUnset(settings.TasksDefaultFilter),
 		DiffFlatFileList:          settings.DiffFlatFileList,
 		TrashRetentionDays:        settings.TrashRetentionDays,
 		TaskMasterEnabled:         settings.TaskMasterEnabled,
@@ -4852,6 +4876,8 @@ func (a *App) SaveSettings(settings SettingsInfo, expectedProjectID string) erro
 		current.TerminalFontFamily = settings.TerminalFontFamily
 		current.TerminalShell = settings.TerminalShell
 		current.GitBranchDisplay = settings.GitBranchDisplay
+		current.NotesDefaultScope = storedViewDefault(settings.NotesDefaultScope, "tab", "session")
+		current.TasksDefaultFilter = storedViewDefault(settings.TasksDefaultFilter, "all", "tab")
 		current.DiffFlatFileList = settings.DiffFlatFileList
 		current.TrashRetentionDays = settings.TrashRetentionDays
 		current.TaskMasterEnabled = settings.TaskMasterEnabled

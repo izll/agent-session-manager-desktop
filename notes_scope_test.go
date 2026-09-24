@@ -41,3 +41,20 @@ func TestTheMainTabIsFoundWhateverItsIndex(t *testing.T) {
 		t.Errorf("the main tab at index 1 did not get its note: %+v", inst)
 	}
 }
+
+// The view defaults are stored empty for "the one used last", so configs
+// written before they existed keep today's behaviour, and only the known fixed
+// values are kept — anything else would be a default no view understands.
+func TestViewDefaultsRoundTrip(t *testing.T) {
+	if got := lastUsedIfUnset(""); got != "last" {
+		t.Errorf("an unset default reads as %q, want last", got)
+	}
+	if got := lastUsedIfUnset("session"); got != "session" {
+		t.Errorf("a fixed default reads as %q", got)
+	}
+	for in, want := range map[string]string{"tab": "tab", "session": "session", "last": "", "": "", "bogus": ""} {
+		if got := storedViewDefault(in, "tab", "session"); got != want {
+			t.Errorf("storing %q gave %q, want %q", in, got, want)
+		}
+	}
+}
