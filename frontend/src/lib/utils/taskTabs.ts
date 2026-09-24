@@ -103,3 +103,22 @@ export function filterTasksByTab<T extends TabAssignable>(
 export function parseTaskTabFilter(raw: unknown): TaskTabFilter {
   return raw === 'tab' ? 'tab' : 'all';
 }
+
+/**
+ * Which halves of the [All | This tab] switch have unfinished tasks behind
+ * them, for the dots on it. Unfinished is anything not done, as the backend
+ * counts it (deferred included). Unfinished rather than any: a finished list
+ * is not worth opening, and "All" would otherwise be marked nearly always.
+ */
+export function openTaskPresence<T extends TabAssignable & { status?: string }>(
+  tasks: T[],
+  currentTabId: string | null,
+  sessionId: string | null | undefined,
+  tabs: TaskTab[],
+): Record<TaskTabFilter, boolean> {
+  const open = tasks.filter(task => task.status !== 'done');
+  return {
+    all: open.length > 0,
+    tab: filterTasksByTab(open, 'tab', currentTabId, sessionId, tabs).length > 0,
+  };
+}

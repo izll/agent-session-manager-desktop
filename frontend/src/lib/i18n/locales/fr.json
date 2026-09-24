@@ -426,6 +426,7 @@
   "tasks.tabFilterLabel": "Afficher les tâches de",
   "tasks.tabFilterAll": "Toutes",
   "tasks.tabFilterThisTab": "Cet onglet",
+  "tasks.hasOpenTasks": "Contient des tâches en cours",
   "tasks.assignedTab": "Assignée à l’onglet « {name} »",
   "tasks.noTasksForTab": "Aucune tâche n’est assignée à cet onglet.",
   "tasks.addTaskBtn": "Ajouter la tâche",

@@ -426,6 +426,7 @@
   "tasks.tabFilterLabel": "Mostrar tarefas de",
   "tasks.tabFilterAll": "Todas",
   "tasks.tabFilterThisTab": "Esta aba",
+  "tasks.hasOpenTasks": "Tem tarefas em aberto",
   "tasks.assignedTab": "Atribuída à aba “{name}”",
   "tasks.noTasksForTab": "Nenhuma tarefa está atribuída a esta aba.",
   "tasks.addTaskBtn": "Adicionar Tarefa",

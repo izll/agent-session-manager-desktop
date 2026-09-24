@@ -426,6 +426,7 @@
   "tasks.tabFilterLabel": "Pokaż zadania",
   "tasks.tabFilterAll": "Wszystkie",
   "tasks.tabFilterThisTab": "Ta karta",
+  "tasks.hasOpenTasks": "Ma otwarte zadania",
   "tasks.assignedTab": "Przypisane do karty „{name}”",
   "tasks.noTasksForTab": "Do tej karty nie przypisano żadnych zadań.",
   "tasks.addTaskBtn": "Dodaj zadanie",

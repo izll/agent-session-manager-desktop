@@ -426,6 +426,7 @@
   "tasks.tabFilterLabel": "Mostra attività di",
   "tasks.tabFilterAll": "Tutte",
   "tasks.tabFilterThisTab": "Questa scheda",
+  "tasks.hasOpenTasks": "Ha attività aperte",
   "tasks.assignedTab": "Assegnata alla scheda «{name}»",
   "tasks.noTasksForTab": "Nessuna attività è assegnata a questa scheda.",
   "tasks.addTaskBtn": "Aggiungi Attività",

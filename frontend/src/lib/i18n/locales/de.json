@@ -426,6 +426,7 @@
   "tasks.tabFilterLabel": "Aufgaben anzeigen von",
   "tasks.tabFilterAll": "Alle",
   "tasks.tabFilterThisTab": "Dieser Tab",
+  "tasks.hasOpenTasks": "Hat offene Aufgaben",
   "tasks.assignedTab": "Dem Tab „{name}“ zugewiesen",
   "tasks.noTasksForTab": "Diesem Tab sind keine Aufgaben zugewiesen.",
   "tasks.addTaskBtn": "Aufgabe hinzufügen",

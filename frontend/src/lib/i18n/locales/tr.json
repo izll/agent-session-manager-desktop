@@ -426,6 +426,7 @@
   "tasks.tabFilterLabel": "Görevleri göster",
   "tasks.tabFilterAll": "Tümü",
   "tasks.tabFilterThisTab": "Bu sekme",
+  "tasks.hasOpenTasks": "Açık görevler var",
   "tasks.assignedTab": "“{name}” sekmesine atandı",
   "tasks.noTasksForTab": "Bu sekmeye atanmış görev yok.",
   "tasks.addTaskBtn": "Görev Ekle",

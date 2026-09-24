@@ -426,6 +426,7 @@
   "tasks.tabFilterLabel": "Taken tonen van",
   "tasks.tabFilterAll": "Alle",
   "tasks.tabFilterThisTab": "Dit tabblad",
+  "tasks.hasOpenTasks": "Heeft open taken",
   "tasks.assignedTab": "Toegewezen aan het tabblad “{name}”",
   "tasks.noTasksForTab": "Er zijn geen taken aan dit tabblad toegewezen.",
   "tasks.addTaskBtn": "Taak toevoegen",

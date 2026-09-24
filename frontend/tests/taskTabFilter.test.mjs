@@ -74,3 +74,17 @@ test('a stored filter that is not "tab" reads as "all"', () => {
     assert.equal(parseTaskTabFilter(raw), 'all');
   }
 });
+
+// The [All | This tab] switch marks which half has unfinished tasks, as the
+// notes switch marks which note has text.
+test('the task switch marks which half has unfinished tasks', async () => {
+  const { openTaskPresence } = await import('../src/lib/utils/taskTabs.ts');
+  const tabs = [{ id: 'main', name: 'Main' }, { id: 't1', name: 'Codex' }];
+  const task = (status, tabId) => ({ status, sessionId: 's', tabId });
+
+  assert.deepEqual(openTaskPresence([task('done', 't1')], 't1', 's', tabs), { all: false, tab: false },
+    'finished tasks mark a half as having work in it');
+  assert.deepEqual(openTaskPresence([task('backlog', 'main')], 't1', 's', tabs), { all: true, tab: false });
+  assert.deepEqual(openTaskPresence([task('deferred', 't1')], 't1', 's', tabs), { all: true, tab: true },
+    'deferred is unfinished, as the backend counts it');
+});

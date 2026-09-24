@@ -426,6 +426,7 @@
   "tasks.tabFilterLabel": "Visa uppgifter för",
   "tasks.tabFilterAll": "Alla",
   "tasks.tabFilterThisTab": "Den här fliken",
+  "tasks.hasOpenTasks": "Har öppna uppgifter",
   "tasks.assignedTab": "Tilldelad fliken ”{name}”",
   "tasks.noTasksForTab": "Inga uppgifter är tilldelade den här fliken.",
   "tasks.addTaskBtn": "Lägg till uppgift",

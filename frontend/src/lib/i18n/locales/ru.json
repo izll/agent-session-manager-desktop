@@ -426,6 +426,7 @@
   "tasks.tabFilterLabel": "Показать задачи",
   "tasks.tabFilterAll": "Все",
   "tasks.tabFilterThisTab": "Эта вкладка",
+  "tasks.hasOpenTasks": "Есть незавершённые задачи",
   "tasks.assignedTab": "Назначена вкладке «{name}»",
   "tasks.noTasksForTab": "Этой вкладке не назначено ни одной задачи.",
   "tasks.addTaskBtn": "Добавить задачу",

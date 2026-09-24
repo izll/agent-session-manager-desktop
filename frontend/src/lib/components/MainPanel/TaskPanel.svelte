@@ -22,6 +22,7 @@
     filterTasksByTab,
     parseTaskTabFilter,
     type TaskTabFilter,
+    openTaskPresence,
   } from '../../utils/taskTabs';
   import {
     tasks,
@@ -168,6 +169,11 @@
       // Not remembered, which is all that is lost.
     }
   }
+
+  // Dots on the switch: which of the two has unfinished tasks. From the whole
+  // list, not the searched and done-hidden one, so a search does not make the
+  // marks come and go.
+  $: tabPresence = openTaskPresence($tasks, currentTabId, $selectedSessionId, tabs);
 
   $: visibleTasks = filterTasksByTab($sortedFilteredTasks, tabFilter, currentTabId, $selectedSessionId, tabs);
 
@@ -1119,12 +1125,12 @@
           class:active={tabFilter === 'all'}
           aria-pressed={tabFilter === 'all'}
           on:click={() => setTabFilter('all')}
-        >{$t('tasks.tabFilterAll')}</button>
+        >{$t('tasks.tabFilterAll')}{#if tabPresence.all}<span class="filter-dot" aria-label={$t('tasks.hasOpenTasks')}></span>{/if}</button>
         <button
           class:active={tabFilter === 'tab'}
           aria-pressed={tabFilter === 'tab'}
           on:click={() => setTabFilter('tab')}
-        >{$t('tasks.tabFilterThisTab')}</button>
+        >{$t('tasks.tabFilterThisTab')}{#if tabPresence.tab}<span class="filter-dot" aria-label={$t('tasks.hasOpenTasks')}></span>{/if}</button>
       </div>
       <button
         class="hide-done-btn"
@@ -1973,8 +1979,8 @@
   }
 
   .tab-filter button {
-    padding: 0 8px;
-    font-size: 11px;
+    padding: 0 12px;
+    font-size: 12px;
     white-space: nowrap;
     background: rgba(255, 255, 255, 0.05);
     border: none;
@@ -1990,6 +1996,18 @@
   .tab-filter button:hover {
     background: rgba(255, 255, 255, 0.1);
     color: #9ca3af;
+  }
+
+  /* Like the notes switch's dot: this half has unfinished tasks. */
+  .filter-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    margin-left: 6px;
+    vertical-align: middle;
+    border-radius: 50%;
+    background: var(--accent-light);
+    opacity: 0.7;
   }
 
   .tab-filter button.active {

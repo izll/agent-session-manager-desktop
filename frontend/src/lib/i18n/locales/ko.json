@@ -426,6 +426,7 @@
   "tasks.tabFilterLabel": "작업 표시 범위",
   "tasks.tabFilterAll": "전체",
   "tasks.tabFilterThisTab": "이 탭",
+  "tasks.hasOpenTasks": "완료되지 않은 작업 있음",
   "tasks.assignedTab": "\"{name}\" 탭에 할당됨",
   "tasks.noTasksForTab": "이 탭에 할당된 작업이 없습니다.",
   "tasks.addTaskBtn": "작업 추가",

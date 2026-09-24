@@ -426,6 +426,7 @@
   "tasks.tabFilterLabel": "显示任务范围",
   "tasks.tabFilterAll": "全部",
   "tasks.tabFilterThisTab": "此标签页",
+  "tasks.hasOpenTasks": "有未完成的任务",
   "tasks.assignedTab": "已分配到标签页“{name}”",
   "tasks.noTasksForTab": "没有分配到此标签页的任务。",
   "tasks.addTaskBtn": "添加任务",

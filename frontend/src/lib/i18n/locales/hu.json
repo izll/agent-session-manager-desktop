@@ -422,6 +422,7 @@
   "tasks.tabFilterLabel": "Feladatok megjelenítése",
   "tasks.tabFilterAll": "Mind",
   "tasks.tabFilterThisTab": "Ez a fül",
+  "tasks.hasOpenTasks": "Van nyitott feladat",
   "tasks.assignedTab": "Ehhez a fülhöz rendelve: {name}",
   "tasks.noTasksForTab": "Ehhez a fülhöz nincs feladat rendelve.",
   "tasks.addTaskBtn": "Feladat hozzáadása",

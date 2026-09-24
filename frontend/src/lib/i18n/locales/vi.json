@@ -426,6 +426,7 @@
   "tasks.tabFilterLabel": "Hiển thị nhiệm vụ của",
   "tasks.tabFilterAll": "Tất cả",
   "tasks.tabFilterThisTab": "Tab này",
+  "tasks.hasOpenTasks": "Có công việc chưa xong",
   "tasks.assignedTab": "Đã giao cho tab “{name}”",
   "tasks.noTasksForTab": "Chưa có nhiệm vụ nào được giao cho tab này.",
   "tasks.addTaskBtn": "Thêm công việc",

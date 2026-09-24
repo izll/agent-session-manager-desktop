@@ -426,6 +426,7 @@
   "tasks.tabFilterLabel": "Показати завдання",
   "tasks.tabFilterAll": "Усі",
   "tasks.tabFilterThisTab": "Ця вкладка",
+  "tasks.hasOpenTasks": "Є незавершені завдання",
   "tasks.assignedTab": "Призначено вкладці «{name}»",
   "tasks.noTasksForTab": "Цій вкладці не призначено жодного завдання.",
   "tasks.addTaskBtn": "Додати завдання",

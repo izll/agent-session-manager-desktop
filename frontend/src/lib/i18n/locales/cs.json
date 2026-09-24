@@ -426,6 +426,7 @@
   "tasks.tabFilterLabel": "Zobrazit úkoly",
   "tasks.tabFilterAll": "Vše",
   "tasks.tabFilterThisTab": "Tato karta",
+  "tasks.hasOpenTasks": "Obsahuje nedokončené úkoly",
   "tasks.assignedTab": "Přiřazeno ke kartě „{name}“",
   "tasks.noTasksForTab": "K této kartě nejsou přiřazeny žádné úkoly.",
   "tasks.addTaskBtn": "Přidat úkol",

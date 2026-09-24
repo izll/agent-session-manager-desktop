@@ -426,6 +426,7 @@
   "tasks.tabFilterLabel": "Mostrar tareas de",
   "tasks.tabFilterAll": "Todas",
   "tasks.tabFilterThisTab": "Esta pestaña",
+  "tasks.hasOpenTasks": "Tiene tareas pendientes",
   "tasks.assignedTab": "Asignada a la pestaña «{name}»",
   "tasks.noTasksForTab": "No hay tareas asignadas a esta pestaña.",
   "tasks.addTaskBtn": "Añadir tarea",

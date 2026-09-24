@@ -426,6 +426,7 @@
   "tasks.tabFilterLabel": "表示するタスク",
   "tasks.tabFilterAll": "すべて",
   "tasks.tabFilterThisTab": "このタブ",
+  "tasks.hasOpenTasks": "未完了のタスクあり",
   "tasks.assignedTab": "タブ「{name}」に割り当て済み",
   "tasks.noTasksForTab": "このタブに割り当てられたタスクはありません。",
   "tasks.addTaskBtn": "タスクを追加",

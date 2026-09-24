@@ -426,6 +426,7 @@
   "tasks.tabFilterLabel": "แสดงงานของ",
   "tasks.tabFilterAll": "ทั้งหมด",
   "tasks.tabFilterThisTab": "แท็บนี้",
+  "tasks.hasOpenTasks": "มีงานที่ยังไม่เสร็จ",
   "tasks.assignedTab": "มอบหมายให้แท็บ “{name}”",
   "tasks.noTasksForTab": "ยังไม่มีงานที่มอบหมายให้แท็บนี้",
   "tasks.addTaskBtn": "เพิ่มงาน",

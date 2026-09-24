@@ -426,6 +426,7 @@
   "tasks.tabFilterLabel": "Show tasks of",
   "tasks.tabFilterAll": "All",
   "tasks.tabFilterThisTab": "This tab",
+  "tasks.hasOpenTasks": "Has unfinished tasks",
   "tasks.assignedTab": "Assigned to the tab “{name}”",
   "tasks.noTasksForTab": "No tasks are assigned to this tab.",
   "tasks.addTaskBtn": "Add Task",
