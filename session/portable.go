@@ -301,7 +301,11 @@ func (p PortableSession) FromPortable(groupID string) *Instance {
 	// Tab indices are assigned fresh: the exporting machine's tmux window
 	// numbers mean nothing here.
 	for i, t := range p.Tabs {
+		// A fresh tab ID as well, like the session's own: the snapshot does
+		// not carry one, and an imported or templated session is a new set of
+		// tabs rather than the ones it was copied from.
 		inst.FollowedWindows = append(inst.FollowedWindows, FollowedWindow{
+			ID:              newTabID(),
 			Index:           i + 1,
 			Name:            t.Name,
 			Agent:           t.Agent,

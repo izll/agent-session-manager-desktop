@@ -309,6 +309,11 @@ func (d *DiffStats) IsEmpty() bool {
 
 // FollowedWindow represents a tmux window tracked as an agent
 type FollowedWindow struct {
+	// ID names this tab for as long as it exists, whatever window index it is
+	// given along the way — see newTabID. Stored tabs from before this field
+	// get a derived one on load (backfillTabIDs); the session's own window,
+	// which is not a FollowedWindow, is MainTabID.
+	ID               string    `json:"id,omitempty"`
 	Index            int       `json:"index"`
 	Agent            AgentType `json:"agent"`
 	Name             string    `json:"name"`                         // Tab name for display
@@ -2129,6 +2134,7 @@ func (i *Instance) NewWindowWithNameOn(serverID string, name string, workDir str
 			}
 			return ""
 		}(),
+		ID:       newTabID(),
 		Index:    newIdx,
 		Agent:    AgentTerminal,
 		Name:     name,
@@ -2963,6 +2969,7 @@ func (i *Instance) GetFollowedWindow(index int) *FollowedWindow {
 func (i *Instance) getFollowedWindow(index, mainWindowIdx int) *FollowedWindow {
 	if index == mainWindowIdx {
 		return &FollowedWindow{
+			ID:              MainTabID,
 			Index:           mainWindowIdx,
 			Agent:           i.Agent,
 			Name:            i.Name,
@@ -2999,6 +3006,7 @@ func (i *Instance) ToggleWindowFollow(index int) bool {
 
 	// Add to followed with default agent (same as main)
 	i.FollowedWindows = append(i.FollowedWindows, FollowedWindow{
+		ID:    newTabID(),
 		Index: index,
 		Agent: i.Agent,
 		Name:  "",
@@ -3082,6 +3090,7 @@ func (i *Instance) ReorderTabs(fromPos, toPos int) error {
 func (i *Instance) GetAllFollowedAgents() []FollowedWindow {
 	result := []FollowedWindow{
 		{
+			ID:              MainTabID,
 			Index:           0,
 			Agent:           i.Agent,
 			Name:            i.Name,
@@ -3467,6 +3476,7 @@ func (i *Instance) NewAgentTab(req NewTabRequest) (int, error) {
 			}
 			return ""
 		}(),
+		ID:               newTabID(),
 		Index:            newIdx,
 		Agent:            agent,
 		Name:             name,
@@ -3653,6 +3663,7 @@ func (i *Instance) NewForkedTab(name string, sessionID string) (int, error) {
 	// Empty where the agent names its own branch (Codex); CaptureCodexResumeIDs
 	// fills it in once the agent has settled.
 	i.FollowedWindows = append(i.FollowedWindows, FollowedWindow{
+		ID:              newTabID(),
 		Index:           newIdx,
 		Agent:           i.Agent,
 		Name:            name,

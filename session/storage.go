@@ -1373,6 +1373,9 @@ func (s *Storage) loadStorageDataLocked() (*StorageData, error) {
 	if err := validateCanonicalStorageSafety(&storageData); err != nil {
 		return nil, fmt.Errorf("failed to validate config file: %w", err)
 	}
+	// Every reader goes through here, so every reader sees a tab ID — and the
+	// same one, since the IDs are derived rather than generated.
+	backfillTabIDs(&storageData)
 
 	return &storageData, nil
 }
