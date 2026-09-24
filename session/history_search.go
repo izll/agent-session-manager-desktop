@@ -242,6 +242,15 @@ func (h *HistoryIndex) appendHistoryEntry(entries *[]HistoryEntry, entry History
 // Search searches the history index for matching entries
 // Falls back to fuzzy search if no exact matches found
 func (h *HistoryIndex) Search(query string) []HistoryEntry {
+	results, _ := h.SearchWithMode(query)
+	return results
+}
+
+// SearchWithMode is Search that also says whether the results came from the
+// fuzzy fallback. A caller merging other sources needs to know: an exact hit
+// elsewhere must win over typo-tolerant guesses here, as it would within the
+// history itself.
+func (h *HistoryIndex) SearchWithMode(query string) (results []HistoryEntry, usedFuzzy bool) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if !h.loaded {
@@ -250,21 +259,22 @@ func (h *HistoryIndex) Search(query string) []HistoryEntry {
 
 	// Don't search with empty query
 	if query == "" {
-		return []HistoryEntry{}
+		return []HistoryEntry{}, false
 	}
 
 	// First try exact substring search
-	results := h.substringSearch(query)
+	results = h.substringSearch(query)
 
 	// If no results, fall back to fuzzy search
 	if len(results) == 0 {
 		results = h.fuzzySearchLocked(query)
+		usedFuzzy = len(results) > 0
 	}
 	if len(results) > historySearchResultLimit {
 		results = results[:historySearchResultLimit]
 	}
 
-	return results
+	return results, usedFuzzy
 }
 
 // substringSearch performs exact substring matching

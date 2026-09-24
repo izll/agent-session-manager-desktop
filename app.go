@@ -4418,7 +4418,19 @@ type HistoryEntryInfo struct {
 	Content   string `json:"content"`
 	SessionID string `json:"sessionId"`
 	Score     int    `json:"score"`
+	// Kind is "note" for a session or tab note and empty for a conversation.
+	// The fields below it describe notes only; for a note, SessionID is the
+	// ASMGR session, not an agent's conversation ID.
+	Kind        string `json:"kind,omitempty"`
+	SessionName string `json:"sessionName,omitempty"`
+	NoteScope   string `json:"noteScope,omitempty"`
+	TabID       string `json:"tabId,omitempty"`
+	TabName     string `json:"tabName,omitempty"`
+	WindowIdx   int    `json:"windowIdx"`
 }
+
+// historyKindNote marks a global search result that is a note.
+const historyKindNote = "note"
 
 // InitHistorySearch initializes history search index
 func (a *App) InitHistorySearch() error {
@@ -4461,24 +4473,79 @@ func (a *App) GlobalSearch(query string) ([]HistoryEntryInfo, error) {
 	index := a.historyIndex
 	a.historyMu.Unlock()
 
-	results := index.Search(query)
-	infos := make([]HistoryEntryInfo, len(results))
-	for i, r := range results {
-		infos[i] = HistoryEntryInfo{
+	results, historyFuzzy := index.SearchWithMode(query)
+
+	// Notes are read from storage on every query rather than indexed: they are
+	// small, change all the time, and a stale copy would find text the user
+	// has since deleted. Only the active project's sessions, as for the
+	// histories, whose index is dropped on every project switch.
+	instances, err := a.storage.LoadStoredInstances()
+	if err != nil {
+		return nil, err
+	}
+	return mergeSearchResults(results, historyFuzzy, instances, query), nil
+}
+
+// mergeSearchResults puts the note hits for query beside the history results.
+func mergeSearchResults(results []session.HistoryEntry, historyFuzzy bool, instances []*session.Instance, query string) []HistoryEntryInfo {
+	notes := session.SearchNotes(instances, query)
+	// One corpus, one rule: guesses only when nothing contains the query. The
+	// history index applies it within itself; across the two, an exact note
+	// hit must not sit beside fuzzy history guesses, nor the other way round.
+	if len(notes) > 0 && historyFuzzy {
+		results = nil
+	} else if len(notes) == 0 && (len(results) == 0 || historyFuzzy) {
+		notes = session.FuzzySearchNotes(instances, query)
+	}
+
+	// Notes first: there are few of them, they are the user's own words, and
+	// among two hundred conversation hits they would otherwise be lost.
+	infos := make([]HistoryEntryInfo, 0, len(notes)+len(results))
+	for _, n := range notes {
+		infos = append(infos, noteEntryInfo(n))
+	}
+	for _, r := range results {
+		infos = append(infos, HistoryEntryInfo{
 			ID:        r.ID,
 			Agent:     string(r.Agent),
 			Content:   r.Snippet,
 			SessionID: r.SessionID,
 			Score:     r.Score,
-		}
+		})
 	}
-	return infos, nil
+	return infos
+}
+
+func noteEntryInfo(n session.NoteMatch) HistoryEntryInfo {
+	return HistoryEntryInfo{
+		ID:          n.ID(),
+		Content:     n.Snippet,
+		SessionID:   n.SessionID,
+		Kind:        historyKindNote,
+		SessionName: n.SessionName,
+		NoteScope:   string(n.Scope),
+		TabID:       n.TabID,
+		TabName:     n.TabName,
+		WindowIdx:   n.WindowIndex,
+	}
 }
 
 // GetHistoryPreview loads conversation preview
 func (a *App) GetHistoryPreview(entryID string) (string, error) {
 	a.projectMu.RLock()
 	defer a.projectMu.RUnlock()
+	if session.IsNoteResultID(entryID) {
+		// Read now, not from the search: the note may have been edited since.
+		instances, err := a.storage.LoadStoredInstances()
+		if err != nil {
+			return "", err
+		}
+		note, ok := session.FindNote(instances, entryID)
+		if !ok {
+			return "", fmt.Errorf("note is no longer available")
+		}
+		return note.Text, nil
+	}
 	a.historyMu.Lock()
 	index := a.historyIndex
 	a.historyMu.Unlock()

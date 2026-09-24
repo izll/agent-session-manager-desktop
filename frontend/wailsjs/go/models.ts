@@ -852,6 +852,12 @@ export namespace main {
 	    content: string;
 	    sessionId: string;
 	    score: number;
+	    kind?: string;
+	    sessionName?: string;
+	    noteScope?: string;
+	    tabId?: string;
+	    tabName?: string;
+	    windowIdx: number;
 
 	    static createFrom(source: any = {}) {
 	        return new HistoryEntryInfo(source);
@@ -864,6 +870,12 @@ export namespace main {
 	        this.content = source["content"];
 	        this.sessionId = source["sessionId"];
 	        this.score = source["score"];
+	        this.kind = source["kind"];
+	        this.sessionName = source["sessionName"];
+	        this.noteScope = source["noteScope"];
+	        this.tabId = source["tabId"];
+	        this.tabName = source["tabName"];
+	        this.windowIdx = source["windowIdx"];
 	    }
 	}
 	export class ImportedScheme {
