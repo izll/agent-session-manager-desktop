@@ -128,7 +128,9 @@ const backend = new Proxy({
   GetAgents: async () => [{
     type: 'claude', name: 'Claude', icon: '', supportsResume: false, supportsAutoYes: true, supportsFork: false,
   }],
-  CreateSession: () => new Promise((resolve) => { resolveCreateSession = resolve; }),
+  // The dialog creates through CreateSessionWithWorktree; mocking only the
+  // older CreateSession left the click with nothing to call.
+  CreateSessionWithWorktree: () => new Promise((resolve) => { resolveCreateSession = resolve; }),
   StartSession: async (id: string) => { startSessionCalls.push(id); },
   GetSessionTemplates: async () => [],
   CreateGroup: async (name: string) => {
