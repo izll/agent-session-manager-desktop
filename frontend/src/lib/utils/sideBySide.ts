@@ -39,6 +39,37 @@ export function parseHunkHeader(header: string): { oldStart: number; newStart: n
   return { oldStart: Number(match[1]), newStart: Number(match[2]) };
 }
 
+/** What deciding on one column needs to know about a file's diff. */
+export interface DiffSides {
+  status?: string | null;
+  hunks?: Array<{ header?: string | null }> | null;
+}
+
+/**
+ * Whether a file's diff has only one side worth a column.
+ *
+ * A new file has no old text and a deleted one no new text, so two columns
+ * would put the whole file in one of them beside a column of nothing — half
+ * the width spent on an empty pane, and the file wrapped into the other half.
+ * Such a file is read in one column whichever layout is chosen.
+ *
+ * The status git reports ("new file mode" / "deleted file mode") is the
+ * signal. The hunk headers are the fallback for a diff that arrives without
+ * one: every hunk starting at -0,0 means there was nothing before, every one
+ * at +0,0 that nothing is left.
+ */
+export function hasOneSide(file: DiffSides | null | undefined): boolean {
+  if (!file) return false;
+  if (file.status === 'added' || file.status === 'deleted') return true;
+  const headers = (file.hunks ?? []).map((hunk) => hunk.header ?? '');
+  if (headers.length === 0) return false;
+  const ranges = headers.map((header) => header.match(/^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/));
+  if (ranges.some((range) => !range)) return false;
+  const empty = (start: string, count: string | undefined) => start === '0' && count === '0';
+  return ranges.every((range) => empty(range![1], range![2])) ||
+    ranges.every((range) => empty(range![3], range![4]));
+}
+
 /**
  * Pair up a hunk's lines into rows.
  *

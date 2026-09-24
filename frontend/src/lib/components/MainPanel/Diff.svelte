@@ -131,7 +131,7 @@
   import { fileTypeOf } from '../../utils/fileTypes';
   import { rememberPlace, recallPlace, noteListKey, cacheDiff, cachedDiff, invalidateDiffCache } from '../../utils/diffViewState';
   import { buildBlockPatch } from '../../utils/blockPatch';
-  import { parseHunkHeader } from '../../utils/sideBySide';
+  import { parseHunkHeader, hasOneSide } from '../../utils/sideBySide';
   import { activeProjectId } from '../../stores/projects';
 
   export let active = false;
@@ -997,7 +997,17 @@
    * the moment the diff opened, and reading a change in the file it lives in
    * is exactly when two columns help most.
    */
-  $: sideBySide = $settings.diffSideBySide === true;
+  $: sideBySideChosen = $settings.diffSideBySide === true;
+  /**
+   * What is on screen, which is not always what was chosen: a new or deleted
+   * file has only one side, and two columns would show it beside an empty one.
+   * The toggle keeps showing the choice, so the next modified file gets it.
+   *
+   * The list's summary answers before the file itself has loaded, so the
+   * renderer — and the scroll position remembered for it — does not change
+   * under a file as it arrives.
+   */
+  $: sideBySide = sideBySideChosen && !hasOneSide(selectedFile ?? selectedSummary);
 
   function setSideBySide(on: boolean) {
     void saveSettings({ diffSideBySide: on });
@@ -2098,9 +2108,9 @@
               >{wholeFileView ? $t('diff.wholeFile') : $t('diff.hunksOnly')}</button>
               <button
                 class="nav-btn"
-                class:active={sideBySide}
-                title={sideBySide ? $t('diff.showUnified') : $t('diff.showSideBySide')}
-                on:click={() => setSideBySide(!sideBySide)}
+                class:active={sideBySideChosen}
+                title={sideBySideChosen ? $t('diff.showUnified') : $t('diff.showSideBySide')}
+                on:click={() => setSideBySide(!sideBySideChosen)}
               >⫲</button>
               {#if sideBySide}
                 <!-- Only offered where it works: the other renderers keep

@@ -22,6 +22,7 @@
   import { highlightLine } from '../../utils/highlightLine';
   import { cachedLanguage, loadLanguage } from '../../utils/codemirror';
   import SideBySideDiff from '../MainPanel/SideBySideDiff.svelte';
+  import { hasOneSide } from '../../utils/sideBySide';
   import { settings, saveSettings } from '../../stores/settings';
 
   export let show = false;
@@ -96,7 +97,18 @@
    * Two aligned columns rather than one with markers. Shares the setting with
    * the diff view: it is one preference about how a diff is read, not two.
    */
-  $: sideBySide = $settings.diffSideBySide === true;
+  $: sideBySideChosen = $settings.diffSideBySide === true;
+  /**
+   * What is on screen: a file the commit added or deleted has only one side,
+   * and two columns would show it beside an empty one. The toggle keeps
+   * showing the choice, which the next modified file gets.
+   *
+   * The loaded diff is asked only once it is this file's — the previous one
+   * stays in place while the next loads — and the list's summary before that.
+   */
+  $: selectedSummary = files.find((file) => file.path === selectedPath) ?? null;
+  $: sideBySide = sideBySideChosen &&
+    !hasOneSide(diff && diff.path === selectedPath ? diff : selectedSummary);
 
   // Pane widths, dragged by the splitters between them.
   let branchWidth = 190;
@@ -1151,9 +1163,9 @@
                     >{wholeFile ? $t('diff.wholeFile') : $t('diff.hunksOnly')}</button>
                     <button
                       class="nav-btn"
-                      class:active={sideBySide}
-                      title={sideBySide ? $t('diff.showUnified') : $t('diff.showSideBySide')}
-                      on:click={() => saveSettings({ diffSideBySide: !sideBySide })}
+                      class:active={sideBySideChosen}
+                      title={sideBySideChosen ? $t('diff.showUnified') : $t('diff.showSideBySide')}
+                      on:click={() => saveSettings({ diffSideBySide: !sideBySideChosen })}
                     >⫲</button>
                   </span>
                 </div>
