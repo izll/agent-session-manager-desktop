@@ -25,6 +25,9 @@ func checkpointTestRepo(t *testing.T) string {
 	dashboardGit(t, repo, "config", "user.name", "Checkpoint Tester")
 	dashboardGit(t, repo, "config", "user.email", "checkpoint@example.invalid")
 	dashboardGit(t, repo, "config", "commit.gpgsign", "false")
+	// Windows runners default to autocrlf, which writes restored files with
+	// CRLF; the tests compare exact contents.
+	dashboardGit(t, repo, "config", "core.autocrlf", "false")
 	return repo
 }
 

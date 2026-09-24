@@ -65,6 +65,8 @@ func TestBackgroundConnectsAreDeduplicated(t *testing.T) {
 // closing brace at column zero.
 func functionBody(t *testing.T, source, signature string) string {
 	t.Helper()
+	// A Windows checkout has CRLF line endings.
+	source = strings.ReplaceAll(source, "\r\n", "\n")
 	at := strings.Index(source, signature)
 	if at < 0 {
 		t.Fatalf("%s is gone; this test needs rewriting", signature)
