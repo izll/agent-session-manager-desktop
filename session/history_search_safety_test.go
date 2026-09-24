@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"unicode/utf8"
 )
 
 func TestHistoryIndexLazyLoadIsConcurrent(t *testing.T) {
@@ -94,5 +95,24 @@ func TestHistorySearchResultAndIndexBudgets(t *testing.T) {
 	results := index.Search("needle")
 	if len(results) != historySearchResultLimit {
 		t.Fatalf("search returned %d results, want cap %d", len(results), historySearchResultLimit)
+	}
+}
+
+// A query with a capital in it never matched the lower-cased content, so the
+// snippet came from the start of the conversation instead of the match. And
+// slicing by bytes split an accented letter at either edge.
+func TestHistorySnippetsFindTheMatchAndKeepCharactersWhole(t *testing.T) {
+	h := &HistoryIndex{}
+	content := strings.Repeat("előzmény ", 20) + "itt van a Keresett szó " + strings.Repeat("árvíztűrő ", 20)
+
+	snippet := h.extractSnippet(content, "Keresett")
+	if !strings.Contains(snippet, "Keresett") {
+		t.Errorf("a capitalised query gave a snippet without the match: %q", snippet)
+	}
+	if !utf8.ValidString(snippet) {
+		t.Errorf("the snippet splits a character: %q", snippet)
+	}
+	if head := h.extractSnippet(strings.Repeat("ő", 80), "nincs"); !utf8.ValidString(head) {
+		t.Errorf("the no-match fallback splits a character: %q", head)
 	}
 }

@@ -16,6 +16,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode/utf8"
 
 	"github.com/sahilm/fuzzy"
 	_ "modernc.org/sqlite"
@@ -365,11 +366,16 @@ func (h *HistoryIndex) GetEntry(id string) (HistoryEntry, bool) {
 // extractSnippet extracts a relevant snippet around the query match
 func (h *HistoryIndex) extractSnippet(content, query string) string {
 	lower := strings.ToLower(content)
-	idx := strings.Index(lower, query)
-	if idx == -1 {
-		// Return beginning if no match found
+	// Lower-cased like the content, or a query with a capital in it never
+	// matched and the snippet came from the start of the conversation instead
+	// of from around the match.
+	idx := strings.Index(lower, strings.ToLower(query))
+	if idx == -1 || len(lower) != len(content) {
+		// No match — or lower-casing changed the byte length (a few letters
+		// do), so an offset into lower would not point at the same place in
+		// content. The beginning is the honest fallback either way.
 		if len(content) > 100 {
-			return content[:100] + "..."
+			return content[:runeBoundary(content, 100)] + "..."
 		}
 		return content
 	}
@@ -383,6 +389,10 @@ func (h *HistoryIndex) extractSnippet(content, query string) string {
 	if end > len(content) {
 		end = len(content)
 	}
+	// On character boundaries: cutting by bytes split an accented letter at
+	// either edge and showed a broken character.
+	start = runeBoundary(content, start)
+	end = runeBoundary(content, end)
 
 	snippet := content[start:end]
 
@@ -1084,3 +1094,15 @@ func generateHistoryID() string {
 }
 
 var historyIDCounter uint64
+
+// runeBoundary moves a byte offset back to the start of the character it
+// falls in, so a slice there never splits a multi-byte character.
+func runeBoundary(text string, offset int) int {
+	if offset >= len(text) {
+		return len(text)
+	}
+	for offset > 0 && !utf8.RuneStart(text[offset]) {
+		offset--
+	}
+	return offset
+}
