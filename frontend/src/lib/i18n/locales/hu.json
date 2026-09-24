@@ -262,6 +262,7 @@
   "notes.scopeSession": "Munkamenet",
   "notes.scopeTabHint": "Csak ennek a fülnek a jegyzete",
   "notes.scopeSessionHint": "Az egész munkamenet jegyzete, minden fülön ugyanaz",
+  "notes.hasNote": "Van jegyzet",
   "notes.saving": "Mentés...",
   "notes.unsaved": "Mentetlen",
   "notes.unsavedQuitTitle": "Mentetlen munkamenet-jegyzetek",

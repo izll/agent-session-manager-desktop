@@ -266,6 +266,7 @@
   "notes.scopeSession": "Сеанс",
   "notes.scopeTabHint": "Нотатка лише цієї вкладки",
   "notes.scopeSessionHint": "Нотатка всього сеансу, однакова на всіх вкладках",
+  "notes.hasNote": "Є нотатка",
   "notes.saving": "Збереження...",
   "notes.unsaved": "Не збережено",
   "notes.unsavedQuitTitle": "Незбережені нотатки сесії",

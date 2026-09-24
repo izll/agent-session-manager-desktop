@@ -266,6 +266,7 @@
   "notes.scopeSession": "Oturum",
   "notes.scopeTabHint": "Yalnızca bu sekmenin notu",
   "notes.scopeSessionHint": "Tüm oturumun notu, her sekmede aynı",
+  "notes.hasNote": "Not var",
   "notes.saving": "Kaydediliyor...",
   "notes.unsaved": "Kaydedilmedi",
   "notes.unsavedQuitTitle": "Kaydedilmemiş oturum notları",

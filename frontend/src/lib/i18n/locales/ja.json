@@ -266,6 +266,7 @@
   "notes.scopeSession": "セッション",
   "notes.scopeTabHint": "このタブだけのメモ",
   "notes.scopeSessionHint": "セッション全体のメモ（すべてのタブで共通）",
+  "notes.hasNote": "メモあり",
   "notes.saving": "保存中...",
   "notes.unsaved": "未保存",
   "notes.unsavedQuitTitle": "保存されていないセッションメモ",

@@ -266,6 +266,7 @@
   "notes.scopeSession": "会话",
   "notes.scopeTabHint": "仅此标签页的笔记",
   "notes.scopeSessionHint": "整个会话的笔记，所有标签页相同",
+  "notes.hasNote": "有笔记",
   "notes.saving": "保存中...",
   "notes.unsaved": "未保存",
   "notes.unsavedQuitTitle": "未保存的会话备注",

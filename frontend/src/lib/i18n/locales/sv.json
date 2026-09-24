@@ -266,6 +266,7 @@
   "notes.scopeSession": "Session",
   "notes.scopeTabHint": "Bara den här flikens anteckning",
   "notes.scopeSessionHint": "Hela sessionens anteckning, samma på varje flik",
+  "notes.hasNote": "Har en anteckning",
   "notes.saving": "Sparar...",
   "notes.unsaved": "Osparad",
   "notes.unsavedQuitTitle": "Osparade sessionsanteckningar",

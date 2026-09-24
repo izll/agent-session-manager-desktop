@@ -266,6 +266,7 @@
   "notes.scopeSession": "Phiên",
   "notes.scopeTabHint": "Ghi chú chỉ của tab này",
   "notes.scopeSessionHint": "Ghi chú của cả phiên, giống nhau trên mọi tab",
+  "notes.hasNote": "Có ghi chú",
   "notes.saving": "Đang lưu...",
   "notes.unsaved": "Chưa lưu",
   "notes.unsavedQuitTitle": "Ghi chú phiên chưa lưu",

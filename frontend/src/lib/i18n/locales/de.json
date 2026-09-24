@@ -266,6 +266,7 @@
   "notes.scopeSession": "Sitzung",
   "notes.scopeTabHint": "Nur die Notiz dieses Tabs",
   "notes.scopeSessionHint": "Die Notiz der ganzen Sitzung, auf jedem Tab gleich",
+  "notes.hasNote": "Hat eine Notiz",
   "notes.saving": "Speichern...",
   "notes.unsaved": "Ungespeichert",
   "notes.unsavedQuitTitle": "Ungespeicherte Sitzungsnotizen",

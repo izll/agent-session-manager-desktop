@@ -266,6 +266,7 @@
   "notes.scopeSession": "Sesión",
   "notes.scopeTabHint": "La nota solo de esta pestaña",
   "notes.scopeSessionHint": "La nota de toda la sesión, la misma en cada pestaña",
+  "notes.hasNote": "Tiene una nota",
   "notes.saving": "Guardando...",
   "notes.unsaved": "Sin guardar",
   "notes.unsavedQuitTitle": "Notas de sesión sin guardar",

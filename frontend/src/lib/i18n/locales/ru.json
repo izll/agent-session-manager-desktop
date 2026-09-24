@@ -266,6 +266,7 @@
   "notes.scopeSession": "Сессия",
   "notes.scopeTabHint": "Заметка только этой вкладки",
   "notes.scopeSessionHint": "Заметка всей сессии, одна на всех вкладках",
+  "notes.hasNote": "Есть заметка",
   "notes.saving": "Сохранение...",
   "notes.unsaved": "Не сохранено",
   "notes.unsavedQuitTitle": "Несохранённые заметки сессии",

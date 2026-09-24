@@ -266,6 +266,7 @@
   "notes.scopeSession": "الجلسة",
   "notes.scopeTabHint": "ملاحظة هذا التبويب فقط",
   "notes.scopeSessionHint": "ملاحظة الجلسة كلها، نفسها في كل تبويب",
+  "notes.hasNote": "توجد ملاحظة",
   "notes.saving": "جارٍ الحفظ...",
   "notes.unsaved": "غير محفوظ",
   "notes.unsavedQuitTitle": "ملاحظات جلسة غير محفوظة",

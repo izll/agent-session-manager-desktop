@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy, createEventDispatcher, tick } from 'svelte';
-  import { selectedSessionId, selectedWindowIdx } from '../../stores/sessions';
+  import { selectedSessionId, selectedWindowIdx, sessions } from '../../stores/sessions';
+  import { notePresence } from '../../utils/noteScope';
   import { get } from 'svelte/store';
   import * as App from '../../../../wailsjs/go/main/App';
   import { createFieldDictation } from '../../utils/dictationField';
@@ -47,6 +48,22 @@
       // Storage unavailable: the choice holds until the view is closed.
     }
   }
+
+  // Which of the two notes have something in them, for the dots on the
+  // switch: seeing an empty note is only worth a click if the other is not
+  // empty too. Recomputed as the text, the target and the session list change.
+  $: notesSession = $sessions.find(s => s.id === $selectedSessionId);
+  $: presence = notePresence({
+    open: scope,
+    openText: notes,
+    otherDraft: draftsByTarget.get(noteKey(
+      $activeProjectId, $selectedSessionId ?? '',
+      scope === 'tab' ? SESSION_NOTES : $selectedWindowIdx,
+    ))?.text,
+    storedTab: (notesSession?.followedWindows?.find(w => w.index === $selectedWindowIdx)?.notes
+      ?? notesSession?.mainTabNotes) || '',
+    storedSession: notesSession?.notes || '',
+  });
 
   function targetWindowIdx(): number {
     return scope === 'session' ? SESSION_NOTES : get(selectedWindowIdx);
@@ -581,14 +598,14 @@
         aria-pressed={scope === 'tab'}
         title={$t('notes.scopeTabHint')}
         on:click={() => setScope('tab')}
-      >{$t('notes.scopeTab')}</button>
+      >{$t('notes.scopeTab')}{#if presence.tab}<span class="scope-dot" aria-label={$t('notes.hasNote')}></span>{/if}</button>
       <button
         type="button"
         class:selected={scope === 'session'}
         aria-pressed={scope === 'session'}
         title={$t('notes.scopeSessionHint')}
         on:click={() => setScope('session')}
-      >{$t('notes.scopeSession')}</button>
+      >{$t('notes.scopeSession')}{#if presence.session}<span class="scope-dot" aria-label={$t('notes.hasNote')}></span>{/if}</button>
     </div>
     <div class="header-actions">
       {#if saving}
@@ -723,6 +740,18 @@
   }
   .scope-switch button:hover {
     color: #e4e4e7;
+  }
+  /* The same dot the Notes view tab carries, on whichever of the two notes
+     has something in it. */
+  .scope-dot {
+    display: inline-block;
+    width: 5px;
+    height: 5px;
+    margin-left: 5px;
+    vertical-align: middle;
+    border-radius: 50%;
+    background: var(--accent-light);
+    opacity: 0.7;
   }
   .scope-switch button.selected {
     background: rgba(var(--accent-rgb), 0.18);

@@ -266,6 +266,7 @@
   "notes.scopeSession": "세션",
   "notes.scopeTabHint": "이 탭만의 메모",
   "notes.scopeSessionHint": "세션 전체의 메모, 모든 탭에서 동일",
+  "notes.hasNote": "메모 있음",
   "notes.saving": "저장 중...",
   "notes.unsaved": "저장되지 않음",
   "notes.unsavedQuitTitle": "저장되지 않은 세션 메모",

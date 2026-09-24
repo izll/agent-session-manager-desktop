@@ -266,6 +266,7 @@
   "notes.scopeSession": "Sessie",
   "notes.scopeTabHint": "Alleen de notitie van dit tabblad",
   "notes.scopeSessionHint": "De notitie van de hele sessie, op elk tabblad dezelfde",
+  "notes.hasNote": "Heeft een notitie",
   "notes.saving": "Opslaan...",
   "notes.unsaved": "Niet opgeslagen",
   "notes.unsavedQuitTitle": "Niet-opgeslagen sessienotities",

@@ -69,3 +69,25 @@ test('the settings can fix what the notes and task views open on', () => {
   assert.match(settingsStore, /notesDefaultScope: 'last',/, 'a fresh install does not start on "last used"');
   assert.match(settingsStore, /tasksDefaultFilter: 'last',/);
 });
+
+// Each half of the switch carries a dot when its note has something in it,
+// so an empty note is not opened just to find out.
+test('the switch marks which note has something in it', async () => {
+  const { notePresence } = await import('../src/lib/utils/noteScope.ts');
+  const base = { storedTab: '', storedSession: '' };
+
+  // The open note follows what is typed, saved or not.
+  assert.deepEqual(notePresence({ ...base, open: 'tab', openText: 'draft' }), { tab: true, session: false });
+  assert.deepEqual(notePresence({ ...base, open: 'tab', openText: '   ' }), { tab: false, session: false },
+    'whitespace alone counts as a note');
+
+  // The other note: this view's own copy wins over the stored one, which the
+  // session list may not have caught up with yet.
+  assert.deepEqual(notePresence({ open: 'tab', openText: '', otherDraft: '', storedTab: '', storedSession: 'old' }),
+    { tab: false, session: false }, 'a note just emptied still shows its stored text');
+  assert.deepEqual(notePresence({ open: 'session', openText: 'x', storedTab: 'kept', storedSession: '' }),
+    { tab: true, session: true });
+
+  assert.match(notes, /\{#if presence\.tab\}<span class="scope-dot"/);
+  assert.match(notes, /\{#if presence\.session\}<span class="scope-dot"/);
+});

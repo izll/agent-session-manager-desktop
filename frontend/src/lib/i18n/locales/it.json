@@ -266,6 +266,7 @@
   "notes.scopeSession": "Sessione",
   "notes.scopeTabHint": "La nota solo di questa scheda",
   "notes.scopeSessionHint": "La nota dell'intera sessione, uguale su ogni scheda",
+  "notes.hasNote": "Contiene una nota",
   "notes.saving": "Salvataggio...",
   "notes.unsaved": "Non salvato",
   "notes.unsavedQuitTitle": "Note della sessione non salvate",

@@ -266,6 +266,7 @@
   "notes.scopeSession": "เซสชัน",
   "notes.scopeTabHint": "โน้ตของแท็บนี้เท่านั้น",
   "notes.scopeSessionHint": "โน้ตของทั้งเซสชัน เหมือนกันทุกแท็บ",
+  "notes.hasNote": "มีโน้ต",
   "notes.saving": "กำลังบันทึก...",
   "notes.unsaved": "ยังไม่ได้บันทึก",
   "notes.unsavedQuitTitle": "บันทึกเซสชันที่ยังไม่ได้บันทึก",

@@ -266,6 +266,7 @@
   "notes.scopeSession": "Relace",
   "notes.scopeTabHint": "Poznámka jen této záložky",
   "notes.scopeSessionHint": "Poznámka celé relace, stejná na každé záložce",
+  "notes.hasNote": "Obsahuje poznámku",
   "notes.saving": "Ukládání...",
   "notes.unsaved": "Neuloženo",
   "notes.unsavedQuitTitle": "Neuložené poznámky relace",

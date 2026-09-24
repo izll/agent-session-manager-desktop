@@ -266,6 +266,7 @@
   "notes.scopeSession": "Session",
   "notes.scopeTabHint": "La note de cet onglet uniquement",
   "notes.scopeSessionHint": "La note de toute la session, la même sur chaque onglet",
+  "notes.hasNote": "Contient une note",
   "notes.saving": "Enregistrement...",
   "notes.unsaved": "Non enregistré",
   "notes.unsavedQuitTitle": "Notes de session non enregistrées",

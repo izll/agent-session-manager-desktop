@@ -266,6 +266,7 @@
   "notes.scopeSession": "Sesja",
   "notes.scopeTabHint": "Notatka tylko tej karty",
   "notes.scopeSessionHint": "Notatka całej sesji, taka sama na każdej karcie",
+  "notes.hasNote": "Zawiera notatkę",
   "notes.saving": "Zapisywanie...",
   "notes.unsaved": "Niezapisane",
   "notes.unsavedQuitTitle": "Niezapisane notatki sesji",
