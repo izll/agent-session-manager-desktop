@@ -6,6 +6,34 @@ Entries describe what changed for someone using the app. Internal refactoring,
 test and CI work is left out unless it changed behaviour. Dates are release
 dates; the format follows [Keep a Changelog](https://keepachangelog.com).
 
+## 1.1.13 — 2026-09-25
+
+### Added
+
+- **Codex starts without its background server.** Codex 0.157 runs its
+  sessions through a shared background server that ignores the YOLO flag,
+  so Codex asked for approval and ran in a sandbox, and the server
+  sometimes failed to start. The app now starts Codex with `--no-daemon`
+  when the installed version supports it. Settings → Agents → Codex turns
+  the background server back on, with a warning about the bug.
+- **A conversation the background server still holds** is continued
+  through it rather than locked out, with a notice that YOLO is not in
+  effect for it and a button that stops the server.
+- **Codex tabs show whether YOLO is really in effect**, read from Codex's
+  own record of the conversation. YOLO that was asked for but is not in
+  effect shows as an amber, struck-through badge.
+- **Updates are checked for every 12 hours while the app runs**, not only
+  at launch.
+- **A new or deleted file is shown in one column** in the side-by-side
+  diff, in the working-tree diff and in the commit history.
+
+### Fixed
+
+- **The YOLO button and badge stayed on after switching Claude to its
+  default mode**, because the default mode was not recognised.
+- **The YOLO button on a Codex tab looked off while YOLO was on**, so a
+  click to switch it on switched it off and restarted the session.
+
 ## 1.1.12 — 2026-09-24
 
 ### Added
