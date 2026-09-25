@@ -6,6 +6,37 @@ Entries describe what changed for someone using the app. Internal refactoring,
 test and CI work is left out unless it changed behaviour. Dates are release
 dates; the format follows [Keep a Changelog](https://keepachangelog.com).
 
+## 1.1.14 — 2026-09-25
+
+### Added
+
+- **An agent's pending update shows in the session list and the tab bar.**
+  An "↑" marks a tab whose agent has a new version: blue when one is
+  available, amber when the agent is waiting for an answer about it (Codex's
+  update prompt), green when it is installed and the tab needs a restart.
+  The tooltip says what to do. Codex, Claude Code and Amazon Q are matched
+  on notices seen live; Gemini CLI, Aider, OpenCode and Cursor on their
+  source. Codex's update prompt now counts as waiting for input, so it
+  raises the usual attention. It can be hidden in Settings → General →
+  Session list.
+- **Old checkpoints can be cleaned up.** The Checkpoints dialog deletes
+  those older than 7, 30 or 90 days, or the automatic "before restore"
+  ones, after a confirmation that gives the count. Settings → Maintenance
+  can delete them automatically (off by default); the five newest are always
+  kept, and a "before restore" checkpoint from the last day is never
+  deleted in bulk.
+- **Restart the tab from the Codex background-server notice.** Once the
+  server is stopped, the notice restarts exactly that tab, so it comes back
+  without the server and with YOLO.
+
+### Fixed
+
+- **A session's tabs are listed in the tab bar's order** in the session
+  list; a reordered tab sat elsewhere there.
+- **The YOLO button on a tab can turn off the tab's own YOLO**, and it now
+  restarts only that tab. A click used to set the session's YOLO instead,
+  so the button could never be turned off.
+
 ## 1.1.13 — 2026-09-25
 
 ### Added
