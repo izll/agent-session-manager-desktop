@@ -1,5 +1,6 @@
 import { writable } from 'svelte/store';
 import * as App from '../../../wailsjs/go/main/App';
+import type { UpdateNotice } from '../utils/updateBadge';
 
 // Map of session ID to last output line
 export const statusLines = writable<Record<string, string>>({});
@@ -58,6 +59,9 @@ export interface TabStatusInfo {
   // Set when this tab's server answered but holds no window for it: the tab
   // is waiting to be started there, not failing.
   missing?: boolean;
+  // The agent's own notice that a newer version is waiting. A blocking one
+  // (Codex's update prompt) also makes activity 'waiting'.
+  update?: UpdateNotice;
 }
 
 // Map of session ID to array of tab statuses (only for multi-tab sessions)

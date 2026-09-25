@@ -17,6 +17,8 @@
   import { focusTerminal } from '../../utils/focus';
   import type { TabStatusInfo } from '../../stores/statusLines';
   import { yoloBadge } from '../../utils/yoloBadge';
+  import { updateBadge, updateTooltip } from '../../utils/updateBadge';
+  import { getAgentName } from '../../stores/agents';
   import { sortByTabOrder } from '../../utils/tabOrder';
   import { afterUnsavedChanges } from '../../stores/unsavedChanges';
   import { activeProjectId } from '../../stores/projects';
@@ -101,8 +103,16 @@
   // The backend lists tabs in the order they were created; the tab bar shows
   // them in the order the user dragged them into.
   $: orderedTabStatuses = sortByTabOrder(tabStatuses, session.tabOrder, (tab) => tab.windowIdx);
-  $: tabRowVisible = (tab: { statusLine?: string; yolo?: boolean; yoloNotInEffect?: boolean }) =>
-    !!tab.statusLine || (!!yoloBadge(tab) && showYolo);
+  $: tabRowVisible = (tab: TabStatusInfo) =>
+    !!tab.statusLine || (!!yoloBadge(tab) && showYolo) || (!!updateBadge(tab) && showUpdate);
+
+  // An agent's own "newer version" notice, per tab: next to the name for a
+  // single tab, at the end of the tab's row otherwise — where YOLO goes.
+  $: showUpdate = !$settings?.hideUpdateBadge;
+  $: nameUpdateTab = sessionStatus === 'running' && tabStatuses.length === 1 ? tabStatuses[0] : null;
+  // Rebuilt when the language changes, so the tooltip follows it.
+  $: updateTitle = (tab: TabStatusInfo | null) =>
+    updateTooltip(tab, getAgentName(tab?.agent ?? '')).map((m) => $t(m.key, m.params)).join('\n');
 
   // Unique agent types for multi-agent sessions (only when 2+ different agents)
   $: uniqueAgents = (() => {
@@ -415,6 +425,9 @@
         <span class="badge yolo" class:not-in-effect={nameYolo === 'notInEffect'}
           title={$t(nameYolo === 'on' ? 'sessionItem.yoloTooltip' : 'sessionItem.yoloNotInEffect')}>Y</span>
       {/if}
+      {#if updateBadge(nameUpdateTab) && showUpdate}
+        <span class="badge update {updateBadge(nameUpdateTab)}" title={updateTitle(nameUpdateTab)}>&#8593;</span>
+      {/if}
     </div>
   </div>
 
@@ -429,18 +442,21 @@
             <span>{tab.spinnerText || tab.statusLine || ''}</span>
             {#if $settings?.showAgentIcons}<AgentIcon agent={tab.agent} size="xs" />{/if}
             {#if yoloBadge(tab) && showYolo}<span class="badge yolo" class:not-in-effect={yoloBadge(tab) === 'notInEffect'} title={$t(yoloBadge(tab) === 'on' ? 'sessionItem.yoloTooltip' : 'sessionItem.yoloNotInEffect')}>Y</span>{/if}
+            {#if updateBadge(tab) && showUpdate}<span class="badge update {updateBadge(tab)}" title={updateTitle(tab)}>&#8593;</span>{/if}
           </div>
         {:else if tab.activity === 'waiting'}
           <div class="status-text waiting tab-status">
             <span>{$t('sessionItem.waitingInput')}</span>
             {#if $settings?.showAgentIcons}<AgentIcon agent={tab.agent} size="xs" />{/if}
             {#if yoloBadge(tab) && showYolo}<span class="badge yolo" class:not-in-effect={yoloBadge(tab) === 'notInEffect'} title={$t(yoloBadge(tab) === 'on' ? 'sessionItem.yoloTooltip' : 'sessionItem.yoloNotInEffect')}>Y</span>{/if}
+            {#if updateBadge(tab) && showUpdate}<span class="badge update {updateBadge(tab)}" title={updateTitle(tab)}>&#8593;</span>{/if}
           </div>
         {:else if tabRowVisible(tab)}
           <div class="status-text tab-status">
             <span>{tab.statusLine}</span>
             {#if $settings?.showAgentIcons}<AgentIcon agent={tab.agent} size="xs" />{/if}
             {#if yoloBadge(tab) && showYolo}<span class="badge yolo" class:not-in-effect={yoloBadge(tab) === 'notInEffect'} title={$t(yoloBadge(tab) === 'on' ? 'sessionItem.yoloTooltip' : 'sessionItem.yoloNotInEffect')}>Y</span>{/if}
+            {#if updateBadge(tab) && showUpdate}<span class="badge update {updateBadge(tab)}" title={updateTitle(tab)}>&#8593;</span>{/if}
           </div>
         {/if}
       {/each}
@@ -704,6 +720,35 @@
     background: rgba(251, 191, 36, 0.1);
     border-color: rgba(251, 191, 36, 0.3);
     text-decoration: line-through;
+  }
+
+  /* An agent update: blue when it can wait, amber when the agent is sitting
+     on the prompt, green when installed and only a restart is left. */
+  .badge.update {
+    color: #60a5fa;
+    background: rgba(96, 165, 250, 0.1);
+    border: 1px solid rgba(96, 165, 250, 0.3);
+    font-size: 9px;
+  }
+
+  .badge.update.blocking {
+    color: #fbbf24;
+    background: rgba(251, 191, 36, 0.1);
+    border-color: rgba(251, 191, 36, 0.3);
+  }
+
+  .badge.update.restart {
+    color: #4ade80;
+    background: rgba(74, 222, 128, 0.1);
+    border-color: rgba(74, 222, 128, 0.3);
+  }
+
+  .status-text.tab-status .badge.update {
+    flex: 0 0 auto;
+    overflow: visible;
+    padding: 0 4px;
+    line-height: 13px;
+    align-self: center;
   }
 
   .status-text {

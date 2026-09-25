@@ -3164,6 +3164,10 @@ type TabStatusInfo struct {
 	// HideStatusLine: per-tab user preference — the session list omits this
 	// tab's status line row when set.
 	HideStatusLine bool `json:"hideStatusLine"`
+	// Update: the agent's own notice that a newer version is waiting, read
+	// from the same capture as Activity. A blocking one also makes Activity
+	// "waiting".
+	Update *session.UpdateNotice `json:"update,omitempty"`
 }
 
 // tabWindowMissing reports a tab on a server whose server answered but has no
@@ -3498,7 +3502,8 @@ func (a *App) getSidebarUpdates(ctx context.Context) SidebarUpdate {
 			bestWindowIdx := 0
 
 			for wi, w := range windows {
-				activity, activityValid := inst.DetectActivityForWindowWithValidityContext(ctx, w.idx)
+				reading := inst.ReadTabContext(ctx, w.idx)
+				activity, activityValid := reading.Activity, reading.Valid
 				validActivityWindows[w.idx] = activityValid
 				info := inst.GetStatusInfoForWindowContext(ctx, w.idx, w.agent)
 
@@ -3531,6 +3536,7 @@ func (a *App) getSidebarUpdates(ctx context.Context) SidebarUpdate {
 					Unreachable:     !inst.WindowReachable(w.idx),
 					Missing:         tabWindowMissing(inst, w.idx, activityValid),
 					HideStatusLine:  w.hideLine,
+					Update:          reading.Update,
 				})
 
 				if activity == session.ActivityWaiting {
@@ -4765,6 +4771,7 @@ type SettingsInfo struct {
 	DictationSendWithoutEnter bool   `json:"dictationSendWithoutEnter"`
 	CodexUseDaemon            bool   `json:"codexUseDaemon"`
 	HideYoloBadge             bool   `json:"hideYoloBadge"`
+	HideUpdateBadge           bool   `json:"hideUpdateBadge"`
 	ShowResumeBadge           bool   `json:"showResumeBadge"`
 	HideRemoteBadge           bool   `json:"hideRemoteBadge"`
 	SplitView                 bool   `json:"splitView"`
@@ -4892,6 +4899,7 @@ func (a *App) GetSettings() (*SettingsInfo, error) {
 		DictationSendWithoutEnter: settings.DictationSendWithoutEnter,
 		CodexUseDaemon:            settings.CodexUseDaemon,
 		HideYoloBadge:             settings.HideYoloBadge,
+		HideUpdateBadge:           settings.HideUpdateBadge,
 		ShowResumeBadge:           settings.ShowResumeBadge,
 		HideRemoteBadge:           settings.HideRemoteBadge,
 		SplitView:                 settings.SplitView,
@@ -4983,6 +4991,7 @@ func (a *App) SaveSettings(settings SettingsInfo, expectedProjectID string) erro
 		current.DictationSendWithoutEnter = settings.DictationSendWithoutEnter
 		current.CodexUseDaemon = settings.CodexUseDaemon
 		current.HideYoloBadge = settings.HideYoloBadge
+		current.HideUpdateBadge = settings.HideUpdateBadge
 		current.ShowResumeBadge = settings.ShowResumeBadge
 		current.HideRemoteBadge = settings.HideRemoteBadge
 		current.SplitView = settings.SplitView

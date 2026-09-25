@@ -261,8 +261,26 @@ func (i *Instance) DetectActivityForWindowWithValidity(windowIdx int) (SessionAc
 // DetectActivityForWindowWithValidityContext is the cancellable form used by
 // lifecycle-owned polling work.
 func (i *Instance) DetectActivityForWindowWithValidityContext(ctx context.Context, windowIdx int) (SessionActivity, bool) {
+	reading := i.ReadTabContext(ctx, windowIdx)
+	return reading.Activity, reading.Valid
+}
+
+// TabReading is what one capture of a tab's pane says about it.
+type TabReading struct {
+	Activity SessionActivity
+	// Valid is false when the pane could not be read; Activity is then idle
+	// only for want of anything better.
+	Valid bool
+	// Update is the agent's own update notice, when it shows one.
+	Update *UpdateNotice
+}
+
+// ReadTabContext reads a tab's activity and any update notice from a single
+// capture of its pane — the sidebar poll needs both, and a second capture per
+// tab per tick would cost a round trip for a few lines of text.
+func (i *Instance) ReadTabContext(ctx context.Context, windowIdx int) TabReading {
 	if !i.windowAliveContext(ctx, windowIdx) {
-		return ActivityIdle, false
+		return TabReading{Activity: ActivityIdle}
 	}
 
 	target := i.GetCaptureTargetContext(ctx, windowIdx)
@@ -283,7 +301,7 @@ func (i *Instance) DetectActivityForWindowWithValidityContext(ctx context.Contex
 
 	// Terminal tabs are not AI agents - skip activity detection entirely
 	if agent == AgentTerminal {
-		return ActivityIdle, true
+		return TabReading{Activity: ActivityIdle, Valid: true}
 	}
 
 	// Through the window's own executor: a tab on a server has its pane there,
@@ -295,10 +313,23 @@ func (i *Instance) DetectActivityForWindowWithValidityContext(ctx context.Contex
 	output, err := i.execOn(i.serverForWindow(windowIdx)).Output(commandCtx,
 		"capture-pane", "-t", target, "-p", "-S", "-50")
 	if err != nil {
-		return ActivityIdle, false
+		return TabReading{Activity: ActivityIdle}
 	}
 
 	lines := strings.Split(string(output), "\n")
+	activity, update := classifyPaneContext(ctx, agent, lines, target)
+	return TabReading{Activity: withBusyGrace(activity, target), Valid: true, Update: update}
+}
+
+// classifyPaneContext reads an agent's activity and update notice from the
+// lines of one capture of its pane.
+//
+// An update prompt that blocks the agent makes the tab waiting whatever else
+// the pane shows. Codex puts its prompt up before its composer takes input,
+// and nothing on that screen is one of its approval phrases: the tab read as
+// idle, and a session parked on "Press enter to continue" never asked for
+// attention.
+func classifyPaneContext(ctx context.Context, agent AgentType, lines []string, target string) (SessionActivity, *UpdateNotice) {
 	patterns := getAgentPatterns(agent)
 
 	var activity SessionActivity
@@ -314,16 +345,24 @@ func (i *Instance) DetectActivityForWindowWithValidityContext(ctx context.Contex
 		activity = detectGenericActivityContext(ctx, lines, patterns, target)
 	}
 
-	// Apply busy grace period: if we detected busy, update the timestamp.
-	// If we got idle but were busy recently, keep reporting busy.
+	update := DetectUpdateNotice(agent, lines)
+	if update != nil && update.Blocking {
+		activity = ActivityWaiting
+	}
+	return activity, update
+}
+
+// withBusyGrace applies the busy grace period: if we detected busy, update the
+// timestamp. If we got idle but were busy recently, keep reporting busy.
+func withBusyGrace(activity SessionActivity, target string) SessionActivity {
 	if activity == ActivityBusy {
 		lastBusyTime.Store(target, time.Now())
-		return ActivityBusy, true
+		return ActivityBusy
 	}
 	if activity == ActivityIdle {
 		if lastTime, ok := lastBusyTime.Load(target); ok {
 			if time.Since(lastTime.(time.Time)) < busyGracePeriod {
-				return ActivityBusy, true
+				return ActivityBusy
 			}
 			// Grace period expired, clean up
 			lastBusyTime.Delete(target)
@@ -334,7 +373,7 @@ func (i *Instance) DetectActivityForWindowWithValidityContext(ctx context.Contex
 		lastBusyTime.Delete(target)
 	}
 
-	return activity, true
+	return activity
 }
 
 // DetectAggregatedActivity checks all followed windows and returns highest priority activity

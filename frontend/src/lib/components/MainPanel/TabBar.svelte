@@ -11,13 +11,14 @@
   import Toast from '../common/Toast.svelte';
   import { sessions, selectedSessionId, selectedWindowIdx, selectWindow, selectedSession, startSession, stopSession, stopTab, restartTab, deleteSession, deleteTab, toggleFavorite, renameTab, reorderTab, loadSessions } from '../../stores/sessions';
   import type { Session } from '../../stores/sessions';
-  import { agents } from '../../stores/agents';
+  import { agents, getAgentName } from '../../stores/agents';
   import { get } from 'svelte/store';
   import { t } from '../../i18n';
   import { describeBackendError } from '../../utils/backendError';
   import { matchesShortcut } from '../../stores/shortcuts';
   import { focusTerminal } from '../../utils/focus';
-  import { tabStatuses } from '../../stores/statusLines';
+  import { tabStatuses, type TabStatusInfo } from '../../stores/statusLines';
+  import { updateBadge, updateTooltip } from '../../utils/updateBadge';
   import StatusIndicator from '../common/StatusIndicator.svelte';
   import * as App from '../../../../wailsjs/go/main/App';
   import { allPalettes, resolveViewBarHidden } from '../../utils/terminalThemes';
@@ -1106,6 +1107,17 @@
     return map;
   })();
 
+  // Per-tab agent update notice, keyed by window index, for the small arrow
+  // after the tab's name (the session list shows the same).
+  $: tabUpdateByIdx = (() => {
+    const map: Record<number, TabStatusInfo> = {};
+    const list = $selectedSessionId ? $tabStatuses[$selectedSessionId] : undefined;
+    if (list) {
+      for (const ts of list) if (ts.update) map[ts.windowIdx] = ts;
+    }
+    return map;
+  })();
+
   // Update active tmux session for dictation text output
   $: if ($selectedSessionId && dictationEnabled) {
     DictationService.SetActiveTmuxSession($selectedSessionId, $selectedWindowIdx ?? 0);
@@ -1973,6 +1985,10 @@
               <!-- svelte-ignore a11y-no-static-element-interactions -->
               <span class="tab-name" on:dblclick|stopPropagation={() => startTabRename(win.Index, win.Name)}>{win.Name}</span>
             {/if}
+            {#if currentSessionStatus === 'running' && !win.Dead && tabUpdateByIdx[win.Index] && !$settings.hideUpdateBadge}
+              <span class="tab-update-badge {updateBadge(tabUpdateByIdx[win.Index])}"
+                title={updateTooltip(tabUpdateByIdx[win.Index], getAgentName(win.Agent)).map((m) => $t(m.key, m.params)).join('\n')}>&#8593;</span>
+            {/if}
             {#if tabServerByIdx[win.Index] && !$settings.hideRemoteBadge}
               <span
                 class="tab-remote-badge"
@@ -2618,6 +2634,22 @@
 
   /* The marker for a tab that runs on a server. Sized and coloured like the
      other tab badges so the bar keeps one visual language. */
+  /* Agent update waiting: colours as in the session list. */
+  .tab-update-badge {
+    flex: none;
+    font-size: 10px;
+    line-height: 1;
+    color: #60a5fa;
+  }
+
+  .tab-update-badge.blocking {
+    color: #fbbf24;
+  }
+
+  .tab-update-badge.restart {
+    color: #4ade80;
+  }
+
   .tab-remote-badge {
     display: flex;
     align-items: center;

@@ -965,6 +965,24 @@
               </button>
             </label>
 
+            <!-- Shown by default, stored as "hide" like YOLO. -->
+            <label class="setting-item">
+              <span class="setting-info">
+                <span class="setting-label">{$t('settings.showUpdateBadge')}</span>
+                <span class="setting-desc">{$t('settings.showUpdateBadgeDesc')}</span>
+              </span>
+              <button
+                class="toggle-btn"
+                class:active={!$settings.hideUpdateBadge}
+                aria-label={$t('settings.showUpdateBadge')}
+                on:click={() => saveSettings({ hideUpdateBadge: !$settings.hideUpdateBadge })}
+              >
+                <span class="toggle-track">
+                  <span class="toggle-thumb"></span>
+                </span>
+              </button>
+            </label>
+
             <label class="setting-item">
               <span class="setting-info">
                 <span class="setting-label">{$t('settings.showResumeBadge')}</span>
