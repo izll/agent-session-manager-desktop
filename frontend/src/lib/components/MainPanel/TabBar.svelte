@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { sortByTabOrder } from '../../utils/tabOrder';
   import { keyClaimedByDialog } from '../../utils/dialogKeys';
   import { onMount, onDestroy, createEventDispatcher, tick } from 'svelte';
   import { claimMenu, releaseMenu } from '../../utils/openMenu';
@@ -963,18 +964,6 @@
     }
   }
 
-  // Sort windows by custom tab order
-  function sortWindowsByTabOrder(wins: any[], tabOrder: number[] | undefined): any[] {
-    if (!tabOrder || tabOrder.length === 0) return wins;
-    const indexMap = new Map<number, number>();
-    tabOrder.forEach((winIdx, pos) => indexMap.set(winIdx, pos));
-    return [...wins].sort((a, b) => {
-      const posA = indexMap.has(a.Index) ? indexMap.get(a.Index)! : 9999;
-      const posB = indexMap.has(b.Index) ? indexMap.get(b.Index)! : 9999;
-      return posA - posB;
-    });
-  }
-
   // Load windows when session changes or status changes
   async function loadWindowsForSession(
     sessionId: string | null,
@@ -1039,7 +1028,7 @@
           TextColor: fw.text_color || '',
           BackgroundColor: fw.background_color || ''
         }));
-        windows = sortWindowsByTabOrder([mainTab, ...followedTabs], sess.tabOrder);
+        windows = sortByTabOrder([mainTab, ...followedTabs], sess.tabOrder, (w: any) => w.Index);
       } else {
         windows = [mainTab];
       }
@@ -1065,7 +1054,7 @@
       // put the tab back where it was, in front of the user, and then move it
       // again a moment later.
       if (movingTabWindowIdx !== null) return;
-      windows = sortWindowsByTabOrder(list || [], sess.tabOrder);
+      windows = sortByTabOrder(list || [], sess.tabOrder, (w: any) => w.Index);
 
       // Start polling if not already
       if (!pollTimeout) {

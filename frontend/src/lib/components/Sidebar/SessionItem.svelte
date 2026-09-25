@@ -17,6 +17,7 @@
   import { focusTerminal } from '../../utils/focus';
   import type { TabStatusInfo } from '../../stores/statusLines';
   import { yoloBadge } from '../../utils/yoloBadge';
+  import { sortByTabOrder } from '../../utils/tabOrder';
   import { afterUnsavedChanges } from '../../stores/unsavedChanges';
   import { activeProjectId } from '../../stores/projects';
   import { UnfinishedTasksForSession } from '../../../../wailsjs/go/main/App';
@@ -97,6 +98,9 @@
   $: showYolo = !$settings?.hideYoloBadge;
   $: showResume = !!$settings?.showResumeBadge;
   /** A tab row worth drawing: it has status text, or a YOLO badge that shows. */
+  // The backend lists tabs in the order they were created; the tab bar shows
+  // them in the order the user dragged them into.
+  $: orderedTabStatuses = sortByTabOrder(tabStatuses, session.tabOrder, (tab) => tab.windowIdx);
   $: tabRowVisible = (tab: { statusLine?: string; yolo?: boolean; yoloNotInEffect?: boolean }) =>
     !!tab.statusLine || (!!yoloBadge(tab) && showYolo);
 
@@ -416,8 +420,8 @@
 
   {#if !$settings?.hideStatusLines && sessionStatus === 'running'}
     {#if tabStatuses.length > 1}
-      <!-- Multi-tab: show per-tab status lines -->
-      {#each tabStatuses as tab}
+      <!-- Multi-tab: show per-tab status lines, in the tab bar's order -->
+      {#each orderedTabStatuses as tab}
         {#if tab.hideStatusLine}
           <!-- per-tab opt-out: user hid this tab's status line -->
         {:else if tab.activity === 'busy'}
