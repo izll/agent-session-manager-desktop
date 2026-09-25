@@ -1086,7 +1086,7 @@
           : currentTabPath}>
           {#if currentTabServer}
             <span class="status-remote" title={$t('servers.onServer').replace('{server}', currentTabServer)}>
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <svg width="11" height="11" viewBox="-1 -1 26 26" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/>
               </svg>
               <span class="status-remote-name">{currentTabServer}</span>
