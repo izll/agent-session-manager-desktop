@@ -2,8 +2,10 @@ package main
 
 import (
 	"asmgr-desktop/session"
+	"asmgr-desktop/updater"
 	"context"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -154,6 +156,74 @@ func TestStopAutoUpdateCheckCancelsAndWaits(t *testing.T) {
 		t.Fatal("stopped update check still has a cancel function")
 	}
 	app.stopAutoCheckForUpdate()
+}
+
+// The check ran once, 30 seconds after launch, so an app left open for days
+// never heard of a release. It now comes round again while the app runs, and
+// stops with it.
+func TestAutoUpdateCheckComesRoundAgainWhileTheAppRuns(t *testing.T) {
+	delay, recheck, round := updateCheckFirstDelay, updateCheckRecheck, updateCheckRound
+	t.Cleanup(func() { updateCheckFirstDelay, updateCheckRecheck, updateCheckRound = delay, recheck, round })
+
+	var rounds atomic.Int32
+	updateCheckFirstDelay, updateCheckRecheck = time.Millisecond, 5*time.Millisecond
+	updateCheckRound = func(*App, context.Context) { rounds.Add(1) }
+
+	app := NewApp()
+	app.startAutoCheckForUpdate(context.Background())
+	deadline := time.Now().Add(2 * time.Second)
+	for rounds.Load() < 3 && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+	app.stopAutoCheckForUpdate()
+	if got := rounds.Load(); got < 3 {
+		t.Fatalf("the update check ran %d times; it should keep coming round", got)
+	}
+	after := rounds.Load()
+	time.Sleep(30 * time.Millisecond)
+	if rounds.Load() != after {
+		t.Error("the update check kept running after the app stopped it")
+	}
+}
+
+func TestTheUpdateLoopLooksMoreOftenThanItChecks(t *testing.T) {
+	if updateCheckRecheck > updater.CheckInterval {
+		t.Errorf("the loop looks every %v, longer than the %v between checks", updateCheckRecheck, updater.CheckInterval)
+	}
+}
+
+// Installing does not restart the app, and the old binary still reports the
+// old version: a later round would find the installed release again and put
+// the update dot back, offering to install it a second time.
+func TestNoUpdateCheckAfterAnUpdateIsInstalled(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	refresh := refreshAvailableUpdate
+	t.Cleanup(func() { refreshAvailableUpdate = refresh })
+	calls := 0
+	refreshAvailableUpdate = func(context.Context, string) (string, error) {
+		// Nothing found: an answer would be emitted to a Wails runtime the
+		// test does not have. The stamp is not saved either, so each round
+		// stays due and only the flag can stop the second request.
+		calls++
+		return "", nil
+	}
+
+	app := NewApp()
+	if !updater.ShouldCheckForUpdate() {
+		t.Fatal("a fresh config dir should be due for a check")
+	}
+	app.checkForUpdateIfDue(context.Background())
+	if calls != 1 {
+		t.Fatalf("a due check made %d requests, want 1", calls)
+	}
+	app.updateInstalled.Store(true)
+	app.checkForUpdateIfDue(context.Background())
+	if calls != 1 {
+		t.Error("the app looked for an update again after installing one")
+	}
+	if !strings.Contains(functionBody(t, readTextFile(t, "app.go"), "func (a *App) PerformUpdate("), "a.updateInstalled.Store(true)") {
+		t.Error("installing an update does not tell the check loop")
+	}
 }
 
 func TestResizeMaintenanceKeepsProjectPinnedUntilCanceled(t *testing.T) {

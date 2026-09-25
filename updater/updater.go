@@ -45,11 +45,12 @@ const (
 	updateManifestEntries = 128
 	updateManifestPathLen = 32 << 10
 
-	// Automatic checks are throttled to once a day, matching the TUI version.
-	CheckInterval = 24 * time.Hour
+	// Automatic checks are throttled to twice a day: two requests against
+	// GitHub's 60 an hour, and a release reaches a running app by evening.
+	CheckInterval = 12 * time.Hour
 	LastCheckFile = "last_update_check"
 	// AvailableUpdateFile caches the last "there is a newer version" answer.
-	// Without it a launch that falls inside the daily throttle shows nothing,
+	// Without it a launch that falls inside the throttle shows nothing,
 	// even though an update is still waiting.
 	AvailableUpdateFile = "available_update"
 	staleUpdateFile     = "stale_update_files.json"

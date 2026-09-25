@@ -43,16 +43,16 @@ func TestShouldCheckForUpdateThrottles(t *testing.T) {
 		t.Error("a check minutes ago should not trigger another")
 	}
 
-	// Checked over a day ago → check again.
-	writeStamp(t, dir, time.Now().Add(-25*time.Hour).Format(time.RFC3339))
+	// Checked over the interval ago → check again.
+	writeStamp(t, dir, time.Now().Add(-13*time.Hour).Format(time.RFC3339))
 	if !ShouldCheckForUpdate() {
-		t.Error("a check 25 hours ago should trigger a new one")
+		t.Error("a check 13 hours ago should trigger a new one")
 	}
 
 	// Just under the interval → still wait.
-	writeStamp(t, dir, time.Now().Add(-23*time.Hour).Format(time.RFC3339))
+	writeStamp(t, dir, time.Now().Add(-11*time.Hour).Format(time.RFC3339))
 	if ShouldCheckForUpdate() {
-		t.Error("23 hours is inside the 24h interval")
+		t.Error("11 hours is inside the 12h interval")
 	}
 }
 

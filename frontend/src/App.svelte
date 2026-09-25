@@ -275,7 +275,7 @@
   let showHelpDialog = false;
   let showFeedbackDialog = false;
   let showUpdateDialog = false;
-  /** Version found by the daily background check; drives the header dot. */
+  /** Version found by the background check; drives the header dot. */
   let availableUpdate = '';
   let showImportDialog = false;
   let showFileImportDialog = false;
@@ -899,9 +899,9 @@
         : null;
     }).catch(() => { /* an older backend has no such call; say nothing */ });
 
-    // The backend checks for a release once a day, shortly after launch. It
-    // only ever notifies — a dot on the update button, not a popup that
-    // interrupts what the user is doing.
+    // The backend checks for a release shortly after launch and then every
+    // 12 hours while the app runs. It only ever notifies — a dot on the update
+    // button, not a popup that interrupts what the user is doing.
     EventsOn('update:available', (info: { version: string; current: string }) => {
       if (!appMounted) return;
       availableUpdate = info?.version || '';
@@ -917,9 +917,9 @@
     window.addEventListener('command:stop-selected', handleCommandStop);
     window.addEventListener('command:templates', handleCommandTemplates as EventListener);
 
-    // Show an update found by an earlier run straight away. The daily throttle
-    // means today's launch may not check at all, and a pending update should
-    // not disappear just because it was discovered yesterday.
+    // Show an update found by an earlier run straight away. The throttle means
+    // this launch may not check at all, and a pending update should not
+    // disappear just because it was discovered by an earlier run.
     try {
       availableUpdate = await PendingUpdate();
     } catch {

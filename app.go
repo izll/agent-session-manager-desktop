@@ -56,20 +56,23 @@ type App struct {
 	sidebarSnapshotAt time.Time
 	// connecting deduplicates background dials, so routing a hundred sessions
 	// does not queue a hundred connections to the same server.
-	connecting          sync.Map
-	dictation           *DictationService
-	activityStats       *ActivityStatsRecorder
-	previewCancel       context.CancelFunc
-	previewWG           sync.WaitGroup
-	attentionMu         sync.Mutex
-	attentionCancel     context.CancelFunc
-	attentionWG         sync.WaitGroup
-	orphanCleanupMu     sync.Mutex
-	orphanCleanupStop   context.CancelFunc
-	orphanCleanupWG     sync.WaitGroup
-	updateCheckMu       sync.Mutex
-	updateCheckStop     context.CancelFunc
-	updateCheckWG       sync.WaitGroup
+	connecting        sync.Map
+	dictation         *DictationService
+	activityStats     *ActivityStatsRecorder
+	previewCancel     context.CancelFunc
+	previewWG         sync.WaitGroup
+	attentionMu       sync.Mutex
+	attentionCancel   context.CancelFunc
+	attentionWG       sync.WaitGroup
+	orphanCleanupMu   sync.Mutex
+	orphanCleanupStop context.CancelFunc
+	orphanCleanupWG   sync.WaitGroup
+	updateCheckMu     sync.Mutex
+	updateCheckStop   context.CancelFunc
+	updateCheckWG     sync.WaitGroup
+	// Set once an update is installed. This process is still the old binary,
+	// so a later check would find the same release and advertise it again.
+	updateInstalled     atomic.Bool
 	updateInstallMu     sync.Mutex
 	updateInstallCancel context.CancelFunc
 	updateInstalling    bool
@@ -325,21 +328,53 @@ func (a *App) stopAutoCheckForUpdate() {
 	a.updateCheckStop = nil
 }
 
-// autoCheckForUpdate looks for a new release shortly after launch, at most
-// once a day (same throttle as the TUI version). It only ever notifies —
-// installing stays a deliberate action in the update dialog.
+// How the automatic update check is paced. The check itself is throttled by
+// updater.CheckInterval; the recheck only asks whether that time has come, so
+// an app left open for days still hears of a release without extra requests.
+var (
+	updateCheckFirstDelay = 30 * time.Second
+	updateCheckRecheck    = time.Hour
+	// One round of the loop; a variable so a test can count the rounds
+	// without reaching GitHub.
+	updateCheckRound = (*App).checkForUpdateIfDue
+	// The network half of a round, a variable for the same reason.
+	refreshAvailableUpdate = updater.RefreshAvailableUpdateContext
+)
+
+// autoCheckForUpdate looks for a new release shortly after launch and then
+// again whenever updater.CheckInterval has passed, for as long as the app
+// runs. It only ever notifies — installing stays a deliberate action in the
+// update dialog.
 func (a *App) autoCheckForUpdate(ctx context.Context) {
 	// Let the window finish coming up first; a release check is never urgent.
 	select {
-	case <-time.After(30 * time.Second):
+	case <-time.After(updateCheckFirstDelay):
 	case <-ctx.Done():
 		return
 	}
+	ticker := time.NewTicker(updateCheckRecheck)
+	defer ticker.Stop()
+	for {
+		updateCheckRound(a, ctx)
+		select {
+		case <-ticker.C:
+		case <-ctx.Done():
+			return
+		}
+	}
+}
 
-	if !updater.ShouldCheckForUpdate() {
+func (a *App) checkForUpdateIfDue(ctx context.Context) {
+	if a.updateInstalled.Load() || !updater.ShouldCheckForUpdate() {
 		return
 	}
-	latest, err := updater.RefreshAvailableUpdateContext(ctx, Version)
+	latest, err := refreshAvailableUpdate(ctx, Version)
+	if a.updateInstalled.Load() {
+		// Installed while the request was out; the refresh has just cached
+		// the release again.
+		updater.ClearAvailableUpdate()
+		return
+	}
 	if err != nil {
 		if ctx.Err() != nil {
 			return
@@ -5386,6 +5421,7 @@ func (a *App) PerformUpdate(version string) error {
 	}
 	// Installed: stop advertising it. The running process is still the old
 	// binary, so Version can't tell us this on its own.
+	a.updateInstalled.Store(true)
 	updater.ClearAvailableUpdate()
 	return nil
 }
