@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onDestroy } from 'svelte';
+  import { createEventDispatcher, onDestroy } from 'svelte';
   import { fade, fly } from 'svelte/transition';
   import { claimToastSlot, releaseToastSlot, toastSlotHeight } from './toastSlots';
 
@@ -17,6 +17,12 @@
   export let show = false;
   /** Distinguishes repeated notifications whose visible text is identical. */
   export let revision = 0;
+  /** A button beside the message, dispatching `action`. Empty shows none. */
+  export let actionLabel = '';
+  /** Greys the button out while what it started is still running. */
+  export let actionBusy = false;
+
+  const dispatch = createEventDispatcher<{ action: void }>();
 
   let timeoutId: ReturnType<typeof setTimeout>;
 
@@ -123,6 +129,9 @@
       {/if}
     </div>
     <span class="toast-message">{message}</span>
+    {#if actionLabel}
+      <button class="toast-action" disabled={actionBusy} on:click={() => dispatch('action')}>{actionLabel}</button>
+    {/if}
     <button class="toast-close" on:click={close}>
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <line x1="18" y1="6" x2="6" y2="18"/>
@@ -173,6 +182,28 @@
     color: #e4e4e7;
     line-height: 1.4;
     overflow-wrap: anywhere;
+  }
+
+  .toast-action {
+    flex-shrink: 0;
+    padding: 4px 10px;
+    border-radius: 6px;
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    color: #e4e4e7;
+    font-size: 12px;
+    font-family: inherit;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  .toast-action:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.1);
+  }
+
+  .toast-action:disabled {
+    opacity: 0.6;
+    cursor: default;
   }
 
   .toast-close {

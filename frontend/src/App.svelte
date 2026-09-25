@@ -202,6 +202,7 @@
   import { focusTerminal } from './lib/utils/focus';
   import { shortcutForEvent, capturingShortcut } from './lib/stores/shortcuts';
   import Toast from './lib/components/common/Toast.svelte';
+  import CodexDaemonNotice from './lib/components/common/CodexDaemonNotice.svelte';
 
   // The accent lives in CSS variables, so applying a theme is one write to
   // the root element — no component needs to know about it.
@@ -1961,6 +1962,8 @@
      with its own toast — deleting from the sidebar, renaming, reordering,
      switching project — failed in silence. -->
 <Toast bind:show={showSessionError} message={sessionErrorMessage} revision={sessionErrorRevision} variant="error" duration={9000} />
+
+<CodexDaemonNotice />
 
 <style>
 .lock-banner {

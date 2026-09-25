@@ -846,6 +846,10 @@ export function StopBackgroundAgent(arg1, arg2) {
   return window['go']['main']['App']['StopBackgroundAgent'](arg1, arg2);
 }
 
+export function StopCodexDaemon(arg1, arg2) {
+  return window['go']['main']['App']['StopCodexDaemon'](arg1, arg2);
+}
+
 export function StopSession(arg1, arg2) {
   return window['go']['main']['App']['StopSession'](arg1, arg2);
 }

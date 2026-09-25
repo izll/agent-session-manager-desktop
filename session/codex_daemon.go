@@ -2,6 +2,7 @@ package session
 
 import (
 	"context"
+	"log"
 	"os/exec"
 	"strings"
 	"sync"
@@ -169,7 +170,11 @@ func resetAgentFlagProbes() {
 // Nothing when the agent has no such server, when the user chose to use it,
 // when their own extra arguments already say so (a repeated flag is an error),
 // or when the agent on that machine does not know the flag.
-func (i *Instance) noDaemonArgs(config AgentConfig, serverID, extraArgs string) []string {
+//
+// Nothing, too, for a conversation the background server still holds: without
+// it that conversation would not open at all (see codex_daemon_held.go). The
+// user is told, since YOLO does not take effect for it.
+func (i *Instance) noDaemonArgs(config AgentConfig, serverID string, args []string, extraArgs string) []string {
 	if config.NoDaemonFlag == "" || CodexUseDaemon() {
 		return nil
 	}
@@ -179,6 +184,18 @@ func (i *Instance) noDaemonArgs(config AgentConfig, serverID, extraArgs string) 
 		}
 	}
 	if !i.agentSupportsFlag(serverID, config.Command, config.NoDaemonFlag) {
+		return nil
+	}
+	if conversationID := conversationArg(config, args); conversationID != "" &&
+		codexDaemonHoldsConversation(i, serverID, conversationID) {
+		log.Printf("[CodexDaemon] conversation %s is held by the background server on %s; continuing it there",
+			conversationID, describeMachine(serverID))
+		reportCodexDaemonHeld(CodexDaemonHeldNotice{
+			SessionID:      i.ID,
+			SessionName:    i.Name,
+			ServerID:       serverID,
+			ConversationID: conversationID,
+		})
 		return nil
 	}
 	return []string{config.NoDaemonFlag}
@@ -192,6 +209,6 @@ func (i *Instance) noDaemonArgs(config AgentConfig, serverID, extraArgs string) 
 // subcommand (codex resume <id>, codex fork <id>) that puts it on the
 // subcommand, which is where it is sure to be read.
 func (i *Instance) agentArgv(config AgentConfig, serverID string, args []string, extraArgs string) []string {
-	args = append(args, i.noDaemonArgs(config, serverID, extraArgs)...)
+	args = append(args, i.noDaemonArgs(config, serverID, args, extraArgs)...)
 	return buildAgentArgv(config.Command, args, extraArgs)
 }

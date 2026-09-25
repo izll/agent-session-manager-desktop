@@ -426,6 +426,8 @@ export function StartTabOnly(arg1:string,arg2:number,arg3:string):Promise<void>;
 
 export function StopBackgroundAgent(arg1:string,arg2:string):Promise<void>;
 
+export function StopCodexDaemon(arg1:string,arg2:string):Promise<void>;
+
 export function StopSession(arg1:string,arg2:string):Promise<void>;
 
 export function StopTab(arg1:string,arg2:number,arg3:string):Promise<void>;
