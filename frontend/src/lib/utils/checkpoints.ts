@@ -65,3 +65,53 @@ export function sessionAgentBusy(
   if (activities[sessionId] === 'busy') return true;
   return (tabStatuses[sessionId] ?? []).some((tab) => tab?.activity === 'busy');
 }
+
+/**
+ * What the dialog's "Clean up" can take: checkpoints older than a number of
+ * days, or the "before restore" ones the restores left behind. A day count is
+ * the choice's own value; the one non-numeric choice is the restores'.
+ */
+export const CHECKPOINT_CLEANUP_BEFORE_RESTORE = 'beforeRestore';
+export const CHECKPOINT_CLEANUP_DAYS = [7, 30, 90] as const;
+/** A month: old enough that nobody is still counting on it by accident. */
+export const DEFAULT_CHECKPOINT_CLEANUP = '30';
+
+export interface CheckpointCleanupRuleLike {
+  olderThanDays: number;
+  beforeRestoreOnly: boolean;
+}
+
+/**
+ * The backend's rule for a cleanup choice. The "before restore" choice takes
+ * them at any age — the backend still spares those from the last day, since
+ * one of them may be the way back from a restore made a moment ago.
+ * Anything unrecognised falls back to the default rather than to "everything".
+ */
+export function checkpointCleanupRule(choice: string): CheckpointCleanupRuleLike {
+  if (choice === CHECKPOINT_CLEANUP_BEFORE_RESTORE) {
+    return { olderThanDays: 0, beforeRestoreOnly: true };
+  }
+  const days = Number.parseInt(choice, 10);
+  if ((CHECKPOINT_CLEANUP_DAYS as readonly number[]).includes(days)) {
+    return { olderThanDays: days, beforeRestoreOnly: false };
+  }
+  return { olderThanDays: Number.parseInt(DEFAULT_CHECKPOINT_CLEANUP, 10), beforeRestoreOnly: false };
+}
+
+/**
+ * The ages the automatic cleanup setting offers. Longer than the manual ones:
+ * a cleanup that runs unattended should only take what is plainly stale.
+ * 0 is off, the default.
+ */
+export const CHECKPOINT_AUTO_PRUNE_DAYS = [30, 90, 180] as const;
+
+/**
+ * The day counts to offer for the setting, 0 (off) first. A stored value that
+ * is not one of the usual ones — set by hand in the config — is offered too,
+ * so the control shows what is in effect instead of claiming "off".
+ */
+export function checkpointAutoPruneDayChoices(current: number | undefined): number[] {
+  const days: number[] = [0, ...CHECKPOINT_AUTO_PRUNE_DAYS];
+  if (current && current > 0 && !days.includes(current)) days.push(current);
+  return days.sort((a, b) => a - b);
+}

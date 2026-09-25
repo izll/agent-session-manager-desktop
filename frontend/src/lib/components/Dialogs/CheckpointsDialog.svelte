@@ -13,8 +13,18 @@
   import { claimKeyForDialog } from '../../utils/dialogKeys';
   import { autoFocusField, dialogEnterBelongsToControl } from '../../utils/dialogActions';
   import { portal } from '../../utils/portal';
-  import { checkpointName, checkpointDifference } from '../../utils/checkpoints';
+  import {
+    checkpointName,
+    checkpointDifference,
+    checkpointCleanupRule,
+    CHECKPOINT_CLEANUP_BEFORE_RESTORE,
+    CHECKPOINT_CLEANUP_DAYS,
+    DEFAULT_CHECKPOINT_CLEANUP,
+    type CheckpointCleanupRuleLike,
+  } from '../../utils/checkpoints';
+  import { describeBackendError } from '../../utils/backendError';
   import ConfirmDialog from './ConfirmDialog.svelte';
+  import Select from '../common/Select.svelte';
 
   export let show = false;
   export let projectId = '';
@@ -42,6 +52,13 @@
   let pendingDelete: main.Checkpoint | null = null;
   let showRestoreConfirm = false;
   let showDeleteConfirm = false;
+
+  /** Which checkpoints "Clean up" takes; see checkpointCleanupRule. */
+  let cleanupChoice = DEFAULT_CHECKPOINT_CLEANUP;
+  /** What the backend said the cleanup would take, awaiting confirmation. The
+   *  same list goes back, so exactly what the user agreed to is deleted. */
+  let pendingCleanup: { rule: CheckpointCleanupRuleLike; targets: main.CheckpointTarget[] } | null = null;
+  let showCleanupConfirm = false;
 
   // Any answer arriving for an earlier opening, or for another tab, is
   // dropped: it describes a repository the dialog is no longer showing.
@@ -72,7 +89,7 @@
       repositoryRoot = list?.root ?? '';
     } catch (e: any) {
       if (mine !== generation) return;
-      error = String(e?.message ?? e);
+      error = describeBackendError(e);
     } finally {
       if (mine === generation) loading = false;
     }
@@ -105,7 +122,7 @@
       notice = message;
     } catch (e: any) {
       if (mine !== generation) return;
-      error = String(e?.message ?? e);
+      error = describeBackendError(e);
     } finally {
       working = false;
     }
@@ -169,6 +186,59 @@
       return $t('checkpoints.deleted');
     });
   }
+
+  $: cleanupOptions = [
+    ...CHECKPOINT_CLEANUP_DAYS.map((days) => ({
+      value: String(days),
+      label: $t('checkpoints.cleanUpOlderThan', { days }),
+    })),
+    { value: CHECKPOINT_CLEANUP_BEFORE_RESTORE, label: $t('checkpoints.cleanUpBeforeRestore') },
+  ];
+
+  /**
+   * Asks the backend what the chosen cleanup would take, then asks the user.
+   * Nothing to take is said at once rather than with an empty confirmation.
+   */
+  async function askCleanUp() {
+    if (working) return;
+    const mine = generation;
+    const rule = checkpointCleanupRule(cleanupChoice);
+    working = true;
+    error = '';
+    notice = '';
+    try {
+      const planned = (await App.PlanCheckpointCleanup(sessionId, windowIdx, root, rule)) ?? [];
+      if (mine !== generation) return;
+      if (planned.length === 0) {
+        notice = $t('checkpoints.cleanUpNothing');
+        return;
+      }
+      pendingCleanup = { rule, targets: planned.map((c) => ({ id: c.id, hash: c.hash })) };
+      showCleanupConfirm = true;
+    } catch (e: any) {
+      if (mine !== generation) return;
+      error = describeBackendError(e);
+    } finally {
+      working = false;
+    }
+  }
+
+  function confirmCleanUp() {
+    const pending = pendingCleanup;
+    pendingCleanup = null;
+    void refocus();
+    if (!pending) return;
+    void run(async () => {
+      const deleted = await App.CleanUpCheckpoints(sessionId, windowIdx, root, pending.rule, pending.targets, projectId);
+      return $t('checkpoints.cleanedUp', { count: deleted ?? 0 });
+    });
+  }
+
+  $: cleanupMessage = pendingCleanup
+    ? pendingCleanup.rule.beforeRestoreOnly
+      ? $t('checkpoints.cleanUpMessageBeforeRestore', { count: pendingCleanup.targets.length })
+      : $t('checkpoints.cleanUpMessage', { count: pendingCleanup.targets.length, days: pendingCleanup.rule.olderThanDays })
+    : '';
 
   $: restoreMessage = pendingRestore
     ? [
@@ -303,6 +373,19 @@
       </div>
 
       <div class="dialog-actions">
+        {#if checkpoints.length > 0}
+          <div class="cleanup" role="group" aria-label={$t('checkpoints.cleanUp')}>
+            <Select
+              small
+              value={cleanupChoice}
+              options={cleanupOptions}
+              on:change={(e) => (cleanupChoice = e.detail)}
+            />
+            <button class="row-btn danger" on:click={askCleanUp} disabled={working} title={$t('checkpoints.cleanUpHint')}>
+              {$t('checkpoints.cleanUp')}
+            </button>
+          </div>
+        {/if}
         <button class="btn-cancel" on:click={close}>{$t('common.close')}</button>
       </div>
     </div>
@@ -329,6 +412,17 @@
   variant="danger"
   on:confirm={confirmDelete}
   on:cancel={() => { pendingDelete = null; void refocus(); }}
+/>
+
+<ConfirmDialog
+  bind:show={showCleanupConfirm}
+  title={$t('checkpoints.cleanUpTitle')}
+  message={cleanupMessage}
+  confirmText={$t('common.delete')}
+  cancelText={$t('common.cancel')}
+  variant="danger"
+  on:confirm={confirmCleanUp}
+  on:cancel={() => { pendingCleanup = null; void refocus(); }}
 />
 
 <style>
@@ -504,6 +598,21 @@
   .dialog-actions {
     display: flex;
     justify-content: flex-end;
+    align-items: center;
     gap: 10px;
+  }
+
+  /* On the left, away from Close: a bulk delete should not sit where the
+     hand goes to dismiss the dialog. */
+  .cleanup {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-right: auto;
+    min-width: 0;
+  }
+
+  .cleanup :global(.custom-select) {
+    width: 190px;
   }
 </style>

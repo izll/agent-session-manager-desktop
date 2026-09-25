@@ -207,6 +207,11 @@ type Settings struct {
 	// would leave the growing trash this was added to bound. So zero means the
 	// default and "keep everything" is stored as a negative.
 	TrashRetentionDays int `json:"trash_retention_days,omitempty"`
+	// CheckpointAutoPruneDays deletes a work tree's git checkpoints once they
+	// are this many days old, whenever a new one is taken. 0 — every config
+	// from before the setting — means off: a checkpoint is the user's undo,
+	// and deleting it has to be something they asked for.
+	CheckpointAutoPruneDays int `json:"checkpoint_auto_prune_days,omitempty"`
 	// The Task Master panel shells out to `npx task-master-ai`, which installs
 	// the package on first use — not something to do to a machine nobody asked.
 	// So it is opt-in, and plain false is the right zero value here: with

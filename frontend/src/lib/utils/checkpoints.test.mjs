@@ -21,8 +21,15 @@ writeFileSync(
   jsPath,
   transformSync(readFileSync(join(here, 'checkpoints.ts'), 'utf8'), { loader: 'ts', format: 'esm' }).code
 );
-const { checkpointsUnavailable, checkpointName, checkpointDifference, sessionAgentBusy } =
-  await import(pathToFileURL(jsPath).href);
+const {
+  checkpointsUnavailable,
+  checkpointName,
+  checkpointDifference,
+  sessionAgentBusy,
+  checkpointCleanupRule,
+  checkpointAutoPruneDayChoices,
+  DEFAULT_CHECKPOINT_CLEANUP,
+} = await import(pathToFileURL(jsPath).href);
 process.on('exit', () => rmSync(dir, { recursive: true, force: true }));
 
 const texts = { untitled: 'Checkpoint', beforeRestore: 'Before restore' };
@@ -55,4 +62,24 @@ test('any busy tab of the session counts as a busy agent', () => {
   // Another session's agent is not this one's.
   assert.equal(sessionAgentBusy('s', { other: 'busy' }, { other: [{ activity: 'busy' }] }), false);
   assert.equal(sessionAgentBusy('', { '': 'busy' }, {}), false);
+});
+
+test('a cleanup choice becomes the rule the backend expects', () => {
+  assert.deepEqual(checkpointCleanupRule('7'), { olderThanDays: 7, beforeRestoreOnly: false });
+  assert.deepEqual(checkpointCleanupRule('90'), { olderThanDays: 90, beforeRestoreOnly: false });
+  assert.deepEqual(checkpointCleanupRule('beforeRestore'), { olderThanDays: 0, beforeRestoreOnly: true });
+  // Nothing unexpected widens a cleanup: it falls back to the default age.
+  const fallback = { olderThanDays: Number(DEFAULT_CHECKPOINT_CLEANUP), beforeRestoreOnly: false };
+  assert.deepEqual(checkpointCleanupRule(''), fallback);
+  assert.deepEqual(checkpointCleanupRule('0'), fallback);
+  assert.deepEqual(checkpointCleanupRule('1'), fallback);
+  assert.equal(fallback.olderThanDays, 30);
+});
+
+test('the automatic cleanup setting offers off first and shows a hand-set value', () => {
+  assert.deepEqual(checkpointAutoPruneDayChoices(0), [0, 30, 90, 180]);
+  assert.deepEqual(checkpointAutoPruneDayChoices(undefined), [0, 30, 90, 180]);
+  assert.deepEqual(checkpointAutoPruneDayChoices(90), [0, 30, 90, 180]);
+  assert.deepEqual(checkpointAutoPruneDayChoices(45), [0, 30, 45, 90, 180]);
+  assert.deepEqual(checkpointAutoPruneDayChoices(-3), [0, 30, 90, 180]);
 });

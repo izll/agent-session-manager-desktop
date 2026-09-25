@@ -24,6 +24,8 @@ export function CancelGitSync():Promise<void>;
 
 export function CheckForUpdate():Promise<main.UpdateInfo>;
 
+export function CleanUpCheckpoints(arg1:string,arg2:number,arg3:string,arg4:main.CheckpointCleanupRule,arg5:Array<main.CheckpointTarget>,arg6:string):Promise<number>;
+
 export function ClearLog(arg1:string):Promise<void>;
 
 export function CloseTab(arg1:string,arg2:number,arg3:string):Promise<void>;
@@ -297,6 +299,8 @@ export function PendingUpdate():Promise<string>;
 export function PerformUpdate(arg1:string):Promise<void>;
 
 export function PermanentlyDeleteTrashItem(arg1:string,arg2:string):Promise<void>;
+
+export function PlanCheckpointCleanup(arg1:string,arg2:number,arg3:string,arg4:main.CheckpointCleanupRule):Promise<Array<main.Checkpoint>>;
 
 export function PlanServerMultiplexerInstall(arg1:string,arg2:string,arg3:string):Promise<remote.MultiplexerPlan>;
 

@@ -148,6 +148,7 @@ func (a *App) CreateCheckpoint(sessionID string, windowIdx int, expectedRoot, la
 	if err != nil {
 		return Checkpoint{}, err
 	}
+	pruneDays := a.checkpointAutoPruneDays()
 	checkpointMu.Lock()
 	defer checkpointMu.Unlock()
 	ctx, cancel := context.WithTimeout(context.Background(), checkpointTimeout)
@@ -157,7 +158,13 @@ func (a *App) CreateCheckpoint(sessionID string, windowIdx int, expectedRoot, la
 		Label:   label,
 		Session: inst.Name,
 	})
-	return created, err
+	if err != nil {
+		return created, err
+	}
+	// Here rather than when the list is opened: the list only grows when one
+	// is taken, and this is already a write under the project lock.
+	autoPruneCheckpoints(ctx, root, pruneDays)
+	return created, nil
 }
 
 // RestoreCheckpoint makes the tab's working tree match a checkpoint, after
@@ -172,11 +179,19 @@ func (a *App) RestoreCheckpoint(sessionID string, windowIdx int, expectedRoot, c
 	if err != nil {
 		return CheckpointRestoreResult{}, err
 	}
+	pruneDays := a.checkpointAutoPruneDays()
 	checkpointMu.Lock()
 	defer checkpointMu.Unlock()
 	ctx, cancel := context.WithTimeout(context.Background(), checkpointTimeout)
 	defer cancel()
-	return restoreCheckpoint(ctx, root, checkpointID, inst.Name)
+	result, err := restoreCheckpoint(ctx, root, checkpointID, inst.Name)
+	if err != nil {
+		return result, err
+	}
+	// A restore adds a "before restore" checkpoint, so it prunes like a
+	// create does — after the files are back, never before.
+	autoPruneCheckpoints(ctx, root, pruneDays)
+	return result, nil
 }
 
 // DeleteCheckpoint removes a checkpoint. Its commit becomes unreachable and
@@ -572,49 +587,9 @@ func listCheckpoints(ctx context.Context, top string) (CheckpointList, error) {
 	if err != nil {
 		return list, err
 	}
-	// Newest first by name: the ids are fixed-width timestamps, finer than the
-	// committer date, which has only whole seconds.
-	out, err := runGitStdout(ctx, top, "for-each-ref", "--sort=-refname",
-		"--format=%(refname)%1f%(objectname)%1f%(committerdate:iso-strict)%1f%(tree)%1f%(contents)%1e",
-		namespace)
+	entries, err := readCheckpointRefs(ctx, top, namespace)
 	if err != nil {
-		return list, fmt.Errorf("could not list checkpoints: %w", err)
-	}
-
-	type entry struct {
-		checkpoint Checkpoint
-		tree       string
-	}
-	var entries []entry
-	for _, record := range strings.Split(out, "\x1e") {
-		record = strings.TrimLeft(record, "\r\n")
-		if record == "" {
-			continue
-		}
-		fields := strings.SplitN(record, "\x1f", 5)
-		if len(fields) < 5 {
-			continue
-		}
-		id := strings.TrimPrefix(fields[0], namespace)
-		// Anything else under the namespace was not made here; restoring it by
-		// an id the validator would reject is impossible anyway.
-		if validateCheckpointID(id) != nil {
-			continue
-		}
-		meta := parseCheckpointMessage(fields[4])
-		entries = append(entries, entry{
-			checkpoint: Checkpoint{
-				ID:           id,
-				Hash:         fields[1],
-				ShortHash:    shortHash(fields[1]),
-				Created:      fields[2],
-				Label:        meta.Label,
-				Kind:         meta.Kind,
-				RestoredFrom: meta.RestoredFrom,
-				Session:      meta.Session,
-			},
-			tree: fields[3],
-		})
+		return list, err
 	}
 	if len(entries) == 0 {
 		return list, nil
@@ -634,6 +609,59 @@ func listCheckpoints(ctx context.Context, top string) (CheckpointList, error) {
 		list.Checkpoints = append(list.Checkpoints, e.checkpoint)
 	}
 	return list, nil
+}
+
+// checkpointRefEntry is one checkpoint as its ref describes it, with its tree.
+type checkpointRefEntry struct {
+	checkpoint Checkpoint
+	tree       string
+}
+
+// readCheckpointRefs reads the checkpoints under one namespace, newest first,
+// without comparing them with the work tree — which is the expensive part and
+// which a cleanup does not need.
+func readCheckpointRefs(ctx context.Context, top, namespace string) ([]checkpointRefEntry, error) {
+	// Newest first by name: the ids are fixed-width timestamps, finer than the
+	// committer date, which has only whole seconds.
+	out, err := runGitStdout(ctx, top, "for-each-ref", "--sort=-refname",
+		"--format=%(refname)%1f%(objectname)%1f%(committerdate:iso-strict)%1f%(tree)%1f%(contents)%1e",
+		namespace)
+	if err != nil {
+		return nil, fmt.Errorf("could not list checkpoints: %w", err)
+	}
+
+	var entries []checkpointRefEntry
+	for _, record := range strings.Split(out, "\x1e") {
+		record = strings.TrimLeft(record, "\r\n")
+		if record == "" {
+			continue
+		}
+		fields := strings.SplitN(record, "\x1f", 5)
+		if len(fields) < 5 {
+			continue
+		}
+		id := strings.TrimPrefix(fields[0], namespace)
+		// Anything else under the namespace was not made here; restoring it by
+		// an id the validator would reject is impossible anyway.
+		if validateCheckpointID(id) != nil {
+			continue
+		}
+		meta := parseCheckpointMessage(fields[4])
+		entries = append(entries, checkpointRefEntry{
+			checkpoint: Checkpoint{
+				ID:           id,
+				Hash:         fields[1],
+				ShortHash:    shortHash(fields[1]),
+				Created:      fields[2],
+				Label:        meta.Label,
+				Kind:         meta.Kind,
+				RestoredFrom: meta.RestoredFrom,
+				Session:      meta.Session,
+			},
+			tree: fields[3],
+		})
+	}
+	return entries, nil
 }
 
 var shortStatNumber = regexp.MustCompile(`(\d+) (file|insertion|deletion)`)

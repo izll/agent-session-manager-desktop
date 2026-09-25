@@ -16,6 +16,7 @@
   import type { main } from '../../../../wailsjs/go/models';
   import { EventsEmit } from '../../../../wailsjs/runtime/runtime';
   import Select from '../common/Select.svelte';
+  import { checkpointAutoPruneDayChoices } from '../../utils/checkpoints';
   import { TERMINAL_THEMES, CUSTOM_THEME_KEYS, getTerminalTheme, allPalettes, nextCustomId,
            MIN_FONT_SIZE, MAX_FONT_SIZE, DEFAULT_FONT_SIZE, type CustomPalette } from '../../utils/terminalThemes';
   import PalettePicker from '../common/PalettePicker.svelte';
@@ -196,6 +197,20 @@
 
   function changeTrashRetention(v: string) {
     saveSettings({ trashRetentionDays: parseInt(v, 10) });
+  }
+
+  // Off by default: a checkpoint is the user's undo, and deleting one without
+  // being asked to is not something to do on a fresh install.
+  $: checkpointAutoPruneOptions = checkpointAutoPruneDayChoices($settings.checkpointAutoPruneDays).map((days) => ({
+    value: String(days),
+    label: days === 0
+      ? $t('settings.checkpointAutoPruneOff')
+      : $t('settings.checkpointAutoPruneAfter', { days }),
+  }));
+  $: checkpointAutoPruneValue = String(Math.max($settings.checkpointAutoPruneDays || 0, 0));
+
+  function changeCheckpointAutoPrune(v: string) {
+    saveSettings({ checkpointAutoPruneDays: Math.max(parseInt(v, 10) || 0, 0) });
   }
 
   $: currentUITheme = $settings.uiTheme || DEFAULT_UI_THEME;
@@ -1799,6 +1814,18 @@
                 value={trashRetentionValue}
                 options={trashRetentionOptions}
                 on:change={(e) => changeTrashRetention(e.detail)}
+              />
+            </div>
+
+            <div class="setting-item input-item">
+              <span class="setting-info">
+                <span class="setting-label">{$t('settings.checkpointAutoPrune')}</span>
+                <span class="setting-desc">{$t('settings.checkpointAutoPruneDesc')}</span>
+              </span>
+              <Select
+                value={checkpointAutoPruneValue}
+                options={checkpointAutoPruneOptions}
+                on:change={(e) => changeCheckpointAutoPrune(e.detail)}
               />
             </div>
           </div>

@@ -42,6 +42,10 @@ export function CheckForUpdate() {
   return window['go']['main']['App']['CheckForUpdate']();
 }
 
+export function CleanUpCheckpoints(arg1, arg2, arg3, arg4, arg5, arg6) {
+  return window['go']['main']['App']['CleanUpCheckpoints'](arg1, arg2, arg3, arg4, arg5, arg6);
+}
+
 export function ClearLog(arg1) {
   return window['go']['main']['App']['ClearLog'](arg1);
 }
@@ -588,6 +592,10 @@ export function PerformUpdate(arg1) {
 
 export function PermanentlyDeleteTrashItem(arg1, arg2) {
   return window['go']['main']['App']['PermanentlyDeleteTrashItem'](arg1, arg2);
+}
+
+export function PlanCheckpointCleanup(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['PlanCheckpointCleanup'](arg1, arg2, arg3, arg4);
 }
 
 export function PlanServerMultiplexerInstall(arg1, arg2, arg3) {

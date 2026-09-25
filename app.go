@@ -4789,21 +4789,23 @@ type SettingsInfo struct {
 	TasksDefaultFilter string                `json:"tasksDefaultFilter"`
 	DiffFlatFileList   bool                  `json:"diffFlatFileList"`
 	TrashRetentionDays int                   `json:"trashRetentionDays"`
-	TaskMasterEnabled  bool                  `json:"taskMasterEnabled"`
-	RestoreLastSession bool                  `json:"restoreLastSession"`
-	TerminalFontSize   int                   `json:"terminalFontSize"`
-	AgentFontSize      int                   `json:"agentFontSize"`
-	HideViewBar        bool                  `json:"hideViewBar"`
-	AgentHideViewBar   bool                  `json:"agentHideViewBar"`
-	HideStatusBar      bool                  `json:"hideStatusBar"`
-	AgentHideStatusBar bool                  `json:"agentHideStatusBar"`
-	NotifyOnWaiting    bool                  `json:"notifyOnWaiting"`
-	NotifyDesktop      bool                  `json:"notifyDesktop"`
-	NotifyNtfy         bool                  `json:"notifyNtfy"`
-	NtfyURL            string                `json:"ntfyUrl"`
-	ExternalEditor     string                `json:"externalEditor"`
-	TerminalTheme      string                `json:"terminalTheme"`
-	AgentDefaultTheme  string                `json:"agentDefaultTheme"`
+	// CheckpointAutoPruneDays: 0 is off; see session.Settings.
+	CheckpointAutoPruneDays int    `json:"checkpointAutoPruneDays"`
+	TaskMasterEnabled       bool   `json:"taskMasterEnabled"`
+	RestoreLastSession      bool   `json:"restoreLastSession"`
+	TerminalFontSize        int    `json:"terminalFontSize"`
+	AgentFontSize           int    `json:"agentFontSize"`
+	HideViewBar             bool   `json:"hideViewBar"`
+	AgentHideViewBar        bool   `json:"agentHideViewBar"`
+	HideStatusBar           bool   `json:"hideStatusBar"`
+	AgentHideStatusBar      bool   `json:"agentHideStatusBar"`
+	NotifyOnWaiting         bool   `json:"notifyOnWaiting"`
+	NotifyDesktop           bool   `json:"notifyDesktop"`
+	NotifyNtfy              bool   `json:"notifyNtfy"`
+	NtfyURL                 string `json:"ntfyUrl"`
+	ExternalEditor          string `json:"externalEditor"`
+	TerminalTheme           string `json:"terminalTheme"`
+	AgentDefaultTheme       string `json:"agentDefaultTheme"`
 	// ShortcutOverrides holds only the shortcuts the user has rebound, keyed by
 	// shortcut id. Passed through untouched: the frontend owns what a binding
 	// looks like, because that is where key events are matched.
@@ -4911,6 +4913,7 @@ func (a *App) GetSettings() (*SettingsInfo, error) {
 		TasksDefaultFilter:        lastUsedIfUnset(settings.TasksDefaultFilter),
 		DiffFlatFileList:          settings.DiffFlatFileList,
 		TrashRetentionDays:        settings.TrashRetentionDays,
+		CheckpointAutoPruneDays:   max(settings.CheckpointAutoPruneDays, 0),
 		TaskMasterEnabled:         settings.TaskMasterEnabled,
 		RestoreLastSession:        settings.RestoreLastSession,
 		TerminalFontSize:          settings.TerminalFontSize,
@@ -5000,6 +5003,7 @@ func (a *App) SaveSettings(settings SettingsInfo, expectedProjectID string) erro
 		current.TasksDefaultFilter = storedViewDefault(settings.TasksDefaultFilter, "all", "tab")
 		current.DiffFlatFileList = settings.DiffFlatFileList
 		current.TrashRetentionDays = settings.TrashRetentionDays
+		current.CheckpointAutoPruneDays = max(settings.CheckpointAutoPruneDays, 0)
 		current.TaskMasterEnabled = settings.TaskMasterEnabled
 		current.RestoreLastSession = settings.RestoreLastSession
 		current.TerminalFontSize = settings.TerminalFontSize

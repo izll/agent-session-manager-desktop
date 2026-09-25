@@ -113,6 +113,11 @@ export interface Settings {
    */
   trashRetentionDays: number;
   /**
+   * Delete a repository's git checkpoints this many days old whenever a new
+   * one is taken. 0 is off, the default; the newest few are always kept.
+   */
+  checkpointAutoPruneDays: number;
+  /**
    * Show the experimental Task Master panel. Off unless asked for: opening it
    * runs `npx task-master-ai`, which installs the package on a machine that
    * doesn't have it.
@@ -175,6 +180,7 @@ function defaultSettings(): Settings {
     tasksDefaultFilter: 'last',
     diffFlatFileList: false,
     trashRetentionDays: 0,
+    checkpointAutoPruneDays: 0,
     taskMasterEnabled: false,
     terminalFontSize: 0,
     agentFontSize: 0,

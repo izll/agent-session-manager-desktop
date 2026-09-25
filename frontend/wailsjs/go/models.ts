@@ -226,6 +226,20 @@ export namespace main {
 	        this.statsKnown = source["statsKnown"];
 	    }
 	}
+	export class CheckpointCleanupRule {
+	    olderThanDays: number;
+	    beforeRestoreOnly: boolean;
+
+	    static createFrom(source: any = {}) {
+	        return new CheckpointCleanupRule(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.olderThanDays = source["olderThanDays"];
+	        this.beforeRestoreOnly = source["beforeRestoreOnly"];
+	    }
+	}
 	export class CheckpointList {
 	    root: string;
 	    checkpoints: Checkpoint[];
@@ -291,6 +305,20 @@ export namespace main {
 		    }
 		    return a;
 		}
+	}
+	export class CheckpointTarget {
+	    id: string;
+	    hash: string;
+
+	    static createFrom(source: any = {}) {
+	        return new CheckpointTarget(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.hash = source["hash"];
+	    }
 	}
 	export class ClaudeUsageWindow {
 	    utilization: number;
@@ -1845,6 +1873,7 @@ export namespace main {
 	    tasksDefaultFilter: string;
 	    diffFlatFileList: boolean;
 	    trashRetentionDays: number;
+	    checkpointAutoPruneDays: number;
 	    taskMasterEnabled: boolean;
 	    restoreLastSession: boolean;
 	    terminalFontSize: number;
@@ -1907,6 +1936,7 @@ export namespace main {
 	        this.tasksDefaultFilter = source["tasksDefaultFilter"];
 	        this.diffFlatFileList = source["diffFlatFileList"];
 	        this.trashRetentionDays = source["trashRetentionDays"];
+	        this.checkpointAutoPruneDays = source["checkpointAutoPruneDays"];
 	        this.taskMasterEnabled = source["taskMasterEnabled"];
 	        this.restoreLastSession = source["restoreLastSession"];
 	        this.terminalFontSize = source["terminalFontSize"];
