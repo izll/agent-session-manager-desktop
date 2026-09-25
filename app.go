@@ -2162,31 +2162,91 @@ func (a *App) ToggleFavorite(id, expectedProjectID string) error {
 // button consistent with the live indicator (which reads the pane), with no
 // session restart. Falls back to the stored-flag toggle (+restart) when the
 // session isn't running or isn't Claude, so YOLO can still be preset offline.
-func (a *App) CycleYoloMode(id string, windowIdx int, expectedProjectID string) error {
+//
+// On a tab the stored flag toggled is the tab's own — see toggleTabAutoYes —
+// and only that tab is restarted. The result says whether it was, so the
+// frontend can rebuild that tab's terminal.
+func (a *App) CycleYoloMode(id string, windowIdx int, expectedProjectID string) (bool, error) {
 	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
-		return err
+		return false, err
 	}
 	defer done()
 	inst, err := a.storage.GetInstance(id)
 	if err != nil {
-		return err
+		return false, err
 	}
-	// Determine the agent of the targeted window.
-	agent := inst.Agent
-	if windowIdx > 0 {
-		for _, fw := range inst.FollowedWindows {
-			if fw.Index == windowIdx {
-				agent = fw.Agent
-				break
-			}
+	tab := yoloTab(inst, windowIdx)
+	if tab == nil {
+		// The session's own window.
+		if inst.IsAlive() && inst.Agent == session.AgentClaude {
+			return false, inst.SendKeysToWindow(windowIdx, "BTab") // Shift+Tab
+		}
+		// Not running / not Claude: preset via the stored flag (restarts if alive).
+		return false, a.toggleAutoYes(id, expectedProjectID)
+	}
+	if tab.Agent == session.AgentClaude && !tab.Stopped && inst.IsAlive() {
+		return false, inst.SendKeysToWindow(windowIdx, "BTab") // Shift+Tab
+	}
+	return a.toggleTabAutoYes(inst, windowIdx, expectedProjectID)
+}
+
+// yoloTab is the tab at windowIdx, or nil for the session's own window.
+func yoloTab(inst *session.Instance, windowIdx int) *session.FollowedWindow {
+	for idx := range inst.FollowedWindows {
+		if inst.FollowedWindows[idx].Index == windowIdx {
+			return &inst.FollowedWindows[idx]
 		}
 	}
-	if inst.IsAlive() && agent == session.AgentClaude {
-		return inst.SendKeysToWindow(windowIdx, "BTab") // Shift+Tab
+	return nil
+}
+
+// tabYoloToggle says what a YOLO click on a tab sets: the session's flag and
+// the tab's own, given both as they are.
+//
+// A tab starts with YOLO when either flag is set (fw.AutoYes || i.AutoYes),
+// and the button shows exactly that. So a click on a tab that is on turns off
+// whatever makes it on — the tab's own flag and, if set, the session's too,
+// since the tab cannot be off while the session's flag is on. A click on a tab
+// that is off turns on the tab's own flag only: the other tabs and the main
+// window are left as they are.
+//
+// Before, every click on a non-Claude tab flipped the session's flag. A tab
+// whose own flag was set therefore stayed on however often it was clicked.
+func tabYoloToggle(sessionAutoYes, tabAutoYes bool) (newSession, newTab bool) {
+	if sessionAutoYes || tabAutoYes {
+		return false, false
 	}
-	// Not running / not Claude: preset via the stored flag (restarts if alive).
-	return a.toggleAutoYes(id, expectedProjectID)
+	return false, true
+}
+
+// toggleTabAutoYes applies tabYoloToggle to the tab at windowIdx.
+//
+// Turning off a session-wide YOLO changes every tab, so that goes the way it
+// always did: the session's flag, and the whole session restarted. Otherwise
+// only the tab's own flag changes, and only that tab is restarted — when it is
+// running; a stopped tab or session picks the flag up when next started.
+func (a *App) toggleTabAutoYes(inst *session.Instance, windowIdx int, expectedProjectID string) (bool, error) {
+	tab := yoloTab(inst, windowIdx)
+	if tab == nil {
+		return false, fmt.Errorf("tab %d not found", windowIdx)
+	}
+	newSession, newTab := tabYoloToggle(inst.AutoYes, tab.AutoYes)
+	tab.AutoYes = newTab
+	if newSession != inst.AutoYes {
+		return false, a.setSessionAutoYes(inst, newSession, expectedProjectID)
+	}
+	if err := a.storage.UpdateInstance(inst); err != nil {
+		return false, err
+	}
+	if tab.Stopped || !inst.IsAlive() {
+		return false, nil
+	}
+	log.Printf("[ToggleAutoYes] session=%s tab=%d auto_yes=%t; restarting the tab", inst.ID, windowIdx, newTab)
+	if err := inst.RestartWindow(windowIdx); err != nil {
+		return false, fmt.Errorf("failed to restart tab after YOLO toggle: %w", err)
+	}
+	return true, a.storage.UpdateInstance(inst)
 }
 
 // ToggleAutoYes toggles YOLO mode and restarts the session if running
@@ -2204,7 +2264,14 @@ func (a *App) toggleAutoYes(id, expectedProjectID string) error {
 	if err != nil {
 		return err
 	}
-	inst.AutoYes = !inst.AutoYes
+	return a.setSessionAutoYes(inst, !inst.AutoYes, expectedProjectID)
+}
+
+// setSessionAutoYes stores the session's YOLO flag and, if the session is
+// running, restarts it so the flag takes effect.
+func (a *App) setSessionAutoYes(inst *session.Instance, autoYes bool, expectedProjectID string) error {
+	id := inst.ID
+	inst.AutoYes = autoYes
 	if err := a.storage.UpdateInstance(inst); err != nil {
 		return err
 	}

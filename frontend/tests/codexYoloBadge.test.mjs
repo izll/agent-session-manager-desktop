@@ -88,3 +88,44 @@ test('the main panel uses it', () => {
   assert.match(panel, /\$: liveYolo = yoloButton\.active;/);
   assert.match(panel, /class:not-in-effect=\{yoloButton\.notInEffect\}/);
 });
+
+// A click on a tab toggles what makes that tab YOLO: its own flag, or the
+// session's it inherits (CycleYoloMode / tabYoloToggle). The button shows
+// exactly that, so a tab on by its own flag alone reads on, and reads off once
+// the click has cleared it. Before, the click set the session's flag and the
+// button could never be turned off from there.
+test('the button on a tab follows the flags a click toggles', () => {
+  const base = { running: true, tabAgent: 'codex', tab: { yolo: false } };
+  assert.equal(yoloButtonState({ ...base, sessionAutoYes: false, tabAutoYes: true }).active, true);
+  assert.equal(yoloButtonState({ ...base, sessionAutoYes: false, tabAutoYes: false }).active, false,
+    "after the click cleared the tab's own flag");
+  assert.equal(yoloButtonState({ ...base, sessionAutoYes: true, tabAutoYes: false }).active, true);
+});
+
+test('a live reading no click can change does not keep the button on', () => {
+  const state = yoloButtonState({
+    running: true, tabAgent: 'codex', sessionAutoYes: false, tabAutoYes: false, tab: { yolo: true },
+  });
+  assert.equal(state.active, false);
+});
+
+test('a stopped tab has no pane to cycle, so even a Claude one shows its flags', () => {
+  const stoppedClaude = yoloButtonState({
+    running: true, tabAgent: 'claude', sessionAutoYes: false, tabAutoYes: true, tabStopped: true, tab: undefined,
+  });
+  assert.deepEqual(stoppedClaude, { active: true, notInEffect: false });
+  const stoppedSession = yoloButtonState({
+    running: false, tabAgent: 'codex', sessionAutoYes: false, tabAutoYes: true, tab: undefined,
+  });
+  assert.equal(stoppedSession.active, true);
+});
+
+test('the main panel says whether the tab is stopped, and reloads after a click', () => {
+  const panel = read('../src/lib/components/MainPanel/MainPanel.svelte');
+  assert.match(panel, /tabStopped: isTab && !!fw\?\.stopped/);
+  assert.match(panel, /tabAutoYes: isTab && !!fw\?\.auto_yes/);
+  const store = read('../src/lib/stores/sessions.ts');
+  const from = store.indexOf('export async function cycleYoloMode');
+  const body = store.slice(from, store.indexOf('\n}\n', from));
+  assert.match(body, /if \(restartedTab\) dropPoolForWindow\(id, windowIdx\);[\s\S]*await loadSessions\(\);/);
+});

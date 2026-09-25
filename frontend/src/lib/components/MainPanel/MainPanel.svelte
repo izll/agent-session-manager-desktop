@@ -639,12 +639,14 @@
   $: yoloButton = (() => {
     const list = $selectedSessionId ? $tabStatuses[$selectedSessionId] : undefined;
     const idx = $selectedWindowIdx ?? 0;
+    const isTab = idx !== (currentSession?.mainWindowIndex ?? 0);
     const fw = currentSession?.followedWindows?.find((w: any) => w.index === idx);
     return yoloButtonState({
       running: currentSession?.status === 'running',
       tabAgent: currentTabAgent,
       sessionAutoYes: !!currentSession?.autoYes,
-      tabAutoYes: idx !== (currentSession?.mainWindowIndex ?? 0) && !!fw?.auto_yes,
+      tabAutoYes: isTab && !!fw?.auto_yes,
+      tabStopped: isTab && !!fw?.stopped,
       tab: list?.find(t => t.windowIdx === idx),
     });
   })();
@@ -911,8 +913,8 @@
               on:click|stopPropagation={async () => {
                 if (!currentSession) return;
                 try {
-                  // Cycle the live mode via Shift+Tab (no restart); the
-                  // indicator updates from the pane on the next poll.
+                  // A running Claude window cycles its live mode via Shift+Tab
+                  // (no restart); anything else toggles the stored setting.
                   await cycleYoloMode(currentSession.id, $selectedWindowIdx ?? 0);
                 } catch (e) {
                   console.error('YOLO cycle failed:', e);

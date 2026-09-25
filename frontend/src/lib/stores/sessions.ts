@@ -469,11 +469,17 @@ export async function toggleAutoYes(id: string) {
 
 // Cycle the YOLO/permission mode of a running Claude window by sending Shift+Tab
 // to its pane (no restart). The live indicator updates on the next poll. Falls
-// back to ToggleAutoYes (stored flag + restart) for stopped/non-Claude windows.
+// back to the stored flag for stopped/non-Claude windows: the session's for the
+// main window (restarting the session), the tab's own for a tab (restarting just
+// that tab, whose terminal is then rebuilt as after any tab restart).
 export async function cycleYoloMode(id: string, windowIdx: number) {
   const target = projectTarget();
   try {
-    await App.CycleYoloMode(id, windowIdx, target.projectId);
+    const restartedTab = await App.CycleYoloMode(id, windowIdx, target.projectId);
+    if (!projectTargetIsCurrent(target)) return;
+    if (restartedTab) dropPoolForWindow(id, windowIdx);
+    // The stored flags changed; the button reads them from the session list.
+    await loadSessions();
   } catch (e) {
     if (!projectTargetIsCurrent(target)) return;
     error.set(String(e));

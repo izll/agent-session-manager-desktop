@@ -60,7 +60,7 @@ export function CreateTabWithWorktree(arg1:string,arg2:string,arg3:boolean,arg4:
 
 export function CreateTask(arg1:string,arg2:string,arg3:string,arg4:string,arg5:Array<string>,arg6:string):Promise<main.TaskInfo>;
 
-export function CycleYoloMode(arg1:string,arg2:number,arg3:string):Promise<void>;
+export function CycleYoloMode(arg1:string,arg2:number,arg3:string):Promise<boolean>;
 
 export function DeleteCheckpoint(arg1:string,arg2:number,arg3:string,arg4:string,arg5:string):Promise<void>;
 
