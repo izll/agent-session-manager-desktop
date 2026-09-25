@@ -1498,5 +1498,6 @@
   "error.checkpointsRootChanged": "El directorio de trabajo de la pestaña cambió; vuelve a abrir los puntos de control",
   "error.checkpointNotFound": "Ese punto de control ya no existe",
   "error.checkpointDirectoryInTheWay": "No se restauró nada: {0} ahora es un directorio con archivos ignorados. Muévelos y vuelve a intentarlo",
-  "sessionItem.yoloTooltip": "Omitir permisos (YOLO)"
+  "sessionItem.yoloTooltip": "Omitir permisos (YOLO)",
+  "sessionItem.yoloNotInEffect": "YOLO solicitado pero no activo — el servidor en segundo plano de Codex lo ignora"
 }

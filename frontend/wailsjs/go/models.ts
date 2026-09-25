@@ -2040,6 +2040,7 @@ export namespace main {
 	    statusLine: string;
 	    spinnerText: string;
 	    yolo: boolean;
+	    yoloNotInEffect?: boolean;
 	    unreachable?: boolean;
 	    missing?: boolean;
 	    hideStatusLine: boolean;
@@ -2057,6 +2058,7 @@ export namespace main {
 	        this.statusLine = source["statusLine"];
 	        this.spinnerText = source["spinnerText"];
 	        this.yolo = source["yolo"];
+	        this.yoloNotInEffect = source["yoloNotInEffect"];
 	        this.unreachable = source["unreachable"];
 	        this.missing = source["missing"];
 	        this.hideStatusLine = source["hideStatusLine"];

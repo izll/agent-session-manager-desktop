@@ -1498,5 +1498,6 @@
   "error.checkpointsRootChanged": "Sekmenin çalışma dizini değişti; kontrol noktalarını yeniden açın",
   "error.checkpointNotFound": "Bu kontrol noktası artık yok",
   "error.checkpointDirectoryInTheWay": "Hiçbir şey geri yüklenmedi: {0} artık yok sayılan dosyalar içeren bir dizin. Onları başka yere taşıyıp yeniden deneyin",
-  "sessionItem.yoloTooltip": "İzinleri atla (YOLO)"
+  "sessionItem.yoloTooltip": "İzinleri atla (YOLO)",
+  "sessionItem.yoloNotInEffect": "YOLO istendi ama geçerli değil — Codex'in arka plan sunucusu bunu yok sayıyor"
 }

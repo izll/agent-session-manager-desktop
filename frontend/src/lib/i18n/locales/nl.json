@@ -1498,5 +1498,6 @@
   "error.checkpointsRootChanged": "De werkmap van het tabblad is gewijzigd; open de checkpoints opnieuw",
   "error.checkpointNotFound": "Dat checkpoint bestaat niet meer",
   "error.checkpointDirectoryInTheWay": "Er is niets hersteld: {0} is nu een map met genegeerde bestanden. Verplaats ze en probeer het opnieuw",
-  "sessionItem.yoloTooltip": "Rechten omzeilen (YOLO)"
+  "sessionItem.yoloTooltip": "Rechten omzeilen (YOLO)",
+  "sessionItem.yoloNotInEffect": "YOLO gevraagd maar niet actief — de achtergrondserver van Codex negeert het"
 }

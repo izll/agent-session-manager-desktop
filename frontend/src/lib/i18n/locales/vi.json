@@ -1498,5 +1498,6 @@
   "error.checkpointsRootChanged": "Thư mục làm việc của thẻ đã thay đổi; hãy mở lại Điểm kiểm tra",
   "error.checkpointNotFound": "Điểm kiểm tra này không còn tồn tại",
   "error.checkpointDirectoryInTheWay": "Không có gì được khôi phục: {0} giờ là một thư mục chứa tệp bị bỏ qua. Hãy di chuyển chúng đi rồi thử lại",
-  "sessionItem.yoloTooltip": "Bỏ qua quyền (YOLO)"
+  "sessionItem.yoloTooltip": "Bỏ qua quyền (YOLO)",
+  "sessionItem.yoloNotInEffect": "Đã yêu cầu YOLO nhưng không có hiệu lực — máy chủ nền của Codex bỏ qua nó"
 }

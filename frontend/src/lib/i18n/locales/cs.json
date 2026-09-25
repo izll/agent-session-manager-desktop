@@ -1498,5 +1498,6 @@
   "error.checkpointsRootChanged": "Pracovní adresář karty se změnil; otevřete kontrolní body znovu",
   "error.checkpointNotFound": "Tento kontrolní bod už neexistuje",
   "error.checkpointDirectoryInTheWay": "Nic nebylo obnoveno: {0} je teď adresář s ignorovanými soubory. Přesuňte je jinam a zkuste to znovu",
-  "sessionItem.yoloTooltip": "Obejít oprávnění (YOLO)"
+  "sessionItem.yoloTooltip": "Obejít oprávnění (YOLO)",
+  "sessionItem.yoloNotInEffect": "YOLO vyžádáno, ale neplatí — server Codexu na pozadí ho ignoruje"
 }

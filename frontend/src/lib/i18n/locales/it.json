@@ -1498,5 +1498,6 @@
   "error.checkpointsRootChanged": "La directory di lavoro della scheda è cambiata; riapri i checkpoint",
   "error.checkpointNotFound": "Questo checkpoint non esiste più",
   "error.checkpointDirectoryInTheWay": "Non è stato ripristinato nulla: {0} ora è una directory che contiene file ignorati. Spostali e riprova",
-  "sessionItem.yoloTooltip": "Ignora i permessi (YOLO)"
+  "sessionItem.yoloTooltip": "Ignora i permessi (YOLO)",
+  "sessionItem.yoloNotInEffect": "YOLO richiesto ma non attivo — il server in background di Codex lo ignora"
 }

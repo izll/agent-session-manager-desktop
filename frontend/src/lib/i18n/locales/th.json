@@ -1498,5 +1498,6 @@
   "error.checkpointsRootChanged": "ไดเรกทอรีทำงานของแท็บเปลี่ยนไปแล้ว โปรดเปิดจุดตรวจสอบใหม่",
   "error.checkpointNotFound": "จุดตรวจสอบนี้ไม่มีอยู่แล้ว",
   "error.checkpointDirectoryInTheWay": "ไม่ได้กู้คืนสิ่งใด: ตอนนี้ {0} เป็นไดเรกทอรีที่มีไฟล์ที่ถูกละเว้น โปรดย้ายไฟล์เหล่านั้นออกแล้วลองอีกครั้ง",
-  "sessionItem.yoloTooltip": "ข้ามการขออนุญาต (YOLO)"
+  "sessionItem.yoloTooltip": "ข้ามการขออนุญาต (YOLO)",
+  "sessionItem.yoloNotInEffect": "ขอ YOLO แล้วแต่ไม่มีผล — เซิร์ฟเวอร์เบื้องหลังของ Codex เพิกเฉยต่อมัน"
 }

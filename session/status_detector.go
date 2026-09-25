@@ -409,6 +409,10 @@ func (i *Instance) DetectYoloForWindowContext(ctx context.Context, windowIdx int
 			}
 		}
 	}
+	if agent == AgentCodex {
+		// Codex does not show its mode on screen; its rollout records it.
+		return i.codexYoloReading(ctx, windowIdx).On
+	}
 	if agent != AgentClaude {
 		return false
 	}
@@ -446,6 +450,21 @@ func (i *Instance) DetectYoloForWindowContext(ctx context.Context, windowIdx int
 	// Mode bar hidden (e.g. a permission/question dialog is up). Keep the last
 	// known state instead of flickering the badge off.
 	return cachedYolo(target)
+}
+
+// DetectYoloStateForWindowContext is DetectYoloForWindowContext with the
+// warning the badge also shows: YOLO asked for but, as the agent reports it,
+// not in effect. Only Codex reports that; for Claude the pane shows the mode
+// the user may have switched on purpose.
+func (i *Instance) DetectYoloStateForWindowContext(ctx context.Context, windowIdx int) YoloReading {
+	agent, _ := i.conversationInWindow(windowIdx)
+	if agent == AgentCodex {
+		if !i.windowAliveContext(ctx, windowIdx) {
+			return YoloReading{}
+		}
+		return i.codexYoloReading(ctx, windowIdx)
+	}
+	return YoloReading{On: i.DetectYoloForWindowContext(ctx, windowIdx)}
 }
 
 // cachedYolo returns the last definitive yolo reading for target, or false.

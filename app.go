@@ -3142,6 +3142,11 @@ type TabStatusInfo struct {
 	// bar, so the sidebar follows a Shift+Tab toggle inside Claude, not just the
 	// stored launch flag. "auto mode" is NOT yolo and reports false here.
 	Yolo bool `json:"yolo"`
+	// YoloNotInEffect: YOLO was asked for this tab, but the agent's own record
+	// says it is not in effect — Codex's background server ignores the flag.
+	// Shown as a warning badge rather than no badge, which would read as "not
+	// asked for".
+	YoloNotInEffect bool `json:"yoloNotInEffect,omitempty"`
 	// Unreachable says this tab's machine did not answer for it.
 	//
 	// Separate from "no activity": a tab on a server that cannot be reached is
@@ -3513,17 +3518,19 @@ func (a *App) getSidebarUpdates(ctx context.Context) SidebarUpdate {
 					line = line[:97] + "..."
 				}
 
+				yolo := inst.DetectYoloStateForWindowContext(ctx, w.idx)
 				tabStatuses = append(tabStatuses, TabStatusInfo{
-					WindowIdx:      w.idx,
-					Agent:          string(w.agent),
-					Name:           w.name,
-					Activity:       actStr,
-					StatusLine:     line,
-					SpinnerText:    info.SpinnerText,
-					Yolo:           inst.DetectYoloForWindowContext(ctx, w.idx),
-					Unreachable:    !inst.WindowReachable(w.idx),
-					Missing:        tabWindowMissing(inst, w.idx, activityValid),
-					HideStatusLine: w.hideLine,
+					WindowIdx:       w.idx,
+					Agent:           string(w.agent),
+					Name:            w.name,
+					Activity:        actStr,
+					StatusLine:      line,
+					SpinnerText:     info.SpinnerText,
+					Yolo:            yolo.On,
+					YoloNotInEffect: yolo.NotInEffect,
+					Unreachable:     !inst.WindowReachable(w.idx),
+					Missing:         tabWindowMissing(inst, w.idx, activityValid),
+					HideStatusLine:  w.hideLine,
 				})
 
 				if activity == session.ActivityWaiting {

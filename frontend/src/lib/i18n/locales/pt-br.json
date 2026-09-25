@@ -1498,5 +1498,6 @@
   "error.checkpointsRootChanged": "O diretório de trabalho da aba mudou; abra os checkpoints novamente",
   "error.checkpointNotFound": "Esse checkpoint não existe mais",
   "error.checkpointDirectoryInTheWay": "Nada foi restaurado: {0} agora é um diretório com arquivos ignorados. Mova-os e tente novamente",
-  "sessionItem.yoloTooltip": "Ignorar permissões (YOLO)"
+  "sessionItem.yoloTooltip": "Ignorar permissões (YOLO)",
+  "sessionItem.yoloNotInEffect": "YOLO solicitado, mas não ativo — o servidor em segundo plano do Codex o ignora"
 }

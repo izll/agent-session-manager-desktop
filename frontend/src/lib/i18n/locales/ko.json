@@ -1498,5 +1498,6 @@
   "error.checkpointsRootChanged": "탭의 작업 디렉터리가 바뀌었습니다. 체크포인트를 다시 여세요",
   "error.checkpointNotFound": "해당 체크포인트가 더 이상 존재하지 않습니다",
   "error.checkpointDirectoryInTheWay": "아무것도 복원되지 않았습니다: {0}은(는) 이제 무시된 파일이 들어 있는 디렉터리입니다. 파일을 옮긴 뒤 다시 시도하세요",
-  "sessionItem.yoloTooltip": "권한 확인 건너뛰기(YOLO)"
+  "sessionItem.yoloTooltip": "권한 확인 건너뛰기(YOLO)",
+  "sessionItem.yoloNotInEffect": "YOLO를 요청했지만 적용되지 않음 — Codex 백그라운드 서버가 무시합니다"
 }

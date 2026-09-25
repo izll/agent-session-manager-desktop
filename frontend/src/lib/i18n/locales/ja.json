@@ -1498,5 +1498,6 @@
   "error.checkpointsRootChanged": "タブの作業ディレクトリが変わりました。チェックポイントを開き直してください",
   "error.checkpointNotFound": "そのチェックポイントはもう存在しません",
   "error.checkpointDirectoryInTheWay": "何も復元されませんでした: {0} は現在、無視されたファイルを含むディレクトリです。それらを移動してから再試行してください",
-  "sessionItem.yoloTooltip": "権限の確認をスキップ（YOLO）"
+  "sessionItem.yoloTooltip": "権限の確認をスキップ（YOLO）",
+  "sessionItem.yoloNotInEffect": "YOLO を指定しましたが有効ではありません — Codex のバックグラウンドサーバーが無視しています"
 }

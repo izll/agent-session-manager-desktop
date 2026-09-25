@@ -1498,5 +1498,6 @@
   "error.checkpointsRootChanged": "Рабочий каталог вкладки изменился; откройте контрольные точки заново",
   "error.checkpointNotFound": "Этой контрольной точки больше нет",
   "error.checkpointDirectoryInTheWay": "Ничего не восстановлено: {0} теперь каталог с игнорируемыми файлами. Уберите их и повторите попытку",
-  "sessionItem.yoloTooltip": "Обход разрешений (YOLO)"
+  "sessionItem.yoloTooltip": "Обход разрешений (YOLO)",
+  "sessionItem.yoloNotInEffect": "YOLO запрошен, но не действует — фоновый сервер Codex его игнорирует"
 }

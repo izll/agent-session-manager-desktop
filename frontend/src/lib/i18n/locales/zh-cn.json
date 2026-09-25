@@ -1498,5 +1498,6 @@
   "error.checkpointsRootChanged": "标签页的工作目录已更改，请重新打开检查点",
   "error.checkpointNotFound": "该检查点已不存在",
   "error.checkpointDirectoryInTheWay": "未恢复任何内容：{0} 现在是一个包含被忽略文件的目录。请将这些文件移走后重试",
-  "sessionItem.yoloTooltip": "跳过权限确认（YOLO）"
+  "sessionItem.yoloTooltip": "跳过权限确认（YOLO）",
+  "sessionItem.yoloNotInEffect": "已请求 YOLO 但未生效 — Codex 后台服务器会忽略它"
 }

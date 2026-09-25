@@ -47,6 +47,9 @@ export interface TabStatusInfo {
   statusLine: string;
   spinnerText: string;
   yolo: boolean;
+  // YOLO was asked for, but the agent reports it is not in effect (Codex's
+  // background server ignores the flag).
+  yoloNotInEffect?: boolean;
   hideStatusLine: boolean;
   // Set when this tab's machine did not answer for it. A tab on an
   // unreachable server is not idle — its work is running out of sight — so

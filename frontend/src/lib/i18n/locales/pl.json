@@ -1498,5 +1498,6 @@
   "error.checkpointsRootChanged": "Katalog roboczy karty się zmienił; otwórz punkty kontrolne ponownie",
   "error.checkpointNotFound": "Ten punkt kontrolny już nie istnieje",
   "error.checkpointDirectoryInTheWay": "Nic nie przywrócono: {0} jest teraz katalogiem z ignorowanymi plikami. Przenieś je i spróbuj ponownie",
-  "sessionItem.yoloTooltip": "Pomijanie uprawnień (YOLO)"
+  "sessionItem.yoloTooltip": "Pomijanie uprawnień (YOLO)",
+  "sessionItem.yoloNotInEffect": "YOLO zażądane, ale nie działa — serwer w tle Codexa je ignoruje"
 }

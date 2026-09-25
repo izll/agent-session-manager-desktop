@@ -1498,5 +1498,6 @@
   "error.checkpointsRootChanged": "Megváltozott a fül munkakönyvtára; nyisd meg újra a mentési pontokat",
   "error.checkpointNotFound": "Ez a mentési pont már nem létezik",
   "error.checkpointDirectoryInTheWay": "Semmi sem lett visszaállítva: a(z) {0} most egy könyvtár, amelyben ignorált fájlok vannak. Tedd el őket máshová, és próbáld újra",
-  "sessionItem.yoloTooltip": "Engedélyek megkerülése (YOLO)"
+  "sessionItem.yoloTooltip": "Engedélyek megkerülése (YOLO)",
+  "sessionItem.yoloNotInEffect": "YOLO kérve, de nem érvényes — a Codex háttérszervere figyelmen kívül hagyja"
 }

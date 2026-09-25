@@ -1480,6 +1480,7 @@
   "error.settingsSaveFailed": "Could not save the settings: {error}",
   "error.projectsLoadFailed": "Could not load the projects: {error}",
   "sessionItem.yoloTooltip": "Bypass permissions (YOLO)",
+  "sessionItem.yoloNotInEffect": "YOLO requested but not in effect — Codex's background server ignores it",
   "tabBar.extraArgsFailed": "Could not save the arguments: {error}",
   "tabBar.deleteTabFailed": "Could not delete the tab: {error}",
   "tabBar.restartTabFailed": "Could not restart the tab: {error}",

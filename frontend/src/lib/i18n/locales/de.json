@@ -1498,5 +1498,6 @@
   "error.checkpointsRootChanged": "Das Arbeitsverzeichnis des Tabs hat sich geändert; öffne die Checkpoints erneut",
   "error.checkpointNotFound": "Dieser Checkpoint existiert nicht mehr",
   "error.checkpointDirectoryInTheWay": "Nichts wurde wiederhergestellt: {0} ist jetzt ein Verzeichnis mit ignorierten Dateien. Verschiebe sie und versuche es erneut",
-  "sessionItem.yoloTooltip": "Berechtigungen umgehen (YOLO)"
+  "sessionItem.yoloTooltip": "Berechtigungen umgehen (YOLO)",
+  "sessionItem.yoloNotInEffect": "YOLO angefordert, aber nicht aktiv — der Hintergrundserver von Codex ignoriert es"
 }

@@ -16,6 +16,7 @@
   import { t } from '../../i18n';
   import { focusTerminal } from '../../utils/focus';
   import type { TabStatusInfo } from '../../stores/statusLines';
+  import { yoloBadge } from '../../utils/yoloBadge';
   import { afterUnsavedChanges } from '../../stores/unsavedChanges';
   import { activeProjectId } from '../../stores/projects';
   import { UnfinishedTasksForSession } from '../../../../wailsjs/go/main/App';
@@ -88,14 +89,16 @@
   // Live YOLO (bypass-permissions) state, read per-tab from the pane.
   //  - single tab  → "Y" next to the session NAME (in the badges)
   //  - multi tab   → "Y" at the end of the specific tab's status row
-  $: singleTabYolo = tabStatuses.length === 1 ? !!tabStatuses[0]?.yolo : false;
+  //  - a crossed-out "Y" where YOLO was asked for but is not in effect
+  $: singleTabYolo = tabStatuses.length === 1 ? yoloBadge(tabStatuses[0]) : '';
+  $: nameYolo = sessionStatus === 'running' ? singleTabYolo : (session.autoYes ? 'on' : '');
 
   // YOLO shows unless switched off; the resume marker is opt-in.
   $: showYolo = !$settings?.hideYoloBadge;
   $: showResume = !!$settings?.showResumeBadge;
   /** A tab row worth drawing: it has status text, or a YOLO badge that shows. */
-  $: tabRowVisible = (tab: { statusLine?: string; yolo?: boolean }) =>
-    !!tab.statusLine || (!!tab.yolo && showYolo);
+  $: tabRowVisible = (tab: { statusLine?: string; yolo?: boolean; yoloNotInEffect?: boolean }) =>
+    !!tab.statusLine || (!!yoloBadge(tab) && showYolo);
 
   // Unique agent types for multi-agent sessions (only when 2+ different agents)
   $: uniqueAgents = (() => {
@@ -404,8 +407,9 @@
       <!-- YOLO next to the name ONLY for a single-tab session. When running we
            use the live pane state; when not running fall back to the stored
            launch flag so the marker is still visible while stopped. -->
-      {#if (sessionStatus === 'running' ? singleTabYolo : session.autoYes) && showYolo}
-        <span class="badge yolo" title={$t("sessionItem.yoloTooltip")}>Y</span>
+      {#if nameYolo && showYolo}
+        <span class="badge yolo" class:not-in-effect={nameYolo === 'notInEffect'}
+          title={$t(nameYolo === 'on' ? 'sessionItem.yoloTooltip' : 'sessionItem.yoloNotInEffect')}>Y</span>
       {/if}
     </div>
   </div>
@@ -420,19 +424,19 @@
           <div class="status-text busy tab-status">
             <span>{tab.spinnerText || tab.statusLine || ''}</span>
             {#if $settings?.showAgentIcons}<AgentIcon agent={tab.agent} size="xs" />{/if}
-            {#if tab.yolo && showYolo}<span class="badge yolo" title={$t("sessionItem.yoloTooltip")}>Y</span>{/if}
+            {#if yoloBadge(tab) && showYolo}<span class="badge yolo" class:not-in-effect={yoloBadge(tab) === 'notInEffect'} title={$t(yoloBadge(tab) === 'on' ? 'sessionItem.yoloTooltip' : 'sessionItem.yoloNotInEffect')}>Y</span>{/if}
           </div>
         {:else if tab.activity === 'waiting'}
           <div class="status-text waiting tab-status">
             <span>{$t('sessionItem.waitingInput')}</span>
             {#if $settings?.showAgentIcons}<AgentIcon agent={tab.agent} size="xs" />{/if}
-            {#if tab.yolo && showYolo}<span class="badge yolo" title={$t("sessionItem.yoloTooltip")}>Y</span>{/if}
+            {#if yoloBadge(tab) && showYolo}<span class="badge yolo" class:not-in-effect={yoloBadge(tab) === 'notInEffect'} title={$t(yoloBadge(tab) === 'on' ? 'sessionItem.yoloTooltip' : 'sessionItem.yoloNotInEffect')}>Y</span>{/if}
           </div>
         {:else if tabRowVisible(tab)}
           <div class="status-text tab-status">
             <span>{tab.statusLine}</span>
             {#if $settings?.showAgentIcons}<AgentIcon agent={tab.agent} size="xs" />{/if}
-            {#if tab.yolo && showYolo}<span class="badge yolo" title={$t("sessionItem.yoloTooltip")}>Y</span>{/if}
+            {#if yoloBadge(tab) && showYolo}<span class="badge yolo" class:not-in-effect={yoloBadge(tab) === 'notInEffect'} title={$t(yoloBadge(tab) === 'on' ? 'sessionItem.yoloTooltip' : 'sessionItem.yoloNotInEffect')}>Y</span>{/if}
           </div>
         {/if}
       {/each}
@@ -688,6 +692,14 @@
     background: rgba(255, 107, 107, 0.1);
     border: 1px solid rgba(255, 107, 107, 0.25);
     font-size: 9px;
+  }
+
+  /* Asked for, not in effect: amber and struck through. */
+  .badge.yolo.not-in-effect {
+    color: #fbbf24;
+    background: rgba(251, 191, 36, 0.1);
+    border-color: rgba(251, 191, 36, 0.3);
+    text-decoration: line-through;
   }
 
   .status-text {

@@ -1498,5 +1498,6 @@
   "error.checkpointsRootChanged": "Le répertoire de travail de l'onglet a changé ; rouvrez les points de sauvegarde",
   "error.checkpointNotFound": "Ce point de sauvegarde n'existe plus",
   "error.checkpointDirectoryInTheWay": "Rien n'a été restauré : {0} est maintenant un répertoire contenant des fichiers ignorés. Déplacez-les puis réessayez",
-  "sessionItem.yoloTooltip": "Contourner les autorisations (YOLO)"
+  "sessionItem.yoloTooltip": "Contourner les autorisations (YOLO)",
+  "sessionItem.yoloNotInEffect": "YOLO demandé mais pas actif — le serveur d'arrière-plan de Codex l'ignore"
 }
