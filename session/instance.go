@@ -788,6 +788,14 @@ func (i *Instance) terminalRestartDirArgs(fw FollowedWindow) []string {
 	if strings.TrimSpace(dir) == "" {
 		dir = i.Path
 	}
+	if i.ServerID != "" {
+		// The session and the tab are on a server: the directory is there,
+		// so it can neither be looked for here nor be a Windows path.
+		if dir = strings.TrimSpace(dir); path.IsAbs(dir) {
+			return []string{"-c", dir}
+		}
+		return nil
+	}
 	return restartDirArgs(dir)
 }
 

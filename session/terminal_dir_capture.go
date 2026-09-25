@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -49,12 +50,13 @@ func (i *Instance) captureTerminalWorkingDir(windowIdx int, query paneDirQuery) 
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), terminalDirCaptureTimeout)
 	defer cancel()
+	remote := newServerPaneDirs(i)
 	for idx := range i.FollowedWindows {
 		window := &i.FollowedWindows[idx]
 		if window.Index != windowIdx {
 			continue
 		}
-		dir, ok := i.readTerminalTabDir(ctx, *window, query)
+		dir, ok := i.readTerminalTabDir(ctx, *window, query, remote)
 		if !ok || dir == window.WorkDir {
 			return false
 		}
@@ -77,9 +79,10 @@ func (i *Instance) captureTerminalWorkingDirs(query paneDirQuery) bool {
 	defer cancel()
 
 	changed := false
+	remote := newServerPaneDirs(i)
 	for idx := range i.FollowedWindows {
 		window := &i.FollowedWindows[idx]
-		dir, ok := i.readTerminalTabDir(ctx, *window, query)
+		dir, ok := i.readTerminalTabDir(ctx, *window, query, remote)
 		if !ok || dir == window.WorkDir {
 			continue
 		}
@@ -118,8 +121,9 @@ func (i *Instance) terminalDirsNow(ctx context.Context, query paneDirQuery) map[
 	}
 	ctx, cancel := context.WithTimeout(ctx, terminalDirCaptureTimeout)
 	defer cancel()
+	remote := newServerPaneDirs(i)
 	for _, window := range i.FollowedWindows {
-		if dir, ok := i.readTerminalTabDir(ctx, window, query); ok {
+		if dir, ok := i.readTerminalTabDir(ctx, window, query, remote); ok {
 			dirs[window.Index] = dir
 		}
 	}
@@ -135,16 +139,29 @@ func (i *Instance) terminalDirsNow(ctx context.Context, query paneDirQuery) map[
 // multiplexer about tabs on a server, which answered for a local pane, and
 // that local path — or, after the root rule, an empty one — overwrote the
 // server tab's own directory.
-func (i *Instance) readTerminalTabDir(ctx context.Context, window FollowedWindow, query paneDirQuery) (string, bool) {
+func (i *Instance) readTerminalTabDir(ctx context.Context, window FollowedWindow, query paneDirQuery, remote serverPaneDirQuery) (string, bool) {
 	if !isTerminalTab(window.Agent) || window.Stopped {
 		return "", false
 	}
-	// The query asks the local multiplexer, which knows nothing of a server's
-	// panes — neither a server session's nor a server tab's.
-	if i.ServerID != "" || window.ServerID != "" {
-		return "", false
-	}
 	target := fmt.Sprintf("%s:%d", i.TmuxSessionName(), window.Index)
+	// The local query knows nothing of a server's panes — neither a server
+	// session's nor a server tab's — so those are asked on the server. Asking
+	// the local one answered for a local pane, which overwrote the server
+	// tab's directory; leaving them out instead meant a server terminal never
+	// kept its directory at all.
+	if server := window.RunsOn(i.ServerID); server != "" {
+		reported := remote(ctx, server, target)
+		if ctx.Err() != nil {
+			return "", false
+		}
+		// Only a session on that same server has a root there to compare
+		// with; a server tab of a local session keeps whatever it reports.
+		root := ""
+		if server == i.ServerID {
+			root = i.Path
+		}
+		return classifyServerDir(reported, root)
+	}
 	reported := query(ctx, target)
 	if ctx.Err() != nil {
 		return "", false
@@ -196,6 +213,25 @@ func classifyCapturedDir(reported, sessionPath string) (string, bool) {
 		return "", false
 	}
 	if samePath(trimmed, sessionPath) {
+		return "", true
+	}
+	return trimmed, true
+}
+
+// classifyServerDir is classifyCapturedDir for a path on a server.
+//
+// Nothing here can check that it exists — it is not on this computer — and
+// it is a POSIX path whatever this computer is, so path rather than filepath:
+// on Windows filepath.IsAbs wants a drive letter. The pane reported it just
+// now, so it existed a moment ago. root is the session's own path when the
+// session runs on that server, and "" when it does not.
+func classifyServerDir(reported, root string) (string, bool) {
+	trimmed := strings.TrimSpace(reported)
+	if trimmed == "" || !path.IsAbs(trimmed) {
+		return "", false
+	}
+	trimmed = path.Clean(trimmed)
+	if root != "" && trimmed == path.Clean(strings.TrimSpace(root)) {
 		return "", true
 	}
 	return trimmed, true
@@ -279,6 +315,46 @@ func sessionPaneDirs() paneDirQuery {
 			return ""
 		}
 		return dirs[index]
+	}
+}
+
+// serverPaneDirQuery reads a pane's directory on a server.
+type serverPaneDirQuery func(ctx context.Context, serverID, target string) string
+
+// newServerPaneDirs answers for panes on servers, one listing per server and
+// session, the way sessionPaneDirs does locally: this runs on the poll every
+// half minute, and over SSH a question per tab would add up. A variable so the
+// tests need no server.
+var newServerPaneDirs = func(i *Instance) serverPaneDirQuery {
+	type listing struct {
+		dirs map[int]string
+		ok   bool
+	}
+	listed := map[string]listing{}
+	return func(ctx context.Context, serverID, target string) string {
+		colon := strings.LastIndex(target, ":")
+		if colon < 0 {
+			return ""
+		}
+		index, err := strconv.Atoi(target[colon+1:])
+		if err != nil {
+			return ""
+		}
+		key := serverID + "\x00" + target[:colon]
+		got, seen := listed[key]
+		if !seen {
+			output, err := i.execOn(serverID).Output(ctx, "list-panes", "-s", "-t", target[:colon], "-F",
+				"#{window_index}\t#{pane_active}\t#{pane_current_path}")
+			got = listing{ok: err == nil}
+			if got.ok {
+				got.dirs = parsePaneDirs(string(output))
+			}
+			listed[key] = got
+		}
+		if !got.ok {
+			return ""
+		}
+		return got.dirs[index]
 	}
 }
 
