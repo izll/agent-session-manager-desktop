@@ -87,10 +87,10 @@ type Settings struct {
 	// touches, so it is shown unless the user says otherwise — and the zero
 	// value of a stored setting has to mean "shown".
 	HideRemoteBadge bool   `json:"hide_remote_badge,omitempty"`
-	// HideUpdateBadge hides the marker on tabs whose agent has an update
-	// waiting. Shown by default: a tab parked on an update prompt is easy to
-	// miss otherwise.
-	HideUpdateBadge bool   `json:"hide_update_badge,omitempty"`
+	// ShowUpdateBadge shows the marker for a tab whose agent has an update
+	// waiting in the session list too. Off by default: the list is busy
+	// enough, and the tab bar shows the marker anyway.
+	ShowUpdateBadge bool   `json:"show_update_badge,omitempty"`
 	SplitView       bool   `json:"split_view,omitempty"`
 	MarkedSessionID string `json:"marked_session_id,omitempty"`
 	// LastSessionID is the session that was selected when the app last closed,

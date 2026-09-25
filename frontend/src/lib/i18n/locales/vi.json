@@ -676,7 +676,7 @@
   "settings.showYoloBadge": "Nhãn YOLO",
   "settings.showYoloBadgeDesc": "Hiện dấu \"Y\" trên các phiên chạy với quyền bị bỏ qua.",
   "settings.showUpdateBadge": "Huy hiệu cập nhật agent",
-  "settings.showUpdateBadgeDesc": "Hiện dấu \"↑\" trên các tab có agent đang chờ phiên bản mới hơn.",
+  "settings.showUpdateBadgeDesc": "Hiện cả dấu \"↑\" trong danh sách phiên cho các tab có agent đang chờ phiên bản mới hơn. Thanh tab luôn hiện dấu này.",
   "settings.showResumeBadge": "Nhãn tiếp tục",
   "settings.showResumeBadgeDesc": "Hiện dấu ↻ trên các phiên tiếp nối cuộc hội thoại trước.",
   "settings.showRemoteBadge": "Dấu hiệu tab từ xa",

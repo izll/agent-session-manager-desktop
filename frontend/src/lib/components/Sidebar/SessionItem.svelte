@@ -108,7 +108,7 @@
 
   // An agent's own "newer version" notice, per tab: next to the name for a
   // single tab, at the end of the tab's row otherwise — where YOLO goes.
-  $: showUpdate = !$settings?.hideUpdateBadge;
+  $: showUpdate = !!$settings?.showUpdateBadge;
   $: nameUpdateTab = sessionStatus === 'running' && tabStatuses.length === 1 ? tabStatuses[0] : null;
   // Rebuilt when the language changes, so the tooltip follows it.
   $: updateTitle = (tab: TabStatusInfo | null) =>

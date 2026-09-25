@@ -676,7 +676,7 @@
   "settings.showYoloBadge": "Badge YOLO",
   "settings.showYoloBadgeDesc": "Mostra il segno «Y» sulle sessioni eseguite con i permessi ignorati.",
   "settings.showUpdateBadge": "Badge aggiornamento agente",
-  "settings.showUpdateBadgeDesc": "Mostra una «↑» sulle schede il cui agente ha una versione più recente in attesa.",
+  "settings.showUpdateBadgeDesc": "Mostra il segno «↑» anche nell'elenco delle sessioni per le schede il cui agente ha una versione più recente in attesa. La barra delle schede lo mostra sempre.",
   "settings.showResumeBadge": "Badge di ripresa",
   "settings.showResumeBadgeDesc": "Mostra il segno ↻ sulle sessioni che continuano una conversazione precedente.",
   "settings.showRemoteBadge": "Indicatore scheda remota",

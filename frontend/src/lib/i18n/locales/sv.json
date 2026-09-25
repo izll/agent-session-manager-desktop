@@ -676,7 +676,7 @@
   "settings.showYoloBadge": "YOLO-märke",
   "settings.showYoloBadgeDesc": "Visa markeringen ”Y” på sessioner som körs med förbigångna behörigheter.",
   "settings.showUpdateBadge": "Märke för agentuppdatering",
-  "settings.showUpdateBadgeDesc": "Visar ett \"↑\" på flikar vars agent har en nyare version som väntar.",
+  "settings.showUpdateBadgeDesc": "Visar även markeringen ”↑” i sessionslistan för flikar vars agent har en nyare version som väntar. Flikraden visar den alltid.",
   "settings.showResumeBadge": "Återupptagningsmärke",
   "settings.showResumeBadgeDesc": "Visa markeringen ↻ på sessioner som fortsätter en tidigare konversation.",
   "settings.showRemoteBadge": "Markering för fjärrflikar",

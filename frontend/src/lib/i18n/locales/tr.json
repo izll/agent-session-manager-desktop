@@ -676,7 +676,7 @@
   "settings.showYoloBadge": "YOLO rozeti",
   "settings.showYoloBadgeDesc": "İzinleri atlayarak çalışan oturumlarda \"Y\" işaretini göster.",
   "settings.showUpdateBadge": "Ajan güncelleme rozeti",
-  "settings.showUpdateBadgeDesc": "Ajanının daha yeni bir sürümü bekleyen sekmelerde \"↑\" işareti gösterir.",
+  "settings.showUpdateBadgeDesc": "Ajanı için yeni sürüm bekleyen sekmelerde \"↑\" işaretini oturum listesinde de gösterir. Sekme çubuğu her zaman gösterir.",
   "settings.showResumeBadge": "Devam rozeti",
   "settings.showResumeBadgeDesc": "Önceki bir konuşmayı sürdüren oturumlarda ↻ işaretini göster.",
   "settings.showRemoteBadge": "Uzak sekme işareti",

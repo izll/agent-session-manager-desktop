@@ -676,7 +676,7 @@
   "settings.showYoloBadge": "ป้าย YOLO",
   "settings.showYoloBadgeDesc": "แสดงเครื่องหมาย \"Y\" บนเซสชันที่ทำงานโดยข้ามการขออนุญาต",
   "settings.showUpdateBadge": "ป้ายอัปเดตเอเจนต์",
-  "settings.showUpdateBadgeDesc": "แสดง \"↑\" บนแท็บที่เอเจนต์มีเวอร์ชันใหม่รออยู่",
+  "settings.showUpdateBadgeDesc": "แสดงเครื่องหมาย \"↑\" ในรายการเซสชันด้วย สำหรับแท็บที่เอเจนต์มีเวอร์ชันใหม่รออยู่ แถบแท็บแสดงเสมอ",
   "settings.showResumeBadge": "ป้ายกลับมาทำต่อ",
   "settings.showResumeBadgeDesc": "แสดงเครื่องหมาย ↻ บนเซสชันที่สานต่อบทสนทนาก่อนหน้า",
   "settings.showRemoteBadge": "เครื่องหมายแท็บระยะไกล",

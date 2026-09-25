@@ -676,7 +676,7 @@
   "settings.showYoloBadge": "Selo YOLO",
   "settings.showYoloBadgeDesc": "Mostrar a marca \"Y\" nas sessões executadas com as permissões ignoradas.",
   "settings.showUpdateBadge": "Selo de atualização do agente",
-  "settings.showUpdateBadgeDesc": "Mostra um \"↑\" nas abas cujo agente tem uma versão mais nova esperando.",
+  "settings.showUpdateBadgeDesc": "Mostra a marca \"↑\" também na lista de sessões para abas cujo agente tem uma versão mais nova esperando. A barra de abas sempre a mostra.",
   "settings.showResumeBadge": "Selo de retomada",
   "settings.showResumeBadgeDesc": "Mostrar a marca ↻ nas sessões que continuam uma conversa anterior.",
   "settings.showRemoteBadge": "Marcador de aba remota",

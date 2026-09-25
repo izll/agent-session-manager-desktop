@@ -4838,7 +4838,7 @@ type SettingsInfo struct {
 	DictationSendWithoutEnter bool   `json:"dictationSendWithoutEnter"`
 	CodexUseDaemon            bool   `json:"codexUseDaemon"`
 	HideYoloBadge             bool   `json:"hideYoloBadge"`
-	HideUpdateBadge           bool   `json:"hideUpdateBadge"`
+	ShowUpdateBadge           bool   `json:"showUpdateBadge"`
 	ShowResumeBadge           bool   `json:"showResumeBadge"`
 	HideRemoteBadge           bool   `json:"hideRemoteBadge"`
 	SplitView                 bool   `json:"splitView"`
@@ -4966,7 +4966,7 @@ func (a *App) GetSettings() (*SettingsInfo, error) {
 		DictationSendWithoutEnter: settings.DictationSendWithoutEnter,
 		CodexUseDaemon:            settings.CodexUseDaemon,
 		HideYoloBadge:             settings.HideYoloBadge,
-		HideUpdateBadge:           settings.HideUpdateBadge,
+		ShowUpdateBadge:           settings.ShowUpdateBadge,
 		ShowResumeBadge:           settings.ShowResumeBadge,
 		HideRemoteBadge:           settings.HideRemoteBadge,
 		SplitView:                 settings.SplitView,
@@ -5058,7 +5058,7 @@ func (a *App) SaveSettings(settings SettingsInfo, expectedProjectID string) erro
 		current.DictationSendWithoutEnter = settings.DictationSendWithoutEnter
 		current.CodexUseDaemon = settings.CodexUseDaemon
 		current.HideYoloBadge = settings.HideYoloBadge
-		current.HideUpdateBadge = settings.HideUpdateBadge
+		current.ShowUpdateBadge = settings.ShowUpdateBadge
 		current.ShowResumeBadge = settings.ShowResumeBadge
 		current.HideRemoteBadge = settings.HideRemoteBadge
 		current.SplitView = settings.SplitView

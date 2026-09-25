@@ -973,9 +973,9 @@
               </span>
               <button
                 class="toggle-btn"
-                class:active={!$settings.hideUpdateBadge}
+                class:active={!!$settings.showUpdateBadge}
                 aria-label={$t('settings.showUpdateBadge')}
-                on:click={() => saveSettings({ hideUpdateBadge: !$settings.hideUpdateBadge })}
+                on:click={() => saveSettings({ showUpdateBadge: !$settings.showUpdateBadge })}
               >
                 <span class="toggle-track">
                   <span class="toggle-thumb"></span>

@@ -676,7 +676,7 @@
   "settings.showYoloBadge": "YOLO-Badge",
   "settings.showYoloBadgeDesc": "Die Markierung \"Y\" bei Sitzungen anzeigen, die mit übergangenen Berechtigungen laufen.",
   "settings.showUpdateBadge": "Agent-Update-Markierung",
-  "settings.showUpdateBadgeDesc": "Zeigt ein „↑\" an Tabs, deren Agent eine neuere Version bereithält.",
+  "settings.showUpdateBadgeDesc": "Zeigt das „↑\" auch in der Sitzungsliste bei Tabs, deren Agent eine neuere Version bereithält. Die Tableiste zeigt es immer.",
   "settings.showResumeBadge": "Fortsetzungs-Badge",
   "settings.showResumeBadgeDesc": "Die Markierung ↻ bei Sitzungen anzeigen, die eine frühere Unterhaltung fortsetzen.",
   "settings.showRemoteBadge": "Markierung für Remote-Tabs",

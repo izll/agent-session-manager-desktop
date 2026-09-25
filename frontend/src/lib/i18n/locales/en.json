@@ -672,7 +672,7 @@
   "settings.showYoloBadge": "YOLO badge",
   "settings.showYoloBadgeDesc": "Show the \"Y\" marker on sessions running with bypassed permissions.",
   "settings.showUpdateBadge": "Agent update badge",
-  "settings.showUpdateBadgeDesc": "Show an \"↑\" marker on tabs whose agent has a newer version waiting.",
+  "settings.showUpdateBadgeDesc": "Also show the \"↑\" marker in the session list for tabs whose agent has a newer version waiting. The tab bar always shows it.",
   "settings.showResumeBadge": "Resume badge",
   "settings.showResumeBadgeDesc": "Show the ↻ marker on sessions that continue an earlier conversation.",
   "settings.compactList": "Compact list",

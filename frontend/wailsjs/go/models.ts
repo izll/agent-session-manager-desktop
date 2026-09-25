@@ -1852,7 +1852,7 @@ export namespace main {
 	    dictationSendWithoutEnter: boolean;
 	    codexUseDaemon: boolean;
 	    hideYoloBadge: boolean;
-	    hideUpdateBadge: boolean;
+	    showUpdateBadge: boolean;
 	    showResumeBadge: boolean;
 	    hideRemoteBadge: boolean;
 	    splitView: boolean;
@@ -1916,7 +1916,7 @@ export namespace main {
 	        this.dictationSendWithoutEnter = source["dictationSendWithoutEnter"];
 	        this.codexUseDaemon = source["codexUseDaemon"];
 	        this.hideYoloBadge = source["hideYoloBadge"];
-	        this.hideUpdateBadge = source["hideUpdateBadge"];
+	        this.showUpdateBadge = source["showUpdateBadge"];
 	        this.showResumeBadge = source["showResumeBadge"];
 	        this.hideRemoteBadge = source["hideRemoteBadge"];
 	        this.splitView = source["splitView"];

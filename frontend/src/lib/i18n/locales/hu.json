@@ -667,7 +667,7 @@
   "settings.showYoloBadge": "YOLO jelvény",
   "settings.showYoloBadgeDesc": "Az „Y\" jelölés megjelenítése az engedélykérés nélkül futó munkameneteken.",
   "settings.showUpdateBadge": "Agent frissítés jelvény",
-  "settings.showUpdateBadgeDesc": "„↑\" jelölés azokon a füleken, ahol az agentnek újabb verziója vár.",
+  "settings.showUpdateBadgeDesc": "A „↑\" jelölés a munkamenet-listában is megjelenik azoknál a füleknél, ahol az agentnek újabb verziója vár. A fülsávban mindig látszik.",
   "settings.showResumeBadge": "Folytatás jelvény",
   "settings.showResumeBadgeDesc": "A ↻ jelölés megjelenítése a korábbi beszélgetést folytató munkameneteken.",
   "settings.showRemoteBadge": "Távoli fül jelzése",

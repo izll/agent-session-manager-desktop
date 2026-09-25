@@ -676,7 +676,7 @@
   "settings.showYoloBadge": "YOLO 标记",
   "settings.showYoloBadgeDesc": "在绕过权限检查运行的会话上显示 “Y” 标记。",
   "settings.showUpdateBadge": "智能体更新徽章",
-  "settings.showUpdateBadgeDesc": "在智能体有新版本待用的标签页上显示\"↑\"。",
+  "settings.showUpdateBadgeDesc": "在会话列表中也为代理有新版本待更新的标签显示“↑”标记。标签栏始终显示。",
   "settings.showResumeBadge": "恢复标记",
   "settings.showResumeBadgeDesc": "在延续先前对话的会话上显示 ↻ 标记。",
   "settings.showRemoteBadge": "远程标签页标记",

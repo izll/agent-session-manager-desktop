@@ -676,7 +676,7 @@
   "settings.showYoloBadge": "Insignia YOLO",
   "settings.showYoloBadgeDesc": "Mostrar la marca «Y» en las sesiones que se ejecutan con los permisos omitidos.",
   "settings.showUpdateBadge": "Insignia de actualización del agente",
-  "settings.showUpdateBadgeDesc": "Muestra una «↑» en las pestañas cuyo agente tiene una versión más reciente pendiente.",
+  "settings.showUpdateBadgeDesc": "Muestra también la marca «↑» en la lista de sesiones para las pestañas cuyo agente tiene una versión nueva pendiente. La barra de pestañas siempre la muestra.",
   "settings.showResumeBadge": "Insignia de reanudación",
   "settings.showResumeBadgeDesc": "Mostrar la marca ↻ en las sesiones que continúan una conversación anterior.",
   "settings.showRemoteBadge": "Marca de pestaña remota",

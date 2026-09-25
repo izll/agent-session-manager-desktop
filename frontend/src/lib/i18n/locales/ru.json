@@ -676,7 +676,7 @@
   "settings.showYoloBadge": "Значок YOLO",
   "settings.showYoloBadgeDesc": "Показывать метку «Y» на сессиях, запущенных с обходом разрешений.",
   "settings.showUpdateBadge": "Значок обновления агента",
-  "settings.showUpdateBadgeDesc": "Показывать «↑» на вкладках, где агента ждёт новая версия.",
+  "settings.showUpdateBadgeDesc": "Показывать метку «↑» и в списке сессий у вкладок, для агента которых доступна новая версия. На панели вкладок она видна всегда.",
   "settings.showResumeBadge": "Значок возобновления",
   "settings.showResumeBadgeDesc": "Показывать метку ↻ на сессиях, продолжающих предыдущий разговор.",
   "settings.showRemoteBadge": "Метка удалённой вкладки",

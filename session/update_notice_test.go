@@ -303,17 +303,19 @@ func TestUpdatePatternTableEntriesHaveAgents(t *testing.T) {
 	}
 }
 
-func TestHideUpdateBadgeDefaultsToShown(t *testing.T) {
+// The marker in the session list is opt-in: settings saved before the option,
+// or without it, leave it off.
+func TestShowUpdateBadgeDefaultsToOff(t *testing.T) {
 	var s Settings
-	if err := json.Unmarshal([]byte(`{"compact_list":true}`), &s); err != nil {
+	if err := json.Unmarshal([]byte(`{"compact_list":true,"hide_update_badge":false}`), &s); err != nil {
 		t.Fatal(err)
 	}
-	if s.HideUpdateBadge {
-		t.Error("legacy settings hid the update badge; it should stay visible")
+	if s.ShowUpdateBadge {
+		t.Error("settings that never asked for it show the update badge in the session list")
 	}
-	data, _ := json.Marshal(Settings{HideUpdateBadge: true})
+	data, _ := json.Marshal(Settings{ShowUpdateBadge: true})
 	var loaded Settings
-	if err := json.Unmarshal(data, &loaded); err != nil || !loaded.HideUpdateBadge {
+	if err := json.Unmarshal(data, &loaded); err != nil || !loaded.ShowUpdateBadge {
 		t.Fatalf("flag lost in a round trip: %s", data)
 	}
 }

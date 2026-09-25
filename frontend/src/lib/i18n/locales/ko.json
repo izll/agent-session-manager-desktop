@@ -676,7 +676,7 @@
   "settings.showYoloBadge": "YOLO 배지",
   "settings.showYoloBadgeDesc": "권한 확인을 건너뛰고 실행 중인 세션에 \"Y\" 표시를 보여줍니다.",
   "settings.showUpdateBadge": "에이전트 업데이트 배지",
-  "settings.showUpdateBadgeDesc": "에이전트의 새 버전이 대기 중인 탭에 \"↑\"를 표시합니다.",
+  "settings.showUpdateBadgeDesc": "에이전트의 새 버전이 대기 중인 탭에 대해 세션 목록에도 \"↑\" 표시를 보여 줍니다. 탭 표시줄에는 항상 표시됩니다.",
   "settings.showResumeBadge": "재개 배지",
   "settings.showResumeBadgeDesc": "이전 대화를 이어가는 세션에 ↻ 표시를 보여줍니다.",
   "settings.showRemoteBadge": "원격 탭 표시",

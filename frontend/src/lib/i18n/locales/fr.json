@@ -676,7 +676,7 @@
   "settings.showYoloBadge": "Badge YOLO",
   "settings.showYoloBadgeDesc": "Afficher le marqueur « Y » sur les sessions exécutées avec les permissions contournées.",
   "settings.showUpdateBadge": "Badge de mise à jour d'agent",
-  "settings.showUpdateBadgeDesc": "Affiche un « ↑ » sur les onglets dont l'agent a une version plus récente en attente.",
+  "settings.showUpdateBadgeDesc": "Affiche aussi le repère « ↑ » dans la liste des sessions pour les onglets dont l'agent a une nouvelle version en attente. La barre d'onglets l'affiche toujours.",
   "settings.showResumeBadge": "Badge de reprise",
   "settings.showResumeBadgeDesc": "Afficher le marqueur ↻ sur les sessions qui poursuivent une conversation antérieure.",
   "settings.showRemoteBadge": "Marqueur d'onglet distant",

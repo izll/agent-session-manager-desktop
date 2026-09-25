@@ -676,7 +676,7 @@
   "settings.showYoloBadge": "Znacznik YOLO",
   "settings.showYoloBadgeDesc": "Pokaż znacznik „Y” przy sesjach działających z pominięciem uprawnień.",
   "settings.showUpdateBadge": "Znacznik aktualizacji agenta",
-  "settings.showUpdateBadgeDesc": "Pokazuje „↑\" na kartach, których agent ma czekającą nowszą wersję.",
+  "settings.showUpdateBadgeDesc": "Pokazuje znacznik „↑\" także na liście sesji przy kartach, których agent ma nowszą wersję. Pasek kart pokazuje go zawsze.",
   "settings.showResumeBadge": "Znacznik wznowienia",
   "settings.showResumeBadgeDesc": "Pokaż znacznik ↻ przy sesjach kontynuujących wcześniejszą rozmowę.",
   "settings.showRemoteBadge": "Oznaczenie karty zdalnej",

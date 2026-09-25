@@ -676,7 +676,7 @@
   "settings.showYoloBadge": "Odznak YOLO",
   "settings.showYoloBadgeDesc": "Zobrazit značku „Y“ u relací běžících s obejitými oprávněními.",
   "settings.showUpdateBadge": "Odznak aktualizace agenta",
-  "settings.showUpdateBadgeDesc": "Zobrazí „↑\" na kartách, jejichž agent má připravenou novější verzi.",
+  "settings.showUpdateBadgeDesc": "Zobrazí značku „↑\" i v seznamu relací u karet, jejichž agent má připravenou novější verzi. Lišta karet ji zobrazuje vždy.",
   "settings.showResumeBadge": "Odznak obnovení",
   "settings.showResumeBadgeDesc": "Zobrazit značku ↻ u relací, které pokračují v dřívější konverzaci.",
   "settings.showRemoteBadge": "Označení vzdálené karty",

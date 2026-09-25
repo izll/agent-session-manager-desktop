@@ -78,28 +78,33 @@ test('every locale has every string, with the same placeholders', () => {
 
 const item = read('../src/lib/components/Sidebar/SessionItem.svelte');
 
-test('every tab row and a single tab\'s name show it, unless hidden', () => {
+test('every tab row and a single tab\'s name show it, when switched on', () => {
   const rows = item.match(/\{#if updateBadge\(tab\) && showUpdate\}.*\{\/if\}/g) ?? [];
   assert.equal(rows.length, 3, 'busy, waiting and idle rows each draw the badge');
   for (const row of rows) assert.match(row, /title=\{updateTitle\(tab\)\}/);
   assert.match(item, /\{#if updateBadge\(nameUpdateTab\) && showUpdate\}/);
-  assert.match(item, /showUpdate = !\$settings\?\.hideUpdateBadge/);
+  assert.match(item, /showUpdate = !!\$settings\?\.showUpdateBadge/,
+    'the session list shows the badge without being asked to');
   assert.match(item, /tabRowVisible = [^\n]*\n[^\n]*updateBadge\(tab\) && showUpdate/,
     'a tab row with only the update badge is still drawn');
   // The tooltip follows the language: the helper is rebuilt from $t.
   assert.match(item, /\$: updateTitle = [^\n]*\n[^\n]*\$t\(/);
 });
 
-test('the tab bar shows it too, under the same setting', () => {
+// The session list is busy enough: the marker there is opt-in. The tab bar,
+// where it sits beside the tab it is about, always shows it.
+test('the tab bar always shows it', () => {
   const bar = read('../src/lib/components/MainPanel/TabBar.svelte');
-  assert.match(bar, /tabUpdateByIdx\[win\.Index\] && !\$settings\.hideUpdateBadge/);
+  assert.match(bar, /!win\.Dead && tabUpdateByIdx\[win\.Index\]\}/);
+  assert.doesNotMatch(bar, /UpdateBadge/, 'the tab bar follows the session-list setting');
 });
 
-test('the setting is shown by default and has a toggle', () => {
+test('the session-list setting is off by default and has a toggle', () => {
   const store = read('../src/lib/stores/settings.ts');
-  assert.match(store, /hideUpdateBadge: boolean;/);
-  assert.match(store, /hideUpdateBadge: false,/);
+  assert.match(store, /showUpdateBadge: boolean;/);
+  assert.match(store, /showUpdateBadge: false,/);
+  assert.doesNotMatch(store, /hideUpdateBadge/);
   const dialog = read('../src/lib/components/Dialogs/SettingsDialog.svelte');
-  assert.match(dialog, /saveSettings\(\{ hideUpdateBadge: !\$settings\.hideUpdateBadge \}\)/);
+  assert.match(dialog, /saveSettings\(\{ showUpdateBadge: !\$settings\.showUpdateBadge \}\)/);
   assert.match(dialog, /\$t\('settings\.showUpdateBadge'\)/);
 });

@@ -676,7 +676,7 @@
   "settings.showYoloBadge": "YOLO-badge",
   "settings.showYoloBadgeDesc": "De markering \"Y\" tonen bij sessies die met omzeilde permissies draaien.",
   "settings.showUpdateBadge": "Agent-updatebadge",
-  "settings.showUpdateBadgeDesc": "Toont een \"↑\" op tabbladen waarvan de agent een nieuwere versie klaar heeft staan.",
+  "settings.showUpdateBadgeDesc": "Toont de „↑\"-markering ook in de sessielijst bij tabbladen waarvan de agent een nieuwere versie klaar heeft staan. De tabbalk toont hem altijd.",
   "settings.showResumeBadge": "Hervattingsbadge",
   "settings.showResumeBadgeDesc": "De markering ↻ tonen bij sessies die een eerder gesprek voortzetten.",
   "settings.showRemoteBadge": "Markering voor externe tabbladen",

@@ -676,7 +676,7 @@
   "settings.showYoloBadge": "Значок YOLO",
   "settings.showYoloBadgeDesc": "Показувати позначку «Y» на сеансах, запущених в обхід дозволів.",
   "settings.showUpdateBadge": "Значок оновлення агента",
-  "settings.showUpdateBadgeDesc": "Показувати «↑» на вкладках, де агента чекає новіша версія.",
+  "settings.showUpdateBadgeDesc": "Показувати позначку «↑» і в списку сеансів для вкладок, агент яких має новішу версію. На панелі вкладок вона видна завжди.",
   "settings.showResumeBadge": "Значок відновлення",
   "settings.showResumeBadgeDesc": "Показувати позначку ↻ на сеансах, що продовжують попередню розмову.",
   "settings.showRemoteBadge": "Позначка віддаленої вкладки",

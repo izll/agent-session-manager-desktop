@@ -676,7 +676,7 @@
   "settings.showYoloBadge": "شارة YOLO",
   "settings.showYoloBadgeDesc": "إظهار العلامة \"Y\" على الجلسات التي تعمل مع تجاوز الأذونات.",
   "settings.showUpdateBadge": "شارة تحديث الوكيل",
-  "settings.showUpdateBadgeDesc": "إظهار \"↑\" على علامات التبويب التي يتوفر لوكيلها إصدار أحدث.",
+  "settings.showUpdateBadgeDesc": "إظهار العلامة \"↑\" في قائمة الجلسات أيضًا للألسنة التي يتوفر لوكيلها إصدار أحدث. شريط الألسنة يعرضها دائمًا.",
   "settings.showResumeBadge": "شارة الاستئناف",
   "settings.showResumeBadgeDesc": "إظهار العلامة ↻ على الجلسات التي تُكمل محادثة سابقة.",
   "settings.showRemoteBadge": "علامة علامة التبويب البعيدة",
