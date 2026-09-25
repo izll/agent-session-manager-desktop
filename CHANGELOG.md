@@ -6,6 +6,24 @@ Entries describe what changed for someone using the app. Internal refactoring,
 test and CI work is left out unless it changed behaviour. Dates are release
 dates; the format follows [Keep a Changelog](https://keepachangelog.com).
 
+## 1.1.15 — 2026-09-25
+
+### Changed
+
+- **The agent update marker stays out of the session list unless asked
+  for.** It is off by default there (Settings → General → Session list);
+  the tab bar always shows it.
+- **The update marker on a tab is easier to see:** a small disc in the
+  state's colour, pulsing while the agent waits on an answer about the
+  update.
+
+### Fixed
+
+- **A terminal on a server keeps its directory.** Its directory was never
+  saved, so after a restart it opened at the start again; a terminal in a
+  session that runs on a server also lost its directory when restarted.
+- **The server cloud icon is no longer clipped** on tabs and elsewhere.
+
 ## 1.1.14 — 2026-09-25
 
 ### Added
