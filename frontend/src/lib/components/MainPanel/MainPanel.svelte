@@ -26,6 +26,7 @@
   import GitBranchBadge from '../common/GitBranchBadge.svelte';
   import { get } from 'svelte/store';
   import { resolveViewBarHidden } from '../../utils/terminalThemes';
+  import { yoloButtonState } from '../../utils/yoloBadge';
   import * as App from '../../../../wailsjs/go/main/App';
   import { t } from '../../i18n';
   import Toast from '../common/Toast.svelte';
@@ -630,17 +631,24 @@
   $: agentConfig = $agents.find(a => a.type === currentSession?.agent);
   $: canAutoYes = agentConfig?.supportsAutoYes && currentSession?.status === 'running';
 
-  // Live YOLO (bypass-permissions) state for the CURRENTLY SELECTED tab, read
-  // from the pane status bar. When the session RUNS we trust ONLY this live
-  // value — never the stored launch flag — so a Shift+Tab toggle to auto mode
-  // turns the indicator off even though the session was launched with --yolo.
-  // When NOT running there's no pane to read, so fall back to the stored flag.
-  $: liveYolo = (() => {
-    if (currentSession?.status !== 'running') return !!currentSession?.autoYes;
+  // YOLO state for the CURRENTLY SELECTED tab. On a running Claude tab it is
+  // the live mode read from the pane — never the stored launch flag — so a
+  // Shift+Tab toggle to auto mode turns the indicator off even though the
+  // session was launched with --yolo. Elsewhere the click toggles the stored
+  // flag, so the button shows that (see yoloButtonState).
+  $: yoloButton = (() => {
     const list = $selectedSessionId ? $tabStatuses[$selectedSessionId] : undefined;
-    const ts = list?.find(t => t.windowIdx === ($selectedWindowIdx ?? 0));
-    return !!ts?.yolo; // running → live only (no stored-flag fallback)
+    const idx = $selectedWindowIdx ?? 0;
+    const fw = currentSession?.followedWindows?.find((w: any) => w.index === idx);
+    return yoloButtonState({
+      running: currentSession?.status === 'running',
+      tabAgent: currentTabAgent,
+      sessionAutoYes: !!currentSession?.autoYes,
+      tabAutoYes: idx !== (currentSession?.mainWindowIndex ?? 0) && !!fw?.auto_yes,
+      tab: list?.find(t => t.windowIdx === idx),
+    });
   })();
+  $: liveYolo = yoloButton.active;
 
   // Get current tab's resume session ID
   $: currentResumeId = (() => {
@@ -899,6 +907,7 @@
             <button
               class="yolo-btn"
               class:active={liveYolo}
+              class:not-in-effect={yoloButton.notInEffect}
               on:click|stopPropagation={async () => {
                 if (!currentSession) return;
                 try {
@@ -909,7 +918,7 @@
                   console.error('YOLO cycle failed:', e);
                 }
               }}
-              title={liveYolo ? $t('mainPanel.yoloOn') : $t('mainPanel.yoloEnable')}
+              title={yoloButton.notInEffect ? $t('sessionItem.yoloNotInEffect') : liveYolo ? $t('mainPanel.yoloOn') : $t('mainPanel.yoloEnable')}
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
@@ -1585,6 +1594,15 @@
     border-color: rgba(255, 107, 107, 0.5);
     color: #ff6b6b;
     box-shadow: 0 0 12px rgba(255, 107, 107, 0.15);
+  }
+
+  /* Asked for, but the agent reports it is not in effect. */
+  .yolo-btn.active.not-in-effect {
+    background: rgba(251, 191, 36, 0.15);
+    border-color: rgba(251, 191, 36, 0.45);
+    color: #fbbf24;
+    box-shadow: none;
+    text-decoration: line-through;
   }
 
   .yolo-btn.active:hover {

@@ -48,3 +48,43 @@ test('every locale explains the warning', () => {
     assert.ok(locale['sessionItem.yoloNotInEffect'], `${file} has no sessionItem.yoloNotInEffect`);
   }
 });
+
+// The YOLO button shows what a click changes. On a Codex tab whose YOLO the
+// background server ignored, the button looked off; clicking it to switch YOLO
+// on switched the session's YOLO off.
+const { yoloButtonState } = await import(`data:text/javascript,${encodeURIComponent(code)}`);
+
+test('the button on a Codex tab shows the setting a click toggles', () => {
+  const ignored = yoloButtonState({
+    running: true, tabAgent: 'codex', sessionAutoYes: true, tabAutoYes: false,
+    tab: { yolo: false, yoloNotInEffect: true },
+  });
+  assert.deepEqual(ignored, { active: true, notInEffect: true });
+
+  const tabOnly = yoloButtonState({
+    running: true, tabAgent: 'codex', sessionAutoYes: false, tabAutoYes: true, tab: { yolo: true },
+  });
+  assert.deepEqual(tabOnly, { active: true, notInEffect: false });
+
+  const off = yoloButtonState({
+    running: true, tabAgent: 'codex', sessionAutoYes: false, tabAutoYes: false, tab: { yolo: false },
+  });
+  assert.deepEqual(off, { active: false, notInEffect: false });
+});
+
+test('the button on a Claude tab still follows the pane', () => {
+  const cycledAway = yoloButtonState({
+    running: true, tabAgent: 'claude', sessionAutoYes: true, tabAutoYes: false, tab: { yolo: false },
+  });
+  assert.deepEqual(cycledAway, { active: false, notInEffect: false });
+  const stopped = yoloButtonState({
+    running: false, tabAgent: 'claude', sessionAutoYes: true, tabAutoYes: false, tab: undefined,
+  });
+  assert.equal(stopped.active, true);
+});
+
+test('the main panel uses it', () => {
+  const panel = read('../src/lib/components/MainPanel/MainPanel.svelte');
+  assert.match(panel, /\$: liveYolo = yoloButton\.active;/);
+  assert.match(panel, /class:not-in-effect=\{yoloButton\.notInEffect\}/);
+});
