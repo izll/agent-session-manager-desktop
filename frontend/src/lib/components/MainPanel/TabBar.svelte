@@ -2635,19 +2635,41 @@
   /* The marker for a tab that runs on a server. Sized and coloured like the
      other tab badges so the bar keeps one visual language. */
   /* Agent update waiting: colours as in the session list. */
+  /* A filled disc rather than a bare glyph: a 10px arrow in a tab title was
+     easy to miss, and missing it is the whole problem it is there for. */
   .tab-update-badge {
+    --update-rgb: 96, 165, 250;
     flex: none;
-    font-size: 10px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    font-size: 12px;
+    font-weight: 700;
     line-height: 1;
-    color: #60a5fa;
+    color: rgb(var(--update-rgb));
+    background: rgba(var(--update-rgb), 0.2);
+    box-shadow: inset 0 0 0 1px rgba(var(--update-rgb), 0.55);
   }
 
   .tab-update-badge.blocking {
-    color: #fbbf24;
+    --update-rgb: 251, 191, 36;
+    /* The agent is waiting on an answer about the update. */
+    animation: tab-update-pulse 1.6s ease-in-out infinite;
   }
 
   .tab-update-badge.restart {
-    color: #4ade80;
+    --update-rgb: 74, 222, 128;
+  }
+
+  @keyframes tab-update-pulse {
+    50% { box-shadow: inset 0 0 0 1px rgba(var(--update-rgb), 0.55), 0 0 0 3px rgba(var(--update-rgb), 0.25); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .tab-update-badge.blocking { animation: none; }
   }
 
   .tab-remote-badge {
