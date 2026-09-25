@@ -428,6 +428,44 @@ func TestCloseConnectionsDrainsStreamsWithoutStoppingServer(t *testing.T) {
 	done()
 }
 
+// slowClosingTerminalStream counts closes that take a while, as a native
+// close waiting on a running multiplexer command does.
+type slowClosingTerminalStream struct {
+	closeCountingTerminalStream
+}
+
+func (s *slowClosingTerminalStream) Close() error {
+	time.Sleep(50 * time.Millisecond)
+	return s.closeCountingTerminalStream.Close()
+}
+
+// closeTransport signals done before it closes the stream, so the connection
+// finished — and CloseConnections returned — while the PTY was still open:
+// the old project's terminal outlived the switch. It failed on a Windows
+// runner by chance; a slow close makes it certain.
+func TestCloseConnectionsWaitsForTheStreamToClose(t *testing.T) {
+	stream := &slowClosingTerminalStream{}
+	tc := &termConn{ptmx: stream, done: make(chan struct{})}
+	ts := NewTerminalServer(nil, 0)
+	ts.mu.Lock()
+	ts.conns["old-project-0"] = tc
+	ts.connWG.Add(1)
+	ts.mu.Unlock()
+	go func() {
+		defer ts.connWG.Done()
+		<-tc.done
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if err := ts.CloseConnections(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if got := stream.closes.Load(); got != 1 {
+		t.Fatalf("CloseConnections returned with the stream still open (closes = %d)", got)
+	}
+}
+
 func TestTerminalServerStopCancelsAndWaitsForPendingAttachHandler(t *testing.T) {
 	ts := NewTerminalServer(nil, 0)
 	handlerCtx, done, allowed := ts.beginHandler()

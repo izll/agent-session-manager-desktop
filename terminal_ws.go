@@ -714,12 +714,22 @@ func (ts *TerminalServer) CloseConnections(ctx context.Context) error {
 	}
 	ts.mu.RUnlock()
 
+	// Waited for as well as the connections: closeTransport signals done
+	// before it closes the stream, so a connection can finish — and this
+	// return — while the PTY is still open, which is exactly what must not
+	// outlive the project here.
+	var closers sync.WaitGroup
 	for _, tc := range conns {
-		go tc.closeTransport()
+		closers.Add(1)
+		go func(tc *termConn) {
+			defer closers.Done()
+			tc.closeTransport()
+		}(tc)
 	}
 
 	done := make(chan struct{})
 	go func() {
+		closers.Wait()
 		ts.connWG.Wait()
 		close(done)
 	}()
