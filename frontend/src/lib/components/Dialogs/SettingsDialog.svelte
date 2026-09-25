@@ -546,7 +546,7 @@
     }
   }
 
-  function toggle(key: 'hideStatusLines' | 'showAgentIcons' | 'showClaudeFiveHourRing' | 'showClaudeSevenDayRing' | 'showCodexUsageRing' | 'showGeminiUsageRing' | 'compactList' | 'hideViewBar' | 'agentHideViewBar' | 'hideStatusBar' | 'agentHideStatusBar' | 'notifyOnWaiting' | 'notifyDesktop' | 'notifyNtfy' | 'taskMasterEnabled' | 'restoreLastSession') {
+  function toggle(key: 'hideStatusLines' | 'showAgentIcons' | 'showClaudeFiveHourRing' | 'showClaudeSevenDayRing' | 'showCodexUsageRing' | 'showGeminiUsageRing' | 'compactList' | 'hideViewBar' | 'agentHideViewBar' | 'hideStatusBar' | 'agentHideStatusBar' | 'notifyOnWaiting' | 'notifyDesktop' | 'notifyNtfy' | 'taskMasterEnabled' | 'restoreLastSession' | 'codexUseDaemon') {
     saveSettings({ [key]: !$settings[key] });
   }
 
@@ -1380,6 +1380,31 @@
 
           </div>
 
+          <!-- How Codex is started. The warning is always on screen, not only
+               once the daemon is chosen: it is the reason the default is what
+               it is, and turning the switch on is exactly when it matters. -->
+          <div class="settings-section">
+            <h3>{$t('settings.codexSection')}</h3>
+
+            <label class="setting-item">
+              <span class="setting-info">
+                <span class="setting-label">{$t('settings.codexUseDaemon')}</span>
+                <span class="setting-desc">{$t('settings.codexUseDaemonDesc')}</span>
+                <span class="setting-desc codex-daemon-warning">{$t('settings.codexUseDaemonWarning')}</span>
+              </span>
+              <button
+                class="toggle-btn"
+                class:active={$settings.codexUseDaemon}
+                aria-label={$t('settings.codexUseDaemon')}
+                on:click={() => toggle('codexUseDaemon')}
+              >
+                <span class="toggle-track">
+                  <span class="toggle-thumb"></span>
+                </span>
+              </button>
+            </label>
+          </div>
+
         {/if}
 
         <!-- Dictation Tab -->
@@ -2184,6 +2209,11 @@
   .accent-warning {
     margin: 8px 0 0;
     font-size: 12px;
+    color: #fbbf24;
+  }
+
+  /* The same amber as the accent warning: a known fault, not an error. */
+  .setting-desc.codex-daemon-warning {
     color: #fbbf24;
   }
 

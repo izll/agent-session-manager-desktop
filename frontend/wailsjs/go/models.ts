@@ -1822,6 +1822,7 @@ export namespace main {
 	    showGeminiUsageRing: boolean;
 	    sortByActivity: boolean;
 	    dictationSendWithoutEnter: boolean;
+	    codexUseDaemon: boolean;
 	    hideYoloBadge: boolean;
 	    showResumeBadge: boolean;
 	    hideRemoteBadge: boolean;
@@ -1883,6 +1884,7 @@ export namespace main {
 	        this.showGeminiUsageRing = source["showGeminiUsageRing"];
 	        this.sortByActivity = source["sortByActivity"];
 	        this.dictationSendWithoutEnter = source["dictationSendWithoutEnter"];
+	        this.codexUseDaemon = source["codexUseDaemon"];
 	        this.hideYoloBadge = source["hideYoloBadge"];
 	        this.showResumeBadge = source["showResumeBadge"];
 	        this.hideRemoteBadge = source["hideRemoteBadge"];

@@ -47,6 +47,12 @@ export interface Settings {
   /** Leave dictated text in the composer instead of submitting it. */
   sortByActivity: boolean;
   dictationSendWithoutEnter: boolean;
+  /**
+   * Let Codex run on its shared background server. Off by default: asmgr then
+   * starts it with --no-daemon, because in daemon mode Codex ignores the
+   * bypass (YOLO) flag and the server sometimes fails to start.
+   */
+  codexUseDaemon: boolean;
   /** YOLO shows unless hidden; the resume marker is opt-in. */
   hideYoloBadge: boolean;
   showResumeBadge: boolean;
@@ -144,6 +150,7 @@ function defaultSettings(): Settings {
     showGeminiUsageRing: false,
     sortByActivity: false,
     dictationSendWithoutEnter: false,
+    codexUseDaemon: false,
     hideYoloBadge: false,
     showResumeBadge: false,
     hideRemoteBadge: false,

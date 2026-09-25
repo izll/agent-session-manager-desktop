@@ -859,6 +859,8 @@ func (a *App) applyActiveProjectRuntimeSettings() {
 		settings = &session.Settings{}
 	}
 	applyRuntimeTerminalShell(settings.TerminalShell)
+	// Per project, like the shell: it decides how the next Codex is started.
+	session.SetCodexUseDaemon(settings.CodexUseDaemon)
 	// Mouse bindings live in tmux's process-global key tables. A read-only
 	// viewer shares that server with the process that owns this project, but is
 	// forbidden from attaching terminals; applying the viewed project's value
@@ -4748,6 +4750,7 @@ type SettingsInfo struct {
 	ShowGeminiUsageRing       bool   `json:"showGeminiUsageRing"`
 	SortByActivity            bool   `json:"sortByActivity"`
 	DictationSendWithoutEnter bool   `json:"dictationSendWithoutEnter"`
+	CodexUseDaemon            bool   `json:"codexUseDaemon"`
 	HideYoloBadge             bool   `json:"hideYoloBadge"`
 	ShowResumeBadge           bool   `json:"showResumeBadge"`
 	HideRemoteBadge           bool   `json:"hideRemoteBadge"`
@@ -4872,6 +4875,7 @@ func (a *App) GetSettings() (*SettingsInfo, error) {
 		ShowGeminiUsageRing:       settings.ShowGeminiUsageRing,
 		SortByActivity:            settings.SortByActivity,
 		DictationSendWithoutEnter: settings.DictationSendWithoutEnter,
+		CodexUseDaemon:            settings.CodexUseDaemon,
 		HideYoloBadge:             settings.HideYoloBadge,
 		ShowResumeBadge:           settings.ShowResumeBadge,
 		HideRemoteBadge:           settings.HideRemoteBadge,
@@ -4961,6 +4965,7 @@ func (a *App) SaveSettings(settings SettingsInfo, expectedProjectID string) erro
 		current.ShowGeminiUsageRing = settings.ShowGeminiUsageRing
 		current.SortByActivity = settings.SortByActivity
 		current.DictationSendWithoutEnter = settings.DictationSendWithoutEnter
+		current.CodexUseDaemon = settings.CodexUseDaemon
 		current.HideYoloBadge = settings.HideYoloBadge
 		current.ShowResumeBadge = settings.ShowResumeBadge
 		current.HideRemoteBadge = settings.HideRemoteBadge
@@ -5016,6 +5021,7 @@ func (a *App) SaveSettings(settings SettingsInfo, expectedProjectID string) erro
 	// server then blocked every storage call indefinitely. One shared deadline
 	// bounds the complete set of global binding updates.
 	applyRuntimeTerminalShell(settings.TerminalShell)
+	session.SetCodexUseDaemon(settings.CodexUseDaemon)
 	applyCtx, cancelApply := context.WithTimeout(a.lifecycleContext(), session.TmuxCommandTimeout)
 	applyRuntimeMouseCopy(applyCtx, settings.TerminalCopyMode == "select")
 	cancelApply()

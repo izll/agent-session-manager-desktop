@@ -84,6 +84,12 @@ type AgentConfig struct {
 	ForkFlag         string
 	ForkIsSubcommand bool
 
+	// NoDaemonFlag keeps the agent off a shared background server and running
+	// in the pane instead. Added to every start unless the user chose the
+	// server (Settings.CodexUseDaemon) — see codex_daemon.go for why — and only
+	// where the agent on that machine lists it in its help.
+	NoDaemonFlag string
+
 	// InstallCommand is what installs it, for the agents whose installer is a
 	// single line worth quoting. Empty where the answer is "see the page" —
 	// telling someone to run a command that is not the right one for their
@@ -162,6 +168,9 @@ var AgentConfigs = map[AgentType]AgentConfig{
 		// interactively on the branch.
 		ForkFlag:         "fork",
 		ForkIsSubcommand: true,
+		// 0.157+: without it the session's settings, the bypass flag among
+		// them, do not reach the background server that runs the thread.
+		NoDaemonFlag: "--no-daemon",
 	},
 	AgentAmazonQ: {
 		Command:            "q",
@@ -1389,7 +1398,7 @@ func (i *Instance) startWithResume(resumeID string, onlyWindowIdx int) error {
 				}
 			}
 
-			argv = buildAgentArgv(config.Command, args, i.ExtraArgs)
+			argv = i.agentArgv(config, i.ServerID, args, i.ExtraArgs)
 		}
 
 		// Check if the command exists.
@@ -1882,7 +1891,7 @@ func (i *Instance) restoreFollowedWindows(onlyWindowIdx int) int {
 						log.Printf("[restoreFollowedWindows] generated a conversation ID for tab %q agent=%s", fw.Name, fw.Agent)
 					}
 				}
-				argv = buildAgentArgv(config.Command, args, fw.ExtraArgs)
+				argv = i.agentArgv(config, fw.RunsOn(i.ServerID), args, fw.ExtraArgs)
 			}
 
 			// Create new window with the agent command as separate argv
@@ -2336,7 +2345,7 @@ func (i *Instance) RestartWindowWithResume(windowIdx int, resumeID string) error
 				log.Printf("[RestartWindow] generated a new conversation ID for main window of session=%s", i.ID)
 			}
 		}
-		argv := buildAgentArgv(config.Command, args, i.ExtraArgs)
+		argv := i.agentArgv(config, i.ServerID, args, i.ExtraArgs)
 		log.Printf("[RestartWindow] launching main window session=%s agent=%s argc=%d", i.ID, i.Agent, len(argv))
 		tmuxArgs := respawnPaneArgs(nil, target, argv...)
 		if err := i.tmuxRun(tmuxArgs...); err != nil {
@@ -2465,7 +2474,7 @@ func (i *Instance) RestartWindowWithResume(windowIdx int, resumeID string) error
 				log.Printf("[RestartWindow] generated a new conversation ID for tab %s/%d", i.ID, fw.Index)
 			}
 		}
-		argv = buildAgentArgv(config.Command, args, fw.ExtraArgs)
+		argv = i.agentArgv(config, restartServerID, args, fw.ExtraArgs)
 	}
 
 	// Ensure we always have an explicit command — respawn-pane without one
@@ -3437,7 +3446,7 @@ func (i *Instance) NewAgentTab(req NewTabRequest) (int, error) {
 				args = append(args, config.SessionIDFlag, generatedSessionID)
 			}
 		}
-		argv = buildAgentArgv(config.Command, args, extraArgs)
+		argv = i.agentArgv(config, serverID, args, extraArgs)
 	}
 
 	// Create new window with the agent command as separate argv elements
@@ -3643,7 +3652,7 @@ func (i *Instance) NewForkedTab(name string, sessionID string) (int, error) {
 	// Claude tab does. A fork is the same conversation with the same setup, so
 	// dropping them here gave the branch a differently-configured agent —
 	// ForkToNewSession passes them, and this did not.
-	argv := buildAgentArgv(config.Command, args, i.ExtraArgs)
+	argv := i.agentArgv(config, i.ServerID, args, i.ExtraArgs)
 
 	// Create new window with forked agent (argv form, no shell layer).
 	output, err := i.newWindowOutput(sessionName, i.Path, name, false, argv)

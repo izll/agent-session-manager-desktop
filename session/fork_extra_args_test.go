@@ -17,7 +17,7 @@ func TestForkedTabCarriesExtraArgs(t *testing.T) {
 	body := functionBody(t, readSource(t, "instance.go"),
 		"func (i *Instance) NewForkedTab(")
 
-	if !strings.Contains(body, "buildAgentArgv(config.Command, args, i.ExtraArgs)") {
+	if !strings.Contains(body, "i.agentArgv(config, i.ServerID, args, i.ExtraArgs)") {
 		t.Error("NewForkedTab does not pass the session's extra arguments to the " +
 			"forked agent, so the branch starts differently configured from the " +
 			"tab it was forked from")

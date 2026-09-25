@@ -148,6 +148,13 @@ type Settings struct {
 	// this on, the words arrive where they can still be edited, and Enter is
 	// the user's to press.
 	DictationSendWithoutEnter bool `json:"dictation_send_without_enter,omitempty"`
+	// CodexUseDaemon lets Codex run on its shared background server instead of
+	// being started with --no-daemon.
+	//
+	// Named for the opt-in so a stored setting without it — every config from
+	// before the field existed — means the default, no daemon: in daemon mode
+	// Codex ignores the bypass flag of a YOLO session. See codex_daemon.go.
+	CodexUseDaemon bool `json:"codex_use_daemon,omitempty"`
 	// WindowX/Y/Width/Height remember where the window was when the app last
 	// closed, so it reopens where it was left rather than being recentred every
 	// time. Zero width or height means "never saved" and the centred default
