@@ -633,7 +633,7 @@
 
   // YOLO state for the CURRENTLY SELECTED tab. On a running Claude tab it is
   // the live mode read from the pane — never the stored launch flag — so a
-  // Shift+Tab toggle to auto mode turns the indicator off even though the
+  // Shift+Tab to the default mode turns the indicator off even though the
   // session was launched with --yolo. Elsewhere the click toggles the stored
   // flag, so the button shows that (see yoloButtonState).
   $: yoloButton = (() => {

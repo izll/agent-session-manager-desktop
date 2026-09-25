@@ -432,20 +432,11 @@ func (i *Instance) DetectYoloForWindowContext(ctx context.Context, windowIdx int
 	if err != nil {
 		return cachedYolo(target)
 	}
-	lower := strings.ToLower(string(out))
-
-	yoloOn := strings.Contains(lower, "bypass permissions on") ||
-		strings.Contains(lower, "auto mode on")
-	// A NON-yolo mode is definitively shown: plain default (no marker but the
-	// mode bar is present) or accept-edits. We detect "the mode bar is present"
-	// via the shift+tab hint that always accompanies it.
-	nonYolo := strings.Contains(lower, "accept edits on")
-	modeBarVisible := yoloOn || nonYolo || strings.Contains(lower, "shift+tab to cycle")
-
-	if modeBarVisible {
+	on, definitive := claudeYoloFromPane(strings.ToLower(string(out)))
+	if definitive {
 		// Definitive reading — cache and return it.
-		lastYoloState.Store(target, yoloOn)
-		return yoloOn
+		lastYoloState.Store(target, on)
+		return on
 	}
 	// Mode bar hidden (e.g. a permission/question dialog is up). Keep the last
 	// known state instead of flickering the badge off.
@@ -465,6 +456,31 @@ func (i *Instance) DetectYoloStateForWindowContext(ctx context.Context, windowId
 		return i.codexYoloReading(ctx, windowIdx)
 	}
 	return YoloReading{On: i.DetectYoloForWindowContext(ctx, windowIdx)}
+}
+
+// claudeYoloFromPane reads Claude's permission mode from the bottom of its
+// pane (lower-cased). definitive is false when the pane shows no mode at all —
+// a permission or question dialog covers the footer — and the caller keeps
+// the last reading.
+//
+// Every mode but the default names itself: "bypass permissions on", "auto
+// mode on", "accept edits on", "plan mode on". The default names nothing; its
+// footer is "? for shortcuts" when idle and a bare "esc to interrupt" while
+// working. Reading only the named modes as definitive kept the default from
+// ever being seen: a Shift+Tab from YOLO to the default left the badge and
+// the button showing YOLO.
+func claudeYoloFromPane(lower string) (on, definitive bool) {
+	if strings.Contains(lower, "bypass permissions on") || strings.Contains(lower, "auto mode on") {
+		return true, true
+	}
+	if strings.Contains(lower, "accept edits on") || strings.Contains(lower, "plan mode on") ||
+		strings.Contains(lower, "shift+tab to cycle") {
+		return false, true
+	}
+	if strings.Contains(lower, "? for shortcuts") || strings.Contains(lower, "esc to interrupt") {
+		return false, true
+	}
+	return false, false
 }
 
 // cachedYolo returns the last definitive yolo reading for target, or false.
