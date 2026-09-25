@@ -313,14 +313,14 @@ func TestALocalCodexIsProbed(t *testing.T) {
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	inst := &Instance{ID: "cd10"}
-	argv := inst.agentArgv(AgentConfigs[AgentCodex], "", []string{bypassFlag}, "")
+	argv, _ := inst.agentArgv(AgentConfigs[AgentCodex], "", []string{bypassFlag}, "")
 	want := []string{"codex", bypassFlag, "--no-daemon"}
 	if strings.Join(argv, " ") != strings.Join(want, " ") {
 		t.Errorf("local argv = %v, want %v", argv, want)
 	}
 
 	// Another agent has no background server and is left alone.
-	if got := inst.agentArgv(AgentConfigs[AgentClaude], "", nil, ""); len(got) != 1 {
+	if got, _ := inst.agentArgv(AgentConfigs[AgentClaude], "", nil, ""); len(got) != 1 {
 		t.Errorf("claude was given extra flags: %v", got)
 	}
 }

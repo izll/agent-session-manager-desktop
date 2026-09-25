@@ -7,13 +7,24 @@
    * would only have shown Codex's "open in another app" screen. Through the
    * server it opens, but the server ignores the YOLO flag — which is worth
    * saying, since the session asked for YOLO.
+   *
+   * Once the server is stopped it offers to restart the tab, which then opens
+   * the conversation without the server, with YOLO in effect. One step at a
+   * time: stop, then restart.
    */
   import { onDestroy, onMount } from 'svelte';
   import Toast from './Toast.svelte';
   import { EventsOff, EventsOn } from '../../../../wailsjs/runtime/runtime';
   import { StopCodexDaemon } from '../../../../wailsjs/go/main/App';
   import { t } from '../../i18n';
-  import { codexDaemonNoticeText, type CodexDaemonHeldNotice, type CodexDaemonNoticeState } from './codexDaemonNotice';
+  import { sessions, restartTab } from '../../stores/sessions';
+  import { activeProjectId } from '../../stores/projects';
+  import {
+    codexDaemonNoticeText,
+    codexDaemonNoticeWindow,
+    type CodexDaemonHeldNotice,
+    type CodexDaemonNoticeState,
+  } from './codexDaemonNotice';
 
   const EVENT = 'codex:daemonHeld';
 
@@ -36,6 +47,11 @@
   });
   onDestroy(() => EventsOff(EVENT));
 
+  function act() {
+    if (state === 'held') void stopDaemon();
+    else if (state === 'stopped') void restartHeldTab();
+  }
+
   async function stopDaemon() {
     if (!notice || busy) return;
     busy = true;
@@ -51,7 +67,30 @@
     }
   }
 
-  $: text = codexDaemonNoticeText($t, state, notice, failure);
+  // The tab the conversation runs in, while it can still be restarted safely.
+  $: restartWindow = codexDaemonNoticeWindow(notice, $sessions, $activeProjectId);
+
+  async function restartHeldTab() {
+    if (!notice || busy || restartWindow === null) return;
+    const restarting = notice;
+    busy = true;
+    try {
+      await restartTab(restarting.sessionId, restartWindow);
+      // A server still holding the conversation sends a fresh notice from
+      // this very restart; that one is what the user needs to see.
+      if (notice === restarting) state = 'restarted';
+    } catch (e) {
+      if (notice === restarting) {
+        state = 'restartFailed';
+        failure = String(e);
+      }
+    } finally {
+      busy = false;
+      revision++;
+    }
+  }
+
+  $: text = codexDaemonNoticeText($t, state, notice, failure, restartWindow !== null);
 </script>
 
 <Toast
@@ -60,7 +99,7 @@
   variant={text.variant}
   actionLabel={text.action}
   actionBusy={busy}
-  on:action={stopDaemon}
+  on:action={act}
   {revision}
-  duration={state === 'held' ? 0 : 9000}
+  duration={text.action ? 0 : 9000}
 />

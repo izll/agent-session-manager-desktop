@@ -157,8 +157,60 @@ func TestAHeldConversationIsContinuedThroughTheDaemon(t *testing.T) {
 		if n.SessionID != "cdh1" || n.ServerID != "srvX" || n.ConversationID != heldID {
 			t.Errorf("notice = %+v", n)
 		}
+		// The window the multiplexer gave the tab (the stand-in answers 100):
+		// the notice's "Restart tab" restarts exactly this one.
+		if n.WindowIndex != 100 {
+			t.Errorf("notice names window %d, want the tab's window 100", n.WindowIndex)
+		}
 	case <-time.After(2 * time.Second):
 		t.Error("the user was not told that YOLO is not in effect")
+	}
+}
+
+// A tab whose window could not be made runs nowhere; there is nothing to warn
+// about, and no window to restart.
+func TestATabThatFailedToOpenIsNotReported(t *testing.T) {
+	freshDaemonState(t)
+	stubDaemonHold(t, true)
+	notices := captureDaemonNotices(t)
+	server := newCodexServer(helpWithDaemon)
+	server.failWith["new-window"] = errors.New("no space for a window")
+	SetTabExecutor("cdh5", "srvX", server)
+	t.Cleanup(func() { ClearTabExecutor("cdh5", "srvX") })
+
+	inst := &Instance{ID: "cdh5", Status: StatusRunning, Path: "/work", AutoYes: true}
+	if _, err := inst.NewAgentTab(NewTabRequest{
+		ServerID: "srvX", Name: "codex tab", Agent: AgentCodex, WorkDir: "/srv/work", ResumeID: heldID,
+	}); err == nil {
+		t.Fatal("the tab was created although its window was not")
+	}
+	select {
+	case n := <-notices:
+		t.Errorf("a tab that never started was reported: %+v", n)
+	case <-time.After(200 * time.Millisecond):
+	}
+}
+
+// Every launch path that can continue a conversation through the server says
+// which window it started, once that window exists.
+func TestEveryLaunchReportsTheWindowItStarted(t *testing.T) {
+	source := readSource(t, "instance.go")
+	launches := 0
+	for _, body := range strings.Split(source, "\nfunc ")[1:] {
+		if !strings.Contains(body, "i.agentArgv(") {
+			continue
+		}
+		launches += strings.Count(body, "i.agentArgv(")
+		name := strings.SplitN(body, "\n", 2)[0]
+		if strings.Contains(body, "argv = i.agentArgv(") || strings.Contains(body, "argv := i.agentArgv(") {
+			t.Errorf("%s drops the notice agentArgv returns", name)
+		}
+		if strings.Count(body, "i.agentArgv(") > strings.Count(body, "reportCodexDaemonHeld(daemonHeld, ") {
+			t.Errorf("%s does not say which window a held conversation landed in", name)
+		}
+	}
+	if launches < 6 {
+		t.Errorf("found %d agent launches, want all 6", launches)
 	}
 }
 

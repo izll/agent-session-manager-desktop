@@ -152,7 +152,7 @@ func (a *App) startup(ctx context.Context) {
 	// A Codex conversation continued through its background server runs without
 	// YOLO; the user is told and offered to stop the server.
 	session.SetCodexDaemonHeldHandler(func(notice session.CodexDaemonHeldNotice) {
-		runtime.EventsEmit(ctx, codexDaemonHeldEvent, notice)
+		runtime.EventsEmit(ctx, codexDaemonHeldEvent, a.codexDaemonHeldPayload(notice))
 	})
 
 	// Clear the "before" files left by external diffs. Done here rather than

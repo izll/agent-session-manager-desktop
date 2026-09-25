@@ -1314,6 +1314,7 @@ func (i *Instance) startWithResume(resumeID string, onlyWindowIdx int) error {
 		config := i.GetAgentConfig()
 		var argv []string // tmux command in argv form (no shell layer)
 		var cmdToCheck string
+		var daemonHeld *CodexDaemonHeldNotice
 
 		if i.Agent == AgentTerminal {
 			// Plain shell session — no agent to launch. Leaving argv empty
@@ -1398,7 +1399,7 @@ func (i *Instance) startWithResume(resumeID string, onlyWindowIdx int) error {
 				}
 			}
 
-			argv = i.agentArgv(config, i.ServerID, args, i.ExtraArgs)
+			argv, daemonHeld = i.agentArgv(config, i.ServerID, args, i.ExtraArgs)
 		}
 
 		// Check if the command exists.
@@ -1528,6 +1529,9 @@ func (i *Instance) startWithResume(resumeID string, onlyWindowIdx int) error {
 			mainTarget := fmt.Sprintf("%s:%d", sessionName, mainWindowIdx)
 			i.tmuxRun("set-option", "-w", "-t", mainTarget, "@asmgr_main", "1")
 			i.tmuxRun("rename-window", "-t", mainTarget, i.WindowName())
+			reportCodexDaemonHeld(daemonHeld, mainWindowIdx)
+		} else if daemonHeld != nil {
+			reportCodexDaemonHeld(daemonHeld, i.GetMainWindowIndex())
 		}
 
 		// Check if session is still alive after a short delay (detect immediate exit)
@@ -1811,6 +1815,7 @@ func (i *Instance) restoreFollowedWindows(onlyWindowIdx int) int {
 			fw.Stopped = true
 		}
 		var windowArgs []string
+		var daemonHeld *CodexDaemonHeldNotice
 		resumeID := fw.ResumeSessionID
 		tabDir := fw.WorkDir
 		if tabDir == "" {
@@ -1891,7 +1896,7 @@ func (i *Instance) restoreFollowedWindows(onlyWindowIdx int) int {
 						log.Printf("[restoreFollowedWindows] generated a conversation ID for tab %q agent=%s", fw.Name, fw.Agent)
 					}
 				}
-				argv = i.agentArgv(config, fw.RunsOn(i.ServerID), args, fw.ExtraArgs)
+				argv, daemonHeld = i.agentArgv(config, fw.RunsOn(i.ServerID), args, fw.ExtraArgs)
 			}
 
 			// Create new window with the agent command as separate argv
@@ -1921,6 +1926,7 @@ func (i *Instance) restoreFollowedWindows(onlyWindowIdx int) int {
 		if fw.Stopped {
 			_ = i.tmuxRun(respawnPaneArgs(nil, target, "exit", "0")...)
 		}
+		reportCodexDaemonHeld(daemonHeld, newIdx)
 
 		// Remember where the chosen tab landed. tmux renumbers the windows as
 		// they are recreated, so the index the user picked is not the index the
@@ -2345,12 +2351,13 @@ func (i *Instance) RestartWindowWithResume(windowIdx int, resumeID string) error
 				log.Printf("[RestartWindow] generated a new conversation ID for main window of session=%s", i.ID)
 			}
 		}
-		argv := i.agentArgv(config, i.ServerID, args, i.ExtraArgs)
+		argv, daemonHeld := i.agentArgv(config, i.ServerID, args, i.ExtraArgs)
 		log.Printf("[RestartWindow] launching main window session=%s agent=%s argc=%d", i.ID, i.Agent, len(argv))
 		tmuxArgs := respawnPaneArgs(nil, target, argv...)
 		if err := i.tmuxRun(tmuxArgs...); err != nil {
 			return fmt.Errorf("failed to restart main window: %w", err)
 		}
+		reportCodexDaemonHeld(daemonHeld, windowIdx)
 		i.MainWindowStopped = false
 		i.CaptureCodexResumeIDs()
 		return nil
@@ -2392,6 +2399,7 @@ func (i *Instance) RestartWindowWithResume(windowIdx int, resumeID string) error
 	}
 
 	var argv []string
+	var daemonHeld *CodexDaemonHeldNotice
 	if fw.Agent == AgentTerminal {
 		// respawn-pane without a command re-runs the pane's original start
 		// command, which is "exit 0" for a stopped tab.
@@ -2474,7 +2482,7 @@ func (i *Instance) RestartWindowWithResume(windowIdx int, resumeID string) error
 				log.Printf("[RestartWindow] generated a new conversation ID for tab %s/%d", i.ID, fw.Index)
 			}
 		}
-		argv = i.agentArgv(config, restartServerID, args, fw.ExtraArgs)
+		argv, daemonHeld = i.agentArgv(config, restartServerID, args, fw.ExtraArgs)
 	}
 
 	// Ensure we always have an explicit command — respawn-pane without one
@@ -2529,6 +2537,7 @@ func (i *Instance) RestartWindowWithResume(windowIdx int, resumeID string) error
 		}
 	}
 
+	reportCodexDaemonHeld(daemonHeld, windowIdx)
 	fw.Stopped = false
 	if collapseDuplicates {
 		selected := *fw
@@ -3391,6 +3400,7 @@ func (i *Instance) NewAgentTab(req NewTabRequest) (int, error) {
 	// Build agent command based on agent type (argv form, no shell)
 	config := AgentConfigs[agent]
 	var argv []string
+	var daemonHeld *CodexDaemonHeldNotice
 	var generatedSessionID string
 
 	if agent == AgentCustom {
@@ -3446,7 +3456,7 @@ func (i *Instance) NewAgentTab(req NewTabRequest) (int, error) {
 				args = append(args, config.SessionIDFlag, generatedSessionID)
 			}
 		}
-		argv = i.agentArgv(config, serverID, args, extraArgs)
+		argv, daemonHeld = i.agentArgv(config, serverID, args, extraArgs)
 	}
 
 	// Create new window with the agent command as separate argv elements
@@ -3476,6 +3486,7 @@ func (i *Instance) NewAgentTab(req NewTabRequest) (int, error) {
 	// The multiplexer gave us this index; anything still claiming it is a
 	// record that outlived its window.
 	i.claimWindowIndex(newIdx, serverID)
+	reportCodexDaemonHeld(daemonHeld, newIdx)
 
 	// Add to followed windows with agent info
 	i.FollowedWindows = append(i.FollowedWindows, FollowedWindow{
@@ -3652,7 +3663,7 @@ func (i *Instance) NewForkedTab(name string, sessionID string) (int, error) {
 	// Claude tab does. A fork is the same conversation with the same setup, so
 	// dropping them here gave the branch a differently-configured agent —
 	// ForkToNewSession passes them, and this did not.
-	argv := i.agentArgv(config, i.ServerID, args, i.ExtraArgs)
+	argv, daemonHeld := i.agentArgv(config, i.ServerID, args, i.ExtraArgs)
 
 	// Create new window with forked agent (argv form, no shell layer).
 	output, err := i.newWindowOutput(sessionName, i.Path, name, false, argv)
@@ -3664,6 +3675,7 @@ func (i *Instance) NewForkedTab(name string, sessionID string) (int, error) {
 	if err != nil {
 		return 0, fmt.Errorf("invalid forked window index: %w", err)
 	}
+	reportCodexDaemonHeld(daemonHeld, newIdx)
 
 	// The tab remembers the BRANCH, not what it was branched from. Storing the
 	// source would send a restart back to the original conversation — the fork

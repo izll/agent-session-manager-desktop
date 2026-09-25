@@ -39,6 +39,9 @@ type CodexDaemonHeldNotice struct {
 	SessionName    string `json:"sessionName"`
 	ServerID       string `json:"serverId"`
 	ConversationID string `json:"conversationId"`
+	// WindowIndex is the window the conversation was started in: the tab the
+	// notice restarts once the server is stopped.
+	WindowIndex int `json:"windowIdx"`
 }
 
 var codexDaemonHeldHandler atomic.Pointer[func(CodexDaemonHeldNotice)]
@@ -53,7 +56,15 @@ func SetCodexDaemonHeldHandler(handler func(CodexDaemonHeldNotice)) {
 	codexDaemonHeldHandler.Store(&handler)
 }
 
-func reportCodexDaemonHeld(notice CodexDaemonHeldNotice) {
+// reportCodexDaemonHeld tells the app about a conversation agentArgv continued
+// through the background server, now running in window windowIdx. A nil
+// notice, the usual case, tells nothing.
+func reportCodexDaemonHeld(held *CodexDaemonHeldNotice, windowIdx int) {
+	if held == nil {
+		return
+	}
+	notice := *held
+	notice.WindowIndex = windowIdx
 	if handler := codexDaemonHeldHandler.Load(); handler != nil {
 		// Not on the caller's goroutine: a launch runs under the storage lock,
 		// and whatever the app does with the notice must not wait on it.

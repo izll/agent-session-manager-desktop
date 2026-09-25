@@ -173,32 +173,32 @@ func resetAgentFlagProbes() {
 //
 // Nothing, too, for a conversation the background server still holds: without
 // it that conversation would not open at all (see codex_daemon_held.go). The
-// user is told, since YOLO does not take effect for it.
-func (i *Instance) noDaemonArgs(config AgentConfig, serverID string, args []string, extraArgs string) []string {
+// notice returned then is for the user, since YOLO does not take effect for
+// it; the caller sends it once it knows which window the agent landed in.
+func (i *Instance) noDaemonArgs(config AgentConfig, serverID string, args []string, extraArgs string) ([]string, *CodexDaemonHeldNotice) {
 	if config.NoDaemonFlag == "" || CodexUseDaemon() {
-		return nil
+		return nil, nil
 	}
 	for _, arg := range SplitArgs(extraArgs) {
 		if arg == config.NoDaemonFlag {
-			return nil
+			return nil, nil
 		}
 	}
 	if !i.agentSupportsFlag(serverID, config.Command, config.NoDaemonFlag) {
-		return nil
+		return nil, nil
 	}
 	if conversationID := conversationArg(config, args); conversationID != "" &&
 		codexDaemonHoldsConversation(i, serverID, conversationID) {
 		log.Printf("[CodexDaemon] conversation %s is held by the background server on %s; continuing it there",
 			conversationID, describeMachine(serverID))
-		reportCodexDaemonHeld(CodexDaemonHeldNotice{
+		return nil, &CodexDaemonHeldNotice{
 			SessionID:      i.ID,
 			SessionName:    i.Name,
 			ServerID:       serverID,
 			ConversationID: conversationID,
-		})
-		return nil
+		}
 	}
-	return []string{config.NoDaemonFlag}
+	return []string{config.NoDaemonFlag}, nil
 }
 
 // agentArgv is buildAgentArgv for an agent started on a given machine: the
@@ -208,7 +208,12 @@ func (i *Instance) noDaemonArgs(config AgentConfig, serverID string, args []stri
 // The added flag goes after the app's arguments rather than first: for a
 // subcommand (codex resume <id>, codex fork <id>) that puts it on the
 // subcommand, which is where it is sure to be read.
-func (i *Instance) agentArgv(config AgentConfig, serverID string, args []string, extraArgs string) []string {
-	args = append(args, i.noDaemonArgs(config, serverID, args, extraArgs)...)
-	return buildAgentArgv(config.Command, args, extraArgs)
+//
+// held is non-nil when a conversation the background server holds is continued
+// through it. The caller hands it to reportCodexDaemonHeld along with the
+// window the agent was started in — known only once the window exists — so the
+// user's notice can restart exactly that tab after the server is stopped.
+func (i *Instance) agentArgv(config AgentConfig, serverID string, args []string, extraArgs string) (argv []string, held *CodexDaemonHeldNotice) {
+	flags, held := i.noDaemonArgs(config, serverID, args, extraArgs)
+	return buildAgentArgv(config.Command, append(args, flags...), extraArgs), held
 }
