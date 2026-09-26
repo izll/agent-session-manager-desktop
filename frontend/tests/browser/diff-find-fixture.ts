@@ -1,4 +1,5 @@
 import { mount } from 'svelte';
+import DiffFocusWrapper from './diff-focus-wrapper.svelte';
 import Diff from '../../src/lib/components/MainPanel/Diff.svelte';
 import GitHistoryDialog from '../../src/lib/components/Dialogs/GitHistoryDialog.svelte';
 import { selectedSessionId, selectedWindowIdx } from '../../src/lib/stores/sessions';
@@ -122,6 +123,9 @@ if (component === 'history') {
     target,
     props: { show: true, projectId: 'p', sessionId: 's', windowIdx: 0, path: '/repo' },
   });
+} else if (component === 'focus') {
+  const wrapper = mount(DiffFocusWrapper, { target }) as { show(takeFocus?: boolean): void };
+  (window as any).diffFocus = { show: (takeFocus?: boolean) => wrapper.show(takeFocus) };
 } else {
   mount(Diff, { target, props: { active: true, initialMode: 'session' } });
 }

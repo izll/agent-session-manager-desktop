@@ -150,6 +150,11 @@
   }
 
   /** The first line index currently on screen, for "which hunk am I on". */
+  /** Takes the keyboard, so the arrow and page keys scroll the file. */
+  export function focus() {
+    viewport?.focus({ preventScroll: true });
+  }
+
   export function firstVisibleLine(): number {
     return Math.floor(scrollTop / lineHeight);
   }
@@ -176,7 +181,7 @@
   }
 </script>
 
-<div class="virtual-viewport" bind:this={viewport} on:scroll={onScroll}>
+<div class="virtual-viewport" tabindex="-1" bind:this={viewport} on:scroll={onScroll}>
   <div style="height: {topPad}px"></div>
   {#each slice as line, i (first + i)}
     <div
@@ -196,6 +201,10 @@
 </div>
 
 <style>
+  .virtual-viewport:focus {
+    outline: none;
+  }
+
   .virtual-viewport {
     height: 100%;
     overflow-y: auto;

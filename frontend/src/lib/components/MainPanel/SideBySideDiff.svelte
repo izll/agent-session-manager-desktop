@@ -597,6 +597,12 @@
    * pairing that keeps them in step while scrolling, so storing both would risk
    * putting them back in a state they could never have scrolled into.
    */
+  /** Takes the keyboard, so the arrow and page keys scroll the columns. The
+   *  right pane is the one the others follow. */
+  export function focus() {
+    rightEl?.focus({ preventScroll: true });
+  }
+
   export function scrollOffset(): number {
     return rightEl?.scrollTop ?? 0;
   }
@@ -817,7 +823,7 @@
   </div>
 
   <!-- svelte-ignore a11y-no-static-element-interactions -->
-  <div class="pane" bind:this={rightEl} on:scroll={() => syncFrom('right')}>
+  <div class="pane" tabindex="-1" bind:this={rightEl} on:scroll={() => syncFrom('right')}>
     <div class="lines" style={rightWidth ? `min-width: ${rightWidth}px` : ''}>
     {#each right as line (line.at)}
       <div
@@ -846,6 +852,10 @@
 </div>
 
 <style>
+  .pane:focus {
+    outline: none;
+  }
+
   .sbs {
     display: grid;
     /* The two panes, with the ribbon strip between them: the strip is where the

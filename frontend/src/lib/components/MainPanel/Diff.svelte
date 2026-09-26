@@ -141,9 +141,13 @@
   import { rememberPlace, recallPlace, noteListKey, cacheDiff, cachedDiff, invalidateDiffCache } from '../../utils/diffViewState';
   import { buildBlockPatch } from '../../utils/blockPatch';
   import { parseHunkHeader, hasOneSide } from '../../utils/sideBySide';
+  import { diffTakesFocusFrom } from '../../utils/diffFocus';
   import { activeProjectId } from '../../stores/projects';
 
   export let active = false;
+  /** Take the keyboard when shown. Only the full diff: the one above a
+   *  terminal sits beside what is being typed into. */
+  export let takeFocus = false;
   export let initialMode: 'session' | 'full' = 'session';
 
   interface DiffData {
@@ -1067,6 +1071,7 @@
   // methods, and importing it as a type as well as a value is more ceremony
   // than the two calls are worth.
   let virtualLines: {
+    focus(): void;
     scrollToLine(i: number, lines?: number): Promise<void>;
     scrollOffset(): number;
     restoreOffset(top: number): Promise<void>;
@@ -1217,6 +1222,31 @@
    * Ctrl+F opens the bar, wherever the focus is inside the diff. Only while
    * this diff is the one on screen: two can be mounted at once (see onKeydown).
    */
+  /**
+   * Switching to the diff hands it the keyboard.
+   *
+   * The focus stayed in the terminal, so scrolling with the arrow and page
+   * keys and Ctrl+F did nothing until the diff was clicked. The scroller of
+   * the view on screen takes it. Only from the terminal or from nowhere: a
+   * field being typed in or an open dialog keeps it.
+   */
+  let wasActive = false;
+  $: if (active !== wasActive) {
+    wasActive = active;
+    if (active && takeFocus) void focusDiffOnShow();
+  }
+
+  async function focusDiffOnShow() {
+    await tick();
+    // After the frame in which the switch happens, so a focus the switch
+    // itself hands back to the terminal does not win.
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    if (!active || destroyed || !diffTakesFocusFrom(document.activeElement)) return;
+    if (sideBySide && sideBySideView) sideBySideView.focus();
+    else if (wholeFileView && virtualLines) virtualLines.focus();
+    else diffContentEl?.focus({ preventScroll: true });
+  }
+
   function handleDiffKeydown(event: KeyboardEvent) {
     if (!active) return;
     if ((event.ctrlKey || event.metaKey) && event.key === 'f') {
@@ -1231,6 +1261,7 @@
   /** The element that actually scrolls in the one-column views. */
   let diffContentEl: HTMLDivElement | null = null;
   let sideBySideView: {
+    focus(): void;
     scrollToRow(row: number, count?: number): void;
     changeRows(): Array<{ from: number; to: number }>;
     hunkRange(from: number, to: number): { from: number; to: number } | null;
@@ -2278,7 +2309,7 @@
             on:close={closeDiffFind}
           />
         {/if}
-        <div class="diff-content" class:columns={sideBySide} bind:this={diffContentEl}>
+        <div class="diff-content" class:columns={sideBySide} tabindex="-1" bind:this={diffContentEl}>
           {#if !selectedFile}
             <div class="diff-state no-diff">
               <span>{$t('diff.selectFile')}</span>
@@ -2415,6 +2446,12 @@
 />
 
 <style>
+  /* Focusable so switching here can hand them the keyboard; the focus ring
+     would only frame the whole diff. */
+  .diff-content:focus {
+    outline: none;
+  }
+
   .large-diff-warning {
     display: flex;
     flex-direction: column;

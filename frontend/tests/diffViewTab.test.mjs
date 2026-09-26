@@ -68,7 +68,7 @@ assert.doesNotMatch(
   /class="view-tabs"/,
   'the view bar must not live inside the diff branch — it has to stay on screen',
 );
-assert.match(diffBranch[0], /<Diff active=\{visible\} initialMode="full" \/>/, 'the diff fills the area below it');
+assert.match(diffBranch[0], /<Diff active=\{visible\} initialMode="full" takeFocus \/>/, 'the diff fills the area below it, and takes the keyboard when shown');
 
 // And the view underneath stays marked, so pressing Diff again visibly returns
 // somewhere rather than anywhere.

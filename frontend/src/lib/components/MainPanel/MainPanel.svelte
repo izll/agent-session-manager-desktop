@@ -965,7 +965,7 @@
              button that brought you here is still on screen to take you back —
              it was the only way back, and it used to vanish with the bar. -->
         <div class="flex-1 overflow-hidden content-area">
-          <Diff active={visible} initialMode="full" />
+          <Diff active={visible} initialMode="full" takeFocus />
         </div>
       {:else}
       <!-- Content Area - Keep components mounted, use CSS to show/hide -->
