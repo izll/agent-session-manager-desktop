@@ -123,7 +123,14 @@
   import VirtualLines from './VirtualLines.svelte';
   import SideBySideDiff from './SideBySideDiff.svelte';
   import DiffFindBar from './DiffFindBar.svelte';
-  import { diffLineText, findMatches, keepMatch, stepMatch } from '../../utils/diffFind';
+  import {
+    diffLineText,
+    findMarkClass,
+    findMatches,
+    keepMatch,
+    markDiffLine,
+    stepMatch,
+  } from '../../utils/diffFind';
   import { matchesShortcut } from '../../stores/shortcuts';
   import { memoHighlightLine } from '../../utils/highlightLine';
   import { cachedLanguage, loadLanguage } from '../../utils/codemirror';
@@ -2331,6 +2338,7 @@
                 blockTo={markedBlock.to}
                 hitLines={lineHitSet}
                 currentHit={currentLineHit}
+                hitQuery={diffQuery}
                 on:viewscroll={trackScroll}
               />
             </div>
@@ -2369,7 +2377,14 @@
                       <!-- memoHighlightLine escapes everything it emits; the diff
                            contains whatever the repository holds, including
                            files that are themselves HTML. -->
-                      <code>{@html memoHighlightLine(line.text, lineLanguage)}</code>
+                      <code>{@html lineHitSet.has(hunkLineOffsets[h] + j)
+                        ? markDiffLine(
+                            memoHighlightLine(line.text, lineLanguage),
+                            line.text,
+                            diffQuery,
+                            findMarkClass(hunkLineOffsets[h] + j === currentLineHit),
+                          )
+                        : memoHighlightLine(line.text, lineLanguage)}</code>
                     </div>
                   {/each}
                 </div>

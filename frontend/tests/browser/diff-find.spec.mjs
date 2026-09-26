@@ -130,3 +130,83 @@ test('history: two columns still search', async ({ page }) => {
   await page.keyboard.type('needle');
   await expect(counter(page)).toHaveText('1/2');
 });
+
+// --- the matched text, not only its row --------------------------------------
+//
+// "ha zöld a háttér (pluszos sor) ott keresni kell szemmel": on an added row the
+// green tint hides where in the line the match is. The text itself is marked.
+
+const marks = (page) => page.locator('mark.diff-find-mark');
+const currentMark = (page) => page.locator('mark.diff-find-mark.current');
+
+/** Search, and check the marks sit on the matched text of the given rows. */
+async function expectMarks(page, rowSelector) {
+  await page.keyboard.type('needle');
+  await expect(counter(page)).toHaveText('1/2');
+  // Exactly the query's characters, in the line's own case — not the row, not
+  // the +/- column in front of it.
+  await expect(currentMark(page)).toHaveCount(1);
+  await expect(currentMark(page)).toHaveText('needle');
+  await expect(page.locator(`${rowSelector} mark.diff-find-mark.current`)).toHaveCount(1);
+  await page.keyboard.press('Enter');
+  await expect(counter(page)).toHaveText('2/2');
+  await expect(currentMark(page)).toHaveText('NEEDLE');
+  await expect(currentMark(page)).toBeInViewport();
+  await expect(page.locator(`${rowSelector}.hit-current`)).toContainText('return NEEDLE_250;');
+  // Back to the first: marked again as current, the second demoted.
+  await page.keyboard.press('Shift+Enter');
+  await expect(counter(page)).toHaveText('1/2');
+  await expect(currentMark(page)).toHaveText('needle');
+
+  await page.keyboard.type('zzz');
+  await expect(marks(page)).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  await expect(bar(page)).toHaveCount(0);
+  await expect(marks(page)).toHaveCount(0);
+}
+
+for (const view of ['whole', 'hunks']) {
+  for (const [file, kind] of [['added.txt', 'add'], ['deleted.txt', 'remove']]) {
+    test(`diff: ${view} view marks the matched text on a ${kind} row of ${file}`, async ({ page }) => {
+      await open(page, `component=diff&sbs=1&view=${view}&file=${file}`);
+      await ctrlF(page);
+      await expectMarks(page, `.diff-line.${kind}`);
+    });
+  }
+}
+
+test('diff: two columns mark the matched text on each side', async ({ page }) => {
+  await open(page, 'component=diff&sbs=1&view=whole&file=modified.txt');
+  await expect(page.locator('.sbs-line').first()).toBeVisible();
+  await findButton(page).click();
+  await page.keyboard.type('needle');
+  await expect(counter(page)).toHaveText('1/2');
+  // "-old needle 5" / "+new needle 5": both halves of the row carry it.
+  await expect(page.locator('.sbs-line.removed mark.diff-find-mark.current')).toHaveText('needle');
+  await expect(page.locator('.sbs-line.added mark.diff-find-mark.current')).toHaveText('needle');
+  await page.keyboard.press('Enter');
+  await expect(counter(page)).toHaveText('2/2');
+  // "-old value" / "+new NEEDLE far": only the side with the text is marked.
+  await expect(currentMark(page)).toHaveCount(1);
+  await expect(page.locator('.sbs-line.added mark.diff-find-mark.current')).toHaveText('NEEDLE');
+  await page.keyboard.press('Escape');
+  await expect(marks(page)).toHaveCount(0);
+});
+
+test('history: the matched text is marked on a new file\'s rows', async ({ page }) => {
+  await open(page, 'component=history&sbs=1&view=hunks&file=added.txt');
+  await page.keyboard.press('Control+f');
+  await expect(bar(page).locator('input')).toBeFocused();
+  await expectMarks(page, '.diff-line.add');
+  await expect(page.locator('.dialog-overlay')).toHaveCount(1);
+});
+
+test('history: two columns mark the matched text', async ({ page }) => {
+  await open(page, 'component=history&sbs=1&view=hunks&file=modified.txt');
+  await expect(page.locator('.sbs-line').first()).toBeVisible();
+  await findButton(page).click();
+  await page.keyboard.type('needle');
+  await expect(counter(page)).toHaveText('1/2');
+  await expect(page.locator('.sbs-line.removed mark.diff-find-mark.current')).toHaveText('needle');
+  await expect(page.locator('.sbs-line.added mark.diff-find-mark.current')).toHaveText('needle');
+});

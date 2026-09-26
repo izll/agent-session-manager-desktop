@@ -17,6 +17,7 @@
    */
   import { createEventDispatcher, onMount, tick } from 'svelte';
   import { memoHighlightLine } from '../../utils/highlightLine';
+  import { findMarkClass, markDiffLine } from '../../utils/diffFind';
   import type { LanguageSupport } from '@codemirror/language';
 
   /** One entry per rendered row. */
@@ -53,6 +54,12 @@
    */
   export let hitLines: ReadonlySet<number> = new Set();
   export let currentHit = -1;
+  /**
+   * The query behind `hitLines`, for marking the matched text inside those
+   * rows. Only rows that are both hits and on screen are transformed, so the
+   * cost is a screenful at most.
+   */
+  export let hitQuery = '';
 
   const dispatch = createEventDispatcher();
 
@@ -180,7 +187,9 @@
       style="height: {lineHeight}px"
     >
       <!-- Already escaped by the highlighter; see utils/highlightLine.ts. -->
-      <code>{@html line.html}</code>
+      <code>{@html hitLines.has(first + i)
+        ? markDiffLine(line.html, line.text, hitQuery, findMarkClass(first + i === currentHit))
+        : line.html}</code>
     </div>
   {/each}
   <div style="height: {bottomPad}px"></div>

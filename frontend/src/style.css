@@ -518,3 +518,27 @@ select option:checked {
 .toggle-btn.active .toggle-thumb {
   left: 22px;
 }
+
+/* Find in a diff: the matched text itself, inside its line (utils/diffFind.ts,
+   markMatchesInHtml). Global because the marks arrive through {@html}, which
+   component-scoped styles do not reach, and four renderers draw them.
+
+   Solid rather than a tint: the row under it may already be green or red, and
+   a translucent yellow over those turns muddy exactly where the eye has to
+   find it. Dark text for the same reason — the syntax colours are chosen for
+   the dark background and several vanish on yellow. The ring keeps the edge
+   readable where a match meets a same-coloured neighbour. The current match
+   is orange with a light ring, so "which one am I on" reads without the
+   counter. */
+mark.diff-find-mark {
+  background: #facc15;
+  color: #1a1a1a;
+  border-radius: 2px;
+  box-shadow: 0 0 0 1px rgba(250, 204, 21, 0.55);
+}
+
+mark.diff-find-mark.current {
+  background: #fb923c;
+  color: #111111;
+  box-shadow: 0 0 0 1px #fff7ed;
+}

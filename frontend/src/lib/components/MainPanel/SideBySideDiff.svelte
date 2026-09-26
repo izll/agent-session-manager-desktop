@@ -24,7 +24,14 @@
     type SideLine,
     type UnifiedLine,
   } from '../../utils/sideBySide';
-  import { findMatches, htmlToText, keepMatch, stepMatch } from '../../utils/diffFind';
+  import {
+    findMarkClass,
+    findMatches,
+    htmlToText,
+    keepMatch,
+    markMatchesInHtml,
+    stepMatch,
+  } from '../../utils/diffFind';
 
   /** One entry per hunk: its header and its lines, already highlighted. */
   export let hunks: Array<{ header: string; lines: UnifiedLine[]; index: number }> = [];
@@ -725,8 +732,12 @@
         class:hit-current={line.row === currentHitRow}
       >
         <span class="gutter">{line.number ?? ''}</span>
-        <!-- Already escaped; see utils/highlightLine.ts. -->
-        <span class="code"><code>{@html line.html ?? ''}</code></span>
+        <!-- Already escaped; see utils/highlightLine.ts. The marks add only
+             their own tags (utils/diffFind.ts). A row matches if either side
+             does; a side without the text is returned as it was. -->
+        <span class="code"><code>{@html hitRows.has(line.row)
+          ? markMatchesInHtml(line.html ?? '', searchQuery, findMarkClass(line.row === currentHitRow))
+          : line.html ?? ''}</code></span>
       </div>
     {/each}
     </div>
@@ -825,7 +836,9 @@
         class:hit-current={line.row === currentHitRow}
       >
         <span class="gutter">{line.number ?? ''}</span>
-        <span class="code"><code>{@html line.html ?? ''}</code></span>
+        <span class="code"><code>{@html hitRows.has(line.row)
+          ? markMatchesInHtml(line.html ?? '', searchQuery, findMarkClass(line.row === currentHitRow))
+          : line.html ?? ''}</code></span>
       </div>
     {/each}
     </div>

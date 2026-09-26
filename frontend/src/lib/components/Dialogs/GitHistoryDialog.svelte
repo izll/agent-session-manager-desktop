@@ -23,7 +23,14 @@
   import { cachedLanguage, loadLanguage } from '../../utils/codemirror';
   import SideBySideDiff from '../MainPanel/SideBySideDiff.svelte';
   import DiffFindBar from '../MainPanel/DiffFindBar.svelte';
-  import { diffLineText, findMatches, keepMatch, stepMatch } from '../../utils/diffFind';
+  import {
+    diffLineText,
+    findMarkClass,
+    findMatches,
+    keepMatch,
+    markDiffLine,
+    stepMatch,
+  } from '../../utils/diffFind';
   import { hasOneSide } from '../../utils/sideBySide';
   import { settings, saveSettings } from '../../stores/settings';
 
@@ -1325,7 +1332,9 @@
                     data-line={i}
                   >
                     <!-- Already escaped; see utils/highlightLine.ts. -->
-                    <code>{@html line.html}</code>
+                    <code>{@html findLineHitSet.has(i)
+                      ? markDiffLine(line.html, line.text, findQuery, findMarkClass(i === currentFindLine))
+                      : line.html}</code>
                   </div>
                 {/each}
               {/if}

@@ -125,3 +125,151 @@ export function findKeyAction(event: {
   if (event.key === 'ArrowUp') return -1;
   return null;
 }
+
+/**
+ * A character reference starting exactly here — the same forms htmlToText
+ * decodes. Anything else beginning with & is ordinary text.
+ */
+const ENTITY_AT = /&(#x[0-9a-f]+|#\d+|[a-z]+);/iy;
+
+/** One visible character of a highlighted line, and the markup it came from. */
+interface TextUnit {
+  /** The markup: one character, or one whole entity — never part of one. */
+  source: string;
+  /** What htmlToText makes of it, lower-cased for matching. */
+  lower: string;
+  /** Its offset in htmlToText's output. */
+  at: number;
+}
+
+/**
+ * The line split into tags (kept verbatim) and text units (one character or
+ * one entity each), in order. A "<" with no ">" after it is text, as it is to
+ * htmlToText.
+ */
+function splitMarkup(html: string): Array<TextUnit | string> {
+  const parts: Array<TextUnit | string> = [];
+  let at = 0;
+  let i = 0;
+  while (i < html.length) {
+    if (html[i] === '<') {
+      const end = html.indexOf('>', i);
+      if (end >= 0) {
+        parts.push(html.slice(i, end + 1));
+        i = end + 1;
+        continue;
+      }
+    }
+    let source: string;
+    let text: string;
+    if (html[i] === '&') {
+      ENTITY_AT.lastIndex = i;
+      const entity = ENTITY_AT.exec(html);
+      source = entity ? entity[0] : '&';
+      text = entity ? htmlToText(source) : source;
+    } else {
+      // A whole code point: a surrogate pair is one character to the reader.
+      source = String.fromCodePoint(html.codePointAt(i) ?? 0);
+      text = source;
+    }
+    parts.push({ source, lower: text.toLowerCase(), at });
+    at += text.length;
+    i += source.length;
+  }
+  return parts;
+}
+
+/**
+ * The line's markup with every occurrence of the query wrapped in
+ * `<mark class="…">`, so the match itself stands out and not only its row —
+ * on an added or removed line the row tint alone leaves the eye to hunt.
+ *
+ * Matching follows findMatches: the text as the reader sees it (tags dropped,
+ * entities decoded), case ignored. Characters before `from` in that text are
+ * not searched — the +/- column, which the find does not match either.
+ *
+ * The markup is never broken: tags pass through untouched and what is inside
+ * them is never matched; an entity is marked whole or not at all; and a match
+ * that runs across a tag — two differently coloured tokens — is closed before
+ * the tag and reopened after it, so the marks sit inside the spans rather than
+ * straddling them. Nothing is decoded into the output: it is the input plus
+ * the mark tags, so it is exactly as safe for {@html} as the input was.
+ *
+ * Overlapping occurrences ("aa" in "aaa") are merged into one mark; adjacent
+ * ones stay separate. A blank query, or one that does not occur, returns the
+ * input string itself.
+ */
+export function markMatchesInHtml(html: string, query: string, className: string, from = 0): string {
+  if (!html || !query.trim()) return html;
+  const needle = query.toLowerCase();
+  const parts = splitMarkup(html);
+  const units = parts.filter((part): part is TextUnit => typeof part !== 'string');
+
+  // The lower-cased text, and for each of its characters the unit it came from.
+  // Built per unit rather than by lower-casing the whole: that can change a
+  // length, and the positions would drift.
+  let lower = '';
+  const owner: number[] = [];
+  units.forEach((unit, index) => {
+    lower += unit.lower;
+    for (let k = 0; k < unit.lower.length; k++) owner.push(index);
+  });
+
+  // Each unit's match number, or -1. An overlap extends the previous match.
+  const matchOf = new Array<number>(units.length).fill(-1);
+  let matches = 0;
+  let lastEnd = -1;
+  for (let start = lower.indexOf(needle); start >= 0; start = lower.indexOf(needle, start + 1)) {
+    if (units[owner[start]].at < from) continue;
+    const end = start + needle.length;
+    const id = start < lastEnd ? matches - 1 : matches++;
+    for (let k = start; k < end; k++) matchOf[owner[k]] = id;
+    lastEnd = end;
+  }
+  if (!matches) return html;
+
+  const open = `<mark class="${escapeAttribute(className)}">`;
+  let out = '';
+  let unitIndex = 0;
+  let inside = -1;
+  for (const part of parts) {
+    if (typeof part === 'string') {
+      if (inside >= 0) out += '</mark>';
+      inside = -1;
+      out += part;
+      continue;
+    }
+    const id = matchOf[unitIndex++];
+    if (id !== inside) {
+      if (inside >= 0) out += '</mark>';
+      if (id >= 0) out += open;
+      inside = id;
+    }
+    out += part.source;
+  }
+  if (inside >= 0) out += '</mark>';
+  return out;
+}
+
+/**
+ * markMatchesInHtml for a diff line: whatever the highlighter drew in front of
+ * the searched text — the +/- column — is left unmarked, so the find and the
+ * marks agree about what a line contains.
+ *
+ * Worked out from the two texts rather than from the markup, because the
+ * highlighter draws that column differently depending on the path it took.
+ */
+export function markDiffLine(html: string, text: string, query: string, className: string): string {
+  if (!html || !query.trim()) return html;
+  const skip = Math.max(0, htmlToText(html).length - diffLineText(text).length);
+  return markMatchesInHtml(html, query, className, skip);
+}
+
+/** The classes for a matching line's marks; the current match's are stronger. */
+export function findMarkClass(current: boolean): string {
+  return current ? 'diff-find-mark current' : 'diff-find-mark';
+}
+
+function escapeAttribute(value: string): string {
+  return value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+}
