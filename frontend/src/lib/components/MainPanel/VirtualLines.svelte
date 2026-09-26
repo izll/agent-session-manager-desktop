@@ -44,6 +44,15 @@
    */
   export let blockFrom = -1;
   export let blockTo = -1;
+  /**
+   * Find matches, by line index: every one faintly, the current one strongly.
+   *
+   * By index rather than marked in the rendered rows, because most rows are
+   * not rendered: the search runs over `lines` itself and hands the answer in,
+   * and a match scrolled into view is marked as it arrives.
+   */
+  export let hitLines: ReadonlySet<number> = new Set();
+  export let currentHit = -1;
 
   const dispatch = createEventDispatcher();
 
@@ -166,6 +175,8 @@
     <div
       class="diff-line {line.type}"
       class:in-block={blockFrom >= 0 && first + i >= blockFrom && first + i <= blockTo}
+      class:hit={hitLines.has(first + i)}
+      class:hit-current={first + i === currentHit}
       style="height: {lineHeight}px"
     >
       <!-- Already escaped by the highlighter; see utils/highlightLine.ts. -->
@@ -224,6 +235,16 @@
   .diff-line.in-block.add,
   .diff-line.in-block.remove {
     box-shadow: inset 3px 0 0 var(--accent, #61afef);
+  }
+
+  /* Find matches, drawn as in the side-by-side view: a tint laid over the
+     row's own colour as a background image, so the added/removed background
+     underneath survives and the change bar (a box-shadow) is not erased. */
+  .diff-line.hit {
+    background-image: linear-gradient(rgba(250, 204, 21, 0.07), rgba(250, 204, 21, 0.07));
+  }
+  .diff-line.hit-current {
+    background-image: linear-gradient(rgba(250, 204, 21, 0.2), rgba(250, 204, 21, 0.2));
   }
 
   /* Wider than the app default: this scroller reaches the window edge, where

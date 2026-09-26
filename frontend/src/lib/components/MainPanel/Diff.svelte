@@ -122,6 +122,8 @@
   import { t } from '../../i18n';
   import VirtualLines from './VirtualLines.svelte';
   import SideBySideDiff from './SideBySideDiff.svelte';
+  import DiffFindBar from './DiffFindBar.svelte';
+  import { diffLineText, findMatches, keepMatch, stepMatch } from '../../utils/diffFind';
   import { matchesShortcut } from '../../stores/shortcuts';
   import { memoHighlightLine } from '../../utils/highlightLine';
   import { cachedLanguage, loadLanguage } from '../../utils/codemirror';
@@ -1065,72 +1067,162 @@
   } | null = null;
 
   /**
-   * Find within the side-by-side view.
+   * Find in the diff, in whichever renderer is showing.
    *
-   * Only there: the unified and whole-file views render through VirtualLines,
-   * which keeps off-screen rows out of the DOM, so a search would have to be
-   * built against the data rather than the markup — a separate piece of work,
-   * and not what was asked for.
+   * The side-by-side view searches its own paired rows. The other two are
+   * searched here, against the data rather than the markup: the whole-file
+   * view keeps off-screen rows out of the DOM, so only its line array knows
+   * what is in the file. Matching is shared (utils/diffFind) so all three agree
+   * on what a query hits.
+   *
+   * Offered everywhere — including a new or deleted file, which is drawn in one
+   * column even with two chosen and so lost the bar when find lived in the
+   * side-by-side view alone.
    */
   let showDiffFind = false;
   let diffQuery = '';
   let diffHitCount = 0;
-  let diffHitAt = 0;
-  let diffFindInput: HTMLInputElement | undefined;
+  /** 0-based; -1 when on no match. */
+  let diffHitAt = -1;
+  let diffFindBar: { focus(): Promise<void> } | undefined;
+  /** Which file and renderer the matches were last computed for. */
+  let searchedIn = '';
+  /** The matches of the one-column renderers, as positions in findTexts(). */
+  let lineHits: number[] = [];
+  let lineHitSet: ReadonlySet<number> = new Set();
+  $: currentLineHit = diffHitAt >= 0 && !sideBySide ? (lineHits[diffHitAt] ?? -1) : -1;
 
-  function runDiffSearch() {
-    diffHitCount = sideBySideView?.search(diffQuery) ?? 0;
-    diffHitAt = sideBySideView?.searchPosition() ?? 0;
+  /** The lines of the unified hunk view, in display order, and where each
+   *  hunk's lines start in that order — the rows the find marks. */
+  $: unifiedFindLines = renderedHunks.flatMap((view) => view.lines);
+  $: hunkLineOffsets = (() => {
+    let total = 0;
+    return renderedHunks.map((view) => {
+      const at = total;
+      total += view.lines.length;
+      return at;
+    });
+  })();
+
+  /** What the one-column renderer on screen shows, as searchable text. */
+  function findTexts(whole: boolean): string[] {
+    return (whole ? flatLines : unifiedFindLines).map((line) => diffLineText(line.text));
+  }
+
+  /**
+   * Search, from scratch or under the reader.
+   *
+   * `reveal` true is a new query: go to the first match. False is a re-run
+   * because the content changed — see rerunDiffSearch.
+   */
+  function runDiffSearch(reveal = true) {
+    // The cursor survives a refresh of the same file in the same renderer, not
+    // a move to another: the row it holds means nothing there.
+    const place = `${selectedPath}\x1f${viewMode}`;
+    const samePlace = place === searchedIn;
+    searchedIn = place;
+    if (sideBySide) {
+      if (!samePlace) sideBySideView?.search('', false);
+      lineHits = [];
+      lineHitSet = new Set();
+      diffHitCount = sideBySideView?.search(diffQuery, reveal) ?? 0;
+      diffHitAt = (sideBySideView?.searchPosition() ?? 0) - 1;
+      return;
+    }
+    // A switch away from two columns must not leave their marks behind.
+    sideBySideView?.search('', false);
+    const previous = samePlace ? currentLineHit : -1;
+    lineHits = findMatches(findTexts(wholeFileView), diffQuery);
+    lineHitSet = new Set(lineHits);
+    diffHitCount = lineHits.length;
+    diffHitAt = reveal ? (lineHits.length ? 0 : -1) : keepMatch(lineHits, previous);
+    if (reveal && diffHitAt >= 0) void revealLineHit(lineHits[diffHitAt]);
   }
 
   function stepDiffSearch(direction: 1 | -1) {
-    diffHitAt = sideBySideView?.stepSearch(direction) ?? 0;
+    if (sideBySide) {
+      diffHitAt = (sideBySideView?.stepSearch(direction) ?? 0) - 1;
+      return;
+    }
+    if (!lineHits.length) return;
+    diffHitAt = stepMatch(diffHitAt, direction, lineHits.length);
+    void revealLineHit(lineHits[diffHitAt]);
   }
+
+  /** Scroll a one-column match into view: by index in the virtualised list,
+   *  where the row may not exist yet, and by element in the hunk list. */
+  async function revealLineHit(index: number) {
+    if (wholeFileView) {
+      await virtualLines?.scrollToLine(index);
+      return;
+    }
+    await tick();
+    scrollIntoThird(diffContentEl, diffContentEl?.querySelector(`[data-find="${index}"]`) ?? null);
+  }
+
+  /**
+   * Scroll `target` to a third of the way down `scroller`.
+   *
+   * Measured from the boxes rather than offsetTop: the rows' offset parent is
+   * not the scroller, and the find bar above it would be counted in.
+   */
+  function scrollIntoThird(scroller: HTMLElement | null, target: Element | null) {
+    if (!scroller || !target) return;
+    const top = target.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop;
+    scroller.scrollTo({ top: Math.max(0, top - scroller.clientHeight / 3), behavior: 'smooth' });
+  }
+
+  /**
+   * The content changed under an open search — another file, a refresh, a
+   * different renderer — so the matches are recounted and redrawn.
+   *
+   * Kept open rather than closed: the query is still what the reader is looking
+   * for, and walking file to file with it is the point. But the view is not
+   * moved: the file was opened (or restored) where the stepping put it, and a
+   * jump to the first match would fight that. The next Enter goes to it.
+   *
+   * After a tick, so the side-by-side view has paired the new hunks first.
+   */
+  async function rerunDiffSearch(open: boolean, ..._content: unknown[]) {
+    if (!open || !diffQuery) return;
+    await tick();
+    if (showDiffFind && diffQuery) runDiffSearch(false);
+  }
+  $: void rerunDiffSearch(showDiffFind, sideBySide, wholeFileView, flatLines, renderedHunks);
 
   function openDiffFind() {
     showDiffFind = true;
-    tick().then(() => { diffFindInput?.focus(); diffFindInput?.select(); });
+    // After a tick: the bar is only rendered once the flag is set.
+    void tick().then(() => diffFindBar?.focus());
   }
 
   function closeDiffFind() {
     showDiffFind = false;
     diffQuery = '';
     diffHitCount = 0;
-    diffHitAt = 0;
+    diffHitAt = -1;
+    lineHits = [];
+    lineHitSet = new Set();
     sideBySideView?.search('');
   }
 
-  /** Ctrl+F opens the bar, wherever the focus is inside the diff. */
+  /**
+   * Ctrl+F opens the bar, wherever the focus is inside the diff. Only while
+   * this diff is the one on screen: two can be mounted at once (see onKeydown).
+   */
   function handleDiffKeydown(event: KeyboardEvent) {
-    if ((event.ctrlKey || event.metaKey) && event.key === 'f' && sideBySide) {
+    if (!active) return;
+    if ((event.ctrlKey || event.metaKey) && event.key === 'f') {
       event.preventDefault();
       openDiffFind();
     }
   }
 
-  function handleDiffFindKeydown(event: KeyboardEvent) {
-    if (event.key === 'Escape') {
-      event.preventDefault();
-      closeDiffFind();
-      return;
-    }
-    if (event.key === 'Enter' || event.key === 'F3' ||
-        ((event.ctrlKey || event.metaKey) && event.key === 'g')) {
-      event.preventDefault();
-      stepDiffSearch(event.shiftKey ? -1 : 1);
-      return;
-    }
-    // The arrows step through matches too. The field is one line, so up and
-    // down do nothing in it — and reaching for them is the natural move once a
-    // search has produced a list of results to walk.
-    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-      event.preventDefault();
-      stepDiffSearch(event.key === 'ArrowDown' ? 1 : -1);
-    }
-  }
   /** The hunk-list scroller. The whole-file view has VirtualLines to scroll
    *  for it; this one is an ordinary element and has to be told. */
   let hunkListEl: HTMLDivElement | null = null;
+  /** The element that actually scrolls in the one-column views. */
+  let diffContentEl: HTMLDivElement | null = null;
   let sideBySideView: {
     scrollToRow(row: number, count?: number): void;
     changeRows(): Array<{ from: number; to: number }>;
@@ -1138,7 +1230,7 @@
     scrollToOldLine(number: number): Promise<void>;
     scrollOffset(): number;
     restoreOffset(top: number): Promise<void>;
-    search(query: string): number;
+    search(query: string, reveal?: boolean): number;
     stepSearch(direction: 1 | -1): number;
     searchPosition(): number;
     topVisibleNewLine(): number | null;
@@ -2112,17 +2204,13 @@
                 title={sideBySideChosen ? $t('diff.showUnified') : $t('diff.showSideBySide')}
                 on:click={() => setSideBySide(!sideBySideChosen)}
               >⫲</button>
-              {#if sideBySide}
-                <!-- Only offered where it works: the other renderers keep
-                     off-screen rows out of the DOM, so there is nothing there
-                     to search. -->
-                <button
-                  class="nav-btn"
-                  class:active={showDiffFind}
-                  title="{$t('diff.findPlaceholder')} (Ctrl+F)"
-                  on:click={() => (showDiffFind ? closeDiffFind() : openDiffFind())}
-                >⌕</button>
-              {/if}
+              <!-- In every view: each renderer can be searched. -->
+              <button
+                class="nav-btn"
+                class:active={showDiffFind}
+                title="{$t('diff.findPlaceholder')} (Ctrl+F)"
+                on:click={() => (showDiffFind ? closeDiffFind() : openDiffFind())}
+              >⌕</button>
               <!-- Last in the row, next to the file they act on: these are the
                    controls here that leave the diff. -->
               <button
@@ -2169,7 +2257,21 @@
              scrollbar together — exactly the shared position the two-scroller
              layout exists to avoid, and the columns drifted apart at the first
              insertion. -->
-        <div class="diff-content" class:columns={sideBySide}>
+        {#if showDiffFind && selectedFile}
+          <!-- Above the code, outside the scroller, so it neither scrolls away
+               nor covers the lines being searched — the same place in all
+               three renderers. -->
+          <DiffFindBar
+            bind:this={diffFindBar}
+            bind:query={diffQuery}
+            hitCount={diffHitCount}
+            hitAt={diffHitAt}
+            on:search={() => runDiffSearch()}
+            on:step={(e) => stepDiffSearch(e.detail)}
+            on:close={closeDiffFind}
+          />
+        {/if}
+        <div class="diff-content" class:columns={sideBySide} bind:this={diffContentEl}>
           {#if !selectedFile}
             <div class="diff-state no-diff">
               <span>{$t('diff.selectFile')}</span>
@@ -2198,35 +2300,6 @@
               </button>
             </div>
           {:else if sideBySide}
-            {#if showDiffFind}
-              <!-- Above the panes rather than floating over them: a bar over
-                   code hides the very lines being searched. -->
-              <div class="diff-find">
-                <input
-                  type="text"
-                  bind:this={diffFindInput}
-                  bind:value={diffQuery}
-                  on:input={runDiffSearch}
-                  on:keydown={handleDiffFindKeydown}
-                  placeholder={$t('diff.findPlaceholder')}
-                  title="{$t('notes.nextMatch')}: Enter · ↓ · F3 · Ctrl+G — {$t('notes.previousMatch')}: Shift+Enter · ↑"
-                />
-                <span class="find-count">
-                  {diffHitCount ? `${diffHitAt}/${diffHitCount}` : (diffQuery ? $t('notes.noMatches') : '')}
-                </span>
-                <button
-                  on:click={() => stepDiffSearch(-1)}
-                  disabled={!diffHitCount}
-                  title="{$t('notes.previousMatch')} (Shift+Enter · ↑)"
-                >↑</button>
-                <button
-                  on:click={() => stepDiffSearch(1)}
-                  disabled={!diffHitCount}
-                  title="{$t('notes.nextMatch')} (Enter · ↓ · F3 · Ctrl+G)"
-                >↓</button>
-                <button on:click={closeDiffFind} title="{$t('common.close')} (Esc)">×</button>
-              </div>
-            {/if}
             <SideBySideDiff
               bind:this={sideBySideView}
               canRevert={true}
@@ -2256,6 +2329,8 @@
                 language={lineLanguage}
                 blockFrom={markedBlock.from}
                 blockTo={markedBlock.to}
+                hitLines={lineHitSet}
+                currentHit={currentLineHit}
                 on:viewscroll={trackScroll}
               />
             </div>
@@ -2263,7 +2338,7 @@
             <!-- Tracked as it scrolls: by the time the tab switch tears this
                  down there is nothing left to read the position from. -->
             <div class="diff-lines" bind:this={hunkListEl} on:scroll={trackScroll}>
-              {#each renderedHunks as view (view.hunk.index)}
+              {#each renderedHunks as view, h (view.hunk.index)}
                 <div
                   class="hunk"
                   class:current-hunk={view.hunk.index === currentHunkIndex}
@@ -2284,8 +2359,13 @@
                       {$t('diff.revert')}
                     </button>
                   </div>
-                  {#each view.lines as line}
-                    <div class="diff-line {line.type}">
+                  {#each view.lines as line, j}
+                    <div
+                      class="diff-line {line.type}"
+                      class:hit={lineHitSet.has(hunkLineOffsets[h] + j)}
+                      class:hit-current={hunkLineOffsets[h] + j === currentLineHit}
+                      data-find={hunkLineOffsets[h] + j}
+                    >
                       <!-- memoHighlightLine escapes everything it emits; the diff
                            contains whatever the repository holds, including
                            files that are themselves HTML. -->
@@ -2838,62 +2918,6 @@
      the path stays put while reading a long file. */
   /* Sits above the panes, full width, so it never covers the code being
      searched. Styled like the note's find bar so the two read as one feature. */
-  .diff-find {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 6px 10px;
-    background: var(--bg-raised);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-    flex-shrink: 0;
-  }
-
-  .diff-find input {
-    flex: 1;
-    min-width: 0;
-    padding: 5px 9px;
-    background: rgba(0, 0, 0, 0.3);
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: 6px;
-    color: #e5e7eb;
-    font-size: 13px;
-    font-family: inherit;
-  }
-
-  .diff-find input:focus {
-    outline: none;
-    border-color: rgba(var(--accent-rgb), 0.6);
-  }
-
-  .diff-find .find-count {
-    font-size: 12px;
-    color: #6b7280;
-    font-variant-numeric: tabular-nums;
-    min-width: 52px;
-    text-align: center;
-  }
-
-  .diff-find button {
-    padding: 4px 9px;
-    background: transparent;
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: 5px;
-    color: #9ca3af;
-    font-size: 13px;
-    line-height: 1;
-    cursor: pointer;
-  }
-
-  .diff-find button:hover:not(:disabled) {
-    background: rgba(255, 255, 255, 0.07);
-    color: #e5e7eb;
-  }
-
-  .diff-find button:disabled {
-    opacity: 0.4;
-    cursor: default;
-  }
-
   .diff-pane {
     flex: 1;
     display: flex;
@@ -3074,6 +3098,17 @@
 
   .diff-lines {
     padding: 12px 0;
+  }
+
+  /* Find matches in the hunk list, drawn as in the other two renderers: a
+     tint laid over the row as a background image, so the added/removed
+     background underneath still shows. */
+  .diff-line.hit {
+    background-image: linear-gradient(rgba(250, 204, 21, 0.07), rgba(250, 204, 21, 0.07));
+  }
+
+  .diff-line.hit-current {
+    background-image: linear-gradient(rgba(250, 204, 21, 0.2), rgba(250, 204, 21, 0.2));
   }
 
   .diff-line {

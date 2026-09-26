@@ -22,6 +22,8 @@
   import { highlightLine } from '../../utils/highlightLine';
   import { cachedLanguage, loadLanguage } from '../../utils/codemirror';
   import SideBySideDiff from '../MainPanel/SideBySideDiff.svelte';
+  import DiffFindBar from '../MainPanel/DiffFindBar.svelte';
+  import { diffLineText, findMatches, keepMatch, stepMatch } from '../../utils/diffFind';
   import { hasOneSide } from '../../utils/sideBySide';
   import { settings, saveSettings } from '../../stores/settings';
 
@@ -506,7 +508,7 @@
    * rendered as its "@@" header and nothing else.
    */
   $: diffLines = (diff?.hunks ?? []).flatMap((hunk: any) => [
-    { type: 'header', html: escapeHtml(hunk.header ?? '') },
+    { type: 'header', text: String(hunk.header ?? ''), html: escapeHtml(hunk.header ?? '') },
     ...String(hunk.body ?? '')
       .split('\n')
       // git's body ends with a newline, which would otherwise render as a
@@ -514,6 +516,8 @@
       .filter((line, index, all) => !(line === '' && index === all.length - 1))
       .map((line) => ({
         type: lineType(line),
+        // Kept beside the markup for the find: it matches on the text.
+        text: line,
         html: highlightLine(line, cachedLanguage(selectedPath)),
       })),
   ]);
@@ -794,7 +798,91 @@
   let sideBySideView: {
     scrollToRow(row: number, count?: number): void;
     changeRows(): Array<{ from: number; to: number }>;
+    search(query: string, reveal?: boolean): number;
+    stepSearch(direction: 1 | -1): number;
+    searchPosition(): number;
   } | null = null;
+
+  /**
+   * Find in the commit's diff, as in the working-tree diff view: the same bar,
+   * keys and matching (utils/diffFind). Two columns search their own rows; the
+   * unified list is searched here, by line.
+   *
+   * Offered for a new or deleted file too, which is drawn in one column even
+   * with two chosen.
+   */
+  let showFind = false;
+  let findQuery = '';
+  let findHitCount = 0;
+  /** 0-based; -1 when on no match. */
+  let findHitAt = -1;
+  let findBar: { focus(): Promise<void> } | undefined;
+  /** Which diff the matches were last computed for. */
+  let searchedIn = '';
+  let findLineHits: number[] = [];
+  let findLineHitSet: ReadonlySet<number> = new Set();
+  $: currentFindLine = findHitAt >= 0 && !sideBySide ? (findLineHits[findHitAt] ?? -1) : -1;
+
+  function runFind(reveal = true) {
+    // The cursor survives only a re-run over the same diff (see Diff.svelte).
+    const place = `${selectedHash}\x1f${selectedPath}\x1f${wholeFile}\x1f${sideBySide}`;
+    const samePlace = place === searchedIn;
+    searchedIn = place;
+    if (sideBySide) {
+      if (!samePlace) sideBySideView?.search('', false);
+      findLineHits = [];
+      findLineHitSet = new Set();
+      findHitCount = sideBySideView?.search(findQuery, reveal) ?? 0;
+      findHitAt = (sideBySideView?.searchPosition() ?? 0) - 1;
+      return;
+    }
+    sideBySideView?.search('', false);
+    const previous = samePlace ? currentFindLine : -1;
+    findLineHits = findMatches(diffLines.map((line) => diffLineText(line.text)), findQuery);
+    findLineHitSet = new Set(findLineHits);
+    findHitCount = findLineHits.length;
+    findHitAt = reveal ? (findLineHits.length ? 0 : -1) : keepMatch(findLineHits, previous);
+    if (reveal && findHitAt >= 0) void revealFindLine(findLineHits[findHitAt]);
+  }
+
+  function stepFind(direction: 1 | -1) {
+    if (sideBySide) {
+      findHitAt = (sideBySideView?.stepSearch(direction) ?? 0) - 1;
+      return;
+    }
+    if (!findLineHits.length) return;
+    findHitAt = stepMatch(findHitAt, direction, findLineHits.length);
+    void revealFindLine(findLineHits[findHitAt]);
+  }
+
+  async function revealFindLine(index: number) {
+    await tick();
+    scrollToThird(diffEl, diffEl?.querySelector(`[data-line="${index}"]`) ?? null);
+  }
+
+  /** Another commit, file or renderer under an open search: recount and
+   *  redraw without moving the view (see Diff.svelte's rerunDiffSearch). */
+  async function rerunFind(open: boolean, ..._content: unknown[]) {
+    if (!open || !findQuery) return;
+    await tick();
+    if (showFind && findQuery) runFind(false);
+  }
+  $: void rerunFind(showFind, sideBySide, diffLines, sideBySideHunks);
+
+  function openFind() {
+    showFind = true;
+    void tick().then(() => findBar?.focus());
+  }
+
+  function closeFind() {
+    showFind = false;
+    findQuery = '';
+    findHitCount = 0;
+    findHitAt = -1;
+    findLineHits = [];
+    findLineHitSet = new Set();
+    sideBySideView?.search('');
+  }
 
   function escapeHtml(text: string): string {
     return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -855,6 +943,13 @@
   }
 
   function onKeydown(e: KeyboardEvent) {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+      e.preventDefault();
+      // Not on to the diff view under the dialog, which has a find of its own.
+      e.stopPropagation();
+      openFind();
+      return;
+    }
     if (e.key === 'Escape') {
       e.preventDefault();
       claimKeyForDialog();
@@ -1167,6 +1262,12 @@
                       title={sideBySideChosen ? $t('diff.showUnified') : $t('diff.showSideBySide')}
                       on:click={() => saveSettings({ diffSideBySide: !sideBySideChosen })}
                     >⫲</button>
+                    <button
+                      class="nav-btn"
+                      class:active={showFind}
+                      title="{$t('diff.findPlaceholder')} (Ctrl+F)"
+                      on:click={() => (showFind ? closeFind() : openFind())}
+                    >⌕</button>
                   </span>
                 </div>
               {/if}
@@ -1190,6 +1291,18 @@
                 >↓ {hintBelow}</button>
               {/if}
 
+            {#if showFind}
+              <DiffFindBar
+                bind:this={findBar}
+                bind:query={findQuery}
+                hitCount={findHitCount}
+                hitAt={findHitAt}
+                isolateKeys={true}
+                on:search={() => runFind()}
+                on:step={(e) => stepFind(e.detail)}
+                on:close={closeFind}
+              />
+            {/if}
             {#if sideBySide}
               <SideBySideDiff
                 bind:this={sideBySideView}
@@ -1207,6 +1320,8 @@
                   <div
                     class="diff-line {line.type}"
                     class:in-block={i >= currentBlock.from && i <= currentBlock.to}
+                    class:hit={findLineHitSet.has(i)}
+                    class:hit-current={i === currentFindLine}
                     data-line={i}
                   >
                     <!-- Already escaped; see utils/highlightLine.ts. -->
@@ -1854,6 +1969,13 @@
   }
   /* "diff --git", "index abc..def" and the +++/--- pair: notation about the
      file rather than its content. */
+  /* Find matches, as in the diff view: a tint over the row's own colour. */
+  .diff-line.hit {
+    background-image: linear-gradient(rgba(250, 204, 21, 0.07), rgba(250, 204, 21, 0.07));
+  }
+  .diff-line.hit-current {
+    background-image: linear-gradient(rgba(250, 204, 21, 0.2), rgba(250, 204, 21, 0.2));
+  }
   .diff-line.meta {
     color: #6b7280;
   }

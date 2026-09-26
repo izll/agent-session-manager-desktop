@@ -2,24 +2,33 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
-// Model of Diff.svelte's handleDiffFindKeydown, kept in step with it by the
-// source check at the bottom: the real handler cannot be imported out of a
-// .svelte file without a compiler.
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+// The real key rules (utils/diffFind.ts), driven the way DiffFindBar.svelte
+// drives them: a non-null action is prevented and acted on. The source check at
+// the bottom keeps the component on those rules.
+const root = new URL('..', import.meta.url);
+const dir = mkdtempSync(join(tmpdir(), 'diff-find-keys-'));
+const js = join(dir, 'diffFind.mjs');
+writeFileSync(js, execFileSync('npx', ['esbuild', '--loader=ts', '--format=esm'], {
+  input: readFileSync(new URL('src/lib/utils/diffFind.ts', root), 'utf8'),
+  encoding: 'utf8',
+  cwd: root.pathname,
+}));
+const { findKeyAction } = await import(js);
+
 function makeHandler() {
   const calls = [];
   const handler = (event) => {
-    const e = { preventDefault() { this.defaultPrevented = true; }, defaultPrevented: false, ...event };
+    const e = { ...event, defaultPrevented: false };
     e.preventDefault = () => { e.defaultPrevented = true; };
-    if (e.key === 'Escape') { e.preventDefault(); calls.push('close'); return e; }
-    if (e.key === 'Enter' || e.key === 'F3' || ((e.ctrlKey || e.metaKey) && e.key === 'g')) {
-      e.preventDefault();
-      calls.push(e.shiftKey ? -1 : 1);
-      return e;
-    }
-    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-      e.preventDefault();
-      calls.push(e.key === 'ArrowDown' ? 1 : -1);
-    }
+    const action = findKeyAction(e);
+    if (action === null) return e;
+    e.preventDefault();
+    calls.push(action);
     return e;
   };
   return { handler, calls };
@@ -76,12 +85,13 @@ test('left and right arrows still move the caret in the field', () => {
   assert.equal(right.defaultPrevented, false);
 });
 
-test('Diff.svelte actually handles the arrows', () => {
-  const src = readFileSync(new URL('../src/lib/components/MainPanel/Diff.svelte', import.meta.url), 'utf8');
-  const handler = src.slice(src.indexOf('function handleDiffFindKeydown'));
+test('the find bar actually uses those rules', () => {
+  const src = readFileSync(new URL('../src/lib/components/MainPanel/DiffFindBar.svelte', import.meta.url), 'utf8')
+    .replace(/\r\n/g, '\n');
+  const handler = src.slice(src.indexOf('function handleKeydown'));
   const body = handler.slice(0, handler.indexOf('\n  }\n') + 4);
-  assert.match(body, /ArrowDown/, 'the find handler no longer mentions ArrowDown');
-  assert.match(body, /ArrowUp/, 'the find handler no longer mentions ArrowUp');
-  assert.match(body, /stepDiffSearch\(event\.key === 'ArrowDown' \? 1 : -1\)/,
-    'the arrows should step the search in the expected direction');
+  assert.match(body, /findKeyAction\(event\)/, 'the bar no longer takes its keys from findKeyAction');
+  assert.match(body, /event\.preventDefault\(\)/);
+  assert.match(body, /dispatch\('step', action\)/, 'a step key should step the search in its direction');
+  assert.match(src, /on:keydown=\{handleKeydown\}/);
 });

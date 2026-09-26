@@ -24,6 +24,7 @@
     type SideLine,
     type UnifiedLine,
   } from '../../utils/sideBySide';
+  import { findMatches, htmlToText, keepMatch, stepMatch } from '../../utils/diffFind';
 
   /** One entry per hunk: its header and its lines, already highlighted. */
   export let hunks: Array<{ header: string; lines: UnifiedLine[]; index: number }> = [];
@@ -445,7 +446,7 @@
    */
   let searchQuery = '';
   let searchHits: number[] = [];
-  let searchAt = 0;
+  let searchAt = -1;
   /**
    * The rows to mark: every match faintly, the current one strongly.
    *
@@ -455,59 +456,43 @@
   let hitRows = new Set<number>();
   let currentHitRow = -1;
 
-  /** Tag-free text of a rendered line, for matching. */
-  function plainText(html: string | null): string {
-    if (!html) return '';
-    // Entities have to be decoded too: the renderer escapes < and &, so a
-    // search for "a < b" would never match the "a &lt; b" in the markup.
-    const el = document.createElement('div');
-    el.innerHTML = html;
-    return el.textContent || '';
-  }
-
   /**
    * Row indices containing the query, in display order.
    *
    * A row matches if either side does — the two columns are one document to
    * the person reading them, and reporting a right-hand hit as "not found"
    * because the left side lacks it would be a lie.
+   *
+   * `reveal` false is a re-run under the reader — the file refreshed, or the
+   * view changed — so the view stays put and the cursor stays on its row if
+   * that row still matches (see keepMatch).
    */
-  export function search(query: string): number {
+  export function search(query: string, reveal = true): number {
+    const previous = currentHitRow;
     searchQuery = query;
-    searchAt = 0;
-
-    if (!query.trim()) {
-      searchHits = [];
-      hitRows = new Set();
-      currentHitRow = -1;
-      return 0;
-    }
-
-    const needle = query.toLowerCase();
-    searchHits = [];
-    paired.forEach((row, index) => {
-      const text = (plainText(row.oldHtml) + '\n' + plainText(row.newHtml)).toLowerCase();
-      if (text.includes(needle)) searchHits.push(index);
-    });
-
+    searchHits = findMatches(
+      paired.map((row) => htmlToText(row.oldHtml) + '\n' + htmlToText(row.newHtml)),
+      query,
+    );
     hitRows = new Set(searchHits);
-    currentHitRow = searchHits.length ? searchHits[0] : -1;
-    if (searchHits.length) scrollToRow(searchHits[0]);
+    searchAt = reveal ? (searchHits.length ? 0 : -1) : keepMatch(searchHits, previous);
+    currentHitRow = searchAt >= 0 ? searchHits[searchAt] : -1;
+    if (reveal && currentHitRow >= 0) scrollToRow(currentHitRow);
     return searchHits.length;
   }
 
   /** Step to the next match, or the previous one. Wraps at both ends. */
   export function stepSearch(direction: 1 | -1): number {
     if (!searchHits.length) return 0;
-    searchAt = (searchAt + direction + searchHits.length) % searchHits.length;
+    searchAt = stepMatch(searchAt, direction, searchHits.length);
     currentHitRow = searchHits[searchAt];
     scrollToRow(currentHitRow);
     return searchAt + 1;
   }
 
-  /** Which match is showing, 1-based; 0 when there are none. */
+  /** Which match is showing, 1-based; 0 when there is none. */
   export function searchPosition(): number {
-    return searchHits.length ? searchAt + 1 : 0;
+    return searchAt >= 0 && searchHits.length ? searchAt + 1 : 0;
   }
 
   export function scrollToRow(rowIndex: number, rowCount = 1) {
