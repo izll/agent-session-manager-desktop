@@ -2,7 +2,9 @@ package session
 
 import (
 	"context"
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -292,18 +294,41 @@ func TestCopyModeIsEnteredSoItCanEndByItself(t *testing.T) {
 	}
 }
 
-// Nothing may end the selection by cancelling.
+// Nothing may cancel while the view is scrolled up.
 //
 // cancel — and the -and-cancel endings — return the view to the bottom. A
 // selection is often made after scrolling up to find something, and jumping
 // back to the end at that moment loses exactly what the user was looking at.
+// At the bottom it moves nothing, and there the mode has to end (see
+// TestASelectionAtTheBottomLeavesCopyMode).
 func TestNoBindingThrowsAwayTheScrollPosition(t *testing.T) {
+	// The part of a binding that runs while scrolled up: the first branch of
+	// an if-shell on scrolledUp, and nothing under an if-shell on atBottom.
+	scrolledPart := func(args []string) string {
+		var kept []string
+		for i := 0; i < len(args); i++ {
+			if args[i] == "if-shell" && i+2 < len(args) && args[i+1] == "-F" {
+				switch args[i+2] {
+				case scrolledUp:
+					if i+3 < len(args) {
+						kept = append(kept, args[i+3])
+					}
+					i += 4
+					continue
+				case atBottom:
+					i += 3
+					continue
+				}
+			}
+			kept = append(kept, args[i])
+		}
+		return strings.Join(kept, " ")
+	}
 	check := func(what string, args []string) {
 		t.Helper()
-		joined := strings.Join(args, " ")
-		if strings.Contains(joined, "cancel") {
-			t.Errorf("%s cancels, which returns the view to the bottom and "+
-				"loses the place the user scrolled to:\n  %s", what, joined)
+		if part := scrolledPart(args); strings.Contains(part, "cancel") {
+			t.Errorf("%s cancels while scrolled up, which returns the view to the "+
+				"bottom and loses the place the user scrolled to:\n  %s", what, strings.Join(args, " "))
 		}
 	}
 
@@ -314,8 +339,81 @@ func TestNoBindingThrowsAwayTheScrollPosition(t *testing.T) {
 				check("click "+key, ClickSelectBinding(table, key, selector, enabled))
 			}
 		}
-		for key, selector := range clickSelectKeys {
-			check("root "+key, RootClickBinding(key, selector, enabled))
+	}
+}
+
+// A selection made without scrolling up left the pane in copy mode: a drag
+// enters it through tmux's own copy-mode -M, without -e, so nothing ended it,
+// keystrokes went to tmux and every later click in the window was taken as a
+// selection. At the bottom every selection now leaves the mode.
+func TestASelectionAtTheBottomLeavesCopyMode(t *testing.T) {
+	for _, enabled := range []bool{true, false} {
+		for _, table := range copyModeTables {
+			drag := MouseCopyBinding(table, enabled)
+			if n := len(drag); n < 2 || drag[n-5] != "if-shell" || drag[n-3] != scrolledUp || !strings.Contains(drag[n-1], "cancel") {
+				t.Errorf("drag end (%s, enabled=%v) does not leave the mode at the bottom:\n  %s",
+					table, enabled, strings.Join(drag, " "))
+			}
+			for key, selector := range clickSelectKeys {
+				click := strings.Join(ClickSelectBinding(table, key, selector, enabled), " ")
+				if !strings.HasSuffix(click, "if-shell -F "+atBottom+" send-keys -X cancel") {
+					t.Errorf("%s in %s (enabled=%v) does not leave the mode at the bottom:\n  %s",
+						key, table, enabled, click)
+				}
+			}
 		}
+		// A root click comes from a pane not in the mode, which is at the
+		// bottom by definition.
+		for key, selector := range clickSelectKeys {
+			root := RootClickBinding(key, selector, enabled)
+			if action := root[len(root)-1]; !strings.HasSuffix(action, "send-keys -X cancel") {
+				t.Errorf("root %s (enabled=%v) stays in copy mode: %s", key, enabled, action)
+			}
+		}
+	}
+}
+
+// The same, against a real tmux on a socket of its own: the bindings are
+// stored whole, the condition reads the scroll position, and a drag's end
+// leaves the mode at the bottom but not scrolled up.
+func TestSelectionEndingAgainstTmux(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("psmux has no copy-mode-vi table")
+	}
+	if _, err := exec.LookPath("tmux"); err != nil {
+		t.Skip("tmux not installed")
+	}
+	socket := fmt.Sprintf("asmgr-copy-%d", os.Getpid())
+	tm := func(args ...string) string {
+		out, _ := exec.Command("tmux", append([]string{"-L", socket, "-f", os.DevNull}, args...)...).CombinedOutput()
+		return strings.TrimSpace(string(out))
+	}
+	defer tm("kill-server")
+	tm("new-session", "-d", "-s", "p", "-x", "80", "-y", "10", "seq 1 200; sleep 60")
+	tm(MouseCopyBinding("copy-mode-vi", true)...)
+	if got := tm("list-keys", "-T", "copy-mode-vi", "MouseDragEnd1Pane"); !strings.Contains(got, "copy-selection-and-cancel") {
+		t.Fatalf("the drag binding was not stored whole: %q", got)
+	}
+
+	dragEnd := func() {
+		args := MouseCopyBinding("copy-mode-vi", true)
+		at := len(args) - 5 // the if-shell and its arguments
+		tm(append([]string{"if-shell", "-t", "p"}, args[at+1:]...)...)
+	}
+	inMode := func() string { return tm("display", "-p", "-t", "p", "#{pane_in_mode}") }
+
+	tm("copy-mode", "-t", "p")
+	tm("send-keys", "-t", "p", "-X", "page-up")
+	dragEnd()
+	if inMode() != "1" {
+		t.Error("a selection made scrolled up left copy mode, throwing the view to the bottom")
+	}
+	tm("send-keys", "-t", "p", "-X", "history-bottom")
+	if inMode() != "1" {
+		t.Skip("this tmux ends the mode at the bottom by itself")
+	}
+	dragEnd()
+	if inMode() != "0" {
+		t.Error("a selection at the bottom left the pane in copy mode")
 	}
 }

@@ -56,6 +56,23 @@ func ConfigureClipboardForwarding() {
 	TmuxCommand("set-option", "-ga", "terminal-overrides", terminalClipboardCapability).Run()
 }
 
+// scrolledUp is true, as a tmux format, while the view is scrolled back from
+// the bottom: scroll_position counts the lines, and 0 reads as false. A plain
+// variable rather than a #{==:} comparison, so tmux 2.6 reads it too.
+const scrolledUp = "#{scroll_position}"
+
+// leaveIfAtBottom ends copy mode when the view is at the bottom. There
+// cancelling moves nothing, and staying in the mode only meant keystrokes going
+// to tmux and the next click extending a selection. Scrolled up, the mode
+// stays: leaving it would throw the view back to the end.
+func leaveIfAtBottom(scrolled, atBottom string) []string {
+	return []string{"if-shell", "-F", scrolledUp, scrolled, atBottom}
+}
+
+// atBottom is true, as a tmux format, while the view is at the bottom — the
+// inverse of scrolledUp, for a binding with nothing to do when scrolled.
+const atBottom = "#{?scroll_position,,1}"
+
 // MouseCopyBinding returns the tmux arguments binding the end of a drag for one
 // key table.
 //
@@ -81,15 +98,20 @@ func MouseCopyBinding(table string, enabled bool) []string {
 		// leaves the mode by itself once the view returns to the bottom, so
 		// the pane cannot be stranded — and the user keeps the place they
 		// scrolled to instead of being thrown back to the end.
-		return []string{"bind-key", "-T", table, "MouseDragEnd1Pane",
-			"send-keys", "-X", "clear-selection"}
+		return append([]string{"bind-key", "-T", table, "MouseDragEnd1Pane"},
+			leaveIfAtBottom("send-keys -X clear-selection", "send-keys -X cancel")...)
 	}
 	// copy-selection, not copy-selection-and-cancel. The -and-cancel half
 	// returns the view to the bottom, so finishing a drag on something
 	// scrolled up threw away the place the user had scrolled to. The mode is
 	// entered with -e and ends by itself on reaching the bottom.
-	return []string{"bind-key", "-T", table, "MouseDragEnd1Pane",
-		"send-keys", "-X", "copy-selection"}
+	//
+	// Except at the bottom. A drag enters the mode through tmux's own root
+	// binding, copy-mode -M, without -e — so a selection made without
+	// scrolling left the pane in copy mode with nothing to end it, and every
+	// later click in the window was taken as a selection.
+	return append([]string{"bind-key", "-T", table, "MouseDragEnd1Pane"},
+		leaveIfAtBottom("send-keys -X copy-selection", "send-keys -X copy-selection-and-cancel")...)
 }
 
 // ClickSelectBinding returns the binding for a double or triple click, which
@@ -119,9 +141,12 @@ func ClickSelectBinding(table, key, selector string, enabled bool) []string {
 		// to tmux instead of the program. The selection is lost on leaving,
 		// which is the lesser cost: a visible highlight is not worth a pane
 		// that ignores typing until the user discovers "q".
-		return append(args, "send-keys", "-X", "stop-selection")
+		args = append(args, "send-keys", "-X", "stop-selection", "\\;")
+	} else {
+		args = append(args, "send-keys", "-X", "copy-selection", "\\;")
 	}
-	return append(args, "send-keys", "-X", "copy-selection")
+	// At the bottom the mode ends, as after a drag.
+	return append(args, "if-shell", "-F", atBottom, "send-keys -X cancel")
 }
 
 // clickSelectKeys maps each click binding to the selection it makes.
@@ -165,12 +190,16 @@ func RootClickBinding(key, selector string, enabled bool) []string {
 	// returns the view to the bottom, so a double click on something scrolled
 	// up threw away the position the user had scrolled to. With -e the mode
 	// ends on its own when they scroll back down.
+	//
+	// And then leave: a click in the root table comes from a pane that is not
+	// in copy mode, so it is always at the bottom, where leaving moves nothing.
+	// Staying in the mode there made every later click a selection.
 	action := "copy-mode -e ; send-keys -X " + selector +
-		" ; run-shell -d 0.3 ; send-keys -X copy-selection"
+		" ; run-shell -d 0.3 ; send-keys -X copy-selection ; send-keys -X cancel"
 	if !enabled {
-		// Select without copying, and likewise stay where the user is looking.
+		// Select without copying; the highlight shows for the pause.
 		action = "copy-mode -e ; send-keys -X " + selector +
-			" ; run-shell -d 0.3 ; send-keys -X stop-selection"
+			" ; run-shell -d 0.3 ; send-keys -X cancel"
 	}
 
 	// The branches are plain command strings, not { } blocks.
