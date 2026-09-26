@@ -6,6 +6,30 @@ Entries describe what changed for someone using the app. Internal refactoring,
 test and CI work is left out unless it changed behaviour. Dates are release
 dates; the format follows [Keep a Changelog](https://keepachangelog.com).
 
+## 1.1.16 — 2026-09-26
+
+### Added
+
+- **Find works in every diff view.** Ctrl+F and the search button used to
+  exist only in the side-by-side view, so a brand-new or deleted file — shown
+  in one column — could not be searched, nor could the whole-file or
+  changes-only views. The commit history dialog has find now too.
+- **The matched text is highlighted inside the line**, not only the line: on
+  a green or red line the words no longer have to be found by eye. The
+  current match stands out from the others.
+- **Switching to the diff hands it the keyboard.** The arrow and page keys
+  and Ctrl+F work without clicking into it first. It never takes the focus
+  from a field being typed in or a dialog, and the diff above a terminal
+  leaves it in the terminal.
+
+### Fixed
+
+- **A selection in the terminal no longer leaves it stuck in scroll mode.**
+  After selecting with the mouse without scrolling up, the terminal stayed in
+  tmux's copy mode: typing went to tmux and every later click was taken as a
+  selection. At the bottom the mode now ends with the selection; scrolled up
+  it stays, so the place is kept. Restart the app once for this to apply.
+
 ## 1.1.15 — 2026-09-25
 
 ### Changed
