@@ -6,6 +6,7 @@
   import ConfirmDialog from './ConfirmDialog.svelte';
   import { t } from '../../i18n';
   import { autoFocusDialog } from '../../utils/dialogActions';
+  import DialogCloseButton from '../common/DialogCloseButton.svelte';
 
   export let show = false;
 
@@ -329,7 +330,7 @@
     <div class="dialog-content manager">
       <div class="dialog-header">
         <h2>{$t('commands.managerTitle')}</h2>
-        <button class="close-btn" on:click={close}>×</button>
+        <DialogCloseButton on:click={close} />
       </div>
 
       <div class="dialog-body">
@@ -494,15 +495,7 @@
     display: flex;
     flex-direction: column;
   }
-  .dialog-header {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 14px 18px; border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-  }
-  .dialog-header h2 { margin: 0; font-size: 15px; color: #e4e4e7; }
-  .close-btn { border: 0; background: none; color: #71717a; font-size: 20px; cursor: pointer; }
-  .close-btn:hover { color: #e4e4e7; }
 
-  .dialog-body { padding: 14px 18px; overflow-y: auto; flex: 1; min-height: 0; }
   .state { padding: 26px 0; text-align: center; font-size: 13px; color: #71717a; }
   .error-line { color: #fb7185; font-size: 13px; margin-bottom: 10px; }
 
@@ -579,20 +572,4 @@
 
   .form-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
 
-  .dialog-footer {
-    display: flex; justify-content: flex-end; gap: 8px;
-    padding: 12px 18px; border-top: 1px solid rgba(255, 255, 255, 0.06);
-  }
-  .btn-primary, .btn-secondary {
-    padding: 7px 16px; border-radius: 7px; font-size: 13px; font-weight: 600; cursor: pointer;
-  }
-  .btn-secondary {
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    background: rgba(255, 255, 255, 0.05); color: #a1a1aa;
-  }
-  .btn-primary {
-    border: 1px solid var(--accent);
-    background: linear-gradient(135deg, var(--accent-dark), var(--accent)); color: var(--accent-ink);
-  }
-  .btn-primary:disabled { opacity: 0.45; cursor: default; }
 </style>

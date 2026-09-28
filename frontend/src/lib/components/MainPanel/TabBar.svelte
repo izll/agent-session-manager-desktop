@@ -30,6 +30,7 @@
   import { afterUnsavedChanges } from '../../stores/unsavedChanges';
   import { autoFocusDialog } from '../../utils/dialogActions';
   import { activeProjectId } from '../../stores/projects';
+  import DialogCloseButton from '../common/DialogCloseButton.svelte';
 
   interface TabColorTarget {
     Index: number;
@@ -2398,26 +2399,23 @@
 
 {#if showExtraArgsEditor}
   <div class="dialog-overlay" use:autoFocusDialog on:click|self={cancelExtraArgs} on:keydown={handleExtraArgsKeydown} role="dialog" aria-modal="true" tabindex="-1">
-    <div class="extra-args-dialog">
-      <div class="extra-args-header">
-        <h3>{$t('tabBar.extraArgsTitle')}</h3>
-        <button class="close-btn" on:click={cancelExtraArgs}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="18" y1="6" x2="6" y2="18"/>
-            <line x1="6" y1="6" x2="18" y2="18"/>
-          </svg>
-        </button>
+    <div class="dialog-content extra-args-dialog">
+      <div class="dialog-header">
+        <h2>{$t('tabBar.extraArgsTitle')}</h2>
+        <DialogCloseButton on:click={cancelExtraArgs} />
       </div>
-      <input
-        class="extra-args-input"
-        type="text"
-        bind:value={extraArgsValue}
-        on:keydown={handleExtraArgsKeydown}
-        placeholder="--model opus --verbose"
-        autofocus
-      />
-      <span class="extra-args-hint">{$t('tabBar.extraArgsHint')}</span>
-      <div class="extra-args-actions">
+      <div class="dialog-body">
+        <input
+          class="extra-args-input"
+          type="text"
+          bind:value={extraArgsValue}
+          on:keydown={handleExtraArgsKeydown}
+          placeholder="--model opus --verbose"
+          autofocus
+        />
+        <span class="extra-args-hint">{$t('tabBar.extraArgsHint')}</span>
+      </div>
+      <div class="dialog-footer">
         <button class="btn-cancel" on:click={cancelExtraArgs}>{$t('common.cancel')}</button>
         <button class="btn-primary" on:click={saveExtraArgs}>{$t('tabBar.extraArgsSave')}</button>
       </div>
@@ -3192,28 +3190,9 @@
 
 
   /* Extra Args Editor */
+  /* The shared dialog chrome (style.css); only the width is its own. */
   .extra-args-dialog {
-    background: var(--bg-raised);
-    border: 1px solid rgba(var(--accent-rgb), 0.3);
-    border-radius: 12px;
-    padding: 20px;
-    width: 400px;
-    max-width: 90vw;
-    box-shadow: 0 12px 48px rgba(0, 0, 0, 0.6);
-  }
-
-  .extra-args-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 16px;
-  }
-
-  .extra-args-header h3 {
-    font-size: 15px;
-    font-weight: 600;
-    color: #e4e4e7;
-    margin: 0;
+    max-width: min(400px, 90vw);
   }
 
   .extra-args-input {
@@ -3243,13 +3222,6 @@
     font-size: 12px;
     color: #6b7280;
     margin-top: 8px;
-    margin-bottom: 16px;
-  }
-
-  .extra-args-actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: 8px;
   }
 
   /* Resize edges */

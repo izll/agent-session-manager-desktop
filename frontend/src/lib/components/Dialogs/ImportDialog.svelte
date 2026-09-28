@@ -7,6 +7,7 @@
   import AgentIcon from '../common/AgentIcon.svelte';
   import Select from '../common/Select.svelte';
   import { t } from '../../i18n';
+  import DialogCloseButton from '../common/DialogCloseButton.svelte';
 
   export let show = false;
 
@@ -183,12 +184,7 @@
     <div class="dialog-content">
       <div class="dialog-header">
         <h2>{$t('import.title')}</h2>
-        <button class="close-btn" on:click={close} disabled={isImporting}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="18" y1="6" x2="6" y2="18"/>
-            <line x1="6" y1="6" x2="18" y2="18"/>
-          </svg>
-        </button>
+        <DialogCloseButton on:click={close} disabled={isImporting} />
       </div>
 
       <div class="dialog-body">
@@ -322,23 +318,11 @@
     width: 550px;
     max-width: 90vw;
     max-height: 80vh;
-    display: flex;
-    flex-direction: column;
-  }
-
-  .dialog-header {
-    flex-shrink: 0;
-  }
-
-  .dialog-body {
-    flex: 1;
-    overflow-y: auto;
   }
 
   .dialog-footer {
     justify-content: space-between;
     align-items: center;
-    flex-shrink: 0;
   }
 
   /* Success message (component-specific) */

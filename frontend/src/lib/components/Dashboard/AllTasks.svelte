@@ -17,6 +17,7 @@
   import Select from '../common/Select.svelte';
   import { isGradient, gradientTextStyle } from '../../utils/rowColors';
   import { autoFocusDialog } from '../../utils/dialogActions';
+  import DialogCloseButton from '../common/DialogCloseButton.svelte';
 
   type OverviewTask = {
     id: string;
@@ -443,77 +444,83 @@
 
 {#if selected}
   <div
-    class="overlay"
+    class="dialog-overlay"
     use:autoFocusDialog
     role="dialog"
     aria-modal="true"
     on:click|self={closeDetails}
     on:keydown={handleDetailKeydown}
   >
-    <div class="detail">
-      <h3>{selected.title}</h3>
+    <div class="dialog-content task-detail">
+      <div class="dialog-header">
+        <h2>{selected.title}</h2>
+        <DialogCloseButton on:click={closeDetails} />
+      </div>
 
-      <dl class="meta">
-        <dt>{$t('allTasks.sessionColumn')}</dt>
-        <dd>{selected.sessionName || projectLabel(selected.projectName)}</dd>
+      <div class="dialog-body">
+        <dl class="meta">
+          <dt>{$t('allTasks.sessionColumn')}</dt>
+          <dd>{selected.sessionName || projectLabel(selected.projectName)}</dd>
 
-        <dt>{$t('tasks.dueAt')}</dt>
-        <dd class={deadlineState(selected.dueAt, selected.status)}>
-          {selected.dueAt ? formatDue(selected.dueAt) : $t('allTasks.noDeadline')}
-        </dd>
+          <dt>{$t('tasks.dueAt')}</dt>
+          <dd class={deadlineState(selected.dueAt, selected.status)}>
+            {selected.dueAt ? formatDue(selected.dueAt) : $t('allTasks.noDeadline')}
+          </dd>
 
-        <dt>{$t('tasks.priority')}</dt>
-        <dd>{selected.priority}</dd>
+          <dt>{$t('tasks.priority')}</dt>
+          <dd>{selected.priority}</dd>
 
-        <dt>{$t('allTasks.statusColumn')}</dt>
-        <dd>{statusLabels[selected.status] || selected.status}</dd>
+          <dt>{$t('allTasks.statusColumn')}</dt>
+          <dd>{statusLabels[selected.status] || selected.status}</dd>
 
-        <dt>{$t('allTasks.pathColumn')}</dt>
-        <dd class="path">{selected.projectPath}</dd>
-      </dl>
+          <dt>{$t('allTasks.pathColumn')}</dt>
+          <dd class="path">{selected.projectPath}</dd>
+        </dl>
 
-      {#if selected.description}
-        <p class="body">{selected.description}</p>
-      {/if}
-      {#if selected.details}
-        <span class="details-label">{$t('tasks.implementationDetails')}</span>
-        <pre class="body details">{selected.details}</pre>
-      {/if}
+        {#if selected.description}
+          <p class="body">{selected.description}</p>
+        {/if}
+        {#if selected.details}
+          <span class="details-label">{$t('tasks.implementationDetails')}</span>
+          <pre class="body details">{selected.details}</pre>
+        {/if}
 
-      {#if selected.subtasks && selected.subtasks.length > 0}
-        <span class="details-label">
-          {$t('tasks.subtasks')}
-          ({selected.subtasks.filter((sub) => sub.done).length}/{selected.subtasks.length})
-        </span>
-        <ul class="sub-list">
-          {#each selected.subtasks as subtask (subtask.id)}
-            <li class:done={subtask.done}>
-              <!-- Read-only here: this view spans every project, and the task
-                   file it would write belongs to another session's panel. -->
-              <span class="tick">{subtask.done ? '✓' : '○'}</span>
-              {subtask.title}
-            </li>
-          {/each}
-        </ul>
-      {/if}
+        {#if selected.subtasks && selected.subtasks.length > 0}
+          <span class="details-label">
+            {$t('tasks.subtasks')}
+            ({selected.subtasks.filter((sub) => sub.done).length}/{selected.subtasks.length})
+          </span>
+          <ul class="sub-list">
+            {#each selected.subtasks as subtask (subtask.id)}
+              <li class:done={subtask.done}>
+                <!-- Read-only here: this view spans every project, and the task
+                     file it would write belongs to another session's panel. -->
+                <span class="tick">{subtask.done ? '✓' : '○'}</span>
+                {subtask.title}
+              </li>
+            {/each}
+          </ul>
+        {/if}
 
-      {#if selected.dependencies && selected.dependencies.length > 0}
-        <span class="details-label">{$t('tasks.dependencies')}</span>
-        <ul class="sub-list">
-          {#each selected.dependencies as dep}
-            <li><span class="tick">–</span>{dependencyTitle(dep, selected)}</li>
-          {/each}
-        </ul>
-      {/if}
+        {#if selected.dependencies && selected.dependencies.length > 0}
+          <span class="details-label">{$t('tasks.dependencies')}</span>
+          <ul class="sub-list">
+            {#each selected.dependencies as dep}
+              <li><span class="tick">–</span>{dependencyTitle(dep, selected)}</li>
+            {/each}
+          </ul>
+        {/if}
+      </div>
 
-      <div class="detail-actions">
-        {#if selected.sessionId}
+      <!-- Closing is the header's ✕ (and Escape), as in every dialog; a second
+           "Close" down here only duplicated it. -->
+      {#if selected.sessionId}
+        <div class="dialog-footer">
           <button class="btn-primary" on:click={() => { const task = selected; selected = null; if (task) jumpToSession(task); }}>
             {$t('allTasks.openSession')}
           </button>
-        {/if}
-        <button class="btn-cancel" on:click={closeDetails}>{$t('common.close')}</button>
-      </div>
+        </div>
+      {/if}
     </div>
   </div>
 {/if}
@@ -859,29 +866,11 @@
     font-size: 12px;
   }
 
-  .overlay {
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.5);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 100;
-  }
-
-  .detail {
-    background: var(--bg-secondary, #1e293b);
-    border: 1px solid rgba(107, 114, 128, 0.3);
-    border-radius: 10px;
-    padding: 20px 22px;
+  /* The shared dialog chrome (style.css); only the width is its own. */
+  .task-detail {
     width: min(560px, 90vw);
+    max-width: min(560px, 90vw);
     max-height: 80vh;
-    overflow-y: auto;
-  }
-
-  .detail h3 {
-    margin: 0 0 16px;
-    font-size: 16px;
   }
 
   .meta {
@@ -963,33 +952,6 @@
     display: inline-block;
     width: 16px;
     color: #6b7280;
-  }
-
-  .detail-actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: 8px;
-    margin-top: 4px;
-  }
-
-  .btn-primary,
-  .btn-cancel {
-    padding: 7px 14px;
-    border-radius: 6px;
-    font-size: 13px;
-    cursor: pointer;
-    border: 1px solid transparent;
-  }
-
-  .btn-primary {
-    background: var(--accent, #3b82f6);
-    color: #fff;
-  }
-
-  .btn-cancel {
-    background: transparent;
-    border-color: #374151;
-    color: inherit;
   }
 
   /* Wider than the app default: this scroller reaches the window edge, where

@@ -284,6 +284,9 @@ select option:checked {
 .dialog-content > .dialog-body ~ .dialog-footer {
   flex-shrink: 0;
   background: var(--bg-raised);
+  /* The same divider as .dialog-footer, so an action row and a footer look
+     alike; several dialogs drew it themselves. */
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
   /* Its own padding, now that it is no longer inside the body.
      The buttons used to sit at the end of the form and took their spacing
      from it; moved out, they had a top padding and nothing below or beside
@@ -357,9 +360,15 @@ select option:checked {
   transition: all 0.2s ease;
 }
 
-.close-btn:hover {
+.close-btn:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.1);
   color: white;
+}
+
+/* Some dialogs lock the ✕ while an import or an update runs. */
+.close-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 /* Cancel button */
@@ -380,6 +389,31 @@ select option:checked {
   color: white;
 }
 
+/* Secondary button: the neutral one beside a primary — "New group" next to
+   "New command". Same box as .btn-cancel and .btn-primary, so a footer's
+   buttons line up; several dialogs used to define it, each slightly smaller. */
+.btn-secondary {
+  padding: 10px 18px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #9ca3af;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+}
+
+.btn-secondary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* Primary button */
 .btn-primary {
   padding: 10px 18px;
@@ -388,7 +422,9 @@ select option:checked {
   border-radius: 8px;
   font-size: 13px;
   font-weight: 600;
-  color: white;
+  /* The accent's own ink, not white: on a light accent (amber, say) white
+     text is unreadable, and the theme sets --accent-ink for exactly this. */
+  color: var(--accent-ink);
   cursor: pointer;
   transition: all 0.15s ease;
 }

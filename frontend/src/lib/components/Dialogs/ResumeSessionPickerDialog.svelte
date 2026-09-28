@@ -5,6 +5,7 @@
   import type { Session } from '../../stores/sessions';
   import * as App from '../../../../wailsjs/go/main/App';
   import { t } from '../../i18n';
+  import DialogCloseButton from '../common/DialogCloseButton.svelte';
 
   export let show = false;
   export let session: Session | null = null;
@@ -138,12 +139,7 @@
     <div class="dialog-content">
       <div class="dialog-header">
         <h2>{$t('resumePicker.title')}</h2>
-        <button class="close-btn" on:click={handleCancel}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="18" y1="6" x2="6" y2="18"/>
-            <line x1="6" y1="6" x2="18" y2="18"/>
-          </svg>
-        </button>
+        <DialogCloseButton on:click={handleCancel} />
       </div>
 
       <div class="dialog-body">
@@ -219,18 +215,13 @@
      The height is a maximum rather than a fixed one: the list is as long as
      the agent's history, and a session with two conversations should not be
      shown in a dialog sized for twenty. */
-  .dialog-content {
-    max-height: 80vh;
-    display: flex;
-    flex-direction: column;
-  }
+  .dialog-content { max-height: 80vh; }
 
-  .dialog-body {
-    padding: 20px 24px;
+  /* The list inside scrolls, not the body. As specific as the shared
+     `.dialog-content > .dialog-body` rule, so the order of the stylesheets
+     cannot decide it. */
+  .dialog-content > .dialog-body {
     overflow: hidden;
-    display: flex;
-    flex-direction: column;
-    min-height: 0;
   }
 
   /* A hint, not a row of buttons — centred, and in the footer's muted type. */

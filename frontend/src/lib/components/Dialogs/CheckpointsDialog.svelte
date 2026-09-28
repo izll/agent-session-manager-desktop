@@ -25,6 +25,7 @@
   import { describeBackendError } from '../../utils/backendError';
   import ConfirmDialog from './ConfirmDialog.svelte';
   import Select from '../common/Select.svelte';
+  import DialogCloseButton from '../common/DialogCloseButton.svelte';
 
   export let show = false;
   export let projectId = '';
@@ -284,12 +285,7 @@
     <div class="dialog-content">
       <div class="dialog-header">
         <h2 id="checkpoints-title">{$t('checkpoints.title')}</h2>
-        <button class="close-btn" on:click={close} aria-label={$t('common.close')} title={$t('common.close')}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="18" y1="6" x2="6" y2="18"/>
-            <line x1="6" y1="6" x2="18" y2="18"/>
-          </svg>
-        </button>
+        <DialogCloseButton on:click={close} />
       </div>
 
       <div class="dialog-body">
@@ -431,10 +427,7 @@
     max-width: min(620px, 94vw);
   }
 
-  .dialog-body {
-    padding: 18px 24px;
-    gap: 12px;
-  }
+  .dialog-body { gap: 12px; }
 
   .intro {
     margin: 0;

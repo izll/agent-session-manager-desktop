@@ -9,6 +9,7 @@
   import { t } from '../../i18n';
   import { autoFocusDialog } from '../../utils/dialogActions';
   import { activeProjectId } from '../../stores/projects';
+  import DialogCloseButton from '../common/DialogCloseButton.svelte';
 
   export let show = false;
 
@@ -250,140 +251,133 @@
     <div class="dialog-content">
       <div class="dialog-header">
         <h2>{$t('bgAgents.title')}{#if agents.length > 0} <span class="agent-count">{agents.length}</span>{/if}</h2>
-        <button class="close-btn" on:click={close}>×</button>
+        <DialogCloseButton on:click={close} />
       </div>
 
-      {#if agents.length > 5}
-        <div class="filter-box">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-          <input bind:value={filter} placeholder={$t('bgAgents.filterPlaceholder')} />
-          {#if filter}<button class="clear-filter" on:click={() => filter = ''}>×</button>{/if}
-        </div>
-      {/if}
+      <div class="dialog-body">
+        {#if agents.length > 5}
+          <div class="filter-box">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+            <input bind:value={filter} placeholder={$t('bgAgents.filterPlaceholder')} />
+            {#if filter}<button class="clear-filter" on:click={() => filter = ''}>×</button>{/if}
+          </div>
+        {/if}
 
-      {#if error}<div class="error-line">{error}</div>{/if}
+        {#if error}<div class="error-line">{error}</div>{/if}
 
-      {#if loading}
-        <div class="empty">{$t('bgAgents.loading')}</div>
-      {:else if agents.length === 0}
-        <div class="empty">
-          {$t('bgAgents.empty')}
-          <span class="hint">{$t('bgAgents.emptyHint')}</span>
-        </div>
-      {:else if filteredAgents.length === 0}
-        <div class="empty">{$t('bgAgents.noMatches')}</div>
-      {:else}
-        <div class="agent-list">
-          {#each filteredAgents as agent (agent.id)}
-            <div class="agent-row">
-              <span class="status-dot {agent.status}"></span>
-              <div class="agent-info">
-                <span class="agent-name">{agent.name || agent.id}</span>
-                <span class="agent-meta">{agent.id} · {shortCwd(agent.cwd)} · {uptime(agent.startedAt)} · {agent.status}</span>
-              </div>
-              <div class="agent-actions">
-                <button on:click={() => openAttach(agent)} title={$t('bgAgents.attachDesc')}>{$t('bgAgents.attach')}</button>
-                <button on:click={() => toggleLogs(agent)}>{$t('bgAgents.logs')}</button>
-                <button class="danger" on:click={() => stopAgent(agent)}>{$t('bgAgents.stop')}</button>
-              </div>
-            </div>
-            {#if attachFor?.id === agent.id}
-              <div class="attach-config">
-                <div class="attach-grid">
-                  <button type="button" class="attach-card" class:selected={attachMode === 'tab'}
-                    disabled={attachRunning.length === 0}
-                    on:click={() => attachMode = 'tab'}>
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <rect x="3" y="5" width="18" height="14" rx="2"/>
-                      <path d="M3 9h18M9 5v4"/>
-                    </svg>
-                    <span class="attach-card-title">{$t('bgAgents.asTab')}</span>
-                    <span class="attach-card-desc">{$t('bgAgents.asTabDesc')}</span>
-                  </button>
-                  <button type="button" class="attach-card" class:selected={attachMode === 'new'}
-                    on:click={() => attachMode = 'new'}>
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <rect x="3" y="4" width="18" height="16" rx="2"/>
-                      <path d="M12 9v6M9 12h6"/>
-                    </svg>
-                    <span class="attach-card-title">{$t('bgAgents.asNew')}</span>
-                    <span class="attach-card-desc">{$t('bgAgents.asNewDesc')}</span>
-                  </button>
+        {#if loading}
+          <div class="empty">{$t('bgAgents.loading')}</div>
+        {:else if agents.length === 0}
+          <div class="empty">
+            {$t('bgAgents.empty')}
+            <span class="hint">{$t('bgAgents.emptyHint')}</span>
+          </div>
+        {:else if filteredAgents.length === 0}
+          <div class="empty">{$t('bgAgents.noMatches')}</div>
+        {:else}
+          <div class="agent-list">
+            {#each filteredAgents as agent (agent.id)}
+              <div class="agent-row">
+                <span class="status-dot {agent.status}"></span>
+                <div class="agent-info">
+                  <span class="agent-name">{agent.name || agent.id}</span>
+                  <span class="agent-meta">{agent.id} · {shortCwd(agent.cwd)} · {uptime(agent.startedAt)} · {agent.status}</span>
                 </div>
+                <div class="agent-actions">
+                  <button on:click={() => openAttach(agent)} title={$t('bgAgents.attachDesc')}>{$t('bgAgents.attach')}</button>
+                  <button on:click={() => toggleLogs(agent)}>{$t('bgAgents.logs')}</button>
+                  <button class="danger" on:click={() => stopAgent(agent)}>{$t('bgAgents.stop')}</button>
+                </div>
+              </div>
+              {#if attachFor?.id === agent.id}
+                <div class="attach-config">
+                  <div class="attach-grid">
+                    <button type="button" class="attach-card" class:selected={attachMode === 'tab'}
+                      disabled={attachRunning.length === 0}
+                      on:click={() => attachMode = 'tab'}>
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="5" width="18" height="14" rx="2"/>
+                        <path d="M3 9h18M9 5v4"/>
+                      </svg>
+                      <span class="attach-card-title">{$t('bgAgents.asTab')}</span>
+                      <span class="attach-card-desc">{$t('bgAgents.asTabDesc')}</span>
+                    </button>
+                    <button type="button" class="attach-card" class:selected={attachMode === 'new'}
+                      on:click={() => attachMode = 'new'}>
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="4" width="18" height="16" rx="2"/>
+                        <path d="M12 9v6M9 12h6"/>
+                      </svg>
+                      <span class="attach-card-title">{$t('bgAgents.asNew')}</span>
+                      <span class="attach-card-desc">{$t('bgAgents.asNewDesc')}</span>
+                    </button>
+                  </div>
 
-                <div class="attach-fields">
-                  {#if attachMode === 'tab'}
-                    <div class="attach-field">
-                      <span class="attach-label">{$t('bgAgents.filterGroup')}</span>
-                      <Select
-                        value={attachGroupFilter}
-                        options={[
-                          { value: 'all', label: $t('bgAgents.allGroups') },
-                          { value: '', label: $t('bgAgents.noGroup') },
-                          ...$groups.map(g => ({ value: g.id, label: g.name }))
-                        ]}
-                        on:change={(e) => attachGroupFilter = e.detail}
-                      />
-                    </div>
-                    <div class="attach-field">
-                      <span class="attach-label">{$t('bgAgents.session')}</span>
-                      {#if attachFiltered.length > 0}
+                  <div class="attach-fields">
+                    {#if attachMode === 'tab'}
+                      <div class="attach-field">
+                        <span class="attach-label">{$t('bgAgents.filterGroup')}</span>
                         <Select
-                          value={attachSessionId}
-                          options={attachFiltered.map(m => ({ value: m.id, label: m.name }))}
-                          on:change={(e) => attachSessionId = e.detail}
+                          value={attachGroupFilter}
+                          options={[
+                            { value: 'all', label: $t('bgAgents.allGroups') },
+                            { value: '', label: $t('bgAgents.noGroup') },
+                            ...$groups.map(g => ({ value: g.id, label: g.name }))
+                          ]}
+                          on:change={(e) => attachGroupFilter = e.detail}
                         />
-                      {:else}
-                        <span class="cascade-empty">{$t('bgAgents.noRunning')}</span>
-                      {/if}
-                    </div>
-                  {:else}
-                    <div class="attach-field">
-                      <span class="attach-label">{$t('bgAgents.filterGroup')}</span>
-                      <Select
-                        value={attachGroupId}
-                        options={[{ value: '', label: $t('bgAgents.noGroup') }, ...$groups.map(g => ({ value: g.id, label: g.name }))]}
-                        on:change={(e) => attachGroupId = e.detail}
-                      />
-                    </div>
-                  {/if}
-                </div>
+                      </div>
+                      <div class="attach-field">
+                        <span class="attach-label">{$t('bgAgents.session')}</span>
+                        {#if attachFiltered.length > 0}
+                          <Select
+                            value={attachSessionId}
+                            options={attachFiltered.map(m => ({ value: m.id, label: m.name }))}
+                            on:change={(e) => attachSessionId = e.detail}
+                          />
+                        {:else}
+                          <span class="cascade-empty">{$t('bgAgents.noRunning')}</span>
+                        {/if}
+                      </div>
+                    {:else}
+                      <div class="attach-field">
+                        <span class="attach-label">{$t('bgAgents.filterGroup')}</span>
+                        <Select
+                          value={attachGroupId}
+                          options={[{ value: '', label: $t('bgAgents.noGroup') }, ...$groups.map(g => ({ value: g.id, label: g.name }))]}
+                          on:change={(e) => attachGroupId = e.detail}
+                        />
+                      </div>
+                    {/if}
+                  </div>
 
-                <div class="attach-buttons">
-                  <button class="cancel" on:click={() => attachFor = null}>{$t('bgAgents.cancel')}</button>
-                  <button class="confirm" on:click={confirmAttach}
-                    disabled={attaching || (attachMode === 'tab' && attachFiltered.length === 0)}>
-                    {$t('bgAgents.attach')}
-                  </button>
+                  <div class="attach-buttons">
+                    <button class="cancel" on:click={() => attachFor = null}>{$t('bgAgents.cancel')}</button>
+                    <button class="confirm" on:click={confirmAttach}
+                      disabled={attaching || (attachMode === 'tab' && attachFiltered.length === 0)}>
+                      {$t('bgAgents.attach')}
+                    </button>
+                  </div>
                 </div>
-              </div>
-            {/if}
-            {#if logsFor === agent.id}
-              <pre class="agent-logs">{logsText}</pre>
-            {/if}
-          {/each}
-        </div>
-      {/if}
+              {/if}
+              {#if logsFor === agent.id}
+                <pre class="agent-logs">{logsText}</pre>
+              {/if}
+            {/each}
+          </div>
+        {/if}
+      </div>
     </div>
   </div>
 {/if}
 
 <style>
+  /* The chrome is the shared one (style.css); only the size is this list's. */
   .dialog-content {
-    /* the global .dialog-content caps max-width at 400px — this list needs room */
     width: min(760px, 92vw);
     max-width: min(760px, 92vw);
     max-height: 78vh;
-    overflow-y: auto;
-    background: linear-gradient(180deg, var(--bg-raised) 0%, var(--bg-sunken) 100%);
-    border: 1px solid rgba(var(--accent-rgb), 0.25);
-    border-radius: 12px;
-    padding: 18px;
   }
-  .dialog-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
-  .dialog-header h2 { margin: 0; color: #e4e4e7; font-size: 16px; }
-  .close-btn { background: none; border: 0; color: #71717a; font-size: 20px; cursor: pointer; }
-  .close-btn:hover { color: #e4e4e7; }
   .error-line { color: #fb7185; font-size: 12px; margin-bottom: 8px; }
   .agent-count {
     display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 999px;

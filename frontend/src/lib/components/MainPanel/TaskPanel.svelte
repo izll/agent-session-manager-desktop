@@ -15,6 +15,7 @@
   import { offerUndo } from '../../stores/undo';
   import { toLocalInputValue, fromLocalInputValue, deadlineState } from '../../utils/taskDueDate';
   import { describeBackendError } from '../../utils/backendError';
+  import DialogCloseButton from '../common/DialogCloseButton.svelte';
   import {
     sessionTabs,
     resolveTaskTab,
@@ -1512,7 +1513,7 @@
     <div class="dialog-content large" on:click|stopPropagation>
       <div class="dialog-header">
         <h2>{$t('tasks.parsePRDTitle')}</h2>
-        <button class="close-btn" on:click={() => showPRDModal = false}>×</button>
+        <DialogCloseButton on:click={() => showPRDModal = false} />
       </div>
       <div class="dialog-body">
         <p class="dialog-hint">
@@ -1551,7 +1552,7 @@
           <button class="mic-btn" class:active={$dictationListening} on:click|preventDefault={toggleModalDictation} title={$t('tabBar.dictateToField')}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
           </button>
-          <button class="close-btn" on:click={() => showAddTaskModal = false}>×</button>
+          <DialogCloseButton on:click={() => showAddTaskModal = false} />
         </div>
       </div>
       <div class="dialog-body">
@@ -1666,7 +1667,7 @@
     <div class="dialog-content large" on:click|stopPropagation>
       <div class="dialog-header">
         <h2>{$t('tasks.complexityAnalysis')}</h2>
-        <button class="close-btn" on:click={() => showComplexityModal = false}>×</button>
+        <DialogCloseButton on:click={() => showComplexityModal = false} />
       </div>
       <div class="dialog-body">
         <pre class="complexity-report">{complexityReport}</pre>
@@ -1688,7 +1689,7 @@
           <button class="mic-btn" class:active={$dictationListening} on:click|preventDefault={toggleModalDictation} title={$t('tabBar.dictateToField')}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
           </button>
-          <button class="close-btn" on:click={() => showEditTaskModal = false}>×</button>
+          <DialogCloseButton on:click={() => showEditTaskModal = false} />
         </div>
       </div>
       <div class="dialog-body">
@@ -1787,7 +1788,7 @@
           <button class="mic-btn" class:active={$dictationListening} on:click|preventDefault={toggleModalDictation} title={$t('tabBar.dictateToField')}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
           </button>
-          <button class="close-btn" on:click={() => showAddSubtaskModal = false}>×</button>
+          <DialogCloseButton on:click={() => showAddSubtaskModal = false} />
         </div>
       </div>
       <div class="dialog-body">
@@ -1834,7 +1835,7 @@
         <!-- Named, not numbered. The id is an internal handle and tells the
              reader nothing; the task's own title says which one this is. -->
         <h2>{getTaskById(dependencyTaskId, $tasks)?.title || $t('tasks.manageDependencies')}</h2>
-        <button class="close-btn" on:click={() => showDependencyModal = false}>×</button>
+        <DialogCloseButton on:click={() => showDependencyModal = false} />
       </div>
       <div class="dialog-body">
         <p class="dialog-hint">{$t('tasks.dependencyHint')}</p>

@@ -5,6 +5,7 @@
   import type { main } from '../../../../wailsjs/go/models';
   import { createEventDispatcher, tick } from 'svelte';
   import { t } from '../../i18n';
+  import DialogCloseButton from '../common/DialogCloseButton.svelte';
 
   export let show = false;
   export let serverId = '';
@@ -136,7 +137,7 @@
     <div class="dialog-content picker">
       <div class="dialog-header">
         <h2>{$t('servers.pickDirectory')}</h2>
-        <button class="close-btn" on:click={() => (show = false)}>×</button>
+        <DialogCloseButton on:click={() => (show = false)} />
       </div>
 
       <div class="dialog-body">
@@ -236,13 +237,7 @@
     flex-direction: column;
   }
 
-  .dialog-body {
-    overflow-y: auto;
-    padding: 12px 16px;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-  }
+  .dialog-body { gap: 10px; }
 
   .path-row,
   .create-row {
@@ -274,12 +269,6 @@
   .btn-primary.small {
     padding: 5px 11px;
     font-size: 12px;
-  }
-
-  .btn-secondary:disabled,
-  .btn-primary:disabled {
-    opacity: 0.5;
-    cursor: default;
   }
 
   .path-row input {
@@ -339,39 +328,10 @@
     color: #8b8b93;
   }
 
-  .dialog-footer {
-    display: flex;
-    justify-content: flex-end;
-    gap: 8px;
-    padding: 12px 16px;
-    border-top: 1px solid rgba(255, 255, 255, 0.06);
-  }
-
-  .btn-primary,
-  .btn-secondary {
-    padding: 7px 16px;
-    border-radius: 7px;
-    font-size: 13px;
-    font-weight: 600;
-    cursor: pointer;
-  }
-
-  .btn-secondary {
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    background: rgba(255, 255, 255, 0.05);
-    color: #a1a1aa;
-  }
-
   .btn-secondary.small {
     padding: 5px 11px;
     font-size: 12px;
     font-weight: 500;
-  }
-
-  .btn-primary {
-    border: 1px solid var(--accent);
-    background: linear-gradient(135deg, var(--accent-dark), var(--accent));
-    color: var(--accent-ink);
   }
 
   .empty {

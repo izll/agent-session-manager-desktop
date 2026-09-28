@@ -6,6 +6,7 @@
   import * as App from '../../../../wailsjs/go/main/App';
   import { activeProjectId } from '../../stores/projects';
   import { get } from 'svelte/store';
+  import DialogCloseButton from '../common/DialogCloseButton.svelte';
 
   interface TabColorTarget {
     Index: number;
@@ -153,7 +154,7 @@
     <div class="dialog-content tab-color-dialog">
       <div class="dialog-header">
         <h2>{$t('tabColor.title')}</h2>
-        <button class="close-btn" on:click={close} aria-label={$t('color.cancel')}>×</button>
+        <DialogCloseButton on:click={close} label={$t('color.cancel')} />
       </div>
 
       <div class="dialog-body">
@@ -232,7 +233,7 @@
 
 <style>
   .tab-color-dialog { max-width: 500px; }
-  .dialog-body { padding: 20px 24px; display: flex; flex-direction: column; gap: 18px; }
+  .dialog-body { gap: 18px; }
   .preview {
     display: flex; align-items: center; gap: 9px; min-height: 38px; padding: 0 14px;
     border: 1px solid rgba(255,255,255,.1); border-radius: 8px;

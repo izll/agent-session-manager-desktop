@@ -7,6 +7,7 @@
   import { t } from '../../i18n';
   import { SHORTCUTS, FAVOURITE_SHORTCUT, type Shortcut, type Binding } from '../../utils/shortcuts';
   import { effectiveBindings, formatBinding } from '../../stores/shortcuts';
+  import DialogCloseButton from '../common/DialogCloseButton.svelte';
 
   // Modifier names differ on Apple keyboards; the bindings themselves do not.
   const isMac = navigator.platform.toLowerCase().includes('mac');
@@ -92,12 +93,7 @@
     <div class="dialog-content">
       <div class="dialog-header">
         <h2>{$t('help.title')}</h2>
-        <button class="close-btn" on:click={close}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="18" y1="6" x2="6" y2="18"/>
-            <line x1="6" y1="6" x2="18" y2="18"/>
-          </svg>
-        </button>
+        <DialogCloseButton on:click={close} />
       </div>
 
       <div class="help-content">
@@ -152,8 +148,6 @@
   .dialog-content {
     max-width: 600px;
     max-height: 80vh;
-    display: flex;
-    flex-direction: column;
   }
 
   .help-content {

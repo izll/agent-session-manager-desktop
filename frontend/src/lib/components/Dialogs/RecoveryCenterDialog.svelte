@@ -10,6 +10,7 @@
   import { t } from '../../i18n';
   import ConfirmDialog from './ConfirmDialog.svelte';
   import { autoFocusDialog } from '../../utils/dialogActions';
+  import DialogCloseButton from '../common/DialogCloseButton.svelte';
 
   export let show = false;
   const dispatch = createEventDispatcher();
@@ -341,7 +342,7 @@
           <h2>{$t('recovery.title')}</h2>
           <p>{$t('recovery.subtitle')}</p>
         </div>
-        <button class="close-btn" on:click={close} disabled={actionRunning}>×</button>
+        <DialogCloseButton on:click={close} disabled={actionRunning} />
       </div>
 
       <div class="recovery-tabs" role="tablist">
@@ -467,21 +468,19 @@
     max-width: min(1280px, calc(100vw - 48px));
     max-height: min(840px, calc(100vh - 48px));
   }
-  .dialog-header { display:flex; align-items:flex-start; justify-content:space-between; padding:18px 20px 14px; border-bottom:1px solid rgba(255,255,255,.07); }
-  .dialog-header h2 { margin:0; font-size:19px; color:#f4f4f5; }
+  /* The shared header, plus a subtitle under the title. */
   .dialog-header p { margin:4px 0 0; font-size:13px; color:#71717a; }
-  .close-btn { border:0; background:transparent; color:#71717a; font-size:22px; cursor:pointer; }
-  .recovery-tabs { display:flex; gap:4px; padding:10px 16px 0; }
+  .recovery-tabs { display:flex; gap:4px; padding:12px 24px 0; }
   .recovery-tabs button { border:0; border-radius:6px; padding:7px 11px; background:transparent; color:#71717a; cursor:pointer; }
   .recovery-tabs button.active { background:rgba(var(--accent-rgb), .14); color:var(--accent-lighter); }
   .recovery-tabs span { margin-left:4px; padding:1px 5px; border-radius:8px; background:rgba(255,255,255,.07); font-size:14px; }
-  .error-line { margin:10px 16px 0; padding:8px 10px; border:1px solid rgba(248,113,113,.25); border-radius:6px; color:#fca5a5; background:rgba(127,29,29,.2); font-size:13px; }
+  .error-line { margin:10px 24px 0; padding:8px 10px; border:1px solid rgba(248,113,113,.25); border-radius:6px; color:#fca5a5; background:rgba(127,29,29,.2); font-size:13px; }
   /* A fixed height, not a range.
      The body grew and shrank with whatever the open tab held, so switching from
      the backups to the tasks — which usually has fewer entries — collapsed the
      window under the pointer. A tab strip that moves when you use it is worse
      than one that leaves some space unused. */
-  .recovery-body { height:min(560px, 60vh); overflow:auto; padding:12px 16px 18px; }
+  .recovery-body { height:min(560px, 60vh); overflow:auto; padding:12px 24px 24px; }
   .toolbar { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:10px; color:#71717a; font-size:13px; }
   .item-list { display:flex; flex-direction:column; gap:7px; }
   .recovery-item { display:flex; align-items:center; gap:14px; padding:13px 14px; border:1px solid rgba(255,255,255,.07); border-radius:8px; background:rgba(255,255,255,.025); }

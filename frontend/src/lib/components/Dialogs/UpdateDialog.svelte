@@ -5,6 +5,7 @@
   import * as App from '../../../../wailsjs/go/main/App';
   import { BrowserOpenURL } from '../../../../wailsjs/runtime/runtime';
   import { t } from '../../i18n';
+  import DialogCloseButton from '../common/DialogCloseButton.svelte';
 
   export let show = false;
 
@@ -125,12 +126,7 @@
     <div class="dialog-content">
       <div class="dialog-header">
         <h2>{$t('update.title')}</h2>
-        <button class="close-btn" on:click={close} disabled={isUpdating}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="18" y1="6" x2="6" y2="18"/>
-            <line x1="6" y1="6" x2="18" y2="18"/>
-          </svg>
-        </button>
+        <DialogCloseButton on:click={close} disabled={isUpdating} />
       </div>
 
       <div class="dialog-body">
@@ -361,17 +357,6 @@
   .btn:disabled {
     opacity: 0.6;
     cursor: not-allowed;
-  }
-
-  .btn-secondary {
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    color: #9ca3af;
-  }
-
-  .btn-secondary:hover {
-    background: rgba(255, 255, 255, 0.1);
-    color: white;
   }
 
   /* Spinner animation */

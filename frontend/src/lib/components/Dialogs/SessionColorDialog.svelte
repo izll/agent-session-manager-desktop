@@ -24,6 +24,7 @@
   } from '../../utils/rowColors';
   import CustomGradientDialog from './CustomGradientDialog.svelte';
   import CustomColorDialog from './CustomColorDialog.svelte';
+  import DialogCloseButton from '../common/DialogCloseButton.svelte';
 
   export let show = false;
   export let session: Session | null = null;
@@ -212,12 +213,7 @@
     <div class="dialog-content">
       <div class="dialog-header">
         <h2>{group ? $t('color.groupTitle') : $t('color.title')}</h2>
-        <button class="close-btn" on:click={close}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="18" y1="6" x2="6" y2="18"/>
-            <line x1="6" y1="6" x2="18" y2="18"/>
-          </svg>
-        </button>
+        <DialogCloseButton on:click={close} />
       </div>
 
       <div class="dialog-body">
@@ -378,16 +374,9 @@
     width: min(760px, 94vw);
     max-width: min(760px, 94vw);
     max-height: 88vh;
-    display: flex;
-    flex-direction: column;
   }
 
   /* Component-specific: custom body padding and scroll */
-  .dialog-body {
-    padding: 20px 24px;
-    overflow-y: auto;
-    flex: 1;
-  }
 
   .label {
     display: block;
@@ -510,9 +499,6 @@
     gap: 6px;
     padding-right: 4px;
   }
-
-
-
 
   .color-btn {
     display: flex;

@@ -203,6 +203,7 @@
   import { shortcutForEvent, capturingShortcut } from './lib/stores/shortcuts';
   import Toast from './lib/components/common/Toast.svelte';
   import CodexDaemonNotice from './lib/components/common/CodexDaemonNotice.svelte';
+  import DialogCloseButton from './lib/components/common/DialogCloseButton.svelte';
 
   // The accent lives in CSS variables, so applying a theme is one write to
   // the root element — no component needs to know about it.
@@ -1820,16 +1821,10 @@
       <div class="dialog-content quick-add">
         <div class="dialog-header">
           <h2>{$t('quickJump.addTitle')}</h2>
-          <button class="close-btn" on:click={() => (quickJumpPrompt = false)}
-            aria-label={$t('common.close')}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="18" y1="6" x2="6" y2="18"/>
-              <line x1="6" y1="6" x2="18" y2="18"/>
-            </svg>
-          </button>
+          <DialogCloseButton on:click={() => (quickJumpPrompt = false)} />
         </div>
 
-        <div class="quick-add-body" use:autoFocusDialog>
+        <div class="dialog-body" use:autoFocusDialog>
           <p class="quick-add-question">{$t('quickJump.addQuestion')}</p>
           <button
             class="quick-add-choice"
@@ -1868,16 +1863,10 @@
       <div class="dialog-content quick-add">
         <div class="dialog-header">
           <h2>{$t('quickJump.nameTitle')}</h2>
-          <button class="close-btn" on:click={closeQuickJumpNaming}
-            aria-label={$t('common.close')}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="18" y1="6" x2="6" y2="18"/>
-              <line x1="6" y1="6" x2="18" y2="18"/>
-            </svg>
-          </button>
+          <DialogCloseButton on:click={closeQuickJumpNaming} />
         </div>
 
-        <div class="quick-add-body" use:autoFocusField>
+        <div class="dialog-body" use:autoFocusField>
           <p class="quick-add-question">{$t('quickJump.nameQuestion')}</p>
           <input
             class="quick-name-input"
@@ -2592,34 +2581,11 @@
 
 
 
-  /* Matching the settings dialog rather than inheriting whatever the shared
-     overlay provides, which drew a circle here. */
-  .close-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 32px;
-    height: 32px;
-    background: rgba(255, 255, 255, 0.05);
-    border: none;
-    border-radius: 8px;
-    color: #6b7280;
-    cursor: pointer;
-    transition: all 0.2s ease;
-  }
-  .close-btn:hover {
-    background: rgba(255, 255, 255, 0.1);
-    color: white;
-  }
-
   /* The quick-jump add prompt: two choices, stated plainly enough that neither
      needs thinking about. */
   .quick-add {
     width: min(460px, 92vw);
     max-width: min(460px, 92vw);
-  }
-  .quick-add-body {
-    padding: 4px 20px 12px;
   }
   .quick-add-question {
     margin: 0 0 14px;

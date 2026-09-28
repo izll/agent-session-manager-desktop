@@ -6,6 +6,7 @@
   import ConfirmDialog from './ConfirmDialog.svelte';
   import { t } from '../../i18n';
   import { autoFocusDialog } from '../../utils/dialogActions';
+  import DialogCloseButton from '../common/DialogCloseButton.svelte';
 
   export let show = false;
 
@@ -556,7 +557,7 @@
     <div class="dialog-content manager">
       <div class="dialog-header">
         <h2>{$t('servers.managerTitle')}</h2>
-        <button class="close-btn" on:click={close}>×</button>
+        <DialogCloseButton on:click={close} />
       </div>
 
       <div class="dialog-body">
@@ -971,15 +972,11 @@
 
 <style>
   .manager {
+    /* max-width as well: the shared cap (560px) otherwise wins over the width
+       and the dialog came out narrower than it asks for. */
     width: min(680px, 92vw);
+    max-width: min(680px, 92vw);
     max-height: 82vh;
-    display: flex;
-    flex-direction: column;
-  }
-
-  .dialog-body {
-    overflow-y: auto;
-    padding: 14px 18px 18px;
   }
 
   .toolbar {
@@ -1332,40 +1329,6 @@
     padding: 5px 8px;
     color: #e4e4e7;
     font-size: 12px;
-  }
-
-  /* Matching the command manager, so the two dialogs do not each invent
-     their own buttons. */
-  .btn-primary,
-  .btn-secondary {
-    padding: 7px 16px;
-    border-radius: 7px;
-    font-size: 13px;
-    font-weight: 600;
-    cursor: pointer;
-  }
-
-  .btn-secondary {
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    background: rgba(255, 255, 255, 0.05);
-    color: #a1a1aa;
-  }
-
-  .btn-secondary:hover:not(:disabled) {
-    background: rgba(255, 255, 255, 0.09);
-    color: #e4e4e7;
-  }
-
-  .btn-primary {
-    border: 1px solid var(--accent);
-    background: linear-gradient(135deg, var(--accent-dark), var(--accent));
-    color: var(--accent-ink);
-  }
-
-  .btn-primary:disabled,
-  .btn-secondary:disabled {
-    opacity: 0.45;
-    cursor: default;
   }
 
   /* The inline actions inside a test result sit next to text rather than in a

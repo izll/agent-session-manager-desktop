@@ -7,6 +7,7 @@
   // Escape here would close both.
   import { portal } from '../../utils/portal';
   import { t } from '../../i18n';
+  import DialogCloseButton from '../common/DialogCloseButton.svelte';
   import {
     customGradient,
     getGradientCSS,
@@ -136,12 +137,7 @@
     <div class="dialog-content">
       <div class="dialog-header">
         <h2>{$t('color.customGradient')}</h2>
-        <button class="close-btn" on:click={close} aria-label={$t('color.cancel')}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="18" y1="6" x2="6" y2="18"/>
-            <line x1="6" y1="6" x2="18" y2="18"/>
-          </svg>
-        </button>
+        <DialogCloseButton on:click={close} label={$t('color.cancel')} />
       </div>
 
       <div class="dialog-body">
@@ -202,10 +198,6 @@
   .dialog-content {
     width: min(520px, 94vw);
     max-width: min(520px, 94vw);
-  }
-
-  .dialog-body {
-    padding: 20px 24px;
   }
 
   .preview {

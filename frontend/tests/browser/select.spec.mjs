@@ -267,7 +267,7 @@ test('late tab editor saves cannot close a replacement draft', async ({ page }) 
   await closeArgs.evaluate((button) => button.focus());
   await expect(closeArgs).toBeFocused();
   await page.keyboard.press('Shift+Tab');
-  await expect(page.locator('.extra-args-actions .btn-primary')).toBeFocused();
+  await expect(page.locator('.extra-args-dialog .dialog-footer .btn-primary')).toBeFocused();
   await page.keyboard.press('Tab');
   await expect(closeArgs).toBeFocused();
 });

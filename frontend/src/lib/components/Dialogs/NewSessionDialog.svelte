@@ -13,6 +13,7 @@
   import * as App from '../../../../wailsjs/go/main/App';
   import type { main } from '../../../../wailsjs/go/models';
   import { t } from '../../i18n';
+  import DialogCloseButton from '../common/DialogCloseButton.svelte';
 
   export let show = false;
 
@@ -471,12 +472,7 @@
         <!-- Someone creating a session is exactly who wants a template; the
              sidebar's icon button alone would be easy to miss from here. -->
         <button class="template-link" on:click={openTemplates}>{$t('newSession.fromTemplate')}</button>
-        <button class="close-btn" on:click={close}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="18" y1="6" x2="6" y2="18"/>
-            <line x1="6" y1="6" x2="18" y2="18"/>
-          </svg>
-        </button>
+        <DialogCloseButton on:click={close} />
       </div>
 
       {#if error}
@@ -1008,8 +1004,6 @@
     display: flex;
     justify-content: flex-end;
     gap: 12px;
-    padding-top: 8px;
-    border-top: 1px solid rgba(255, 255, 255, 0.05);
   }
 
   /* Component-specific: primary button with flex for spinner */

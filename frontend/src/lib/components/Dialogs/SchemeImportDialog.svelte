@@ -6,6 +6,7 @@
   import PalettePicker from '../common/PalettePicker.svelte';
   import { t } from '../../i18n';
   import { autoFocusDialog } from '../../utils/dialogActions';
+  import DialogCloseButton from '../common/DialogCloseButton.svelte';
 
   export let show = false;
 
@@ -220,84 +221,86 @@
     <div class="dialog-content">
       <div class="dialog-header">
         <h2>{$t('schemeImport.title')}</h2>
-        <button class="close-btn" on:click={close}>×</button>
+        <DialogCloseButton on:click={close} />
       </div>
 
-      <div class="source-tabs">
-        <button class:active={tab === 'local'} on:click={() => switchTab('local')}>{$t('schemeImport.local')}</button>
-        <button class:active={tab === 'online'} on:click={() => switchTab('online')}>{$t('schemeImport.online')}</button>
-        <button class:active={tab === 'file'} on:click={() => switchTab('file')}>{$t('schemeImport.file')}</button>
-      </div>
-
-      <p class="source-hint">
-        {#if tab === 'local'}{$t('schemeImport.localHint')}
-        {:else if tab === 'online'}{$t('schemeImport.onlineHint')}
-        {:else}{$t('schemeImport.fileHint')}{/if}
-      </p>
-
-      {#if error}<div class="error-line">{error}</div>{/if}
-
-      {#if loading}
-        <div class="state">{$t('schemeImport.loading')}</div>
-      {:else if tab === 'file' && found.length === 0}
-        <div class="state file-state">
-          <button class="primary" on:click={pickFiles}>{$t('schemeImport.choose')}</button>
+      <div class="dialog-body">
+        <div class="source-tabs">
+          <button class:active={tab === 'local'} on:click={() => switchTab('local')}>{$t('schemeImport.local')}</button>
+          <button class:active={tab === 'online'} on:click={() => switchTab('online')}>{$t('schemeImport.online')}</button>
+          <button class:active={tab === 'file'} on:click={() => switchTab('file')}>{$t('schemeImport.file')}</button>
         </div>
-      {:else if tab === 'online' && found.length === 0}
-        <div class="online-picker">
-          <input class="filter" bind:value={onlineFilter} placeholder={$t('schemeImport.filterPlaceholder')} />
-          <div class="online-list">
-            {#each filteredOnline.slice(0, 300) as o (o.file)}
-              <label class="online-row" class:checked={onlineSelected.has(o.file)}>
-                <input type="checkbox" checked={onlineSelected.has(o.file)} on:change={() => toggleOnline(o.file)} />
-                <span>{o.name}</span>
+
+        <p class="source-hint">
+          {#if tab === 'local'}{$t('schemeImport.localHint')}
+          {:else if tab === 'online'}{$t('schemeImport.onlineHint')}
+          {:else}{$t('schemeImport.fileHint')}{/if}
+        </p>
+
+        {#if error}<div class="error-line">{error}</div>{/if}
+
+        {#if loading}
+          <div class="state">{$t('schemeImport.loading')}</div>
+        {:else if tab === 'file' && found.length === 0}
+          <div class="state file-state">
+            <button class="btn-primary" on:click={pickFiles}>{$t('schemeImport.choose')}</button>
+          </div>
+        {:else if tab === 'online' && found.length === 0}
+          <div class="online-picker">
+            <input class="filter" bind:value={onlineFilter} placeholder={$t('schemeImport.filterPlaceholder')} />
+            <div class="online-list">
+              {#each filteredOnline.slice(0, 300) as o (o.file)}
+                <label class="online-row" class:checked={onlineSelected.has(o.file)}>
+                  <input type="checkbox" checked={onlineSelected.has(o.file)} on:change={() => toggleOnline(o.file)} />
+                  <span>{o.name}</span>
+                </label>
+              {/each}
+            </div>
+            <div class="online-actions">
+              <span class="count">{$t('schemeImport.selectedCount', { n: onlineSelected.size })}</span>
+              <button class="btn-primary" disabled={onlineSelected.size === 0} on:click={previewOnline}>
+                {$t('schemeImport.preview')}
+              </button>
+            </div>
+          </div>
+        {:else if found.length > 0}
+          <div class="found-head">
+            <button class="link-btn" on:click={toggleAll}>
+              {allFoundSelected ? $t('schemeImport.selectNone') : $t('schemeImport.selectAll')}
+            </button>
+            <span class="count">{$t('schemeImport.selectedCount', { n: selected.size })}</span>
+            {#if tab === 'online'}
+              <button class="link-btn back" on:click={() => { found = []; selected = new Set(); }}>
+                {$t('schemeImport.backToList')}
+              </button>
+            {:else if tab === 'file'}
+              <button class="link-btn back" on:click={pickFiles}>{$t('schemeImport.choose')}</button>
+            {/if}
+          </div>
+
+          <div class="found-list">
+            {#each found as f (f.name)}
+              <label class="found-row" class:checked={selected.has(f.name)}>
+                <input type="checkbox" checked={selected.has(f.name)} on:change={() => toggle(f.name)} />
+                <span class="found-name">{f.name}</span>
+                <span class="found-source">{f.source}</span>
               </label>
             {/each}
           </div>
-          <div class="online-actions">
-            <span class="count">{$t('schemeImport.selectedCount', { n: onlineSelected.size })}</span>
-            <button class="primary" disabled={onlineSelected.size === 0} on:click={previewOnline}>
-              {$t('schemeImport.preview')}
-            </button>
+
+          <div class="preview-strip">
+            <PalettePicker compact palettes={previewPalettes} value="" />
           </div>
-        </div>
-      {:else if found.length > 0}
-        <div class="found-head">
-          <button class="link-btn" on:click={toggleAll}>
-            {allFoundSelected ? $t('schemeImport.selectNone') : $t('schemeImport.selectAll')}
-          </button>
-          <span class="count">{$t('schemeImport.selectedCount', { n: selected.size })}</span>
-          {#if tab === 'online'}
-            <button class="link-btn back" on:click={() => { found = []; selected = new Set(); }}>
-              {$t('schemeImport.backToList')}
-            </button>
-          {:else if tab === 'file'}
-            <button class="link-btn back" on:click={pickFiles}>{$t('schemeImport.choose')}</button>
-          {/if}
-        </div>
+        {/if}
 
-        <div class="found-list">
-          {#each found as f (f.name)}
-            <label class="found-row" class:checked={selected.has(f.name)}>
-              <input type="checkbox" checked={selected.has(f.name)} on:change={() => toggle(f.name)} />
-              <span class="found-name">{f.name}</span>
-              <span class="found-source">{f.source}</span>
-            </label>
-          {/each}
-        </div>
+        {#if duplicateCount > 0}
+          <p class="dup-note">{$t('schemeImport.duplicateNote', { n: duplicateCount })}</p>
+        {/if}
+      </div>
 
-        <div class="preview-strip">
-          <PalettePicker compact palettes={previewPalettes} value="" />
-        </div>
-      {/if}
-
-      {#if duplicateCount > 0}
-        <p class="dup-note">{$t('schemeImport.duplicateNote', { n: duplicateCount })}</p>
-      {/if}
-
-      <div class="dialog-actions">
-        <button class="cancel" on:click={close}>{$t('common.cancel')}</button>
-        <button class="primary" disabled={selected.size === 0} on:click={addSelected}>
+      <div class="dialog-footer">
+        <button class="btn-cancel" on:click={close}>{$t('common.cancel')}</button>
+        <button class="btn-primary" disabled={selected.size === 0} on:click={addSelected}>
           {$t('schemeImport.add', { n: selected.size })}
         </button>
       </div>
@@ -310,22 +313,13 @@
   .scheme-overlay { z-index: 60; }
   .scheme-overlay:focus { outline: none; }
 
+  /* Shared chrome (style.css); the size and the spacing of the rows are its own. */
   .dialog-content {
     width: min(720px, 94vw);
     max-width: min(720px, 94vw);
     max-height: 84vh;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    padding: 18px;
-    border-radius: 12px;
-    border: 1px solid rgba(var(--accent-rgb), 0.25);
-    background: linear-gradient(180deg, var(--bg-raised) 0%, var(--bg-sunken) 100%);
   }
-  .dialog-header { display: flex; align-items: center; justify-content: space-between; }
-  .dialog-header h2 { margin: 0; font-size: 16px; color: #e4e4e7; }
-  .close-btn { border: 0; background: none; color: #71717a; font-size: 20px; cursor: pointer; }
-  .close-btn:hover { color: #e4e4e7; }
+  .dialog-body { gap: 10px; }
 
   .source-tabs { display: flex; gap: 6px; }
   .source-tabs button {
@@ -376,17 +370,4 @@
     background: rgba(255, 255, 255, 0.06);
   }
   .preview-strip { max-height: 200px; overflow-y: auto; }
-
-  .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 2px; }
-  .dialog-actions button {
-    padding: 7px 16px; border-radius: 7px; font-size: 13px; font-weight: 600; cursor: pointer;
-  }
-  .dialog-actions .cancel {
-    border: 1px solid rgba(255, 255, 255, 0.12); background: rgba(255, 255, 255, 0.04); color: #a1a1aa;
-  }
-  .dialog-actions .primary, .online-actions .primary {
-    border: 1px solid var(--accent); background: linear-gradient(135deg, var(--accent-dark), var(--accent)); color: var(--accent-ink);
-    padding: 7px 16px; border-radius: 7px; font-size: 13px; font-weight: 600; cursor: pointer;
-  }
-  .dialog-actions .primary:disabled, .online-actions .primary:disabled { opacity: 0.45; cursor: default; }
 </style>

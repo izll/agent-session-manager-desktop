@@ -6,6 +6,7 @@
   import { autoFocusDialog } from '../../utils/dialogActions';
   import ConfirmDialog from './ConfirmDialog.svelte';
   import { t } from '../../i18n';
+  import DialogCloseButton from '../common/DialogCloseButton.svelte';
 
   export let show = false;
 
@@ -126,7 +127,7 @@
     <div class="dialog-content log-dialog" role="presentation">
       <div class="dialog-header">
         <h2>{$t('logs.title')}</h2>
-        <button class="close-btn" on:click={close}>×</button>
+        <DialogCloseButton on:click={close} />
       </div>
 
       <div class="log-sources">

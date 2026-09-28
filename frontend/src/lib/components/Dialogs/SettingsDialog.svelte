@@ -28,6 +28,7 @@
   import { agents } from '../../stores/agents';
   import ShortcutEditor from '../Settings/ShortcutEditor.svelte';
   import { t, loadTranslations } from '../../i18n';
+  import DialogCloseButton from '../common/DialogCloseButton.svelte';
 
   export let show = false;
 
@@ -595,12 +596,7 @@
     <div class="dialog-content">
       <div class="dialog-header">
         <h2>{$t('settings.title')}</h2>
-        <button class="close-btn" on:click={close}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="18" y1="6" x2="6" y2="18"/>
-            <line x1="6" y1="6" x2="18" y2="18"/>
-          </svg>
-        </button>
+        <DialogCloseButton on:click={close} />
       </div>
 
       <!-- Tabs -->
@@ -1992,24 +1988,9 @@
     border-radius: 5px; background: transparent; cursor: pointer;
   }
 
-  .dialog-overlay {
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.7);
-    /* no backdrop-filter — WebKit repaints the whole blurred region on any
-       change beneath it (same reason it was removed from the header) */
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 50;
-  }
-
+  /* The chrome — overlay, panel, header, title, close button — is the shared
+     one in style.css; only the size is this dialog's own. */
   .dialog-content {
-    background: linear-gradient(180deg, var(--bg-raised) 0%, var(--bg-sunken) 100%);
-    border: 1px solid rgba(var(--accent-rgb), 0.2);
-    border-radius: 16px;
-    box-shadow: 0 25px 50px rgba(0, 0, 0, 0.5), 0 0 100px rgba(var(--accent-rgb), 0.1);
-    width: 100%;
     /* Wide enough that a setting's label and its control share a line
        comfortably; the 90vw keeps it sane on a small window. */
     max-width: min(760px, 90vw);
@@ -2021,48 +2002,6 @@
        longer settings tabs scrolled where they used to fit. */
     height: min(88vh, 780px);
     max-height: 88vh;
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
-  }
-
-  .dialog-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 20px 24px;
-    background: linear-gradient(180deg, rgba(var(--accent-rgb), 0.1) 0%, transparent 100%);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-    flex-shrink: 0;
-  }
-
-  .dialog-header h2 {
-    font-size: 18px;
-    font-weight: 600;
-    margin: 0;
-    background: linear-gradient(135deg, var(--accent-light) 0%, var(--accent) 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-  }
-
-  .close-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 32px;
-    height: 32px;
-    background: rgba(255, 255, 255, 0.05);
-    border: none;
-    border-radius: 8px;
-    color: #6b7280;
-    cursor: pointer;
-    transition: all 0.2s ease;
-  }
-
-  .close-btn:hover {
-    background: rgba(255, 255, 255, 0.1);
-    color: white;
   }
 
   .tabs {

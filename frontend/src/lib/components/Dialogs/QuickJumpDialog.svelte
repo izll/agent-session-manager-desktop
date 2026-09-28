@@ -25,6 +25,7 @@
   import { activities } from '../../stores/activities';
   import { tabStatuses } from '../../stores/statusLines';
   import { autoFocusDialog } from '../../utils/dialogActions';
+  import DialogCloseButton from '../common/DialogCloseButton.svelte';
 
   export let show = false;
 
@@ -463,12 +464,7 @@
     <div class="dialog-content jump-dialog">
       <div class="dialog-header">
         <h2>{$t('quickJump.title')}</h2>
-        <button class="close-btn" on:click={close} aria-label={$t('common.close')}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="18" y1="6" x2="6" y2="18"/>
-            <line x1="6" y1="6" x2="18" y2="18"/>
-          </svg>
-        </button>
+        <DialogCloseButton on:click={close} />
       </div>
 
       <!-- svelte-ignore a11y-no-noninteractive-tabindex -->
@@ -608,26 +604,6 @@
     max-height: min(70vh, 640px);
   }
 
-
-  /* Matching the settings dialog rather than inheriting whatever the shared
-     overlay provides, which drew a circle here. */
-  .close-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 32px;
-    height: 32px;
-    background: rgba(255, 255, 255, 0.05);
-    border: none;
-    border-radius: 8px;
-    color: #6b7280;
-    cursor: pointer;
-    transition: all 0.2s ease;
-  }
-  .close-btn:hover {
-    background: rgba(255, 255, 255, 0.1);
-    color: white;
-  }
 
   .jump-list {
     overflow-y: auto;

@@ -7,6 +7,7 @@
   import * as App from '../../../../wailsjs/go/main/App';
   import { t } from '../../i18n';
   import { activeProjectId } from '../../stores/projects';
+  import DialogCloseButton from '../common/DialogCloseButton.svelte';
 
   export let show = false;
 
@@ -180,12 +181,7 @@
     <div class="dialog-content">
       <div class="dialog-header">
         <h2>{$t('fork.title')}</h2>
-        <button class="close-btn" on:click={close}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="18" y1="6" x2="6" y2="18"/>
-            <line x1="6" y1="6" x2="18" y2="18"/>
-          </svg>
-        </button>
+        <DialogCloseButton on:click={close} />
       </div>
 
       <div class="dialog-info">
@@ -468,8 +464,6 @@
     display: flex;
     justify-content: flex-end;
     gap: 12px;
-    padding-top: 16px;
-    border-top: 1px solid rgba(255, 255, 255, 0.05);
   }
 
   /* Component-specific: primary button with icon support */

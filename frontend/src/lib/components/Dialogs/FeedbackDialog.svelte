@@ -5,6 +5,7 @@
   import * as App from '../../../../wailsjs/go/main/App';
   import { BrowserOpenURL, ClipboardSetText } from '../../../../wailsjs/runtime/runtime';
   import { t } from '../../i18n';
+  import DialogCloseButton from '../common/DialogCloseButton.svelte';
 
   export let show = false;
 
@@ -93,12 +94,7 @@
     <div class="dialog-content">
       <div class="dialog-header">
         <h2>{$t('feedback.title')}</h2>
-        <button class="close-btn" on:click={close} aria-label={$t('common.cancel')}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="18" y1="6" x2="6" y2="18"/>
-            <line x1="6" y1="6" x2="18" y2="18"/>
-          </svg>
-        </button>
+        <DialogCloseButton on:click={close} label={$t('common.cancel')} />
       </div>
 
       <div class="dialog-body">
@@ -169,13 +165,6 @@
 {/if}
 
 <style>
-  .dialog-content {
-    max-width: 560px;
-  }
-
-  .dialog-body {
-    padding: 20px 24px;
-  }
 
   .form-group {
     margin-bottom: 16px;
@@ -257,8 +246,6 @@
     display: flex;
     justify-content: flex-end;
     gap: 10px;
-    padding-top: 8px;
-    border-top: 1px solid rgba(255, 255, 255, 0.05);
   }
 
   .dialog-actions button:disabled {

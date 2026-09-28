@@ -6,6 +6,7 @@
   import { autoFocusDialog } from '../../utils/dialogActions';
   import { activeProjectId } from '../../stores/projects';
   import { get } from 'svelte/store';
+  import DialogCloseButton from '../common/DialogCloseButton.svelte';
 
   export let show = false;
   /** Session the picked command is sent to. Empty means "nothing selected". */
@@ -294,7 +295,7 @@
     <div class="dialog-content picker">
       <div class="dialog-header">
         <h2>{$t('commands.pickerTitle')}</h2>
-        <button class="close-btn" on:click={close}>×</button>
+        <DialogCloseButton on:click={close} />
       </div>
 
       {#if !targetSessionId}
@@ -406,15 +407,8 @@
     display: flex;
     flex-direction: column;
   }
-  .dialog-header {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 14px 18px; border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-  }
-  .dialog-header h2 { margin: 0; font-size: 15px; color: #e4e4e7; }
-  .close-btn { border: 0; background: none; color: #71717a; font-size: 20px; cursor: pointer; }
-  .close-btn:hover { color: #e4e4e7; }
 
-  .search-wrap { padding: 12px 18px 0; }
+  .search-wrap { padding: 16px 24px 0; }
   .search {
     width: 100%; padding: 8px 11px; border-radius: 7px; font-size: 13px;
     border: 1px solid rgba(255, 255, 255, 0.12);
@@ -422,7 +416,6 @@
   }
   .search:focus { outline: none; border-color: rgba(var(--accent-rgb), 0.6); }
 
-  .dialog-body { padding: 12px 18px; overflow-y: auto; flex: 1; min-height: 0; }
   .state { padding: 26px 0; text-align: center; font-size: 13px; color: #71717a; }
   .state.warn { color: #fbbf24; }
   .error-line { color: #fb7185; font-size: 13px; }
@@ -471,10 +464,6 @@
     word-break: break-all; white-space: pre-wrap;
   }
 
-  .dialog-footer {
-    display: flex; justify-content: flex-end; gap: 8px;
-    padding: 12px 18px; border-top: 1px solid rgba(255, 255, 255, 0.06);
-  }
   .picker-footer { justify-content: space-between; align-items: center; }
   .foot-hint { font-size: 11px; color: #6b7280; }
   .link-btn {
@@ -483,15 +472,4 @@
   }
   .link-btn:hover { color: var(--accent-pale); }
 
-  .btn-primary, .btn-secondary {
-    padding: 7px 16px; border-radius: 7px; font-size: 13px; font-weight: 600; cursor: pointer;
-  }
-  .btn-secondary {
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    background: rgba(255, 255, 255, 0.05); color: #a1a1aa;
-  }
-  .btn-primary {
-    border: 1px solid var(--accent);
-    background: linear-gradient(135deg, var(--accent-dark), var(--accent)); color: var(--accent-ink);
-  }
 </style>
