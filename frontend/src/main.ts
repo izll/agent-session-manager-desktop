@@ -3,6 +3,11 @@ import { mount } from 'svelte'
 import App from './App.svelte'
 import { installFramelessResizeFix } from './lib/utils/framelessResizeFix'
 import { translateBackendErrors } from './lib/utils/backendErrorBridge'
+import { installUncaughtErrorLog } from './lib/utils/uncaughtErrorLog'
+import { LogFrontend } from '../wailsjs/go/main/App'
+
+// First, so an error anywhere after it reaches the log.
+installUncaughtErrorLog(LogFrontend)
 
 installFramelessResizeFix()
 
