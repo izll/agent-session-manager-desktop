@@ -6,6 +6,23 @@ Entries describe what changed for someone using the app. Internal refactoring,
 test and CI work is left out unless it changed behaviour. Dates are release
 dates; the format follows [Keep a Changelog](https://keepachangelog.com).
 
+## 1.1.18 — 2026-09-29
+
+### Added
+
+- **The favourites section folds.** Click its header, or press Enter on it,
+  to fold it away like a group; the count stays on the header. Folding hides
+  only the extra copies: a favourite in a group still shows there, and one
+  without a group moves among the ungrouped sessions. The previous/next
+  session shortcuts skip the folded section, the Ctrl+Shift+1–7 favourite
+  shortcuts keep working, and the choice is kept.
+
+### Fixed
+
+- **Folding the favourites no longer scrolls the list** down to the selected
+  session's other copy. The list scrolls to the selection only when you move
+  it.
+
 ## 1.1.17 — 2026-09-28
 
 ### Added
