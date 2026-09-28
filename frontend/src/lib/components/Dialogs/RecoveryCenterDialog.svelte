@@ -338,9 +338,9 @@
   <div class="dialog-overlay" use:autoFocusDialog on:keydown={handleKeydown} role="dialog" aria-modal="true">
     <div class="dialog-content recovery-dialog">
       <div class="dialog-header">
-        <div>
+        <div class="dialog-heading">
           <h2>{$t('recovery.title')}</h2>
-          <p>{$t('recovery.subtitle')}</p>
+          <p class="dialog-subtitle">{$t('recovery.subtitle')}</p>
         </div>
         <DialogCloseButton on:click={close} disabled={actionRunning} />
       </div>
@@ -468,8 +468,6 @@
     max-width: min(1280px, calc(100vw - 48px));
     max-height: min(840px, calc(100vh - 48px));
   }
-  /* The shared header, plus a subtitle under the title. */
-  .dialog-header p { margin:4px 0 0; font-size:13px; color:#71717a; }
   .recovery-tabs { display:flex; gap:4px; padding:12px 24px 0; }
   .recovery-tabs button { border:0; border-radius:6px; padding:7px 11px; background:transparent; color:#71717a; cursor:pointer; }
   .recovery-tabs button.active { background:rgba(var(--accent-rgb), .14); color:var(--accent-lighter); }

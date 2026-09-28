@@ -77,6 +77,70 @@ test('a dialog title is an h2, so it takes the shared title style', () => {
   assert.deepEqual(wrong, []);
 });
 
+// ── One header layout ─────────────────────────────────────────────────────
+
+// Every dialog header's markup, from its opening tag to the matching </div>.
+function headers(markup) {
+  const out = [];
+  for (const m of markup.matchAll(/<div class="dialog-header">/g)) {
+    let depth = 0;
+    const tags = /<div\b|<\/div>/g;
+    tags.lastIndex = m.index;
+    for (let t; (t = tags.exec(markup));) {
+      depth += t[0] === '</div>' ? -1 : 1;
+      if (depth === 0) { out.push(markup.slice(m.index, tags.lastIndex)); break; }
+    }
+  }
+  return out;
+}
+
+const headerFiles = files.map((f) => ({ ...f, headers: headers(f.markup) })).filter((f) => f.headers.length);
+
+test('there are dialog headers to check', () => {
+  const count = headerFiles.reduce((n, f) => n + f.headers.length, 0);
+  assert.ok(count > 35, `only found ${count} dialog headers`);
+});
+
+// The history dialog's title had a class of its own that made it truncate;
+// the others wrapped, and a task title three lines long squeezed the ✕ to
+// 20px. The truncation is the shared title's now, and a class on it is where
+// a local variant would start again.
+test('a dialog title is plain: no class, nothing but its text', () => {
+  const wrong = [];
+  for (const f of headerFiles) {
+    for (const h of f.headers) {
+      for (const m of h.matchAll(/<h2([^>]*)>([\s\S]*?)<\/h2>/g)) {
+        if (/\bclass[=:]/.test(m[1])) wrong.push(`${f.name}: a class on the title`);
+        // A count badge inside the h2 took the title's clipped gradient.
+        if (/<[a-zA-Z]/.test(m[2])) wrong.push(`${f.name}: markup inside the title — ${m[2].trim().slice(0, 60)}`);
+      }
+    }
+  }
+  assert.deepEqual(wrong, []);
+});
+
+// Extra buttons were a 30px box (history), a bare 14px glyph (the task
+// dialogs' microphone) and an underlined link (new session). Now each is a
+// .dialog-header-btn, grouped with the ✕ at the right end, the ✕ last.
+test('extra header buttons are the shared kind, before the ✕', () => {
+  const wrong = [];
+  for (const f of headerFiles) {
+    for (const h of f.headers) {
+      const buttons = [...h.matchAll(/<button\b[^>]*>/g)].map((m) => m[0]);
+      for (const b of buttons) {
+        if (!/class="dialog-header-btn[\s"]/.test(b)) wrong.push(`${f.name}: ${b.slice(0, 70)}`);
+      }
+      if (buttons.length && !/<div class="dialog-header-actions">/.test(h)) {
+        wrong.push(`${f.name}: extra buttons outside .dialog-header-actions`);
+      }
+      const close = h.lastIndexOf('<DialogCloseButton');
+      const lastButton = h.lastIndexOf('<button');
+      if (close < lastButton) wrong.push(`${f.name}: the ✕ is not the last button`);
+    }
+  }
+  assert.deepEqual(wrong, []);
+});
+
 // ── No local copies of the chrome ────────────────────────────────────────
 
 // Rules in a component's own <style>, as [selector, body] pairs.
@@ -119,6 +183,11 @@ const chrome = {
   '.dialog-content': ['background', 'border', 'border-radius', 'box-shadow', 'padding'],
   '.dialog-header': null, // null: no local rule at all
   '.close-btn': null,
+  '.dialog-header-actions': null,
+  '.dialog-header-btn': ['width', 'height', 'padding', 'border', 'border-radius', 'background', 'font-size', 'margin', 'margin-left', 'margin-right'],
+  '.dialog-heading': null,
+  '.dialog-subtitle': null,
+  '.dialog-count': null,
   '.dialog-body': ['padding', 'background'],
   '.dialog-footer': ['padding', 'background', 'border', 'border-top'],
   '.dialog-actions': ['padding', 'padding-top', 'background', 'border', 'border-top'],
@@ -137,14 +206,18 @@ test('no component restyles the dialog chrome', () => {
     for (const [selector, body] of rules(f.css)) {
       // The piece of chrome the selector ends on, if any.
       const last = selector.split(/[\s>+~]+/).pop() || '';
-      // A child of the header other than its title is the dialog's own
-      // (a subtitle, extra buttons) and not chrome.
-      if (/\.dialog-header\s+(?!h2\b)\S/.test(selector)) continue;
+      let piece = Object.keys(chrome).find((c) => last === c || last.startsWith(c + '.') || last.startsWith(c + ':'));
       if (/\.dialog-header\s+h2\b/.test(selector)) {
         found.push(`${f.name}: ${selector} — the title style is shared`);
         continue;
       }
-      let piece = Object.keys(chrome).find((c) => last === c || last.startsWith(c + '.') || last.startsWith(c + ':'));
+      // Anything else inside a header that is not one of its shared parts is
+      // the dialog's own content, and not chrome. (The recovery center's
+      // subtitle was styled like this before it became .dialog-subtitle.)
+      if (!piece && /\.dialog-header\s+\S/.test(selector)) {
+        found.push(`${f.name}: ${selector} — a header part styled locally; use the shared ones`);
+        continue;
+      }
       let key = piece;
       if (!piece) {
         const own = panelClasses.find((c) => last === c);

@@ -453,7 +453,7 @@
   >
     <div class="dialog-content task-detail">
       <div class="dialog-header">
-        <h2>{selected.title}</h2>
+        <h2 title={selected.title}>{selected.title}</h2>
         <DialogCloseButton on:click={closeDetails} />
       </div>
 

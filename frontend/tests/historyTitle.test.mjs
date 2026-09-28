@@ -49,12 +49,14 @@ assert.match(
 // it.
 assert.match(
   source,
-  /<h2 class="history-title" title=\{headerTitle\}>\{headerTitle\}<\/h2>/,
+  /<h2 title=\{headerTitle\}>\{headerTitle\}<\/h2>/,
   'the header should be one string, with the full text available on hover',
 );
 
-const rule = source.match(/\n {2}\.history-title \{([\s\S]*?)\n {2}\}/);
-assert.ok(rule, '.history-title rule is missing');
+// The truncation is every dialog title's now (style.css), not this dialog's.
+const sheet = readFileSync(new URL('../src/style.css', import.meta.url), 'utf8');
+const rule = sheet.match(/\n\.dialog-header h2 \{([\s\S]*?)\n\}/);
+assert.ok(rule, '.dialog-header h2 rule is missing');
 assert.match(rule[1], /text-overflow: ellipsis/, 'a long subject must truncate');
 assert.match(rule[1], /white-space: nowrap/, 'the title must stay on one line');
 assert.match(

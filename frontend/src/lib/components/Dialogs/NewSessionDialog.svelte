@@ -471,8 +471,10 @@
         <h2>{$t('newSession.title')}</h2>
         <!-- Someone creating a session is exactly who wants a template; the
              sidebar's icon button alone would be easy to miss from here. -->
-        <button class="template-link" on:click={openTemplates}>{$t('newSession.fromTemplate')}</button>
-        <DialogCloseButton on:click={close} />
+        <div class="dialog-header-actions">
+          <button class="dialog-header-btn text" on:click={openTemplates}>{$t('newSession.fromTemplate')}</button>
+          <DialogCloseButton on:click={close} />
+        </div>
       </div>
 
       {#if error}
@@ -748,23 +750,6 @@
      every dialog needs them, and only this one had them. */
   .dialog-content {
     max-width: 480px;
-  }
-
-  /* Sits to the left of the close button, which the shared header pushes to
-     the far right. */
-  .template-link {
-    margin-left: auto;
-    margin-right: 12px;
-    border: 0;
-    background: none;
-    padding: 0;
-    cursor: pointer;
-    font-size: 12px;
-    color: var(--accent-light);
-    text-decoration: underline;
-  }
-  .template-link:hover {
-    color: var(--accent-pale);
   }
 
   /* Component-specific: error message with icon and margin */

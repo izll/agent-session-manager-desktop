@@ -392,6 +392,11 @@
   // Hoisted out of markup so no casts are needed there.
   $: deleteName = deleteTarget?.name || '';
   $: useTitle = useTarget ? $t('templates.useTitle', { name: useTarget.name }) : '';
+  // One string, so a long template name truncates in the header and the
+  // tooltip still has all of it.
+  $: headerTitle = mode === 'use' ? useTitle
+    : mode === 'edit' ? (editingId ? $t('templates.editTitle') : $t('templates.newTitle'))
+    : $t('templates.managerTitle');
   $: useTabCount = useTarget?.tabs?.length || 0;
 
   function tabSummary(tpl: Template): string {
@@ -411,11 +416,7 @@
   >
     <div class="dialog-content manager">
       <div class="dialog-header">
-        <h2>
-          {#if mode === 'use'}{useTitle}
-          {:else if mode === 'edit'}{editingId ? $t('templates.editTitle') : $t('templates.newTitle')}
-          {:else}{$t('templates.managerTitle')}{/if}
-        </h2>
+        <h2 title={headerTitle}>{headerTitle}</h2>
         <DialogCloseButton on:click={close} />
       </div>
 

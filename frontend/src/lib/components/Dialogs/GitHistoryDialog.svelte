@@ -1001,23 +1001,26 @@
       style={dialogSizeStyle}
     >
       <div class="dialog-header">
-        <h2 class="history-title" title={headerTitle}>{headerTitle}</h2>
-        <button
-          class="header-btn"
-          title={maximised ? $t('history.restore') : $t('history.maximise')}
-          on:click={() => (maximised = !maximised)}
-        >
-          {#if maximised}
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/>
-            </svg>
-          {:else}
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/>
-            </svg>
-          {/if}
-        </button>
-        <DialogCloseButton on:click={close} />
+        <h2 title={headerTitle}>{headerTitle}</h2>
+        <div class="dialog-header-actions">
+          <button
+            class="dialog-header-btn"
+            title={maximised ? $t('history.restore') : $t('history.maximise')}
+            aria-label={maximised ? $t('history.restore') : $t('history.maximise')}
+            on:click={() => (maximised = !maximised)}
+          >
+            {#if maximised}
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/>
+              </svg>
+            {:else}
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/>
+              </svg>
+            {/if}
+          </button>
+          <DialogCloseButton on:click={close} />
+        </div>
       </div>
 
       <div class="history-body">
@@ -1488,44 +1491,6 @@
   .fold-btn:hover {
     opacity: 1;
   }
-
-  .header-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 30px;
-    height: 30px;
-    margin-right: 8px;
-    border: none;
-    border-radius: 7px;
-    background: rgba(255, 255, 255, 0.05);
-    color: #6b7280;
-    cursor: pointer;
-  }
-  .header-btn:hover:not(:disabled) {
-    background: rgba(255, 255, 255, 0.1);
-    color: white;
-  }
-  .header-btn:disabled {
-    opacity: 0.35;
-    cursor: default;
-  }
-  .header-btn.on {
-    color: var(--accent, #61afef);
-    background: rgba(97, 175, 239, 0.16);
-  }
-
-  /* One line that truncates: a commit subject is long enough that it will,
-     and the buttons after it must keep their place. */
-  .history-title {
-    flex: 1 1 auto;
-    min-width: 0;
-    margin-right: 12px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
 
   .branch-pane,
   .commit-pane {

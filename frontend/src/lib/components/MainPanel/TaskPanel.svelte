@@ -1077,6 +1077,12 @@
     return all.find(t => t.id === id);
   }
 
+  // Named, not numbered: the id is an internal handle, and the task's own
+  // title says which one the dialog is about. A title is a sentence, so the
+  // header truncates it and the tooltip carries the rest.
+  $: addSubtaskTitle = getTaskById(addSubtaskTaskId, $tasks)?.title || $t('tasks.addSubtaskMenu');
+  $: dependencyTitle = getTaskById(dependencyTaskId, $tasks)?.title || $t('tasks.manageDependencies');
+
   // Takes the translate function rather than reading $t inside: called from the
   // markup, Svelte re-runs this only when its arguments change, so a language
   // switch would leave the old wording on screen.
@@ -1548,9 +1554,9 @@
     <div class="dialog-content large" on:click|stopPropagation on:focusin={handleDialogFocusIn}>
       <div class="dialog-header">
         <h2>{$t('tasks.addNewTask')}</h2>
-        <div class="header-actions">
-          <button class="mic-btn" class:active={$dictationListening} on:click|preventDefault={toggleModalDictation} title={$t('tabBar.dictateToField')}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+        <div class="dialog-header-actions">
+          <button class="dialog-header-btn dictation-btn" class:active={$dictationListening} on:click|preventDefault={toggleModalDictation} title={$t('tabBar.dictateToField')} aria-label={$t('tabBar.dictateToField')}>
+            <svg width="16" height="16" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
           </button>
           <DialogCloseButton on:click={() => showAddTaskModal = false} />
         </div>
@@ -1685,9 +1691,9 @@
     <div class="dialog-content large" on:click|stopPropagation on:focusin={handleDialogFocusIn}>
       <div class="dialog-header">
         <h2>{$t('tasks.editTask')}</h2>
-        <div class="header-actions">
-          <button class="mic-btn" class:active={$dictationListening} on:click|preventDefault={toggleModalDictation} title={$t('tabBar.dictateToField')}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+        <div class="dialog-header-actions">
+          <button class="dialog-header-btn dictation-btn" class:active={$dictationListening} on:click|preventDefault={toggleModalDictation} title={$t('tabBar.dictateToField')} aria-label={$t('tabBar.dictateToField')}>
+            <svg width="16" height="16" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
           </button>
           <DialogCloseButton on:click={() => showEditTaskModal = false} />
         </div>
@@ -1781,12 +1787,10 @@
   <div class="dialog-overlay" use:autoFocusField role="dialog" aria-modal="true" tabindex="-1" on:keydown={(e) => closeModalOnEscape(e, () => showAddSubtaskModal = false)} on:click={() => showAddSubtaskModal = false}>
     <div class="dialog-content large" on:click|stopPropagation on:focusin={handleDialogFocusIn}>
       <div class="dialog-header">
-        <!-- Named, not numbered: the id is an internal handle, and the task's
-             own title says which one this subtask is being added to. -->
-        <h2>{getTaskById(addSubtaskTaskId, $tasks)?.title || $t('tasks.addSubtaskMenu')}</h2>
-        <div class="header-actions">
-          <button class="mic-btn" class:active={$dictationListening} on:click|preventDefault={toggleModalDictation} title={$t('tabBar.dictateToField')}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+        <h2 title={addSubtaskTitle}>{addSubtaskTitle}</h2>
+        <div class="dialog-header-actions">
+          <button class="dialog-header-btn dictation-btn" class:active={$dictationListening} on:click|preventDefault={toggleModalDictation} title={$t('tabBar.dictateToField')} aria-label={$t('tabBar.dictateToField')}>
+            <svg width="16" height="16" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
           </button>
           <DialogCloseButton on:click={() => showAddSubtaskModal = false} />
         </div>
@@ -1832,9 +1836,7 @@
   <div class="dialog-overlay" use:autoFocusDialog role="dialog" aria-modal="true" tabindex="-1" on:keydown={(e) => closeModalOnEscape(e, () => showDependencyModal = false)} on:click={() => showDependencyModal = false}>
     <div class="dialog-content dependency-dialog" on:click|stopPropagation>
       <div class="dialog-header">
-        <!-- Named, not numbered. The id is an internal handle and tells the
-             reader nothing; the task's own title says which one this is. -->
-        <h2>{getTaskById(dependencyTaskId, $tasks)?.title || $t('tasks.manageDependencies')}</h2>
+        <h2 title={dependencyTitle}>{dependencyTitle}</h2>
         <DialogCloseButton on:click={() => showDependencyModal = false} />
       </div>
       <div class="dialog-body">
@@ -2992,30 +2994,8 @@
 
 
 
-  .header-actions {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .mic-btn {
-    background: none;
-    border: none;
-    cursor: pointer;
-    color: #6b7280;
-    padding: 4px 6px;
-    border-radius: 4px;
-    display: flex;
-    align-items: center;
-    transition: color 0.2s;
-  }
-
-  .mic-btn:hover {
-    color: #9ca3af;
-  }
-
-  .mic-btn.active {
-    color: var(--accent);
+  /* The shared header button (style.css); listening also pulses. */
+  .dictation-btn.active {
     animation: mic-pulse 1.5s ease-in-out infinite;
   }
 

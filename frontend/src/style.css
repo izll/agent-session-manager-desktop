@@ -306,24 +306,128 @@ select option:checked {
   }
 }
 
-/* Dialog header */
+/* Dialog header — one layout for every dialog:
+     [title] [count]                    [extra buttons] [✕]
+   The title is one line: a task's or a commit's title is a sentence, and
+   wrapped it made the header two or three lines tall and squeezed the ✕ to
+   20px wide. It truncates instead, and the dialogs with a title that long
+   put the whole of it in a tooltip. Everything after the title sits at the
+   right edge, and every button there is the ✕'s size and look: the history's
+   maximise button was 30px, the task dialogs' microphone a bare 14px glyph,
+   the new-session template link underlined text. */
 .dialog-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 12px;
   padding: 20px 24px;
   background: linear-gradient(180deg, rgba(var(--accent-rgb), 0.1) 0%, transparent 100%);
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .dialog-header h2 {
+  flex: 0 1 auto;
+  min-width: 0;
   font-size: 18px;
   font-weight: 600;
   margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   background: linear-gradient(135deg, var(--accent-light) 0%, var(--accent) 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
+}
+
+/* A count after the title (background agents). Outside the h2: inside it,
+   the title's clipped gradient painted over the badge's text. */
+.dialog-count {
+  flex-shrink: 0;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: rgba(var(--accent-rgb), 0.15);
+  color: var(--accent-light);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+/* A line under the title (the recovery center says what it restores). The
+   pair truncates like a lone title. */
+.dialog-heading {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.dialog-subtitle {
+  margin: 4px 0 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  color: #71717a;
+}
+
+/* The right-hand end: extra buttons, then the ✕ last. A lone ✕ needs no
+   group; it is pushed to the edge the same way. */
+.dialog-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.dialog-header > .close-btn {
+  margin-left: auto;
+}
+
+/* An extra header button: the ✕'s box, with a 16px icon. */
+.dialog-header-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  background: rgba(255, 255, 255, 0.05);
+  border: none;
+  border-radius: 8px;
+  color: #6b7280;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.dialog-header-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* One with words rather than an icon ("Use a template"): same height and
+   box, as wide as its label, and in the accent colour — grey words read as a
+   caption, not as something to click. */
+.dialog-header-btn.text {
+  width: auto;
+  padding: 0 12px;
+  white-space: nowrap;
+  color: var(--accent-light);
+}
+
+.dialog-header-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+}
+
+.dialog-header-btn.active {
+  background: rgba(var(--accent-rgb), 0.16);
+  color: var(--accent);
+}
+
+.dialog-header-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 /* Dialog body */
@@ -350,6 +454,7 @@ select option:checked {
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
   width: 32px;
   height: 32px;
   background: rgba(255, 255, 255, 0.05);

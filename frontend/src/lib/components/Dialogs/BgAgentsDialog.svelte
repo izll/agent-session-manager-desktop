@@ -250,7 +250,8 @@
   <div class="dialog-overlay" use:autoFocusDialog role="dialog" aria-modal="true">
     <div class="dialog-content">
       <div class="dialog-header">
-        <h2>{$t('bgAgents.title')}{#if agents.length > 0} <span class="agent-count">{agents.length}</span>{/if}</h2>
+        <h2>{$t('bgAgents.title')}</h2>
+        {#if agents.length > 0}<span class="dialog-count">{agents.length}</span>{/if}
         <DialogCloseButton on:click={close} />
       </div>
 
@@ -379,10 +380,6 @@
     max-height: 78vh;
   }
   .error-line { color: #fb7185; font-size: 12px; margin-bottom: 8px; }
-  .agent-count {
-    display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 999px;
-    background: rgba(var(--accent-rgb), 0.15); color: var(--accent-light); font-size: 12px; vertical-align: 2px;
-  }
   .filter-box {
     display: flex; align-items: center; gap: 8px; margin-bottom: 10px;
     padding: 0 10px; height: 34px; border-radius: 8px;
