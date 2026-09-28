@@ -91,6 +91,8 @@
   "sidebar.collapseSidebar": "Sbalit postranní panel",
   "sidebar.searchPlaceholder": "Hledat relace...",
   "sidebar.favorites": "Oblíbené",
+  "sidebar.collapseFavorites": "Sbalit oblíbené",
+  "sidebar.expandFavorites": "Rozbalit oblíbené",
   "sidebar.sortByActivity": "Seřadit podle aktivity",
   "sidebar.sortDefault": "Výchozí pořadí",
   "sidebar.filter": "Filtrovat relace",

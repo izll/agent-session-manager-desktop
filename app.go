@@ -4854,6 +4854,7 @@ type SettingsInfo struct {
 	SortByActivity            bool   `json:"sortByActivity"`
 	SidebarHideInactive       bool   `json:"sidebarHideInactive"`
 	SidebarActiveWithinDays   int    `json:"sidebarActiveWithinDays"`
+	FavoritesCollapsed        bool   `json:"favoritesCollapsed"`
 	DictationSendWithoutEnter bool   `json:"dictationSendWithoutEnter"`
 	CodexUseDaemon            bool   `json:"codexUseDaemon"`
 	HideYoloBadge             bool   `json:"hideYoloBadge"`
@@ -4984,6 +4985,7 @@ func (a *App) GetSettings() (*SettingsInfo, error) {
 		SortByActivity:            settings.SortByActivity,
 		SidebarHideInactive:       settings.SidebarHideInactive,
 		SidebarActiveWithinDays:   storedActiveWithinDays(settings.SidebarActiveWithinDays),
+		FavoritesCollapsed:        settings.FavoritesCollapsed,
 		DictationSendWithoutEnter: settings.DictationSendWithoutEnter,
 		CodexUseDaemon:            settings.CodexUseDaemon,
 		HideYoloBadge:             settings.HideYoloBadge,
@@ -5078,6 +5080,7 @@ func (a *App) SaveSettings(settings SettingsInfo, expectedProjectID string) erro
 		current.SortByActivity = settings.SortByActivity
 		current.SidebarHideInactive = settings.SidebarHideInactive
 		current.SidebarActiveWithinDays = storedActiveWithinDays(settings.SidebarActiveWithinDays)
+		current.FavoritesCollapsed = settings.FavoritesCollapsed
 		current.DictationSendWithoutEnter = settings.DictationSendWithoutEnter
 		current.CodexUseDaemon = settings.CodexUseDaemon
 		current.HideYoloBadge = settings.HideYoloBadge

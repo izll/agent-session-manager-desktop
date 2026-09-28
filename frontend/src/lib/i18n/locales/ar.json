@@ -91,6 +91,8 @@
   "sidebar.collapseSidebar": "طي الشريط الجانبي",
   "sidebar.searchPlaceholder": "البحث في الجلسات...",
   "sidebar.favorites": "المفضلة",
+  "sidebar.collapseFavorites": "طي المفضلة",
+  "sidebar.expandFavorites": "توسيع المفضلة",
   "sidebar.sortByActivity": "الترتيب حسب النشاط",
   "sidebar.sortDefault": "الترتيب الافتراضي",
   "sidebar.filter": "تصفية الجلسات",

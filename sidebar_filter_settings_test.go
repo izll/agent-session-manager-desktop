@@ -42,3 +42,35 @@ func TestSidebarFilterSettingsRoundTrip(t *testing.T) {
 		}
 	}
 }
+
+// The folded favourites section is remembered the same way, and saving another
+// setting does not unfold it.
+func TestFavoritesCollapsedSettingsRoundTrip(t *testing.T) {
+	storage := guardedTestStorage(t)
+	app := &App{storage: storage, projectLocked: true}
+
+	oldMouse, oldShell := applyRuntimeMouseCopy, applyRuntimeTerminalShell
+	applyRuntimeMouseCopy = func(context.Context, bool) {}
+	applyRuntimeTerminalShell = func(string) {}
+	t.Cleanup(func() { applyRuntimeMouseCopy, applyRuntimeTerminalShell = oldMouse, oldShell })
+
+	fresh, err := app.GetSettings()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fresh.FavoritesCollapsed {
+		t.Fatal("the favourites section starts folded; it should start open")
+	}
+	for _, collapsed := range []bool{true, false, true} {
+		if err := app.SaveSettings(SettingsInfo{FavoritesCollapsed: collapsed, SortByActivity: true}, ""); err != nil {
+			t.Fatal(err)
+		}
+		got, err := app.GetSettings()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.FavoritesCollapsed != collapsed {
+			t.Errorf("saved favoritesCollapsed=%v, read back %v", collapsed, got.FavoritesCollapsed)
+		}
+	}
+}

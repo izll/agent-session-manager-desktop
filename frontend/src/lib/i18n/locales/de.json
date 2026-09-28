@@ -91,6 +91,8 @@
   "sidebar.collapseSidebar": "Seitenleiste ausblenden",
   "sidebar.searchPlaceholder": "Sitzungen suchen...",
   "sidebar.favorites": "Favoriten",
+  "sidebar.collapseFavorites": "Favoriten einklappen",
+  "sidebar.expandFavorites": "Favoriten ausklappen",
   "sidebar.sortByActivity": "Nach Aktivität sortieren",
   "sidebar.sortDefault": "Standardreihenfolge",
   "sidebar.filter": "Sitzungen filtern",

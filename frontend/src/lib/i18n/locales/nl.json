@@ -91,6 +91,8 @@
   "sidebar.collapseSidebar": "Zijbalk invouwen",
   "sidebar.searchPlaceholder": "Sessies zoeken...",
   "sidebar.favorites": "Favorieten",
+  "sidebar.collapseFavorites": "Favorieten inklappen",
+  "sidebar.expandFavorites": "Favorieten uitklappen",
   "sidebar.sortByActivity": "Sorteren op activiteit",
   "sidebar.sortDefault": "Standaardvolgorde",
   "sidebar.filter": "Sessies filteren",

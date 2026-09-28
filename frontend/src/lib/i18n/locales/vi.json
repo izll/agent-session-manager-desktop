@@ -91,6 +91,8 @@
   "sidebar.collapseSidebar": "Thu gọn thanh bên",
   "sidebar.searchPlaceholder": "Tìm kiếm phiên...",
   "sidebar.favorites": "Yêu thích",
+  "sidebar.collapseFavorites": "Thu gọn mục yêu thích",
+  "sidebar.expandFavorites": "Mở rộng mục yêu thích",
   "sidebar.sortByActivity": "Sắp xếp theo hoạt động",
   "sidebar.sortDefault": "Thứ tự mặc định",
   "sidebar.filter": "Lọc phiên",

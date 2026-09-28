@@ -91,6 +91,8 @@
   "sidebar.collapseSidebar": "Collapse sidebar",
   "sidebar.searchPlaceholder": "Search sessions...",
   "sidebar.favorites": "Favorites",
+  "sidebar.collapseFavorites": "Collapse favorites",
+  "sidebar.expandFavorites": "Expand favorites",
   "sidebar.sortByActivity": "Sort by activity",
   "sidebar.sortDefault": "Default order",
   "sidebar.filter": "Filter sessions",

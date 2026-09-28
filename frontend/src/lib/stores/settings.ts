@@ -50,6 +50,8 @@ export interface Settings {
   sidebarHideInactive: boolean;
   /** Sidebar filter: only sessions active in this many days; 0 is off. */
   sidebarActiveWithinDays: number;
+  /** The sidebar's favourites section folded down to its header. */
+  favoritesCollapsed: boolean;
   dictationSendWithoutEnter: boolean;
   /**
    * Let Codex run on its shared background server. Off by default: asmgr then
@@ -162,6 +164,7 @@ function defaultSettings(): Settings {
     sortByActivity: false,
     sidebarHideInactive: false,
     sidebarActiveWithinDays: 0,
+    favoritesCollapsed: false,
     dictationSendWithoutEnter: false,
     codexUseDaemon: false,
     hideYoloBadge: false,

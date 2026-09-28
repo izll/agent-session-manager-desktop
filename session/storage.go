@@ -150,6 +150,11 @@ type Settings struct {
 	// combine, and both apply whichever way the list is sorted.
 	SidebarHideInactive     bool `json:"sidebar_hide_inactive,omitempty"`
 	SidebarActiveWithinDays int  `json:"sidebar_active_within_days,omitempty"`
+	// FavoritesCollapsed folds the sidebar's favourites section down to its
+	// header. The sessions stay in the list: a favourite in a group is still
+	// shown there, and one without a group moves back among the ungrouped
+	// sessions while the section is folded.
+	FavoritesCollapsed bool `json:"favorites_collapsed,omitempty"`
 	// DictationSendWithoutEnter leaves the dictated text in the agent's
 	// composer instead of submitting it.
 	//

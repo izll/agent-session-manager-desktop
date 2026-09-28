@@ -91,6 +91,8 @@
   "sidebar.collapseSidebar": "Réduire la barre latérale",
   "sidebar.searchPlaceholder": "Rechercher des sessions...",
   "sidebar.favorites": "Favoris",
+  "sidebar.collapseFavorites": "Replier les favoris",
+  "sidebar.expandFavorites": "Déplier les favoris",
   "sidebar.sortByActivity": "Trier par activité",
   "sidebar.sortDefault": "Ordre par défaut",
   "sidebar.filter": "Filtrer les sessions",

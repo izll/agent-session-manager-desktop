@@ -149,9 +149,24 @@ export const favorites = derived(
   ([$sessions, $visible]) => $sessions.filter(s => s.favorite && $visible(s)),
 );
 
+/** Is the sidebar's favourites section folded down to its header? */
+export const favoritesCollapsed = derived(settings, ($settings) => !!$settings?.favoritesCollapsed);
+
+export function toggleFavoritesCollapsed() {
+  return saveSettings({ favoritesCollapsed: !get(favoritesCollapsed) });
+}
+
+/**
+ * The sessions shown below the groups.
+ *
+ * A favourite without a group is normally shown only in the favourites
+ * section. While that section is folded it comes back here, in its usual
+ * place: folding the section hides the extra copies, not the sessions.
+ */
 export const ungroupedSessions = derived(
-  [sessions, sessionVisible],
-  ([$sessions, $visible]) => $sessions.filter(s => !s.groupId && !s.favorite && $visible(s)),
+  [sessions, sessionVisible, favoritesCollapsed],
+  ([$sessions, $visible, $collapsed]) =>
+    $sessions.filter(s => !s.groupId && (!s.favorite || $collapsed) && $visible(s)),
 );
 
 export const sessionsByGroup = derived(

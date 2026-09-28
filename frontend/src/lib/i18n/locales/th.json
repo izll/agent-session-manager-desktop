@@ -91,6 +91,8 @@
   "sidebar.collapseSidebar": "ย่อแถบด้านข้าง",
   "sidebar.searchPlaceholder": "ค้นหาเซสชัน...",
   "sidebar.favorites": "รายการโปรด",
+  "sidebar.collapseFavorites": "ยุบรายการโปรด",
+  "sidebar.expandFavorites": "ขยายรายการโปรด",
   "sidebar.sortByActivity": "เรียงตามกิจกรรม",
   "sidebar.sortDefault": "ลำดับเริ่มต้น",
   "sidebar.filter": "กรองเซสชัน",

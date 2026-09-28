@@ -91,6 +91,8 @@
   "sidebar.collapseSidebar": "Свернуть боковую панель",
   "sidebar.searchPlaceholder": "Поиск сессий...",
   "sidebar.favorites": "Избранное",
+  "sidebar.collapseFavorites": "Свернуть избранное",
+  "sidebar.expandFavorites": "Развернуть избранное",
   "sidebar.sortByActivity": "Сортировать по активности",
   "sidebar.sortDefault": "Порядок по умолчанию",
   "sidebar.filter": "Фильтр сеансов",

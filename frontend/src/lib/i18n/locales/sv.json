@@ -91,6 +91,8 @@
   "sidebar.collapseSidebar": "Minimera sidofältet",
   "sidebar.searchPlaceholder": "Sök sessioner...",
   "sidebar.favorites": "Favoriter",
+  "sidebar.collapseFavorites": "Fäll ihop favoriter",
+  "sidebar.expandFavorites": "Fäll ut favoriter",
   "sidebar.sortByActivity": "Sortera efter aktivitet",
   "sidebar.sortDefault": "Standardordning",
   "sidebar.filter": "Filtrera sessioner",

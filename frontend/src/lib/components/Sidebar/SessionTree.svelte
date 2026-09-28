@@ -4,6 +4,8 @@
   import {
     sessions,
     favorites,
+    favoritesCollapsed,
+    toggleFavoritesCollapsed,
     sessionsByActivity,
     groups,
     sessionsByGroup,
@@ -373,15 +375,33 @@
       {/if}
     {:else}
     <!-- Favorites -->
+    <!-- Folds like a group does: the header stays, with the count, and the
+         rows go. Nothing is lost by it — every favourite is also in the list
+         below, in its group or (while folded) among the ungrouped sessions.
+         A search does not unfold it, as it does not unfold a group; the count
+         says how many favourites match. -->
     {#if $favorites.length > 0}
-      <div class="section">
-        <div class="section-header favorites">
+      <div class="section" class:collapsed={$favoritesCollapsed}>
+        <button
+          class="section-header favorites"
+          aria-expanded={!$favoritesCollapsed}
+          title={$favoritesCollapsed ? $t('sidebar.expandFavorites') : $t('sidebar.collapseFavorites')}
+          on:click={() => void toggleFavoritesCollapsed()}
+        >
+          <span class="chevron" class:expanded={!$favoritesCollapsed}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M9 18l6-6-6-6"/>
+            </svg>
+          </span>
           <span class="star">★</span>
-          {$t('sidebar.favorites')}
-        </div>
-        {#each $favorites as session, i (session.id)}
-          <SessionItem {session} section="favorites" index={$sessions.findIndex(s => s.id === session.id)} favoriteSlot={favoriteSlot(session.id)} activity={getActivity(session.id, $activities)} statusLine={getStatusLine(session.id, $statusLines)} spinnerText={$spinnerTexts[session.id] || ''} tabStatuses={$tabStatuses[session.id] || []} on:drop={handleSessionDrop} />
-        {/each}
+          <span class="favorites-label">{$t('sidebar.favorites')}</span>
+          <span class="favorites-count">{$favorites.length}</span>
+        </button>
+        {#if !$favoritesCollapsed}
+          {#each $favorites as session, i (session.id)}
+            <SessionItem {session} section="favorites" index={$sessions.findIndex(s => s.id === session.id)} favoriteSlot={favoriteSlot(session.id)} activity={getActivity(session.id, $activities)} statusLine={getStatusLine(session.id, $statusLines)} spinnerText={$spinnerTexts[session.id] || ''} tabStatuses={$tabStatuses[session.id] || []} on:drop={handleSessionDrop} />
+          {/each}
+        {/if}
       </div>
     {/if}
 
@@ -419,7 +439,7 @@
     {#if $ungroupedSessions.length > 0}
       <div class="section">
         {#each $ungroupedSessions as session (session.id)}
-          <SessionItem {session} index={$sessions.findIndex(s => s.id === session.id)} activity={getActivity(session.id, $activities)} statusLine={getStatusLine(session.id, $statusLines)} spinnerText={$spinnerTexts[session.id] || ''} tabStatuses={$tabStatuses[session.id] || []} on:drop={handleSessionDrop} />
+          <SessionItem {session} index={$sessions.findIndex(s => s.id === session.id)} favoriteSlot={favoriteSlot(session.id)} activity={getActivity(session.id, $activities)} statusLine={getStatusLine(session.id, $statusLines)} spinnerText={$spinnerTexts[session.id] || ''} tabStatuses={$tabStatuses[session.id] || []} on:drop={handleSessionDrop} />
         {/each}
       </div>
     {/if}
@@ -643,6 +663,64 @@
     display: flex;
     align-items: center;
     gap: 6px;
+    width: 100%;
+    padding-left: 4px;
+    background: none;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    cursor: pointer;
+    font-family: inherit;
+    text-align: left;
+    transition: background 0.15s ease, border-color 0.15s ease;
+  }
+
+  .section-header.favorites:hover {
+    background: rgba(251, 191, 36, 0.06);
+    border-color: rgba(251, 191, 36, 0.15);
+  }
+
+  .section-header.favorites:focus-visible {
+    outline: 2px solid rgba(251, 191, 36, 0.5);
+    outline-offset: -2px;
+  }
+
+  /* The group header's chevron, a size down to match this header. */
+  .section-header .chevron {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    color: #a1a1aa;
+    transition: transform 0.2s ease;
+  }
+
+  .section-header .chevron.expanded {
+    transform: rotate(90deg);
+  }
+
+  .favorites-label {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* Same pill as a group's session count. */
+  .favorites-count {
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0;
+    color: #6b7280;
+    background: rgba(107, 114, 128, 0.2);
+    padding: 1px 7px;
+    border-radius: 10px;
+  }
+
+  /* Folded, the section is a single header: no gap as deep as a full one. */
+  .section.collapsed {
+    margin-bottom: 8px;
   }
 
   .section-header .star {

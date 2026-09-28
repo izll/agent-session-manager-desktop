@@ -91,6 +91,8 @@
   "sidebar.collapseSidebar": "Contraer barra lateral",
   "sidebar.searchPlaceholder": "Buscar sesiones...",
   "sidebar.favorites": "Favoritos",
+  "sidebar.collapseFavorites": "Contraer favoritos",
+  "sidebar.expandFavorites": "Expandir favoritos",
   "sidebar.sortByActivity": "Ordenar por actividad",
   "sidebar.sortDefault": "Orden predeterminado",
   "sidebar.filter": "Filtrar sesiones",

@@ -1851,6 +1851,7 @@ export namespace main {
 	    sortByActivity: boolean;
 	    sidebarHideInactive: boolean;
 	    sidebarActiveWithinDays: number;
+	    favoritesCollapsed: boolean;
 	    dictationSendWithoutEnter: boolean;
 	    codexUseDaemon: boolean;
 	    hideYoloBadge: boolean;
@@ -1917,6 +1918,7 @@ export namespace main {
 	        this.sortByActivity = source["sortByActivity"];
 	        this.sidebarHideInactive = source["sidebarHideInactive"];
 	        this.sidebarActiveWithinDays = source["sidebarActiveWithinDays"];
+	        this.favoritesCollapsed = source["favoritesCollapsed"];
 	        this.dictationSendWithoutEnter = source["dictationSendWithoutEnter"];
 	        this.codexUseDaemon = source["codexUseDaemon"];
 	        this.hideYoloBadge = source["hideYoloBadge"];

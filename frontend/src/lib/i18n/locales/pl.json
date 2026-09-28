@@ -91,6 +91,8 @@
   "sidebar.collapseSidebar": "Zwiń panel boczny",
   "sidebar.searchPlaceholder": "Szukaj sesji...",
   "sidebar.favorites": "Ulubione",
+  "sidebar.collapseFavorites": "Zwiń ulubione",
+  "sidebar.expandFavorites": "Rozwiń ulubione",
   "sidebar.sortByActivity": "Sortuj według aktywności",
   "sidebar.sortDefault": "Kolejność domyślna",
   "sidebar.filter": "Filtruj sesje",

@@ -91,6 +91,8 @@
   "sidebar.collapseSidebar": "Comprimi barra laterale",
   "sidebar.searchPlaceholder": "Cerca sessioni...",
   "sidebar.favorites": "Preferiti",
+  "sidebar.collapseFavorites": "Comprimi preferiti",
+  "sidebar.expandFavorites": "Espandi preferiti",
   "sidebar.sortByActivity": "Ordina per attività",
   "sidebar.sortDefault": "Ordine predefinito",
   "sidebar.filter": "Filtra sessioni",

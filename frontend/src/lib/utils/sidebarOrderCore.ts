@@ -33,6 +33,7 @@ export function buildSidebarOrder(
   groups: GroupLike[],
   byGroup: Map<string, Identified[]>,
   ungrouped: Identified[],
+  favoritesCollapsed = false,
 ): SidebarEntry[] {
   const entries: SidebarEntry[] = [];
   if (sortByActivity) {
@@ -40,7 +41,12 @@ export function buildSidebarOrder(
     for (const session of byActivity) entries.push({ id: session.id, section: 'list' });
     return entries;
   }
-  for (const session of favorites) entries.push({ id: session.id, section: 'favorites' });
+  // A folded favourites section shows its header only, like a collapsed
+  // group. Its sessions are still in the list below — in their group, or
+  // among the ungrouped ones — so stepping reaches them there.
+  if (!favoritesCollapsed) {
+    for (const session of favorites) entries.push({ id: session.id, section: 'favorites' });
+  }
   for (const group of groups) {
     // A collapsed group shows its header only; its sessions are not on
     // screen, so the shortcut must not land on them.

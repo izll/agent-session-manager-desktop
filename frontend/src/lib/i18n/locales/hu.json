@@ -91,6 +91,8 @@
   "sidebar.collapseSidebar": "Oldalsáv összecsukása",
   "sidebar.searchPlaceholder": "Munkamenetek keresése...",
   "sidebar.favorites": "Kedvencek",
+  "sidebar.collapseFavorites": "Kedvencek összecsukása",
+  "sidebar.expandFavorites": "Kedvencek kinyitása",
   "sidebar.sortByActivity": "Rendezés aktivitás szerint",
   "sidebar.sortDefault": "Alapértelmezett sorrend",
   "sidebar.filter": "Munkamenetek szűrése",

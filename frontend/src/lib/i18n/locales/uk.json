@@ -91,6 +91,8 @@
   "sidebar.collapseSidebar": "Згорнути бічну панель",
   "sidebar.searchPlaceholder": "Пошук сеансів...",
   "sidebar.favorites": "Обране",
+  "sidebar.collapseFavorites": "Згорнути обране",
+  "sidebar.expandFavorites": "Розгорнути обране",
   "sidebar.sortByActivity": "Сортувати за активністю",
   "sidebar.sortDefault": "Типовий порядок",
   "sidebar.filter": "Фільтр сеансів",

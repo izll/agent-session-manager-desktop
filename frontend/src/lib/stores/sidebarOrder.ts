@@ -26,7 +26,8 @@ export type { SidebarEntry, SidebarSection };
  *
  * Stepping used to walk the sessions in stored order, which is not what is on
  * screen: the list may be sorted by activity, favourites are lifted into a
- * section of their own, collapsed groups hide their sessions, and a search
+ * section of their own, collapsed groups and a folded favourites section hide
+ * their sessions, and a search
  * filters them. The shortcut then jumped to a session somewhere else in the
  * list, or to one that was not visible at all.
  *
@@ -38,7 +39,10 @@ export type { SidebarEntry, SidebarSection };
 export const sidebarOrder = derived(
   [settings, sessionsByActivity, favorites, groups, sessionsByGroup, ungroupedSessions],
   ([$settings, $byActivity, $favorites, $groups, $byGroup, $ungrouped]) =>
-    buildSidebarOrder(!!$settings?.sortByActivity, $byActivity, $favorites, $groups, $byGroup, $ungrouped),
+    buildSidebarOrder(
+      !!$settings?.sortByActivity, $byActivity, $favorites, $groups, $byGroup, $ungrouped,
+      !!$settings?.favoritesCollapsed,
+    ),
 );
 
 /** The copy the user last clicked or stepped onto. */
