@@ -11,7 +11,7 @@
   import ConfirmDialog from '../Dialogs/ConfirmDialog.svelte';
   import type { Session } from '../../stores/sessions';
   import { selectedSessionId, renameSession, deleteSession, toggleFavorite } from '../../stores/sessions';
-  import { activeSidebarEntry, selectSidebarEntry, type SidebarSection } from '../../stores/sidebarOrder';
+  import { activeSidebarEntry, selectSidebarEntry, revealTicket, claimReveal, type SidebarSection } from '../../stores/sidebarOrder';
   import { settings } from '../../stores/settings';
   import { t } from '../../i18n';
   import { focusTerminal } from '../../utils/focus';
@@ -77,9 +77,11 @@
     $activeSidebarEntry.section === section;
 
   // Keep the row the cursor is on in view. Stepping past the bottom of the
-  // list used to select sessions that were scrolled out of sight.
+  // list used to select sessions that were scrolled out of sight. Only when
+  // the user moved (see revealTicket), not when the list changed under the
+  // cursor — folding the favourites scrolled down to the other copy.
   let rowEl: HTMLDivElement;
-  $: if (isCursor && rowEl) void revealRow();
+  $: if (isCursor && rowEl && claimReveal($revealTicket)) void revealRow();
   async function revealRow() {
     await tick();
     rowEl?.scrollIntoView({ block: 'nearest' });

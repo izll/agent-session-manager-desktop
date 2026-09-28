@@ -30,8 +30,14 @@ const makeSession = (id: string, name: string, extra: Partial<Session> = {}): Se
 
 activeProjectId.set('project-a');
 groups.set([{ id: 'g', name: 'Work group', collapsed: false, color: '', bgColor: '', fullRowColor: false }]);
+// ?many=1 puts forty sessions in the group ahead of the grouped favourite, so
+// its copy there is far below the fold.
+const filler = new URLSearchParams(location.search).get('many') === '1'
+  ? Array.from({ length: 40 }, (_, i) => makeSession(`filler-${i}`, `Filler ${i}`, { groupId: 'g' }))
+  : [];
 sessions.set([
   makeSession('loose', 'Loose fav', { favorite: true }),
+  ...filler,
   makeSession('gfav', 'Grouped fav', { favorite: true, groupId: 'g' }),
   makeSession('gplain', 'Grouped plain', { groupId: 'g' }),
   makeSession('plain', 'Plain one'),

@@ -48,6 +48,33 @@ export const sidebarOrder = derived(
 /** The copy the user last clicked or stepped onto. */
 const cursor = writable<SidebarEntry | null>(null);
 
+/**
+ * When the list should scroll to the cursor row: a new ticket per step or
+ * selection, and each ticket scrolls once.
+ *
+ * The row used to scroll whenever it became the cursor. Folding the
+ * favourites moves the cursor from the favourite's copy to its copy in a
+ * group further down, and the list jumped there although the user had not
+ * moved at all. Only a move by the user asks for the scroll now.
+ */
+export const revealTicket = writable(1);
+let revealed = 0;
+
+/** True once for each ticket: the row that gets it scrolls into view. */
+export function claimReveal(ticket: number): boolean {
+  if (ticket === revealed) return false;
+  revealed = ticket;
+  return true;
+}
+
+function requestReveal() {
+  revealTicket.update((n) => n + 1);
+}
+
+// A selection made anywhere — the palette, quick jump, a notification — is a
+// move too.
+selectedSessionId.subscribe(() => requestReveal());
+
 export const activeSidebarEntry = derived(
   [cursor, selectedSessionId, sidebarOrder],
   ([$cursor, $selectedId, $order]) => resolveActiveEntry($cursor, $selectedId, $order),
@@ -65,6 +92,7 @@ export const activeSidebarEntry = derived(
  */
 export function selectSidebarEntry(id: string, section: SidebarSection) {
   cursor.set({ id, section });
+  requestReveal();
   if (get(selectedSessionId) !== id) selectSession(id);
   else showSessionView();
 }
@@ -77,8 +105,10 @@ function step(delta: 1 | -1) {
   // session: the selection is unchanged, so neither is the view — a step taken
   // on the dashboard does not throw the user out of it just for passing over
   // the favourite's second row.
-  if (entry.id === get(selectedSessionId)) cursor.set(entry);
-  else selectSidebarEntry(entry.id, entry.section);
+  if (entry.id === get(selectedSessionId)) {
+    cursor.set(entry);
+    requestReveal();
+  } else selectSidebarEntry(entry.id, entry.section);
 }
 
 export function selectPrevSession() {

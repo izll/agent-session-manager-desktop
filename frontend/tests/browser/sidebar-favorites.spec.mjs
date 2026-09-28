@@ -71,3 +71,25 @@ test('a search keeps the section folded and counts what matches', async ({ page 
   await page.locator('.search-input').fill('plain');
   await expect(header(page)).toHaveCount(0);
 });
+
+// Folding the favourites moved the cursor from the favourite's copy to its copy
+// in a group far below, and the list scrolled down there although the user
+// had not moved. Only a step or a selection scrolls.
+test('folding the favourites does not scroll to the other copy', async ({ page }) => {
+  await page.goto('/tests/browser/sidebar-favorites-fixture.html?many=1');
+  await expect(page.locator('body')).toHaveAttribute('data-fixture-ready', 'true', { timeout: 15_000 });
+  const list = page.locator('.session-list');
+  const scrollTop = () => list.evaluate((el) => el.scrollTop);
+
+  await page.locator('.session-list .session-name', { hasText: 'Grouped fav' }).first().click();
+  await list.evaluate((el) => { el.scrollTop = 0; });
+  await header(page).click();
+  await page.waitForTimeout(150);
+  expect(await scrollTop()).toBe(0);
+
+  // A step still brings the cursor into view: from the grouped copy, below
+  // the forty fillers, to the next one in the group.
+  await step(page, 'next');
+  await expect(cursorRow(page)).toHaveText('Grouped plain');
+  await expect(page.locator('.session-list .session-item.selected:not(.echo)')).toBeInViewport();
+});
