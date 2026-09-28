@@ -1,7 +1,13 @@
-import { writable, derived, get } from 'svelte/store';
+import { writable, derived, get, readable } from 'svelte/store';
 import { lastActive } from './statusLines';
 import { compareByActivity } from '../utils/activityOrder';
-import { matchesSearch } from '../utils/sessionFilter';
+import {
+  activityFilterFrom,
+  activityTime,
+  isActivityFilterOn,
+  matchesActivityFilter,
+  matchesSearch,
+} from '../utils/sessionFilter';
 import * as App from '../../../wailsjs/go/main/App';
 import type { main } from '../../../wailsjs/go/models';
 import { showSessionView } from './navigation';
@@ -81,56 +87,92 @@ export const selectedSession = derived(
 );
 
 /**
+ * A minute-by-minute clock for the activity filter's time window.
+ *
+ * The session list and the live activity times change only when something
+ * happens, so without this a session that crossed the edge of "last 1 day"
+ * while nothing else moved would stay listed until the next change.
+ */
+const minuteClock = readable(Date.now(), (set) => {
+  const timer = setInterval(() => set(Date.now()), 60_000);
+  // Never the reason a process (a test run) stays alive.
+  (timer as { unref?: () => void }).unref?.();
+  return () => clearInterval(timer);
+});
+
+/** The sidebar's activity filter, from the settings it is saved in. */
+export const sidebarActivityFilter = derived(settings, ($settings) => activityFilterFrom($settings));
+
+/**
+ * Whether a session is shown in the sidebar list: it matches the search and
+ * passes the activity filter. Every list below goes through this one test, so
+ * the sort order cannot change what is shown.
+ *
+ * The time is the live poll's where there is one: the loaded updatedAt is a
+ * snapshot from the last reload and goes stale within seconds.
+ */
+export const sessionVisible = derived(
+  [searchFilter, sidebarActivityFilter, lastActive, minuteClock],
+  ([$searchFilter, $filter, $lastActive, $now]) => {
+    const now = Math.max($now, Date.now());
+    return (s: Session) =>
+      matchesSearch(s, $searchFilter) &&
+      matchesActivityFilter(s, activityTime($lastActive[s.id] || s.updatedAt), $filter, now);
+  },
+);
+
+/**
  * Every session in one flat list, most recently active first.
  *
  * No groups and no favourites section: this view answers "where was I", and a
  * session pinned to the top for being important is not an answer to that. The
  * ordinary list is still there behind the toggle for everything else.
  *
- * Filtered by the search like the grouped lists are. It used to leave the
- * search out, so with the list sorted the search box filtered nothing.
+ * Filtered like the grouped lists are. It used to leave the search out, so
+ * with the list sorted the search box filtered nothing.
  */
 export const sessionsByActivity = derived(
-  [sessions, lastActive, searchFilter],
-  ([$sessions, $lastActive, $searchFilter]) => {
-    const timeOf = (s: Session) => {
-      const stamp = $lastActive[s.id] || s.updatedAt;
-      // A session with no recorded activity sorts last rather than first: an
-      // empty timestamp is "never", not "the beginning of time".
-      const parsed = stamp ? Date.parse(stamp) : 0;
-      // An unparseable stamp is NaN, and a NaN in a comparison silently leaves
-      // the array in whatever order it started in.
-      return Number.isFinite(parsed) ? parsed : 0;
-    };
+  [sessions, lastActive, sessionVisible],
+  ([$sessions, $lastActive, $visible]) => {
+    // A session with no recorded activity sorts last rather than first.
+    const timeOf = (s: Session) => activityTime($lastActive[s.id] || s.updatedAt);
     const now = Date.now();
     return $sessions
-      .filter(s => matchesSearch(s, $searchFilter))
+      .filter($visible)
       .sort((a, b) =>
         compareByActivity({ name: a.name, time: timeOf(a) }, { name: b.name, time: timeOf(b) }, now));
   },
 );
 
 export const favorites = derived(
-  [sessions, searchFilter],
-  ([$sessions, $searchFilter]) =>
-    $sessions.filter(s => s.favorite && matchesSearch(s, $searchFilter)),
+  [sessions, sessionVisible],
+  ([$sessions, $visible]) => $sessions.filter(s => s.favorite && $visible(s)),
 );
 
 export const ungroupedSessions = derived(
-  [sessions, searchFilter],
-  ([$sessions, $searchFilter]) =>
-    $sessions.filter(s => !s.groupId && !s.favorite && matchesSearch(s, $searchFilter)),
+  [sessions, sessionVisible],
+  ([$sessions, $visible]) => $sessions.filter(s => !s.groupId && !s.favorite && $visible(s)),
 );
 
 export const sessionsByGroup = derived(
-  [sessions, groups, searchFilter],
-  ([$sessions, $groups, $searchFilter]) => {
+  [sessions, groups, sessionVisible],
+  ([$sessions, $groups, $visible]) => {
     const result: Map<string, Session[]> = new Map();
     for (const group of $groups) {
-      result.set(group.id, $sessions.filter(s => s.groupId === group.id && matchesSearch(s, $searchFilter)));
+      result.set(group.id, $sessions.filter(s => s.groupId === group.id && $visible(s)));
     }
     return result;
   }
+);
+
+/**
+ * Is anything narrowing the sidebar list — the search or the activity filter?
+ * While it is, groups with nothing left to show are hidden rather than left as
+ * empty headers, and an empty list says it was filtered empty.
+ */
+export const sidebarFiltered = derived(
+  [searchFilter, sidebarActivityFilter],
+  ([$searchFilter, $filter]) => !!$searchFilter.trim() || isActivityFilterOn($filter),
 );
 
 // Actions

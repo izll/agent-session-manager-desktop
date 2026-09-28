@@ -1849,6 +1849,8 @@ export namespace main {
 	    showCodexUsageRing: boolean;
 	    showGeminiUsageRing: boolean;
 	    sortByActivity: boolean;
+	    sidebarHideInactive: boolean;
+	    sidebarActiveWithinDays: number;
 	    dictationSendWithoutEnter: boolean;
 	    codexUseDaemon: boolean;
 	    hideYoloBadge: boolean;
@@ -1913,6 +1915,8 @@ export namespace main {
 	        this.showCodexUsageRing = source["showCodexUsageRing"];
 	        this.showGeminiUsageRing = source["showGeminiUsageRing"];
 	        this.sortByActivity = source["sortByActivity"];
+	        this.sidebarHideInactive = source["sidebarHideInactive"];
+	        this.sidebarActiveWithinDays = source["sidebarActiveWithinDays"];
 	        this.dictationSendWithoutEnter = source["dictationSendWithoutEnter"];
 	        this.codexUseDaemon = source["codexUseDaemon"];
 	        this.hideYoloBadge = source["hideYoloBadge"];

@@ -46,6 +46,10 @@ export interface Settings {
   showGeminiUsageRing: boolean;
   /** Leave dictated text in the composer instead of submitting it. */
   sortByActivity: boolean;
+  /** Sidebar filter: hide the sessions that are not running. */
+  sidebarHideInactive: boolean;
+  /** Sidebar filter: only sessions active in this many days; 0 is off. */
+  sidebarActiveWithinDays: number;
   dictationSendWithoutEnter: boolean;
   /**
    * Let Codex run on its shared background server. Off by default: asmgr then
@@ -156,6 +160,8 @@ function defaultSettings(): Settings {
     showCodexUsageRing: false,
     showGeminiUsageRing: false,
     sortByActivity: false,
+    sidebarHideInactive: false,
+    sidebarActiveWithinDays: 0,
     dictationSendWithoutEnter: false,
     codexUseDaemon: false,
     hideYoloBadge: false,

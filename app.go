@@ -4824,6 +4824,18 @@ func storedViewDefault(value string, allowed ...string) string {
 	return ""
 }
 
+// storedActiveWithinDays keeps the sidebar's activity window to the choices
+// its menu offers. Anything else — a hand-edited config, a value from a later
+// version — means no window, so no session is hidden by a filter the menu
+// cannot show as on or turn off.
+func storedActiveWithinDays(days int) int {
+	switch days {
+	case 1, 7, 30:
+		return days
+	}
+	return 0
+}
+
 // SettingsInfo represents settings for frontend
 type SettingsInfo struct {
 	CompactList     bool `json:"compactList"`
@@ -4835,6 +4847,8 @@ type SettingsInfo struct {
 	ShowCodexUsageRing        bool   `json:"showCodexUsageRing"`
 	ShowGeminiUsageRing       bool   `json:"showGeminiUsageRing"`
 	SortByActivity            bool   `json:"sortByActivity"`
+	SidebarHideInactive       bool   `json:"sidebarHideInactive"`
+	SidebarActiveWithinDays   int    `json:"sidebarActiveWithinDays"`
 	DictationSendWithoutEnter bool   `json:"dictationSendWithoutEnter"`
 	CodexUseDaemon            bool   `json:"codexUseDaemon"`
 	HideYoloBadge             bool   `json:"hideYoloBadge"`
@@ -4963,6 +4977,8 @@ func (a *App) GetSettings() (*SettingsInfo, error) {
 		ShowCodexUsageRing:        settings.ShowCodexUsageRing,
 		ShowGeminiUsageRing:       settings.ShowGeminiUsageRing,
 		SortByActivity:            settings.SortByActivity,
+		SidebarHideInactive:       settings.SidebarHideInactive,
+		SidebarActiveWithinDays:   storedActiveWithinDays(settings.SidebarActiveWithinDays),
 		DictationSendWithoutEnter: settings.DictationSendWithoutEnter,
 		CodexUseDaemon:            settings.CodexUseDaemon,
 		HideYoloBadge:             settings.HideYoloBadge,
@@ -5055,6 +5071,8 @@ func (a *App) SaveSettings(settings SettingsInfo, expectedProjectID string) erro
 		current.ShowCodexUsageRing = settings.ShowCodexUsageRing
 		current.ShowGeminiUsageRing = settings.ShowGeminiUsageRing
 		current.SortByActivity = settings.SortByActivity
+		current.SidebarHideInactive = settings.SidebarHideInactive
+		current.SidebarActiveWithinDays = storedActiveWithinDays(settings.SidebarActiveWithinDays)
 		current.DictationSendWithoutEnter = settings.DictationSendWithoutEnter
 		current.CodexUseDaemon = settings.CodexUseDaemon
 		current.HideYoloBadge = settings.HideYoloBadge

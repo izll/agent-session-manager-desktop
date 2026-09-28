@@ -9,6 +9,8 @@
     sessionsByGroup,
     ungroupedSessions,
     searchFilter,
+    sidebarActivityFilter,
+    sidebarFiltered,
     moveSessionToIndex,
     assignToGroup,
     isLoading
@@ -18,16 +20,91 @@
   import { statusLines, spinnerTexts, tabStatuses, getStatusLine } from '../../stores/statusLines';
   import { settings, saveSettings } from '../../stores/settings';
   import { t } from '../../i18n';
+  import { portal } from '../../utils/portal';
+  import { menuPosition } from '../../utils/menuPosition';
+  import { claimMenu, releaseMenu } from '../../utils/openMenu';
+  import { ACTIVE_WITHIN_CHOICES, isActivityFilterOn, type ActivityFilter } from '../../utils/sessionFilter';
+  import { activeProjectId } from '../../stores/projects';
 
   function toggleSortByActivity() {
     void saveSettings({ sortByActivity: !$settings?.sortByActivity });
   }
-  import { activeProjectId } from '../../stores/projects';
 
+  // The activity filter menu. It stays open while choices are made, so the
+  // two halves — hide inactive and the time window — can be set together.
+  let filterMenuOpen = false;
+  let filterMenuAnchor = { x: 0, y: 0 };
+  let filterButton: HTMLButtonElement;
 
+  const WINDOW_LABELS: Record<number, string> = {
+    0: 'sidebar.filterAnyTime',
+    1: 'sidebar.filterDay',
+    7: 'sidebar.filterWeek',
+    30: 'sidebar.filterMonth',
+  };
 
+  function toggleFilterMenu() {
+    if (filterMenuOpen) {
+      closeFilterMenu();
+      return;
+    }
+    const rect = filterButton.getBoundingClientRect();
+    filterMenuAnchor = { x: rect.left, y: rect.bottom + 4 };
+    filterMenuOpen = true;
+    claimMenu(closeFilterMenu);
+  }
 
-  
+  function closeFilterMenu() {
+    filterMenuOpen = false;
+    releaseMenu(closeFilterMenu);
+  }
+
+  function handleWindowKeydown(e: KeyboardEvent) {
+    if (filterMenuOpen && e.key === 'Escape') {
+      e.stopPropagation();
+      closeFilterMenu();
+    }
+  }
+
+  function toggleHideInactive() {
+    void saveSettings({ sidebarHideInactive: !$sidebarActivityFilter.hideInactive });
+  }
+
+  function setActiveWithin(days: number) {
+    void saveSettings({ sidebarActiveWithinDays: days });
+  }
+
+  /** Everything that narrows the list, search included, back off. */
+  function clearFilters() {
+    closeFilterMenu();
+    searchFilter.set('');
+    if (isActivityFilterOn($sidebarActivityFilter)) {
+      void saveSettings({ sidebarHideInactive: false, sidebarActiveWithinDays: 0 });
+    }
+  }
+
+  /** The tooltip: what the button does, or what is filtered while it is on. */
+  function filterTitle(filter: ActivityFilter, translate: typeof $t): string {
+    if (!isActivityFilterOn(filter)) return translate('sidebar.filter');
+    const parts: string[] = [];
+    if (filter.hideInactive) parts.push(translate('sidebar.filterHideInactive'));
+    if (filter.activeWithinDays > 0) parts.push(translate(WINDOW_LABELS[filter.activeWithinDays]));
+    return translate('sidebar.filterActive', { filters: parts.join(' · ') });
+  }
+
+  $: activityFilterOn = isActivityFilterOn($sidebarActivityFilter);
+  $: filterButtonTitle = filterTitle($sidebarActivityFilter, $t);
+
+  // Nothing left on screen although the project has sessions: the search or
+  // the filter emptied the list, and it has to say so.
+  $: listEmpty = $settings?.sortByActivity
+    ? $sessionsByActivity.length === 0
+    : $favorites.length === 0 && $ungroupedSessions.length === 0 &&
+      Array.from($sessionsByGroup.values()).every((arr) => arr.length === 0);
+  // While filtering, a group with nothing left to show is hidden.
+  $: visibleGroupCount = $sidebarFiltered
+    ? $groups.filter((g) => ($sessionsByGroup.get(g.id) || []).length > 0).length
+    : $groups.length;
 
   export let onNewSession: () => void;
   export let onNewGroup: () => void;
@@ -163,6 +240,8 @@
   })();
 </script>
 
+<svelte:window on:click={() => filterMenuOpen && closeFilterMenu()} on:keydown={handleWindowKeydown} />
+
 <div class="session-tree" class:compact={$settings?.compactList}>
   <!-- Status Summary -->
   {#if $sessions.length > 0}
@@ -213,7 +292,67 @@
         <path d="M19 8v11M16 16l3 3 3-3"/>
       </svg>
     </button>
+    <!-- Filtering: hides sessions by whether they run and how recently they
+         did anything. Applies in either order. -->
+    <button
+      bind:this={filterButton}
+      class="sort-toggle filter-toggle"
+      class:active={activityFilterOn}
+      class:open={filterMenuOpen}
+      title={filterButtonTitle}
+      aria-label={filterButtonTitle}
+      aria-haspopup="menu"
+      aria-expanded={filterMenuOpen}
+      on:click|stopPropagation={toggleFilterMenu}
+    >
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M3 5h18l-7 8.5V19l-4 2v-7.5L3 5z"/>
+      </svg>
+      {#if activityFilterOn}<span class="filter-dot"></span>{/if}
+    </button>
   </div>
+
+  {#if filterMenuOpen}
+    <div
+      class="context-menu filter-menu"
+      role="menu"
+      tabindex="-1"
+      use:portal
+      use:menuPosition={filterMenuAnchor}
+      on:click|stopPropagation
+      on:keydown={handleWindowKeydown}
+    >
+      <button
+        class="context-menu-item"
+        role="menuitemcheckbox"
+        aria-checked={$sidebarActivityFilter.hideInactive}
+        on:click={toggleHideInactive}
+      >
+        <span class="menu-check">{#if $sidebarActivityFilter.hideInactive}✓{/if}</span>
+        {$t('sidebar.filterHideInactive')}
+      </button>
+      <div class="menu-separator"></div>
+      <div class="menu-label">{$t('sidebar.filterLastActivity')}</div>
+      {#each ACTIVE_WITHIN_CHOICES as days (days)}
+        <button
+          class="context-menu-item"
+          role="menuitemradio"
+          aria-checked={$sidebarActivityFilter.activeWithinDays === days}
+          on:click={() => setActiveWithin(days)}
+        >
+          <span class="menu-check">{#if $sidebarActivityFilter.activeWithinDays === days}✓{/if}</span>
+          {$t(WINDOW_LABELS[days])}
+        </button>
+      {/each}
+      {#if activityFilterOn}
+        <div class="menu-separator"></div>
+        <button class="context-menu-item" on:click={clearFilters}>
+          <span class="menu-check"></span>
+          {$t('sidebar.filterClear')}
+        </button>
+      {/if}
+    </div>
+  {/if}
 
   <!-- Session List -->
   <!-- svelte-ignore a11y-no-static-element-interactions -->
@@ -226,9 +365,10 @@
       {#each $sessionsByActivity as session (session.id)}
         <SessionItem {session} index={$sessions.findIndex(s => s.id === session.id)} favoriteSlot={favoriteSlot(session.id)} activity={getActivity(session.id, $activities)} statusLine={getStatusLine(session.id, $statusLines)} spinnerText={$spinnerTexts[session.id] || ''} tabStatuses={$tabStatuses[session.id] || []} on:drop={handleSessionDrop} />
       {/each}
-      {#if $sessions.length > 0 && $sessionsByActivity.length === 0}
+      {#if $sessions.length > 0 && listEmpty}
         <div class="no-matches">
-          {$t('sidebar.noMatches')}
+          {activityFilterOn ? $t('sidebar.filterNoMatches') : $t('sidebar.noMatches')}
+          <button class="clear-filter-btn" on:click={clearFilters}>{$t('sidebar.filterClear')}</button>
         </div>
       {/if}
     {:else}
@@ -246,7 +386,7 @@
     {/if}
 
     <!-- Sessions header (after favorites) -->
-    {#if $groups.length > 0 || $ungroupedSessions.length > 0}
+    {#if visibleGroupCount > 0 || $ungroupedSessions.length > 0}
       <div
         class="section-header sessions-label"
         on:dragover={handleUngroupedDragOver}
@@ -264,7 +404,7 @@
          every group (the user wants to see the structure). -->
     {#each $groups as group, i (group.id)}
       {@const groupSessions = $sessionsByGroup.get(group.id) || []}
-      {#if !$searchFilter.trim() || groupSessions.length > 0}
+      {#if !$sidebarFiltered || groupSessions.length > 0}
         <GroupItem
           {group}
           sessions={groupSessions}
@@ -288,13 +428,13 @@
          Without this the empty state appears first and says there are no
          sessions — which on a slow multiplexer is both alarming and wrong. The
          store has always known; nothing was asking it. -->
-    {#if $isLoading && $favorites.length === 0 && $groups.length === 0 && $ungroupedSessions.length === 0}
+    {#if $isLoading && $sessions.length === 0 && $groups.length === 0}
       <div class="empty-state">
         <div class="loading-spinner"></div>
         <p>{$t('common.loading')}</p>
       </div>
     <!-- Empty state -->
-    {:else if $favorites.length === 0 && $groups.length === 0 && $ungroupedSessions.length === 0}
+    {:else if $sessions.length === 0 && $groups.length === 0}
       <div class="empty-state">
         <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
           <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
@@ -304,12 +444,13 @@
           {$t('sidebar.createFirst')}
         </button>
       </div>
-    {:else if $searchFilter.trim() && $favorites.length === 0 && $ungroupedSessions.length === 0 && Array.from($sessionsByGroup.values()).every((arr) => arr.length === 0)}
+    {:else if $sidebarFiltered && listEmpty}
       <!-- Filter is active but nothing matches anywhere. Without this the
            sidebar looks blankly empty and the user can't tell whether the
            filter wiped everything out or the project is actually empty. -->
       <div class="no-matches">
-        {$t('sidebar.noMatches')}
+        {activityFilterOn ? $t('sidebar.filterNoMatches') : $t('sidebar.noMatches')}
+        <button class="clear-filter-btn" on:click={clearFilters}>{$t('sidebar.filterClear')}</button>
       </div>
     {/if}
     {/if}
@@ -763,5 +904,98 @@
     background: var(--accent);
     border-color: var(--accent);
     color: #fff;
+  }
+
+  /* Room for the dot that says a filter is on, beside the accent fill: the
+     fill alone reads the same as the sort toggle next to it. */
+  .filter-toggle {
+    position: relative;
+  }
+
+  .filter-toggle.open:not(.active) {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+  }
+
+  .filter-dot {
+    position: absolute;
+    top: -3px;
+    right: -3px;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--accent-light);
+    border: 1px solid var(--bg-secondary);
+  }
+
+  /* The filter menu, in the look of the session context menu. */
+  .context-menu {
+    position: fixed;
+    z-index: 1000;
+    min-width: 200px;
+    background: var(--bg-raised);
+    border: 1px solid rgba(var(--accent-rgb), 0.3);
+    border-radius: 8px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+    padding: 4px;
+  }
+
+  .context-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 7px 12px 7px 8px;
+    font-size: 13px;
+    color: #e4e4e7;
+    background: none;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    text-align: left;
+  }
+
+  .context-menu-item:hover {
+    background: rgba(var(--accent-rgb), 0.15);
+  }
+
+  .menu-check {
+    width: 14px;
+    flex-shrink: 0;
+    text-align: center;
+    color: var(--accent-light);
+  }
+
+  .menu-separator {
+    height: 1px;
+    margin: 4px 6px;
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  .menu-label {
+    padding: 4px 12px 2px 30px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #6b7280;
+  }
+
+  .clear-filter-btn {
+    display: block;
+    margin: 8px auto 0;
+    padding: 4px 10px;
+    font-size: 12px;
+    font-style: normal;
+    color: var(--accent-light);
+    background: rgba(var(--accent-rgb), 0.1);
+    border: 1px solid rgba(var(--accent-rgb), 0.3);
+    border-radius: 6px;
+    cursor: pointer;
+  }
+
+  .clear-filter-btn:hover {
+    background: rgba(var(--accent-rgb), 0.2);
   }
 </style>

@@ -1,52 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { build } from 'esbuild';
+import { loadSidebarStores } from './sidebarStores.mjs';
 
-// The real stores, bundled with only the backend stubbed out: the bug lived in
-// which derived list the search reached, so the derivations have to run.
-const root = new URL('../', import.meta.url);
-const rootDir = fileURLToPath(root);
-const treeSrc = readFileSync(new URL('src/lib/components/Sidebar/SessionTree.svelte', root), 'utf8');
-
-const bindings = readFileSync(new URL('wailsjs/go/main/App.d.ts', root), 'utf8');
-const appMethods = [...new Set([...bindings.matchAll(/export function ([A-Za-z0-9_]+)/g)].map(m => m[1]))];
-
-const result = await build({
-  stdin: {
-    contents: `
-      export { get } from 'svelte/store';
-      export * from './src/lib/stores/sidebarOrder.ts';
-      export { sessions, groups, searchFilter, sessionsByActivity, selectedSessionId } from './src/lib/stores/sessions.ts';
-      export { settings } from './src/lib/stores/settings.ts';
-      export { lastActive } from './src/lib/stores/statusLines.ts';
-    `,
-    resolveDir: rootDir,
-    loader: 'ts',
-  },
-  bundle: true,
-  write: false,
-  format: 'esm',
-  platform: 'node',
-  plugins: [{
-    name: 'sidebar-backend-stub',
-    setup(api) {
-      api.onResolve({ filter: /wailsjs\/go\/main\/App$/ }, () => ({ path: 'app', namespace: 'stub' }));
-      api.onResolve({ filter: /utils\/terminal$/ }, () => ({ path: 'terminal', namespace: 'stub' }));
-      api.onLoad({ filter: /^app$/, namespace: 'stub' }, () => ({
-        contents: appMethods.map(n => `export const ${n} = async () => undefined;`).join('\n'),
-        loader: 'js',
-      }));
-      api.onLoad({ filter: /^terminal$/, namespace: 'stub' }, () => ({
-        contents: `export const defaultTerminalRenderer = () => 'dom';`,
-        loader: 'js',
-      }));
-    },
-  }],
-});
-const s = await import(
-  `data:text/javascript;base64,${Buffer.from(result.outputFiles[0].text).toString('base64')}`);
+// The real stores with only the backend stubbed out: the bug lived in which
+// derived list the search reached, so the derivations have to run.
+const treeSrc = readFileSync(
+  new URL('../src/lib/components/Sidebar/SessionTree.svelte', import.meta.url), 'utf8');
+const s = await loadSidebarStores();
 
 const session = (id, name, extra = {}) => ({
   id, name, notes: '', groupId: '', favorite: false, status: 'stopped', updatedAt: '', ...extra,

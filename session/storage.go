@@ -144,6 +144,12 @@ type Settings struct {
 	// a session pinned for being important is not an answer to where the work
 	// was left off.
 	SortByActivity bool `json:"sort_by_activity,omitempty"`
+	// SidebarHideInactive hides the sessions that are not running from the
+	// sidebar list. SidebarActiveWithinDays hides the ones that last did
+	// anything longer ago than that many days; 0 shows every age. The two
+	// combine, and both apply whichever way the list is sorted.
+	SidebarHideInactive     bool `json:"sidebar_hide_inactive,omitempty"`
+	SidebarActiveWithinDays int  `json:"sidebar_active_within_days,omitempty"`
 	// DictationSendWithoutEnter leaves the dictated text in the agent's
 	// composer instead of submitting it.
 	//
