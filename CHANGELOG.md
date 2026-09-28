@@ -6,6 +6,35 @@ Entries describe what changed for someone using the app. Internal refactoring,
 test and CI work is left out unless it changed behaviour. Dates are release
 dates; the format follows [Keep a Changelog](https://keepachangelog.com).
 
+## 1.1.17 — 2026-09-28
+
+### Added
+
+- **Filter the session list by activity.** A filter button beside the sort
+  toggle hides sessions that are not running, and keeps those active in the
+  last day, 7 days or 30 days; the two combine, so "last 7 days" with
+  "hide inactive" leaves the running sessions that worked this week. The
+  filter works with the search and in both sort orders, the previous/next
+  session shortcuts step only through what is shown, and the choice is kept.
+- **Uncaught frontend errors are written to the app log**, so a problem that
+  shows on one machine only can be traced.
+
+### Changed
+
+- **Every dialog has the Settings dialog's look:** the same header, title,
+  close button, padding and buttons. A long title is cut to one line with
+  the full text in a tooltip, and extra header buttons sit beside the close
+  button in the same size.
+
+### Fixed
+
+- **The session search did nothing in the activity-sorted list.**
+- **Ctrl+K opened nothing, and every shortcut after it stopped working**, on
+  a session whose store held several records for one tab. The palette, and
+  a stopped session's tab bar, now list one tab per index.
+- **Escape closes the command palette wherever the focus is**, and goes no
+  further.
+
 ## 1.1.16 — 2026-09-26
 
 ### Added
