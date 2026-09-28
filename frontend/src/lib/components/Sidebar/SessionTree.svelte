@@ -226,6 +226,11 @@
       {#each $sessionsByActivity as session (session.id)}
         <SessionItem {session} index={$sessions.findIndex(s => s.id === session.id)} favoriteSlot={favoriteSlot(session.id)} activity={getActivity(session.id, $activities)} statusLine={getStatusLine(session.id, $statusLines)} spinnerText={$spinnerTexts[session.id] || ''} tabStatuses={$tabStatuses[session.id] || []} on:drop={handleSessionDrop} />
       {/each}
+      {#if $sessions.length > 0 && $sessionsByActivity.length === 0}
+        <div class="no-matches">
+          {$t('sidebar.noMatches')}
+        </div>
+      {/if}
     {:else}
     <!-- Favorites -->
     {#if $favorites.length > 0}

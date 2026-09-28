@@ -56,7 +56,9 @@ test('equal timestamps fall back to the name', () => {
 test('the source list is not sorted in place', () => {
   const at2 = storeSrc.indexOf('export const sessionsByActivity');
   const body = storeSrc.slice(at2, storeSrc.indexOf('\n);', at2));
-  assert.ok(body.includes('[...$sessions]'),
+  // The search filter copies the array before the sort; without it, a spread
+  // has to.
+  assert.ok(/\$sessions\s*\.filter\(/.test(body) || body.includes('[...$sessions]'),
     'sorting $sessions directly mutates the store array every derivation');
 });
 
@@ -84,7 +86,7 @@ test('the live poll time takes precedence over the loaded one', () => {
   const at = storeSrc.indexOf('export const sessionsByActivity');
   const decl = storeSrc.slice(at, storeSrc.indexOf('\n);', at));
 
-  assert.match(decl, /\[sessions, lastActive\]/,
+  assert.match(decl, /\[sessions, lastActive\b/,
     'the ordering does not depend on the live activity times, so it goes stale');
 
   const timeOfAt = storeSrc.indexOf('const timeOf =', at);

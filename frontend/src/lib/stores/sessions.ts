@@ -1,6 +1,7 @@
 import { writable, derived, get } from 'svelte/store';
 import { lastActive } from './statusLines';
 import { compareByActivity } from '../utils/activityOrder';
+import { matchesSearch } from '../utils/sessionFilter';
 import * as App from '../../../wailsjs/go/main/App';
 import type { main } from '../../../wailsjs/go/models';
 import { showSessionView } from './navigation';
@@ -85,10 +86,13 @@ export const selectedSession = derived(
  * No groups and no favourites section: this view answers "where was I", and a
  * session pinned to the top for being important is not an answer to that. The
  * ordinary list is still there behind the toggle for everything else.
+ *
+ * Filtered by the search like the grouped lists are. It used to leave the
+ * search out, so with the list sorted the search box filtered nothing.
  */
 export const sessionsByActivity = derived(
-  [sessions, lastActive],
-  ([$sessions, $lastActive]) => {
+  [sessions, lastActive, searchFilter],
+  ([$sessions, $lastActive, $searchFilter]) => {
     const timeOf = (s: Session) => {
       const stamp = $lastActive[s.id] || s.updatedAt;
       // A session with no recorded activity sorts last rather than first: an
@@ -99,58 +103,32 @@ export const sessionsByActivity = derived(
       return Number.isFinite(parsed) ? parsed : 0;
     };
     const now = Date.now();
-    return [...$sessions].sort((a, b) =>
-      compareByActivity({ name: a.name, time: timeOf(a) }, { name: b.name, time: timeOf(b) }, now));
+    return $sessions
+      .filter(s => matchesSearch(s, $searchFilter))
+      .sort((a, b) =>
+        compareByActivity({ name: a.name, time: timeOf(a) }, { name: b.name, time: timeOf(b) }, now));
   },
 );
 
 export const favorites = derived(
   [sessions, searchFilter],
-  ([$sessions, $searchFilter]) => {
-    let filtered = $sessions.filter(s => s.favorite);
-    if ($searchFilter) {
-      const lower = $searchFilter.toLowerCase();
-      filtered = filtered.filter(s =>
-        s.name.toLowerCase().includes(lower) ||
-        s.notes?.toLowerCase().includes(lower)
-      );
-    }
-    return filtered;
-  }
+  ([$sessions, $searchFilter]) =>
+    $sessions.filter(s => s.favorite && matchesSearch(s, $searchFilter)),
 );
 
 export const ungroupedSessions = derived(
   [sessions, searchFilter],
-  ([$sessions, $searchFilter]) => {
-    let filtered = $sessions.filter(s => !s.groupId && !s.favorite);
-    if ($searchFilter) {
-      const lower = $searchFilter.toLowerCase();
-      filtered = filtered.filter(s =>
-        s.name.toLowerCase().includes(lower) ||
-        s.notes?.toLowerCase().includes(lower)
-      );
-    }
-    return filtered;
-  }
+  ([$sessions, $searchFilter]) =>
+    $sessions.filter(s => !s.groupId && !s.favorite && matchesSearch(s, $searchFilter)),
 );
 
 export const sessionsByGroup = derived(
   [sessions, groups, searchFilter],
   ([$sessions, $groups, $searchFilter]) => {
     const result: Map<string, Session[]> = new Map();
-
     for (const group of $groups) {
-      let groupSessions = $sessions.filter(s => s.groupId === group.id);
-      if ($searchFilter) {
-        const lower = $searchFilter.toLowerCase();
-        groupSessions = groupSessions.filter(s =>
-          s.name.toLowerCase().includes(lower) ||
-          s.notes?.toLowerCase().includes(lower)
-        );
-      }
-      result.set(group.id, groupSessions);
+      result.set(group.id, $sessions.filter(s => s.groupId === group.id && matchesSearch(s, $searchFilter)));
     }
-
     return result;
   }
 );
