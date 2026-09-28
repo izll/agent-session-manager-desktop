@@ -255,6 +255,20 @@ if (!target) throw new Error('fixture target is missing');
 const requestedMode = new URLSearchParams(location.search).get('mode');
 const mode = requestedMode === 'palette' || requestedMode === 'command' || requestedMode === 'history' || requestedMode === 'quickjump' || requestedMode === 'quickterminal' || requestedMode === 'scheme' || requestedMode === 'import' || requestedMode === 'sessionfile' || requestedMode === 'alltasks' || requestedMode === 'taskbadge' || requestedMode === 'dashboard' || requestedMode === 'recovery' || requestedMode === 'update' || requestedMode === 'settings' || requestedMode === 'newsession' || requestedMode === 'newgroup' || requestedMode === 'bgagents' || requestedMode === 'fork' || requestedMode === 'commandmanager' || requestedMode === 'template'
   ? requestedMode : 'global';
+// A session from an old store with three records on one index — as found on
+// a user's machine, where it made the command palette throw on opening.
+if (mode === 'palette' && new URLSearchParams(location.search).get('dupTabs') === '1') {
+  const tab = (id: string, name: string, agent: string) => ({ index: 1, id, name, agent });
+  sessions.set([{
+    id: 'session-dups', name: 'Dup tabs', path: '/repo-dups', status: 'stopped', agent: 'claude',
+    color: '', bgColor: '', fullRowColor: false, groupId: '', autoYes: false,
+    hideStatusLine: false, notes: '', favorite: false, resumeSessionId: '',
+    followedWindows: [tab('t1', 'Terminal', 'terminal'), tab('t2', 'codex tab', 'codex'), tab('t3', 'codex tab', 'codex')],
+    tabOrder: [], mainWindowStopped: false, extraArgs: '', tabTextColor: '', tabBackgroundColor: '',
+    terminalTheme: '', terminalFontSize: 0, hideViewBar: 0, hideStatusBar: 0,
+    mainWindowIndex: 0, lastWindowIndex: 0, isGitRepo: false,
+  }]);
+}
 if (mode === 'newgroup' || mode === 'bgagents' || mode === 'fork') {
   activeProjectId.set('project-a');
   sessions.set([{

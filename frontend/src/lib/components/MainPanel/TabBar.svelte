@@ -1,5 +1,6 @@
 <script lang="ts">
   import { sortByTabOrder } from '../../utils/tabOrder';
+  import { firstPerIndex } from '../../utils/firstPerIndex';
   import { keyClaimedByDialog } from '../../utils/dialogKeys';
   import { onMount, onDestroy, createEventDispatcher, tick } from 'svelte';
   import { claimMenu, releaseMenu } from '../../utils/openMenu';
@@ -1020,7 +1021,7 @@
 
       if (sess.followedWindows && sess.followedWindows.length > 0) {
         // Convert followedWindows to window format for display
-        const followedTabs = sess.followedWindows.map((fw: any) => ({
+        const followedTabs = firstPerIndex(sess.followedWindows, (fw: any) => fw.index, 0).map((fw: any) => ({
           Index: fw.index,
           Name: fw.name || `Tab ${fw.index}`,
           Agent: fw.agent || sess.agent,

@@ -126,7 +126,7 @@
             <AgentIcon agent={session.agent} size="xs" />
             {session.agent}
           </span>
-          {#each tabs as tab (tab.index)}
+          {#each tabs as tab (tab.id || tab.index)}
             <span class="summary-chip">
               <AgentIcon agent={tab.agent} size="xs" />
               {tab.name || tab.agent}

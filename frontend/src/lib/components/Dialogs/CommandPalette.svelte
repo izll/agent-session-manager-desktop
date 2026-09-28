@@ -15,6 +15,7 @@
   import { GetSessionTemplates } from '../../../../wailsjs/go/main/App';
   import type { main } from '../../../../wailsjs/go/models';
   import { t } from '../../i18n';
+  import { firstPerIndex } from '../../utils/firstPerIndex';
 
   export let show = false;
 
@@ -293,7 +294,7 @@
           }
         });
       }
-      for (const tab of session.followedWindows || []) {
+      for (const tab of firstPerIndex(session.followedWindows, (fw: any) => fw.index, session.mainWindowIndex ?? 0)) {
         result.push({
           id: `tab:${session.id}:${tab.index}`,
           category: $t('palette.tabs'),

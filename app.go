@@ -3553,8 +3553,13 @@ func (a *App) getSidebarUpdates(ctx context.Context) SidebarUpdate {
 				hideLine bool
 			}
 			windows := []windowInfo{{idx: mainWindowIdx, agent: mainAgent, name: inst.Name, hideLine: inst.HideStatusLine}}
+			// An old store can hold two records for one index. They are one
+			// pane, with one reading; listing both gave the UI two tabs under
+			// one key, which a keyed list refuses by throwing.
+			listed := map[int]bool{mainWindowIdx: true}
 			for _, fw := range inst.FollowedWindows {
-				if fw.Index != mainWindowIdx && !fw.Stopped {
+				if !listed[fw.Index] && !fw.Stopped {
+					listed[fw.Index] = true
 					name := fw.Name
 					if name == "" {
 						name = string(fw.Agent)
