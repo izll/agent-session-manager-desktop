@@ -363,7 +363,26 @@
     claimKeyForDialog();
     e.stopPropagation();
   }
+
+  /**
+   * Escape closes the palette wherever the focus is.
+   *
+   * handleKeydown sits on the palette, so it only heard keys while the focus
+   * was inside it. A click beside the search field — on the list's padding,
+   * or past the palette — moves the focus to the page, and Escape then did
+   * nothing. Caught at the window in the capture phase, and stopped there,
+   * so it reaches neither the terminal nor anything else behind the palette.
+   */
+  function handleWindowKeydown(e: KeyboardEvent) {
+    if (!show || e.key !== 'Escape' || e.isComposing) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    claimKeyForDialog();
+    if (!busy) close();
+  }
 </script>
+
+<svelte:window on:keydown|capture={handleWindowKeydown} />
 
 {#if show}
   <div class="dialog-overlay palette-overlay" role="presentation">
