@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onDestroy, tick } from 'svelte';
-  import { requestFileJump } from '../../stores/fileJump';
+  import { requestFileJump, requestFolderJump } from '../../stores/fileJump';
 
   /**
    * Leave the diff for the file browser, where the file can be edited.
@@ -143,6 +143,21 @@
   import { parseHunkHeader, hasOneSide } from '../../utils/sideBySide';
   import { diffTakesFocusFrom } from '../../utils/diffFocus';
   import { activeProjectId } from '../../stores/projects';
+  import { portal } from '../../utils/portal';
+  import { menuPosition } from '../../utils/menuPosition';
+  import { claimMenu, releaseMenu } from '../../utils/openMenu';
+  import { describeBackendError } from '../../utils/backendError';
+  import { diffHiddenRules, hiddenRepoFor, knownHiddenRepo, hideInDiff, showInDiff } from '../../stores/diffHidden';
+  import {
+    extensionPattern,
+    folderOf,
+    hiddenByCount,
+    isHidden,
+    normaliseRule,
+    rulesHiding,
+    splitHidden,
+    standaloneRules,
+  } from '../../utils/diffHidden';
 
   export let active = false;
   /** Take the keyboard when shown. Only the full diff: the one above a
@@ -251,6 +266,127 @@
   let pendingRevert: { target: DiffTarget; run: () => Promise<void> } | null = null;
   let loadedRoot = '';
 
+  // --- Hidden files -------------------------------------------------------
+  //
+  // Files kept out of this view — by the view only: nothing is written to
+  // git. See utils/diffHidden for what a rule can say, and stores/diffHidden
+  // for where the rules are kept (per repository, by the backend).
+
+  /** The repository the loaded diff is of, as the rules are keyed; '' while
+   *  unknown or outside one, when hiding is not offered. */
+  let hiddenRepo = '';
+
+  function hiddenRulesOf(repo: string, all: Record<string, string[]>): string[] {
+    return repo ? all[repo] ?? [] : [];
+  }
+
+  $: hiddenRules = hiddenRulesOf(hiddenRepo, $diffHiddenRules);
+  $: hiddenSplit = splitHidden(files, hiddenRules);
+  /** What every tab but Skipped works from. */
+  $: shownFiles = hiddenSplit.shown;
+  /** Hidden files that have changes right now — the Skipped tab. */
+  $: skippedFiles = hiddenSplit.hidden;
+  /** Rules with a row of their own in the Skipped tab. */
+  $: skippedRules = standaloneRules(hiddenRules, skippedFiles);
+
+  // Shown in the banner above the panes; a refused rule is something the user
+  // can act on, so it is not only logged.
+  let hideError = '';
+
+  async function hideRule(rule: string) {
+    closeFileMenu();
+    const sessionId = get(selectedSessionId);
+    const root = loadedRoot;
+    if (!sessionId || !root || !hiddenRepo) return false;
+    try {
+      await hideInDiff(sessionId, tabIdx(), root, rule);
+      hideError = '';
+      return true;
+    } catch (e) {
+      hideError = describeBackendError(e);
+      return false;
+    }
+  }
+
+  async function showRules(rules: string[]) {
+    closeFileMenu();
+    const sessionId = get(selectedSessionId);
+    const root = loadedRoot;
+    if (!sessionId || !root || !hiddenRepo || !rules.length) return;
+    try {
+      await showInDiff(sessionId, tabIdx(), root, rules);
+      hideError = '';
+    } catch (e) {
+      hideError = describeBackendError(e);
+    }
+  }
+
+  /** Show a hidden file again: every rule that hides it goes, including a
+   *  folder or pattern — the button says so in its tooltip. */
+  function showFileAgain(path: string) {
+    void showRules(rulesHiding(hiddenRules, path));
+  }
+
+  // The Skipped tab's own box, for a folder or pattern typed in.
+  let newRule = '';
+
+  async function addTypedRule() {
+    const rule = normaliseRule(newRule);
+    if (!rule) return;
+    if (await hideRule(rule)) newRule = '';
+  }
+
+  // Takes the rules and the translate function rather than reading them:
+  // called from the markup, Svelte re-runs it only when its arguments change.
+  function showAgainTitle(path: string, rules: string[], tr: typeof $t): string {
+    const by = rulesHiding(rules, path).filter((rule) => rule !== path);
+    return by.length
+      ? tr('diff.hidden.showAgainRule', { rules: by.join(', ') })
+      : tr('diff.hidden.showAgain');
+  }
+
+  // --- File context menu --------------------------------------------------
+
+  type FileMenu = { x: number; y: number; path: string; kind: 'file' | 'dir'; status: string };
+  let fileMenu: FileMenu | null = null;
+
+  function openFileMenu(e: MouseEvent, path: string, kind: 'file' | 'dir', status = '') {
+    e.preventDefault();
+    e.stopPropagation();
+    let x = e.clientX;
+    let y = e.clientY;
+    // The keyboard's menu key (or Shift+F10) opens it with no pointer: put it
+    // under the row instead of in the window's corner.
+    if (!x && !y && e.currentTarget instanceof HTMLElement) {
+      const box = e.currentTarget.getBoundingClientRect();
+      x = box.left + 24;
+      y = box.bottom;
+    }
+    fileMenu = { x, y, path, kind, status };
+    // A right-click fires contextmenu, not click, so the window listener that
+    // closes menus never sees it — without this, another menu stays open.
+    claimMenu(closeFileMenu);
+  }
+
+  function closeFileMenu() {
+    if (!fileMenu) return;
+    fileMenu = null;
+    releaseMenu(closeFileMenu);
+  }
+
+  // The menu's entries take their target as an argument, read before the menu
+  // closes: the markup's `menu` and `folder` are gone once it has.
+  function showFileInFiles(path: string) {
+    closeFileMenu();
+    openFileInBrowser(path);
+  }
+
+  /** The browser names a folder without its trailing slash. */
+  function showFolderInFiles(dir: string) {
+    closeFileMenu();
+    requestFolderJump(dir.replace(/\/+$/, ''));
+  }
+
   function currentTarget(): DiffTarget | null {
     const sessionId = get(selectedSessionId);
     if (!sessionId) return null;
@@ -301,6 +437,7 @@
     stopPaneResize();
     // Where the review had got to, so coming back resumes rather than restarts.
     savePlace();
+    closeFileMenu();
   });
 
   function resetCopyState() {
@@ -362,6 +499,7 @@
       selectedPath = null;
       loadedDiffKey = '';
       loadedRoot = '';
+      hiddenRepo = '';
       resetCopyState();
       error = '';
       return;
@@ -396,6 +534,9 @@
       const rootCacheKey = `${requestedKey}\x1f${root}`;
       if (loadedDiffKey !== requestedKey || loadedRoot !== root) {
         const cached = cachedDiff(rootCacheKey) as { diff: DiffData | null; files: session.DiffFileSummary[] } | null;
+        // The hidden files come with the list: shown without them, a cached
+        // list would flash every hidden file for as long as the rules took.
+        hiddenRepo = knownHiddenRepo(sessionId, windowIdx, root);
         if (cached) {
           diff = cached.diff;
           files = cached.files;
@@ -408,9 +549,15 @@
           resetCopyState();
         }
       }
+      // Asked alongside the list rather than after it, so the first load of a
+      // repository does not show its hidden files and then take them away.
+      const repoRequest = hiddenRepoFor(sessionId, windowIdx, root);
       const fileResult = mode === 'session'
         ? await App.GetSessionDiffFileList(sessionId, windowIdx, root)
         : await App.GetFullDiffFileList(sessionId, windowIdx, root);
+      if (generation !== loadGeneration || projectId !== get(activeProjectId) || sessionId !== get(selectedSessionId) ||
+          windowIdx !== tabIdx() || mode !== diffMode || !active) return;
+      const repo = await repoRequest;
       if (generation !== loadGeneration || projectId !== get(activeProjectId) || sessionId !== get(selectedSessionId) ||
           windowIdx !== tabIdx() || mode !== diffMode || !active) return;
       const summaries = fileResult || [];
@@ -432,6 +579,7 @@
       }
       diff = { content: '', added: totals.added, removed: totals.removed };
       files = summaries;
+      hiddenRepo = repo;
       loadedDiffKey = requestedKey;
       loadedRoot = root;
       syncSelection();
@@ -442,6 +590,7 @@
       error = String(e);
       diff = null;
       files = [];
+      hiddenRepo = '';
       selectedPath = null;
       loadedDiffKey = '';
       resetCopyState();
@@ -481,7 +630,16 @@
       selectedPath = null;
       return;
     }
+    // Any file in the diff keeps the selection, hidden or not: a hidden file
+    // opened from the Skipped tab stays open across the reload.
     if (selectedPath && files.some(f => f.path === selectedPath)) return;
+    // Otherwise only a file on show is picked. Opening on a hidden one would
+    // put on screen the very file the user asked not to see.
+    const shown = splitHidden(files, hiddenRulesOf(hiddenRepo, get(diffHiddenRules))).shown;
+    if (shown.length === 0) {
+      selectedPath = null;
+      return;
+    }
 
     // Back to what was open before the tab switch, if it is still in the diff.
     const sessionId = get(selectedSessionId);
@@ -494,9 +652,9 @@
         get(settings).diffLastFile?.[`${sessionId}:${tabIdx()}:${diffMode}`] ??
         get(settings).diffLastFile?.[sessionId]
       : null;
-    selectedPath = remembered && files.some(f => f.path === remembered)
+    selectedPath = remembered && shown.some(f => f.path === remembered)
       ? remembered
-      : files[0].path;
+      : shown[0].path;
   }
 
   // Reload when session changes — but ONLY while the Diff tab is actually
@@ -851,7 +1009,9 @@
   // Order is deliberate: modified first (the usual work), then added, then
   // renamed, then deleted last (least often what you came to look at).
   const GROUP_ORDER = ['modified', 'added', 'renamed', 'deleted'] as const;
-  type StatusFilter = 'all' | typeof GROUP_ORDER[number];
+  // 'skipped' lists the files hidden from the others — last, because it is the
+  // one tab that is not about what the change did.
+  type StatusFilter = 'all' | typeof GROUP_ORDER[number] | 'skipped';
 
   // Which kinds of change are on screen.
   //
@@ -863,21 +1023,25 @@
   // rather than opening on an empty list.
   let statusFilter: StatusFilter = 'modified';
 
-  // Counts come from the unfiltered list, so a button always says how many
-  // files it would show — including the one currently active.
+  // Counts come from the list before the status filter, so a button always
+  // says how many files it would show — including the one currently active.
+  // Hidden files are not in them: they are counted under Skipped instead.
   $: filterCounts = {
-    all: files.length,
-    modified: files.filter(f => (f.status || 'modified') === 'modified').length,
-    added: files.filter(f => f.status === 'added').length,
-    renamed: files.filter(f => f.status === 'renamed').length,
-    deleted: files.filter(f => f.status === 'deleted').length,
+    all: shownFiles.length,
+    modified: shownFiles.filter(f => (f.status || 'modified') === 'modified').length,
+    added: shownFiles.filter(f => f.status === 'added').length,
+    renamed: shownFiles.filter(f => f.status === 'renamed').length,
+    deleted: shownFiles.filter(f => f.status === 'deleted').length,
+    skipped: skippedFiles.length,
   };
-  // Only offer a filter there is something to filter to.
-  $: availableFilters = (['all', ...GROUP_ORDER] as StatusFilter[])
-    .filter(f => f === 'all' || filterCounts[f] > 0);
+  // Only offer a filter there is something to filter to. Skipped is the
+  // exception: it is also where a folder or pattern is typed in, so it is
+  // there whenever hiding is — at 0 until something is hidden.
+  $: availableFilters = (['all', ...GROUP_ORDER, 'skipped'] as StatusFilter[])
+    .filter(f => f === 'all' || (f === 'skipped' ? !!hiddenRepo : filterCounts[f] > 0));
   // A filter whose files have all gone (reverted, or the build finished) would
   // leave an empty list with no obvious way back.
-  $: if (statusFilter !== 'all' && filterCounts[statusFilter] === 0) statusFilter = 'all';
+  $: if (statusFilter !== 'all' && !availableFilters.includes(statusFilter)) statusFilter = 'all';
 
   // Back to the default when the diff being shown changes. Carrying a filter
   // across sessions means the one session where a flood of new files makes it
@@ -892,15 +1056,23 @@
     }
   }
 
-  $: visibleFiles = statusFilter === 'all'
-    ? files
-    : files.filter(f => (f.status || 'modified') === statusFilter);
+  $: visibleFiles = statusFilter === 'skipped'
+    ? skippedFiles
+    : statusFilter === 'all'
+      ? shownFiles
+      : shownFiles.filter(f => (f.status || 'modified') === statusFilter);
 
   // Keep the selection on something the filter actually shows: leaving it on a
   // hidden file means the pane displays a diff for a row the user cannot see.
   $: if (visibleFiles.length && selectedPath &&
          !visibleFiles.some(f => f.path === selectedPath)) {
     selectFile(visibleFiles[0].path);
+  }
+  // Nothing left on show because everything is hidden: let the hidden file
+  // go too, rather than keep displaying what was just put out of sight.
+  $: if (!visibleFiles.length && statusFilter !== 'skipped' && selectedPath &&
+         isHidden(hiddenRules, selectedPath)) {
+    selectedPath = null;
   }
 
   $: fileGroups = GROUP_ORDER
@@ -1668,6 +1840,11 @@
   // at once — the full view and the one above a terminal — and both would
   // otherwise answer the same key.
   function onKeydown(event: KeyboardEvent) {
+    if (fileMenu && event.key === 'Escape') {
+      event.preventDefault();
+      closeFileMenu();
+      return;
+    }
     if (!active) return;
     if (matchesShortcut(event, 'diff.nextChange')) {
       event.preventDefault();
@@ -1802,7 +1979,13 @@
   }
 
   $: hiddenLineCount = renderedHunks.reduce((n, h) => n + h.hidden, 0);
-  $: fileCount = files.length;
+  // What is under review: hidden files are left out of the count and of the
+  // header's totals, as they are left out of the list.
+  $: fileCount = shownFiles.length;
+  $: shownTotals = shownFiles.reduce(
+    (acc, f) => ({ added: acc.added + (f.added || 0), removed: acc.removed + (f.removed || 0) }),
+    { added: 0, removed: 0 },
+  );
 
   // --- File tree ----------------------------------------------------------
 
@@ -1860,7 +2043,7 @@
   }
 </script>
 
-<svelte:window on:keydown={onKeydown} />
+<svelte:window on:keydown={onKeydown} on:click={closeFileMenu} on:blur={closeFileMenu} />
 
 <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
 <div class="diff-container" role="region" tabindex="-1" on:keydown={handleDiffKeydown}>
@@ -1868,9 +2051,12 @@
     <div class="header-left">
       <span class="diff-title">{diffMode === 'session' ? $t('diff.session') : $t('diff.full')}</span>
       {#if diff}
-        <div class="diff-stats">
-          <span class="stat added">+{diff.added}</span>
-          <span class="stat removed">-{diff.removed}</span>
+        <div
+          class="diff-stats"
+          title={skippedFiles.length ? $t('diff.hidden.notCounted', { count: skippedFiles.length }) : undefined}
+        >
+          <span class="stat added">+{shownTotals.added}</span>
+          <span class="stat removed">-{shownTotals.removed}</span>
         </div>
       {/if}
     </div>
@@ -1939,6 +2125,12 @@
         <button class="nav-btn" on:click={() => (editorError = '')}>×</button>
       </div>
     {/if}
+    {#if hideError}
+      <div class="diff-error" role="alert">
+        {hideError}
+        <button class="nav-btn" on:click={() => (hideError = '')}>×</button>
+      </div>
+    {/if}
     {#if error}
       <div class="revert-error">{error}</div>
     {/if}
@@ -1987,13 +2179,51 @@
               <button
                 class="status-filter"
                 class:active={statusFilter === f}
+                class:skipped={f === 'skipped'}
+                data-filter={f}
+                title={f === 'skipped' ? $t('diff.hidden.tabHint') : undefined}
                 on:click={() => statusFilter = f}
               >
-                {f === 'all' ? $t('diff.filterAll') : $t(`diff.group.${f}`)}
+                {f === 'all' ? $t('diff.filterAll') : f === 'skipped' ? $t('diff.filterSkipped') : $t(`diff.group.${f}`)}
                 <span class="status-filter-count">{filterCounts[f]}</span>
               </button>
             {/each}
           </div>
+        {/if}
+        {#if statusFilter === 'skipped'}
+          <div class="skipped-panel">
+            <p class="skipped-hint">{$t('diff.hidden.hint')}</p>
+            <form class="skipped-add" on:submit|preventDefault={addTypedRule}>
+              <input
+                class="skipped-input"
+                bind:value={newRule}
+                placeholder={$t('diff.hidden.patternPlaceholder')}
+                aria-label={$t('diff.hidden.patternPlaceholder')}
+                spellcheck="false"
+              />
+              <button type="submit" class="skipped-add-btn" disabled={!newRule.trim()}>{$t('diff.hidden.add')}</button>
+            </form>
+            {#each skippedRules as rule (rule)}
+              <div class="skipped-rule" data-rule={rule}>
+                <code class="skipped-rule-text" title={rule}>{rule}</code>
+                <span class="skipped-rule-count" title={$t('diff.hidden.ruleCount')}>{hiddenByCount(rule, skippedFiles)}</span>
+                <button
+                  class="revert-btn show-again"
+                  title={$t('diff.hidden.showAgain')}
+                  on:click={() => showRules([rule])}
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>
+                  </svg>
+                </button>
+              </div>
+            {/each}
+            {#if !skippedFiles.length && !skippedRules.length}
+              <div class="skipped-empty">{$t('diff.hidden.none')}</div>
+            {/if}
+          </div>
+        {:else if !visibleFiles.length && skippedFiles.length}
+          <div class="skipped-empty">{$t('diff.hidden.allHidden')}</div>
         {/if}
         {#if treeView}
           <div class="file-list">
@@ -2007,6 +2237,7 @@
                   aria-expanded={!collapsedDirs.has(row.path)}
                   title={row.path}
                   on:click={() => toggleDir(row.path)}
+                  on:contextmenu={(e) => openFileMenu(e, row.path, 'dir')}
                   on:keydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleDir(row.path); } }}
                 >
                   <div class="file-main">
@@ -2037,6 +2268,7 @@
                   role="button"
                   tabindex="0"
                   on:click={() => selectFile(file.path)}
+                  on:contextmenu={(e) => openFileMenu(e, file.path, 'file', file.status)}
                   on:keydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectFile(file.path); } }}
                 >
                   <div class="file-main">
@@ -2086,6 +2318,20 @@
                         <path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"/>
                       </svg>
                     </button>
+                    <!-- Only in Skipped, where showing again is what the tab is for. Hiding
+                         is in the row's context menu: the row has no room for another
+                         button, and one appearing under the pointer invites a stray click. -->
+                    {#if hiddenRepo && statusFilter === 'skipped'}
+                      <button
+                        class="revert-btn show-again"
+                        title={showAgainTitle(file.path, hiddenRules, $t)}
+                        on:click|stopPropagation={() => showFileAgain(file.path)}
+                      >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                          <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>
+                        </svg>
+                      </button>
+                    {/if}
                     <button
                       class="revert-btn file-revert"
                       disabled={reverting}
@@ -2119,6 +2365,7 @@
               role="button"
               tabindex="0"
               on:click={() => selectFile(file.path)}
+              on:contextmenu={(e) => openFileMenu(e, file.path, 'file', file.status)}
               on:keydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectFile(file.path); } }}
             >
               <div class="file-main">
@@ -2168,6 +2415,20 @@
                     <path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"/>
                   </svg>
                 </button>
+                <!-- Only in Skipped, where showing again is what the tab is for. Hiding
+                     is in the row's context menu: the row has no room for another
+                     button, and one appearing under the pointer invites a stray click. -->
+                {#if hiddenRepo && statusFilter === 'skipped'}
+                  <button
+                    class="revert-btn show-again"
+                    title={showAgainTitle(file.path, hiddenRules, $t)}
+                    on:click|stopPropagation={() => showFileAgain(file.path)}
+                  >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>
+                    </svg>
+                  </button>
+                {/if}
                 <button
                   class="revert-btn file-revert"
                   disabled={reverting}
@@ -2444,6 +2705,77 @@
   on:confirm={confirmRevert}
   on:cancel={cancelRevert}
 />
+
+<!-- The file list's context menu: hide from the view, or go to the file in
+     the file browser. Portalled so the list's scroller cannot clip it. -->
+{#if fileMenu}
+  {@const menu = fileMenu}
+  {@const folder = menu.kind === 'dir' ? `${menu.path}/` : folderOf(menu.path)}
+  {@const pattern = menu.kind === 'file' ? extensionPattern(menu.path) : null}
+  <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
+  <div
+    class="context-menu diff-file-menu"
+    use:portal
+    use:menuPosition={{ x: menu.x, y: menu.y }}
+    on:click|stopPropagation
+    on:contextmenu|preventDefault
+  >
+    {#if hiddenRepo}
+      {#if menu.kind === 'file'}
+        {#if isHidden(hiddenRules, menu.path)}
+          <button
+            class="context-menu-item"
+            data-action="show-again"
+            title={showAgainTitle(menu.path, hiddenRules, $t)}
+            on:click={() => showFileAgain(menu.path)}
+          >{$t('diff.hidden.showAgain')}</button>
+        {:else}
+          <button class="context-menu-item" data-action="hide" on:click={() => hideRule(menu.path)}>
+            {$t('diff.hidden.hide')}
+          </button>
+          {#if folder}
+            <button class="context-menu-item" data-action="hide-folder" on:click={() => hideRule(folder)}>
+              {$t('diff.hidden.hideFolder', { folder })}
+            </button>
+          {/if}
+          {#if pattern}
+            <button class="context-menu-item" data-action="hide-pattern" on:click={() => hideRule(pattern)}>
+              {$t('diff.hidden.hidePattern', { pattern })}
+            </button>
+          {/if}
+        {/if}
+      {:else if hiddenRules.includes(folder)}
+        <button class="context-menu-item" data-action="show-again" on:click={() => showRules([folder])}>
+          {$t('diff.hidden.showAgain')}
+        </button>
+      {:else if statusFilter !== 'skipped'}
+        <button class="context-menu-item" data-action="hide-folder" on:click={() => hideRule(folder)}>
+          {$t('diff.hidden.hideFolder', { folder })}
+        </button>
+      {/if}
+      <div class="menu-divider"></div>
+    {/if}
+    {#if menu.kind === 'file'}
+      <!-- A deleted file is not on disk, so the browser has nothing to open. -->
+      <button
+        class="context-menu-item"
+        data-action="show-in-files"
+        disabled={menu.status === 'deleted'}
+        title={menu.status === 'deleted' ? $t('diff.menu.deletedNotInFiles') : undefined}
+        on:click={() => showFileInFiles(menu.path)}
+      >{$t('diff.menu.showInFiles')}</button>
+    {/if}
+    <!-- The folder usually outlives a deleted file, so this stays offered for
+         one; a file at the root has no folder to show. -->
+    {#if folder}
+      <button
+        class="context-menu-item"
+        data-action="show-folder-in-files"
+        on:click={() => showFolderInFiles(folder)}
+      >{$t('diff.menu.showFolderInFiles')}</button>
+    {/if}
+  </div>
+{/if}
 
 <style>
   /* Focusable so switching here can hand them the keyboard; the focus ring
@@ -3239,6 +3571,138 @@
 
   .diff-error button {
     margin-left: auto;
+  }
+
+  /* --- Hidden files ------------------------------------------------------ */
+
+  /* Set apart from the status tabs: it is about the view, not the change. */
+  .status-filter.skipped {
+    border-style: dashed;
+  }
+  .status-filter.skipped:not(.active) {
+    border-color: rgba(255, 255, 255, 0.12);
+  }
+
+  .skipped-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
+  }
+
+  .skipped-hint {
+    margin: 0;
+    font-size: 11px;
+    color: var(--text-muted, #9ca3af);
+  }
+
+  .skipped-add {
+    display: flex;
+    gap: 6px;
+  }
+
+  .skipped-input {
+    flex: 1;
+    min-width: 0;
+    padding: 4px 8px;
+    font-size: 12px;
+    font-family: var(--font-mono, monospace);
+    color: var(--text-primary, #e4e4e7);
+    background: var(--bg-input, rgba(0, 0, 0, 0.25));
+    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.12));
+    border-radius: 4px;
+    outline: none;
+  }
+
+  .skipped-input:focus {
+    border-color: rgba(var(--accent-rgb), 0.6);
+  }
+
+  .skipped-add-btn {
+    padding: 4px 10px;
+    font-size: 12px;
+    color: var(--text-primary, #e4e4e7);
+    background: rgba(var(--accent-rgb), 0.15);
+    border: 1px solid rgba(var(--accent-rgb), 0.35);
+    border-radius: 4px;
+    cursor: pointer;
+  }
+
+  .skipped-add-btn:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+
+  .skipped-rule {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+  }
+
+  .skipped-rule-text {
+    color: #d1d5db;
+    font-family: var(--font-mono, monospace);
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .skipped-rule-count {
+    color: var(--text-muted, #9ca3af);
+    font-size: 11px;
+  }
+
+  .skipped-empty {
+    padding: 8px 10px;
+    font-size: 12px;
+    color: var(--text-muted, #9ca3af);
+  }
+
+  .diff-file-menu {
+    position: fixed;
+    z-index: 1000;
+    min-width: 200px;
+    background: var(--bg-raised);
+    border: 1px solid rgba(var(--accent-rgb), 0.3);
+    border-radius: 8px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+    padding: 4px;
+  }
+
+  .diff-file-menu .context-menu-item {
+    display: block;
+    width: 100%;
+    padding: 7px 12px;
+    font-size: 13px;
+    text-align: left;
+    color: #e4e4e7;
+    background: none;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 420px;
+  }
+
+  .diff-file-menu .context-menu-item:hover:not(:disabled) {
+    background: rgba(var(--accent-rgb), 0.15);
+  }
+
+  .diff-file-menu .context-menu-item:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+
+  .diff-file-menu .menu-divider {
+    height: 1px;
+    margin: 4px 0;
+    background: rgba(255, 255, 255, 0.1);
   }
 
 </style>

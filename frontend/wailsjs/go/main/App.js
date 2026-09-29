@@ -6,6 +6,10 @@ export function AcceptServerHostKey(arg1, arg2) {
   return window['go']['main']['App']['AcceptServerHostKey'](arg1, arg2);
 }
 
+export function AddDiffHiddenRule(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['AddDiffHiddenRule'](arg1, arg2, arg3, arg4);
+}
+
 export function AddQuickJump(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['AddQuickJump'](arg1, arg2, arg3, arg4);
 }
@@ -260,6 +264,10 @@ export function GetCodexUsage() {
 
 export function GetCommands() {
   return window['go']['main']['App']['GetCommands']();
+}
+
+export function GetDiffHiddenRules(arg1, arg2, arg3) {
+  return window['go']['main']['App']['GetDiffHiddenRules'](arg1, arg2, arg3);
 }
 
 export function GetExtraArgs(arg1, arg2) {
@@ -652,6 +660,10 @@ export function RefreshDetectionPatterns() {
 
 export function RefreshWindow(arg1, arg2, arg3) {
   return window['go']['main']['App']['RefreshWindow'](arg1, arg2, arg3);
+}
+
+export function RemoveDiffHiddenRules(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['RemoveDiffHiddenRules'](arg1, arg2, arg3, arg4);
 }
 
 export function RemoveQuickJump(arg1, arg2, arg3) {

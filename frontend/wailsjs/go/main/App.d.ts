@@ -7,6 +7,8 @@ import {remote} from '../models';
 
 export function AcceptServerHostKey(arg1:string,arg2:string):Promise<void>;
 
+export function AddDiffHiddenRule(arg1:string,arg2:number,arg3:string,arg4:string):Promise<main.DiffHiddenRules>;
+
 export function AddQuickJump(arg1:string,arg2:number,arg3:string,arg4:string):Promise<void>;
 
 export function AddSubtask(arg1:string,arg2:string,arg3:string,arg4:string):Promise<main.SubtaskInfo>;
@@ -134,6 +136,8 @@ export function GetClaudeUsage():Promise<main.ClaudeUsageInfo>;
 export function GetCodexUsage():Promise<main.CodexUsageInfo>;
 
 export function GetCommands():Promise<main.CommandLibraryInfo>;
+
+export function GetDiffHiddenRules(arg1:string,arg2:number,arg3:string):Promise<main.DiffHiddenRules>;
 
 export function GetExtraArgs(arg1:string,arg2:number):Promise<string>;
 
@@ -330,6 +334,8 @@ export function RedrawWindow(arg1:string,arg2:number,arg3:string):Promise<void>;
 export function RefreshDetectionPatterns():Promise<main.PatternRefreshResult>;
 
 export function RefreshWindow(arg1:string,arg2:number,arg3:string):Promise<void>;
+
+export function RemoveDiffHiddenRules(arg1:string,arg2:number,arg3:string,arg4:Array<string>):Promise<main.DiffHiddenRules>;
 
 export function RemoveQuickJump(arg1:string,arg2:number,arg3:string):Promise<void>;
 

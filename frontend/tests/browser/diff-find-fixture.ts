@@ -5,6 +5,8 @@ import GitHistoryDialog from '../../src/lib/components/Dialogs/GitHistoryDialog.
 import { selectedSessionId, selectedWindowIdx } from '../../src/lib/stores/sessions';
 import { activeProjectId } from '../../src/lib/stores/projects';
 import { loadSettings } from '../../src/lib/stores/settings';
+import { pendingFileJump } from '../../src/lib/stores/fileJump';
+import { get } from 'svelte/store';
 
 /**
  * Find in every diff renderer.
@@ -21,6 +23,10 @@ const params = new URLSearchParams(location.search);
 const component = params.get('component') ?? 'diff';
 const whole = params.get('view') !== 'hunks';
 const sideBySide = params.get('sbs') === '1';
+// ?extra=1 adds files in folders, for hiding a folder or a pattern.
+const extra = params.get('extra') === '1';
+// ?hidden=a,b seeds the repository's hidden-file rules.
+let hiddenRules: string[] = (params.get('hidden') ?? '').split(',').filter(Boolean);
 
 const LENGTH = 300;
 const FAR = 250;
@@ -48,6 +54,11 @@ const bodies: Record<string, { status: string; header: string; body: string }> =
   'added.txt': { status: 'added', header: `@@ -0,0 +1,${LENGTH} @@`, body: lines('+') },
   'deleted.txt': { status: 'deleted', header: `@@ -1,${LENGTH} +0,0 @@`, body: lines('-') },
   'modified.txt': { status: 'modified', header: `@@ -1,${LENGTH} +1,${LENGTH} @@`, body: modifiedBody() },
+  ...(extra ? {
+    'gen/out.txt': { status: 'added', header: `@@ -0,0 +1,${LENGTH} @@`, body: lines('+') },
+    'gen/map.txt': { status: 'added', header: `@@ -0,0 +1,${LENGTH} @@`, body: lines('+') },
+    'src/app.lock': { status: 'modified', header: `@@ -1,${LENGTH} +1,${LENGTH} @@`, body: modifiedBody() },
+  } : {}),
 };
 
 function summaries() {
@@ -79,6 +90,13 @@ let stored: Record<string, unknown> = {
   shortcuts: {},
 };
 
+const hiddenCalls: string[][] = [];
+(window as any).diffHidden = {
+  calls: () => hiddenCalls,
+  rules: () => [...hiddenRules].sort(),
+  fileJump: () => get(pendingFileJump),
+};
+
 const backend = new Proxy({
   GetSettings: async () => ({ ...stored }),
   SaveSettings: async (next: Record<string, unknown>) => { stored = { ...next }; },
@@ -96,6 +114,19 @@ const backend = new Proxy({
   GetGitCommitFiles: async () => summaries(),
   GetGitCommitDiff: async (_s: string, _h: string, path: string) => diffFile(path),
   GetLockStatus: async () => ({ locked: true, otherInstancePid: 0 }),
+  // The backend's per-repository store, in memory. Calls are recorded so a
+  // test can see that hiding went through it.
+  GetDiffHiddenRules: async () => ({ repo: '/repo', rules: [...hiddenRules].sort() }),
+  AddDiffHiddenRule: async (_s: string, _w: number, _root: string, rule: string) => {
+    hiddenCalls.push(['add', rule]);
+    if (!hiddenRules.includes(rule)) hiddenRules = [...hiddenRules, rule];
+    return { repo: '/repo', rules: [...hiddenRules].sort() };
+  },
+  RemoveDiffHiddenRules: async (_s: string, _w: number, _root: string, rules: string[]) => {
+    hiddenCalls.push(['remove', ...rules]);
+    hiddenRules = hiddenRules.filter((rule) => !rules.includes(rule));
+    return { repo: '/repo', rules: [...hiddenRules].sort() };
+  },
 }, {
   get(target, key) {
     if (key in target) return target[key as keyof typeof target];

@@ -726,6 +726,20 @@ export namespace main {
 	        this.removed = source["removed"];
 	    }
 	}
+	export class DiffHiddenRules {
+	    repo: string;
+	    rules: string[];
+
+	    static createFrom(source: any = {}) {
+	        return new DiffHiddenRules(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.repo = source["repo"];
+	        this.rules = source["rules"];
+	    }
+	}
 	export class FeedbackLinks {
 	    github: string;
 	    email: string;
