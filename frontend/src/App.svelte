@@ -177,17 +177,19 @@
   import StopDialog from './lib/components/Dialogs/StopDialog.svelte';
   import StartDialog from './lib/components/Dialogs/StartDialog.svelte';
   import ResumeChoiceDialog from './lib/components/Dialogs/ResumeChoiceDialog.svelte';
+  import InterruptedWorkDialog from './lib/components/Dialogs/InterruptedWorkDialog.svelte';
   import ResumeSessionPickerDialog from './lib/components/Dialogs/ResumeSessionPickerDialog.svelte';
   import type { Session } from './lib/stores/sessions';
   import { error as sessionError } from './lib/stores/sessions';
   import { appError } from './lib/stores/appErrors';
-  import { sessions, loadSessions, selectSession, selectWindow, selectedSession, selectedSessionId, selectedWindowIdx, startSession, stopSession, stopTab, restartTab, restartTabWithResume, startTabOnly, deleteSession, toggleFavorite, reorderSession } from './lib/stores/sessions';
+  import { sessions, loadSessions, selectSession, selectWindow, selectedSession, selectedSessionId, selectedWindowIdx, startSession, stopSession, stopTab, restartTab, restartTabWithResume, startTabOnly, deleteSession, toggleFavorite, reorderSession, getInterruptedWork, reopenInterruptedSessions } from './lib/stores/sessions';
+  import { summarize, type InterruptedSession } from './lib/utils/interruptedWork';
   import { selectPrevSession, selectNextSession } from './lib/stores/sidebarOrder';
   import { activities } from './lib/stores/activities';
   import { statusLines, tabStatuses } from './lib/stores/statusLines';
   import { QuickReplyTab, ExportSessions, PendingUpdate, AddQuickJump } from '../wailsjs/go/main/App';
   import { WhatsNewOnLaunch, MarkWhatsNewSeen } from '../wailsjs/go/main/App';
-  import { activeProjectId, loadProjects, otherInstancePID, refreshLockStatus } from './lib/stores/projects';
+  import { activeProjectId, loadProjects, otherInstancePID, projects, refreshLockStatus } from './lib/stores/projects';
   import { appView, goBack, showTasksView } from './lib/stores/navigation';
   import { openTaskCount, watchOpenCount, refreshOpenCount } from './lib/stores/taskAlerts';
   import { flushSettingsSaves, loadSettings, settings } from './lib/stores/settings';
@@ -348,6 +350,80 @@
     appError.set(null);
   }
 
+  // ── After a restart ───────────────────────────────────────────────────
+  //
+  // The sessions a reboot (or a lost tmux server) interrupted, offered back on
+  // launch and whenever another project is opened — each project's work where
+  // that project is. An ordinary relaunch finds everything still running and
+  // offers nothing.
+  let showInterruptedWork = false;
+  let interruptedSessions: InterruptedSession[] = [];
+  let interruptedProjectName = '';
+  let interruptedCheckedProject: string | null = null;
+  let interruptedCheckGeneration = 0;
+  let reopenToastMessage = '';
+  let reopenToastVariant: 'success' | 'warning' = 'success';
+  let showReopenToast = false;
+  let reopenToastRevision = 0;
+
+  function announceReopen(summary: { ok: number; failed: number }) {
+    reopenToastVariant = summary.failed === 0 ? 'success' : 'warning';
+    reopenToastMessage = summary.failed === 0
+      ? $t('interrupted.toastDone', { count: summary.ok })
+      : $t('interrupted.toastPartial', { ok: summary.ok, total: summary.ok + summary.failed });
+    reopenToastRevision++;
+    showReopenToast = true;
+  }
+
+  async function checkInterruptedWork(projectId: string) {
+    interruptedCheckedProject = projectId;
+    const generation = ++interruptedCheckGeneration;
+    showInterruptedWork = false;
+    launchDialogs.done('interrupted');
+    let work;
+    try {
+      work = await getInterruptedWork();
+    } catch {
+      return; // Nothing to offer is the safe reading of a failed check.
+    }
+    if (!appMounted || generation !== interruptedCheckGeneration || !work || work.sessions.length === 0) return;
+    if (work.mode === 'auto') {
+      const ids = work.sessions.map((s) => s.id);
+      let results;
+      try {
+        results = await reopenInterruptedSessions(ids, []);
+      } catch {
+        results = ids.map((id) => ({ id, ok: false }));
+      }
+      if (appMounted && generation === interruptedCheckGeneration) announceReopen(summarize(results));
+      return;
+    }
+    if (work.mode !== 'ask') return;
+    interruptedSessions = work.sessions as InterruptedSession[];
+    const project = $projects.find((p) => p.id === work.projectId);
+    interruptedProjectName = $projects.length > 1 && project ? project.name : '';
+    // Through the launch queue, first in line: it asks for an answer, and the
+    // release notes can wait behind it.
+    launchDialogs.request('interrupted', () => {
+      if (generation === interruptedCheckGeneration) showInterruptedWork = true;
+      else launchDialogs.done('interrupted');
+    }, 0);
+  }
+
+  // Closed, however it was: the next launch dialog may open.
+  let interruptedWasShown = false;
+  $: if (showInterruptedWork) interruptedWasShown = true;
+  $: if (!showInterruptedWork && interruptedWasShown) {
+    interruptedWasShown = false;
+    launchDialogs.done('interrupted');
+  }
+
+  // Another project opened: its own interrupted work, if any. The first check
+  // is made from onMount, once the project is known.
+  $: if (interruptedCheckedProject !== null && $activeProjectId !== interruptedCheckedProject) {
+    checkInterruptedWork($activeProjectId);
+  }
+
   let showGitHistory = false;
   let showRecoveryCenter = false;
   let showCommandPalette = false;
@@ -403,7 +479,7 @@
     showLogDialog || showQuickJump || showGitHistory || quickJumpPrompt || quickJumpNaming ||
     showCommandPicker || showCommandManager || showServerManager || showTemplateDialog ||
     showQuitConfirm || showStopDialog || showStartDialog ||
-    showResumeChoice || showResumeSessionPicker;
+    showResumeChoice || showResumeSessionPicker || showInterruptedWork;
   $: if (prevAnyDialogOpen && !anyDialogOpen) {
     // Dialog just closed — return focus to the terminal
     focusTerminal();
@@ -1011,11 +1087,16 @@
     // Start combined sidebar polling (activities + status lines)
     startSidebarPolling();
 
+    // What a restart interrupted. Not awaited: a session on a server can take
+    // a few seconds to answer, and nothing else should wait for that.
+    const interruptedChecked = checkInterruptedWork(get(activeProjectId));
+
     // Initialize dictation service and listen for state changes
     initDictation();
 
-    // Release notes after an update, once the app is on its feet.
-    void checkWhatsNew();
+    // Release notes after an update, once the app is on its feet — and after
+    // the interrupted-work check, so an offer to reopen comes first.
+    void interruptedChecked.finally(() => checkWhatsNew());
   });
 
   onDestroy(() => {
@@ -1998,6 +2079,12 @@
     on:select={handleResumeSessionSelect}
     on:cancel={handleResumeCancel}
   />
+  <InterruptedWorkDialog
+    bind:show={showInterruptedWork}
+    sessions={interruptedSessions}
+    projectName={interruptedProjectName}
+    on:done={(e) => { if (e.detail.failed === 0) announceReopen(e.detail); }}
+  />
 </main>
 
 <Toast bind:show={showDictationError} message={dictationErrorMessage} revision={dictationErrorRevision} variant="error" duration={9000} />
@@ -2007,6 +2094,8 @@
      with its own toast — deleting from the sidebar, renaming, reordering,
      switching project — failed in silence. -->
 <Toast bind:show={showSessionError} message={sessionErrorMessage} revision={sessionErrorRevision} variant="error" duration={9000} />
+
+<Toast bind:show={showReopenToast} message={reopenToastMessage} revision={reopenToastRevision} variant={reopenToastVariant} duration={reopenToastVariant === 'success' ? 5000 : 9000} />
 
 <CodexDaemonNotice />
 

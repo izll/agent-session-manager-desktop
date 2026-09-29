@@ -383,6 +383,28 @@ export async function startTabOnly(id: string, windowIdx: number) {
   }
 }
 
+// What a restart interrupted, for the active project. Asked on launch and
+// after a project switch; empty on an ordinary relaunch.
+export async function getInterruptedWork(): Promise<main.InterruptedWork | null> {
+  const target = projectTarget();
+  const work = await App.GetInterruptedWork();
+  if (!projectTargetIsCurrent(target) || work.projectId !== target.projectId) return null;
+  return work;
+}
+
+// Brings the chosen sessions back and forgets the rest. Each session's result
+// comes back rather than one error for all: one that fails must not hide the
+// ones that came back.
+export async function reopenInterruptedSessions(reopen: string[], dismiss: string[]) {
+  const target = projectTarget();
+  if (dismiss.length > 0) await App.DismissInterruptedWork(dismiss, target.projectId);
+  if (reopen.length === 0) return [];
+  for (const id of reopen) dropPoolForSession(id);
+  const results = await App.ReopenInterruptedSessions(reopen, target.projectId);
+  if (projectTargetIsCurrent(target)) await loadSessions();
+  return results;
+}
+
 export async function restartTabWithResume(id: string, windowIdx: number, resumeId: string) {
   const target = projectTarget();
   try {

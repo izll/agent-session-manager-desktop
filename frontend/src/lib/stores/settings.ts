@@ -20,6 +20,9 @@ export type TasksDefaultFilter = 'last' | 'all' | 'tab';
  */
 export type TerminalCopyMode = 'shift' | 'select';
 
+/** After a restart: ask about the interrupted work, reopen it, or leave it. */
+export type RestartReopen = 'ask' | 'auto' | 'off';
+
 export interface Settings {
   /** Rebound keyboard shortcuts, keyed by shortcut id. Only what the user has
    *  changed — see stores/shortcuts.ts. */
@@ -75,6 +78,11 @@ export interface Settings {
    * dashboard. Off by default — the dashboard is the neutral starting point.
    */
   restoreLastSession: boolean;
+  /**
+   * What happens on launch to the sessions a reboot (or a lost tmux server)
+   * interrupted. Asks by default.
+   */
+  restartReopen: RestartReopen;
   markedWindowIdx: number;
   language: string;
   /** Interface accent colour id (see uiThemes.ts). */
@@ -175,6 +183,7 @@ function defaultSettings(): Settings {
     markedSessionId: '',
     lastSessionId: '',
     restoreLastSession: false,
+    restartReopen: 'ask',
     markedWindowIdx: 0,
     language: 'en',
     uiTheme: 'violet',

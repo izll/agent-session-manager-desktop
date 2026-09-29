@@ -196,6 +196,15 @@ const dialogs: Record<string, Entry> = {
   tabColor: { load: () => import('../../src/lib/components/Dialogs/TabColorDialog.svelte'), props: { sessionId: session.id, tab: { Index: 1, Name: 'Second tab' } } },
   update: { load: () => import('../../src/lib/components/Dialogs/UpdateDialog.svelte') },
   whatsNew: { load: () => import('../../src/lib/components/Dialogs/WhatsNewDialog.svelte') },
+  interruptedWork: {
+    load: () => import('../../src/lib/components/Dialogs/InterruptedWorkDialog.svelte'),
+    props: {
+      sessions: [
+        { id: 'a', name: 'Main tab', path: '/home/user/projects/api', agent: 'claude', color: '', serverId: '', agents: ['claude'], reopenTabs: 1, totalTabs: 2 },
+        { id: 'b', name: LONG_TITLE, path: '/home/user/projects/web', agent: 'codex', color: '', serverId: '', agents: ['codex'], reopenTabs: 1, totalTabs: 1 },
+      ],
+    },
+  },
   taskDetail: {
     load: () => import('../../src/lib/components/Dashboard/AllTasks.svelte'),
     open: async () => {

@@ -9,7 +9,7 @@
   import { setDictationHotkey } from '../../utils/dictationHotkey';
   import { createEventDispatcher, onDestroy } from 'svelte';
   import { get } from 'svelte/store';
-  import { settings, saveSettings, type NotesDefaultScope, type TasksDefaultFilter } from '../../stores/settings';
+  import { settings, saveSettings, type NotesDefaultScope, type TasksDefaultFilter, type RestartReopen } from '../../stores/settings';
   import { activeProjectId } from '../../stores/projects';
   import * as DictationService from '../../../../wailsjs/go/main/DictationService';
   import * as App from '../../../../wailsjs/go/main/App';
@@ -174,6 +174,12 @@
     { value: 'last', label: $t('settings.viewDefaultLast') },
     { value: 'all', label: $t('tasks.tabFilterAll') },
     { value: 'tab', label: $t('tasks.tabFilterThisTab') },
+  ];
+
+  $: restartReopenOptions = [
+    { value: 'ask', label: $t('settings.restartReopenAsk') },
+    { value: 'auto', label: $t('settings.restartReopenAuto') },
+    { value: 'off', label: $t('settings.restartReopenOff') },
   ];
 
   function changeGitBranchDisplay(v: string) {
@@ -1045,6 +1051,20 @@
                 </span>
               </button>
             </label>
+
+            <!-- Beside "reopen last session": both are about what the app
+                 comes back to. This one is about work a reboot interrupted. -->
+            <div class="setting-item input-item" data-setting="restart-reopen">
+              <span class="setting-info">
+                <span class="setting-label">{$t('settings.restartReopen')}</span>
+                <span class="setting-desc">{$t('settings.restartReopenDesc')}</span>
+              </span>
+              <Select
+                value={$settings.restartReopen || 'ask'}
+                options={restartReopenOptions}
+                on:change={(e) => saveSettings({ restartReopen: e.detail as RestartReopen })}
+              />
+            </div>
           </div>
 
           <div class="settings-section">
