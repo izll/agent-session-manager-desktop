@@ -2958,3 +2958,80 @@ export namespace session {
 	}
 
 }
+
+export namespace whatsnew {
+
+	export class Section {
+	    kind: string;
+	    title: string;
+	    intro: string[];
+	    items: string[];
+
+	    static createFrom(source: any = {}) {
+	        return new Section(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.kind = source["kind"];
+	        this.title = source["title"];
+	        this.intro = source["intro"];
+	        this.items = source["items"];
+	    }
+	}
+	export class Entry {
+	    version: string;
+	    date: string;
+	    intro: string[];
+	    sections: Section[];
+
+	    static createFrom(source: any = {}) {
+	        return new Entry(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.version = source["version"];
+	        this.date = source["date"];
+	        this.intro = source["intro"];
+	        this.sections = this.convertValues(source["sections"], Section);
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class Launch {
+	    show: boolean;
+	    since: string;
+	    versions: string[];
+	    current: string;
+
+	    static createFrom(source: any = {}) {
+	        return new Launch(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.show = source["show"];
+	        this.since = source["since"];
+	        this.versions = source["versions"];
+	        this.current = source["current"];
+	    }
+	}
+
+}

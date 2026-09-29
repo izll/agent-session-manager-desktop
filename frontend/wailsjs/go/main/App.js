@@ -242,6 +242,10 @@ export function GetBackups() {
   return window['go']['main']['App']['GetBackups']();
 }
 
+export function GetChangelog() {
+  return window['go']['main']['App']['GetChangelog']();
+}
+
 export function GetClaudeUsage() {
   return window['go']['main']['App']['GetClaudeUsage']();
 }
@@ -536,6 +540,10 @@ export function ListSessionDirectory(arg1, arg2, arg3, arg4) {
 
 export function LogFrontend(arg1) {
   return window['go']['main']['App']['LogFrontend'](arg1);
+}
+
+export function MarkWhatsNewSeen() {
+  return window['go']['main']['App']['MarkWhatsNewSeen']();
 }
 
 export function MoveGroup(arg1, arg2, arg3) {
@@ -996,4 +1004,8 @@ export function UnfinishedTasksForSession(arg1) {
 
 export function UpdateTask(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['UpdateTask'](arg1, arg2, arg3, arg4);
+}
+
+export function WhatsNewOnLaunch() {
+  return window['go']['main']['App']['WhatsNewOnLaunch']();
 }

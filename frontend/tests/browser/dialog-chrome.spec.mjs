@@ -54,7 +54,7 @@ test('Settings, the reference, has the shared chrome', () => {
   expect(reference.panel['border-top-left-radius']).toBe('16px');
 });
 
-for (const dialog of ['bgAgents', 'servers', 'commands', 'commandPicker', 'schemeImport', 'logs']) {
+for (const dialog of ['bgAgents', 'servers', 'commands', 'commandPicker', 'schemeImport', 'logs', 'whatsNew']) {
   test(`${dialog} wears the same chrome as Settings`, async ({ page }) => {
     const measured = await chrome(page, dialog);
     expect(measured.overlay).toEqual(reference.overlay);
@@ -80,7 +80,7 @@ const HEADER_DIALOGS = [
   'checkpoints', 'customColor', 'customGradient', 'feedback', 'fork', 'gitHistory', 'help',
   'import', 'newGroup', 'newSession', 'newTab', 'quickJump', 'recovery', 'remoteDir',
   'resumePicker', 'saveAsTemplate', 'sessionColor', 'sessionFile', 'templates', 'tabColor',
-  'update', 'taskDetail', 'taskAdd', 'taskEdit', 'taskSubtask', 'taskDependencies', 'taskPRD',
+  'update', 'whatsNew', 'taskDetail', 'taskAdd', 'taskEdit', 'taskSubtask', 'taskDependencies', 'taskPRD',
   'taskComplexity', 'extraArgs',
 ];
 

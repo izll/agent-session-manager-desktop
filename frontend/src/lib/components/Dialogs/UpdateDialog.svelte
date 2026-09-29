@@ -107,6 +107,13 @@
     success = '';
   }
 
+  /** The release notes, which this dialog hands over to. */
+  function openWhatsNew() {
+    if (isUpdating) return;
+    close();
+    dispatch('whatsNew');
+  }
+
   function handleKeydown(e: KeyboardEvent) {
     if (e.key === 'Escape') {
       claimKeyForDialog();
@@ -198,6 +205,13 @@
       </div>
 
       <div class="dialog-footer">
+        <!-- Only when up to date: the notes are those of the running version,
+             and beside "Update Now" they would read as the new release's. -->
+        {#if updateInfo && !updateInfo.available && !success && !isUpdating}
+          <button class="btn btn-secondary whats-new-btn" on:click={openWhatsNew}>
+            {$t('whatsNew.title')}
+          </button>
+        {/if}
         {#if updateInfo?.available && updateInfo.canAutoInstall === true && !success}
           <button
             class="btn btn-primary"
@@ -352,6 +366,11 @@
     border: none;
     cursor: pointer;
     transition: all 0.2s ease;
+  }
+
+  /* At the far end from the actions: it reads, it does not update. */
+  .whats-new-btn {
+    margin-inline-end: auto;
   }
 
   .btn:disabled {

@@ -157,6 +157,8 @@
   import HelpDialog from './lib/components/Dialogs/HelpDialog.svelte';
   import FeedbackDialog from './lib/components/Dialogs/FeedbackDialog.svelte';
   import UpdateDialog from './lib/components/Dialogs/UpdateDialog.svelte';
+  import WhatsNewDialog from './lib/components/Dialogs/WhatsNewDialog.svelte';
+  import { launchDialogs } from './lib/utils/launchDialogs';
   import ImportDialog from './lib/components/Dialogs/ImportDialog.svelte';
   import SessionFileDialog from './lib/components/Dialogs/SessionFileDialog.svelte';
   import SettingsDialog from './lib/components/Dialogs/SettingsDialog.svelte';
@@ -184,6 +186,7 @@
   import { activities } from './lib/stores/activities';
   import { statusLines, tabStatuses } from './lib/stores/statusLines';
   import { QuickReplyTab, ExportSessions, PendingUpdate, AddQuickJump } from '../wailsjs/go/main/App';
+  import { WhatsNewOnLaunch, MarkWhatsNewSeen } from '../wailsjs/go/main/App';
   import { activeProjectId, loadProjects, otherInstancePID, refreshLockStatus } from './lib/stores/projects';
   import { appView, goBack, showTasksView } from './lib/stores/navigation';
   import { openTaskCount, watchOpenCount, refreshOpenCount } from './lib/stores/taskAlerts';
@@ -279,6 +282,44 @@
   let showUpdateDialog = false;
   /** Version found by the background check; drives the header dot. */
   let availableUpdate = '';
+
+  // Release notes. After an update they open by themselves, through the
+  // launch-dialog queue so they never land on top of another dialog that
+  // opened at start-up; they can be opened any time from Help, the update
+  // dialog and the command palette. `whatsNewFresh` lists the releases new
+  // since the last launch, kept until the dialog has been seen, so opening it
+  // by hand while the automatic one waits shows the same thing.
+  let showWhatsNew = false;
+  let whatsNewFresh: string[] = [];
+  let whatsNewSince = '';
+
+  function openWhatsNew() {
+    launchDialogs.done('whatsNew');
+    showWhatsNew = true;
+  }
+
+  function handleWhatsNewClosed() {
+    whatsNewFresh = [];
+    whatsNewSince = '';
+    launchDialogs.done('whatsNew');
+    // Idempotent, and never moves the record backwards: harmless after a
+    // dialog opened by hand.
+    MarkWhatsNewSeen().catch((e) => console.error('Could not record the release notes as seen:', e));
+  }
+
+  async function checkWhatsNew() {
+    let launch;
+    try {
+      launch = await WhatsNewOnLaunch();
+    } catch {
+      return; // an older backend, or no notes: nothing to show
+    }
+    if (!appMounted || !launch?.show || !launch.versions?.length) return;
+    whatsNewFresh = launch.versions;
+    whatsNewSince = launch.since || '';
+    // Last in line: anything else that needs an answer at start-up goes first.
+    launchDialogs.request('whatsNew', () => { showWhatsNew = true; }, 100);
+  }
   let showImportDialog = false;
   let showFileImportDialog = false;
   /** Export failures are rare but must not vanish silently. */
@@ -357,7 +398,7 @@
   let prevAnyDialogOpen = false;
   $: anyDialogOpen =
     showNewSessionDialog || showNewGroupDialog || showGlobalSearch || showBgAgents ||
-    showHelpDialog || showFeedbackDialog || showUpdateDialog || showImportDialog || showFileImportDialog ||
+    showHelpDialog || showFeedbackDialog || showUpdateDialog || showWhatsNew || showImportDialog || showFileImportDialog ||
     showSettingsDialog || showRecoveryCenter || showCommandPalette || showColorDialog || showDeleteConfirm ||
     showLogDialog || showQuickJump || showGitHistory || quickJumpPrompt || quickJumpNaming ||
     showCommandPicker || showCommandManager || showServerManager || showTemplateDialog ||
@@ -368,6 +409,8 @@
     focusTerminal();
   }
   $: prevAnyDialogOpen = anyDialogOpen;
+  // A launch-time dialog waits while any other dialog is open.
+  $: launchDialogs.setBlocked(anyDialogOpen);
 
   // Sidebar state
   const SIDEBAR_MIN = 200;
@@ -918,6 +961,7 @@
     window.addEventListener('command:start-selected', handleCommandStart);
     window.addEventListener('command:stop-selected', handleCommandStop);
     window.addEventListener('command:templates', handleCommandTemplates as EventListener);
+    window.addEventListener('command:whats-new', openWhatsNew);
 
     // Show an update found by an earlier run straight away. The throttle means
     // this launch may not check at all, and a pending update should not
@@ -969,6 +1013,9 @@
 
     // Initialize dictation service and listen for state changes
     initDictation();
+
+    // Release notes after an update, once the app is on its feet.
+    void checkWhatsNew();
   });
 
   onDestroy(() => {
@@ -982,6 +1029,7 @@
     window.removeEventListener('command:start-selected', handleCommandStart);
     window.removeEventListener('command:stop-selected', handleCommandStop);
     window.removeEventListener('command:templates', handleCommandTemplates as EventListener);
+    window.removeEventListener('command:whats-new', openWhatsNew);
     stopSidebarPolling();
     EventsOff('update:available');
     EventsOff('dictation:state');
@@ -1751,12 +1799,20 @@
   <HelpDialog
     bind:show={showHelpDialog}
     on:feedback={() => { showHelpDialog = false; showFeedbackDialog = true; }}
+    on:whatsNew={() => { showHelpDialog = false; openWhatsNew(); }}
   />
   <FeedbackDialog bind:show={showFeedbackDialog} />
   <UpdateDialog
     bind:show={showUpdateDialog}
     on:installed={() => availableUpdate = ''}
     on:checked={(e) => availableUpdate = e.detail}
+    on:whatsNew={openWhatsNew}
+  />
+  <WhatsNewDialog
+    bind:show={showWhatsNew}
+    fresh={whatsNewFresh}
+    since={whatsNewSince}
+    on:close={handleWhatsNewClosed}
   />
   <ImportDialog bind:show={showImportDialog} />
   <SessionFileDialog bind:show={showFileImportDialog} />

@@ -78,6 +78,11 @@ const backend = new Proxy({
   GetQuickJump: async () => [],
   DiscoverLocalSchemes: async () => [],
   ListOnlineSchemes: async () => [],
+  GetChangelog: async () => [{
+    version: '1.1.18', date: '2026-09-29', intro: [],
+    sections: [{ kind: 'added', title: 'Added', intro: [], items: ['**The favourites section folds.** Press `Enter`.'] }],
+  }],
+  GetVersion: async () => '1.1.18',
   CheckForUpdate: async () => ({ available: true, currentVersion: '1.0.0', latestVersion: '1.1.0', canAutoInstall: true }),
   ReadSessionFile: async () => ({
     token: 'token', path: '/tmp/session.json', exportedAt: '2026-08-21T10:00:00Z',
@@ -190,6 +195,7 @@ const dialogs: Record<string, Entry> = {
   templates: { load: () => import('../../src/lib/components/Dialogs/SessionTemplateDialog.svelte') },
   tabColor: { load: () => import('../../src/lib/components/Dialogs/TabColorDialog.svelte'), props: { sessionId: session.id, tab: { Index: 1, Name: 'Second tab' } } },
   update: { load: () => import('../../src/lib/components/Dialogs/UpdateDialog.svelte') },
+  whatsNew: { load: () => import('../../src/lib/components/Dialogs/WhatsNewDialog.svelte') },
   taskDetail: {
     load: () => import('../../src/lib/components/Dashboard/AllTasks.svelte'),
     open: async () => {

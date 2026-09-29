@@ -239,6 +239,12 @@
       }
     }
 
+    result.push({
+      id: 'whats-new', category: $t('palette.actions'), title: $t('whatsNew.title'),
+      keywords: 'whats new changelog release notes version újdonságok', icon: '✦',
+      action: () => { window.dispatchEvent(new CustomEvent('command:whats-new')); }
+    });
+
     const projectItems = [
       { id: '', name: $t('project.default') },
       ...get(projects)

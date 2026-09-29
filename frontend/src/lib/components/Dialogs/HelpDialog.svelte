@@ -118,6 +118,11 @@
             <p class="version">v{version}</p>
           {/if}
           <p class="link">
+            <button class="whats-new-link" on:click={() => dispatch('whatsNew')}>
+              {$t('whatsNew.title')}
+            </button>
+          </p>
+          <p class="link">
             <!-- The webview won't follow target="_blank"; hand the URL to the
                  host so it opens in the user's real browser. -->
             <a
@@ -223,6 +228,20 @@
   }
 
   .about .link a:hover {
+    text-decoration: underline;
+  }
+
+  /* Looks like the link under it: both leave the dialog for something to read. */
+  .whats-new-link {
+    padding: 0;
+    background: none;
+    border: none;
+    font: inherit;
+    color: var(--accent-light);
+    cursor: pointer;
+  }
+
+  .whats-new-link:hover {
     text-decoration: underline;
   }
 

@@ -54,6 +54,35 @@ func TestCompareSemver(t *testing.T) {
 	}
 }
 
+func TestCompareReleases(t *testing.T) {
+	for _, tt := range []struct {
+		a, b string
+		want int
+		ok   bool
+	}{
+		{"1.1.18", "1.1.14", 1, true},
+		{"v1.1.14", "1.1.18", -1, true},
+		{"1.1.18", "v1.1.18", 0, true},
+		{"1.10.0", "1.9.9", 1, true},
+		{"1.2.0-rc.1", "1.1.0", 0, false},
+		{"dev", "1.1.0", 0, false},
+		{"1.1.0", "", 0, false},
+	} {
+		got, ok := CompareReleases(tt.a, tt.b)
+		if got > 0 {
+			got = 1
+		} else if got < 0 {
+			got = -1
+		}
+		if got != tt.want || ok != tt.ok {
+			t.Errorf("CompareReleases(%q, %q) = %d, %v; want %d, %v", tt.a, tt.b, got, ok, tt.want, tt.ok)
+		}
+	}
+	if IsRelease("1.2.0-rc.1") || !IsRelease("1.2.0") {
+		t.Error("IsRelease")
+	}
+}
+
 func TestParseSemverRejectsInvalidValues(t *testing.T) {
 	for _, value := range []string{"", "1", "1.2", "1.02.3", "1.2.3-01", "1.2.3+", "latest", "v1.2.3.4"} {
 		if _, ok := parseSemver(value); ok {

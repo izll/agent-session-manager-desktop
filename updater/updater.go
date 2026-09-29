@@ -501,6 +501,25 @@ func compareSemver(a, b semVersion) int {
 	return 1
 }
 
+// CompareReleases orders two stable release versions ("1.2.3" or "v1.2.3"):
+// negative when a is older, zero when equal, positive when newer. ok is false
+// when either is not a stable release — unparseable, or a pre-release — so a
+// caller never ranks a development build against a real one.
+func CompareReleases(a, b string) (cmp int, ok bool) {
+	av, aok := parseSemver(a)
+	bv, bok := parseSemver(b)
+	if !aok || !bok || av.prerelease != "" || bv.prerelease != "" {
+		return 0, false
+	}
+	return compareSemver(av, bv), true
+}
+
+// IsRelease reports whether v is a stable release version.
+func IsRelease(v string) bool {
+	_, ok := CompareReleases(v, v)
+	return ok
+}
+
 func allDigits(s string) bool {
 	for _, r := range s {
 		if r < '0' || r > '9' {
