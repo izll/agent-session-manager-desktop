@@ -95,6 +95,8 @@ export function DiscardTrashedWorktree(arg1:string,arg2:boolean):Promise<void>;
 
 export function DiscoverLocalSchemes():Promise<Array<main.ImportedScheme>>;
 
+export function DismissInterruptedWork(arg1:Array<string>,arg2:string):Promise<void>;
+
 export function EmptyTrash(arg1:string):Promise<void>;
 
 export function ExportSessions(arg1:Array<string>,arg2:string):Promise<string>;
@@ -158,6 +160,8 @@ export function GetGitSyncPreview(arg1:string,arg2:number,arg3:string,arg4:strin
 export function GetGroups():Promise<Array<main.GroupInfo>>;
 
 export function GetHistoryPreview(arg1:string):Promise<string>;
+
+export function GetInterruptedWork():Promise<main.InterruptedWork>;
 
 export function GetLastLine(arg1:string):Promise<string>;
 
@@ -334,6 +338,8 @@ export function RenameGroup(arg1:string,arg2:string,arg3:string):Promise<void>;
 export function RenameSession(arg1:string,arg2:string,arg3:string):Promise<void>;
 
 export function RenameTab(arg1:string,arg2:number,arg3:string,arg4:string):Promise<void>;
+
+export function ReopenInterruptedSessions(arg1:Array<string>,arg2:string):Promise<Array<main.ReopenResult>>;
 
 export function ReorderServers(arg1:Array<string>):Promise<Array<main.ServerInfo>>;
 

@@ -182,6 +182,10 @@ export function DiscoverLocalSchemes() {
   return window['go']['main']['App']['DiscoverLocalSchemes']();
 }
 
+export function DismissInterruptedWork(arg1, arg2) {
+  return window['go']['main']['App']['DismissInterruptedWork'](arg1, arg2);
+}
+
 export function EmptyTrash(arg1) {
   return window['go']['main']['App']['EmptyTrash'](arg1);
 }
@@ -308,6 +312,10 @@ export function GetGroups() {
 
 export function GetHistoryPreview(arg1) {
   return window['go']['main']['App']['GetHistoryPreview'](arg1);
+}
+
+export function GetInterruptedWork() {
+  return window['go']['main']['App']['GetInterruptedWork']();
 }
 
 export function GetLastLine(arg1) {
@@ -660,6 +668,10 @@ export function RenameSession(arg1, arg2, arg3) {
 
 export function RenameTab(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['RenameTab'](arg1, arg2, arg3, arg4);
+}
+
+export function ReopenInterruptedSessions(arg1, arg2) {
+  return window['go']['main']['App']['ReopenInterruptedSessions'](arg1, arg2);
 }
 
 export function ReorderServers(arg1) {

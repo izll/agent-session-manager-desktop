@@ -42,6 +42,7 @@ type Storage struct {
 	mu                 sync.Mutex
 	projectsMu         sync.Mutex
 	lockMu             sync.Mutex
+	runningMu          sync.Mutex // guards the running.json record (running_snapshot.go)
 	configDir          string
 	configPath         string
 	projectID          string // Active project ID ("" = default)
@@ -238,6 +239,12 @@ type Settings struct {
 	// the neutral starting point, and landing straight in a session is a
 	// preference rather than an obvious improvement.
 	RestoreLastSession bool `json:"restore_last_session,omitempty"`
+	// RestartReopen is what happens to the work a reboot (or a lost tmux
+	// server) interrupted, on the next launch: "ask" shows the list and lets
+	// the user pick, "auto" reopens it all, "off" does nothing. Empty — every
+	// config from before the setting — is "ask": offering is harmless, and
+	// silently doing nothing is exactly what this exists to fix.
+	RestartReopen string `json:"restart_reopen,omitempty"`
 	// Attention notifications: fire when an agent flips to "waiting"
 	// (needs user input). Desktop uses notify-send/osascript; ntfy POSTs
 	// to NtfyURL (e.g. https://ntfy.sh/my-topic) for mobile push.

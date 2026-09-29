@@ -1122,6 +1122,68 @@ export namespace main {
 	        this.isDefault = source["isDefault"];
 	    }
 	}
+	export class InterruptedSession {
+	    id: string;
+	    name: string;
+	    path: string;
+	    agent: string;
+	    color: string;
+	    serverId: string;
+	    agents: string[];
+	    reopenTabs: number;
+	    totalTabs: number;
+
+	    static createFrom(source: any = {}) {
+	        return new InterruptedSession(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.path = source["path"];
+	        this.agent = source["agent"];
+	        this.color = source["color"];
+	        this.serverId = source["serverId"];
+	        this.agents = source["agents"];
+	        this.reopenTabs = source["reopenTabs"];
+	        this.totalTabs = source["totalTabs"];
+	    }
+	}
+	export class InterruptedWork {
+	    projectId: string;
+	    mode: string;
+	    sessions: InterruptedSession[];
+
+	    static createFrom(source: any = {}) {
+	        return new InterruptedWork(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.projectId = source["projectId"];
+	        this.mode = source["mode"];
+	        this.sessions = this.convertValues(source["sessions"], InterruptedSession);
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class LockStatusInfo {
 	    locked: boolean;
 	    otherInstancePid: number;
@@ -1551,6 +1613,22 @@ export namespace main {
 	        this.viewOf = source["viewOf"];
 	    }
 	}
+	export class ReopenResult {
+	    id: string;
+	    ok: boolean;
+	    error?: string;
+
+	    static createFrom(source: any = {}) {
+	        return new ReopenResult(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.ok = source["ok"];
+	        this.error = source["error"];
+	    }
+	}
 	export class SSHConfigHostInfo {
 	    alias: string;
 	    hostName: string;
@@ -1880,6 +1958,7 @@ export namespace main {
 	    checkpointAutoPruneDays: number;
 	    taskMasterEnabled: boolean;
 	    restoreLastSession: boolean;
+	    restartReopen: string;
 	    terminalFontSize: number;
 	    agentFontSize: number;
 	    hideViewBar: boolean;
@@ -1947,6 +2026,7 @@ export namespace main {
 	        this.checkpointAutoPruneDays = source["checkpointAutoPruneDays"];
 	        this.taskMasterEnabled = source["taskMasterEnabled"];
 	        this.restoreLastSession = source["restoreLastSession"];
+	        this.restartReopen = source["restartReopen"];
 	        this.terminalFontSize = source["terminalFontSize"];
 	        this.agentFontSize = source["agentFontSize"];
 	        this.hideViewBar = source["hideViewBar"];

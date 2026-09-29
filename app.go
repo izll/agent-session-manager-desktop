@@ -40,7 +40,12 @@ type App struct {
 	projectMutationMu sync.Mutex
 	// terminalDirSaves paces how often the sidebar poll saves where the
 	// terminal tabs are. See terminalDirSaveInterval.
-	terminalDirSaves    eventThrottle
+	terminalDirSaves eventThrottle
+	// runningSaves paces the poll's record of what is running, and
+	// runningStops keeps it from undoing a stop made while a pass was out
+	// (interrupted_work.go).
+	runningSaves        eventThrottle
+	runningStops        runningStops
 	projectTransitionMu sync.Mutex
 	projectGateMu       sync.Mutex
 	projectSwitching    bool
@@ -125,6 +130,7 @@ func NewApp() *App {
 		ptys:             make(map[string]*ptySession),
 		servers:          newServerPool(),
 		terminalDirSaves: eventThrottle{interval: terminalDirSaveInterval},
+		runningSaves:     eventThrottle{interval: runningRecordInterval},
 	}
 }
 
@@ -1583,6 +1589,8 @@ func (a *App) StopSession(id, expectedProjectID string) error {
 	if err := inst.Stop(); err != nil {
 		return err
 	}
+	// Stopped on purpose, so not something a restart should bring back.
+	a.forgetStoppedSession(expectedProjectID, id)
 	return a.storage.UpdateInstance(inst)
 }
 
@@ -1695,9 +1703,16 @@ func (a *App) StopTab(id string, windowIdx int, expectedProjectID string) error 
 	if err != nil {
 		return err
 	}
+	// Which tab this is, asked before the stop: stopping the main window
+	// parks it, and the question is about the tab, not the pane.
+	tabID := ""
+	if tab := inst.GetFollowedWindow(windowIdx); tab != nil {
+		tabID = tab.ID
+	}
 	if err := inst.StopWindow(windowIdx); err != nil {
 		return err
 	}
+	a.forgetStoppedTab(expectedProjectID, id, tabID)
 	return a.storage.UpdateInstance(inst)
 }
 
@@ -3339,6 +3354,9 @@ func (a *App) lastSidebarSnapshot() (SidebarUpdate, bool) {
 const terminalDirSaveInterval = 30 * time.Second
 
 func (a *App) getSidebarUpdates(ctx context.Context) SidebarUpdate {
+	// Before the load, whose status reads are what the record of running
+	// sessions is built from: a stop after this moment wins over them.
+	passStart := time.Now()
 	a.projectMu.RLock()
 	mayPersist := a.projectLocked
 	defer a.projectMu.RUnlock()
@@ -3493,6 +3511,12 @@ func (a *App) getSidebarUpdates(ctx context.Context) SidebarUpdate {
 		if err := a.storage.RecordTerminalDirsForProject(projectID, terminalDirs); err != nil {
 			log.Printf("[SidebarPoll] failed to save terminal directories: %v", err)
 		}
+	}
+
+	// What is running, and in which tabs, for the next launch after a reboot
+	// (interrupted_work.go). Only by the instance that owns the project.
+	if mayPersist {
+		a.recordRunningFromPoll(ctx, projectID, instances, passStart)
 	}
 
 	// Phase 2: run detection in parallel. isSpinnerAnimating() sleeps 60ms
@@ -4887,6 +4911,7 @@ type SettingsInfo struct {
 	CheckpointAutoPruneDays int    `json:"checkpointAutoPruneDays"`
 	TaskMasterEnabled       bool   `json:"taskMasterEnabled"`
 	RestoreLastSession      bool   `json:"restoreLastSession"`
+	RestartReopen           string `json:"restartReopen"`
 	TerminalFontSize        int    `json:"terminalFontSize"`
 	AgentFontSize           int    `json:"agentFontSize"`
 	HideViewBar             bool   `json:"hideViewBar"`
@@ -5014,6 +5039,7 @@ func (a *App) GetSettings() (*SettingsInfo, error) {
 		CheckpointAutoPruneDays:   max(settings.CheckpointAutoPruneDays, 0),
 		TaskMasterEnabled:         settings.TaskMasterEnabled,
 		RestoreLastSession:        settings.RestoreLastSession,
+		RestartReopen:             restartReopenMode(settings.RestartReopen),
 		TerminalFontSize:          settings.TerminalFontSize,
 		AgentFontSize:             settings.AgentFontSize,
 		HideViewBar:               settings.HideViewBar,
@@ -5108,6 +5134,7 @@ func (a *App) SaveSettings(settings SettingsInfo, expectedProjectID string) erro
 		current.CheckpointAutoPruneDays = max(settings.CheckpointAutoPruneDays, 0)
 		current.TaskMasterEnabled = settings.TaskMasterEnabled
 		current.RestoreLastSession = settings.RestoreLastSession
+		current.RestartReopen = storedRestartReopen(settings.RestartReopen)
 		current.TerminalFontSize = settings.TerminalFontSize
 		current.AgentFontSize = settings.AgentFontSize
 		current.HideViewBar = settings.HideViewBar
