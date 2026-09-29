@@ -15,6 +15,8 @@ export type FileJump = {
   path: string;
   /** 1-based; the browser scrolls here. Absent when only the file matters. */
   line?: number;
+  /** A folder: shown and selected in the tree, with no file opened. */
+  folder?: boolean;
 };
 
 export const pendingFileJump = writable<FileJump | null>(null);
@@ -31,6 +33,13 @@ export const browserViewRequested = writable(false);
 /** Ask the browser view to open a file, optionally at a line. */
 export function requestFileJump(path: string, line?: number): void {
   pendingFileJump.set({ path, line });
+  browserViewRequested.set(true);
+}
+
+/** Ask the browser view to show a folder in its tree — opened out, selected
+ *  and scrolled to — without opening any file. */
+export function requestFolderJump(path: string): void {
+  pendingFileJump.set({ path, folder: true });
   browserViewRequested.set(true);
 }
 

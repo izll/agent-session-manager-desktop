@@ -35,7 +35,7 @@
       clearFileJump();
       const loaded = await loadFile(path);
       if (!loaded) return;
-      void revealInTree(path);
+      void revealInTree(path).then(() => scrollTreeTo(path));
 
       // After the document is in the editor, not before: CodeMirror has no
       // document to position within until loadFile has built the view.
@@ -282,6 +282,36 @@
       void loadFile(path);
       void revealInTree(path);
     });
+  }
+
+  /** The folder a jump asked for, marked in the tree until a file is chosen. */
+  let revealedDir: string | null = null;
+
+  /**
+   * Show a folder from a jump: its ancestors and the folder itself opened out,
+   * the row marked and scrolled to. No file is opened — the folder is what was
+   * asked for.
+   */
+  async function openRequestedFolder(path: string) {
+    clearFileJump();
+    const folder = path.replace(/\/+$/, '');
+    if (!folder) return; // the root: the tree already starts there
+    // revealInTree opens every folder above its last segment; with a stand-in
+    // name after the folder, that includes the folder itself.
+    await revealInTree(`${folder}/_`);
+    if (destroyed) return;
+    revealedDir = folder;
+    await scrollTreeTo(folder);
+  }
+
+  /**
+   * Scroll the tree to a row. Opening its folders was not enough: in a long
+   * tree the row was open but somewhere below the fold.
+   */
+  async function scrollTreeTo(path: string) {
+    await tick();
+    const row = panesEl?.querySelector(`.file-list [data-tree-path="${CSS.escape(path)}"]`);
+    row?.scrollIntoView({ block: 'nearest' });
   }
 
   async function revealInTree(path: string) {
@@ -1026,8 +1056,11 @@
   /** Honour jumps only after the target tab's tree owns the component. */
   $: if (active && loadedBrowseKey === browseKey && $pendingFileJump) {
     const jump = $pendingFileJump;
-    void openRequestedFile(jump.path, jump.line);
+    if (jump.folder) void openRequestedFolder(jump.path);
+    else void openRequestedFile(jump.path, jump.line);
   }
+  // A file chosen: the folder mark has served its purpose.
+  $: if (selectedPath) revealedDir = null;
 
   // Navigating away from the Files tab keeps this component mounted but hidden,
   // so unsaved edits would sit there invisibly until the session changed and
@@ -1339,6 +1372,8 @@
             {#if row.kind === 'dir'}
               <div
                 class="tree-dir"
+                class:selected={row.path === revealedDir}
+                data-tree-path={row.path}
                 style="padding-left: {10 + row.depth * TREE_INDENT}px"
                 role="button"
                 tabindex="0"
@@ -1382,6 +1417,7 @@
               <div
                 class="file-row tree-file"
                 class:selected={file.path === selectedPath}
+                data-tree-path={file.path}
                 class:unreadable={file.entry.unreadable}
                 style="padding-left: {10 + row.depth * TREE_INDENT}px"
                 role="button"
@@ -1817,6 +1853,7 @@
   .file-row:hover {
     background: rgba(255, 255, 255, 0.04);
   }
+  .tree-dir.selected,
   .file-row.selected {
     background: rgba(var(--accent-rgb), 0.12);
     border-left-color: var(--accent);
