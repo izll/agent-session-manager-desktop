@@ -334,6 +334,8 @@ func (s *Storage) ListTaskBackups() ([]BackupInfo, error) {
 		return nil, err
 	}
 	allowed := taskBackupAllowedPaths(data)
+	// The project's own task list lives beside sessions.json.
+	allowed[CanonicalProjectPath(filepath.Dir(s.configPath))] = struct{}{}
 	result := make([]BackupInfo, 0, len(entries))
 	for _, entry := range backupJSONEntries(entries) {
 		backupPath := filepath.Join(s.taskBackupDirLocked(), entry.Name())
@@ -480,6 +482,8 @@ func (s *Storage) RestoreTaskBackup(id string) error {
 			err = loadErr
 		} else {
 			allowed = taskBackupAllowedPaths(data)
+			// The project's own task list lives beside sessions.json.
+			allowed[CanonicalProjectPath(filepath.Dir(s.configPath))] = struct{}{}
 		}
 	}
 	s.mu.Unlock()

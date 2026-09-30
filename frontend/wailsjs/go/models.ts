@@ -2293,6 +2293,7 @@ export namespace main {
 	    projectId: string;
 	    projectName: string;
 	    projectPath: string;
+	    projectTask?: boolean;
 	    sessionName?: string;
 	    sessionColor?: string;
 	    overdue: boolean;
@@ -2321,6 +2322,7 @@ export namespace main {
 	        this.projectId = source["projectId"];
 	        this.projectName = source["projectName"];
 	        this.projectPath = source["projectPath"];
+	        this.projectTask = source["projectTask"];
 	        this.sessionName = source["sessionName"];
 	        this.sessionColor = source["sessionColor"];
 	        this.overdue = source["overdue"];

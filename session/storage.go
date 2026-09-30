@@ -339,6 +339,10 @@ type StorageData struct {
 	Groups        []*Group      `json:"groups,omitempty"`
 	Settings      *Settings     `json:"settings,omitempty"`
 	Trash         []*TrashEntry `json:"trash,omitempty"`
+	// Notes is the project's own note — free text about the project as a
+	// whole, beside the per-session and per-tab notes. Kept in this file so it
+	// is backed up, restored and moved with the project like everything else.
+	Notes string `json:"notes,omitempty"`
 }
 
 // DefaultSettings returns the initial settings a brand-new install should have.

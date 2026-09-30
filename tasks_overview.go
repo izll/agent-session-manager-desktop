@@ -20,6 +20,11 @@ type TaskOverviewItem struct {
 	ProjectName string `json:"projectName"`
 	ProjectPath string `json:"projectPath"`
 
+	// ProjectTask marks a task from the project's own list, which belongs to
+	// no session and lives in no working directory. ProjectPath and SessionID
+	// are empty for it.
+	ProjectTask bool `json:"projectTask,omitempty"`
+
 	// SessionName is the session the task belongs to, resolved for display.
 	// Empty when the task is project-wide or its session no longer exists —
 	// a deleted session must not hide the task that outlived it.
@@ -86,6 +91,8 @@ func (a *App) GetAllTasks() ([]TaskOverviewItem, error) {
 	}
 
 	for _, project := range refs {
+		items = append(items, a.projectOwnTasks(project.id, project.name, now)...)
+
 		instances, _, err := a.storage.LoadAllForProject(project.id)
 		if err != nil {
 			continue
@@ -144,6 +151,37 @@ func (a *App) GetAllTasks() ([]TaskOverviewItem, error) {
 
 	sortTasksByDeadline(items)
 	return items, nil
+}
+
+// projectOwnTasks is one project's own task list, the one beside its
+// sessions.json. Missing or unreadable, it contributes nothing, like a
+// session's file would.
+func (a *App) projectOwnTasks(projectID, projectName string, now time.Time) []TaskOverviewItem {
+	dir, err := a.storage.ProjectDataDirFor(projectID)
+	if err != nil {
+		return nil
+	}
+	manager := session.NewTaskManager(dir)
+	if err := manager.Load(); err != nil {
+		return nil
+	}
+	tasks := manager.GetTasks()
+	items := make([]TaskOverviewItem, 0, len(tasks))
+	for _, task := range tasks {
+		info := convertTask(task)
+		// A project task names no session; one that somehow does must not be
+		// shown under that session's heading while living in another list.
+		info.SessionID = ""
+		info.TabID = ""
+		items = append(items, TaskOverviewItem{
+			TaskInfo:    info,
+			ProjectID:   projectID,
+			ProjectName: projectName,
+			ProjectTask: true,
+			Overdue:     task.Overdue(now),
+		})
+	}
+	return items
 }
 
 // sortTasksByDeadline orders tasks the way someone chasing deadlines reads

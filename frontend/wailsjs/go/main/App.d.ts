@@ -183,6 +183,8 @@ export function GetProjectActivityStatistics(arg1:string,arg2:number):Promise<ma
 
 export function GetProjectGitSummaries(arg1:string):Promise<Array<main.ProjectGitSummary>>;
 
+export function GetProjectNotes():Promise<string>;
+
 export function GetProjectSessions(arg1:string):Promise<Array<main.SessionInfo>>;
 
 export function GetProjects():Promise<Array<main.ProjectInfo>>;
@@ -292,6 +294,10 @@ export function MoveQuickJump(arg1:number,arg2:number,arg3:string):Promise<void>
 export function MoveSessionToIndex(arg1:string,arg2:number,arg3:string):Promise<void>;
 
 export function MoveTask(arg1:string,arg2:string,arg3:string,arg4:string):Promise<void>;
+
+export function MoveTaskToProject(arg1:string,arg2:string,arg3:string):Promise<main.TaskInfo>;
+
+export function MoveTaskToSession(arg1:string,arg2:string,arg3:string,arg4:string):Promise<main.TaskInfo>;
 
 export function OpenAppLogFolder():Promise<void>;
 
@@ -403,6 +409,8 @@ export function SelectProject(arg1:string):Promise<void>;
 
 export function SendInput(arg1:string,arg2:string,arg3:string):Promise<void>;
 
+export function SendProjectTaskToAgent(arg1:string,arg2:string,arg3:string,arg4:string):Promise<void>;
+
 export function SendPrompt(arg1:string,arg2:string,arg3:string):Promise<void>;
 
 export function SendPromptToWindow(arg1:string,arg2:number,arg3:string,arg4:string):Promise<void>;
@@ -414,6 +422,8 @@ export function SetExtraArgs(arg1:string,arg2:number,arg3:string,arg4:string):Pr
 export function SetGroupColor(arg1:string,arg2:string,arg3:string,arg4:boolean,arg5:string):Promise<void>;
 
 export function SetLastWindowIndex(arg1:string,arg2:number,arg3:string):Promise<void>;
+
+export function SetProjectNotes(arg1:string,arg2:string):Promise<void>;
 
 export function SetQuickJump(arg1:Array<session.QuickJumpEntry>,arg2:string):Promise<void>;
 

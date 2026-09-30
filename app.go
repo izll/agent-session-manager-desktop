@@ -2071,13 +2071,17 @@ func (a *App) CreateBackup(expectedProjectID string) error {
 	return nil
 }
 
-// backupTaskFiles snapshots the task file of every session's working directory.
+// backupTaskFiles snapshots the project's own task file and that of every
+// session's working directory.
 func (a *App) backupTaskFiles() error {
 	instances, err := a.storage.Load()
 	if err != nil {
 		return err
 	}
-	dirs := make([]string, 0, len(instances))
+	// The project's own list first, beside sessions.json; then every
+	// session's working directory.
+	dirs := make([]string, 0, len(instances)+1)
+	dirs = append(dirs, a.storage.ProjectDataDir())
 	for _, instance := range instances {
 		if instance != nil && instance.Path != "" {
 			dirs = append(dirs, instance.Path)
@@ -5861,14 +5865,23 @@ type DeletedSubtaskSnapshot struct {
 var taskManagerCache = make(map[string]*session.TaskManager)
 var taskManagerMu sync.RWMutex
 
-// getTaskManager returns or creates a task manager for a session's project path
+// getTaskManager returns or creates a task manager for a session's project
+// path — or, for ProjectTasksScope, for the active project's own task list.
 func (a *App) getTaskManager(sessionID string) (*session.TaskManager, error) {
+	if sessionID == ProjectTasksScope {
+		return cachedTaskManager(a.storage.ProjectDataDir())
+	}
 	sess, err := a.storage.GetInstance(sessionID)
 	if err != nil {
 		return nil, fmt.Errorf("session not found: %w", err)
 	}
+	return cachedTaskManager(sess.Path)
+}
 
-	projectPath := session.CanonicalProjectPath(sess.Path)
+// cachedTaskManager returns the one task manager for a directory's task file,
+// loading it on first use.
+func cachedTaskManager(dir string) (*session.TaskManager, error) {
+	projectPath := session.CanonicalProjectPath(dir)
 	if projectPath == "" {
 		return nil, fmt.Errorf("error.sessionNoPath")
 	}
@@ -6022,7 +6035,7 @@ func (a *App) CreateTask(sessionID, title, description, priority string, tags []
 		tags = []string{}
 	}
 
-	task, err := tm.CreateTaskForSession(title, description, session.TaskPriority(priority), tags, sessionID)
+	task, err := tm.CreateTaskForSession(title, description, session.TaskPriority(priority), tags, taskOwner(sessionID))
 	if err != nil {
 		return nil, err
 	}
@@ -6043,6 +6056,9 @@ func (a *App) UpdateTask(sessionID, taskID string, updates map[string]interface{
 		return err
 	}
 
+	if sessionID == ProjectTasksScope {
+		return tm.UpdateTask(taskID, withoutSessionAssignment(updates))
+	}
 	return tm.UpdateTask(taskID, tabAssignmentImpliesSession(sessionID, updates))
 }
 

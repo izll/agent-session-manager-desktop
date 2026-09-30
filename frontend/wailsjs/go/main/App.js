@@ -358,6 +358,10 @@ export function GetProjectGitSummaries(arg1) {
   return window['go']['main']['App']['GetProjectGitSummaries'](arg1);
 }
 
+export function GetProjectNotes() {
+  return window['go']['main']['App']['GetProjectNotes']();
+}
+
 export function GetProjectSessions(arg1) {
   return window['go']['main']['App']['GetProjectSessions'](arg1);
 }
@@ -576,6 +580,14 @@ export function MoveSessionToIndex(arg1, arg2, arg3) {
 
 export function MoveTask(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['MoveTask'](arg1, arg2, arg3, arg4);
+}
+
+export function MoveTaskToProject(arg1, arg2, arg3) {
+  return window['go']['main']['App']['MoveTaskToProject'](arg1, arg2, arg3);
+}
+
+export function MoveTaskToSession(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['MoveTaskToSession'](arg1, arg2, arg3, arg4);
 }
 
 export function OpenAppLogFolder() {
@@ -798,6 +810,10 @@ export function SendInput(arg1, arg2, arg3) {
   return window['go']['main']['App']['SendInput'](arg1, arg2, arg3);
 }
 
+export function SendProjectTaskToAgent(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['SendProjectTaskToAgent'](arg1, arg2, arg3, arg4);
+}
+
 export function SendPrompt(arg1, arg2, arg3) {
   return window['go']['main']['App']['SendPrompt'](arg1, arg2, arg3);
 }
@@ -820,6 +836,10 @@ export function SetGroupColor(arg1, arg2, arg3, arg4, arg5) {
 
 export function SetLastWindowIndex(arg1, arg2, arg3) {
   return window['go']['main']['App']['SetLastWindowIndex'](arg1, arg2, arg3);
+}
+
+export function SetProjectNotes(arg1, arg2) {
+  return window['go']['main']['App']['SetProjectNotes'](arg1, arg2);
 }
 
 export function SetQuickJump(arg1, arg2) {
