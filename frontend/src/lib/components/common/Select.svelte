@@ -1,3 +1,14 @@
+<script context="module" lang="ts">
+  /**
+   * One dropdown open at a time, among dropdowns. Opening one left another
+   * open beside it — a session picker and a tab picker in the same dialog
+   * spilled over each other. Not the app-wide menu slot (claimMenu): a
+   * dropdown can sit inside a menu or panel that holds that slot, and
+   * opening it would close its own container.
+   */
+  let closeOpenSelect: (() => void) | null = null;
+</script>
+
 <script lang="ts">
   import { createEventDispatcher, onMount, onDestroy, tick } from 'svelte';
   import { t } from '../../i18n';
@@ -99,6 +110,24 @@
       dropdownRef.style.maxHeight = `${below}px`;
     }
   }
+
+  function closeFromAnother() {
+    isOpen = false;
+  }
+
+  function followOpenSlot(open: boolean) {
+    if (open) {
+      if (closeOpenSelect && closeOpenSelect !== closeFromAnother) closeOpenSelect();
+      closeOpenSelect = closeFromAnother;
+    } else if (closeOpenSelect === closeFromAnother) {
+      closeOpenSelect = null;
+    }
+  }
+  // Whichever way this one opens or closes, the shared slot follows.
+  $: followOpenSlot(isOpen);
+  onDestroy(() => {
+    if (closeOpenSelect === closeFromAnother) closeOpenSelect = null;
+  });
 
   async function toggle() {
     isOpen = !isOpen;
