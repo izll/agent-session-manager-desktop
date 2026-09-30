@@ -139,3 +139,40 @@ test('a match at the very start of the path yields no leading empty segment', ()
   assert.equal(segments[0].text, 'app');
   assert.equal(segments[0].matched, true);
 });
+
+// "release" brought up files that only held its letters scattered in order,
+// and a file named release-notes.md could rank low, its letters taken from the
+// directory names on the way. Whole pieces of the query come first now, and
+// scattered letters only when nothing holds the query whole.
+const releaseIndex = [
+  c('frontend/src/lib/components/Sidebar/SessionList.svelte'),
+  c('scripts/release-notes.md'),
+  c('docs/RELEASE.md'),
+  c('frontend/src/lib/utils/releaseCheck.ts'),
+  c('frontend/src/lib/stores/sessions.ts'),
+];
+
+test('drops files that only hold the letters scattered', () => {
+  const paths = rankFiles(releaseIndex, 'release').map((m) => m.path);
+  assert.deepEqual(paths.sort(), ['docs/RELEASE.md', 'frontend/src/lib/utils/releaseCheck.ts', 'scripts/release-notes.md']);
+});
+
+test('marks the whole word, where it is in the file name', () => {
+  const [hit] = rankFiles([c('release/tools/release-notes.md')], 'release');
+  assert.deepEqual(hit.positions, [14, 15, 16, 17, 18, 19, 20]);
+});
+
+test('ranks a file name starting with the query first', () => {
+  assert.equal(rankFiles(releaseIndex, 'release')[0].path, 'docs/RELEASE.md');
+});
+
+test('finds each word of a query somewhere, in any order', () => {
+  const paths = rankFiles(releaseIndex, 'check release').map((m) => m.path);
+  assert.deepEqual(paths, ['frontend/src/lib/utils/releaseCheck.ts']);
+});
+
+test('still finds a file by its initials when nothing holds the query whole', () => {
+  const paths = rankFiles([c('frontend/src/lib/components/MainPanel/FileBrowser.svelte'), c('README.md')], 'flbrsv')
+    .map((m) => m.path);
+  assert.deepEqual(paths, ['frontend/src/lib/components/MainPanel/FileBrowser.svelte']);
+});

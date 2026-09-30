@@ -121,6 +121,66 @@ function isBoundary(path: string, idx: number): boolean {
   return ch >= 'A' && ch <= 'Z' && prev >= 'a' && prev <= 'z';
 }
 
+// Tiers, far apart so no score within a tier can cross into the next.
+// A path holding the query as one piece beats one holding each of its words,
+// which beats one holding its letters scattered in order.
+const TIER_SUBSTRING = 2000;
+const TIER_WORDS = 1000;
+
+/**
+ * The best contiguous occurrence of `needle` in the path, scored: in the
+ * basename over the directory, at a word boundary over mid-word, and the
+ * basename's own start above all. Null when the path does not contain it.
+ */
+function bestOccurrence(path: string, lower: string, baseStart: number, needle: string): { at: number; score: number } | null {
+  let best: { at: number; score: number } | null = null;
+  for (let at = lower.indexOf(needle); at >= 0; at = lower.indexOf(needle, at + 1)) {
+    let score = needle.length * (SCORE_MATCH + SCORE_CONSECUTIVE);
+    if (isBoundary(path, at)) score += SCORE_BOUNDARY * 2;
+    if (at >= baseStart) {
+      score += SCORE_BASENAME * 2;
+      if (at === baseStart) score += SCORE_BASENAME_START * 2;
+    }
+    if (!best || score > best.score) best = { at, score };
+  }
+  return best;
+}
+
+/**
+ * Score a path on whole pieces of the query: the query as one piece
+ * (TIER_SUBSTRING), or each of its space-separated words somewhere (TIER_WORDS).
+ * Null when neither holds, and the path is left to the scattered-letter match.
+ *
+ * The letters-in-order match alone ranked badly: it takes the first place each
+ * letter appears, so "release" in a file called release-notes.md could land
+ * on letters strewn over the directory names, and paths that merely contain
+ * r…e…l…e…a…s…e somewhere filled the list.
+ */
+export function scoreWhole(path: string, name: string, queryLower: string): FileMatch | null {
+  const lower = path.toLowerCase();
+  const baseStart = path.length - name.length;
+  const words = queryLower.split(' ').filter(Boolean);
+  if (words.length === 0) return null;
+
+  const whole = words.join(' ');
+  const single = bestOccurrence(path, lower, baseStart, whole);
+  if (single) {
+    const positions = Array.from({ length: whole.length }, (_, i) => single.at + i);
+    return { path, score: TIER_SUBSTRING + single.score - path.length * PENALTY_LENGTH, positions };
+  }
+  if (words.length < 2) return null;
+
+  let score = TIER_WORDS;
+  const taken = new Set<number>();
+  for (const word of words) {
+    const hit = bestOccurrence(path, lower, baseStart, word);
+    if (!hit) return null;
+    score += hit.score;
+    for (let i = 0; i < word.length; i++) taken.add(hit.at + i);
+  }
+  return { path, score: score - path.length * PENALTY_LENGTH, positions: [...taken].sort((a, b) => a - b) };
+}
+
 /**
  * Rank the whole index against a query, best first.
  *
@@ -144,10 +204,19 @@ export function rankFiles(
       .map((c) => ({ path: c.path, score: 0, positions: [] }));
   }
 
+  // Whole pieces first. The scattered-letter match is for the queries that
+  // find nothing whole — initials like "flbrsv" — and only for those: next to
+  // real hits it only added noise.
   const out: FileMatch[] = [];
   for (const candidate of candidates) {
-    const match = scorePath(candidate.path, candidate.name, q);
+    const match = scoreWhole(candidate.path, candidate.name, q);
     if (match) out.push(match);
+  }
+  if (out.length === 0) {
+    for (const candidate of candidates) {
+      const match = scorePath(candidate.path, candidate.name, q);
+      if (match) out.push(match);
+    }
   }
   // Descending score, then shorter path, then alphabetical — the last two make
   // the order deterministic, so an unchanged query never reshuffles the list.
