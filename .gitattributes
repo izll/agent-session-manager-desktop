@@ -1,0 +1,24 @@
+# Text files are checked out with LF everywhere, Windows included.
+#
+# Without this, git on the Windows CI runner turned every text file into CRLF
+# on checkout. Tests that read the source, the changelog or a fixture and look
+# for a pattern passed on Linux and failed there, again and again, while the
+# program itself was fine. How the app handles a user's own CRLF files is
+# covered by tests that build such files themselves.
+* text=auto eol=lf
+
+# Binaries: never touched.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.icns binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.exe binary
+*.dll binary
+*.syso binary
+*.zip binary
+*.gz binary
