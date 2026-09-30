@@ -10,6 +10,7 @@
     type GitBranchEntry
   } from '../../stores/gitBranch';
   import { portal } from '../../utils/portal';
+  import { claimMenu, releaseMenu } from '../../utils/openMenu';
   import { canOfferPush, canOfferPull, type GitSyncDirection } from '../../utils/gitSync';
   import GitSyncPanel from './GitSyncPanel.svelte';
 
@@ -116,6 +117,10 @@
       return;
     }
     isOpen = true;
+    // One menu at a time, app-wide: the push/pull panel, this badge's twin in
+    // the status bar, any other context menu. They used to sit on top of
+    // each other.
+    claimMenu(close);
     // Lazily: the badge is mounted for every session, so listing on render
     // would fork a git process per session instead of per click.
     loadBranches();
@@ -125,17 +130,26 @@
 
   function toggleSync(direction: GitSyncDirection) {
     if (syncOpen === direction) {
-      if (!syncBusy) syncOpen = null;
+      if (!syncBusy) closeSync();
       return;
     }
     if (syncBusy) return;
     close();
     syncOpen = direction;
+    claimMenu(closeSync);
+  }
+
+  /** Close the push/pull panel for another menu — unless a push or pull is
+   *  running: that panel shows how it ends, as elsewhere. */
+  function closeSync() {
+    releaseMenu(closeSync);
+    if (!syncBusy) syncOpen = null;
   }
 
   function close() {
     if (!isOpen) return;
     isOpen = false;
+    releaseMenu(close);
     // Invalidate any listing still in flight so it can't land into a menu the
     // user has already dismissed.
     listGeneration++;
@@ -240,7 +254,7 @@
     direction={syncOpen}
     anchor={syncOpen === 'push' ? pushPillRef : pullPillRef}
     bind:busy={syncBusy}
-    on:close={() => (syncOpen = null)}
+    on:close={() => { releaseMenu(closeSync); syncOpen = null; }}
   />
 {/if}
 
