@@ -308,6 +308,14 @@
     }
   }
 
+  /** Every rule of this repository dropped at once, after a confirmation:
+   *  typed patterns go too, and those took some work to write. */
+  let showAllConfirm = false;
+  function askShowAll() {
+    closeFileMenu();
+    if (hiddenRules.length) showAllConfirm = true;
+  }
+
   async function showRules(rules: string[]) {
     closeFileMenu();
     const sessionId = get(selectedSessionId);
@@ -2192,7 +2200,12 @@
         {/if}
         {#if statusFilter === 'skipped'}
           <div class="skipped-panel">
-            <p class="skipped-hint">{$t('diff.hidden.hint')}</p>
+            <div class="skipped-head">
+              <p class="skipped-hint">{$t('diff.hidden.hint')}</p>
+              {#if hiddenRules.length}
+                <button type="button" class="skipped-add-btn show-all" on:click={askShowAll}>{$t('diff.hidden.showAll')}</button>
+              {/if}
+            </div>
             <form class="skipped-add" on:submit|preventDefault={addTypedRule}>
               <input
                 class="skipped-input"
@@ -2704,6 +2717,16 @@
   variant="danger"
   on:confirm={confirmRevert}
   on:cancel={cancelRevert}
+/>
+
+<ConfirmDialog
+  bind:show={showAllConfirm}
+  title={$t('diff.hidden.showAllTitle')}
+  message={$t('diff.hidden.showAllMessage', { rules: hiddenRules.length, files: skippedFiles.length })}
+  confirmText={$t('diff.hidden.showAll')}
+  cancelText={$t('common.cancel')}
+  on:confirm={() => { showAllConfirm = false; void showRules(hiddenRules); }}
+  on:cancel={() => (showAllConfirm = false)}
 />
 
 <!-- The file list's context menu: hide from the view, or go to the file in
@@ -3581,6 +3604,17 @@
   }
   .status-filter.skipped:not(.active) {
     border-color: rgba(255, 255, 255, 0.12);
+  }
+
+  .skipped-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .skipped-head .show-all {
+    flex-shrink: 0;
   }
 
   .skipped-panel {

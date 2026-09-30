@@ -144,3 +144,28 @@ test('the menu jumps to the file, and to its folder, in the file browser', async
   await row(page, 'deleted.txt').click({ button: 'right' });
   await expect(menuItem(page, 'show-in-files')).toBeDisabled();
 });
+
+test('show all again: every rule goes after a confirmation, and every file is back', async ({ page }) => {
+  await open(page, '&hidden=gen/,deleted.txt');
+  await tab(page, 'skipped').click();
+  await expect(count(page, 'skipped')).toHaveText('3');
+  const button = page.locator('.skipped-panel .show-all');
+  await expect(button).toBeVisible();
+
+  // Cancel leaves everything as it was.
+  await button.click();
+  const dialog = page.getByRole('dialog');
+  // Two rules, three files.
+  await expect(dialog).toContainText('2');
+  await expect(dialog).toContainText('3');
+  await dialog.getByRole('button', { name: /Cancel|Mégse/ }).click();
+  await expect(count(page, 'skipped')).toHaveText('3');
+
+  await button.click();
+  await page.getByRole('dialog').getByRole('button', { name: /Show all again/ }).click();
+  await expect(count(page, 'skipped')).toHaveText('0');
+  await expect(button).toHaveCount(0);
+  expect(await page.evaluate(() => window.diffHidden.rules())).toEqual([]);
+  await tab(page, 'all').click();
+  await expect(count(page, 'all')).toHaveText('6');
+});
