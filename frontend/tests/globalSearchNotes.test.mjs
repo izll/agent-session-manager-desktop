@@ -70,7 +70,8 @@ test('the panel switches to notes after the tab-change reset', () => {
 // before the target watch (so the scope it sets is loaded in the same update).
 test('the notes view takes the scope and query from the search', () => {
   const activation = notes.indexOf('applyDefaultScope();\n    void activateNotes();');
-  const jump = notes.indexOf('$: if (active && $pendingNoteJump) takeNoteJump($pendingNoteJump);');
+  // Not in the project's note view: a jump names a session's note.
+  const jump = notes.indexOf('$: if (active && !isProject && $pendingNoteJump) takeNoteJump($pendingNoteJump);');
   const watch = notes.indexOf('$: wantedWindowIdx =');
   assert.ok(activation > 0 && jump > activation && watch > jump, 'the note jump is handled in the wrong place');
 

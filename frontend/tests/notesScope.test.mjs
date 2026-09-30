@@ -21,8 +21,10 @@ test('the session note is the same target on both sides', () => {
 // Switching scope is a change of target: the edit in progress is kept as a
 // draft and saved, and the other note is loaded.
 test('switching between the tab and the session reloads the note', () => {
-  assert.match(notes, /\$: wantedWindowIdx = scope === 'session' \? SESSION_NOTES : \$selectedWindowIdx;/);
-  assert.match(notes, /\$: if \(\$activeProjectId !== lastProjectId \|\| \$selectedSessionId !== lastSessionId \|\| wantedWindowIdx !== lastWindowIdx\)/,
+  // The project's own note is one fixed target, whatever tab is selected.
+  assert.match(notes, /\$: wantedSessionId = isProject \? PROJECT_TASKS_SCOPE : \$selectedSessionId;/);
+  assert.match(notes, /\$: wantedWindowIdx = isProject \|\| scope === 'session' \? SESSION_NOTES : \$selectedWindowIdx;/);
+  assert.match(notes, /\$: if \(\$activeProjectId !== lastProjectId \|\| wantedSessionId !== lastSessionId \|\| wantedWindowIdx !== lastWindowIdx\)/,
     'a scope switch does not save the draft and load the other note');
   assert.match(notes, /localStorage\.setItem\(SCOPE_KEY, next\)/, 'the choice is not remembered');
 });

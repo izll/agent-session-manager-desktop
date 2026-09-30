@@ -11,8 +11,18 @@
   import { activeProjectId } from '../../stores/projects';
   import { settings } from '../../stores/settings';
   import { pendingNoteJump, clearNoteJump, type NoteJump } from '../../stores/noteJump';
+  import { PROJECT_TASKS_SCOPE } from '../../utils/projectScope';
 
   export let active = false;
+  /**
+   * The project's own note instead of a session's or a tab's. It is addressed
+   * as one more target — session PROJECT_TASKS_SCOPE — so drafts, the save
+   * queue and the unsaved-changes guard treat it like any other note; only
+   * reading and writing go to the project's endpoints. Fixed for the life of
+   * the view.
+   */
+  export let project = false;
+  const isProject = project;
 
   // Which note is open: this tab's, or the session's — the one every tab of
   // the session shares. The session's is addressed as its own target, window
@@ -67,7 +77,11 @@
   });
 
   function targetWindowIdx(): number {
-    return scope === 'session' ? SESSION_NOTES : get(selectedWindowIdx);
+    return isProject || scope === 'session' ? SESSION_NOTES : get(selectedWindowIdx);
+  }
+
+  function targetSessionId(): string | null {
+    return isProject ? PROJECT_TASKS_SCOPE : get(selectedSessionId);
   }
 
   const dispatch = createEventDispatcher();
@@ -396,7 +410,7 @@
   // Load notes when session or window changes
   async function loadNotes(force = false) {
     const projectId = get(activeProjectId);
-    const sessionId = get(selectedSessionId);
+    const sessionId = targetSessionId();
     const windowIdx = targetWindowIdx();
 
     if (!sessionId) {
@@ -445,7 +459,7 @@
         resetHistory();
         return;
       }
-      const content = await App.GetTabNotes(sessionId, windowIdx);
+      const content = isProject ? await App.GetProjectNotes() : await App.GetTabNotes(sessionId, windowIdx);
       if (generation !== loadGeneration || projectId !== lastProjectId || projectId !== get(activeProjectId) || sessionId !== lastSessionId || windowIdx !== lastWindowIdx) return;
       notes = content || '';
       lastSaved = notes;
@@ -514,7 +528,8 @@
    * reach for next time.
    */
   let revealFirstMatch = false;
-  $: if (active && $pendingNoteJump) takeNoteJump($pendingNoteJump);
+  // A jump names a session's note; the project's view leaves it for that one.
+  $: if (active && !isProject && $pendingNoteJump) takeNoteJump($pendingNoteJump);
 
   function takeNoteJump(jump: NoteJump) {
     clearNoteJump();
@@ -539,8 +554,9 @@
 
   // Watch for session/window changes, and for a switch between the tab's note
   // and the session's, which is a change of target like any other.
-  $: wantedWindowIdx = scope === 'session' ? SESSION_NOTES : $selectedWindowIdx;
-  $: if ($activeProjectId !== lastProjectId || $selectedSessionId !== lastSessionId || wantedWindowIdx !== lastWindowIdx) {
+  $: wantedSessionId = isProject ? PROJECT_TASKS_SCOPE : $selectedSessionId;
+  $: wantedWindowIdx = isProject || scope === 'session' ? SESSION_NOTES : $selectedWindowIdx;
+  $: if ($activeProjectId !== lastProjectId || wantedSessionId !== lastSessionId || wantedWindowIdx !== lastWindowIdx) {
     rememberCurrentDraft();
     // Save current notes before loading new ones
     if (saveTimeout) {
@@ -601,7 +617,9 @@
   }
 
   async function saveNow(projectId: string, sessionId: string | null, windowIdx: number, snapshot: string) {
-    if (!projectId || !sessionId || (projectId === lastProjectId && sessionId === lastSessionId && windowIdx === lastWindowIdx && snapshot === lastSaved)) return;
+    // The project ID is not tested for truth: the default project's is "",
+    // and refusing it left every note there unsaved.
+    if (!sessionId || (projectId === lastProjectId && sessionId === lastSessionId && windowIdx === lastWindowIdx && snapshot === lastSaved)) return;
 
     const key = noteKey(projectId, sessionId, windowIdx);
     const previous = saveQueues.get(key) ?? Promise.resolve();
@@ -609,7 +627,8 @@
       savesInFlight++;
       saving = true;
       try {
-        await App.SetTabNotes(sessionId, windowIdx, snapshot, projectId);
+        if (isProject) await App.SetProjectNotes(snapshot, projectId);
+        else await App.SetTabNotes(sessionId, windowIdx, snapshot, projectId);
         const draft = draftsByTarget.get(key) ?? { text: snapshot, saved: lastSaved, saveError: '', loadError: '' };
         draftsByTarget.set(key, { ...draft, saved: snapshot, saveError: '', loadError: '' });
         if (projectId === lastProjectId && projectId === get(activeProjectId) && sessionId === lastSessionId && windowIdx === lastWindowIdx && notes === snapshot) {
@@ -647,7 +666,8 @@
 
 <div class="notes-container">
   <div class="notes-header">
-    <span class="notes-title">{$t('notes.title')}</span>
+    <span class="notes-title">{isProject ? $t('projectTasks.notesTitle') : $t('notes.title')}</span>
+    {#if !isProject}
     <div class="scope-switch" role="group" aria-label={$t('notes.title')}>
       <button
         type="button"
@@ -664,6 +684,7 @@
         on:click={() => setScope('session')}
       >{$t('notes.scopeSession')}{#if presence.session}<span class="scope-dot" aria-label={$t('notes.hasNote')}></span>{/if}</button>
     </div>
+    {/if}
     <div class="header-actions">
       {#if saving}
         <span class="save-indicator">{$t('notes.saving')}</span>
@@ -744,7 +765,7 @@
     <textarea
       class="notes-textarea"
       class:dictating={$dictationListening}
-      placeholder={$t('notes.placeholder')}
+      placeholder={isProject ? $t('projectTasks.notesPlaceholder') : $t('notes.placeholder')}
       bind:value={notes}
       bind:this={textareaEl}
       on:input={handleInput}
