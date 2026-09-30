@@ -85,7 +85,9 @@ assert.match(browser, /App\.SaveSessionFileEdit\([\s\S]*?openedRoot,[\s\S]*?proj
 // A diff jump is consumed only after the target tree has initialized. Source
 // order matters for independent Svelte reactive blocks, so assert that too.
 const initAt = browser.indexOf('requestBrowseTarget(browseKey');
-const jumpAt = browser.indexOf('loadedBrowseKey === browseKey && $pendingFileJump');
+// And only once its root is listed: a jump taken before found no root, read
+// nothing and was cleared, so the file never opened.
+const jumpAt = browser.indexOf('loadedBrowseKey === browseKey && rootAbsPath && $pendingFileJump');
 assert.ok(initAt >= 0 && jumpAt > initAt, 'target initialization must precede pending jump handling');
 
 // Every diff identity includes the window and mode, including the per-file

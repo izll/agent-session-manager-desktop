@@ -37,3 +37,23 @@ test('a jump to a folder opens it, marks it and scrolls to it, opening no file',
   await page.locator('[data-tree-path="zz/deep/inner/x.txt"]').click();
   await expect(row).not.toHaveClass(/selected/);
 });
+
+// In the app the full diff replaces the view the browser lives in, so the
+// browser is mounted by the very switch the jump asked for. It handled the
+// jump before its root was listed, read nothing, and cleared it on the way:
+// no file opened and the tree stayed put.
+for (const [what, jump, rowPath] of [
+  ['file', () => window.fileJumpFixture.requestFileJump('zz/deep/target.txt', 1), 'zz/deep/target.txt'],
+  ['folder', () => window.fileJumpFixture.requestFolderJump('zz/deep/inner'), 'zz/deep/inner'],
+]) {
+  test(`a ${what} jump made before the browser is mounted still lands`, async ({ page }) => {
+    await page.goto('/tests/browser/file-jump-fixture.html?late=1');
+    await expect(page.locator('body')).toHaveAttribute('data-fixture-ready', 'true', { timeout: 30_000 });
+    await page.evaluate(jump);
+    await page.evaluate(() => window.fileJumpFixture.mountBrowser());
+    const row = page.locator(`[data-tree-path="${rowPath}"]`);
+    await expect(row).toHaveClass(/selected/);
+    await expect(row).toBeInViewport();
+    if (what === 'file') await expect(page.locator('.cm-content')).toContainText('content of zz/deep/target.txt');
+  });
+}

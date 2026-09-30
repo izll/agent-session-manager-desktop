@@ -43,7 +43,14 @@ selectedWindowIdx.set(0);
 
 const target = document.getElementById('browser');
 if (!target) throw new Error('fixture target is missing');
-mount(FileBrowser, { target, props: { active: true } });
+// ?late=1: the browser is mounted only when asked, after a jump was requested
+// — as in the app, where the full diff replaces the view the browser lives in.
+const mountBrowser = () => mount(FileBrowser, { target, props: { active: true } });
+(window as any).fileJumpFixture.mountBrowser = async () => {
+  mountBrowser();
+  await tick();
+};
+if (new URLSearchParams(location.search).get('late') !== '1') mountBrowser();
 await tick();
 await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 document.body.dataset.fixtureReady = 'true';

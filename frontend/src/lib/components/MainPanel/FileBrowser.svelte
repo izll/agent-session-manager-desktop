@@ -1053,8 +1053,11 @@
     });
   }
 
-  /** Honour jumps only after the target tab's tree owns the component. */
-  $: if (active && loadedBrowseKey === browseKey && $pendingFileJump) {
+  /** Honour jumps only after the target tab's tree owns the component, and
+   *  its root is listed: a jump taken before that (the browser mounted by the
+   *  very switch the jump asked for) found no root, read nothing, and was
+   *  cleared on the way — the file never opened and the tree never moved. */
+  $: if (active && loadedBrowseKey === browseKey && rootAbsPath && $pendingFileJump) {
     const jump = $pendingFileJump;
     if (jump.folder) void openRequestedFolder(jump.path);
     else void openRequestedFile(jump.path, jump.line);
