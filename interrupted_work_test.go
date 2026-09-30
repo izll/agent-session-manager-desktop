@@ -213,11 +213,9 @@ func TestStopSessionTakesItOutOfTheRecord(t *testing.T) {
 // StopTab needs a live pane to stop, so its wiring is checked in the source:
 // the tab is named before the stop and taken out of the record after it.
 func TestStopTabTakesTheTabOutOfTheRecord(t *testing.T) {
-	src, err := os.ReadFile("app.go")
-	if err != nil {
-		t.Fatal(err)
-	}
-	body := string(src)
+	// readTextFile, not os.ReadFile: a Windows checkout has CRLF, and the
+	// end of the function is looked up as "\n}\n".
+	body := readTextFile(t, "app.go")
 	at := strings.Index(body, "func (a *App) StopTab(")
 	if at < 0 {
 		t.Fatal("StopTab not found")

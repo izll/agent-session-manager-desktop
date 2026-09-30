@@ -161,13 +161,16 @@ func TestParseTheSubset(t *testing.T) {
 // A Windows checkout may turn the file's line endings into CRLF before it is
 // embedded; the notes must read the same.
 func TestParseCRLF(t *testing.T) {
-	lf := Parse(readChangelog(t))
-	crlf := Parse([]byte(strings.ReplaceAll(string(readChangelog(t)), "\n", "\r\n")))
+	// From LF, whatever the checkout has: on Windows the file on disk is
+	// already CRLF, and turning its \n into \r\n again made \r\r\n.
+	lfText := strings.ReplaceAll(string(readChangelog(t)), "\r\n", "\n")
+	lf := Parse([]byte(lfText))
+	crlf := Parse([]byte(strings.ReplaceAll(lfText, "\n", "\r\n")))
 	if !reflect.DeepEqual(lf, crlf) {
 		t.Fatal("CRLF line endings parse differently")
 	}
 	// Bare carriage returns too, which an editor can leave behind.
-	cr := Parse([]byte(strings.ReplaceAll(string(readChangelog(t)), "\n", "\r")))
+	cr := Parse([]byte(strings.ReplaceAll(lfText, "\n", "\r")))
 	if !reflect.DeepEqual(lf, cr) {
 		t.Fatal("CR line endings parse differently")
 	}
