@@ -148,7 +148,7 @@ assert.match(notes, /App\.SetTabNotes\(sessionId, windowIdx, snapshot, projectId
 // produced the visible list. Late mutations cannot edit another session's
 // global store.
 assert.match(tasks, /effectiveProviderBySession/);
-assert.match(tasks, /export function prepareTasksSession[\s\S]*?tasks\.set\(\[\]\)/);
+assert.match(tasks, /function prepareTasksSession[\s\S]*?tasks\.set\(\[\]\)/);
 assert.ok(
   taskPanel.indexOf('prepareTasksSession(sessionId)') < taskPanel.indexOf('await checkTaskMasterStatus(sessionId)'),
   'the previous task list must be cleared before the provider probe awaits',
@@ -156,12 +156,12 @@ assert.ok(
 assert.match(tasks, /rememberProvider\(sessionId, requestedMCP, 'local', projectId\)/);
 assert.match(tasks, /providerKey\(projectId, sessionId\)/,
   'effective provider state must not cross projects that reuse a session id');
-const removeTask = tasks.match(/export async function removeTask[\s\S]*?\n\}/)?.[0] ?? '';
+const removeTask = tasks.match(/async function removeTask[\s\S]*?\n  \}/)?.[0] ?? '';
 assert.match(removeTask, /captureActiveTasksTarget\(sessionId\)/);
 assert.match(removeTask, /activeTasksTargetIsCurrent\(target\)/);
 assert.match(tasks, /async function reloadTasksIfActive/);
 assert.match(tasks, /const localMutationQueues = new Map/);
-const localEdit = tasks.match(/async function editTaskLocally[\s\S]*?\n\}/)?.[0] ?? '';
+const localEdit = tasks.match(/async function editTaskLocally[\s\S]*?\n  \}/)?.[0] ?? '';
 assert.match(localEdit, /const queueKey = `\$\{projectId\}\\x1f\$\{target\?\.generation \?\? tasksContextGeneration\}\\x1f\$\{sessionId\}`/);
 assert.match(localEdit, /activeTasksTargetIsCurrent\(target\)/,
   'a queued local read-modify-write must fail closed after its project/session context is invalidated');
@@ -175,12 +175,12 @@ assert.match(undo, /action: pending, remaining: WINDOW_SECONDS/);
 assert.match(undoToast, /\$undoState\.error/);
 assert.match(taskPanel, /restoreDeletedTask\(sessionId, removed, provider\)/);
 assert.match(taskPanel, /restoreDeletedSubtask\(sessionId, parentId, removed, provider\)/);
-assert.match(tasks, /export async function restoreDeletedTask/);
-const restoreTask = tasks.match(/export async function restoreDeletedTask[\s\S]*?\n\}/)?.[0] ?? '';
+assert.match(tasks, /async function restoreDeletedTask/);
+const restoreTask = tasks.match(/async function restoreDeletedTask[\s\S]*?\n  \}/)?.[0] ?? '';
 assert.match(restoreTask, /App\.RestoreDeletedTask\(sessionId, provider, new main\.DeletedTaskSnapshot\(snapshot\), projectId\)/);
 assert.doesNotMatch(restoreTask, /CreateTask|TaskMasterAddManualTask|TaskMasterRemoveTask/, 'restore must be one atomic backend operation');
 
-const directEdit = tasks.match(/export async function updateTaskDirect[\s\S]*?\n\}/)?.[0] ?? '';
+const directEdit = tasks.match(/async function updateTaskDirect[\s\S]*?\n  \}/)?.[0] ?? '';
 const mcpDirectEdit = directEdit.match(/if \(\(requestedProvider \?\? providerFor\(sessionId, projectId\)\) === 'mcp'\) \{[\s\S]*?\} else/)?.[0] ?? '';
 assert.match(mcpDirectEdit, /TaskMasterUpdateTaskDirect\([\s\S]*?dueAt/);
 assert.doesNotMatch(mcpDirectEdit, /App\.UpdateTask/,
@@ -379,8 +379,10 @@ assert.match(updateDialog, /manualInstallHint[\s\S]*?BrowserOpenURL/,
   'unsupported platforms must expose the trusted manual installation route');
 assert.match(allTasks, /task\.projectId !== \$activeProjectId[\s\S]*?await selectProject\(task\.projectId\)/,
   'an all-project task jump must switch the backend project before selecting its session id');
-assert.match(allTasks, /const key = `\$\{task\.projectId\}:\$\{task\.sessionId \|\| task\.projectPath\}`/,
+assert.match(allTasks, /: `\$\{task\.projectId\}:\$\{task\.sessionId \|\| task\.projectPath\}`/,
   'task groups must not merge project-scoped session ids');
+assert.match(allTasks, /\? `\$\{task\.projectId\}:@project`/,
+  'each project\'s own list must be a group of its own, not merged across projects');
 assert.match(allTasks, /if \(loading\) \{[\s\S]*?loadQueued = true;[\s\S]*?return;/,
   'bursty all-task refreshes must not start overlapping all-project scans');
 assert.match(allTasks, /if \(loadQueued\) \{[\s\S]*?loadQueued = false;[\s\S]*?void load\(\)/,
@@ -543,7 +545,8 @@ assert.match(sideBySideDiff, /onDestroy\(\(\) => activeSplitCleanup\?\.\(\)\)/,
 const statusColumn = taskPanel.match(/\.meta-column\.status-badge \{[\s\S]*?\n  \}/)?.[0] ?? '';
 assert.match(taskPanel, /function closeModalOnEscape[\s\S]*?event\.key !== 'Escape'/,
   'TaskPanel modals must offer a keyboard close path');
-assert.equal((taskPanel.match(/role="dialog" aria-modal="true" tabindex="-1"/g) || []).length, 6,
+// Six task dialogs, and the session picker of the project list.
+assert.equal((taskPanel.match(/role="dialog" aria-modal="true" tabindex="-1"/g) || []).length, 7,
   'every TaskPanel overlay must expose modal semantics and focus containment');
 assert.match(statusColumn, /white-space: nowrap/);
 const priorityColumn = taskPanel.match(/\.meta-column\.priority-badge \{[\s\S]*?\n  \}/)?.[0] ?? '';

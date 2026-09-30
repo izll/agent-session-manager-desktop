@@ -4,6 +4,8 @@
   import AgentIcon from '../common/AgentIcon.svelte';
   import StatusIndicator from '../common/StatusIndicator.svelte';
   import ProjectStatistics from './ProjectStatistics.svelte';
+  import ProjectWorkspace from './ProjectWorkspace.svelte';
+  import { projectTasksOpen, projectOpenTaskCount } from '../../stores/projectTasks';
   import { sessions, selectSession, selectWindow, toggleGroupCollapse, type Session, type Group } from '../../stores/sessions';
   import { groups } from '../../stores/sessions';
   import { activities, type Activity } from '../../stores/activities';
@@ -128,8 +130,8 @@
   }
 
   let filter = '';
-  let dashboardTab: 'overview' | 'statistics' = 'overview';
-  let previousDashboardTab: 'overview' | 'statistics' = 'overview';
+  let dashboardTab: 'overview' | 'tasks' | 'statistics' = 'overview';
+  let previousDashboardTab: 'overview' | 'tasks' | 'statistics' = 'overview';
   let gitSummaries: ProjectGitSummary[] = [];
   let loading = true;
   let refreshing = false;
@@ -198,7 +200,7 @@
     void refreshGit();
   }
 
-  $: if (mounted && dashboardTab === 'overview' && previousDashboardTab === 'statistics') {
+  $: if (mounted && dashboardTab === 'overview' && previousDashboardTab !== 'overview') {
     void refreshGit();
     void refreshUsage();
   }
@@ -362,8 +364,8 @@
     <header class="dashboard-header">
       <div>
         <div class="eyebrow">{currentProject?.name || $t('project.default')}</div>
-        <h1>{dashboardTab === 'overview' ? $t('dashboard.title') : $t('statistics.title')}</h1>
-        <p>{dashboardTab === 'overview' ? $t('dashboard.subtitle') : $t('statistics.subtitle')}</p>
+        <h1>{dashboardTab === 'overview' ? $t('dashboard.title') : dashboardTab === 'tasks' ? $t('projectTasks.title') : $t('statistics.title')}</h1>
+        <p>{dashboardTab === 'overview' ? $t('dashboard.subtitle') : dashboardTab === 'tasks' ? $t('projectTasks.subtitle') : $t('statistics.subtitle')}</p>
       </div>
       {#if dashboardTab === 'overview'}
         <div class="header-actions">
@@ -388,6 +390,10 @@
       <button role="tab" aria-selected={dashboardTab === 'overview'} class:active={dashboardTab === 'overview'} on:click={() => dashboardTab = 'overview'}>
         {$t('statistics.overview')}
       </button>
+      <button role="tab" aria-selected={dashboardTab === 'tasks'} class:active={dashboardTab === 'tasks'} on:click={() => dashboardTab = 'tasks'}>
+        {$t('projectTasks.title')}
+        {#if $projectOpenTaskCount > 0}<span class="tab-count">{$projectOpenTaskCount}</span>{/if}
+      </button>
       <button role="tab" aria-selected={dashboardTab === 'statistics'} class:active={dashboardTab === 'statistics'} on:click={() => dashboardTab = 'statistics'}>
         {$t('statistics.tab')}
       </button>
@@ -405,6 +411,10 @@
         <span class="summary-label">{$t('dashboard.repositories')}</span><strong>{summary.repositories}</strong>
       </div>
       <div class="summary-card dirty"><span class="summary-label">{$t('dashboard.dirtyRepositories')}</span><strong>{summary.dirtyRepositories}</strong></div>
+      <!-- The project's own open tasks, one click from its list. -->
+      <button class="summary-card project-tasks" on:click={() => dashboardTab = 'tasks'} title={$t('projectTasks.title')}>
+        <span class="summary-label">{$t('projectTasks.unfinished')}</span><strong>{$projectOpenTaskCount}</strong>
+      </button>
     </section>
 
     {#if claudeUsage?.available || codexUsage?.available}
@@ -613,6 +623,17 @@
       {/if}
       {/each}
     {/if}
+    {:else if dashboardTab === 'tasks'}
+      <section class="project-tasks-section">
+        <!-- One copy on screen at a time: the window, opened over this, shows
+             the same list and note, and two editors of one note would each
+             save over the other. -->
+        {#if $projectTasksOpen}
+          <div class="empty-state compact"><p>{$t('projectTasks.openInWindow')}</p></div>
+        {:else}
+          <ProjectWorkspace active={dashboardTab === 'tasks'} on:taskSent={(event) => openSession(event.detail.sessionId, event.detail.windowIdx)} />
+        {/if}
+      </section>
     {:else}
       <ProjectStatistics projectId={$activeProjectId} onOpenSession={openSession} />
     {/if}
@@ -641,6 +662,9 @@
   .dashboard-tabs button { padding:7px 13px; border:0; border-radius:6px; color:#71717a; background:transparent; cursor:pointer; font-size:11px; font-weight:650; transition:.15s ease; }
   .dashboard-tabs button:hover { color:#d4d4d8; }
   .dashboard-tabs button.active { color:#ede9fe; background:rgba(var(--accent-rgb), .18); box-shadow:inset 0 0 0 1px rgba(var(--accent-rgb), .2); }
+  .tab-count { margin-left:5px; padding:0 6px; border-radius:999px; background:rgba(var(--accent-rgb), .22); font-size:10px; }
+  /* Tall enough to work in, inside a page that scrolls. */
+  .project-tasks-section { height:max(420px, calc(100vh - 290px)); }
 
   .summary-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(125px,1fr)); gap:9px; margin-bottom:18px; }
   .summary-card { min-width:0; display:grid; grid-template-columns:auto 1fr auto; align-items:center; gap:7px; padding:13px 14px; border:1px solid rgba(255,255,255,.065); border-radius:10px; background:rgba(20,20,32,.72); color:#71717a; }
@@ -653,6 +677,8 @@
   .summary-card.stopped .summary-dot { background:#ff5f87; }
   .summary-card.repositories svg { color:var(--accent-light); }
   .summary-card.dirty strong { color:#fbbf24; }
+  .summary-card.project-tasks { grid-template-columns:1fr auto; text-align:left; cursor:pointer; transition:.15s ease; }
+  .summary-card.project-tasks:hover { border-color:rgba(var(--accent-rgb), .35); background:rgba(var(--accent-rgb), .08); }
 
   .usage-strip { display:flex; flex-direction:column; gap:7px; margin:-6px 0 15px; padding:9px 14px; border:1px solid rgba(255,255,255,.065); border-radius:10px; background:rgba(20,20,32,.72); }
   .usage-row { display:flex; align-items:center; gap:14px; flex-wrap:wrap; }

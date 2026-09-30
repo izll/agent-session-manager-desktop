@@ -1,9 +1,11 @@
 <script lang="ts">
   import { onMount, onDestroy, createEventDispatcher } from 'svelte';
   import { claimMenu, releaseMenu } from '../../utils/openMenu';
+  import { portal } from '../../utils/portal';
+  import { menuPosition } from '../../utils/menuPosition';
   import { autoFocusDialog, autoFocusField } from '../../utils/dialogActions';
   import { get } from 'svelte/store';
-  import { selectedSessionId, selectedSession, selectedWindowIdx } from '../../stores/sessions';
+  import { selectedSessionId, selectedSession, selectedWindowIdx, sessions } from '../../stores/sessions';
   import { settings } from '../../stores/settings';
   import { activeProjectId } from '../../stores/projects';
   import Select from '../common/Select.svelte';
@@ -26,6 +28,37 @@
     openTaskPresence,
   } from '../../utils/taskTabs';
   import {
+    sessionTaskStore,
+    parentTaskId,
+    type Task,
+    type TaskStatus,
+    type TaskPriority,
+    type TaskSortBy,
+    type Subtask,
+    type TaskProvider
+  } from '../../stores/tasks';
+  import {
+    PROJECT_TASKS_SCOPE,
+    projectTaskStore,
+    moveTaskToSession,
+    moveTaskToProject,
+    sendProjectTaskToAgent,
+  } from '../../stores/projectTasks';
+
+  export let active = false;
+  /**
+   * Whose list this is: the selected session's, or the project's own — the
+   * one that belongs to no session. The same panel either way, so the project
+   * list has every feature a session's has; only what depends on a session
+   * (its tabs, Task Master in its directory) is left out, and the project list
+   * gains moving a task into a session and sending it to a chosen agent.
+   *
+   * Fixed for the life of the panel: each list has its own store, taken once.
+   */
+  export let project = false;
+  const isProject = project;
+
+  const {
     tasks,
     taskFilter,
     sortedFilteredTasks,
@@ -45,7 +78,6 @@
     addManualTask,
     restoreDeletedTask,
     restoreDeletedSubtask,
-    updateTask,
     updateTaskDirect,
     removeTask,
     setTaskStatus,
@@ -58,24 +90,22 @@
     getNextTask,
     addSubtask,
     removeSubtask,
-    clearSubtasks,
     setSubtaskStatus,
     addDependency,
-    parentTaskId,
     removeDependency,
     taskSortBy,
     setTaskSortBy,
     hideDone,
     toggleHideDone,
-    type Task,
-    type TaskStatus,
-    type TaskPriority,
-    type TaskSortBy,
-    type Subtask,
-    type TaskProvider
-  } from '../../stores/tasks';
+  } = isProject ? projectTaskStore : sessionTaskStore;
 
-  export let active = false;
+  /** The list the panel acts on: the project's scope, or the selected session. */
+  function currentScopeId(): string | null {
+    return isProject ? PROJECT_TASKS_SCOPE : get(selectedSessionId);
+  }
+  $: scopeKey = isProject ? PROJECT_TASKS_SCOPE : ($selectedSessionId ?? '');
+  // Task Master runs in a session's directory; the project list has none.
+  $: taskMasterUI = !isProject && $settings.taskMasterEnabled;
 
   const dispatch = createEventDispatcher();
 
@@ -133,7 +163,7 @@
 
   // Tabs a task can be assigned to, and the one being looked at. The list stays
   // per session; a tab is only an assignment within it.
-  $: tabs = sessionTabs($selectedSession);
+  $: tabs = isProject ? [] : sessionTabs($selectedSession);
   $: currentTabId = tabIdAtWindow(tabs, $selectedWindowIdx);
   $: editTabOptions = [
     { value: '', label: $t('tasks.tabNone') },
@@ -144,7 +174,8 @@
   // list someone prefers is theirs, not the project's, and losing it (private
   // window, cleared storage) only means starting on "All".
   const TAB_FILTER_STORAGE_KEY = 'asmgr.tasks.tabFilter';
-  let tabFilter: TaskTabFilter = readStoredTabFilter();
+  // The project list has no tabs, so nothing to narrow to.
+  let tabFilter: TaskTabFilter = isProject ? 'all' : readStoredTabFilter();
 
   function readStoredTabFilter(): TaskTabFilter {
     try {
@@ -158,6 +189,7 @@
   // toggle still changes it for as long as the panel stays open. "last" keeps
   // whatever was used last, as remembered above.
   function applyDefaultTabFilter() {
+    if (isProject) return;
     const fixed = get(settings)?.tasksDefaultFilter;
     if (fixed === 'all' || fixed === 'tab') tabFilter = fixed;
   }
@@ -228,7 +260,7 @@
   };
 
   function captureActionTarget(): TaskActionTarget | null {
-    const sessionId = get(selectedSessionId);
+    const sessionId = currentScopeId();
     const provider = get(effectiveTaskProvider);
     if (!sessionId || !provider) return null;
     return { sessionId, provider, generation: actionGeneration };
@@ -236,7 +268,7 @@
 
   function targetIsCurrent(target: TaskActionTarget | null): target is TaskActionTarget {
     return !!target && target.generation === actionGeneration &&
-      target.sessionId === get(selectedSessionId) &&
+      target.sessionId === currentScopeId() &&
       target.provider === get(effectiveTaskProvider);
   }
 
@@ -266,6 +298,7 @@
     showDependencyModal = false;
     showAddTaskModal = false;
     showPRDModal = false;
+    sessionPick = null;
   }
 
   function openAddTaskModal() {
@@ -288,7 +321,7 @@
   // produced it. Provider probes deliberately pass through null, which also
   // invalidates open actions while the replacement list is unknown.
   $: {
-    const identity = `${$selectedSessionId || ''}:${$effectiveTaskProvider || 'loading'}`;
+    const identity = `${scopeKey}:${$effectiveTaskProvider || 'loading'}`;
     if (identity !== actionIdentity) {
       actionIdentity = identity;
       actionGeneration++;
@@ -446,7 +479,7 @@
   });
 
   async function loadTasksIfNeeded(force = false) {
-    const sessionId = get(selectedSessionId);
+    const sessionId = currentScopeId();
     const projectId = get(activeProjectId);
     const targetKey = `${projectId}:${sessionId ?? ''}`;
     if (!sessionId) {
@@ -468,11 +501,11 @@
     // running it is what triggers the npx install the opt-in exists to prevent
     // — the whole point of the setting. Off, the panel uses the app's own task
     // storage and never reaches for it.
-    const useTaskMaster = get(settings).taskMasterEnabled;
+    const useTaskMaster = !isProject && get(settings).taskMasterEnabled;
     useMCPMode.set(useTaskMaster);
     if (useTaskMaster) {
       await checkTaskMasterStatus(sessionId);
-      if (generation !== taskPanelLoadGeneration || sessionId !== get(selectedSessionId) ||
+      if (generation !== taskPanelLoadGeneration || sessionId !== currentScopeId() ||
           projectId !== get(activeProjectId)) return;
     }
     await loadTasks(sessionId);
@@ -509,7 +542,7 @@
   }
 
   // Watch for session changes
-  $: if (`${$activeProjectId}:${$selectedSessionId ?? ''}` !== lastTasksTarget) {
+  $: if (`${$activeProjectId}:${scopeKey}` !== lastTasksTarget) {
     loadTasksIfNeeded();
   }
 
@@ -518,8 +551,8 @@
   // cannot keep sending mutations there after Task Master was switched off.
   $: if ($settings.taskMasterEnabled !== loadedTaskMasterSetting) {
     loadedTaskMasterSetting = $settings.taskMasterEnabled;
-    useMCPMode.set(loadedTaskMasterSetting);
-    if (active) void loadTasksIfNeeded(true);
+    useMCPMode.set(!isProject && loadedTaskMasterSetting);
+    if (active && !isProject) void loadTasksIfNeeded(true);
   }
 
   // Priority colors
@@ -775,6 +808,12 @@
 
   // Send to agent
   async function handleSendToAgent(taskId: string, requestedTarget?: TaskActionTarget | null) {
+    // A project task has no session of its own to go to: which agent gets it
+    // is asked when it is sent.
+    if (isProject) {
+      openSessionPicker('send', taskId, requestedTarget);
+      return;
+    }
     const target = requestedTarget ?? captureActionTarget();
     const operation = beginTargetOperation(target);
     if (!operation) return;
@@ -792,6 +831,107 @@
       console.error('Failed to send task to agent:', e);
     }
     if (contextMenuTarget === operation.target) closeContextMenu();
+  }
+
+  /**
+   * Choosing a session (and optionally one of its tabs) for a project task:
+   * to move the task into that session's list, or to send it to that
+   * session's agent. One dialog for both, since the choice is the same.
+   */
+  type SessionPick = { mode: 'move' | 'send'; taskId: string; title: string; target: TaskActionTarget };
+  let sessionPick: SessionPick | null = null;
+  let pickSessionId = '';
+  let pickTabId = '';
+  let pickError = '';
+  let pickBusy = false;
+
+  $: pickSessionOptions = [
+    { value: '', label: $t('projectTasks.chooseSession') },
+    ...$sessions.map((session) => ({ value: session.id, label: session.name })),
+  ];
+  $: pickTabs = sessionTabs($sessions.find((session) => session.id === pickSessionId));
+  $: pickTabOptions = [
+    { value: '', label: $t('projectTasks.anyTab') },
+    ...pickTabs.map((tab) => ({ value: tab.id, label: tab.name })),
+  ];
+
+  function openSessionPicker(mode: SessionPick['mode'], taskId: string, requestedTarget?: TaskActionTarget | null) {
+    const target = requestedTarget ?? captureActionTarget();
+    if (!targetIsCurrent(target)) return;
+    claimActionUI();
+    const task = $tasks.find((candidate) => candidate.id === taskId);
+    sessionPick = { mode, taskId, title: task?.title || taskId, target };
+    // The session being looked at is the likeliest choice.
+    pickSessionId = $sessions.some((session) => session.id === $selectedSessionId) ? ($selectedSessionId ?? '') : '';
+    pickTabId = '';
+    pickError = '';
+    if (contextMenuTask) closeContextMenu();
+  }
+
+  function closeSessionPicker() {
+    sessionPick = null;
+    pickError = '';
+  }
+
+  function handlePickSessionChange(event: CustomEvent<string>) {
+    pickSessionId = event.detail;
+    // A tab belongs to one session; the old choice means nothing in another.
+    pickTabId = '';
+  }
+
+  async function confirmSessionPick() {
+    const pick = sessionPick;
+    const operation = beginTargetOperation(pick?.target ?? null);
+    if (!pick || !operation || !pickSessionId) return;
+    const sessionId = pickSessionId;
+    const tabId = pickTabId;
+    const sessionName = $sessions.find((session) => session.id === sessionId)?.name || sessionId;
+    pickBusy = true;
+    pickError = '';
+    try {
+      if (pick.mode === 'move') {
+        const moved = await moveTaskToSession(pick.taskId, sessionId, tabId);
+        if (!operationIsCurrent(operation) || sessionPick !== pick) return;
+        closeSessionPicker();
+        offerUndo({
+          message: $t('projectTasks.movedToSession', { title: pick.title, session: sessionName }),
+          undo: () => moveTaskToProject(sessionId, moved.id).then(() => undefined),
+        });
+      } else {
+        await sendProjectTaskToAgent(pick.taskId, sessionId, tabId);
+        if (!operationIsCurrent(operation) || sessionPick !== pick) return;
+        closeSessionPicker();
+        const windowIdx = pickTabs.find((tab) => tab.id === tabId)?.windowIdx;
+        dispatch('taskSent', { taskId: pick.taskId, sessionId, windowIdx });
+      }
+    } catch (e) {
+      if (!operationIsCurrent(operation) || sessionPick !== pick) return;
+      pickError = String(e);
+    } finally {
+      if (sessionPick === pick || !sessionPick) pickBusy = false;
+    }
+  }
+
+  // Out of a session's list into the project's. Only for the app's own list:
+  // Task Master's is a different file, which this does not reach into.
+  async function handleMoveToProject(taskId: string, requestedTarget?: TaskActionTarget | null) {
+    const target = requestedTarget ?? captureActionTarget();
+    const operation = beginTargetOperation(target);
+    if (!operation || isProject || operation.target.provider !== 'local') return;
+    const sessionId = operation.target.sessionId;
+    const title = $tasks.find((task) => task.id === taskId)?.title || taskId;
+    if (contextMenuTarget === operation.target) closeContextMenu();
+    try {
+      const moved = await moveTaskToProject(sessionId, taskId);
+      if (!operationIsCurrent(operation)) return;
+      offerUndo({
+        message: $t('projectTasks.movedToProject', { title }),
+        undo: () => moveTaskToSession(moved.id, sessionId, '').then(() => undefined),
+      });
+    } catch (e) {
+      if (!operationIsCurrent(operation)) return;
+      taskError.set(String(e));
+    }
   }
 
   // Context menu
@@ -857,8 +997,10 @@
     const details = editTaskDetails;
     const priority = editTaskPriority;
     const dueAt = fromLocalInputValue(editTaskDueAt);
-    const sessionScoped = editTaskSessionScoped;
-    const tabId = editTaskTabId !== editTaskInitialTabId ? editTaskTabId : undefined;
+    // A project task belongs to no session, and giving it one is a move, not an
+    // edit — so neither field is sent from the project list.
+    const sessionScoped = isProject ? undefined : editTaskSessionScoped;
+    const tabId = !isProject && editTaskTabId !== editTaskInitialTabId ? editTaskTabId : undefined;
     try {
       console.log('[TaskPanel] calling updateTaskDirect...', { editTaskTitle, editTaskDescription, editTaskDetails, editTaskPriority });
       await updateTaskDirect(sessionId, taskId, title, description, details, priority, dueAt, sessionScoped, operation.target.provider, tabId);
@@ -1116,17 +1258,18 @@
 <div class="task-panel">
   <div class="task-header">
     <div class="header-left">
-      <span class="task-title">{$t('tasks.title')}</span>
+      <span class="task-title">{isProject ? $t('projectTasks.title') : $t('tasks.title')}</span>
       {#if $taskStats.total > 0}
         <span class="task-count">
           {$taskStats.done}/{$taskStats.total}
         </span>
       {/if}
-      {#if $settings.taskMasterEnabled && $taskMasterStatus.running}
+      {#if taskMasterUI && $taskMasterStatus.running}
         <span class="mcp-badge">{$t('tasks.mcp')}</span>
       {/if}
     </div>
     <div class="header-right">
+      {#if !isProject}
       <div class="tab-filter" role="group" aria-label={$t('tasks.tabFilterLabel')}>
         <button
           class:active={tabFilter === 'all'}
@@ -1139,6 +1282,7 @@
           on:click={() => setTabFilter('tab')}
         >{$t('tasks.tabFilterThisTab')}{#if tabPresence.tab}<span class="filter-dot" aria-label={$t('tasks.hasOpenTasks')}></span>{/if}</button>
       </div>
+      {/if}
       <button
         class="hide-done-btn"
         class:active={$hideDone}
@@ -1219,7 +1363,7 @@
     <button class="action-btn next" on:click={handleGetNextTask} disabled={$isLoadingTasks}>
       {$t('tasks.nextTask')}
     </button>
-    {#if $settings.taskMasterEnabled}
+    {#if taskMasterUI}
       {#if !$taskMasterStatus.running}
         <button class="action-btn init" on:click={handleInit} disabled={$isLoadingTasks}>
           {$t('tasks.initialize')}
@@ -1250,10 +1394,10 @@
       <div class="loading">{$t('tasks.loading')}</div>
     {:else if visibleTasks.length === 0}
       <div class="empty">
-        {#if $settings.taskMasterEnabled && !$taskMasterStatus.running}
+        {#if taskMasterUI && !$taskMasterStatus.running}
           {$t('tasks.initHint')}
         {:else if $tasks.length === 0}
-          {$t('tasks.noTasks')}
+          {isProject ? $t('projectTasks.noTasks') : $t('tasks.noTasks')}
         {:else if tabFilter === 'tab' && $sortedFilteredTasks.length > 0}
           {$t('tasks.noTasksForTab')}
         {:else}
@@ -1466,11 +1610,20 @@
 
               <div class="task-actions">
                 <button class="action-btn primary" on:click|stopPropagation={() => handleSendToAgent(task.id)}>
-                  {$t('tasks.sendToAgent')}
+                  {isProject ? $t('projectTasks.sendToAgent') : $t('tasks.sendToAgent')}
                 </button>
                 <button class="action-btn edit" on:click|stopPropagation={() => openEditTaskModal(task)}>
                   {$t('tasks.edit')}
                 </button>
+                {#if isProject}
+                  <button class="action-btn" on:click|stopPropagation={() => openSessionPicker('move', task.id)}>
+                    {$t('projectTasks.moveToSession')}
+                  </button>
+                {:else if $effectiveTaskProvider === 'local'}
+                  <button class="action-btn" on:click|stopPropagation={() => handleMoveToProject(task.id)}>
+                    {$t('projectTasks.moveToProject')}
+                  </button>
+                {/if}
                 {#if $effectiveTaskProvider === 'mcp'}
                   <button class="action-btn" on:click|stopPropagation={() => handleExpandTask(task.id)}>
                     {$t('tasks.expand')}
@@ -1491,13 +1644,21 @@
 <!-- Context Menu -->
 {#if contextMenuTask}
   {@const menuTask = contextMenuTask}
+  <!-- At body level: inside the project tasks window a fixed menu would be
+       placed against the dialog rather than the window. -->
   <div
     class="context-menu"
-    style="left: {contextMenuX}px; top: {contextMenuY}px"
+    use:portal
+    use:menuPosition={{ x: contextMenuX, y: contextMenuY }}
     on:click|stopPropagation
   >
-    <button on:click={() => handleSendToAgent(menuTask.id, contextMenuTarget)}>{$t('tasks.sendToAgent')}</button>
+    <button on:click={() => handleSendToAgent(menuTask.id, contextMenuTarget)}>{isProject ? $t('projectTasks.sendToAgent') : $t('tasks.sendToAgent')}</button>
     <button on:click={() => openEditTaskModal(menuTask, contextMenuTarget)}>{$t('tasks.editTaskMenu')}</button>
+    {#if isProject}
+      <button on:click={() => openSessionPicker('move', menuTask.id, contextMenuTarget)}>{$t('projectTasks.moveToSession')}</button>
+    {:else if contextMenuTarget?.provider === 'local'}
+      <button on:click={() => handleMoveToProject(menuTask.id, contextMenuTarget)}>{$t('projectTasks.moveToProject')}</button>
+    {/if}
     {#if contextMenuTarget?.provider === 'mcp'}
       <button on:click={() => handleExpandTask(menuTask.id, contextMenuTarget)}>{$t('tasks.expandTask')}</button>
     {/if}
@@ -1742,15 +1903,17 @@
             on:change={handleEditPriorityChange}
           />
         </label>
-        <label>
-          {$t('tasks.tab')}
-          <Select
-            value={editTaskTabId}
-            options={editTabOptions}
-            on:change={handleEditTabChange}
-          />
-          <span class="field-hint">{$t('tasks.tabHint')}</span>
-        </label>
+        {#if !isProject}
+          <label>
+            {$t('tasks.tab')}
+            <Select
+              value={editTaskTabId}
+              options={editTabOptions}
+              on:change={handleEditTabChange}
+            />
+            <span class="field-hint">{$t('tasks.tabHint')}</span>
+          </label>
+        {/if}
         <label>
           {$t('tasks.dueAt')}
           <input
@@ -1759,11 +1922,13 @@
             class="due-input"
           />
         </label>
-        <label class="checkbox-label">
-          <!-- Locked while a tab is chosen: a tab is always this session's. -->
-          <input type="checkbox" bind:checked={editTaskSessionScoped} disabled={!!editTaskTabId} />
-          {$t('tasks.belongsToSession')}
-        </label>
+        {#if !isProject}
+          <label class="checkbox-label">
+            <!-- Locked while a tab is chosen: a tab is always this session's. -->
+            <input type="checkbox" bind:checked={editTaskSessionScoped} disabled={!!editTaskTabId} />
+            {$t('tasks.belongsToSession')}
+          </label>
+        {/if}
       </div>
       {#if editTaskError}
         <div class="error-banner" style="margin: 0 16px;">{editTaskError}</div>
@@ -1890,6 +2055,41 @@
       </div>
       <div class="dialog-footer">
         <button class="btn-primary" on:click={() => showDependencyModal = false}>{$t('common.close')}</button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<!-- Session picker: move a project task into a session, or send it to one -->
+{#if sessionPick}
+  {@const pick = sessionPick}
+  <div class="dialog-overlay" use:autoFocusDialog role="dialog" aria-modal="true" tabindex="-1" on:keydown={(e) => closeModalOnEscape(e, closeSessionPicker)} on:click={closeSessionPicker}>
+    <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+    <div class="dialog-content session-pick-dialog" on:click|stopPropagation>
+      <div class="dialog-header">
+        <h2 title={pick.title}>{pick.mode === 'move' ? $t('projectTasks.moveTitle') : $t('projectTasks.sendTitle')}</h2>
+        <DialogCloseButton on:click={closeSessionPicker} />
+      </div>
+      <div class="dialog-body">
+        <p class="dialog-hint pick-task" title={pick.title}>{pick.title}</p>
+        <p class="dialog-hint">{pick.mode === 'move' ? $t('projectTasks.moveHint') : $t('projectTasks.sendHint')}</p>
+        <label>
+          {$t('projectTasks.session')}
+          <Select value={pickSessionId} options={pickSessionOptions} on:change={handlePickSessionChange} searchable />
+        </label>
+        <label>
+          {$t('tasks.tab')}
+          <Select value={pickTabId} options={pickTabOptions} on:change={(e) => (pickTabId = e.detail)} />
+        </label>
+        {#if pickError}
+          <div class="error-banner">{describeBackendError(pickError)}</div>
+        {/if}
+      </div>
+      <div class="dialog-footer">
+        <button class="btn-cancel" on:click={closeSessionPicker}>{$t('common.cancel')}</button>
+        <button class="btn-primary" on:click={confirmSessionPick} disabled={!pickSessionId || pickBusy}>
+          {pick.mode === 'move' ? $t('projectTasks.moveConfirm') : $t('projectTasks.sendConfirm')}
+        </button>
       </div>
     </div>
   </div>
@@ -2591,6 +2791,17 @@
        wrapped; this fits most of them on one line while staying inside a
        laptop screen. */
     max-width: min(960px, 92vw);
+  }
+
+  /* The task being moved or sent, named once at the top: the heading says
+     what is being done, this says to what. */
+  .dialog-hint.pick-task {
+    margin-bottom: 8px;
+    color: #e4e4e7;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   /* Dialog body form styles */

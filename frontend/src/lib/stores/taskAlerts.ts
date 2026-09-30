@@ -1,5 +1,6 @@
 import { writable } from 'svelte/store';
 import { tasks } from './tasks';
+import { projectTaskStore, TASK_LISTS_CHANGED } from './projectTasks';
 import { GetAllTasks } from '../../../wailsjs/go/main/App';
 
 /**
@@ -78,21 +79,37 @@ export function watchOpenCount(): () => void {
   let first = true;
   let pending: ReturnType<typeof setTimeout> | null = null;
 
-  const unsubscribe = tasks.subscribe(() => {
-    if (first) {
-      first = false;
-      return;
-    }
+  const schedule = () => {
     if (pending) clearTimeout(pending);
     pending = setTimeout(() => {
       pending = null;
       void refreshOpenCount();
     }, 150);
+  };
+  const unsubscribe = tasks.subscribe(() => {
+    if (first) {
+      first = false;
+      return;
+    }
+    schedule();
   });
+  // The project's own list counts too, and so does a task moving between the
+  // lists, which changes neither store on its own terms.
+  let firstProject = true;
+  const unsubscribeProject = projectTaskStore.tasks.subscribe(() => {
+    if (firstProject) {
+      firstProject = false;
+      return;
+    }
+    schedule();
+  });
+  window.addEventListener(TASK_LISTS_CHANGED, schedule);
 
   return () => {
     clearInterval(timer);
     if (pending) clearTimeout(pending);
     unsubscribe();
+    unsubscribeProject();
+    window.removeEventListener(TASK_LISTS_CHANGED, schedule);
   };
 }

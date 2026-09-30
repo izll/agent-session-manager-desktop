@@ -16,6 +16,7 @@
   import type { main } from '../../../../wailsjs/go/models';
   import { t } from '../../i18n';
   import { firstPerIndex } from '../../utils/firstPerIndex';
+  import { openProjectTasks } from '../../stores/projectTasks';
 
   export let show = false;
 
@@ -238,6 +239,20 @@
         });
       }
     }
+
+    // The project's own list and note: no session needed, so always offered.
+    result.push(
+      {
+        id: 'project-tasks', category: $t('palette.actions'), title: $t('palette.openProjectTasks'),
+        keywords: 'project tasks todo backlog projekt feladatok', icon: '☷',
+        action: () => openProjectTasks('tasks')
+      },
+      {
+        id: 'project-notes', category: $t('palette.actions'), title: $t('palette.openProjectNotes'),
+        keywords: 'project notes projekt jegyzet', icon: '⌑',
+        action: () => openProjectTasks('notes')
+      },
+    );
 
     result.push({
       id: 'whats-new', category: $t('palette.actions'), title: $t('whatsNew.title'),

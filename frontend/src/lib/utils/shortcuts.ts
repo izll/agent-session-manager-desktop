@@ -164,6 +164,15 @@ export const SHORTCUTS: Shortcut[] = [
     defaults: [{ key: 'y', ctrl: true, shift: true }],
   },
   {
+    id: 'projectTasks.open',
+    category: 'other',
+    descKey: 'help.actionProjectTasks',
+    // B for "backlog": the letters that say "tasks" or "project" are taken
+    // (Ctrl+Shift+T opens a terminal tab, Ctrl+Shift+P the palette, and the
+    // file browser answers to Ctrl+Shift+O).
+    defaults: [{ key: 'b', ctrl: true, shift: true }],
+  },
+  {
     id: 'quickJump.open',
     category: 'navigation',
     descKey: 'help.actionQuickJump',

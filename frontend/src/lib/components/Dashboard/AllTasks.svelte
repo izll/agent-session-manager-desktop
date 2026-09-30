@@ -18,6 +18,7 @@
   import { isGradient, gradientTextStyle } from '../../utils/rowColors';
   import { autoFocusDialog } from '../../utils/dialogActions';
   import DialogCloseButton from '../common/DialogCloseButton.svelte';
+  import { openProjectTasks, TASK_LISTS_CHANGED } from '../../stores/projectTasks';
 
   type OverviewTask = {
     id: string;
@@ -30,6 +31,8 @@
     projectId: string;
     projectName: string;
     projectPath: string;
+    /** From the project's own list, which belongs to no session. */
+    projectTask?: boolean;
     sessionId?: string;
     sessionName?: string;
     sessionColor?: string;
@@ -91,7 +94,11 @@
     void load();
     const refresh = () => { void load(); };
     window.addEventListener('tasks:refresh', refresh);
-    return () => window.removeEventListener('tasks:refresh', refresh);
+    window.addEventListener(TASK_LISTS_CHANGED, refresh);
+    return () => {
+      window.removeEventListener('tasks:refresh', refresh);
+      window.removeEventListener(TASK_LISTS_CHANGED, refresh);
+    };
   });
 
   onDestroy(() => {
@@ -140,7 +147,7 @@
    * disappears rather than sitting there empty.
    */
   $: groups = (() => {
-    const byKey = new Map<string, { key: string; label: string; sessionId?: string; color: string; tasks: OverviewTask[] }>();
+    const byKey = new Map<string, { key: string; label: string; sessionId?: string; projectTask: boolean; color: string; tasks: OverviewTask[] }>();
 
     for (const task of visible) {
       // Group on the session when there is one, otherwise on the directory —
@@ -149,13 +156,20 @@
       // Session ids and paths are only unique inside a project. Imported or
       // restored projects commonly reuse them, and merging those groups makes
       // the jump button target whichever project's task happened to come first.
-      const key = `${task.projectId}:${task.sessionId || task.projectPath}`;
+      // A project's own list is a group of its own, named after the project:
+      // it has neither a session nor a directory to group on.
+      const key = task.projectTask
+        ? `${task.projectId}:@project`
+        : `${task.projectId}:${task.sessionId || task.projectPath}`;
       let group = byKey.get(key);
       if (!group) {
         group = {
           key,
-          label: task.sessionName || projectLabel(task.projectName),
+          label: task.projectTask
+            ? $t('allTasks.projectGroup', { project: projectLabel(task.projectName) })
+            : task.sessionName || projectLabel(task.projectName),
           sessionId: task.sessionId,
+          projectTask: !!task.projectTask,
           color: task.sessionColor || '',
           tasks: [],
         };
@@ -227,7 +241,9 @@
    */
   function dependencyTitle(id: string, task: OverviewTask): string {
     const match = tasks.find(
-      (candidate) => candidate.id === id && candidate.projectPath === task.projectPath,
+      (candidate) => candidate.id === id && candidate.projectId === task.projectId &&
+        !!candidate.projectTask === !!task.projectTask &&
+        (task.projectTask || candidate.projectPath === task.projectPath),
     );
     return match ? match.title : id;
   }
@@ -237,6 +253,20 @@
   function toggleTask(key: string) {
     expanded.has(key) ? expanded.delete(key) : expanded.add(key);
     expanded = expanded; // reassign so Svelte notices the mutation
+  }
+
+  /** Open the project's own list, in the project the task belongs to. */
+  async function openProjectList(task: OverviewTask) {
+    try {
+      if (task.projectId !== $activeProjectId) {
+        const switched = await selectProject(task.projectId);
+        if (!switched) return;
+      }
+    } catch (e) {
+      error = String(e);
+      return;
+    }
+    openProjectTasks('tasks');
   }
 
   /** Open the session the task belongs to, and leave this view for it. */
@@ -343,7 +373,20 @@
             {/if}
           </span>
 
-          {#if group.sessionId}
+          {#if group.projectTask}
+            <button
+              class="jump-btn"
+              on:click={() => openProjectList(group.tasks[0])}
+              title={$t('allTasks.openProjectTasks')}
+              aria-label={$t('allTasks.openProjectTasks')}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                <path d="M15 3h6v6"/>
+                <path d="M10 14L21 3"/>
+              </svg>
+            </button>
+          {:else if group.sessionId}
             <button
               class="jump-btn"
               on:click={() => jumpToSession(group.tasks[0])}
@@ -460,7 +503,9 @@
       <div class="dialog-body">
         <dl class="meta">
           <dt>{$t('allTasks.sessionColumn')}</dt>
-          <dd>{selected.sessionName || projectLabel(selected.projectName)}</dd>
+          <dd>{selected.projectTask
+            ? $t('allTasks.projectGroup', { project: projectLabel(selected.projectName) })
+            : selected.sessionName || projectLabel(selected.projectName)}</dd>
 
           <dt>{$t('tasks.dueAt')}</dt>
           <dd class={deadlineState(selected.dueAt, selected.status)}>
@@ -473,8 +518,10 @@
           <dt>{$t('allTasks.statusColumn')}</dt>
           <dd>{statusLabels[selected.status] || selected.status}</dd>
 
-          <dt>{$t('allTasks.pathColumn')}</dt>
-          <dd class="path">{selected.projectPath}</dd>
+          {#if !selected.projectTask}
+            <dt>{$t('allTasks.pathColumn')}</dt>
+            <dd class="path">{selected.projectPath}</dd>
+          {/if}
         </dl>
 
         {#if selected.description}
@@ -514,7 +561,13 @@
 
       <!-- Closing is the header's ✕ (and Escape), as in every dialog; a second
            "Close" down here only duplicated it. -->
-      {#if selected.sessionId}
+      {#if selected.projectTask}
+        <div class="dialog-footer">
+          <button class="btn-primary" on:click={() => { const task = selected; selected = null; if (task) void openProjectList(task); }}>
+            {$t('allTasks.openProjectTasks')}
+          </button>
+        </div>
+      {:else if selected.sessionId}
         <div class="dialog-footer">
           <button class="btn-primary" on:click={() => { const task = selected; selected = null; if (task) jumpToSession(task); }}>
             {$t('allTasks.openSession')}

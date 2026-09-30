@@ -235,6 +235,10 @@ const dialogs: Record<string, Entry> = {
       (await until(() => buttonWith(/Analy/i), 'Analyze')).click();
     },
   },
+  // The project's own tasks and note, in their window.
+  projectTasks: { load: () => import('../../src/lib/components/Dialogs/ProjectTasksDialog.svelte') },
+  // The project list's session picker, opened from a task's menu.
+  taskSessionPick: { load: taskPanel, props: { active: true, project: true }, open: () => taskMenu(/Move to session/) },
   extraArgs: {
     load: () => import('../../src/lib/components/MainPanel/TabBar.svelte'), props: { visible: true },
     open: async () => {

@@ -56,7 +56,7 @@ const store = readFileSync(
   'utf8',
 );
 
-const setStatus = store.match(/export async function setSubtaskStatus[\s\S]*?\n}/);
+const setStatus = store.match(/async function setSubtaskStatus[\s\S]*?\n  }/);
 assert.ok(setStatus, 'setSubtaskStatus is missing');
 assert.doesNotMatch(
   setStatus[0],

@@ -81,89 +81,7 @@ export type TaskSortBy =
   | 'completed-desc'
   | 'completed-asc';
 
-// Stores
-export const tasks = writable<Task[]>([]);
-export const taskSortBy = writable<TaskSortBy>('priority');
-export const hideDone = writable<boolean>(true);
-export const taskFilter = writable<TaskFilter>({
-  status: 'all',
-  priority: 'all',
-  searchText: ''
-});
-export const selectedTaskId = writable<string | null>(null);
-export const isLoadingTasks = writable<boolean>(false);
-export const taskError = writable<string | null>(null);
-export const taskMasterStatus = writable<TaskMasterStatus>({
-  initialized: false,
-  running: false,
-  error: null
-});
-export const useMCPMode = writable<boolean>(true); // Default to MCP mode
-/** Provider that produced the list currently shown in TaskPanel. Null while a
- * target/provider probe is still in flight, so provider-specific UI cannot act
- * on the previous list during the hand-off. */
-export const effectiveTaskProvider = writable<TaskProvider | null>(null);
-
-let activeTasksSessionId = '';
-let activeStatusSessionId = '';
-let tasksLoadGeneration = 0;
-let statusLoadGeneration = 0;
-let tasksContextGeneration = 0;
 export type TaskProvider = 'mcp' | 'local';
-const effectiveProviderBySession = new Map<string, { requestedMCP: boolean; provider: TaskProvider }>();
-
-function providerKey(projectId: string, sessionId: string): string {
-  return `${projectId}\x1f${sessionId}`;
-}
-
-function providerFor(sessionId: string, projectId = get(activeProjectId)): TaskProvider {
-  const requestedMCP = get(useMCPMode);
-  const effective = effectiveProviderBySession.get(providerKey(projectId, sessionId));
-  if (effective && effective.requestedMCP === requestedMCP) return effective.provider;
-  return requestedMCP ? 'mcp' : 'local';
-}
-
-function rememberProvider(sessionId: string, requestedMCP: boolean, provider: TaskProvider, projectId: string) {
-  effectiveProviderBySession.set(providerKey(projectId, sessionId), { requestedMCP, provider });
-  if (isActiveTasksSession(sessionId) && projectId === get(activeProjectId)) effectiveTaskProvider.set(provider);
-}
-
-function isActiveTasksSession(sessionId: string): boolean {
-  return sessionId === activeTasksSessionId;
-}
-
-function isActiveTasksProject(sessionId: string, projectId: string): boolean {
-  return isActiveTasksSession(sessionId) && projectId === get(activeProjectId);
-}
-
-type ActiveTasksTarget = { sessionId: string; generation: number; projectId: string };
-
-function captureActiveTasksTarget(sessionId: string): ActiveTasksTarget | null {
-  return isActiveTasksSession(sessionId)
-    ? { sessionId, generation: tasksContextGeneration, projectId: get(activeProjectId) }
-    : null;
-}
-
-function activeTasksTargetIsCurrent(target: ActiveTasksTarget | null): boolean {
-  return !!target && target.sessionId === activeTasksSessionId &&
-    target.generation === tasksContextGeneration && target.projectId === get(activeProjectId);
-}
-
-/** Claim the visible list for a new session before any provider probe awaits. */
-export function prepareTasksSession(sessionId: string): void {
-  tasksContextGeneration++;
-  activeTasksSessionId = sessionId;
-  tasksLoadGeneration++;
-  tasks.set([]);
-  selectedTaskId.set(null);
-  taskError.set(null);
-  isLoadingTasks.set(!!sessionId);
-  effectiveTaskProvider.set(null);
-}
-
-async function reloadTasksIfActive(sessionId: string, projectId = get(activeProjectId)): Promise<void> {
-  if (isActiveTasksProject(sessionId, projectId)) await loadTasks(sessionId);
-}
 
 function normalizeStatus(status: string): TaskStatus {
   const normalized = status === 'backlog' ? 'pending' : status;
@@ -191,56 +109,6 @@ function normalizeTask(task: any): Task {
     }))
   };
 }
-
-// Derived stores
-export const filteredTasks = derived(
-  [tasks, taskFilter, hideDone],
-  ([$tasks, $filter, $hideDone]) => {
-    let filtered = [...$tasks];
-
-    // Hide done tasks if enabled (and status filter is not explicitly 'done')
-    if ($hideDone && $filter.status !== 'done') {
-      filtered = filtered.filter(t => t.status !== 'done');
-    }
-
-    // Filter by status
-    if ($filter.status !== 'all') {
-      filtered = filtered.filter(t => t.status === $filter.status);
-    }
-
-    // Filter by priority
-    if ($filter.priority !== 'all') {
-      filtered = filtered.filter(t => t.priority === $filter.priority);
-    }
-
-    // Filter by search text
-    if ($filter.searchText) {
-      const lower = $filter.searchText.toLowerCase();
-      // Implementation details are searched too: they are where the pasted
-      // plan or command usually lives, so leaving them out means a task you
-      // remember by a line from its notes cannot be found at all.
-      filtered = filtered.filter(t =>
-        t.title.toLowerCase().includes(lower) ||
-        t.description.toLowerCase().includes(lower) ||
-        (t.details || '').toLowerCase().includes(lower) ||
-        t.tags.some(tag => tag.toLowerCase().includes(lower)) ||
-        (t.subtasks || []).some(sub => sub.title.toLowerCase().includes(lower))
-      );
-    }
-
-    return filtered;
-  }
-);
-
-export const taskStats = derived(tasks, ($tasks) => {
-  const total = $tasks.length;
-  const done = $tasks.filter(t => t.status === 'done').length;
-  const inProgress = $tasks.filter(t => t.status === 'in-progress').length;
-  const pending = $tasks.filter(t => t.status === 'pending').length;
-  const blocked = $tasks.filter(t => t.status === 'blocked').length;
-
-  return { total, done, inProgress, pending, blocked };
-});
 
 // Priority order for sorting
 const priorityOrder: Record<TaskPriority, number> = {
@@ -277,611 +145,6 @@ function compareCompletion(a: Task, b: Task): number {
   return 0;
 }
 
-export const sortedFilteredTasks = derived(
-  [filteredTasks, taskSortBy],
-  ([$filtered, $sortBy]) => {
-    return [...$filtered].sort((a, b) => {
-      if ($sortBy === 'status') {
-        // Sort by status first (done last)
-        const sa = statusOrder[a.status] ?? 2;
-        const sb = statusOrder[b.status] ?? 2;
-        if (sa !== sb) return sa - sb;
-        // Finished tasks read as a record of what was done, so they go in the
-        // order they were ticked off, most recent first. Priority is the wrong
-        // key for them: it says what to do next, and there is no next.
-        if (a.status === 'done' && b.status === 'done') {
-          const done = compareCompletion(a, b);
-          if (done !== 0) return done;
-        }
-        // Then by priority
-        const pa = priorityOrder[a.priority] ?? 3;
-        const pb = priorityOrder[b.priority] ?? 3;
-        if (pa !== pb) return pa - pb;
-        // Then by ID
-        const idA = parseFloat(a.id) || 0;
-        const idB = parseFloat(b.id) || 0;
-        return idA - idB;
-      }
-
-      if ($sortBy === 'completed-desc' || $sortBy === 'completed-asc') {
-        const ascending = $sortBy === 'completed-asc';
-        const ca = a.completedAt || '';
-        const cb = b.completedAt || '';
-        if (ca && cb) return ascending ? ca.localeCompare(cb) : cb.localeCompare(ca);
-        // Unfinished tasks have no completion time. They go last in both
-        // directions rather than at whichever end the sort puts empty strings:
-        // sorting BY completion is a question about what is done, so the ones
-        // that are not belong out of the way.
-        if (ca) return -1;
-        if (cb) return 1;
-        // Among the unfinished, keep the default ordering rather than leaving
-        // them in whatever order they arrived.
-        const pa = priorityOrder[a.priority] ?? 3;
-        const pb = priorityOrder[b.priority] ?? 3;
-        if (pa !== pb) return pa - pb;
-        return (parseFloat(a.id) || 0) - (parseFloat(b.id) || 0);
-      }
-
-      if ($sortBy === 'created-desc' || $sortBy === 'created-asc') {
-        const ascending = $sortBy === 'created-asc';
-        const ca = a.createdAt || '';
-        const cb = b.createdAt || '';
-        if (ca && cb) return ascending ? ca.localeCompare(cb) : cb.localeCompare(ca);
-        if (ca) return -1;
-        if (cb) return 1;
-        // Fallback to ID
-        const idA = parseFloat(a.id) || 0;
-        const idB = parseFloat(b.id) || 0;
-        return idA - idB;
-      }
-
-      // Default: sort by priority
-      const pa = priorityOrder[a.priority] ?? 3;
-      const pb = priorityOrder[b.priority] ?? 3;
-      if (pa !== pb) return pa - pb;
-      const idA = parseFloat(a.id) || 0;
-      const idB = parseFloat(b.id) || 0;
-      return idA - idB;
-    });
-  }
-);
-
-// ============================================================================
-// Task Master MCP Actions
-// ============================================================================
-
-// Check Task Master status
-export async function checkTaskMasterStatus(sessionId: string) {
-  const projectId = get(activeProjectId);
-  activeStatusSessionId = sessionId;
-  const generation = ++statusLoadGeneration;
-  if (!sessionId) {
-    taskMasterStatus.set({ initialized: false, running: false, error: 'No session selected' });
-    return;
-  }
-
-  try {
-    const status = await App.TaskMasterStatus(sessionId, projectId);
-    if (generation !== statusLoadGeneration || sessionId !== activeStatusSessionId || projectId !== get(activeProjectId)) return;
-    taskMasterStatus.set(status as TaskMasterStatus);
-  } catch (e) {
-    if (generation !== statusLoadGeneration || sessionId !== activeStatusSessionId || projectId !== get(activeProjectId)) return;
-    taskMasterStatus.set({ initialized: false, running: false, error: String(e) });
-  }
-}
-
-// Initialize Task Master for a project
-export async function initializeTaskMaster(sessionId: string) {
-  if (!sessionId) return;
-  const projectId = get(activeProjectId);
-
-  isLoadingTasks.set(true);
-  taskError.set(null);
-
-  try {
-    await App.TaskMasterInit(sessionId, projectId);
-    // An initialization started in a previous session must not reclaim the
-    // global status store after the user has switched away.
-    if (isActiveTasksProject(sessionId, projectId)) await checkTaskMasterStatus(sessionId);
-    await reloadTasksIfActive(sessionId, projectId);
-  } catch (e) {
-    if (isActiveTasksProject(sessionId, projectId)) taskError.set(String(e));
-    throw e;
-  } finally {
-    if (isActiveTasksProject(sessionId, projectId)) isLoadingTasks.set(false);
-  }
-}
-
-// Parse PRD into tasks
-export async function parsePRD(sessionId: string, prdContent: string, numTasks: number = 10) {
-  if (!sessionId || !prdContent.trim()) return;
-  const projectId = get(activeProjectId);
-
-  isLoadingTasks.set(true);
-  taskError.set(null);
-
-  try {
-    await App.TaskMasterParsePRD(sessionId, prdContent, numTasks, projectId);
-    await reloadTasksIfActive(sessionId, projectId);
-  } catch (e) {
-    if (isActiveTasksProject(sessionId, projectId)) taskError.set(String(e));
-    throw e;
-  } finally {
-    if (isActiveTasksProject(sessionId, projectId)) isLoadingTasks.set(false);
-  }
-}
-
-// Preserve createdAt from existing tasks when merging with fresh data
-function mergeCreatedAt(newTasks: Task[]): Task[] {
-  const existing = get(tasks);
-  if (existing.length === 0) return newTasks;
-  const createdAtMap = new Map<string, string>();
-  // completedAt travels with createdAt for the same reason: Task Master does
-  // not always return it, and losing it would drop a finished task out of the
-  // order it was ticked off in.
-  const completedAtMap = new Map<string, string>();
-  for (const t of existing) {
-    if (t.createdAt) createdAtMap.set(t.id, t.createdAt);
-    if (t.completedAt) completedAtMap.set(t.id, t.completedAt);
-  }
-  return newTasks.map(t => ({
-    ...t,
-    createdAt: t.createdAt || createdAtMap.get(t.id),
-    completedAt: t.completedAt || completedAtMap.get(t.id),
-  }));
-}
-
-// Load tasks from Task Master
-export async function loadTasks(sessionId: string) {
-  const projectId = get(activeProjectId);
-  activeTasksSessionId = sessionId;
-  const generation = ++tasksLoadGeneration;
-  if (!sessionId) {
-    tasks.set([]);
-    taskError.set(null);
-    isLoadingTasks.set(false);
-    effectiveTaskProvider.set(null);
-    return;
-  }
-
-  isLoadingTasks.set(true);
-  taskError.set(null);
-
-  const requestedMCP = get(useMCPMode);
-  try {
-    // Try MCP mode first
-    if (requestedMCP) {
-      try {
-        const result = await App.TaskMasterGetTasks(sessionId, '', projectId);
-        if (generation !== tasksLoadGeneration || sessionId !== activeTasksSessionId || projectId !== get(activeProjectId)) return;
-        rememberProvider(sessionId, requestedMCP, 'mcp', projectId);
-        tasks.set(mergeCreatedAt((result || []).map(normalizeTask)));
-        return;
-      } catch (e) {
-        // Fall back to local mode if MCP fails
-        console.warn('MCP mode failed, trying local mode:', e);
-      }
-    }
-
-    // Local mode fallback (using our session/tasks.go)
-    const result = await App.GetTasks(sessionId);
-    // Convert local task format to MCP format
-    if (generation !== tasksLoadGeneration || sessionId !== activeTasksSessionId || projectId !== get(activeProjectId)) return;
-    rememberProvider(sessionId, requestedMCP, 'local', projectId);
-    const converted = (result || []).map(normalizeTask);
-    tasks.set(mergeCreatedAt(converted));
-  } catch (e) {
-    if (generation !== tasksLoadGeneration || sessionId !== activeTasksSessionId || projectId !== get(activeProjectId)) return;
-    console.error('Failed to load tasks:', e);
-    if (isActiveTasksSession(sessionId)) taskError.set(String(e));
-    tasks.set([]);
-    effectiveTaskProvider.set(null);
-  } finally {
-    if (generation === tasksLoadGeneration && sessionId === activeTasksSessionId && projectId === get(activeProjectId)) {
-      isLoadingTasks.set(false);
-    }
-  }
-}
-
-// Get next task to work on
-export async function getNextTask(sessionId: string, requestedProvider?: TaskProvider): Promise<Task | null> {
-  if (!sessionId) return null;
-  const projectId = get(activeProjectId);
-
-  try {
-    if ((requestedProvider ?? providerFor(sessionId, projectId)) === 'mcp') {
-      const task = await App.TaskMasterNextTask(sessionId, projectId);
-      return task ? normalizeTask(task) : null;
-    } else {
-      const task = await App.GetNextTask(sessionId);
-      return task ? normalizeTask(task) : null;
-    }
-  } catch (e) {
-    if (isActiveTasksProject(sessionId, projectId)) taskError.set(String(e));
-    return null;
-  }
-}
-
-// Set task status
-export async function setTaskStatus(sessionId: string, taskId: string, status: TaskStatus, requestedProvider?: TaskProvider): Promise<TaskProvider> {
-  if (!sessionId) throw new Error('session is required');
-
-  const target = captureActiveTasksTarget(sessionId);
-  const provider = requestedProvider ?? providerFor(sessionId, target?.projectId);
-
-  try {
-    if (provider === 'mcp') {
-      await App.TaskMasterSetStatus(sessionId, taskId, status, target?.projectId ?? get(activeProjectId));
-    } else {
-      await App.MoveTask(sessionId, taskId, status, target?.projectId ?? get(activeProjectId));
-    }
-
-    if (activeTasksTargetIsCurrent(target)) {
-      tasks.update(t => t.map(task =>
-        task.id === taskId ? { ...task, status } : task
-      ));
-    }
-    return provider;
-  } catch (e) {
-    if (activeTasksTargetIsCurrent(target)) taskError.set(String(e));
-    throw e;
-  }
-}
-
-// Add a new task (MCP mode with AI)
-export async function addTask(
-  sessionId: string,
-  prompt: string,
-  research: boolean = false,
-  priority: string = 'medium',
-  requestedProvider?: TaskProvider,
-) {
-  if (!sessionId || !prompt.trim()) return;
-  const target = captureActiveTasksTarget(sessionId);
-  const projectId = target?.projectId ?? get(activeProjectId);
-
-  isLoadingTasks.set(true);
-  taskError.set(null);
-
-  try {
-    let newTask: any;
-    const provider = requestedProvider ?? providerFor(sessionId, projectId);
-    if (provider === 'mcp') {
-      newTask = await App.TaskMasterAddTask(sessionId, prompt, research, priority, projectId);
-    } else {
-      newTask = await App.CreateTask(sessionId, prompt, '', priority, [], projectId);
-    }
-    // Pre-inject createdAt so mergeCreatedAt preserves it across loadTasks
-    if (newTask?.id && activeTasksTargetIsCurrent(target)) {
-      const now = new Date().toISOString();
-      tasks.update(t => [...t, { ...newTask, createdAt: newTask.createdAt || now } as Task]);
-    }
-    await reloadTasksIfActive(sessionId, projectId);
-  } catch (e) {
-    if (activeTasksTargetIsCurrent(target)) taskError.set(String(e));
-    throw e;
-  } finally {
-    if (activeTasksTargetIsCurrent(target)) isLoadingTasks.set(false);
-  }
-}
-
-// Add a new task manually (no AI required)
-export async function addManualTask(
-  sessionId: string,
-  title: string,
-  description: string = '',
-  details: string = '',
-  priority: string = 'medium',
-  requestedProvider?: TaskProvider,
-): Promise<Task | undefined> {
-  if (!sessionId || !title.trim()) return;
-  const target = captureActiveTasksTarget(sessionId);
-  const projectId = target?.projectId ?? get(activeProjectId);
-
-  isLoadingTasks.set(true);
-  taskError.set(null);
-
-  try {
-    let newTask: any;
-    const provider = requestedProvider ?? providerFor(sessionId, projectId);
-    if (provider === 'mcp') {
-      newTask = await App.TaskMasterAddManualTask(sessionId, title, description, details, priority, projectId);
-    } else {
-      newTask = await App.CreateTask(sessionId, title, description, priority, [], projectId);
-    }
-    // Pre-inject createdAt so mergeCreatedAt preserves it across loadTasks
-    if (newTask?.id && activeTasksTargetIsCurrent(target)) {
-      const now = new Date().toISOString();
-      tasks.update(t => [...t, { ...newTask, createdAt: newTask.createdAt || now } as Task]);
-    }
-    await reloadTasksIfActive(sessionId, projectId);
-    return newTask ? normalizeTask(newTask) : undefined;
-  } catch (e) {
-    if (activeTasksTargetIsCurrent(target)) taskError.set(String(e));
-    throw e;
-  } finally {
-    if (activeTasksTargetIsCurrent(target)) isLoadingTasks.set(false);
-  }
-}
-
-/** Restore the provider-neutral snapshot atomically with its original IDs. */
-export async function restoreDeletedTask(sessionId: string, snapshot: Task, provider: TaskProvider): Promise<void> {
-  if (!sessionId || !snapshot.title.trim()) return;
-  const target = captureActiveTasksTarget(sessionId);
-  const projectId = target?.projectId ?? get(activeProjectId);
-  if (isActiveTasksSession(sessionId)) {
-    isLoadingTasks.set(true);
-    taskError.set(null);
-  }
-  try {
-    await App.RestoreDeletedTask(sessionId, provider, new main.DeletedTaskSnapshot(snapshot), projectId);
-    await reloadTasksIfActive(sessionId, projectId);
-  } catch (e) {
-    if (activeTasksTargetIsCurrent(target)) taskError.set(String(e));
-    throw e;
-  } finally {
-    if (activeTasksTargetIsCurrent(target)) isLoadingTasks.set(false);
-  }
-}
-
-export async function restoreDeletedSubtask(
-  sessionId: string,
-  taskId: string,
-  snapshot: Subtask,
-  provider: TaskProvider,
-): Promise<void> {
-  const target = captureActiveTasksTarget(sessionId);
-  const projectId = target?.projectId ?? get(activeProjectId);
-  await App.RestoreDeletedSubtask(
-    sessionId,
-    provider,
-    taskId,
-    new main.DeletedSubtaskSnapshot(snapshot),
-    projectId,
-  );
-  await reloadTasksIfActive(sessionId, projectId);
-}
-
-// Update task (MCP mode with AI)
-export async function updateTask(sessionId: string, taskId: string, prompt: string, research: boolean = false) {
-  if (!sessionId || !taskId) return;
-  const projectId = get(activeProjectId);
-
-  try {
-    if (providerFor(sessionId, projectId) === 'mcp') {
-      await App.TaskMasterUpdateTask(sessionId, taskId, prompt, research, projectId);
-    } else {
-      await App.UpdateTask(sessionId, taskId, { description: prompt }, projectId);
-    }
-    await reloadTasksIfActive(sessionId, projectId);
-  } catch (e) {
-    if (isActiveTasksProject(sessionId, projectId)) taskError.set(String(e));
-    throw e;
-  }
-}
-
-// Update subtask with implementation notes
-export async function updateSubtask(sessionId: string, subtaskId: string, notes: string) {
-  if (!sessionId || !subtaskId) return;
-  const projectId = get(activeProjectId);
-
-  try {
-    await App.TaskMasterUpdateSubtask(sessionId, subtaskId, notes, projectId);
-    await reloadTasksIfActive(sessionId, projectId);
-  } catch (e) {
-    if (isActiveTasksProject(sessionId, projectId)) taskError.set(String(e));
-    throw e;
-  }
-}
-
-// Expand task into subtasks
-export async function expandTask(sessionId: string, taskId: string, research: boolean = true, force: boolean = false) {
-  if (!sessionId || !taskId) return;
-  const projectId = get(activeProjectId);
-
-  isLoadingTasks.set(true);
-  taskError.set(null);
-
-  try {
-    await App.TaskMasterExpandTask(sessionId, taskId, research, force, projectId);
-    await reloadTasksIfActive(sessionId, projectId);
-  } catch (e) {
-    if (isActiveTasksProject(sessionId, projectId)) taskError.set(String(e));
-    throw e;
-  } finally {
-    if (isActiveTasksProject(sessionId, projectId)) isLoadingTasks.set(false);
-  }
-}
-
-// Expand all eligible tasks
-export async function expandAllTasks(sessionId: string, research: boolean = true) {
-  if (!sessionId) return;
-  const projectId = get(activeProjectId);
-
-  isLoadingTasks.set(true);
-  taskError.set(null);
-
-  try {
-    await App.TaskMasterExpandAll(sessionId, research, projectId);
-    await reloadTasksIfActive(sessionId, projectId);
-  } catch (e) {
-    if (isActiveTasksProject(sessionId, projectId)) taskError.set(String(e));
-    throw e;
-  } finally {
-    if (isActiveTasksProject(sessionId, projectId)) isLoadingTasks.set(false);
-  }
-}
-
-// Analyze complexity
-export async function analyzeComplexity(sessionId: string, research: boolean = true): Promise<string> {
-  if (!sessionId) return '';
-  const projectId = get(activeProjectId);
-
-  isLoadingTasks.set(true);
-  taskError.set(null);
-
-  try {
-    const result = await App.TaskMasterAnalyzeComplexity(sessionId, research, projectId);
-    await reloadTasksIfActive(sessionId, projectId);
-    return result;
-  } catch (e) {
-    if (isActiveTasksProject(sessionId, projectId)) taskError.set(String(e));
-    throw e;
-  } finally {
-    if (isActiveTasksProject(sessionId, projectId)) isLoadingTasks.set(false);
-  }
-}
-
-// Remove a task
-export async function removeTask(sessionId: string, taskId: string, requestedProvider?: TaskProvider): Promise<TaskProvider> {
-  if (!sessionId || !taskId) throw new Error('session and task are required');
-
-  const target = captureActiveTasksTarget(sessionId);
-  const projectId = target?.projectId ?? get(activeProjectId);
-  const provider = requestedProvider ?? providerFor(sessionId, projectId);
-
-  try {
-    if (provider === 'mcp') {
-      await App.TaskMasterRemoveTask(sessionId, taskId, projectId);
-    } else {
-      await App.DeleteTask(sessionId, taskId, projectId);
-    }
-    if (activeTasksTargetIsCurrent(target)) tasks.update(t => t.filter(task => task.id !== taskId));
-    if (activeTasksTargetIsCurrent(target) && get(selectedTaskId) === taskId) {
-      selectedTaskId.set(null);
-    }
-    return provider;
-  } catch (e) {
-    if (activeTasksTargetIsCurrent(target)) taskError.set(String(e));
-    throw e;
-  }
-}
-
-// Send task to agent
-export async function sendTaskToAgent(sessionId: string, taskId: string, requestedProvider?: TaskProvider) {
-  if (!sessionId || !taskId) return;
-  const projectId = get(activeProjectId);
-
-  try {
-    if ((requestedProvider ?? providerFor(sessionId, projectId)) === 'mcp') {
-      await App.TaskMasterSendToAgent(sessionId, taskId, projectId);
-    } else {
-      await App.SendTaskToAgent(sessionId, taskId, projectId);
-    }
-  } catch (e) {
-    if (isActiveTasksProject(sessionId, projectId)) taskError.set(String(e));
-    throw e;
-  }
-}
-
-// Update task directly (no AI)
-/**
- * Save an edited task.
- *
- * dueAt is RFC 3339, or "" to clear the deadline. It is passed only when the
- * caller actually means to change it — the backend keys on the field being
- * present, so an unrelated edit that always sent it would wipe the deadline of
- * every task it touched.
- *
- * Task Master has no deadline field of its own, so in MCP mode the deadline is
- * written through the app's own storage alongside the Task Master update. That
- * keeps the feature working in both modes rather than silently doing nothing in
- * one of them.
- */
-export async function updateTaskDirect(sessionId: string, taskId: string, title: string, description: string, details: string, priority: string, dueAt?: string, sessionScoped?: boolean, requestedProvider?: TaskProvider, tabId?: string) {
-  if (!sessionId || !taskId) return;
-  const projectId = get(activeProjectId);
-
-  try {
-    if ((requestedProvider ?? providerFor(sessionId, projectId)) === 'mcp') {
-      // One provider, one atomic replacement. Writing the extra fields through
-      // the local update API targeted a separate tasks.json after the MCP file
-      // had already changed, leaving a partial edit and a permanent error.
-      await App.TaskMasterUpdateTaskDirect(
-        sessionId,
-        taskId,
-        title,
-        description,
-        details,
-        priority,
-        dueAt ?? '',
-        sessionScoped ? sessionId : '',
-        // The direct edit rewrites the whole field, so "not changing the tab"
-        // has to send the tab it already has rather than nothing. A task taken
-        // off the session takes no tab with it: the backend would read a tab
-        // as putting it straight back.
-        sessionScoped ? (tabId ?? get(tasks).find(task => task.id === taskId)?.tabId ?? '') : '',
-        projectId,
-      );
-    } else {
-      // Editing a task is the app's own operation — it has storage for these
-      // fields and no reason to ask Task Master. Calling it regardless is what
-      // made saving an edit fail with "Task Master is turned off".
-      const updates: Record<string, unknown> = { title, description, details, priority };
-      if (dueAt !== undefined) updates.dueAt = dueAt;
-      // Empty string detaches the task from the session; the backend keys on
-      // the field being present, so an edit that never sends it leaves the
-      // assignment alone.
-      if (sessionScoped !== undefined) updates.sessionId = sessionScoped ? sessionId : '';
-      // Same presence rule: "" unassigns, an absent key leaves the tab alone.
-      if (tabId !== undefined) updates.tabId = tabId;
-      await App.UpdateTask(sessionId, taskId, updates, projectId);
-    }
-    await reloadTasksIfActive(sessionId, projectId);
-  } catch (e) {
-    if (isActiveTasksProject(sessionId, projectId)) taskError.set(String(e));
-    throw e;
-  }
-}
-
-
-/**
- * Rewrite one task's subtasks or dependencies through the app's own storage.
- *
- * Task Master exposes an endpoint per operation — add a subtask, remove one,
- * set its status. The local store has no such endpoints, and adding six would
- * be six ways to write the same file. It has UpdateTask, which takes whole
- * fields, so the change is made here on the list already in memory and written
- * back in one call.
- */
-const localMutationQueues = new Map<string, Promise<void>>();
-
-async function editTaskLocally(
-  sessionId: string,
-  taskId: string,
-  change: (task: Task) => Partial<Task>,
-): Promise<void> {
-  // These are read/modify/write operations over a whole array field. Serialise
-  // them per session and read inside the queue: two rapid checkbox/add clicks
-  // must see the result of the operation immediately before them, not the same
-  // stale Svelte-store snapshot and then overwrite one another.
-  const target = captureActiveTasksTarget(sessionId);
-  const projectId = target?.projectId ?? get(activeProjectId);
-  const queueKey = `${projectId}\x1f${target?.generation ?? tasksContextGeneration}\x1f${sessionId}`;
-  const previous = localMutationQueues.get(queueKey) ?? Promise.resolve();
-  const queued = previous.catch(() => undefined).then(async () => {
-    // A queued RMW starts its backend reads only when the previous item has
-    // settled. By then a project switch may have reused this session id; do
-    // not read and rewrite the replacement project's task array.
-    if (target && !activeTasksTargetIsCurrent(target)) {
-      throw new Error('task target changed before the queued mutation started');
-    }
-    const source = ((await App.GetTasks(sessionId)) || []).map(normalizeTask);
-    if (target && !activeTasksTargetIsCurrent(target)) {
-      throw new Error('task target changed while the queued mutation was reading');
-    }
-    const task = source.find((t) => String(t.id) === String(taskId));
-    if (!task) throw new Error(`no such task: ${taskId}`);
-    await App.UpdateTask(sessionId, String(taskId), change(task) as Record<string, any>, projectId);
-  });
-  localMutationQueues.set(queueKey, queued);
-  try {
-    await queued;
-  } finally {
-    if (localMutationQueues.get(queueKey) === queued) localMutationQueues.delete(queueKey);
-  }
-}
-
 /** The task a subtask id belongs to: Task Master addresses them as "3.1". */
 export function parentTaskId(subtaskId: string): string {
   return String(subtaskId).split('.')[0];
@@ -911,186 +174,1043 @@ function nextLocalSubtaskId(subtasks: Subtask[]): string {
   throw new Error('no safe local subtask ID is available');
 }
 
-// Add subtask to a task
-export async function addSubtask(sessionId: string, taskId: string, title: string, description: string = '', requestedProvider?: TaskProvider) {
-  if (!sessionId || !taskId || !title.trim()) return;
-  const projectId = get(activeProjectId);
-
-  try {
-    if ((requestedProvider ?? providerFor(sessionId, projectId)) === 'mcp') {
-      await App.TaskMasterAddSubtask(sessionId, taskId, title, description, projectId);
-    } else {
-      await editTaskLocally(sessionId, taskId, (task) => ({
-        subtasks: [
-          ...(task.subtasks || []),
-          // Numbered within the task, as Task Master does, so the two stores
-          // produce ids of the same shape. Use max+1, not length+1: after a
-          // deletion the latter can reuse an ID that still belongs to a sibling.
-          { id: nextLocalSubtaskId(task.subtasks || []), title, description, status: 'pending' },
-        ],
-      }));
-    }
-    await reloadTasksIfActive(sessionId, projectId);
-  } catch (e) {
-    if (isActiveTasksProject(sessionId, projectId)) taskError.set(String(e));
-    throw e;
-  }
+export interface TaskStoreOptions {
+  /**
+   * Never ask Task Master: the list is always the app's own. The project's
+   * task list has no working directory for Task Master to run in.
+   */
+  localOnly?: boolean;
 }
 
-// Remove a subtask
-export async function removeSubtask(sessionId: string, subtaskId: string, requestedProvider?: TaskProvider): Promise<TaskProvider> {
-  if (!sessionId || !subtaskId) throw new Error('session and subtask are required');
-
-  const projectId = get(activeProjectId);
-  const provider = requestedProvider ?? providerFor(sessionId, projectId);
-
-  try {
-    if (provider === 'mcp') {
-      await App.TaskMasterRemoveSubtask(sessionId, subtaskId, projectId);
-    } else {
-      const parent = parentTaskId(subtaskId);
-      const child = String(subtaskId).slice(parent.length + 1);
-      await editTaskLocally(sessionId, parent, (task) => ({
-        subtasks: (task.subtasks || []).filter((sub: any) => String(sub.id) !== child),
-      }));
-    }
-    await reloadTasksIfActive(sessionId, projectId);
-    return provider;
-  } catch (e) {
-    if (isActiveTasksProject(sessionId, projectId)) taskError.set(String(e));
-    throw e;
-  }
-}
-
-// Clear all subtasks from a task
-export async function clearSubtasks(sessionId: string, taskId: string) {
-  if (!sessionId || !taskId) return;
-  const projectId = get(activeProjectId);
-
-  try {
-    if (providerFor(sessionId, projectId) === 'mcp') {
-      await App.TaskMasterClearSubtasks(sessionId, taskId, projectId);
-    } else {
-      await editTaskLocally(sessionId, taskId, () => ({ subtasks: [] }));
-    }
-    await reloadTasksIfActive(sessionId, projectId);
-  } catch (e) {
-    if (isActiveTasksProject(sessionId, projectId)) taskError.set(String(e));
-    throw e;
-  }
-}
-
-// Set subtask status
-export async function setSubtaskStatus(sessionId: string, subtaskId: string, status: TaskStatus, requestedProvider?: TaskProvider): Promise<TaskProvider> {
-  if (!sessionId || !subtaskId) throw new Error('session and subtask are required');
-
-  const projectId = get(activeProjectId);
-  const provider = requestedProvider ?? providerFor(sessionId, projectId);
-
-  try {
-    if (provider === 'mcp') {
-      await App.TaskMasterSetSubtaskStatus(sessionId, subtaskId, status, projectId);
-    } else {
-      const parent = parentTaskId(subtaskId);
-      const child = String(subtaskId).slice(parent.length + 1);
-      await editTaskLocally(sessionId, parent, (task) => {
-        let found = false;
-        const subtasks = (task.subtasks || []).map((subtask) => {
-          if (String(subtask.id) !== child) return subtask;
-          found = true;
-          // Both spellings are written deliberately. The local model persists
-          // Done, while its normalized frontend shape also exposes Status.
-          return { ...subtask, status, done: status === 'done' };
-        });
-        if (!found) throw new Error(`no such subtask: ${subtaskId}`);
-        return { subtasks };
-      });
-    }
-    await reloadTasksIfActive(sessionId, projectId);
-    return provider;
-  } catch (e) {
-    if (isActiveTasksProject(sessionId, projectId)) taskError.set(String(e));
-    throw e;
-  }
-}
-
-// Add dependency to a task
-export async function addDependency(sessionId: string, taskId: string, dependsOnId: string, requestedProvider?: TaskProvider): Promise<TaskProvider> {
-  if (!sessionId || !taskId || !dependsOnId) throw new Error('session, task and dependency are required');
-
-  const projectId = get(activeProjectId);
-  const provider = requestedProvider ?? providerFor(sessionId, projectId);
-
-  try {
-    if (provider === 'mcp') {
-      await App.TaskMasterAddDependency(sessionId, taskId, dependsOnId, projectId);
-    } else {
-      await editTaskLocally(sessionId, taskId, (task) => ({
-        // Deduplicated: adding the same dependency twice is a no-op, not an
-        // error worth interrupting the user for.
-        dependencies: Array.from(new Set([...(task.dependencies || []), String(dependsOnId)])),
-      }));
-    }
-    await reloadTasksIfActive(sessionId, projectId);
-    return provider;
-  } catch (e) {
-    if (isActiveTasksProject(sessionId, projectId)) taskError.set(String(e));
-    throw e;
-  }
-}
-
-// Remove dependency from a task
-export async function removeDependency(sessionId: string, taskId: string, dependsOnId: string, requestedProvider?: TaskProvider): Promise<TaskProvider> {
-  if (!sessionId || !taskId || !dependsOnId) throw new Error('session, task and dependency are required');
-
-  const projectId = get(activeProjectId);
-  const provider = requestedProvider ?? providerFor(sessionId, projectId);
-
-  try {
-    if (provider === 'mcp') {
-      await App.TaskMasterRemoveDependency(sessionId, taskId, dependsOnId, projectId);
-    } else {
-      await editTaskLocally(sessionId, taskId, (task) => ({
-        dependencies: (task.dependencies || []).filter(
-          (dep: any) => String(dep) !== String(dependsOnId)),
-      }));
-    }
-    await reloadTasksIfActive(sessionId, projectId);
-    return provider;
-  } catch (e) {
-    if (isActiveTasksProject(sessionId, projectId)) taskError.set(String(e));
-    throw e;
-  }
-}
-
-// ============================================================================
-// UI Helpers
-// ============================================================================
-
-export function selectTask(id: string | null) {
-  selectedTaskId.set(id);
-}
-
-export function setTaskFilter(filter: Partial<TaskFilter>) {
-  taskFilter.update(f => ({ ...f, ...filter }));
-}
-
-export function setTaskSortBy(sortBy: TaskSortBy) {
-  taskSortBy.set(sortBy);
-}
-
-export function toggleHideDone() {
-  hideDone.update(v => !v);
-}
-
-export function clearTaskFilter() {
-  taskFilter.set({
+/**
+ * One task list as the panel shows it: the loaded tasks, the filter and sort
+ * applied to them, and the actions that change them.
+ *
+ * A factory rather than module-level state, because two lists can be on screen
+ * at once — a session's in the main panel, and the project's own list on the
+ * dashboard or in its window. Sharing one set of stores, each would load over
+ * the other's list and its actions would land in the wrong one.
+ */
+export function createTaskStore({ localOnly = false }: TaskStoreOptions = {}) {
+  const tasks = writable<Task[]>([]);
+  const taskSortBy = writable<TaskSortBy>('priority');
+  const hideDone = writable<boolean>(true);
+  const taskFilter = writable<TaskFilter>({
     status: 'all',
     priority: 'all',
     searchText: ''
   });
+  const selectedTaskId = writable<string | null>(null);
+  const isLoadingTasks = writable<boolean>(false);
+  const taskError = writable<string | null>(null);
+  const taskMasterStatus = writable<TaskMasterStatus>({
+    initialized: false,
+    running: false,
+    error: null
+  });
+  const useMCPMode = writable<boolean>(true); // Default to MCP mode
+  /** Provider that produced the list currently shown in TaskPanel. Null while a
+   * target/provider probe is still in flight, so provider-specific UI cannot act
+   * on the previous list during the hand-off. */
+  const effectiveTaskProvider = writable<TaskProvider | null>(null);
+
+  let activeTasksSessionId = '';
+  let activeStatusSessionId = '';
+  let tasksLoadGeneration = 0;
+  let statusLoadGeneration = 0;
+  let tasksContextGeneration = 0;
+  const effectiveProviderBySession = new Map<string, { requestedMCP: boolean; provider: TaskProvider }>();
+
+  function providerKey(projectId: string, sessionId: string): string {
+    return `${projectId}\x1f${sessionId}`;
+  }
+
+  function providerFor(sessionId: string, projectId = get(activeProjectId)): TaskProvider {
+    const requestedMCP = !localOnly && get(useMCPMode);
+    const effective = effectiveProviderBySession.get(providerKey(projectId, sessionId));
+    if (effective && effective.requestedMCP === requestedMCP) return effective.provider;
+    return requestedMCP ? 'mcp' : 'local';
+  }
+
+  function rememberProvider(sessionId: string, requestedMCP: boolean, provider: TaskProvider, projectId: string) {
+    effectiveProviderBySession.set(providerKey(projectId, sessionId), { requestedMCP, provider });
+    if (isActiveTasksSession(sessionId) && projectId === get(activeProjectId)) effectiveTaskProvider.set(provider);
+  }
+
+  function isActiveTasksSession(sessionId: string): boolean {
+    return sessionId === activeTasksSessionId;
+  }
+
+  function isActiveTasksProject(sessionId: string, projectId: string): boolean {
+    return isActiveTasksSession(sessionId) && projectId === get(activeProjectId);
+  }
+
+  type ActiveTasksTarget = { sessionId: string; generation: number; projectId: string };
+
+  function captureActiveTasksTarget(sessionId: string): ActiveTasksTarget | null {
+    return isActiveTasksSession(sessionId)
+      ? { sessionId, generation: tasksContextGeneration, projectId: get(activeProjectId) }
+      : null;
+  }
+
+  function activeTasksTargetIsCurrent(target: ActiveTasksTarget | null): boolean {
+    return !!target && target.sessionId === activeTasksSessionId &&
+      target.generation === tasksContextGeneration && target.projectId === get(activeProjectId);
+  }
+
+  /** Claim the visible list for a new session before any provider probe awaits. */
+  function prepareTasksSession(sessionId: string): void {
+    tasksContextGeneration++;
+    activeTasksSessionId = sessionId;
+    tasksLoadGeneration++;
+    tasks.set([]);
+    selectedTaskId.set(null);
+    taskError.set(null);
+    isLoadingTasks.set(!!sessionId);
+    effectiveTaskProvider.set(null);
+  }
+
+  async function reloadTasksIfActive(sessionId: string, projectId = get(activeProjectId)): Promise<void> {
+    if (isActiveTasksProject(sessionId, projectId)) await loadTasks(sessionId);
+  }
+
+  // Derived stores
+  const filteredTasks = derived(
+    [tasks, taskFilter, hideDone],
+    ([$tasks, $filter, $hideDone]) => {
+      let filtered = [...$tasks];
+
+      // Hide done tasks if enabled (and status filter is not explicitly 'done')
+      if ($hideDone && $filter.status !== 'done') {
+        filtered = filtered.filter(t => t.status !== 'done');
+      }
+
+      // Filter by status
+      if ($filter.status !== 'all') {
+        filtered = filtered.filter(t => t.status === $filter.status);
+      }
+
+      // Filter by priority
+      if ($filter.priority !== 'all') {
+        filtered = filtered.filter(t => t.priority === $filter.priority);
+      }
+
+      // Filter by search text
+      if ($filter.searchText) {
+        const lower = $filter.searchText.toLowerCase();
+        // Implementation details are searched too: they are where the pasted
+        // plan or command usually lives, so leaving them out means a task you
+        // remember by a line from its notes cannot be found at all.
+        filtered = filtered.filter(t =>
+          t.title.toLowerCase().includes(lower) ||
+          t.description.toLowerCase().includes(lower) ||
+          (t.details || '').toLowerCase().includes(lower) ||
+          t.tags.some(tag => tag.toLowerCase().includes(lower)) ||
+          (t.subtasks || []).some(sub => sub.title.toLowerCase().includes(lower))
+        );
+      }
+
+      return filtered;
+    }
+  );
+
+  const taskStats = derived(tasks, ($tasks) => {
+    const total = $tasks.length;
+    const done = $tasks.filter(t => t.status === 'done').length;
+    const inProgress = $tasks.filter(t => t.status === 'in-progress').length;
+    const pending = $tasks.filter(t => t.status === 'pending').length;
+    const blocked = $tasks.filter(t => t.status === 'blocked').length;
+
+    return { total, done, inProgress, pending, blocked };
+  });
+
+  const sortedFilteredTasks = derived(
+    [filteredTasks, taskSortBy],
+    ([$filtered, $sortBy]) => {
+      return [...$filtered].sort((a, b) => {
+        if ($sortBy === 'status') {
+          // Sort by status first (done last)
+          const sa = statusOrder[a.status] ?? 2;
+          const sb = statusOrder[b.status] ?? 2;
+          if (sa !== sb) return sa - sb;
+          // Finished tasks read as a record of what was done, so they go in the
+          // order they were ticked off, most recent first. Priority is the wrong
+          // key for them: it says what to do next, and there is no next.
+          if (a.status === 'done' && b.status === 'done') {
+            const done = compareCompletion(a, b);
+            if (done !== 0) return done;
+          }
+          // Then by priority
+          const pa = priorityOrder[a.priority] ?? 3;
+          const pb = priorityOrder[b.priority] ?? 3;
+          if (pa !== pb) return pa - pb;
+          // Then by ID
+          const idA = parseFloat(a.id) || 0;
+          const idB = parseFloat(b.id) || 0;
+          return idA - idB;
+        }
+
+        if ($sortBy === 'completed-desc' || $sortBy === 'completed-asc') {
+          const ascending = $sortBy === 'completed-asc';
+          const ca = a.completedAt || '';
+          const cb = b.completedAt || '';
+          if (ca && cb) return ascending ? ca.localeCompare(cb) : cb.localeCompare(ca);
+          // Unfinished tasks have no completion time. They go last in both
+          // directions rather than at whichever end the sort puts empty strings:
+          // sorting BY completion is a question about what is done, so the ones
+          // that are not belong out of the way.
+          if (ca) return -1;
+          if (cb) return 1;
+          // Among the unfinished, keep the default ordering rather than leaving
+          // them in whatever order they arrived.
+          const pa = priorityOrder[a.priority] ?? 3;
+          const pb = priorityOrder[b.priority] ?? 3;
+          if (pa !== pb) return pa - pb;
+          return (parseFloat(a.id) || 0) - (parseFloat(b.id) || 0);
+        }
+
+        if ($sortBy === 'created-desc' || $sortBy === 'created-asc') {
+          const ascending = $sortBy === 'created-asc';
+          const ca = a.createdAt || '';
+          const cb = b.createdAt || '';
+          if (ca && cb) return ascending ? ca.localeCompare(cb) : cb.localeCompare(ca);
+          if (ca) return -1;
+          if (cb) return 1;
+          // Fallback to ID
+          const idA = parseFloat(a.id) || 0;
+          const idB = parseFloat(b.id) || 0;
+          return idA - idB;
+        }
+
+        // Default: sort by priority
+        const pa = priorityOrder[a.priority] ?? 3;
+        const pb = priorityOrder[b.priority] ?? 3;
+        if (pa !== pb) return pa - pb;
+        const idA = parseFloat(a.id) || 0;
+        const idB = parseFloat(b.id) || 0;
+        return idA - idB;
+      });
+    }
+  );
+
+  // ============================================================================
+  // Task Master MCP Actions
+  // ============================================================================
+
+  // Check Task Master status
+  async function checkTaskMasterStatus(sessionId: string) {
+    const projectId = get(activeProjectId);
+    activeStatusSessionId = sessionId;
+    const generation = ++statusLoadGeneration;
+    if (!sessionId) {
+      taskMasterStatus.set({ initialized: false, running: false, error: 'No session selected' });
+      return;
+    }
+
+    try {
+      const status = await App.TaskMasterStatus(sessionId, projectId);
+      if (generation !== statusLoadGeneration || sessionId !== activeStatusSessionId || projectId !== get(activeProjectId)) return;
+      taskMasterStatus.set(status as TaskMasterStatus);
+    } catch (e) {
+      if (generation !== statusLoadGeneration || sessionId !== activeStatusSessionId || projectId !== get(activeProjectId)) return;
+      taskMasterStatus.set({ initialized: false, running: false, error: String(e) });
+    }
+  }
+
+  // Initialize Task Master for a project
+  async function initializeTaskMaster(sessionId: string) {
+    if (!sessionId) return;
+    const projectId = get(activeProjectId);
+
+    isLoadingTasks.set(true);
+    taskError.set(null);
+
+    try {
+      await App.TaskMasterInit(sessionId, projectId);
+      // An initialization started in a previous session must not reclaim the
+      // global status store after the user has switched away.
+      if (isActiveTasksProject(sessionId, projectId)) await checkTaskMasterStatus(sessionId);
+      await reloadTasksIfActive(sessionId, projectId);
+    } catch (e) {
+      if (isActiveTasksProject(sessionId, projectId)) taskError.set(String(e));
+      throw e;
+    } finally {
+      if (isActiveTasksProject(sessionId, projectId)) isLoadingTasks.set(false);
+    }
+  }
+
+  // Parse PRD into tasks
+  async function parsePRD(sessionId: string, prdContent: string, numTasks: number = 10) {
+    if (!sessionId || !prdContent.trim()) return;
+    const projectId = get(activeProjectId);
+
+    isLoadingTasks.set(true);
+    taskError.set(null);
+
+    try {
+      await App.TaskMasterParsePRD(sessionId, prdContent, numTasks, projectId);
+      await reloadTasksIfActive(sessionId, projectId);
+    } catch (e) {
+      if (isActiveTasksProject(sessionId, projectId)) taskError.set(String(e));
+      throw e;
+    } finally {
+      if (isActiveTasksProject(sessionId, projectId)) isLoadingTasks.set(false);
+    }
+  }
+
+  // Preserve createdAt from existing tasks when merging with fresh data
+  function mergeCreatedAt(newTasks: Task[]): Task[] {
+    const existing = get(tasks);
+    if (existing.length === 0) return newTasks;
+    const createdAtMap = new Map<string, string>();
+    // completedAt travels with createdAt for the same reason: Task Master does
+    // not always return it, and losing it would drop a finished task out of the
+    // order it was ticked off in.
+    const completedAtMap = new Map<string, string>();
+    for (const t of existing) {
+      if (t.createdAt) createdAtMap.set(t.id, t.createdAt);
+      if (t.completedAt) completedAtMap.set(t.id, t.completedAt);
+    }
+    return newTasks.map(t => ({
+      ...t,
+      createdAt: t.createdAt || createdAtMap.get(t.id),
+      completedAt: t.completedAt || completedAtMap.get(t.id),
+    }));
+  }
+
+  // Load tasks from Task Master
+  async function loadTasks(sessionId: string) {
+    const projectId = get(activeProjectId);
+    activeTasksSessionId = sessionId;
+    const generation = ++tasksLoadGeneration;
+    if (!sessionId) {
+      tasks.set([]);
+      taskError.set(null);
+      isLoadingTasks.set(false);
+      effectiveTaskProvider.set(null);
+      return;
+    }
+
+    isLoadingTasks.set(true);
+    taskError.set(null);
+
+    const requestedMCP = !localOnly && get(useMCPMode);
+    try {
+      // Try MCP mode first
+      if (requestedMCP) {
+        try {
+          const result = await App.TaskMasterGetTasks(sessionId, '', projectId);
+          if (generation !== tasksLoadGeneration || sessionId !== activeTasksSessionId || projectId !== get(activeProjectId)) return;
+          rememberProvider(sessionId, requestedMCP, 'mcp', projectId);
+          tasks.set(mergeCreatedAt((result || []).map(normalizeTask)));
+          return;
+        } catch (e) {
+          // Fall back to local mode if MCP fails
+          console.warn('MCP mode failed, trying local mode:', e);
+        }
+      }
+
+      // Local mode fallback (using our session/tasks.go)
+      const result = await App.GetTasks(sessionId);
+      // Convert local task format to MCP format
+      if (generation !== tasksLoadGeneration || sessionId !== activeTasksSessionId || projectId !== get(activeProjectId)) return;
+      rememberProvider(sessionId, requestedMCP, 'local', projectId);
+      const converted = (result || []).map(normalizeTask);
+      tasks.set(mergeCreatedAt(converted));
+    } catch (e) {
+      if (generation !== tasksLoadGeneration || sessionId !== activeTasksSessionId || projectId !== get(activeProjectId)) return;
+      console.error('Failed to load tasks:', e);
+      if (isActiveTasksSession(sessionId)) taskError.set(String(e));
+      tasks.set([]);
+      effectiveTaskProvider.set(null);
+    } finally {
+      if (generation === tasksLoadGeneration && sessionId === activeTasksSessionId && projectId === get(activeProjectId)) {
+        isLoadingTasks.set(false);
+      }
+    }
+  }
+
+  // Get next task to work on
+  async function getNextTask(sessionId: string, requestedProvider?: TaskProvider): Promise<Task | null> {
+    if (!sessionId) return null;
+    const projectId = get(activeProjectId);
+
+    try {
+      if ((requestedProvider ?? providerFor(sessionId, projectId)) === 'mcp') {
+        const task = await App.TaskMasterNextTask(sessionId, projectId);
+        return task ? normalizeTask(task) : null;
+      } else {
+        const task = await App.GetNextTask(sessionId);
+        return task ? normalizeTask(task) : null;
+      }
+    } catch (e) {
+      if (isActiveTasksProject(sessionId, projectId)) taskError.set(String(e));
+      return null;
+    }
+  }
+
+  // Set task status
+  async function setTaskStatus(sessionId: string, taskId: string, status: TaskStatus, requestedProvider?: TaskProvider): Promise<TaskProvider> {
+    if (!sessionId) throw new Error('session is required');
+
+    const target = captureActiveTasksTarget(sessionId);
+    const provider = requestedProvider ?? providerFor(sessionId, target?.projectId);
+
+    try {
+      if (provider === 'mcp') {
+        await App.TaskMasterSetStatus(sessionId, taskId, status, target?.projectId ?? get(activeProjectId));
+      } else {
+        await App.MoveTask(sessionId, taskId, status, target?.projectId ?? get(activeProjectId));
+      }
+
+      if (activeTasksTargetIsCurrent(target)) {
+        tasks.update(t => t.map(task =>
+          task.id === taskId ? { ...task, status } : task
+        ));
+      }
+      return provider;
+    } catch (e) {
+      if (activeTasksTargetIsCurrent(target)) taskError.set(String(e));
+      throw e;
+    }
+  }
+
+  // Add a new task (MCP mode with AI)
+  async function addTask(
+    sessionId: string,
+    prompt: string,
+    research: boolean = false,
+    priority: string = 'medium',
+    requestedProvider?: TaskProvider,
+  ) {
+    if (!sessionId || !prompt.trim()) return;
+    const target = captureActiveTasksTarget(sessionId);
+    const projectId = target?.projectId ?? get(activeProjectId);
+
+    isLoadingTasks.set(true);
+    taskError.set(null);
+
+    try {
+      let newTask: any;
+      const provider = requestedProvider ?? providerFor(sessionId, projectId);
+      if (provider === 'mcp') {
+        newTask = await App.TaskMasterAddTask(sessionId, prompt, research, priority, projectId);
+      } else {
+        newTask = await App.CreateTask(sessionId, prompt, '', priority, [], projectId);
+      }
+      // Pre-inject createdAt so mergeCreatedAt preserves it across loadTasks
+      if (newTask?.id && activeTasksTargetIsCurrent(target)) {
+        const now = new Date().toISOString();
+        tasks.update(t => [...t, { ...newTask, createdAt: newTask.createdAt || now } as Task]);
+      }
+      await reloadTasksIfActive(sessionId, projectId);
+    } catch (e) {
+      if (activeTasksTargetIsCurrent(target)) taskError.set(String(e));
+      throw e;
+    } finally {
+      if (activeTasksTargetIsCurrent(target)) isLoadingTasks.set(false);
+    }
+  }
+
+  // Add a new task manually (no AI required)
+  async function addManualTask(
+    sessionId: string,
+    title: string,
+    description: string = '',
+    details: string = '',
+    priority: string = 'medium',
+    requestedProvider?: TaskProvider,
+  ): Promise<Task | undefined> {
+    if (!sessionId || !title.trim()) return;
+    const target = captureActiveTasksTarget(sessionId);
+    const projectId = target?.projectId ?? get(activeProjectId);
+
+    isLoadingTasks.set(true);
+    taskError.set(null);
+
+    try {
+      let newTask: any;
+      const provider = requestedProvider ?? providerFor(sessionId, projectId);
+      if (provider === 'mcp') {
+        newTask = await App.TaskMasterAddManualTask(sessionId, title, description, details, priority, projectId);
+      } else {
+        newTask = await App.CreateTask(sessionId, title, description, priority, [], projectId);
+      }
+      // Pre-inject createdAt so mergeCreatedAt preserves it across loadTasks
+      if (newTask?.id && activeTasksTargetIsCurrent(target)) {
+        const now = new Date().toISOString();
+        tasks.update(t => [...t, { ...newTask, createdAt: newTask.createdAt || now } as Task]);
+      }
+      await reloadTasksIfActive(sessionId, projectId);
+      return newTask ? normalizeTask(newTask) : undefined;
+    } catch (e) {
+      if (activeTasksTargetIsCurrent(target)) taskError.set(String(e));
+      throw e;
+    } finally {
+      if (activeTasksTargetIsCurrent(target)) isLoadingTasks.set(false);
+    }
+  }
+
+  /** Restore the provider-neutral snapshot atomically with its original IDs. */
+  async function restoreDeletedTask(sessionId: string, snapshot: Task, provider: TaskProvider): Promise<void> {
+    if (!sessionId || !snapshot.title.trim()) return;
+    const target = captureActiveTasksTarget(sessionId);
+    const projectId = target?.projectId ?? get(activeProjectId);
+    if (isActiveTasksSession(sessionId)) {
+      isLoadingTasks.set(true);
+      taskError.set(null);
+    }
+    try {
+      await App.RestoreDeletedTask(sessionId, provider, new main.DeletedTaskSnapshot(snapshot), projectId);
+      await reloadTasksIfActive(sessionId, projectId);
+    } catch (e) {
+      if (activeTasksTargetIsCurrent(target)) taskError.set(String(e));
+      throw e;
+    } finally {
+      if (activeTasksTargetIsCurrent(target)) isLoadingTasks.set(false);
+    }
+  }
+
+  async function restoreDeletedSubtask(
+    sessionId: string,
+    taskId: string,
+    snapshot: Subtask,
+    provider: TaskProvider,
+  ): Promise<void> {
+    const target = captureActiveTasksTarget(sessionId);
+    const projectId = target?.projectId ?? get(activeProjectId);
+    await App.RestoreDeletedSubtask(
+      sessionId,
+      provider,
+      taskId,
+      new main.DeletedSubtaskSnapshot(snapshot),
+      projectId,
+    );
+    await reloadTasksIfActive(sessionId, projectId);
+  }
+
+  // Update task (MCP mode with AI)
+  async function updateTask(sessionId: string, taskId: string, prompt: string, research: boolean = false) {
+    if (!sessionId || !taskId) return;
+    const projectId = get(activeProjectId);
+
+    try {
+      if (providerFor(sessionId, projectId) === 'mcp') {
+        await App.TaskMasterUpdateTask(sessionId, taskId, prompt, research, projectId);
+      } else {
+        await App.UpdateTask(sessionId, taskId, { description: prompt }, projectId);
+      }
+      await reloadTasksIfActive(sessionId, projectId);
+    } catch (e) {
+      if (isActiveTasksProject(sessionId, projectId)) taskError.set(String(e));
+      throw e;
+    }
+  }
+
+  // Update subtask with implementation notes
+  async function updateSubtask(sessionId: string, subtaskId: string, notes: string) {
+    if (!sessionId || !subtaskId) return;
+    const projectId = get(activeProjectId);
+
+    try {
+      await App.TaskMasterUpdateSubtask(sessionId, subtaskId, notes, projectId);
+      await reloadTasksIfActive(sessionId, projectId);
+    } catch (e) {
+      if (isActiveTasksProject(sessionId, projectId)) taskError.set(String(e));
+      throw e;
+    }
+  }
+
+  // Expand task into subtasks
+  async function expandTask(sessionId: string, taskId: string, research: boolean = true, force: boolean = false) {
+    if (!sessionId || !taskId) return;
+    const projectId = get(activeProjectId);
+
+    isLoadingTasks.set(true);
+    taskError.set(null);
+
+    try {
+      await App.TaskMasterExpandTask(sessionId, taskId, research, force, projectId);
+      await reloadTasksIfActive(sessionId, projectId);
+    } catch (e) {
+      if (isActiveTasksProject(sessionId, projectId)) taskError.set(String(e));
+      throw e;
+    } finally {
+      if (isActiveTasksProject(sessionId, projectId)) isLoadingTasks.set(false);
+    }
+  }
+
+  // Expand all eligible tasks
+  async function expandAllTasks(sessionId: string, research: boolean = true) {
+    if (!sessionId) return;
+    const projectId = get(activeProjectId);
+
+    isLoadingTasks.set(true);
+    taskError.set(null);
+
+    try {
+      await App.TaskMasterExpandAll(sessionId, research, projectId);
+      await reloadTasksIfActive(sessionId, projectId);
+    } catch (e) {
+      if (isActiveTasksProject(sessionId, projectId)) taskError.set(String(e));
+      throw e;
+    } finally {
+      if (isActiveTasksProject(sessionId, projectId)) isLoadingTasks.set(false);
+    }
+  }
+
+  // Analyze complexity
+  async function analyzeComplexity(sessionId: string, research: boolean = true): Promise<string> {
+    if (!sessionId) return '';
+    const projectId = get(activeProjectId);
+
+    isLoadingTasks.set(true);
+    taskError.set(null);
+
+    try {
+      const result = await App.TaskMasterAnalyzeComplexity(sessionId, research, projectId);
+      await reloadTasksIfActive(sessionId, projectId);
+      return result;
+    } catch (e) {
+      if (isActiveTasksProject(sessionId, projectId)) taskError.set(String(e));
+      throw e;
+    } finally {
+      if (isActiveTasksProject(sessionId, projectId)) isLoadingTasks.set(false);
+    }
+  }
+
+  // Remove a task
+  async function removeTask(sessionId: string, taskId: string, requestedProvider?: TaskProvider): Promise<TaskProvider> {
+    if (!sessionId || !taskId) throw new Error('session and task are required');
+
+    const target = captureActiveTasksTarget(sessionId);
+    const projectId = target?.projectId ?? get(activeProjectId);
+    const provider = requestedProvider ?? providerFor(sessionId, projectId);
+
+    try {
+      if (provider === 'mcp') {
+        await App.TaskMasterRemoveTask(sessionId, taskId, projectId);
+      } else {
+        await App.DeleteTask(sessionId, taskId, projectId);
+      }
+      if (activeTasksTargetIsCurrent(target)) tasks.update(t => t.filter(task => task.id !== taskId));
+      if (activeTasksTargetIsCurrent(target) && get(selectedTaskId) === taskId) {
+        selectedTaskId.set(null);
+      }
+      return provider;
+    } catch (e) {
+      if (activeTasksTargetIsCurrent(target)) taskError.set(String(e));
+      throw e;
+    }
+  }
+
+  // Send task to agent
+  async function sendTaskToAgent(sessionId: string, taskId: string, requestedProvider?: TaskProvider) {
+    if (!sessionId || !taskId) return;
+    const projectId = get(activeProjectId);
+
+    try {
+      if ((requestedProvider ?? providerFor(sessionId, projectId)) === 'mcp') {
+        await App.TaskMasterSendToAgent(sessionId, taskId, projectId);
+      } else {
+        await App.SendTaskToAgent(sessionId, taskId, projectId);
+      }
+    } catch (e) {
+      if (isActiveTasksProject(sessionId, projectId)) taskError.set(String(e));
+      throw e;
+    }
+  }
+
+  // Update task directly (no AI)
+  /**
+   * Save an edited task.
+   *
+   * dueAt is RFC 3339, or "" to clear the deadline. It is passed only when the
+   * caller actually means to change it — the backend keys on the field being
+   * present, so an unrelated edit that always sent it would wipe the deadline of
+   * every task it touched.
+   *
+   * Task Master has no deadline field of its own, so in MCP mode the deadline is
+   * written through the app's own storage alongside the Task Master update. That
+   * keeps the feature working in both modes rather than silently doing nothing in
+   * one of them.
+   */
+  async function updateTaskDirect(sessionId: string, taskId: string, title: string, description: string, details: string, priority: string, dueAt?: string, sessionScoped?: boolean, requestedProvider?: TaskProvider, tabId?: string) {
+    if (!sessionId || !taskId) return;
+    const projectId = get(activeProjectId);
+
+    try {
+      if ((requestedProvider ?? providerFor(sessionId, projectId)) === 'mcp') {
+        // One provider, one atomic replacement. Writing the extra fields through
+        // the local update API targeted a separate tasks.json after the MCP file
+        // had already changed, leaving a partial edit and a permanent error.
+        await App.TaskMasterUpdateTaskDirect(
+          sessionId,
+          taskId,
+          title,
+          description,
+          details,
+          priority,
+          dueAt ?? '',
+          sessionScoped ? sessionId : '',
+          // The direct edit rewrites the whole field, so "not changing the tab"
+          // has to send the tab it already has rather than nothing. A task taken
+          // off the session takes no tab with it: the backend would read a tab
+          // as putting it straight back.
+          sessionScoped ? (tabId ?? get(tasks).find(task => task.id === taskId)?.tabId ?? '') : '',
+          projectId,
+        );
+      } else {
+        // Editing a task is the app's own operation — it has storage for these
+        // fields and no reason to ask Task Master. Calling it regardless is what
+        // made saving an edit fail with "Task Master is turned off".
+        const updates: Record<string, unknown> = { title, description, details, priority };
+        if (dueAt !== undefined) updates.dueAt = dueAt;
+        // Empty string detaches the task from the session; the backend keys on
+        // the field being present, so an edit that never sends it leaves the
+        // assignment alone.
+        if (sessionScoped !== undefined) updates.sessionId = sessionScoped ? sessionId : '';
+        // Same presence rule: "" unassigns, an absent key leaves the tab alone.
+        if (tabId !== undefined) updates.tabId = tabId;
+        await App.UpdateTask(sessionId, taskId, updates, projectId);
+      }
+      await reloadTasksIfActive(sessionId, projectId);
+    } catch (e) {
+      if (isActiveTasksProject(sessionId, projectId)) taskError.set(String(e));
+      throw e;
+    }
+  }
+
+
+  /**
+   * Rewrite one task's subtasks or dependencies through the app's own storage.
+   *
+   * Task Master exposes an endpoint per operation — add a subtask, remove one,
+   * set its status. The local store has no such endpoints, and adding six would
+   * be six ways to write the same file. It has UpdateTask, which takes whole
+   * fields, so the change is made here on the list already in memory and written
+   * back in one call.
+   */
+  const localMutationQueues = new Map<string, Promise<void>>();
+
+  async function editTaskLocally(
+    sessionId: string,
+    taskId: string,
+    change: (task: Task) => Partial<Task>,
+  ): Promise<void> {
+    // These are read/modify/write operations over a whole array field. Serialise
+    // them per session and read inside the queue: two rapid checkbox/add clicks
+    // must see the result of the operation immediately before them, not the same
+    // stale Svelte-store snapshot and then overwrite one another.
+    const target = captureActiveTasksTarget(sessionId);
+    const projectId = target?.projectId ?? get(activeProjectId);
+    const queueKey = `${projectId}\x1f${target?.generation ?? tasksContextGeneration}\x1f${sessionId}`;
+    const previous = localMutationQueues.get(queueKey) ?? Promise.resolve();
+    const queued = previous.catch(() => undefined).then(async () => {
+      // A queued RMW starts its backend reads only when the previous item has
+      // settled. By then a project switch may have reused this session id; do
+      // not read and rewrite the replacement project's task array.
+      if (target && !activeTasksTargetIsCurrent(target)) {
+        throw new Error('task target changed before the queued mutation started');
+      }
+      const source = ((await App.GetTasks(sessionId)) || []).map(normalizeTask);
+      if (target && !activeTasksTargetIsCurrent(target)) {
+        throw new Error('task target changed while the queued mutation was reading');
+      }
+      const task = source.find((t) => String(t.id) === String(taskId));
+      if (!task) throw new Error(`no such task: ${taskId}`);
+      await App.UpdateTask(sessionId, String(taskId), change(task) as Record<string, any>, projectId);
+    });
+    localMutationQueues.set(queueKey, queued);
+    try {
+      await queued;
+    } finally {
+      if (localMutationQueues.get(queueKey) === queued) localMutationQueues.delete(queueKey);
+    }
+  }
+
+  // Add subtask to a task
+  async function addSubtask(sessionId: string, taskId: string, title: string, description: string = '', requestedProvider?: TaskProvider) {
+    if (!sessionId || !taskId || !title.trim()) return;
+    const projectId = get(activeProjectId);
+
+    try {
+      if ((requestedProvider ?? providerFor(sessionId, projectId)) === 'mcp') {
+        await App.TaskMasterAddSubtask(sessionId, taskId, title, description, projectId);
+      } else {
+        await editTaskLocally(sessionId, taskId, (task) => ({
+          subtasks: [
+            ...(task.subtasks || []),
+            // Numbered within the task, as Task Master does, so the two stores
+            // produce ids of the same shape. Use max+1, not length+1: after a
+            // deletion the latter can reuse an ID that still belongs to a sibling.
+            { id: nextLocalSubtaskId(task.subtasks || []), title, description, status: 'pending' },
+          ],
+        }));
+      }
+      await reloadTasksIfActive(sessionId, projectId);
+    } catch (e) {
+      if (isActiveTasksProject(sessionId, projectId)) taskError.set(String(e));
+      throw e;
+    }
+  }
+
+  // Remove a subtask
+  async function removeSubtask(sessionId: string, subtaskId: string, requestedProvider?: TaskProvider): Promise<TaskProvider> {
+    if (!sessionId || !subtaskId) throw new Error('session and subtask are required');
+
+    const projectId = get(activeProjectId);
+    const provider = requestedProvider ?? providerFor(sessionId, projectId);
+
+    try {
+      if (provider === 'mcp') {
+        await App.TaskMasterRemoveSubtask(sessionId, subtaskId, projectId);
+      } else {
+        const parent = parentTaskId(subtaskId);
+        const child = String(subtaskId).slice(parent.length + 1);
+        await editTaskLocally(sessionId, parent, (task) => ({
+          subtasks: (task.subtasks || []).filter((sub: any) => String(sub.id) !== child),
+        }));
+      }
+      await reloadTasksIfActive(sessionId, projectId);
+      return provider;
+    } catch (e) {
+      if (isActiveTasksProject(sessionId, projectId)) taskError.set(String(e));
+      throw e;
+    }
+  }
+
+  // Clear all subtasks from a task
+  async function clearSubtasks(sessionId: string, taskId: string) {
+    if (!sessionId || !taskId) return;
+    const projectId = get(activeProjectId);
+
+    try {
+      if (providerFor(sessionId, projectId) === 'mcp') {
+        await App.TaskMasterClearSubtasks(sessionId, taskId, projectId);
+      } else {
+        await editTaskLocally(sessionId, taskId, () => ({ subtasks: [] }));
+      }
+      await reloadTasksIfActive(sessionId, projectId);
+    } catch (e) {
+      if (isActiveTasksProject(sessionId, projectId)) taskError.set(String(e));
+      throw e;
+    }
+  }
+
+  // Set subtask status
+  async function setSubtaskStatus(sessionId: string, subtaskId: string, status: TaskStatus, requestedProvider?: TaskProvider): Promise<TaskProvider> {
+    if (!sessionId || !subtaskId) throw new Error('session and subtask are required');
+
+    const projectId = get(activeProjectId);
+    const provider = requestedProvider ?? providerFor(sessionId, projectId);
+
+    try {
+      if (provider === 'mcp') {
+        await App.TaskMasterSetSubtaskStatus(sessionId, subtaskId, status, projectId);
+      } else {
+        const parent = parentTaskId(subtaskId);
+        const child = String(subtaskId).slice(parent.length + 1);
+        await editTaskLocally(sessionId, parent, (task) => {
+          let found = false;
+          const subtasks = (task.subtasks || []).map((subtask) => {
+            if (String(subtask.id) !== child) return subtask;
+            found = true;
+            // Both spellings are written deliberately. The local model persists
+            // Done, while its normalized frontend shape also exposes Status.
+            return { ...subtask, status, done: status === 'done' };
+          });
+          if (!found) throw new Error(`no such subtask: ${subtaskId}`);
+          return { subtasks };
+        });
+      }
+      await reloadTasksIfActive(sessionId, projectId);
+      return provider;
+    } catch (e) {
+      if (isActiveTasksProject(sessionId, projectId)) taskError.set(String(e));
+      throw e;
+    }
+  }
+
+  // Add dependency to a task
+  async function addDependency(sessionId: string, taskId: string, dependsOnId: string, requestedProvider?: TaskProvider): Promise<TaskProvider> {
+    if (!sessionId || !taskId || !dependsOnId) throw new Error('session, task and dependency are required');
+
+    const projectId = get(activeProjectId);
+    const provider = requestedProvider ?? providerFor(sessionId, projectId);
+
+    try {
+      if (provider === 'mcp') {
+        await App.TaskMasterAddDependency(sessionId, taskId, dependsOnId, projectId);
+      } else {
+        await editTaskLocally(sessionId, taskId, (task) => ({
+          // Deduplicated: adding the same dependency twice is a no-op, not an
+          // error worth interrupting the user for.
+          dependencies: Array.from(new Set([...(task.dependencies || []), String(dependsOnId)])),
+        }));
+      }
+      await reloadTasksIfActive(sessionId, projectId);
+      return provider;
+    } catch (e) {
+      if (isActiveTasksProject(sessionId, projectId)) taskError.set(String(e));
+      throw e;
+    }
+  }
+
+  // Remove dependency from a task
+  async function removeDependency(sessionId: string, taskId: string, dependsOnId: string, requestedProvider?: TaskProvider): Promise<TaskProvider> {
+    if (!sessionId || !taskId || !dependsOnId) throw new Error('session, task and dependency are required');
+
+    const projectId = get(activeProjectId);
+    const provider = requestedProvider ?? providerFor(sessionId, projectId);
+
+    try {
+      if (provider === 'mcp') {
+        await App.TaskMasterRemoveDependency(sessionId, taskId, dependsOnId, projectId);
+      } else {
+        await editTaskLocally(sessionId, taskId, (task) => ({
+          dependencies: (task.dependencies || []).filter(
+            (dep: any) => String(dep) !== String(dependsOnId)),
+        }));
+      }
+      await reloadTasksIfActive(sessionId, projectId);
+      return provider;
+    } catch (e) {
+      if (isActiveTasksProject(sessionId, projectId)) taskError.set(String(e));
+      throw e;
+    }
+  }
+
+  // ============================================================================
+  // UI Helpers
+  // ============================================================================
+
+  function selectTask(id: string | null) {
+    selectedTaskId.set(id);
+  }
+
+  function setTaskFilter(filter: Partial<TaskFilter>) {
+    taskFilter.update(f => ({ ...f, ...filter }));
+  }
+
+  function setTaskSortBy(sortBy: TaskSortBy) {
+    taskSortBy.set(sortBy);
+  }
+
+  function toggleHideDone() {
+    hideDone.update(v => !v);
+  }
+
+  function clearTaskFilter() {
+    taskFilter.set({
+      status: 'all',
+      priority: 'all',
+      searchText: ''
+    });
+  }
+
+  function toggleMCPMode() {
+    useMCPMode.update(v => !v);
+  }
+
+  return {
+    /** Reload the list, but only if it is the one this store is showing. */
+    reloadTasksIfActive,
+    tasks,
+    taskSortBy,
+    hideDone,
+    taskFilter,
+    selectedTaskId,
+    isLoadingTasks,
+    taskError,
+    taskMasterStatus,
+    useMCPMode,
+    effectiveTaskProvider,
+    prepareTasksSession,
+    filteredTasks,
+    taskStats,
+    sortedFilteredTasks,
+    checkTaskMasterStatus,
+    initializeTaskMaster,
+    parsePRD,
+    loadTasks,
+    getNextTask,
+    setTaskStatus,
+    addTask,
+    addManualTask,
+    restoreDeletedTask,
+    restoreDeletedSubtask,
+    updateTask,
+    updateSubtask,
+    expandTask,
+    expandAllTasks,
+    analyzeComplexity,
+    removeTask,
+    sendTaskToAgent,
+    updateTaskDirect,
+    addSubtask,
+    removeSubtask,
+    clearSubtasks,
+    setSubtaskStatus,
+    addDependency,
+    removeDependency,
+    selectTask,
+    setTaskFilter,
+    setTaskSortBy,
+    toggleHideDone,
+    clearTaskFilter,
+    toggleMCPMode,
+  };
 }
 
-export function toggleMCPMode() {
-  useMCPMode.update(v => !v);
-}
+export type TaskStore = ReturnType<typeof createTaskStore>;
+
+/** The selected session's list, shown in the main panel's task view. */
+export const sessionTaskStore = createTaskStore();
+
+export const {
+  tasks,
+  taskSortBy,
+  hideDone,
+  taskFilter,
+  selectedTaskId,
+  isLoadingTasks,
+  taskError,
+  taskMasterStatus,
+  useMCPMode,
+  effectiveTaskProvider,
+  prepareTasksSession,
+  filteredTasks,
+  taskStats,
+  sortedFilteredTasks,
+  checkTaskMasterStatus,
+  initializeTaskMaster,
+  parsePRD,
+  loadTasks,
+  getNextTask,
+  setTaskStatus,
+  addTask,
+  addManualTask,
+  restoreDeletedTask,
+  restoreDeletedSubtask,
+  updateTask,
+  updateSubtask,
+  expandTask,
+  expandAllTasks,
+  analyzeComplexity,
+  removeTask,
+  sendTaskToAgent,
+  updateTaskDirect,
+  addSubtask,
+  removeSubtask,
+  clearSubtasks,
+  setSubtaskStatus,
+  addDependency,
+  removeDependency,
+  selectTask,
+  setTaskFilter,
+  setTaskSortBy,
+  toggleHideDone,
+  clearTaskFilter,
+  toggleMCPMode,
+} = sessionTaskStore;

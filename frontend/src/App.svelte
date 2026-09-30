@@ -166,6 +166,8 @@
   import LogDialog from './lib/components/Dialogs/LogDialog.svelte';
   import QuickJumpDialog from './lib/components/Dialogs/QuickJumpDialog.svelte';
   import GitHistoryDialog from './lib/components/Dialogs/GitHistoryDialog.svelte';
+  import ProjectTasksDialog from './lib/components/Dialogs/ProjectTasksDialog.svelte';
+  import ProjectTasksButton from './lib/components/common/ProjectTasksButton.svelte';
   import RecoveryCenterDialog from './lib/components/Dialogs/RecoveryCenterDialog.svelte';
   import CommandPalette from './lib/components/Dialogs/CommandPalette.svelte';
   import CommandPickerDialog from './lib/components/Dialogs/CommandPickerDialog.svelte';
@@ -192,6 +194,7 @@
   import { activeProjectId, loadProjects, otherInstancePID, projects, refreshLockStatus } from './lib/stores/projects';
   import { appView, goBack, showTasksView } from './lib/stores/navigation';
   import { openTaskCount, watchOpenCount, refreshOpenCount } from './lib/stores/taskAlerts';
+  import { projectTasksOpen, watchProjectOpenCount } from './lib/stores/projectTasks';
   import { flushSettingsSaves, loadSettings, settings } from './lib/stores/settings';
   import GitBranchBadge from './lib/components/common/GitBranchBadge.svelte';
   import { agents, loadAgents } from './lib/stores/agents';
@@ -478,7 +481,7 @@
     showSettingsDialog || showRecoveryCenter || showCommandPalette || showColorDialog || showDeleteConfirm ||
     showLogDialog || showQuickJump || showGitHistory || quickJumpPrompt || quickJumpNaming ||
     showCommandPicker || showCommandManager || showServerManager || showTemplateDialog ||
-    showQuitConfirm || showStopDialog || showStartDialog ||
+    showQuitConfirm || showStopDialog || showStartDialog || $projectTasksOpen ||
     showResumeChoice || showResumeSessionPicker || showInterruptedWork;
   $: if (prevAnyDialogOpen && !anyDialogOpen) {
     // Dialog just closed — return focus to the terminal
@@ -963,6 +966,11 @@
         e.stopPropagation();
         addCurrentToQuickJump();
         return;
+      case 'projectTasks.open':
+        e.preventDefault();
+        e.stopPropagation();
+        projectTasksOpen.set(true);
+        return;
       case 'help.show':
         e.preventDefault();
         showHelpDialog = true;
@@ -1002,6 +1010,8 @@
   // comes from reading every project's task file, which the backend has no
   // reason to watch continuously.
   let stopOpenTaskWatch: (() => void) | null = null;
+  // The same for the project's own list, on its header button.
+  let stopProjectTaskWatch: (() => void) | null = null;
   let appMounted = false;
 
   onMount(async () => {
@@ -1012,6 +1022,7 @@
 
     appMounted = true;
     stopOpenTaskWatch = watchOpenCount();
+    stopProjectTaskWatch = watchProjectOpenCount();
 
     GetMultiplexerStatus().then((s) => {
       if (!appMounted) return;
@@ -1104,6 +1115,7 @@
     appMounted = false;
     if (isResizing) stopResize();
     stopOpenTaskWatch?.();
+    stopProjectTaskWatch?.();
     window.removeEventListener('keydown', handleKeydown, true);
     window.removeEventListener('quickjump:add', handleQuickJumpAdd as EventListener);
     window.removeEventListener('git:show-history', handleShowGitHistory);
@@ -1756,6 +1768,9 @@
             <span class="task-badge">{$openTaskCount > 99 ? '99+' : $openTaskCount}</span>
           {/if}
         </button>
+        <!-- The active project's own list — the one no session owns — beside
+             the list of everything. -->
+        <ProjectTasksButton />
         <button class="btn btn-ghost btn-icon" on:click={() => showSettingsDialog = true} title={$t('header.settings')}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="12" cy="12" r="3"/>
@@ -2027,6 +2042,8 @@
       </div>
     </div>
   {/if}
+
+  <ProjectTasksDialog bind:show={$projectTasksOpen} />
 
   <GitHistoryDialog
     bind:show={showGitHistory}
