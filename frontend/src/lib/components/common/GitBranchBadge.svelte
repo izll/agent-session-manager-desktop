@@ -249,6 +249,19 @@
        offers to switch branches. -->
   <div class="branch-menu" bind:this={menuRef} use:portal>
     <div class="branch-menu-title">{$t('gitBranch.listTitle')}</div>
+    <!-- The history lives behind the branch badge because that is where a user
+         already is when they are thinking about the repository. Right under
+         the title, not after the list: with many branches it sat at the end
+         of a long scroll. -->
+    <button
+      class="branch-menu-action"
+      on:click={() => { close(); window.dispatchEvent(new CustomEvent('git:show-history')); }}
+    >
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/>
+      </svg>
+      {$t('history.title')}
+    </button>
     {#if loading}
       <div class="branch-menu-note">{$t('gitBranch.listLoading')}</div>
     {:else if failed}
@@ -278,17 +291,6 @@
       {/if}
     {/if}
 
-    <!-- The history lives behind the branch badge because that is where a user
-         already is when they are thinking about the repository. -->
-    <button
-      class="branch-menu-action"
-      on:click={() => { close(); window.dispatchEvent(new CustomEvent('git:show-history')); }}
-    >
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/>
-      </svg>
-      {$t('history.title')}
-    </button>
   </div>
 {/if}
 
@@ -299,9 +301,9 @@
     gap: 7px;
     width: 100%;
     padding: 8px 12px;
-    margin-top: 4px;
+    margin-bottom: 4px;
     border: none;
-    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
     background: transparent;
     color: inherit;
     font: inherit;
