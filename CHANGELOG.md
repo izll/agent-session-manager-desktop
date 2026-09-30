@@ -6,6 +6,52 @@ Entries describe what changed for someone using the app. Internal refactoring,
 test and CI work is left out unless it changed behaviour. Dates are release
 dates; the format follows [Keep a Changelog](https://keepachangelog.com).
 
+## 1.1.19 — 2026-09-30
+
+### Added
+
+- **Pick up where you left off after a restart.** The app keeps track of
+  which sessions and tabs are running. When the computer or tmux restarts,
+  it offers to reopen them — only the tabs that were running, with the
+  agents continuing their conversations — with a checkbox per session and a
+  count like "3 of 5 tabs". Settings → General → Session list → "After a
+  restart": Ask (default), Reopen automatically, or Do nothing. An ordinary
+  relaunch of the app, with tmux still running, asks nothing.
+- **What's new after an update.** Once after an update, a dialog lists the
+  changes since the version you had, and pages back through older releases.
+  It can be opened any time from Help → About, the command palette and the
+  update dialog.
+- **Project tasks and a project note.** Each project has a task list and a
+  note of its own, belonging to no session: on the dashboard, behind a
+  header button that counts open tasks, with Ctrl+Shift+B and from the
+  command palette. A project task can be moved into a session's list and
+  back, or sent to a session's agent; project tasks also show in All tasks.
+- **Hide files from the diff view.** Right-click a file to hide it, its
+  folder, or every file with its extension — from the view only, nothing
+  changes in git. The new "Skipped" tab lists them, takes typed patterns
+  such as `dist/` or `*.lock`, shows each one again, or all at once.
+- **Jump from the diff to the file browser**, to the file or to its folder,
+  from the same menu. The file tree now scrolls to what it was asked to show.
+
+### Changed
+
+- **Quick open finds the query as a whole first.** A file holding the typed
+  text, or each of its words, comes before one that only holds its letters
+  scattered in order — which is now used only when nothing holds the text
+  whole, so searching by initials still works.
+- **Commit history is the second item of the branch menu**, above the
+  branch list, in the same size as the rows.
+
+### Fixed
+
+- **Notes in the default project were not saved** since 0.9.34: they stayed
+  "Unsaved".
+- **Show in files from the diff opened nothing** when the diff filled the
+  window: the file browser handled the jump before its tree had loaded.
+- **Menus and dropdowns opened on top of each other:** the branch menu and
+  the push panel, the header's badge and the status bar's, and two
+  dropdowns in one dialog. One is open at a time now.
+
 ## 1.1.18 — 2026-09-29
 
 ### Added
