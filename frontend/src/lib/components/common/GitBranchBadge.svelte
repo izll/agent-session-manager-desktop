@@ -307,6 +307,9 @@
     background: transparent;
     color: inherit;
     font: inherit;
+    /* The menu is portalled to <body> and has no size of its own, so an
+       inherited font came out larger than the 13px branch rows under it. */
+    font-size: 13px;
     text-align: left;
     cursor: pointer;
   }

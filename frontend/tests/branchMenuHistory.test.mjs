@@ -15,3 +15,10 @@ test('the history button comes before the branch list', () => {
   assert.ok(title >= 0 && history > title && list > history,
     'the history button is not between the title and the branch list');
 });
+
+test('the history button is the size of the branch rows', () => {
+  const src = readFileSync(new URL('../src/lib/components/common/GitBranchBadge.svelte', import.meta.url), 'utf8')
+    .replace(/\r\n/g, '\n');
+  const rule = src.slice(src.indexOf('  .branch-menu-action {'), src.indexOf('  .branch-menu-action:hover'));
+  assert.match(rule, /font-size: 13px;/, 'the button inherits the page font and comes out larger than the rows');
+});
