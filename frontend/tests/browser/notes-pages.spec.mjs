@@ -94,6 +94,52 @@ test('the page keys follow a rebinding', async ({ page }) => {
   await expect(textarea).toHaveValue('first line\nthe hidden needle is here');
 });
 
+// Each page keeps its undo history across page switches; the histories go
+// with the note, so another note and back starts them over.
+test('undo reaches edits made before switching pages', async ({ page }) => {
+  await gotoNotes(page, 'notes-pages');
+  const textarea = page.locator('.notes-textarea');
+  await expect(textarea).toHaveValue('alpha and beta');
+  const undo = () => textarea.press('ControlOrMeta+z');
+  const redo = () => textarea.press('ControlOrMeta+y');
+
+  await textarea.fill('plan edited');
+  await pageTab(page, 'Risks').click();
+  await expect(textarea).toHaveValue('first line\nthe hidden needle is here');
+  await textarea.fill('risks edited');
+  await pageTab(page, 'Plan').click();
+  await expect(textarea).toHaveValue('plan edited');
+
+  await undo();
+  await expect(textarea).toHaveValue('alpha and beta');
+  // Undone text is saved like typed text.
+  await expect.poll(() => storedPages(page, 'notes-pages'))
+    .toEqual([['Plan', 'alpha and beta'], ['Risks', 'risks edited']]);
+  await redo();
+  await expect(textarea).toHaveValue('plan edited');
+
+  // The other page's history went with it, and its undo stays on that page.
+  await textarea.press('Alt+PageDown');
+  await expect(textarea).toHaveValue('risks edited');
+  await undo();
+  await expect(textarea).toHaveValue('first line\nthe hidden needle is here');
+  await undo();
+  await expect(textarea).toHaveValue('first line\nthe hidden needle is here');
+  await expect.poll(() => storedPages(page, 'notes-pages'))
+    .toEqual([['Plan', 'plan edited'], ['Risks', 'first line\nthe hidden needle is here']]);
+  await expect(page.locator('.save-indicator.unsaved')).toHaveCount(0);
+
+  // Another note and back: the histories are not kept for notes left.
+  await page.evaluate(() => window.notesFixture.select('notes-b'));
+  await expect(textarea).toHaveValue('saved B');
+  await page.evaluate(() => window.notesFixture.select('notes-pages'));
+  await expect(textarea).toHaveValue('first line\nthe hidden needle is here');
+  await pageTab(page, 'Plan').click();
+  await expect(textarea).toHaveValue('plan edited');
+  await undo();
+  await expect(textarea).toHaveValue('plan edited');
+});
+
 test('the open page is remembered across a restart', async ({ page }) => {
   await gotoNotes(page, 'notes-pages');
   await pageTab(page, 'Risks').click();

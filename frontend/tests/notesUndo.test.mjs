@@ -65,10 +65,19 @@ assert.match(
   'the direct assignment must remain only as a fallback',
 );
 
-// A note has pages, and the history is of the open page's text: opening
-// another page starts it over, or undo would write one page's text into the
-// next.
-assert.match(notes, /function showPage[\s\S]*?notes = activeText\(\);[\s\S]*?resetHistory\(\)/,
-  'switching pages keeps the previous page\'s undo history');
+// A note has pages, and each page has its own history: opening another page
+// sets the open page's aside and takes up the other's, or undo would write
+// one page's text into the next — or forget a page's edits once left.
+const showPage = notes.slice(notes.indexOf('function showPage'));
+const showPageBody = showPage.slice(0, showPage.indexOf('\n  }\n'));
+assert.match(showPageBody, /notes = activeText\(\);[\s\S]*?if \(activePageId !== previousId\) swapPageHistory\(previousId, activePageId\);/,
+  'switching pages does not swap the undo histories');
+assert.doesNotMatch(showPageBody, /resetHistory\(\)/, 'switching pages throws the undo histories away');
+// Kept for the open note only: every reset — another note, a reload, a
+// discard — drops the other pages' histories with the open one.
+assert.match(notes, /function resetHistory\(\) \{\s*pageHistories\.clear\(\);\s*startHistory\(\);/,
+  'the other pages\' histories outlive the note they belong to');
+// A history is taken up only if it ends at the page's text as it is now.
+assert.match(notes, /if \(kept && kept\.entries\[kept\.at\]\?\.text === notes\) \{/);
 
 console.log('notesUndo: ok');

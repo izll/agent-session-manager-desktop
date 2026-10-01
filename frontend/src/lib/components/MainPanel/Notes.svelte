@@ -380,9 +380,45 @@
    * without looking.
    */
   function resetHistory() {
+    pageHistories.clear();
+    startHistory();
+  }
+
+  function startHistory() {
     history = [{ text: notes, caret: 0 }];
     historyAt = 0;
     lastRecordedAt = 0;
+  }
+
+  /**
+   * The histories of the open note's other pages, by page ID, so switching
+   * pages and back still undoes what was typed there. The history above is
+   * the open page's; it is put here when another page is opened and taken
+   * back out when its page is.
+   *
+   * Only the open note's pages are kept — every reset above (another note,
+   * a fresh load of this one, a discard) drops them all — and each is capped
+   * at HISTORY_LIMIT entries like the open one.
+   */
+  type PageHistory = { entries: Snapshot[]; at: number };
+  const pageHistories = new Map<string, PageHistory>();
+
+  function swapPageHistory(fromId: string, toId: string) {
+    // A deleted page's history has no page to go back to.
+    if (pageIndex(pages, fromId) !== -1) pageHistories.set(fromId, { entries: history, at: historyAt });
+    const kept = pageHistories.get(toId);
+    pageHistories.delete(toId);
+    // Taken up only if it ends at the page's text as it is now: a history
+    // that does not would make the first undo jump to text the page no
+    // longer has.
+    if (kept && kept.entries[kept.at]?.text === notes) {
+      history = kept.entries;
+      historyAt = kept.at;
+      // The first keystroke after coming back starts an entry of its own.
+      lastRecordedAt = 0;
+    } else {
+      startHistory();
+    }
   }
 
   function recordHistory(force = false) {
@@ -821,9 +857,12 @@
   }
 
   function showPage(id: string) {
+    const previousId = activePageId;
     activePageId = resolveActivePage(pages, id);
     notes = activeText();
-    resetHistory();
+    // Each page keeps its own undo history: one history across pages would
+    // write one page's text into the next.
+    if (activePageId !== previousId) swapPageHistory(previousId, activePageId);
     rememberActivePage(currentNoteKey(), activePageId);
     // Remembered with the draft as well, so coming back to this note in the
     // same sitting opens this page even before the note is saved.
@@ -934,6 +973,7 @@
   function removePage(id: string) {
     const result = deletePage(pages, id, activePageId);
     changePages(result.pages, result.activeId);
+    if (pageIndex(pages, id) === -1) pageHistories.delete(id);
   }
 
   function confirmDeletePage() {
