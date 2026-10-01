@@ -942,6 +942,10 @@ export function TabMoveRefusals(arg1, arg2) {
   return window['go']['main']['App']['TabMoveRefusals'](arg1, arg2);
 }
 
+export function TabSplitRefusal(arg1, arg2) {
+  return window['go']['main']['App']['TabSplitRefusal'](arg1, arg2);
+}
+
 export function TaskMasterAddDependency(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['TaskMasterAddDependency'](arg1, arg2, arg3, arg4);
 }

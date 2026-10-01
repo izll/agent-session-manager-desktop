@@ -475,6 +475,8 @@ export function TabIsGitRepo(arg1:string,arg2:number):Promise<boolean>;
 
 export function TabMoveRefusals(arg1:string,arg2:number):Promise<Record<string, string>>;
 
+export function TabSplitRefusal(arg1:string,arg2:number):Promise<string>;
+
 export function TaskMasterAddDependency(arg1:string,arg2:string,arg3:string,arg4:string):Promise<void>;
 
 export function TaskMasterAddManualTask(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string,arg6:string):Promise<main.MCPTaskInfo>;

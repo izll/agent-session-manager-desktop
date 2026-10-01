@@ -326,3 +326,59 @@ func TestMergeSessionIntoRemovesTheEmptiedSession(t *testing.T) {
 		t.Errorf("quick jump = %+v, want %+v", settings.QuickJump, want)
 	}
 }
+
+// The only tab of a session is the session: moving it merges the session into
+// the target, process and all, and the session it leaves is gone.
+func TestMovingTheOnlyTabOfASessionMergesIt(t *testing.T) {
+	f := newTabMoveFixture(t)
+	solo := f.session(t, "solo", true)
+	f.session(t, "dst", true)
+	remote := &session.Instance{ID: "remote", Name: "remote", Path: "/srv", Status: session.StatusStopped, ServerID: "srv1"}
+	if err := f.storage.AddInstance(remote); err != nil {
+		t.Fatal(err)
+	}
+	own := solo.GetMainWindowIndex()
+	pid := f.pid("solo:" + strconv.Itoa(own))
+
+	refusals, err := f.app.TabMoveRefusals("solo", own)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := map[string]string{"dst": "", "remote": "error.tabMoveLocalTabToServer"}; !reflect.DeepEqual(refusals, want) {
+		t.Errorf("refusals = %+v, want %+v", refusals, want)
+	}
+	if refusal, err := f.app.TabSplitRefusal("solo", own); err != nil || refusal != "error.tabSplitOnlyTab" {
+		t.Errorf("split refusal = %q, %v; it is a session of its own already", refusal, err)
+	}
+
+	result, err := f.app.MoveTabToSession("solo", own, "dst", "")
+	if err != nil {
+		t.Fatalf("move: %v", err)
+	}
+	if result.SessionID != "dst" || result.TabsMoved != 1 {
+		t.Errorf("result = %+v", result)
+	}
+	if f.stored(t, "solo") != nil {
+		t.Error("the session its only tab left is still stored")
+	}
+	if got := f.pid("dst:" + strconv.Itoa(result.WindowIdx)); got != pid {
+		t.Errorf("the tab was restarted: pid %s, was %s", got, pid)
+	}
+	if storedDst := f.stored(t, "dst"); len(storedDst.FollowedWindows) != 1 {
+		t.Errorf("the target holds %+v", storedDst.FollowedWindows)
+	}
+}
+
+func TestTabSplitRefusalOfAnOrdinaryTab(t *testing.T) {
+	f := newTabMoveFixture(t)
+	src := f.session(t, "src", false, session.FollowedWindow{ID: "tab-a", Name: "a", Agent: session.AgentTerminal, Index: 1})
+	if refusal, err := f.app.TabSplitRefusal("src", tabIndex(t, src, "tab-a")); err != nil || refusal != "" {
+		t.Errorf("split refusal of a tab = %q, %v", refusal, err)
+	}
+	if refusal, _ := f.app.TabSplitRefusal("src", 0); refusal != "error.tabMoveMainTab" {
+		t.Errorf("split refusal of the own window beside a tab = %q", refusal)
+	}
+	if _, err := f.app.TabSplitRefusal("gone", 1); err == nil {
+		t.Error("a session that is not there was answered for")
+	}
+}

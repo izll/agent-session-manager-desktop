@@ -39,6 +39,17 @@ func (a *App) TabMoveRefusals(sourceID string, windowIdx int) (map[string]string
 	})
 }
 
+// TabSplitRefusal says why the tab at windowIdx could not become a session of
+// its own — a translation key — or "" where it can. Asked with
+// TabMoveRefusals, for the "new session" drop target.
+func (a *App) TabSplitRefusal(sourceID string, windowIdx int) (string, error) {
+	src, err := a.storage.GetInstance(sourceID)
+	if err != nil {
+		return "", err
+	}
+	return src.SplitRefusal(windowIdx), nil
+}
+
 // SessionMergeRefusals is TabMoveRefusals for merging a whole session.
 func (a *App) SessionMergeRefusals(sourceID string) (map[string]string, error) {
 	return a.moveRefusals(sourceID, func(src, dst *session.Instance) string {
@@ -71,6 +82,9 @@ func (a *App) moveRefusals(sourceID string, refusal func(src, dst *session.Insta
 
 // MoveTabToSession moves a tab into another session of the project. A running
 // tab keeps running; see session.MoveTab.
+//
+// The only tab of a session is the session: moving it merges the session
+// into the target, which ends it (see MergeSessionInto).
 func (a *App) MoveTabToSession(sourceID string, windowIdx int, targetID, expectedProjectID string) (*TabMoveResult, error) {
 	connections, err := a.connectionsForTabMove(sourceID, windowIdx)
 	if err != nil {
@@ -85,6 +99,11 @@ func (a *App) MoveTabToSession(sourceID string, windowIdx int, targetID, expecte
 	src, dst, err := a.tabMoveSessions(sourceID, targetID)
 	if err != nil {
 		return nil, err
+	}
+	if src.IsOnlyTab(windowIdx) {
+		// The merge's connections are these: with no other tab, the session's
+		// own machine is the only one it is on.
+		return a.mergeLoaded(src, dst, connections)
 	}
 	routeTabMove(dst, connections)
 
@@ -194,6 +213,12 @@ func (a *App) MergeSessionInto(sourceID, targetID, expectedProjectID string) (*T
 	if err != nil {
 		return nil, err
 	}
+	return a.mergeLoaded(src, dst, connections)
+}
+
+// mergeLoaded is MergeSessionInto once both sessions are loaded under the
+// project lock, with the connections to every server src's tabs run on.
+func (a *App) mergeLoaded(src, dst *session.Instance, connections map[string]*serverConnection) (*TabMoveResult, error) {
 	routeTabMove(dst, connections)
 
 	moves, mergeErr := session.MergeSession(src, dst)

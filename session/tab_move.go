@@ -80,6 +80,7 @@ const (
 	errTabMoveLocalToSrv   = "error.tabMoveLocalTabToServer"
 	errTabMoveRunningLocal = "error.tabMoveRunningUnsupported"
 	errTabMoveNotFound     = "error.windowNotFound"
+	errTabSplitOnlyTab     = "error.tabSplitOnlyTab"
 )
 
 // TabMoveRefusal says why a tab cannot go into dst, or "" when it can.
@@ -109,17 +110,50 @@ func TabMoveRefusal(machine string, live bool, dst *Instance) string {
 // says so before the drop rather than after. Answered from the records alone:
 // it runs on every dragover-to-be, and nothing here is worth a multiplexer
 // round trip — the move itself checks again.
+//
+// The own window of a session that has no other tab is the whole session:
+// moving it is merging the session (see IsOnlyTab), and it is refused where
+// the merge would be.
 func (i *Instance) MoveRefusal(windowIdx int, dst *Instance) string {
 	if dst == nil || dst.ID == i.ID {
 		return errTabMoveSameSession
 	}
 	at := i.followedAt(windowIdx)
 	if at < 0 {
+		if len(i.FollowedWindows) == 0 {
+			return i.MergeRefusal(dst)
+		}
 		return errTabMoveMainTab
 	}
 	fw := i.FollowedWindows[at]
 	live := i.Status == StatusRunning && !fw.Stopped
 	return TabMoveRefusal(fw.RunsOn(i.ServerID), live, dst)
+}
+
+// SplitRefusal says why the tab at windowIdx cannot become a session of its
+// own (SplitTab), or "" when it can.
+//
+// The rules are a move's into a session on the tab's own machine, which is
+// where the new session runs. The session's own window is refused: it is a
+// session already — of its own when it is the only tab, which says so.
+func (i *Instance) SplitRefusal(windowIdx int) string {
+	at := i.followedAt(windowIdx)
+	if at < 0 {
+		if len(i.FollowedWindows) == 0 {
+			return errTabSplitOnlyTab
+		}
+		return errTabMoveMainTab
+	}
+	fw := i.FollowedWindows[at]
+	machine := fw.RunsOn(i.ServerID)
+	live := i.Status == StatusRunning && !fw.Stopped
+	return TabMoveRefusal(machine, live, &Instance{ServerID: machine})
+}
+
+// IsOnlyTab reports whether windowIdx is the own window of a session that has
+// no other tab — the tab that, moved, takes the whole session with it.
+func (i *Instance) IsOnlyTab(windowIdx int) bool {
+	return len(i.FollowedWindows) == 0 && i.isOwnWindow(windowIdx)
 }
 
 // MergeRefusal says why this whole session cannot go into dst, or "".
