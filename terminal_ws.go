@@ -855,6 +855,8 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 
 	sessionID := r.URL.Query().Get("session")
 	windowIdx := r.URL.Query().Get("window")
+	// The viewer's size, so the attach starts at it (see StartTerminalWithSize).
+	attachCols, attachRows := attachSizeFrom(r.URL.Query().Get("cols"), r.URL.Query().Get("rows"))
 	projectValues, projectPresent := r.URL.Query()["project"]
 
 	// Require the per-launch token before doing anything else (and before
@@ -1162,10 +1164,10 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 	// instead: there is no local process to give a pty to, and the stream the
 	// rest of this handler works with is the same either way.
 	var ptmx session.TerminalStream
-	if remoteStream, handled := ts.attachRemote(inst, winIdx, windowTarget); handled {
+	if remoteStream, handled := ts.attachRemote(inst, winIdx, windowTarget, attachCols, attachRows); handled {
 		ptmx, err = remoteStream.stream, remoteStream.err
 	} else {
-		ptmx, err = session.StartTerminal(cmd)
+		ptmx, err = session.StartTerminalWithSize(cmd, attachCols, attachRows)
 	}
 	if err != nil {
 		// Clean up linked session on error (only if it was created)

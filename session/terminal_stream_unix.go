@@ -18,6 +18,19 @@ func StartTerminal(cmd *exec.Cmd) (TerminalStream, error) {
 	return pty.Start(cmd)
 }
 
+// StartTerminalWithSize is StartTerminal with the PTY at the viewer's size
+// from the start. Without one the PTY starts at 0x0, which tmux takes for
+// 80x24, and with window-size "latest" the window shrank to that until the
+// real size arrived a moment later: an agent such as Claude Code redrew its
+// whole output at 80 columns in between, and the scrollback kept that narrow
+// copy. Zero sizes fall back to StartTerminal.
+func StartTerminalWithSize(cmd *exec.Cmd, cols, rows int) (TerminalStream, error) {
+	if cols <= 0 || rows <= 0 {
+		return StartTerminal(cmd)
+	}
+	return pty.StartWithSize(cmd, &pty.Winsize{Cols: uint16(cols), Rows: uint16(rows)})
+}
+
 // SetTerminalSize performs the window-size ioctl on the PTY master. tmux
 // reacts to the resulting SIGWINCH, which is what makes the pane follow the
 // xterm.js viewport.

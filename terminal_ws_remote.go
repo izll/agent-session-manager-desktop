@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strconv"
 
 	"asmgr-desktop/session"
 )
@@ -96,7 +97,7 @@ func (ts *TerminalServer) sessionAliveProbe(ctx context.Context, inst *session.I
 //
 // The second return value says whether this was a remote session at all, so
 // the caller can fall through to the local path without having to ask twice.
-func (ts *TerminalServer) attachRemote(inst *session.Instance, winIdx int, windowTarget string) (remoteAttach, bool) {
+func (ts *TerminalServer) attachRemote(inst *session.Instance, winIdx int, windowTarget string, cols, rows int) (remoteAttach, bool) {
 	if inst == nil {
 		return remoteAttach{}, false
 	}
@@ -138,8 +139,11 @@ func (ts *TerminalServer) attachRemote(inst *session.Instance, winIdx int, windo
 	// The initial size matters: tmux draws to it as soon as the client
 	// attaches, and starting at the wrong size shows the user a redraw they
 	// did not ask for. The browser sends its real size immediately afterwards.
+	if cols <= 0 || rows <= 0 {
+		cols, rows = defaultRemoteColumns, defaultRemoteRows
+	}
 	stream, err := connection.client.AttachTerminalTo(
-		connection.helper, windowTarget, extraPath, defaultRemoteColumns, defaultRemoteRows)
+		connection.helper, windowTarget, extraPath, cols, rows)
 	if err != nil {
 		return remoteAttach{err: err}, true
 	}
@@ -165,4 +169,16 @@ type remoteUnsupportedError struct{}
 
 func (*remoteUnsupportedError) Error() string {
 	return "this session runs on a server, and the connection to it is not available here"
+}
+
+// attachSizeFrom reads the viewer's size from the attach request. Anything
+// missing, unparseable or out of bounds is 0x0, which means "no size": the
+// attach then starts as it did before.
+func attachSizeFrom(colsText, rowsText string) (int, int) {
+	cols, colsErr := strconv.Atoi(colsText)
+	rows, rowsErr := strconv.Atoi(rowsText)
+	if colsErr != nil || rowsErr != nil || cols < 10 || cols > 1000 || rows < 3 || rows > 500 {
+		return 0, 0
+	}
+	return cols, rows
 }

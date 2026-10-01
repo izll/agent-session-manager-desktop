@@ -747,6 +747,28 @@ function measuredAgainstContainer(terminalInstance: TerminalInstance): boolean {
 }
 
 /**
+ * The size to attach at, as URL parameters, or nothing when it is not known.
+ *
+ * Attached without one, the client started at 0x0, which tmux takes for
+ * 80x24 — and with window-size "latest" the pane shrank to that until the
+ * real size arrived a moment later. Claude Code redrew its whole output at 80
+ * columns in between, and that narrow copy stayed in the scrollback: paging
+ * back showed text wrapped at two different widths. The fit to the container
+ * is used where it can be measured; a terminal not laid out yet sends none.
+ */
+export function attachSizeQuery(instance: { terminal: { cols: number; rows: number }; fitAddon?: { proposeDimensions(): { cols: number; rows: number } | undefined } }): string {
+  let size: { cols: number; rows: number } | undefined;
+  try {
+    size = instance.fitAddon?.proposeDimensions();
+  } catch {
+    size = undefined;
+  }
+  size ??= { cols: instance.terminal.cols, rows: instance.terminal.rows };
+  if (!size || !(size.cols >= 20) || !(size.rows >= 5)) return '';
+  return `&cols=${Math.floor(size.cols)}&rows=${Math.floor(size.rows)}`;
+}
+
+/**
  * Announce a size only when it differs from the last one announced.
  *
  * Every resize message makes the Windows backend nudge the multiplexer into a
@@ -939,7 +961,7 @@ export async function attachToSession(
     const token = await getTerminalWSToken();
     const wsUrl = `ws://127.0.0.1:${port}/terminal?session=${encodeURIComponent(sessionId)}` +
       `&window=${windowIdx}&project=${encodeURIComponent(projectId)}` +
-      `&token=${encodeURIComponent(token)}`;
+      `&token=${encodeURIComponent(token)}` + attachSizeQuery(terminalInstance);
 
     const ws = new WebSocket(wsUrl);
     ws.binaryType = 'arraybuffer';

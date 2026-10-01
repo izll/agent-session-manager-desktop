@@ -240,6 +240,18 @@ func (c *controlModeStream) startBackground(run func()) {
 // The caller hands us an ordinary attach-session command (built in
 // terminal_ws.go / app.go, which stay platform-agnostic); the -CC flag is
 // injected here so neither caller has to know the transport.
+// StartTerminalWithSize starts the control-mode client and gives it the
+// viewer's size straight away, so the window does not settle at a default
+// size first; see the Unix version.
+func StartTerminalWithSize(cmd *exec.Cmd, cols, rows int) (TerminalStream, error) {
+	stream, err := StartTerminal(cmd)
+	if err != nil || cols <= 0 || rows <= 0 {
+		return stream, err
+	}
+	_ = SetTerminalSize(stream, cols, rows)
+	return stream, nil
+}
+
 func StartTerminal(cmd *exec.Cmd) (TerminalStream, error) {
 	target := attachTargetOf(cmd)
 	insertControlFlag(cmd)
