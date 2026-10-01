@@ -63,10 +63,10 @@ test('switching pages shows each page and loses no edit', WEBKIT, async ({ page 
   await expect.poll(() => storedPages(page, 'notes-pages'))
     .toEqual([['Plan', 'alpha, beta and gamma'], ['Risks', 'no risks left']]);
 
-  // Alt+PgUp / Alt+PgDn step through the pages from the editor.
-  await textarea.press('Alt+PageUp');
+  // Ctrl+PgUp / Ctrl+PgDn step through the pages from the editor.
+  await textarea.press('Control+PageUp');
   await expect(textarea).toHaveValue('alpha, beta and gamma');
-  await textarea.press('Alt+PageDown');
+  await textarea.press('Control+PageDown');
   await expect(textarea).toHaveValue('no risks left');
 
   // Another session and back: the note opens on the page it was left on.
@@ -83,19 +83,19 @@ test('the page keys follow a rebinding', WEBKIT, async ({ page }) => {
   await gotoNotes(page, 'notes-pages');
   const textarea = page.locator('.notes-textarea');
   await expect(textarea).toHaveValue('alpha and beta');
-  await expect(pageTab(page, 'Plan')).toHaveAttribute('title', /Alt\+PgUp \/ Alt\+PgDn switch pages\.$/);
+  await expect(pageTab(page, 'Plan')).toHaveAttribute('title', /Ctrl\+PgUp \/ Ctrl\+PgDn switch pages\.$/);
 
   await page.evaluate(() => window.notesFixture.rebind({
     'notes.nextPage': [{ key: 'arrowright', alt: true, shift: true }],
     'notes.prevPage': [],
   }));
   await expect(pageTab(page, 'Plan')).toHaveAttribute('title', /Shift\+Alt\+→ switch pages\.$/);
-  await textarea.press('Alt+PageDown');
+  await textarea.press('Control+PageDown');
   await expect(textarea).toHaveValue('alpha and beta');
   await textarea.press('Alt+Shift+ArrowRight');
   await expect(textarea).toHaveValue('first line\nthe hidden needle is here');
-  // Switched off: Alt+PgUp steps no more.
-  await textarea.press('Alt+PageUp');
+  // Switched off: Ctrl+PgUp steps no more.
+  await textarea.press('Control+PageUp');
   await expect(textarea).toHaveValue('first line\nthe hidden needle is here');
 });
 
@@ -124,7 +124,7 @@ test('undo reaches edits made before switching pages', WEBKIT, async ({ page }) 
   await expect(textarea).toHaveValue('plan edited');
 
   // The other page's history went with it, and its undo stays on that page.
-  await textarea.press('Alt+PageDown');
+  await textarea.press('Control+PageDown');
   await expect(textarea).toHaveValue('risks edited');
   await undo();
   await expect(textarea).toHaveValue('first line\nthe hidden needle is here');

@@ -53,6 +53,11 @@ const backend = new Proxy({
         Agent: fw.agent, Dead: false, TextColor: '', BackgroundColor: '' })),
     ];
   },
+  // The source session's own window has a note of two pages, every other
+  // tab a note of one, for the shared Ctrl+PgUp/PgDn.
+  GetTabNotePages: async (session: string, windowIdx: number) => (session === 'src' && windowIdx === 0
+    ? [{ id: 'p1', title: 'One', text: 'first page' }, { id: 'p2', title: 'Two', text: 'second page' }]
+    : [{ id: 'page-1', title: '', text: `note of ${session}:${windowIdx}` }]),
   TabMoveRefusals: async (source: string) => refusals(source),
   // The only tab of a session is a session of its own already.
   TabSplitRefusal: async (source: string, windowIdx: number) => {

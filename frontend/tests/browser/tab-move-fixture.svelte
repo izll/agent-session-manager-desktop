@@ -2,6 +2,7 @@
   import { onMount, tick } from 'svelte';
   import SessionTree from '../../src/lib/components/Sidebar/SessionTree.svelte';
   import TabBar from '../../src/lib/components/MainPanel/TabBar.svelte';
+  import Notes from '../../src/lib/components/MainPanel/Notes.svelte';
 
   export let onFixtureReady: () => void = () => {};
 
@@ -19,5 +20,6 @@
   </div>
   <div style="flex: 1; min-width: 0">
     <TabBar visible={true} />
+    <div style="height: 300px"><Notes active={true} /></div>
   </div>
 </div>

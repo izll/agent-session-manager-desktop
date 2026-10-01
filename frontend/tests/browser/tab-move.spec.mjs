@@ -293,3 +293,31 @@ test('the only tab\'s menu moves it to a session, asking first, and offers no ne
     { method: 'MergeSessionInto', args: ['solo', 'dst', 'project-a'] },
   ]);
 });
+
+// Ctrl+PgUp / Ctrl+PgDn are shared: in a note of several pages they step its
+// pages, anywhere else — a note of one page included — the session's tabs.
+test('in a note of several pages the tab keys step its pages', async ({ page }) => {
+  await gotoFixture(page);
+  const note = page.locator('.notes-textarea');
+  await expect(note).toHaveValue('first page');
+  await note.focus();
+  await page.keyboard.press('Control+PageDown');
+  await expect(note).toHaveValue('second page');
+  expect((await page.evaluate(() => window.tabMoveFixture.selected())).windowIdx).toBe(0);
+});
+
+test('in a note of one page the tab keys still switch tabs', async ({ page }) => {
+  await gotoFixture(page);
+  const note = page.locator('.notes-textarea');
+  await expect(note).toHaveValue('first page');
+  // Out of the note, they switch tabs.
+  await page.locator('body').click({ position: { x: 600, y: 500 } });
+  await page.keyboard.press('Control+PageDown');
+  await expect.poll(async () => (await page.evaluate(() => window.tabMoveFixture.selected())).windowIdx).not.toBe(0);
+  // In a note of one page too.
+  await expect(note).toHaveValue(/^note of src:/);
+  const before = (await page.evaluate(() => window.tabMoveFixture.selected())).windowIdx;
+  await note.focus();
+  await page.keyboard.press('Control+PageDown');
+  await expect.poll(async () => (await page.evaluate(() => window.tabMoveFixture.selected())).windowIdx).not.toBe(before);
+});

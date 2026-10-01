@@ -121,7 +121,7 @@ left off.
   side by side, with a draggable split, `Ctrl+F7`/`Ctrl+Shift+F7` to step through
   the changes, and a jump from any line to that spot in the editor. Huge diffs are
   guarded so they never freeze the UI. Keep per-tab notes, with search (`Ctrl+F`)
-  and full undo, split into titled pages (`Alt+PgUp`/`Alt+PgDn` to switch).
+  and full undo, split into titled pages (`Ctrl+PgUp`/`Ctrl+PgDn` switch pages in a note of several, tabs elsewhere).
 - **Commit history** — `Ctrl+Shift+Y` browses the repository's commits and
   branches: the files each one touched, its diff, and a search through the
   messages. Read a change on its own or in the whole file, with `F7` stepping

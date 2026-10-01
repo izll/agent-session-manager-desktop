@@ -1,6 +1,6 @@
 import { derived, get, writable } from 'svelte/store';
 import { settings, saveSettings } from './settings';
-import { SHORTCUTS, type Binding, type Shortcut } from '../utils/shortcuts';
+import { SHORTCUTS, type Binding, type Shortcut, keysAreShared } from '../utils/shortcuts';
 
 /**
  * Which keys each shortcut answers to, after the user's changes.
@@ -126,6 +126,8 @@ export function conflictsWith(binding: Binding, exceptId: string): Shortcut[] {
   const clashes: Shortcut[] = [];
   for (const shortcut of SHORTCUTS) {
     if (shortcut.id === exceptId) continue;
+    // A deliberate pair, acting in different places: not a clash.
+    if (keysAreShared(exceptId, shortcut.id)) continue;
     const theirs = bindings.get(shortcut.id) || [];
     if (theirs.some((b) => sameBinding(b, binding))) clashes.push(shortcut);
   }

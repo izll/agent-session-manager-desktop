@@ -33,6 +33,13 @@ export interface Shortcut {
    *  than one — the palette answers to both Ctrl+K and Ctrl+Shift+P. */
   defaults: Binding[];
   /**
+   * Shortcuts that may answer to the same keys because they act in different
+   * places, and the more local one gives way when it has nothing to do. The
+   * note pages and the session's tabs share Ctrl+PgUp/PgDn: in a note with
+   * several pages they step the pages, everywhere else the tabs.
+   */
+  sharesKeysWith?: string[];
+  /**
    * Fixed shortcuts cannot be rebound, and the editor shows them greyed out
    * rather than hiding them — a user looking for Esc should find it and see
    * why, instead of wondering whether the list is incomplete.
@@ -235,15 +242,17 @@ export const SHORTCUTS: Shortcut[] = [
     id: 'notes.prevPage',
     category: 'navigation',
     descKey: 'help.notesPrevPage',
-    // Acted on inside the notes only. Alt rather than Ctrl: Ctrl+PgUp/PgDn
-    // switch the session's tabs everywhere, the notes included.
-    defaults: [{ key: 'pageup', alt: true }],
+    // The tabs' keys: inside a note with several pages they step the pages,
+    // and anywhere else — a note of one page included — the tabs, as before.
+    defaults: [{ key: 'pageup', ctrl: true }],
+    sharesKeysWith: ['tab.prev'],
   },
   {
     id: 'notes.nextPage',
     category: 'navigation',
     descKey: 'help.notesNextPage',
-    defaults: [{ key: 'pagedown', alt: true }],
+    defaults: [{ key: 'pagedown', ctrl: true }],
+    sharesKeysWith: ['tab.next'],
   },
   {
     id: 'session.filter',
@@ -311,4 +320,12 @@ const BY_ID = new Map(SHORTCUTS.map((s) => [s.id, s]));
 /** Look up a shortcut's definition. */
 export function shortcutById(id: string): Shortcut | undefined {
   return BY_ID.get(id);
+}
+
+/** Whether two shortcuts share keys by declaration (sharesKeysWith), either
+ *  way round: then the same keys on both are not a clash. */
+export function keysAreShared(a: string, b: string): boolean {
+  const first = SHORTCUTS.find((s) => s.id === a);
+  const second = SHORTCUTS.find((s) => s.id === b);
+  return !!(first?.sharesKeysWith?.includes(b) || second?.sharesKeysWith?.includes(a));
 }

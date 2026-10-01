@@ -912,6 +912,8 @@
   function handlePageStepKey(event: KeyboardEvent): boolean {
     const next = matchesShortcut(event, 'notes.nextPage');
     if (!next && !matchesShortcut(event, 'notes.prevPage')) return false;
+    // One page: nothing to step, and the keys are the tabs' too — let them go.
+    if (pages.length < 2) return false;
     event.preventDefault();
     event.stopPropagation();
     if (pages.length > 1) selectPage(stepPage(pages, activePageId, next ? 1 : -1));
@@ -1098,7 +1100,7 @@
 
 <svelte:window on:click={() => { if (pageMenu) closePageMenu(); }} on:keydown={handleWindowKeydown} />
 
-<div class="notes-container">
+<div class="notes-container" data-note-pages={pages.length}>
   <div class="notes-header">
     <span class="notes-title">{isProject ? $t('projectTasks.notesTitle') : $t('notes.title')}</span>
     {#if !isProject}

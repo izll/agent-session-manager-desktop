@@ -124,26 +124,31 @@ test('the presence dots count every page', () => {
   assert.match(notes, /dispatch\('notesChange', \{ sessionId, windowIdx, notes: notePagesText\(snapshot\) \}\)/);
 });
 
-// Ctrl+PgUp / Ctrl+PgDn switch the session's tabs everywhere; the pages take
-// the Alt pair so the notes do not trap the user.
+// The pages share Ctrl+PgUp / Ctrl+PgDn with the session's tabs: in a note of
+// several pages they step the pages, anywhere else the tabs (see the tab-move
+// browser tests). The pair is declared, so neither counts as a clash.
 //
 // They are registered shortcuts, so they can be rebound in the settings and
 // are listed in the help.
-test('pages are stepped with Alt+PgUp / Alt+PgDn, not the tab keys', async () => {
+test('pages are stepped with the tab keys, shared by declaration', async () => {
   const { SHORTCUTS, shortcutById } = await import('../src/lib/utils/shortcuts.ts');
-  assert.deepEqual(shortcutById('notes.prevPage')?.defaults, [{ key: 'pageup', alt: true }]);
-  assert.deepEqual(shortcutById('notes.nextPage')?.defaults, [{ key: 'pagedown', alt: true }]);
+  assert.deepEqual(shortcutById('notes.prevPage')?.defaults, [{ key: 'pageup', ctrl: true }]);
+  assert.deepEqual(shortcutById('notes.nextPage')?.defaults, [{ key: 'pagedown', ctrl: true }]);
+  assert.deepEqual(shortcutById('notes.prevPage')?.sharesKeysWith, ['tab.prev']);
+  assert.deepEqual(shortcutById('notes.nextPage')?.sharesKeysWith, ['tab.next']);
   for (const id of ['notes.prevPage', 'notes.nextPage']) {
     const shortcut = shortcutById(id);
     assert.equal(shortcut.fixed, undefined, `${id} cannot be rebound`);
     assert.equal(shortcut.category, 'navigation');
   }
-  // No other default answers to the same keys.
+  // No other default answers to the same keys, beyond a declared pair.
   const seen = new Map();
+  const declared = (a, b) => shortcutById(a)?.sharesKeysWith?.includes(b) || shortcutById(b)?.sharesKeysWith?.includes(a);
   for (const shortcut of SHORTCUTS) {
     for (const b of shortcut.defaults) {
       const key = `${b.key}|${!!b.ctrl}|${!!b.shift}|${!!b.alt}`;
-      assert.ok(!seen.has(key), `${shortcut.id} and ${seen.get(key)} share a default binding`);
+      const other = seen.get(key);
+      assert.ok(!other || declared(shortcut.id, other), `${shortcut.id} and ${other} share a default binding`);
       seen.set(key, shortcut.id);
     }
   }
@@ -210,4 +215,16 @@ test('the page strings are translated everywhere', () => {
     assert.match(strings['notes.untitledPageN'], /\{n\}/, `${name} drops the page number`);
     assert.match(strings['notes.deletePageMessage'], /\{title\}/, `${name} drops the page title`);
   }
+});
+
+// The shortcut editor does not report the declared pair as a clash (it asks
+// keysAreShared), but still reports anything else on those keys.
+test('the shared page and tab keys are no clash, and nothing else is', async () => {
+  const { keysAreShared } = await import('../src/lib/utils/shortcuts.ts');
+  assert.ok(keysAreShared('notes.nextPage', 'tab.next'));
+  assert.ok(keysAreShared('tab.prev', 'notes.prevPage'));
+  assert.ok(!keysAreShared('notes.nextPage', 'tab.prev'));
+  assert.ok(!keysAreShared('notes.nextPage', 'session.filter'));
+  const store = readFileSync(new URL('../src/lib/stores/shortcuts.ts', import.meta.url), 'utf8');
+  assert.match(store, /if \(keysAreShared\(exceptId, shortcut\.id\)\) continue;/);
 });

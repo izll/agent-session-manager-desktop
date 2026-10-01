@@ -529,6 +529,14 @@
   // Dictation event listeners
   let dictationCleanup: (() => void) | null = null;
 
+  /** Whether the focus is in a note with several pages and the key is one of
+   *  its page keys — the note steps its pages then, not the tabs. */
+  function notePagesTakeKey(e: KeyboardEvent): boolean {
+    const note = e.target instanceof Element ? e.target.closest('[data-note-pages]') : null;
+    if (!note || Number(note.getAttribute('data-note-pages')) < 2) return false;
+    return matchesShortcut(e, 'notes.nextPage') || matchesShortcut(e, 'notes.prevPage');
+  }
+
   // Ctrl+PageUp/PageDown to switch window tabs, Ctrl+T to open one
   function handleWindowTabKeydown(e: KeyboardEvent) {
     if (!visible) return;
@@ -562,6 +570,10 @@
     const wantsNext = matchesShortcut(e, 'tab.next');
     const wantsPrev = matchesShortcut(e, 'tab.prev');
     if (!wantsNext && !wantsPrev) return;
+    // In a note of several pages the same keys step its pages (they share
+    // them by design, see sharesKeysWith); this handler runs first, in the
+    // capture phase, so it has to step aside.
+    if (notePagesTakeKey(e)) return;
     if (windows.length <= 1) return;
     if (document.querySelector('.dialog-overlay') || keyClaimedByDialog()) return;
 
