@@ -1643,5 +1643,10 @@
   "help.actionProjectTasks": "プロジェクトのタスクとメモ",
   "allTasks.projectGroup": "{project} · プロジェクトのタスク",
   "allTasks.openProjectTasks": "プロジェクトのタスクを開く",
-  "error.projectTaskMoveTaskMaster": "Task Master がオンの間は、タスクをセッションに移動できません。その場合、セッションにはアプリではなく Task Master の一覧が表示されます。"
+  "error.projectTaskMoveTaskMaster": "Task Master がオンの間は、タスクをセッションに移動できません。その場合、セッションにはアプリではなく Task Master の一覧が表示されます。",
+  "error.tabMoveMainTab": "セッション自身のタブは単独では移動できません。セッション全体を移動するには「セッションに統合…」を使ってください",
+  "error.tabMoveSameSession": "このタブはすでにそのセッションにあります",
+  "error.tabMoveLocalTabToServer": "このコンピューターで実行中のタブは、サーバー上のセッションに移動できません",
+  "error.tabMoveRunningUnsupported": "Windows では実行中のタブを別のセッションに移動できません。先にタブを停止してから移動してください",
+  "error.tabMoveFailed": "タブを移動できませんでした: {0}"
 }

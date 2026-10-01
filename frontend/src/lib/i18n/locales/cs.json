@@ -1643,5 +1643,10 @@
   "help.actionProjectTasks": "Úkoly a poznámky projektu",
   "allTasks.projectGroup": "{project} · úkoly projektu",
   "allTasks.openProjectTasks": "Otevřít úkoly projektu",
-  "error.projectTaskMoveTaskMaster": "Úkol nelze přesunout do relace, dokud je zapnutý Task Master: relace pak zobrazuje seznam Task Masteru, ne seznam aplikace."
+  "error.projectTaskMoveTaskMaster": "Úkol nelze přesunout do relace, dokud je zapnutý Task Master: relace pak zobrazuje seznam Task Masteru, ne seznam aplikace.",
+  "error.tabMoveMainTab": "Vlastní kartu relace nelze přesunout samostatně — k přesunu celé relace použijte „Sloučit do relace…“",
+  "error.tabMoveSameSession": "Karta už v této relaci je",
+  "error.tabMoveLocalTabToServer": "Karta běžící na tomto počítači se nemůže připojit k relaci na serveru",
+  "error.tabMoveRunningUnsupported": "Ve Windows nelze běžící kartu přesunout do jiné relace — nejprve kartu zastavte a pak ji přesuňte",
+  "error.tabMoveFailed": "Kartu se nepodařilo přesunout: {0}"
 }

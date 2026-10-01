@@ -2174,6 +2174,26 @@ export namespace main {
 	        this.missing = source["missing"];
 	    }
 	}
+	export class TabMoveResult {
+	    sessionId: string;
+	    sessionName: string;
+	    windowIdx: number;
+	    tabsMoved: number;
+	    tasksMoved: number;
+
+	    static createFrom(source: any = {}) {
+	        return new TabMoveResult(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.sessionId = source["sessionId"];
+	        this.sessionName = source["sessionName"];
+	        this.windowIdx = source["windowIdx"];
+	        this.tabsMoved = source["tabsMoved"];
+	        this.tasksMoved = source["tasksMoved"];
+	    }
+	}
 	export class TabStatusInfo {
 	    windowIdx: number;
 	    agent: string;

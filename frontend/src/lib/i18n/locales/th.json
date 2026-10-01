@@ -1643,5 +1643,10 @@
   "help.actionProjectTasks": "งานและบันทึกของโปรเจกต์",
   "allTasks.projectGroup": "{project} · งานของโปรเจกต์",
   "allTasks.openProjectTasks": "เปิดงานของโปรเจกต์",
-  "error.projectTaskMoveTaskMaster": "ไม่สามารถย้ายงานไปยังเซสชันได้ขณะที่ Task Master เปิดอยู่ เพราะเซสชันจะแสดงรายการของ Task Master ไม่ใช่รายการของแอป"
+  "error.projectTaskMoveTaskMaster": "ไม่สามารถย้ายงานไปยังเซสชันได้ขณะที่ Task Master เปิดอยู่ เพราะเซสชันจะแสดงรายการของ Task Master ไม่ใช่รายการของแอป",
+  "error.tabMoveMainTab": "ไม่สามารถย้ายแท็บหลักของเซสชันเพียงลำพังได้ — ใช้ “รวมเข้ากับเซสชัน…” เพื่อย้ายทั้งเซสชัน",
+  "error.tabMoveSameSession": "แท็บนี้อยู่ในเซสชันนั้นอยู่แล้ว",
+  "error.tabMoveLocalTabToServer": "แท็บที่ทำงานบนคอมพิวเตอร์เครื่องนี้ไม่สามารถเข้าร่วมเซสชันบนเซิร์ฟเวอร์ได้",
+  "error.tabMoveRunningUnsupported": "บน Windows ไม่สามารถย้ายแท็บที่กำลังทำงานไปยังเซสชันอื่นได้ — หยุดแท็บก่อน แล้วจึงย้าย",
+  "error.tabMoveFailed": "ไม่สามารถย้ายแท็บได้: {0}"
 }

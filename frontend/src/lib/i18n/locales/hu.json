@@ -1643,5 +1643,10 @@
   "help.actionProjectTasks": "Projektfeladatok és -jegyzetek",
   "allTasks.projectGroup": "{project} · projektfeladatok",
   "allTasks.openProjectTasks": "Projektfeladatok megnyitása",
-  "error.projectTaskMoveTaskMaster": "Amíg a Task Master be van kapcsolva, feladatot nem lehet munkamenetbe áthelyezni: a munkamenet ilyenkor a Task Master listáját mutatja, nem az alkalmazásét."
+  "error.projectTaskMoveTaskMaster": "Amíg a Task Master be van kapcsolva, feladatot nem lehet munkamenetbe áthelyezni: a munkamenet ilyenkor a Task Master listáját mutatja, nem az alkalmazásét.",
+  "error.tabMoveMainTab": "A munkamenet saját fülét nem lehet önmagában áthelyezni — a teljes munkamenethez használd az „Egyesítés munkamenetbe…” menüpontot",
+  "error.tabMoveSameSession": "A fül már ebben a munkamenetben van",
+  "error.tabMoveLocalTabToServer": "Az ezen a gépen futó fül nem kerülhet át egy szerveren futó munkamenetbe",
+  "error.tabMoveRunningUnsupported": "Windowson futó fület nem lehet másik munkamenetbe áthelyezni — előbb állítsd le a fület, aztán helyezd át",
+  "error.tabMoveFailed": "A fület nem sikerült áthelyezni: {0}"
 }

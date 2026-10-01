@@ -287,11 +287,17 @@ export function LogFrontend(arg1:string):Promise<void>;
 
 export function MarkWhatsNewSeen():Promise<void>;
 
+export function MergeSessionInto(arg1:string,arg2:string,arg3:string):Promise<main.TabMoveResult>;
+
 export function MoveGroup(arg1:string,arg2:number,arg3:string):Promise<void>;
 
 export function MoveQuickJump(arg1:number,arg2:number,arg3:string):Promise<void>;
 
 export function MoveSessionToIndex(arg1:string,arg2:number,arg3:string):Promise<void>;
+
+export function MoveTabToNewSession(arg1:string,arg2:number,arg3:string,arg4:string):Promise<main.TabMoveResult>;
+
+export function MoveTabToSession(arg1:string,arg2:number,arg3:string,arg4:string):Promise<main.TabMoveResult>;
 
 export function MoveTask(arg1:string,arg2:string,arg3:string,arg4:string):Promise<void>;
 
@@ -417,6 +423,8 @@ export function SendPromptToWindow(arg1:string,arg2:number,arg3:string,arg4:stri
 
 export function SendTaskToAgent(arg1:string,arg2:string,arg3:string):Promise<void>;
 
+export function SessionMergeRefusals(arg1:string):Promise<Record<string, string>>;
+
 export function SetExtraArgs(arg1:string,arg2:number,arg3:string,arg4:string):Promise<void>;
 
 export function SetGroupColor(arg1:string,arg2:string,arg3:string,arg4:boolean,arg5:string):Promise<void>;
@@ -464,6 +472,8 @@ export function StopTab(arg1:string,arg2:number,arg3:string):Promise<void>;
 export function StopTaskMaster(arg1:string,arg2:string):Promise<void>;
 
 export function TabIsGitRepo(arg1:string,arg2:number):Promise<boolean>;
+
+export function TabMoveRefusals(arg1:string,arg2:number):Promise<Record<string, string>>;
 
 export function TaskMasterAddDependency(arg1:string,arg2:string,arg3:string,arg4:string):Promise<void>;
 

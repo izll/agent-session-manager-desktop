@@ -1643,5 +1643,10 @@
   "help.actionProjectTasks": "Projektuppgifter och anteckningar",
   "allTasks.projectGroup": "{project} · projektuppgifter",
   "allTasks.openProjectTasks": "Öppna projektuppgifter",
-  "error.projectTaskMoveTaskMaster": "En uppgift kan inte flyttas till en session medan Task Master är på: sessionen visar då Task Masters lista, inte appens."
+  "error.projectTaskMoveTaskMaster": "En uppgift kan inte flyttas till en session medan Task Master är på: sessionen visar då Task Masters lista, inte appens.",
+  "error.tabMoveMainTab": "En sessions egen flik kan inte flyttas för sig — använd ”Slå ihop med session…” för att flytta hela sessionen",
+  "error.tabMoveSameSession": "Fliken finns redan i den sessionen",
+  "error.tabMoveLocalTabToServer": "En flik som körs på den här datorn kan inte gå med i en session på en server",
+  "error.tabMoveRunningUnsupported": "I Windows kan en flik som körs inte flyttas till en annan session — stoppa fliken först och flytta den sedan",
+  "error.tabMoveFailed": "Fliken kunde inte flyttas: {0}"
 }

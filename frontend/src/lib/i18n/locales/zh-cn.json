@@ -1643,5 +1643,10 @@
   "help.actionProjectTasks": "项目任务和笔记",
   "allTasks.projectGroup": "{project} · 项目任务",
   "allTasks.openProjectTasks": "打开项目任务",
-  "error.projectTaskMoveTaskMaster": "开启 Task Master 时无法将任务移动到会话：此时会话显示的是 Task Master 的列表，而不是应用的列表。"
+  "error.projectTaskMoveTaskMaster": "开启 Task Master 时无法将任务移动到会话：此时会话显示的是 Task Master 的列表，而不是应用的列表。",
+  "error.tabMoveMainTab": "会话自身的标签页不能单独移动——要移动整个会话，请使用“合并到会话…”",
+  "error.tabMoveSameSession": "该标签页已在那个会话中",
+  "error.tabMoveLocalTabToServer": "在本机运行的标签页不能加入服务器上的会话",
+  "error.tabMoveRunningUnsupported": "在 Windows 上无法将运行中的标签页移动到其他会话——请先停止该标签页，再移动它",
+  "error.tabMoveFailed": "无法移动标签页：{0}"
 }

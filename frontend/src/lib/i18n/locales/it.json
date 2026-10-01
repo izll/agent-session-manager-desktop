@@ -1643,5 +1643,10 @@
   "help.actionProjectTasks": "Attività e note del progetto",
   "allTasks.projectGroup": "{project} · attività del progetto",
   "allTasks.openProjectTasks": "Apri le attività del progetto",
-  "error.projectTaskMoveTaskMaster": "Un'attività non può essere spostata in una sessione mentre Task Master è attivo: la sessione mostra allora l'elenco di Task Master, non quello dell'app."
+  "error.projectTaskMoveTaskMaster": "Un'attività non può essere spostata in una sessione mentre Task Master è attivo: la sessione mostra allora l'elenco di Task Master, non quello dell'app.",
+  "error.tabMoveMainTab": "La scheda propria di una sessione non può essere spostata da sola: usa «Unisci in una sessione…» per spostare l’intera sessione",
+  "error.tabMoveSameSession": "La scheda è già in quella sessione",
+  "error.tabMoveLocalTabToServer": "Una scheda in esecuzione su questo computer non può entrare in una sessione su un server",
+  "error.tabMoveRunningUnsupported": "Su Windows una scheda in esecuzione non può essere spostata in un’altra sessione: prima ferma la scheda, poi spostala",
+  "error.tabMoveFailed": "Impossibile spostare la scheda: {0}"
 }

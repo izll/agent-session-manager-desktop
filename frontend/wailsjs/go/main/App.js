@@ -566,6 +566,10 @@ export function MarkWhatsNewSeen() {
   return window['go']['main']['App']['MarkWhatsNewSeen']();
 }
 
+export function MergeSessionInto(arg1, arg2, arg3) {
+  return window['go']['main']['App']['MergeSessionInto'](arg1, arg2, arg3);
+}
+
 export function MoveGroup(arg1, arg2, arg3) {
   return window['go']['main']['App']['MoveGroup'](arg1, arg2, arg3);
 }
@@ -576,6 +580,14 @@ export function MoveQuickJump(arg1, arg2, arg3) {
 
 export function MoveSessionToIndex(arg1, arg2, arg3) {
   return window['go']['main']['App']['MoveSessionToIndex'](arg1, arg2, arg3);
+}
+
+export function MoveTabToNewSession(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['MoveTabToNewSession'](arg1, arg2, arg3, arg4);
+}
+
+export function MoveTabToSession(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['MoveTabToSession'](arg1, arg2, arg3, arg4);
 }
 
 export function MoveTask(arg1, arg2, arg3, arg4) {
@@ -826,6 +838,10 @@ export function SendTaskToAgent(arg1, arg2, arg3) {
   return window['go']['main']['App']['SendTaskToAgent'](arg1, arg2, arg3);
 }
 
+export function SessionMergeRefusals(arg1) {
+  return window['go']['main']['App']['SessionMergeRefusals'](arg1);
+}
+
 export function SetExtraArgs(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['SetExtraArgs'](arg1, arg2, arg3, arg4);
 }
@@ -920,6 +936,10 @@ export function StopTaskMaster(arg1, arg2) {
 
 export function TabIsGitRepo(arg1, arg2) {
   return window['go']['main']['App']['TabIsGitRepo'](arg1, arg2);
+}
+
+export function TabMoveRefusals(arg1, arg2) {
+  return window['go']['main']['App']['TabMoveRefusals'](arg1, arg2);
 }
 
 export function TaskMasterAddDependency(arg1, arg2, arg3, arg4) {

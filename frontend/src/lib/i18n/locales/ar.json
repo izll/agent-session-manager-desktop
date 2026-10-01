@@ -1643,5 +1643,10 @@
   "help.actionProjectTasks": "مهام المشروع وملاحظاته",
   "allTasks.projectGroup": "{project} · مهام المشروع",
   "allTasks.openProjectTasks": "فتح مهام المشروع",
-  "error.projectTaskMoveTaskMaster": "لا يمكن نقل مهمة إلى جلسة أثناء تفعيل Task Master: إذ تعرض الجلسة حينها قائمة Task Master لا قائمة التطبيق."
+  "error.projectTaskMoveTaskMaster": "لا يمكن نقل مهمة إلى جلسة أثناء تفعيل Task Master: إذ تعرض الجلسة حينها قائمة Task Master لا قائمة التطبيق.",
+  "error.tabMoveMainTab": "لا يمكن نقل علامة التبويب الخاصة بالجلسة وحدها — استخدم «دمج في جلسة…» لنقل الجلسة كاملة",
+  "error.tabMoveSameSession": "علامة التبويب موجودة بالفعل في تلك الجلسة",
+  "error.tabMoveLocalTabToServer": "لا يمكن لعلامة تبويب تعمل على هذا الكمبيوتر الانضمام إلى جلسة على خادم",
+  "error.tabMoveRunningUnsupported": "على Windows لا يمكن نقل علامة تبويب قيد التشغيل إلى جلسة أخرى — أوقف علامة التبويب أولًا ثم انقلها",
+  "error.tabMoveFailed": "تعذر نقل علامة التبويب: {0}"
 }

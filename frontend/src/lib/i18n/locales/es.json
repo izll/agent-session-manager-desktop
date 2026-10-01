@@ -1643,5 +1643,10 @@
   "help.actionProjectTasks": "Tareas y notas del proyecto",
   "allTasks.projectGroup": "{project} · tareas del proyecto",
   "allTasks.openProjectTasks": "Abrir tareas del proyecto",
-  "error.projectTaskMoveTaskMaster": "No se puede mover una tarea a una sesión mientras Task Master está activado: la sesión muestra entonces la lista de Task Master, no la de la aplicación."
+  "error.projectTaskMoveTaskMaster": "No se puede mover una tarea a una sesión mientras Task Master está activado: la sesión muestra entonces la lista de Task Master, no la de la aplicación.",
+  "error.tabMoveMainTab": "La pestaña propia de una sesión no se puede mover sola: usa «Fusionar en sesión…» para mover toda la sesión",
+  "error.tabMoveSameSession": "La pestaña ya está en esa sesión",
+  "error.tabMoveLocalTabToServer": "Una pestaña que se ejecuta en este equipo no puede unirse a una sesión en un servidor",
+  "error.tabMoveRunningUnsupported": "En Windows no se puede mover una pestaña en ejecución a otra sesión: detén primero la pestaña y luego muévela",
+  "error.tabMoveFailed": "No se pudo mover la pestaña: {0}"
 }

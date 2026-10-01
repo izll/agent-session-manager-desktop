@@ -1643,5 +1643,10 @@
   "help.actionProjectTasks": "Задачи и заметки проекта",
   "allTasks.projectGroup": "{project} · задачи проекта",
   "allTasks.openProjectTasks": "Открыть задачи проекта",
-  "error.projectTaskMoveTaskMaster": "Пока включён Task Master, задачу нельзя переместить в сессию: сессия тогда показывает список Task Master, а не список приложения."
+  "error.projectTaskMoveTaskMaster": "Пока включён Task Master, задачу нельзя переместить в сессию: сессия тогда показывает список Task Master, а не список приложения.",
+  "error.tabMoveMainTab": "Собственную вкладку сеанса нельзя переместить отдельно — чтобы переместить весь сеанс, используйте «Объединить с сеансом…»",
+  "error.tabMoveSameSession": "Вкладка уже находится в этом сеансе",
+  "error.tabMoveLocalTabToServer": "Вкладка, работающая на этом компьютере, не может перейти в сеанс на сервере",
+  "error.tabMoveRunningUnsupported": "В Windows работающую вкладку нельзя переместить в другой сеанс — сначала остановите вкладку, затем переместите её",
+  "error.tabMoveFailed": "Не удалось переместить вкладку: {0}"
 }

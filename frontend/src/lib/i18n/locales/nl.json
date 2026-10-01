@@ -1643,5 +1643,10 @@
   "help.actionProjectTasks": "Projecttaken en notities",
   "allTasks.projectGroup": "{project} · projecttaken",
   "allTasks.openProjectTasks": "Projecttaken openen",
-  "error.projectTaskMoveTaskMaster": "Een taak kan niet naar een sessie worden verplaatst zolang Task Master aan staat: de sessie toont dan de lijst van Task Master, niet die van de app."
+  "error.projectTaskMoveTaskMaster": "Een taak kan niet naar een sessie worden verplaatst zolang Task Master aan staat: de sessie toont dan de lijst van Task Master, niet die van de app.",
+  "error.tabMoveMainTab": "Het eigen tabblad van een sessie kan niet los worden verplaatst — gebruik „Samenvoegen in sessie…” om de hele sessie te verplaatsen",
+  "error.tabMoveSameSession": "Het tabblad zit al in die sessie",
+  "error.tabMoveLocalTabToServer": "Een tabblad dat op deze computer draait, kan niet bij een sessie op een server komen",
+  "error.tabMoveRunningUnsupported": "Op Windows kan een actief tabblad niet naar een andere sessie worden verplaatst — stop het tabblad eerst en verplaats het daarna",
+  "error.tabMoveFailed": "Het tabblad kon niet worden verplaatst: {0}"
 }

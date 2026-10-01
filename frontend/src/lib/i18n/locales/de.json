@@ -1643,5 +1643,10 @@
   "help.actionProjectTasks": "Projektaufgaben und Notizen",
   "allTasks.projectGroup": "{project} · Projektaufgaben",
   "allTasks.openProjectTasks": "Projektaufgaben öffnen",
-  "error.projectTaskMoveTaskMaster": "Eine Aufgabe kann nicht in eine Sitzung verschoben werden, solange Task Master aktiv ist: Die Sitzung zeigt dann die Liste von Task Master, nicht die der App."
+  "error.projectTaskMoveTaskMaster": "Eine Aufgabe kann nicht in eine Sitzung verschoben werden, solange Task Master aktiv ist: Die Sitzung zeigt dann die Liste von Task Master, nicht die der App.",
+  "error.tabMoveMainTab": "Der eigene Tab einer Sitzung kann nicht allein verschoben werden — verwende „In Sitzung zusammenführen…“, um die ganze Sitzung zu verschieben",
+  "error.tabMoveSameSession": "Der Tab ist bereits in dieser Sitzung",
+  "error.tabMoveLocalTabToServer": "Ein Tab, der auf diesem Computer läuft, kann keiner Sitzung auf einem Server beitreten",
+  "error.tabMoveRunningUnsupported": "Unter Windows kann ein laufender Tab nicht in eine andere Sitzung verschoben werden — stoppe den Tab zuerst und verschiebe ihn dann",
+  "error.tabMoveFailed": "Der Tab konnte nicht verschoben werden: {0}"
 }

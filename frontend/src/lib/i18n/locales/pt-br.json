@@ -1643,5 +1643,10 @@
   "help.actionProjectTasks": "Tarefas e notas do projeto",
   "allTasks.projectGroup": "{project} · tarefas do projeto",
   "allTasks.openProjectTasks": "Abrir tarefas do projeto",
-  "error.projectTaskMoveTaskMaster": "Uma tarefa não pode ser movida para uma sessão enquanto o Task Master estiver ativado: a sessão passa a mostrar a lista do Task Master, não a do aplicativo."
+  "error.projectTaskMoveTaskMaster": "Uma tarefa não pode ser movida para uma sessão enquanto o Task Master estiver ativado: a sessão passa a mostrar a lista do Task Master, não a do aplicativo.",
+  "error.tabMoveMainTab": "A aba própria de uma sessão não pode ser movida sozinha — use “Mesclar em sessão…” para mover a sessão inteira",
+  "error.tabMoveSameSession": "A aba já está nessa sessão",
+  "error.tabMoveLocalTabToServer": "Uma aba em execução neste computador não pode entrar em uma sessão em um servidor",
+  "error.tabMoveRunningUnsupported": "No Windows, uma aba em execução não pode ser movida para outra sessão — pare a aba primeiro e depois mova-a",
+  "error.tabMoveFailed": "Não foi possível mover a aba: {0}"
 }

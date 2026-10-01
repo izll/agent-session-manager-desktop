@@ -1643,5 +1643,10 @@
   "help.actionProjectTasks": "프로젝트 작업 및 메모",
   "allTasks.projectGroup": "{project} · 프로젝트 작업",
   "allTasks.openProjectTasks": "프로젝트 작업 열기",
-  "error.projectTaskMoveTaskMaster": "Task Master가 켜져 있으면 작업을 세션으로 이동할 수 없습니다. 이때 세션에는 앱의 목록이 아니라 Task Master의 목록이 표시됩니다."
+  "error.projectTaskMoveTaskMaster": "Task Master가 켜져 있으면 작업을 세션으로 이동할 수 없습니다. 이때 세션에는 앱의 목록이 아니라 Task Master의 목록이 표시됩니다.",
+  "error.tabMoveMainTab": "세션 자체의 탭은 단독으로 옮길 수 없습니다. 세션 전체를 옮기려면 “세션에 병합…”을 사용하세요",
+  "error.tabMoveSameSession": "탭이 이미 그 세션에 있습니다",
+  "error.tabMoveLocalTabToServer": "이 컴퓨터에서 실행 중인 탭은 서버의 세션에 합류할 수 없습니다",
+  "error.tabMoveRunningUnsupported": "Windows에서는 실행 중인 탭을 다른 세션으로 옮길 수 없습니다. 먼저 탭을 중지한 다음 옮기세요",
+  "error.tabMoveFailed": "탭을 옮기지 못했습니다: {0}"
 }

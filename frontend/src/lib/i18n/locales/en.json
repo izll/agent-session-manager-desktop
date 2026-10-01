@@ -1643,5 +1643,10 @@
   "help.actionProjectTasks": "Project tasks and notes",
   "allTasks.projectGroup": "{project} · project tasks",
   "allTasks.openProjectTasks": "Open project tasks",
-  "error.projectTaskMoveTaskMaster": "A task cannot be moved into a session while Task Master is on: the session then shows Task Master's list, not the app's."
+  "error.projectTaskMoveTaskMaster": "A task cannot be moved into a session while Task Master is on: the session then shows Task Master's list, not the app's.",
+  "error.tabMoveMainTab": "A session's own tab cannot be moved by itself — use “Merge into session…” to move the whole session",
+  "error.tabMoveSameSession": "The tab is already in that session",
+  "error.tabMoveLocalTabToServer": "A tab running on this computer cannot join a session on a server",
+  "error.tabMoveRunningUnsupported": "On Windows a running tab cannot be moved to another session — stop the tab first, then move it",
+  "error.tabMoveFailed": "The tab could not be moved: {0}"
 }

@@ -1643,5 +1643,10 @@
   "help.actionProjectTasks": "Proje görevleri ve notları",
   "allTasks.projectGroup": "{project} · proje görevleri",
   "allTasks.openProjectTasks": "Proje görevlerini aç",
-  "error.projectTaskMoveTaskMaster": "Task Master açıkken bir görev oturuma taşınamaz: oturum o zaman uygulamanın değil, Task Master'ın listesini gösterir."
+  "error.projectTaskMoveTaskMaster": "Task Master açıkken bir görev oturuma taşınamaz: oturum o zaman uygulamanın değil, Task Master'ın listesini gösterir.",
+  "error.tabMoveMainTab": "Bir oturumun kendi sekmesi tek başına taşınamaz — tüm oturumu taşımak için “Oturumla birleştir…” seçeneğini kullanın",
+  "error.tabMoveSameSession": "Sekme zaten o oturumda",
+  "error.tabMoveLocalTabToServer": "Bu bilgisayarda çalışan bir sekme, sunucudaki bir oturuma katılamaz",
+  "error.tabMoveRunningUnsupported": "Windows'ta çalışan bir sekme başka bir oturuma taşınamaz — önce sekmeyi durdurun, sonra taşıyın",
+  "error.tabMoveFailed": "Sekme taşınamadı: {0}"
 }

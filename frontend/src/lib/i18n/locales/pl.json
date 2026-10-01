@@ -1643,5 +1643,10 @@
   "help.actionProjectTasks": "Zadania i notatki projektu",
   "allTasks.projectGroup": "{project} · zadania projektu",
   "allTasks.openProjectTasks": "Otwórz zadania projektu",
-  "error.projectTaskMoveTaskMaster": "Nie można przenieść zadania do sesji, gdy Task Master jest włączony: sesja pokazuje wtedy listę Task Mastera, a nie listę aplikacji."
+  "error.projectTaskMoveTaskMaster": "Nie można przenieść zadania do sesji, gdy Task Master jest włączony: sesja pokazuje wtedy listę Task Mastera, a nie listę aplikacji.",
+  "error.tabMoveMainTab": "Własnej karty sesji nie można przenieść osobno — użyj „Scal z sesją…”, aby przenieść całą sesję",
+  "error.tabMoveSameSession": "Karta jest już w tej sesji",
+  "error.tabMoveLocalTabToServer": "Karta działająca na tym komputerze nie może dołączyć do sesji na serwerze",
+  "error.tabMoveRunningUnsupported": "W systemie Windows działającej karty nie można przenieść do innej sesji — najpierw zatrzymaj kartę, a potem ją przenieś",
+  "error.tabMoveFailed": "Nie udało się przenieść karty: {0}"
 }

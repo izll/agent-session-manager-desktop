@@ -1643,5 +1643,10 @@
   "help.actionProjectTasks": "Công việc và ghi chú của dự án",
   "allTasks.projectGroup": "{project} · công việc của dự án",
   "allTasks.openProjectTasks": "Mở công việc của dự án",
-  "error.projectTaskMoveTaskMaster": "Không thể chuyển công việc sang phiên khi Task Master đang bật: khi đó phiên hiển thị danh sách của Task Master, không phải của ứng dụng."
+  "error.projectTaskMoveTaskMaster": "Không thể chuyển công việc sang phiên khi Task Master đang bật: khi đó phiên hiển thị danh sách của Task Master, không phải của ứng dụng.",
+  "error.tabMoveMainTab": "Không thể di chuyển riêng thẻ chính của phiên — hãy dùng “Gộp vào phiên…” để di chuyển toàn bộ phiên",
+  "error.tabMoveSameSession": "Thẻ đã ở trong phiên đó",
+  "error.tabMoveLocalTabToServer": "Thẻ đang chạy trên máy tính này không thể tham gia phiên trên máy chủ",
+  "error.tabMoveRunningUnsupported": "Trên Windows không thể di chuyển thẻ đang chạy sang phiên khác — hãy dừng thẻ trước rồi di chuyển",
+  "error.tabMoveFailed": "Không thể di chuyển thẻ: {0}"
 }

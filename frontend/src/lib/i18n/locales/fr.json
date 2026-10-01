@@ -1643,5 +1643,10 @@
   "help.actionProjectTasks": "Tâches et notes du projet",
   "allTasks.projectGroup": "{project} · tâches du projet",
   "allTasks.openProjectTasks": "Ouvrir les tâches du projet",
-  "error.projectTaskMoveTaskMaster": "Une tâche ne peut pas être déplacée vers une session tant que Task Master est activé : la session affiche alors la liste de Task Master, pas celle de l'application."
+  "error.projectTaskMoveTaskMaster": "Une tâche ne peut pas être déplacée vers une session tant que Task Master est activé : la session affiche alors la liste de Task Master, pas celle de l'application.",
+  "error.tabMoveMainTab": "L’onglet propre d’une session ne peut pas être déplacé seul — utilisez « Fusionner dans une session… » pour déplacer toute la session",
+  "error.tabMoveSameSession": "L’onglet est déjà dans cette session",
+  "error.tabMoveLocalTabToServer": "Un onglet qui s’exécute sur cet ordinateur ne peut pas rejoindre une session sur un serveur",
+  "error.tabMoveRunningUnsupported": "Sous Windows, un onglet en cours d’exécution ne peut pas être déplacé vers une autre session — arrêtez d’abord l’onglet, puis déplacez-le",
+  "error.tabMoveFailed": "Impossible de déplacer l’onglet : {0}"
 }
