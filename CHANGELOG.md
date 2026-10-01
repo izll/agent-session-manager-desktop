@@ -6,6 +6,44 @@ Entries describe what changed for someone using the app. Internal refactoring,
 test and CI work is left out unless it changed behaviour. Dates are release
 dates; the format follows [Keep a Changelog](https://keepachangelog.com).
 
+## 1.1.20 — 2026-10-01
+
+### Added
+
+- **Notes have titled pages.** Every note — a tab's, a session's, the
+  project's — can hold several pages: add one with "+", rename it with a
+  double-click, reorder by dragging or from its menu, delete it (with a
+  question if it has text). Ctrl+PgUp / Ctrl+PgDn switch pages in a note of
+  several pages — tabs anywhere else, as before — and can be rebound in the
+  shortcuts. Each page keeps its own undo history. Existing
+  notes become the first page, unchanged; an older version of the app still
+  shows all of their text.
+- **The global search finds text on any page**, and page titles, and opens
+  the page of the match. The project's own note is searched too.
+- **Move tabs between sessions without stopping them.** Drag a tab from the
+  tab bar onto a session in the sidebar, or use its menu: "Move to
+  session…", or "Move to new session", which asks for the new session's
+  name — also by dropping the tab on the "New session" zone that appears
+  while dragging. "Merge into session…" in a session's menu moves all of
+  its tabs into another. The tab's conversation, notes, colours and tasks go
+  with it. A session's only tab can be moved too, after a question, as that
+  ends the session. A tab never changes machine; on Windows a running local
+  tab has to be stopped first.
+- **The update marker on tabs can be switched off**, in Settings → General
+  → Session list.
+
+### Changed
+
+- **The notes take the keyboard when they open**, so typing, undo and the
+  page keys work without a click first.
+
+### Fixed
+
+- **Paging back in a terminal showed text wrapped at two widths.** Opening
+  a tab attached to it at 80 columns for a moment, and an agent such as
+  Claude Code redrew everything at that width; the scrollback kept it. The
+  terminal now attaches at its real size.
+
 ## 1.1.19 — 2026-09-30
 
 ### Added
