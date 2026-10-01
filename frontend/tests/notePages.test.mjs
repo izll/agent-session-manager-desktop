@@ -126,13 +126,61 @@ test('the presence dots count every page', () => {
 
 // Ctrl+PgUp / Ctrl+PgDn switch the session's tabs everywhere; the pages take
 // the Alt pair so the notes do not trap the user.
-test('pages are stepped with Alt+PgUp / Alt+PgDn, not the tab keys', () => {
+//
+// They are registered shortcuts, so they can be rebound in the settings and
+// are listed in the help.
+test('pages are stepped with Alt+PgUp / Alt+PgDn, not the tab keys', async () => {
+  const { SHORTCUTS, shortcutById } = await import('../src/lib/utils/shortcuts.ts');
+  assert.deepEqual(shortcutById('notes.prevPage')?.defaults, [{ key: 'pageup', alt: true }]);
+  assert.deepEqual(shortcutById('notes.nextPage')?.defaults, [{ key: 'pagedown', alt: true }]);
+  for (const id of ['notes.prevPage', 'notes.nextPage']) {
+    const shortcut = shortcutById(id);
+    assert.equal(shortcut.fixed, undefined, `${id} cannot be rebound`);
+    assert.equal(shortcut.category, 'navigation');
+  }
+  // No other default answers to the same keys.
+  const seen = new Map();
+  for (const shortcut of SHORTCUTS) {
+    for (const b of shortcut.defaults) {
+      const key = `${b.key}|${!!b.ctrl}|${!!b.shift}|${!!b.alt}`;
+      assert.ok(!seen.has(key), `${shortcut.id} and ${seen.get(key)} share a default binding`);
+      seen.set(key, shortcut.id);
+    }
+  }
+
   const step = notes.slice(notes.indexOf('function handlePageStepKey'));
-  assert.match(step.slice(0, 400), /if \(!event\.altKey \|\| event\.ctrlKey/);
+  const body = step.slice(0, step.indexOf('\n  }\n'));
+  assert.match(body, /matchesShortcut\(event, 'notes\.nextPage'\)/);
+  assert.match(body, /matchesShortcut\(event, 'notes\.prevPage'\)/);
+  assert.doesNotMatch(body, /PageUp|PageDown|altKey/, 'the page keys are still hard-coded');
   assert.match(notes, /if \(handlePageStepKey\(event\)\) return;\s*const mod = event\.ctrlKey/,
     'the editor does not step pages');
-  const shortcuts = read('../src/lib/utils/shortcuts.ts');
-  assert.doesNotMatch(shortcuts, /key: 'page(up|down)', alt: true/, 'a global shortcut takes Alt+PgUp/PgDn');
+
+  // Acted on in the notes only: the app's own handler has nothing to do for
+  // them, and the terminal neither refuses nor captures them.
+  const app = read('../src/App.svelte');
+  assert.doesNotMatch(app, /case 'notes\.(prev|next)Page'/);
+  const stepKeys = read('../src/lib/utils/sessionStepKeys.ts');
+  assert.match(stepKeys, /return id === 'session\.prev' \|\| id === 'session\.next';/);
+  const terminal = read('../src/lib/components/MainPanel/Terminal.svelte');
+  assert.match(terminal, /if \(e\.shiftKey && \(e\.key === 'PageUp' \|\| e\.key === 'PageDown'\)\) \{/,
+    'the terminal captures other page keys than Shift+PgUp/PgDn');
+});
+
+test('the page keys are named as they are bound, and translated everywhere', () => {
+  assert.match(notes, /\$: pageStepKeys = \['notes\.prevPage', 'notes\.nextPage'\]\s*\.flatMap\(\(id\) => \$effectiveBindings\.get\(id\) \?\? \[\]\)/);
+  assert.match(notes, /\$t\('notes\.pageStepHint', \{ keys: pageStepKeys \}\)/);
+  const dir = new URL('../src/lib/i18n/locales/', import.meta.url);
+  const english = JSON.parse(readFileSync(new URL('en.json', dir), 'utf8'));
+  for (const name of readdirSync(dir).filter((n) => n.endsWith('.json'))) {
+    const strings = JSON.parse(readFileSync(new URL(name, dir), 'utf8'));
+    for (const key of ['help.notesPrevPage', 'help.notesNextPage', 'notes.pageStepHint']) {
+      assert.ok(strings[key]?.trim(), `${name} has no ${key}`);
+      if (name !== 'en.json') assert.notEqual(strings[key], english[key], `${name} leaves ${key} in English`);
+    }
+    assert.match(strings['notes.pageStepHint'], /\{keys\}/, `${name} does not name the keys`);
+    assert.doesNotMatch(strings['notes.pageHint'], /Alt\+/, `${name} names fixed keys in the page hint`);
+  }
 });
 
 test('the page menu is the shared kind', () => {
@@ -148,8 +196,8 @@ test('the page strings are translated everywhere', () => {
   const keys = ['notes.pages', 'notes.untitledPage', 'notes.untitledPageN', 'notes.addPage', 'notes.pageTitle',
     'notes.pageHint', 'notes.renamePage', 'notes.movePageLeft', 'notes.movePageRight', 'notes.deletePage',
     'notes.deletePageTitle', 'notes.deletePageMessage'];
-  // "Note" is French for a note too, and the hint is mostly key names.
-  const mayMatchEnglish = new Set(['notes.pageHint', 'notes.untitledPage', 'notes.untitledPageN']);
+  // "Note" is French for a note too.
+  const mayMatchEnglish = new Set(['notes.untitledPage', 'notes.untitledPageN']);
   const english = JSON.parse(readFileSync(new URL('en.json', dir), 'utf8'));
   for (const name of readdirSync(dir).filter((n) => n.endsWith('.json'))) {
     const strings = JSON.parse(readFileSync(new URL(name, dir), 'utf8'));

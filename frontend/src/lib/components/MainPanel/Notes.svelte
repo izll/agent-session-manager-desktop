@@ -15,6 +15,7 @@
   import { portal } from '../../utils/portal';
   import { menuPosition } from '../../utils/menuPosition';
   import { claimMenu, releaseMenu } from '../../utils/openMenu';
+  import { matchesShortcut, effectiveBindings, formatBinding } from '../../stores/shortcuts';
   import {
     type NotePage, editablePages, pagesKey, notePagesText, resolveActivePage, pageIndex,
     setPageText, renamePage, addPage, deletePage, movePage, dropIndex, stepPage, pageLabel,
@@ -844,18 +845,27 @@
   }
 
   /**
-   * Alt+PgUp / Alt+PgDn step through the pages. Ctrl+PgUp / Ctrl+PgDn — the
-   * usual pair — already switch the session's tabs everywhere, the notes
-   * included, and taking them here would strand the user in the note.
+   * The page shortcuts (Alt+PgUp / Alt+PgDn unless rebound) step through the
+   * pages. Ctrl+PgUp / Ctrl+PgDn — the usual pair — already switch the
+   * session's tabs everywhere, the notes included, and taking them here
+   * would strand the user in the note.
    */
   function handlePageStepKey(event: KeyboardEvent): boolean {
-    if (!event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return false;
-    if (event.key !== 'PageUp' && event.key !== 'PageDown') return false;
+    const next = matchesShortcut(event, 'notes.nextPage');
+    if (!next && !matchesShortcut(event, 'notes.prevPage')) return false;
     event.preventDefault();
     event.stopPropagation();
-    if (pages.length > 1) selectPage(stepPage(pages, activePageId, event.key === 'PageDown' ? 1 : -1));
+    if (pages.length > 1) selectPage(stepPage(pages, activePageId, next ? 1 : -1));
     return true;
   }
+
+  // The keys in the page tabs' tooltip follow a rebinding, as the help does;
+  // switched off, they are left out rather than named.
+  const isMac = typeof navigator !== 'undefined' && /Mac/i.test(navigator.platform);
+  $: pageStepKeys = ['notes.prevPage', 'notes.nextPage']
+    .flatMap((id) => $effectiveBindings.get(id) ?? [])
+    .map((binding) => formatBinding(binding, isMac))
+    .join(' / ');
 
   let pageStripEl: HTMLElement | undefined;
 
@@ -1115,7 +1125,7 @@
           data-page-id={page.id}
           draggable={!loadingNotes && !loadError}
           disabled={loadingNotes || !!loadError}
-          title="{pageLabel(page.title, i, pages.length, $t)} — {$t('notes.pageHint')}"
+          title="{pageLabel(page.title, i, pages.length, $t)} — {$t('notes.pageHint')}{pageStepKeys ? ` ${$t('notes.pageStepHint', { keys: pageStepKeys })}` : ''}"
           on:click={() => selectPage(page.id)}
           on:dblclick={() => startRename(page.id)}
           on:contextmenu={(e) => openPageMenu(e, page.id)}

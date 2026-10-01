@@ -72,6 +72,28 @@ test('switching pages shows each page and loses no edit', async ({ page }) => {
   await expect(pageTab(page, 'Risks')).toHaveAttribute('aria-selected', 'true');
 });
 
+// The page keys are shortcuts like any other: rebound in the settings, the
+// new keys step and the old ones do nothing, and the tooltip names the new.
+test('the page keys follow a rebinding', async ({ page }) => {
+  await gotoNotes(page, 'notes-pages');
+  const textarea = page.locator('.notes-textarea');
+  await expect(textarea).toHaveValue('alpha and beta');
+  await expect(pageTab(page, 'Plan')).toHaveAttribute('title', /Alt\+PgUp \/ Alt\+PgDn switch pages\.$/);
+
+  await page.evaluate(() => window.notesFixture.rebind({
+    'notes.nextPage': [{ key: 'arrowright', alt: true, shift: true }],
+    'notes.prevPage': [],
+  }));
+  await expect(pageTab(page, 'Plan')).toHaveAttribute('title', /Shift\+Alt\+→ switch pages\.$/);
+  await textarea.press('Alt+PageDown');
+  await expect(textarea).toHaveValue('alpha and beta');
+  await textarea.press('Alt+Shift+ArrowRight');
+  await expect(textarea).toHaveValue('first line\nthe hidden needle is here');
+  // Switched off: Alt+PgUp steps no more.
+  await textarea.press('Alt+PageUp');
+  await expect(textarea).toHaveValue('first line\nthe hidden needle is here');
+});
+
 test('the open page is remembered across a restart', async ({ page }) => {
   await gotoNotes(page, 'notes-pages');
   await pageTab(page, 'Risks').click();

@@ -4,6 +4,7 @@ import { selectedSessionId, selectedWindowIdx } from '../../src/lib/stores/sessi
 import { afterUnsavedChanges, registerUnsavedGuard } from '../../src/lib/stores/unsavedChanges';
 import { activeProjectId, selectProject } from '../../src/lib/stores/projects';
 import { requestNoteJump, type NoteJump } from '../../src/lib/stores/noteJump';
+import { settings } from '../../src/lib/stores/settings';
 
 type Page = { id: string; title: string; text: string };
 // As the backend returns notes: one written before pages is a single
@@ -105,6 +106,10 @@ const backend = new Proxy({
   },
   jump(jump: NoteJump) {
     requestNoteJump(jump);
+  },
+  /** Rebind shortcuts as the shortcut editor stores them, without saving. */
+  rebind(overrides: Record<string, unknown>) {
+    settings.update((current) => ({ ...current, shortcutOverrides: overrides }));
   },
   failedSaves() {
     return failedSaves;

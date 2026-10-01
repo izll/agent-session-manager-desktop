@@ -232,6 +232,20 @@ export const SHORTCUTS: Shortcut[] = [
     defaults: [{ key: 'f7', ctrl: true, shift: true }],
   },
   {
+    id: 'notes.prevPage',
+    category: 'navigation',
+    descKey: 'help.notesPrevPage',
+    // Acted on inside the notes only. Alt rather than Ctrl: Ctrl+PgUp/PgDn
+    // switch the session's tabs everywhere, the notes included.
+    defaults: [{ key: 'pageup', alt: true }],
+  },
+  {
+    id: 'notes.nextPage',
+    category: 'navigation',
+    descKey: 'help.notesNextPage',
+    defaults: [{ key: 'pagedown', alt: true }],
+  },
+  {
     id: 'session.filter',
     category: 'search',
     descKey: 'help.actionFilterSessions',
