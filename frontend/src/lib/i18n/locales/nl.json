@@ -1648,5 +1648,20 @@
   "error.tabMoveSameSession": "Het tabblad zit al in die sessie",
   "error.tabMoveLocalTabToServer": "Een tabblad dat op deze computer draait, kan niet bij een sessie op een server komen",
   "error.tabMoveRunningUnsupported": "Op Windows kan een actief tabblad niet naar een andere sessie worden verplaatst — stop het tabblad eerst en verplaats het daarna",
-  "error.tabMoveFailed": "Het tabblad kon niet worden verplaatst: {0}"
+  "error.tabMoveFailed": "Het tabblad kon niet worden verplaatst: {0}",
+  "tabBar.moveToSession": "Naar sessie verplaatsen…",
+  "tabBar.moveToNewSession": "Naar nieuwe sessie verplaatsen",
+  "sessionMenu.mergeInto": "Samenvoegen in sessie…",
+  "tabMove.pickTitleTab": "„{name}” naar sessie verplaatsen",
+  "tabMove.pickTitleMerge": "„{name}” samenvoegen in sessie",
+  "tabMove.mergeNote": "Alle tabbladen van „{name}”, ook het eigen tabblad, gaan naar de gekozen sessie — actieve blijven draaien — samen met notities en taken. Daarna wordt „{name}” verwijderd.",
+  "tabMove.filter": "Sessies filteren…",
+  "tabMove.noTargets": "Er is geen andere sessie in dit project.",
+  "tabMove.move": "Verplaatsen",
+  "tabMove.merge": "Samenvoegen",
+  "tabMove.movedTo": "„{tab}” verplaatst naar {session}",
+  "tabMove.movedToNew": "„{tab}” is nu een eigen sessie: {session}",
+  "tabMove.merged": "„{source}” samengevoegd in {session} ({count} tabbladen)",
+  "tabMove.failed": "Het tabblad kon niet worden verplaatst: {error}",
+  "tabMove.mergeFailed": "De sessie kon niet worden samengevoegd: {error}"
 }

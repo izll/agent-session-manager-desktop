@@ -1648,5 +1648,20 @@
   "error.tabMoveSameSession": "该标签页已在那个会话中",
   "error.tabMoveLocalTabToServer": "在本机运行的标签页不能加入服务器上的会话",
   "error.tabMoveRunningUnsupported": "在 Windows 上无法将运行中的标签页移动到其他会话——请先停止该标签页，再移动它",
-  "error.tabMoveFailed": "无法移动标签页：{0}"
+  "error.tabMoveFailed": "无法移动标签页：{0}",
+  "tabBar.moveToSession": "移动到会话…",
+  "tabBar.moveToNewSession": "移动到新会话",
+  "sessionMenu.mergeInto": "合并到会话…",
+  "tabMove.pickTitleTab": "将“{name}”移动到会话",
+  "tabMove.pickTitleMerge": "将“{name}”合并到会话",
+  "tabMove.mergeNote": "“{name}”的所有标签页（包括其自身的标签页）连同笔记和任务一起移入所选会话——正在运行的会继续运行。随后“{name}”将被移除。",
+  "tabMove.filter": "筛选会话…",
+  "tabMove.noTargets": "此项目中没有其他会话。",
+  "tabMove.move": "移动",
+  "tabMove.merge": "合并",
+  "tabMove.movedTo": "“{tab}”已移动到 {session}",
+  "tabMove.movedToNew": "“{tab}”现在是独立的会话：{session}",
+  "tabMove.merged": "“{source}”已合并到 {session}（{count} 个标签页）",
+  "tabMove.failed": "无法移动标签页：{error}",
+  "tabMove.mergeFailed": "无法合并会话：{error}"
 }

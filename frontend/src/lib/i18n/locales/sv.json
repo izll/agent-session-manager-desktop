@@ -1648,5 +1648,20 @@
   "error.tabMoveSameSession": "Fliken finns redan i den sessionen",
   "error.tabMoveLocalTabToServer": "En flik som körs på den här datorn kan inte gå med i en session på en server",
   "error.tabMoveRunningUnsupported": "I Windows kan en flik som körs inte flyttas till en annan session — stoppa fliken först och flytta den sedan",
-  "error.tabMoveFailed": "Fliken kunde inte flyttas: {0}"
+  "error.tabMoveFailed": "Fliken kunde inte flyttas: {0}",
+  "tabBar.moveToSession": "Flytta till session…",
+  "tabBar.moveToNewSession": "Flytta till ny session",
+  "sessionMenu.mergeInto": "Slå ihop med session…",
+  "tabMove.pickTitleTab": "Flytta ”{name}” till session",
+  "tabMove.pickTitleMerge": "Slå ihop ”{name}” med session",
+  "tabMove.mergeNote": "Alla flikar i ”{name}”, även dess egen, flyttas till den valda sessionen — de som körs fortsätter köra — tillsammans med anteckningar och uppgifter. Sedan tas ”{name}” bort.",
+  "tabMove.filter": "Filtrera sessioner…",
+  "tabMove.noTargets": "Det finns ingen annan session i projektet.",
+  "tabMove.move": "Flytta",
+  "tabMove.merge": "Slå ihop",
+  "tabMove.movedTo": "”{tab}” flyttades till {session}",
+  "tabMove.movedToNew": "”{tab}” är nu en egen session: {session}",
+  "tabMove.merged": "”{source}” slogs ihop med {session} ({count} flikar)",
+  "tabMove.failed": "Fliken kunde inte flyttas: {error}",
+  "tabMove.mergeFailed": "Sessionen kunde inte slås ihop: {error}"
 }

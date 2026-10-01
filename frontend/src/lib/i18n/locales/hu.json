@@ -1648,5 +1648,20 @@
   "error.tabMoveSameSession": "A fül már ebben a munkamenetben van",
   "error.tabMoveLocalTabToServer": "Az ezen a gépen futó fül nem kerülhet át egy szerveren futó munkamenetbe",
   "error.tabMoveRunningUnsupported": "Windowson futó fület nem lehet másik munkamenetbe áthelyezni — előbb állítsd le a fület, aztán helyezd át",
-  "error.tabMoveFailed": "A fület nem sikerült áthelyezni: {0}"
+  "error.tabMoveFailed": "A fület nem sikerült áthelyezni: {0}",
+  "tabBar.moveToSession": "Áthelyezés munkamenetbe…",
+  "tabBar.moveToNewSession": "Áthelyezés új munkamenetbe",
+  "sessionMenu.mergeInto": "Egyesítés munkamenetbe…",
+  "tabMove.pickTitleTab": "„{name}” áthelyezése munkamenetbe",
+  "tabMove.pickTitleMerge": "„{name}” egyesítése munkamenetbe",
+  "tabMove.mergeNote": "„{name}” minden füle — a saját fülével együtt — átkerül a kiválasztott munkamenetbe (a futók tovább futnak), a jegyzeteivel és feladataival együtt. Ezután „{name}” megszűnik.",
+  "tabMove.filter": "Munkamenetek szűrése…",
+  "tabMove.noTargets": "Nincs másik munkamenet ebben a projektben.",
+  "tabMove.move": "Áthelyezés",
+  "tabMove.merge": "Egyesítés",
+  "tabMove.movedTo": "„{tab}” átkerült ide: {session}",
+  "tabMove.movedToNew": "„{tab}” mostantól önálló munkamenet: {session}",
+  "tabMove.merged": "„{source}” egyesítve ide: {session} ({count} fül)",
+  "tabMove.failed": "A fület nem sikerült áthelyezni: {error}",
+  "tabMove.mergeFailed": "A munkamenetet nem sikerült egyesíteni: {error}"
 }

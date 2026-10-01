@@ -1648,5 +1648,20 @@
   "error.tabMoveSameSession": "แท็บนี้อยู่ในเซสชันนั้นอยู่แล้ว",
   "error.tabMoveLocalTabToServer": "แท็บที่ทำงานบนคอมพิวเตอร์เครื่องนี้ไม่สามารถเข้าร่วมเซสชันบนเซิร์ฟเวอร์ได้",
   "error.tabMoveRunningUnsupported": "บน Windows ไม่สามารถย้ายแท็บที่กำลังทำงานไปยังเซสชันอื่นได้ — หยุดแท็บก่อน แล้วจึงย้าย",
-  "error.tabMoveFailed": "ไม่สามารถย้ายแท็บได้: {0}"
+  "error.tabMoveFailed": "ไม่สามารถย้ายแท็บได้: {0}",
+  "tabBar.moveToSession": "ย้ายไปยังเซสชัน…",
+  "tabBar.moveToNewSession": "ย้ายไปยังเซสชันใหม่",
+  "sessionMenu.mergeInto": "รวมเข้ากับเซสชัน…",
+  "tabMove.pickTitleTab": "ย้าย “{name}” ไปยังเซสชัน",
+  "tabMove.pickTitleMerge": "รวม “{name}” เข้ากับเซสชัน",
+  "tabMove.mergeNote": "แท็บทั้งหมดของ “{name}” รวมถึงแท็บหลักของมัน จะย้ายไปยังเซสชันที่เลือกพร้อมโน้ตและงาน — แท็บที่กำลังทำงานจะทำงานต่อ จากนั้น “{name}” จะถูกลบออก",
+  "tabMove.filter": "กรองเซสชัน…",
+  "tabMove.noTargets": "ไม่มีเซสชันอื่นในโปรเจกต์นี้",
+  "tabMove.move": "ย้าย",
+  "tabMove.merge": "รวม",
+  "tabMove.movedTo": "ย้าย “{tab}” ไปยัง {session} แล้ว",
+  "tabMove.movedToNew": "“{tab}” เป็นเซสชันของตัวเองแล้ว: {session}",
+  "tabMove.merged": "รวม “{source}” เข้ากับ {session} แล้ว ({count} แท็บ)",
+  "tabMove.failed": "ไม่สามารถย้ายแท็บได้: {error}",
+  "tabMove.mergeFailed": "ไม่สามารถรวมเซสชันได้: {error}"
 }

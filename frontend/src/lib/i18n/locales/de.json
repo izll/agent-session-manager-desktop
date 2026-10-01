@@ -1648,5 +1648,20 @@
   "error.tabMoveSameSession": "Der Tab ist bereits in dieser Sitzung",
   "error.tabMoveLocalTabToServer": "Ein Tab, der auf diesem Computer läuft, kann keiner Sitzung auf einem Server beitreten",
   "error.tabMoveRunningUnsupported": "Unter Windows kann ein laufender Tab nicht in eine andere Sitzung verschoben werden — stoppe den Tab zuerst und verschiebe ihn dann",
-  "error.tabMoveFailed": "Der Tab konnte nicht verschoben werden: {0}"
+  "error.tabMoveFailed": "Der Tab konnte nicht verschoben werden: {0}",
+  "tabBar.moveToSession": "In Sitzung verschieben…",
+  "tabBar.moveToNewSession": "In neue Sitzung verschieben",
+  "sessionMenu.mergeInto": "In Sitzung zusammenführen…",
+  "tabMove.pickTitleTab": "„{name}“ in Sitzung verschieben",
+  "tabMove.pickTitleMerge": "„{name}“ in Sitzung zusammenführen",
+  "tabMove.mergeNote": "Alle Tabs von „{name}“, auch der eigene, wandern in die gewählte Sitzung — laufende laufen weiter —, zusammen mit Notizen und Aufgaben. Danach wird „{name}“ entfernt.",
+  "tabMove.filter": "Sitzungen filtern…",
+  "tabMove.noTargets": "In diesem Projekt gibt es keine andere Sitzung.",
+  "tabMove.move": "Verschieben",
+  "tabMove.merge": "Zusammenführen",
+  "tabMove.movedTo": "„{tab}“ nach {session} verschoben",
+  "tabMove.movedToNew": "„{tab}“ ist jetzt eine eigene Sitzung: {session}",
+  "tabMove.merged": "„{source}“ in {session} zusammengeführt ({count} Tabs)",
+  "tabMove.failed": "Der Tab konnte nicht verschoben werden: {error}",
+  "tabMove.mergeFailed": "Die Sitzung konnte nicht zusammengeführt werden: {error}"
 }

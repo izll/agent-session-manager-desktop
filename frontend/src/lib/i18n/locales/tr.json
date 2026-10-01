@@ -1648,5 +1648,20 @@
   "error.tabMoveSameSession": "Sekme zaten o oturumda",
   "error.tabMoveLocalTabToServer": "Bu bilgisayarda çalışan bir sekme, sunucudaki bir oturuma katılamaz",
   "error.tabMoveRunningUnsupported": "Windows'ta çalışan bir sekme başka bir oturuma taşınamaz — önce sekmeyi durdurun, sonra taşıyın",
-  "error.tabMoveFailed": "Sekme taşınamadı: {0}"
+  "error.tabMoveFailed": "Sekme taşınamadı: {0}",
+  "tabBar.moveToSession": "Oturuma taşı…",
+  "tabBar.moveToNewSession": "Yeni oturuma taşı",
+  "sessionMenu.mergeInto": "Oturumla birleştir…",
+  "tabMove.pickTitleTab": "“{name}” sekmesini oturuma taşı",
+  "tabMove.pickTitleMerge": "“{name}” oturumunu birleştir",
+  "tabMove.mergeNote": "“{name}” oturumunun kendi sekmesi dahil tüm sekmeleri, notları ve görevleriyle birlikte seçilen oturuma geçer — çalışanlar çalışmaya devam eder. Ardından “{name}” kaldırılır.",
+  "tabMove.filter": "Oturumları filtrele…",
+  "tabMove.noTargets": "Bu projede başka oturum yok.",
+  "tabMove.move": "Taşı",
+  "tabMove.merge": "Birleştir",
+  "tabMove.movedTo": "“{tab}” {session} oturumuna taşındı",
+  "tabMove.movedToNew": "“{tab}” artık ayrı bir oturum: {session}",
+  "tabMove.merged": "“{source}” {session} ile birleştirildi ({count} sekme)",
+  "tabMove.failed": "Sekme taşınamadı: {error}",
+  "tabMove.mergeFailed": "Oturum birleştirilemedi: {error}"
 }

@@ -1648,5 +1648,20 @@
   "error.tabMoveSameSession": "La scheda è già in quella sessione",
   "error.tabMoveLocalTabToServer": "Una scheda in esecuzione su questo computer non può entrare in una sessione su un server",
   "error.tabMoveRunningUnsupported": "Su Windows una scheda in esecuzione non può essere spostata in un’altra sessione: prima ferma la scheda, poi spostala",
-  "error.tabMoveFailed": "Impossibile spostare la scheda: {0}"
+  "error.tabMoveFailed": "Impossibile spostare la scheda: {0}",
+  "tabBar.moveToSession": "Sposta in una sessione…",
+  "tabBar.moveToNewSession": "Sposta in una nuova sessione",
+  "sessionMenu.mergeInto": "Unisci in una sessione…",
+  "tabMove.pickTitleTab": "Sposta «{name}» in una sessione",
+  "tabMove.pickTitleMerge": "Unisci «{name}» in una sessione",
+  "tabMove.mergeNote": "Tutte le schede di «{name}», compresa la sua, passano nella sessione scelta — quelle in esecuzione continuano — insieme a note e attività. Poi «{name}» viene rimossa.",
+  "tabMove.filter": "Filtra le sessioni…",
+  "tabMove.noTargets": "Non c’è nessun’altra sessione in questo progetto.",
+  "tabMove.move": "Sposta",
+  "tabMove.merge": "Unisci",
+  "tabMove.movedTo": "«{tab}» spostata in {session}",
+  "tabMove.movedToNew": "«{tab}» ora è una sessione a sé: {session}",
+  "tabMove.merged": "«{source}» unita in {session} ({count} schede)",
+  "tabMove.failed": "Impossibile spostare la scheda: {error}",
+  "tabMove.mergeFailed": "Impossibile unire la sessione: {error}"
 }

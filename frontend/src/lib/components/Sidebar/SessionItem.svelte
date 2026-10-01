@@ -9,6 +9,10 @@
   import SessionColorDialog from '../Dialogs/SessionColorDialog.svelte';
   import SaveAsTemplateDialog from '../Dialogs/SaveAsTemplateDialog.svelte';
   import ConfirmDialog from '../Dialogs/ConfirmDialog.svelte';
+  import MoveTabDialog from '../Dialogs/MoveTabDialog.svelte';
+  import { TAB_DRAG_MIME, decodeTabDrag, tabDropState, type TabDropState } from '../../utils/tabMoveRules';
+  import { tabDrag, endTabDrag, moveTabWithNotice } from '../../utils/tabMove';
+  import { describeBackendError } from '../../utils/backendError';
   import type { Session } from '../../stores/sessions';
   import { selectedSessionId, renameSession, deleteSession, toggleFavorite } from '../../stores/sessions';
   import { activeSidebarEntry, selectSidebarEntry, revealTicket, claimReveal, type SidebarSection } from '../../stores/sidebarOrder';
@@ -128,6 +132,8 @@
 
   let isDragging = false;
   let isDragOver = false;
+  // A tab from the tab bar held over this row: whether it would be taken.
+  let tabDropOver: TabDropState = 'none';
 
   // Session ids are unique only inside a project, and keyed rows can be reused
   // for a same-id session after switching. Never carry A's menu/modal/editor
@@ -148,6 +154,8 @@
     showSaveAsTemplate = false;
     isDragging = false;
     isDragOver = false;
+    tabDropOver = 'none';
+    showMergeDialog = false;
   }
 
   function handleContextMenu(e: MouseEvent) {
@@ -287,6 +295,59 @@
     showSaveAsTemplate = true;
   }
 
+  // Merging this session into another, from its own menu. Opened here for the
+  // same reason as the colour dialog: this row is rendered from three places.
+  let showMergeDialog = false;
+
+  function handleMerge() {
+    closeContextMenu();
+    showMergeDialog = true;
+  }
+
+  // A drag that ended anywhere — dropped on another row, or let go of —
+  // leaves no row lit.
+  $: if (!$tabDrag) tabDropOver = 'none';
+
+  // Why a tab held over this row would be refused, for its tooltip.
+  $: tabDropRefusal = tabDropOver === 'refused' && $tabDrag?.refusals
+    ? describeBackendError($tabDrag.refusals[session.id])
+    : '';
+
+  /**
+   * A tab dragged out of the tab bar, over this row.
+   *
+   * Told apart from a session being reordered by its drag type, the only part
+   * of a drag readable before the drop. A refusing row does not call
+   * preventDefault, so the cursor says "no" and nothing drops; the reason is
+   * in the row's tooltip.
+   */
+  function handleTabDragOver(e: DragEvent): boolean {
+    if (!e.dataTransfer?.types.includes(TAB_DRAG_MIME)) return false;
+    tabDropOver = tabDropState($tabDrag, session.id, get(activeProjectId));
+    if (tabDropOver === 'ok') {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+    }
+    return true;
+  }
+
+  function handleTabDrop(e: DragEvent): boolean {
+    if (!e.dataTransfer?.types.includes(TAB_DRAG_MIME)) return false;
+    e.preventDefault();
+    const state = tabDropState($tabDrag, session.id, get(activeProjectId));
+    tabDropOver = 'none';
+    const payload = decodeTabDrag(e.dataTransfer.getData(TAB_DRAG_MIME));
+    // The tab bar the drag came from may never see its dragend once the view
+    // has followed the tab elsewhere.
+    endTabDrag();
+    if (state !== 'ok' || !payload || payload.projectId !== get(activeProjectId) ||
+        payload.sessionId === session.id) {
+      return true;
+    }
+    void moveTabWithNotice(payload.sessionId, payload.windowIdx, session.id, payload.name);
+    return true;
+  }
+
   function handleDragStart(e: DragEvent) {
     if (!e.dataTransfer) return;
     e.dataTransfer.effectAllowed = 'move';
@@ -303,6 +364,7 @@
   }
 
   function handleDragOver(e: DragEvent) {
+    if (handleTabDragOver(e)) return;
     e.preventDefault();
     if (e.dataTransfer) {
       e.dataTransfer.dropEffect = 'move';
@@ -312,9 +374,11 @@
 
   function handleDragLeave() {
     isDragOver = false;
+    tabDropOver = 'none';
   }
 
   function handleDrop(e: DragEvent) {
+    if (handleTabDrop(e)) return;
     e.preventDefault();
     isDragOver = false;
     if (!e.dataTransfer) return;
@@ -346,9 +410,11 @@
   class:running={sessionStatus === 'running'}
   class:dragging={isDragging}
   class:drag-over={isDragOver}
+  class:tab-drop-ok={tabDropOver === 'ok'}
+  class:tab-drop-refused={tabDropOver === 'refused'}
   class:compact={$settings?.compactList}
   style={rowStyle}
-  title={favoriteSlot > 0 ? $t('sidebar.favoriteShortcut', { n: favoriteSlot }) : undefined}
+  title={tabDropRefusal || (favoriteSlot > 0 ? $t('sidebar.favoriteShortcut', { n: favoriteSlot }) : undefined)}
   on:click={() => selectSidebarEntry(session.id, section)}
   on:contextmenu={handleContextMenu}
   on:keydown={(e) => e.key === 'Enter' && selectSidebarEntry(session.id, section)}
@@ -529,6 +595,14 @@
       </svg>
       {$t('sessionMenu.saveAsTemplate')}
     </button>
+    <button class="context-menu-item" data-menu-action="merge-into" on:click={handleMerge}>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M6 3v6a6 6 0 0 0 6 6h6"/>
+        <polyline points="15 12 18 15 15 18"/>
+        <line x1="6" y1="21" x2="6" y2="15"/>
+      </svg>
+      {$t('sessionMenu.mergeInto')}
+    </button>
     <button class="context-menu-item danger" on:click={handleDelete}>
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <polyline points="3 6 5 6 21 6"/>
@@ -541,6 +615,7 @@
 
 <SessionColorDialog bind:show={showColorDialog} {session} />
 <SaveAsTemplateDialog bind:show={showSaveAsTemplate} {session} />
+<MoveTabDialog bind:show={showMergeDialog} mode="merge" sourceId={session.id} name={session.name} />
 <ConfirmDialog
   bind:show={showDeleteConfirm}
   title={$t('confirm.deleteSession')}
@@ -831,6 +906,20 @@
     border-color: rgba(var(--accent-rgb), 0.6);
     background: rgba(var(--accent-rgb), 0.15);
     box-shadow: 0 0 0 2px rgba(var(--accent-rgb), 0.2);
+  }
+
+  /* A tab held over the row: a session that would take it, or one that
+     would refuse it (the reason is the row's tooltip). */
+  .session-item.tab-drop-ok {
+    border-color: rgba(var(--accent-rgb), 0.7);
+    background: rgba(var(--accent-rgb), 0.18);
+    box-shadow: inset 0 0 0 1px rgba(var(--accent-rgb), 0.5);
+  }
+
+  .session-item.tab-drop-refused {
+    border-color: rgba(239, 68, 68, 0.55);
+    background: rgba(239, 68, 68, 0.08);
+    cursor: not-allowed;
   }
 
   .session-item.drag-over::before {

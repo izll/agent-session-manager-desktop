@@ -443,6 +443,76 @@ export async function deleteTab(id: string, windowIdx: number) {
   }
 }
 
+/**
+ * After a tab (or a whole session) moved: the source's terminal for it goes,
+ * the list is reloaded, and the view follows the tab to where it is now — the
+ * way a browser tab dragged into another window becomes that window's active
+ * tab.
+ *
+ * Errors are left to the caller, which reports them translated; the generic
+ * `error` store would show the backend's key as it is.
+ */
+async function followMovedTab(target: ProjectOperationTarget, sourceId: string,
+  windowIdx: number | null, result: main.TabMoveResult) {
+  if (windowIdx === null) {
+    dropPoolForSession(sourceId);
+    // The merged session no longer exists: switching away must not try to
+    // remember which of its tabs was open.
+    if (get(selectedSessionId) === sourceId) selectedSessionId.set(null);
+  } else {
+    dropPoolForWindow(sourceId, windowIdx);
+    // As after deleting a tab: the source must not be remembered as left on
+    // a tab it no longer has.
+    if (get(selectedSessionId) === sourceId && get(selectedWindowIdx) === windowIdx) {
+      selectedWindowIdx.set(0);
+    }
+  }
+  // A stale entry for the index the tab was given, from a tab that had it
+  // before, must not be shown in its place.
+  dropPoolForWindow(result.sessionId, result.windowIdx);
+  const currentSettings = get(settings);
+  if (currentSettings.splitView && currentSettings.markedSessionId === sourceId &&
+      (windowIdx === null || currentSettings.markedWindowIdx === windowIdx)) {
+    await saveSettings({ splitView: false, markedSessionId: '', markedWindowIdx: 0 }, target.projectId);
+    if (!projectTargetIsCurrent(target)) return;
+  }
+  await loadSessions();
+  if (!projectTargetIsCurrent(target)) return;
+  selectSession(result.sessionId);
+  selectWindow(result.windowIdx);
+  if (result.tasksMoved > 0) {
+    try { window.dispatchEvent(new CustomEvent('tasks:refresh')); } catch { /* no-op */ }
+  }
+}
+
+/** Moves a tab into another session of the project; see App.MoveTabToSession. */
+export async function moveTabToSession(sourceId: string, windowIdx: number, targetId: string) {
+  const target = projectTarget();
+  const result = await App.MoveTabToSession(sourceId, windowIdx, targetId, target.projectId);
+  if (!projectTargetIsCurrent(target)) return null;
+  await followMovedTab(target, sourceId, windowIdx, result);
+  return result;
+}
+
+/** Makes a tab a session of its own; an empty name takes the tab's. */
+export async function moveTabToNewSession(sourceId: string, windowIdx: number, name = '') {
+  const target = projectTarget();
+  const result = await App.MoveTabToNewSession(sourceId, windowIdx, name, target.projectId);
+  if (!projectTargetIsCurrent(target)) return null;
+  await followMovedTab(target, sourceId, windowIdx, result);
+  return result;
+}
+
+/** Moves every tab of a session into another and removes the emptied one. */
+export async function mergeSessionInto(sourceId: string, targetId: string) {
+  const target = projectTarget();
+  const result = await App.MergeSessionInto(sourceId, targetId, target.projectId);
+  if (!projectTargetIsCurrent(target)) return null;
+  sessionTabMemory.delete(sourceId);
+  await followMovedTab(target, sourceId, null, result);
+  return result;
+}
+
 export async function renameSession(id: string, name: string) {
   const target = projectTarget();
   try {

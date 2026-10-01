@@ -16,3 +16,15 @@ export const appError = writable<string | null>(null);
 export function reportError(message: string): void {
   appError.set(message);
 }
+
+/**
+ * Outcomes worth a word, from anywhere — the success counterpart of appError,
+ * for an action whose result is not otherwise visible where it was started
+ * (a tab dropped on another session moves the view along with it, and the
+ * user should be told where it went).
+ */
+export const appNotice = writable<string | null>(null);
+
+export function reportNotice(message: string): void {
+  appNotice.set(message);
+}

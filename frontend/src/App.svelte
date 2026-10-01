@@ -183,7 +183,7 @@
   import ResumeSessionPickerDialog from './lib/components/Dialogs/ResumeSessionPickerDialog.svelte';
   import type { Session } from './lib/stores/sessions';
   import { error as sessionError } from './lib/stores/sessions';
-  import { appError } from './lib/stores/appErrors';
+  import { appError, appNotice } from './lib/stores/appErrors';
   import { sessions, loadSessions, selectSession, selectWindow, selectedSession, selectedSessionId, selectedWindowIdx, startSession, stopSession, stopTab, restartTab, restartTabWithResume, startTabOnly, deleteSession, toggleFavorite, reorderSession, getInterruptedWork, reopenInterruptedSessions } from './lib/stores/sessions';
   import { summarize, type InterruptedSession } from './lib/utils/interruptedWork';
   import { selectPrevSession, selectNextSession } from './lib/stores/sidebarOrder';
@@ -351,6 +351,17 @@
     sessionErrorRevision++;
     showSessionError = true;
     appError.set(null);
+  }
+  // Outcomes reported from anywhere, cleared after showing for the same
+  // reason as the errors above.
+  let showNoticeToast = false;
+  let noticeMessage = '';
+  let noticeRevision = 0;
+  $: if ($appNotice) {
+    noticeMessage = $appNotice;
+    noticeRevision++;
+    showNoticeToast = true;
+    appNotice.set(null);
   }
 
   // ── After a restart ───────────────────────────────────────────────────
@@ -2112,6 +2123,7 @@
      switching project — failed in silence. -->
 <Toast bind:show={showSessionError} message={sessionErrorMessage} revision={sessionErrorRevision} variant="error" duration={9000} />
 
+<Toast bind:show={showNoticeToast} message={noticeMessage} revision={noticeRevision} variant="success" duration={5000} />
 <Toast bind:show={showReopenToast} message={reopenToastMessage} revision={reopenToastRevision} variant={reopenToastVariant} duration={reopenToastVariant === 'success' ? 5000 : 9000} />
 
 <CodexDaemonNotice />

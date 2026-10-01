@@ -1648,5 +1648,20 @@
   "error.tabMoveSameSession": "このタブはすでにそのセッションにあります",
   "error.tabMoveLocalTabToServer": "このコンピューターで実行中のタブは、サーバー上のセッションに移動できません",
   "error.tabMoveRunningUnsupported": "Windows では実行中のタブを別のセッションに移動できません。先にタブを停止してから移動してください",
-  "error.tabMoveFailed": "タブを移動できませんでした: {0}"
+  "error.tabMoveFailed": "タブを移動できませんでした: {0}",
+  "tabBar.moveToSession": "セッションへ移動…",
+  "tabBar.moveToNewSession": "新しいセッションへ移動",
+  "sessionMenu.mergeInto": "セッションに統合…",
+  "tabMove.pickTitleTab": "「{name}」をセッションへ移動",
+  "tabMove.pickTitleMerge": "「{name}」をセッションに統合",
+  "tabMove.mergeNote": "「{name}」のすべてのタブ（自身のタブを含む）が、メモやタスクと一緒に選んだセッションへ移ります。実行中のものは実行を続けます。その後「{name}」は削除されます。",
+  "tabMove.filter": "セッションを絞り込む…",
+  "tabMove.noTargets": "このプロジェクトには他のセッションがありません。",
+  "tabMove.move": "移動",
+  "tabMove.merge": "統合",
+  "tabMove.movedTo": "「{tab}」を {session} に移動しました",
+  "tabMove.movedToNew": "「{tab}」は独立したセッションになりました: {session}",
+  "tabMove.merged": "「{source}」を {session} に統合しました（{count} タブ）",
+  "tabMove.failed": "タブを移動できませんでした: {error}",
+  "tabMove.mergeFailed": "セッションを統合できませんでした: {error}"
 }

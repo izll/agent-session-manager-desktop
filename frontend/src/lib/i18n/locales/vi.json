@@ -1648,5 +1648,20 @@
   "error.tabMoveSameSession": "Thẻ đã ở trong phiên đó",
   "error.tabMoveLocalTabToServer": "Thẻ đang chạy trên máy tính này không thể tham gia phiên trên máy chủ",
   "error.tabMoveRunningUnsupported": "Trên Windows không thể di chuyển thẻ đang chạy sang phiên khác — hãy dừng thẻ trước rồi di chuyển",
-  "error.tabMoveFailed": "Không thể di chuyển thẻ: {0}"
+  "error.tabMoveFailed": "Không thể di chuyển thẻ: {0}",
+  "tabBar.moveToSession": "Chuyển sang phiên…",
+  "tabBar.moveToNewSession": "Chuyển sang phiên mới",
+  "sessionMenu.mergeInto": "Gộp vào phiên…",
+  "tabMove.pickTitleTab": "Chuyển “{name}” sang phiên",
+  "tabMove.pickTitleMerge": "Gộp “{name}” vào phiên",
+  "tabMove.mergeNote": "Mọi thẻ của “{name}”, kể cả thẻ chính của nó, chuyển sang phiên đã chọn — các thẻ đang chạy vẫn tiếp tục chạy — cùng với ghi chú và nhiệm vụ. Sau đó “{name}” bị xóa.",
+  "tabMove.filter": "Lọc phiên…",
+  "tabMove.noTargets": "Không có phiên nào khác trong dự án này.",
+  "tabMove.move": "Chuyển",
+  "tabMove.merge": "Gộp",
+  "tabMove.movedTo": "Đã chuyển “{tab}” sang {session}",
+  "tabMove.movedToNew": "“{tab}” giờ là một phiên riêng: {session}",
+  "tabMove.merged": "Đã gộp “{source}” vào {session} ({count} thẻ)",
+  "tabMove.failed": "Không thể di chuyển thẻ: {error}",
+  "tabMove.mergeFailed": "Không thể gộp phiên: {error}"
 }

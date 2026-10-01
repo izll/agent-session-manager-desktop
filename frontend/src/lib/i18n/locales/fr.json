@@ -1648,5 +1648,20 @@
   "error.tabMoveSameSession": "L’onglet est déjà dans cette session",
   "error.tabMoveLocalTabToServer": "Un onglet qui s’exécute sur cet ordinateur ne peut pas rejoindre une session sur un serveur",
   "error.tabMoveRunningUnsupported": "Sous Windows, un onglet en cours d’exécution ne peut pas être déplacé vers une autre session — arrêtez d’abord l’onglet, puis déplacez-le",
-  "error.tabMoveFailed": "Impossible de déplacer l’onglet : {0}"
+  "error.tabMoveFailed": "Impossible de déplacer l’onglet : {0}",
+  "tabBar.moveToSession": "Déplacer vers une session…",
+  "tabBar.moveToNewSession": "Déplacer vers une nouvelle session",
+  "sessionMenu.mergeInto": "Fusionner dans une session…",
+  "tabMove.pickTitleTab": "Déplacer « {name} » vers une session",
+  "tabMove.pickTitleMerge": "Fusionner « {name} » dans une session",
+  "tabMove.mergeNote": "Tous les onglets de « {name} », y compris le sien, passent dans la session choisie — ceux qui tournent continuent — avec ses notes et ses tâches. « {name} » est ensuite supprimée.",
+  "tabMove.filter": "Filtrer les sessions…",
+  "tabMove.noTargets": "Il n’y a pas d’autre session dans ce projet.",
+  "tabMove.move": "Déplacer",
+  "tabMove.merge": "Fusionner",
+  "tabMove.movedTo": "« {tab} » déplacé vers {session}",
+  "tabMove.movedToNew": "« {tab} » est désormais une session à part entière : {session}",
+  "tabMove.merged": "« {source} » fusionnée dans {session} ({count} onglets)",
+  "tabMove.failed": "Impossible de déplacer l’onglet : {error}",
+  "tabMove.mergeFailed": "Impossible de fusionner la session : {error}"
 }

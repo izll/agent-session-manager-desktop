@@ -1648,5 +1648,20 @@
   "error.tabMoveSameSession": "Вкладка уже находится в этом сеансе",
   "error.tabMoveLocalTabToServer": "Вкладка, работающая на этом компьютере, не может перейти в сеанс на сервере",
   "error.tabMoveRunningUnsupported": "В Windows работающую вкладку нельзя переместить в другой сеанс — сначала остановите вкладку, затем переместите её",
-  "error.tabMoveFailed": "Не удалось переместить вкладку: {0}"
+  "error.tabMoveFailed": "Не удалось переместить вкладку: {0}",
+  "tabBar.moveToSession": "Переместить в сеанс…",
+  "tabBar.moveToNewSession": "Переместить в новый сеанс",
+  "sessionMenu.mergeInto": "Объединить с сеансом…",
+  "tabMove.pickTitleTab": "Переместить «{name}» в сеанс",
+  "tabMove.pickTitleMerge": "Объединить «{name}» с сеансом",
+  "tabMove.mergeNote": "Все вкладки «{name}», включая собственную, переходят в выбранный сеанс — работающие продолжают работать — вместе с заметками и задачами. Затем «{name}» удаляется.",
+  "tabMove.filter": "Фильтр сеансов…",
+  "tabMove.noTargets": "В этом проекте нет других сеансов.",
+  "tabMove.move": "Переместить",
+  "tabMove.merge": "Объединить",
+  "tabMove.movedTo": "«{tab}» перемещена в {session}",
+  "tabMove.movedToNew": "«{tab}» теперь отдельный сеанс: {session}",
+  "tabMove.merged": "«{source}» объединён с {session} (вкладок: {count})",
+  "tabMove.failed": "Не удалось переместить вкладку: {error}",
+  "tabMove.mergeFailed": "Не удалось объединить сеанс: {error}"
 }

@@ -1648,5 +1648,20 @@
   "error.tabMoveSameSession": "علامة التبويب موجودة بالفعل في تلك الجلسة",
   "error.tabMoveLocalTabToServer": "لا يمكن لعلامة تبويب تعمل على هذا الكمبيوتر الانضمام إلى جلسة على خادم",
   "error.tabMoveRunningUnsupported": "على Windows لا يمكن نقل علامة تبويب قيد التشغيل إلى جلسة أخرى — أوقف علامة التبويب أولًا ثم انقلها",
-  "error.tabMoveFailed": "تعذر نقل علامة التبويب: {0}"
+  "error.tabMoveFailed": "تعذر نقل علامة التبويب: {0}",
+  "tabBar.moveToSession": "نقل إلى جلسة…",
+  "tabBar.moveToNewSession": "نقل إلى جلسة جديدة",
+  "sessionMenu.mergeInto": "دمج في جلسة…",
+  "tabMove.pickTitleTab": "نقل «{name}» إلى جلسة",
+  "tabMove.pickTitleMerge": "دمج «{name}» في جلسة",
+  "tabMove.mergeNote": "تنتقل جميع علامات تبويب «{name}»، بما فيها علامة التبويب الخاصة بها، إلى الجلسة المختارة — وتستمر العاملة منها في العمل — مع ملاحظاتها ومهامها. ثم تُزال «{name}».",
+  "tabMove.filter": "تصفية الجلسات…",
+  "tabMove.noTargets": "لا توجد جلسة أخرى في هذا المشروع.",
+  "tabMove.move": "نقل",
+  "tabMove.merge": "دمج",
+  "tabMove.movedTo": "نُقلت «{tab}» إلى {session}",
+  "tabMove.movedToNew": "أصبحت «{tab}» جلسة مستقلة: {session}",
+  "tabMove.merged": "دُمجت «{source}» في {session} ({count} علامات تبويب)",
+  "tabMove.failed": "تعذر نقل علامة التبويب: {error}",
+  "tabMove.mergeFailed": "تعذر دمج الجلسة: {error}"
 }

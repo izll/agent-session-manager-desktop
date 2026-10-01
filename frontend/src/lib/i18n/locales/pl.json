@@ -1648,5 +1648,20 @@
   "error.tabMoveSameSession": "Karta jest już w tej sesji",
   "error.tabMoveLocalTabToServer": "Karta działająca na tym komputerze nie może dołączyć do sesji na serwerze",
   "error.tabMoveRunningUnsupported": "W systemie Windows działającej karty nie można przenieść do innej sesji — najpierw zatrzymaj kartę, a potem ją przenieś",
-  "error.tabMoveFailed": "Nie udało się przenieść karty: {0}"
+  "error.tabMoveFailed": "Nie udało się przenieść karty: {0}",
+  "tabBar.moveToSession": "Przenieś do sesji…",
+  "tabBar.moveToNewSession": "Przenieś do nowej sesji",
+  "sessionMenu.mergeInto": "Scal z sesją…",
+  "tabMove.pickTitleTab": "Przenieś „{name}” do sesji",
+  "tabMove.pickTitleMerge": "Scal „{name}” z sesją",
+  "tabMove.mergeNote": "Wszystkie karty „{name}”, łącznie z jej własną, trafią do wybranej sesji — działające działają dalej — razem z notatkami i zadaniami. Potem „{name}” zostanie usunięta.",
+  "tabMove.filter": "Filtruj sesje…",
+  "tabMove.noTargets": "W tym projekcie nie ma innej sesji.",
+  "tabMove.move": "Przenieś",
+  "tabMove.merge": "Scal",
+  "tabMove.movedTo": "„{tab}” przeniesiono do {session}",
+  "tabMove.movedToNew": "„{tab}” jest teraz osobną sesją: {session}",
+  "tabMove.merged": "„{source}” scalono z {session} (kart: {count})",
+  "tabMove.failed": "Nie udało się przenieść karty: {error}",
+  "tabMove.mergeFailed": "Nie udało się scalić sesji: {error}"
 }

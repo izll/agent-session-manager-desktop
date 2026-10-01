@@ -1648,5 +1648,20 @@
   "error.tabMoveSameSession": "The tab is already in that session",
   "error.tabMoveLocalTabToServer": "A tab running on this computer cannot join a session on a server",
   "error.tabMoveRunningUnsupported": "On Windows a running tab cannot be moved to another session — stop the tab first, then move it",
-  "error.tabMoveFailed": "The tab could not be moved: {0}"
+  "error.tabMoveFailed": "The tab could not be moved: {0}",
+  "tabBar.moveToSession": "Move to session…",
+  "tabBar.moveToNewSession": "Move to new session",
+  "sessionMenu.mergeInto": "Merge into session…",
+  "tabMove.pickTitleTab": "Move “{name}” to session",
+  "tabMove.pickTitleMerge": "Merge “{name}” into session",
+  "tabMove.mergeNote": "Every tab of “{name}”, its own tab included, moves into the chosen session — running ones keep running — together with its notes and tasks. “{name}” is then removed.",
+  "tabMove.filter": "Filter sessions…",
+  "tabMove.noTargets": "There is no other session in this project.",
+  "tabMove.move": "Move",
+  "tabMove.merge": "Merge",
+  "tabMove.movedTo": "“{tab}” moved to {session}",
+  "tabMove.movedToNew": "“{tab}” is now a session of its own: {session}",
+  "tabMove.merged": "“{source}” merged into {session} ({count} tabs)",
+  "tabMove.failed": "Could not move the tab: {error}",
+  "tabMove.mergeFailed": "Could not merge the session: {error}"
 }
