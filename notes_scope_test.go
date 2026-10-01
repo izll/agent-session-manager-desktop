@@ -42,6 +42,32 @@ func TestTheMainTabIsFoundWhateverItsIndex(t *testing.T) {
 	}
 }
 
+// The notes API reads and writes whole notes, every page at once, for the
+// session's note and each tab's, and an empty note is an empty list.
+func TestTabNotePagesAPI(t *testing.T) {
+	app, _, instance := projectTasksApp(t)
+	if got, err := app.GetTabNotePages(instance.ID, SessionNotesWindow); err != nil || got == nil || len(got) != 0 {
+		t.Fatalf("an empty note = %#v, %v; want an empty list", got, err)
+	}
+	pages := []session.NotePage{
+		{ID: "a", Title: "Plan", Text: "the plan"},
+		{ID: "b", Title: "", Text: "untitled"},
+	}
+	if err := app.SetTabNotePages(instance.ID, SessionNotesWindow, pages, ""); err != nil {
+		t.Fatal(err)
+	}
+	got, err := app.GetTabNotePages(instance.ID, SessionNotesWindow)
+	if err != nil || len(got) != 2 || got[0] != pages[0] || got[1] != pages[1] {
+		t.Fatalf("session note pages = %+v, %v", got, err)
+	}
+	if main, _ := app.GetTabNotePages(instance.ID, 0); len(main) != 0 {
+		t.Fatalf("writing the session note wrote the main tab's: %+v", main)
+	}
+	if err := app.SetTabNotePages(instance.ID, SessionNotesWindow, pages, "another-project"); err == nil {
+		t.Fatal("a write for another project was accepted")
+	}
+}
+
 // The view defaults are stored empty for "the one used last", so configs
 // written before they existed keep today's behaviour, and only the known fixed
 // values are kept — anything else would be a default no view understands.

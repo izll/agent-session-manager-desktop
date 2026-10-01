@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -168,7 +169,7 @@ func TestProjectTaskWritesHonourTheProjectGuard(t *testing.T) {
 		"SendProjectTaskToAgent": func() error {
 			return app.SendProjectTaskToAgent(created.ID, instance.ID, "", stale)
 		},
-		"SetProjectNotes": func() error { return app.SetProjectNotes("x", stale) },
+		"SetProjectNotePages": func() error { return app.SetProjectNotePages(onePage("x"), stale) },
 	}
 	for name, call := range checks {
 		if err := call(); err == nil || !strings.Contains(err.Error(), "active project changed") {
@@ -178,7 +179,7 @@ func TestProjectTaskWritesHonourTheProjectGuard(t *testing.T) {
 
 	app.projectLocked = false
 	for name, call := range map[string]func() error{
-		"SetProjectNotes": func() error { return app.SetProjectNotes("x", "") },
+		"SetProjectNotePages": func() error { return app.SetProjectNotePages(onePage("x"), "") },
 		"MoveTaskToSession": func() error {
 			_, err := app.MoveTaskToSession(created.ID, instance.ID, "", "")
 			return err
@@ -196,14 +197,27 @@ func TestProjectTaskWritesHonourTheProjectGuard(t *testing.T) {
 	}
 }
 
-// The notes endpoints read and write the active project's own note.
+func onePage(text string) []session.NotePage {
+	return []session.NotePage{{ID: "p", Text: text}}
+}
+
+// The notes endpoints read and write the active project's own note, every
+// page of it.
 func TestProjectNotesAPI(t *testing.T) {
 	app, _, _ := projectTasksApp(t)
-	if err := app.SetProjectNotes("the plan", ""); err != nil {
+	if got, err := app.GetProjectNotePages(); err != nil || got == nil || len(got) != 0 {
+		t.Fatalf("an empty project note = %#v, %v; want an empty list", got, err)
+	}
+	pages := []session.NotePage{
+		{ID: "a", Title: "Plan", Text: "the plan"},
+		{ID: "b", Title: "Risks", Text: "none yet"},
+	}
+	if err := app.SetProjectNotePages(pages, ""); err != nil {
 		t.Fatal(err)
 	}
-	if got, err := app.GetProjectNotes(); err != nil || got != "the plan" {
-		t.Errorf("GetProjectNotes = %q, %v", got, err)
+	got, err := app.GetProjectNotePages()
+	if err != nil || !slices.Equal(got, pages) {
+		t.Errorf("GetProjectNotePages = %+v, %v; want %+v", got, err, pages)
 	}
 }
 

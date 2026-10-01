@@ -31,8 +31,8 @@ assert.match(
  * tab's note and writing it into this one. A failed load no longer fabricates
  * an empty note: it restores the target's cached draft through showDraft.
  */
-assert.match(notes, /function showDraft[\s\S]*?notes = draft\.text/);
-assert.match(notes, /notes = content \|\| '';[\s\S]*?resetHistory\(\)/,
+assert.match(notes, /function showDraft[\s\S]*?notes = activeText\(\)/);
+assert.match(notes, /const loaded = editablePages\(content\);[\s\S]*?showDraft\(draft\);[\s\S]*?resetHistory\(\)/,
   'a successful backend load resets history');
 assert.match(notes, /showDraft\(\{ \.\.\.draft, loadError: String\(e\) \}\);[\s\S]*?resetHistory\(\)/,
   'a failed load restores only the target draft and resets history');
@@ -64,5 +64,11 @@ assert.match(
   /if \(!inserted\)/,
   'the direct assignment must remain only as a fallback',
 );
+
+// A note has pages, and the history is of the open page's text: opening
+// another page starts it over, or undo would write one page's text into the
+// next.
+assert.match(notes, /function showPage[\s\S]*?notes = activeText\(\);[\s\S]*?resetHistory\(\)/,
+  'switching pages keeps the previous page\'s undo history');
 
 console.log('notesUndo: ok');

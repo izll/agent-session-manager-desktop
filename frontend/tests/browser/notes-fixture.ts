@@ -3,12 +3,23 @@ import Notes from '../../src/lib/components/MainPanel/Notes.svelte';
 import { selectedSessionId, selectedWindowIdx } from '../../src/lib/stores/sessions';
 import { afterUnsavedChanges, registerUnsavedGuard } from '../../src/lib/stores/unsavedChanges';
 import { activeProjectId, selectProject } from '../../src/lib/stores/projects';
+import { requestNoteJump, type NoteJump } from '../../src/lib/stores/noteJump';
 
-const stored = new Map<string, string>([
-  ['project-a\x1fnotes-a:0', 'saved A'],
-  ['project-a\x1fnotes-b:0', 'saved B'],
-  ['project-b\x1fnotes-b:0', 'saved B in project B'],
+type Page = { id: string; title: string; text: string };
+// As the backend returns notes: one written before pages is a single
+// untitled page with the fixed first-page ID.
+const legacy = (text: string): Page[] => [{ id: 'page-1', title: '', text }];
+const stored = new Map<string, Page[]>([
+  ['project-a\x1fnotes-a:0', legacy('saved A')],
+  ['project-a\x1fnotes-b:0', legacy('saved B')],
+  ['project-b\x1fnotes-b:0', legacy('saved B in project B')],
+  ['project-a\x1fnotes-pages:0', [
+    { id: 'p-plan', title: 'Plan', text: 'alpha and beta' },
+    { id: 'p-risks', title: 'Risks', text: 'first line\nthe hidden needle is here' },
+  ]],
 ]);
+const saves: Page[][] = [];
+const clone = <T,>(value: T): T => JSON.parse(JSON.stringify(value));
 let failNextASave = true;
 let failedSaves = 0;
 let selectedProject = 'project-a';
@@ -48,17 +59,18 @@ function approveSecondGuard() {
 }
 
 const backend = new Proxy({
-  GetTabNotes: async (sessionId: string, windowIdx: number) => {
+  GetTabNotePages: async (sessionId: string, windowIdx: number) => {
     if (sessionId === 'notes-load-fails') throw new Error('load refused');
-    return stored.get(noteKey(selectedProject, sessionId, windowIdx)) ?? '';
+    return clone(stored.get(noteKey(selectedProject, sessionId, windowIdx)) ?? []);
   },
-  SetTabNotes: async (sessionId: string, windowIdx: number, value: string, expectedProjectId: string) => {
+  SetTabNotePages: async (sessionId: string, windowIdx: number, pages: Page[], expectedProjectId: string) => {
     if (sessionId === 'notes-a' && failNextASave) {
       failNextASave = false;
       failedSaves++;
       throw new Error('save refused');
     }
-    stored.set(noteKey(expectedProjectId, sessionId, windowIdx), value);
+    saves.push(clone(pages));
+    stored.set(noteKey(expectedProjectId, sessionId, windowIdx), clone(pages));
   },
   SelectProject: async (id: string) => { selectedProject = id; },
   GetActiveProjectID: async () => selectedProject,
@@ -80,8 +92,19 @@ const backend = new Proxy({
     selectedSessionId.set(sessionId);
     selectedWindowIdx.set(0);
   },
+  /** The note's text, its pages' texts joined; undefined when never saved. */
   stored(sessionId: string, projectId = selectedProject) {
-    return stored.get(noteKey(projectId, sessionId, 0));
+    return stored.get(noteKey(projectId, sessionId, 0))?.map((p) => p.text).join('\n---\n');
+  },
+  /** The note's pages as [title, text] pairs. */
+  storedPages(sessionId: string, projectId = selectedProject) {
+    return stored.get(noteKey(projectId, sessionId, 0))?.map((p) => [p.title, p.text]);
+  },
+  saveCount() {
+    return saves.length;
+  },
+  jump(jump: NoteJump) {
+    requestNoteJump(jump);
   },
   failedSaves() {
     return failedSaves;

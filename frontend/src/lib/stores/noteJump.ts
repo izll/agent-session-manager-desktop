@@ -19,6 +19,8 @@ export type NoteJump = {
   scope: NoteResultScope;
   /** Pre-filled into the notes view's find bar; empty for none. */
   query: string;
+  /** The page of the note to open; absent for the one it was left on. */
+  pageId?: string;
 };
 
 export const pendingNoteJump = writable<NoteJump | null>(null);

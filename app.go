@@ -2446,21 +2446,6 @@ func (a *App) SetSessionColor(id, color, bgColor string, fullRow bool, expectedP
 	return a.storage.UpdateInstance(inst)
 }
 
-// SetSessionNotes sets session notes
-func (a *App) SetSessionNotes(id string, notes string, expectedProjectID string) error {
-	done, err := a.beginExpectedProjectMutation(expectedProjectID)
-	if err != nil {
-		return err
-	}
-	defer done()
-	inst, err := a.storage.GetInstance(id)
-	if err != nil {
-		return err
-	}
-	inst.SessionNote().SetPages([]session.NotePage{{ID: session.LegacyNotePageID, Text: notes}})
-	return a.storage.UpdateInstance(inst)
-}
-
 // AssignToGroup assigns session to group
 func (a *App) AssignToGroup(sessionID, groupID, expectedProjectID string) error {
 	done, err := a.beginExpectedProjectMutation(expectedProjectID)
@@ -3007,8 +2992,10 @@ func (a *App) GetTabOrder(sessionID string) ([]int, error) {
 	return inst.GetTabOrder(), nil
 }
 
-// SetTabNotes sets tab notes
-func (a *App) SetTabNotes(sessionID string, windowIdx int, notes, expectedProjectID string) error {
+// SetTabNotePages replaces a note — the tab's own, or the session's for
+// SessionNotesWindow — all of its pages at once, so a page switch, rename or
+// reorder can never be saved half-way.
+func (a *App) SetTabNotePages(sessionID string, windowIdx int, pages []session.NotePage, expectedProjectID string) error {
 	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return err
@@ -3018,7 +3005,7 @@ func (a *App) SetTabNotes(sessionID string, windowIdx int, notes, expectedProjec
 	if err != nil {
 		return err
 	}
-	noteSlot(inst, windowIdx).SetPages([]session.NotePage{{ID: session.LegacyNotePageID, Text: notes}})
+	noteSlot(inst, windowIdx).SetPages(pages)
 	return a.storage.UpdateInstance(inst)
 }
 
@@ -3062,13 +3049,23 @@ func (a *App) SetTabColor(sessionID string, windowIdx int, textColor, background
 	return a.storage.UpdateInstance(inst)
 }
 
-// GetTabNotes gets tab notes
-func (a *App) GetTabNotes(sessionID string, windowIdx int) (string, error) {
+// GetTabNotePages returns the pages of a note; see SetTabNotePages. A note
+// with nothing in it has no pages.
+func (a *App) GetTabNotePages(sessionID string, windowIdx int) ([]session.NotePage, error) {
 	inst, err := a.storage.GetInstance(sessionID)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	return session.NotePagesText(noteSlot(inst, windowIdx).Pages()), nil
+	return nonNilNotePages(noteSlot(inst, windowIdx).Pages()), nil
+}
+
+// nonNilNotePages makes an empty note an empty list rather than null, so the
+// webview never has to tell the two apart.
+func nonNilNotePages(pages []session.NotePage) []session.NotePage {
+	if pages == nil {
+		return []session.NotePage{}
+	}
+	return pages
 }
 
 // GetWindowList returns list of windows

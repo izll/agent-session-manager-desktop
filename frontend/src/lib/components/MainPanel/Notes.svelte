@@ -12,6 +12,13 @@
   import { settings } from '../../stores/settings';
   import { pendingNoteJump, clearNoteJump, type NoteJump } from '../../stores/noteJump';
   import { PROJECT_TASKS_SCOPE } from '../../utils/projectScope';
+  import { portal } from '../../utils/portal';
+  import { menuPosition } from '../../utils/menuPosition';
+  import { claimMenu, releaseMenu } from '../../utils/openMenu';
+  import {
+    type NotePage, editablePages, pagesKey, notePagesText, resolveActivePage, pageIndex,
+    setPageText, renamePage, addPage, deletePage, movePage, dropIndex, stepPage, pageLabel,
+  } from '../../utils/notePages';
 
   export let active = false;
   /**
@@ -64,13 +71,15 @@
   // switch: seeing an empty note is only worth a click if the other is not
   // empty too. Recomputed as the text, the target and the session list change.
   $: notesSession = $sessions.find(s => s.id === $selectedSessionId);
+  // Any page with text counts: the texts are joined the way the session list
+  // carries them, so the open note and the stored one are read alike.
   $: presence = notePresence({
     open: scope,
-    openText: notes,
-    otherDraft: draftsByTarget.get(noteKey(
+    openText: notePagesText(pages),
+    otherDraft: draftText(draftsByTarget.get(noteKey(
       $activeProjectId, $selectedSessionId ?? '',
       scope === 'tab' ? SESSION_NOTES : $selectedWindowIdx,
-    ))?.text,
+    ))),
     storedTab: (notesSession?.followedWindows?.find(w => w.index === $selectedWindowIdx)?.notes
       ?? notesSession?.mainTabNotes) || '',
     storedSession: notesSession?.notes || '',
@@ -86,6 +95,16 @@
 
   const dispatch = createEventDispatcher();
 
+  /**
+   * A note is a list of titled pages, and it is saved whole: drafts, the save
+   * queue and the unsaved-changes guard all deal in a note's full list of
+   * pages, so switching from page A to page B is not a change of target and
+   * cannot lose what was typed on A. `notes` is the open page's text — what
+   * the textarea, find, undo and dictation work on — and is written back into
+   * `pages` on every edit.
+   */
+  let pages: NotePage[] = editablePages([]);
+  let activePageId = pages[0].id;
   let notes = '';
   let lastSessionId: string | null = null;
   let lastWindowIdx: number = 0;
@@ -93,10 +112,17 @@
   let saveTimeout: ReturnType<typeof setTimeout> | null = null;
   let loadGeneration = 0;
   let saving = false;
-  let lastSaved = '';
+  /** The note as last saved (or loaded), to tell an unsaved change by. */
+  let savedPages: NotePage[] = pages;
   let textareaEl: HTMLTextAreaElement;
   const saveQueues = new Map<string, Promise<void>>();
-  type NoteDraft = { text: string; saved: string; saveError: string; loadError: string };
+  type NoteDraft = {
+    pages: NotePage[];
+    activePageId: string;
+    saved: NotePage[];
+    saveError: string;
+    loadError: string;
+  };
   const draftsByTarget = new Map<string, NoteDraft>();
   let savesInFlight = 0;
   let activationGeneration = 0;
@@ -107,17 +133,28 @@
   let pendingDiscard: (() => void) | null = null;
   let pendingDiscardCancel: (() => void) | null = null;
 
+  function draftText(draft: NoteDraft | undefined): string | undefined {
+    return draft && notePagesText(draft.pages);
+  }
+
+  function draftIsDirty(draft: NoteDraft): boolean {
+    return pagesKey(draft.pages) !== pagesKey(draft.saved) || !!draft.saveError;
+  }
+
+  /** Whether the open note differs from what was last saved. */
+  function openNoteChanged(): boolean {
+    return pagesKey(pages) !== pagesKey(savedPages);
+  }
+
   function hasUnsavedDrafts(): boolean {
-    return [...draftsByTarget.values()].some((draft) =>
-      draft.text !== draft.saved || !!draft.saveError
-    ) || notes !== lastSaved || !!saveError;
+    return [...draftsByTarget.values()].some(draftIsDirty) || openNoteChanged() || !!saveError;
   }
 
   function unsavedRevision(): string {
     return JSON.stringify([
-      notes, lastSaved, saveError,
+      pagesKey(pages), pagesKey(savedPages), saveError,
       [...draftsByTarget.entries()].map(([key, draft]) =>
-        [key, draft.text, draft.saved, draft.saveError]),
+        [key, pagesKey(draft.pages), pagesKey(draft.saved), draft.saveError]),
     ]);
   }
 
@@ -134,9 +171,16 @@
     }
     await Promise.all([...saveQueues.values()].map((save) => save.catch(() => undefined)));
     for (const [key, draft] of draftsByTarget) {
-      draftsByTarget.set(key, { ...draft, text: draft.saved, saveError: '' });
+      draftsByTarget.set(key, {
+        ...draft,
+        pages: draft.saved,
+        activePageId: resolveActivePage(draft.saved, draft.activePageId),
+        saveError: '',
+      });
     }
-    notes = lastSaved;
+    pages = savedPages;
+    activePageId = resolveActivePage(pages, activePageId);
+    notes = activeText();
     saveError = '';
     resetHistory();
     if (continuation) continuation();
@@ -153,21 +197,71 @@
     return `${projectId}:${sessionId}:${windowIdx}`;
   }
 
+  function currentNoteKey(): string | null {
+    return lastSessionId ? noteKey(lastProjectId, lastSessionId, lastWindowIdx) : null;
+  }
+
+  function activeText(): string {
+    return pages[pageIndex(pages, activePageId)]?.text ?? '';
+  }
+
   function rememberCurrentDraft() {
-    if (!lastSessionId) return;
-    draftsByTarget.set(noteKey(lastProjectId, lastSessionId, lastWindowIdx), {
-      text: notes,
-      saved: lastSaved,
+    const key = currentNoteKey();
+    if (!key) return;
+    draftsByTarget.set(key, {
+      pages,
+      activePageId,
+      saved: savedPages,
       saveError,
       loadError,
     });
   }
 
   function showDraft(draft: NoteDraft) {
-    notes = draft.text;
-    lastSaved = draft.saved;
+    pages = draft.pages;
+    activePageId = resolveActivePage(pages, draft.activePageId);
+    notes = activeText();
+    savedPages = draft.saved;
     saveError = draft.saveError;
     loadError = draft.loadError;
+  }
+
+  /**
+   * Which page each note was last open on, per viewer and across restarts, so
+   * coming back to a note opens the page left — like the scope above, a
+   * matter of where this person was, not a property of the note.
+   */
+  const ACTIVE_PAGE_KEY = 'asmgr.notesActivePage';
+  const ACTIVE_PAGE_LIMIT = 300;
+
+  function readActivePages(): Record<string, string> {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(ACTIVE_PAGE_KEY) || '{}');
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+
+  function rememberedActivePage(key: string): string | undefined {
+    const id = readActivePages()[key];
+    return typeof id === 'string' ? id : undefined;
+  }
+
+  function rememberActivePage(key: string | null, id: string) {
+    if (!key) return;
+    try {
+      const all = readActivePages();
+      delete all[key];
+      all[key] = id;
+      const keys = Object.keys(all);
+      // Oldest first, as inserted: a note not opened for a long time
+      // forgets its page before one opened today.
+      for (const old of keys.slice(0, Math.max(0, keys.length - ACTIVE_PAGE_LIMIT))) delete all[old];
+      localStorage.setItem(ACTIVE_PAGE_KEY, JSON.stringify(all));
+    } catch {
+      // Storage unavailable: the page holds until the view is closed.
+    }
   }
 
   /**
@@ -342,6 +436,8 @@
       return;
     }
 
+    if (handlePageStepKey(event)) return;
+
     const mod = event.ctrlKey || event.metaKey;
     if (!mod) return;
 
@@ -398,11 +494,12 @@
     unregisterUnsavedGuard = null;
     pendingDiscard = null;
     pendingDiscardCancel = null;
+    closePageMenu();
     rememberCurrentDraft();
     // Save any pending changes
     if (saveTimeout) {
       clearTimeout(saveTimeout);
-      void saveNow(lastProjectId, lastSessionId, lastWindowIdx, notes);
+      void saveNow(lastProjectId, lastSessionId, lastWindowIdx, pages);
     }
     dictation.destroy();
   });
@@ -418,8 +515,10 @@
       loadingNotes = false;
       lastProjectId = projectId;
       lastSessionId = null;
+      pages = editablePages([]);
+      activePageId = pages[0].id;
       notes = '';
-      lastSaved = '';
+      savedPages = pages;
       saveError = '';
       loadError = '';
       resetHistory();
@@ -431,15 +530,24 @@
       return;
     }
 
+    const sameTarget = projectId === lastProjectId && sessionId === lastSessionId && windowIdx === lastWindowIdx;
     lastProjectId = projectId;
     lastSessionId = sessionId;
     lastWindowIdx = windowIdx;
     const generation = ++loadGeneration;
     const targetKey = noteKey(projectId, sessionId, windowIdx);
+    const empty = editablePages([]);
     const remembered = draftsByTarget.get(targetKey) ?? {
-      text: '', saved: '', saveError: '', loadError: '',
+      pages: empty,
+      // Reloading the note already open stays on its page; a note opened
+      // afresh goes back to the page it was left on.
+      activePageId: sameTarget ? activePageId : rememberedActivePage(targetKey) ?? empty[0].id,
+      saved: empty, saveError: '', loadError: '',
     };
     showDraft({ ...remembered, loadError: '' });
+    // A note seen for the first time shows nothing until it arrives; the
+    // page to open is kept for when it has.
+    const wantedPageId = remembered.activePageId;
     loadingNotes = true;
 
     try {
@@ -454,18 +562,23 @@
       // here would turn a failed save into apparent success and discard the only
       // copy of the user's text on a fast A -> B -> A switch.
       const latestDraft = draftsByTarget.get(targetKey);
-      if (latestDraft && (latestDraft.saveError || latestDraft.text !== latestDraft.saved)) {
+      if (latestDraft && draftIsDirty(latestDraft)) {
         showDraft(latestDraft);
         resetHistory();
         return;
       }
-      const content = isProject ? await App.GetProjectNotes() : await App.GetTabNotes(sessionId, windowIdx);
+      const content = isProject ? await App.GetProjectNotePages() : await App.GetTabNotePages(sessionId, windowIdx);
       if (generation !== loadGeneration || projectId !== lastProjectId || projectId !== get(activeProjectId) || sessionId !== lastSessionId || windowIdx !== lastWindowIdx) return;
-      notes = content || '';
-      lastSaved = notes;
-      saveError = '';
-      loadError = '';
-      draftsByTarget.set(targetKey, { text: notes, saved: notes, saveError: '', loadError: '' });
+      const loaded = editablePages(content);
+      const draft: NoteDraft = {
+        pages: loaded,
+        activePageId: resolveActivePage(loaded, wantedPageId),
+        saved: loaded,
+        saveError: '',
+        loadError: '',
+      };
+      showDraft(draft);
+      draftsByTarget.set(targetKey, draft);
       resetHistory();
     } catch (e) {
       if (generation !== loadGeneration || projectId !== lastProjectId || projectId !== get(activeProjectId) || sessionId !== lastSessionId || windowIdx !== lastWindowIdx) return;
@@ -510,7 +623,7 @@
       if (generation !== activationGeneration || !active) return;
       // A keystroke made while the flush was in flight owns the textarea. A
       // forced read here would replace it with the previous disk snapshot.
-      if (saveTimeout || notes !== lastSaved) return;
+      if (saveTimeout || openNoteChanged()) return;
       await loadNotes(true);
     } finally {
       if (generation === activationGeneration) activating = false;
@@ -518,8 +631,8 @@
   }
 
   /**
-   * A note opened from the global search: show the note it names, with the
-   * query in the find bar and the first match selected.
+   * A note opened from the global search: show the note and the page it
+   * names, with the query in the find bar and the first match selected.
    *
    * After the activation block above, so the note asked for wins over a
    * default scope fixed in the settings; before the target watch below, so
@@ -527,7 +640,8 @@
    * to localStorage: following a search result is not choosing which note to
    * reach for next time.
    */
-  let revealFirstMatch = false;
+  let revealJump = false;
+  let jumpPageId: string | undefined;
   // A jump names a session's note; the project's view leaves it for that one.
   $: if (active && !isProject && $pendingNoteJump) takeNoteJump($pendingNoteJump);
 
@@ -537,10 +651,12 @@
     // selection has moved on, and the request is no longer the user's wish.
     if (jump.projectId !== get(activeProjectId) || jump.sessionId !== get(selectedSessionId)) return;
     scope = jump.scope;
-    if (!jump.query) return;
-    showFind = true;
-    findQuery = jump.query;
-    revealFirstMatch = true;
+    jumpPageId = jump.pageId;
+    if (jump.query) {
+      showFind = true;
+      findQuery = jump.query;
+    }
+    revealJump = !!jump.query || !!jump.pageId;
   }
 
   async function flushPendingSave() {
@@ -548,8 +664,8 @@
       clearTimeout(saveTimeout);
       saveTimeout = null;
     }
-    if (!lastSessionId || notes === lastSaved) return;
-    await saveNow(lastProjectId, lastSessionId, lastWindowIdx, notes);
+    if (!lastSessionId || !openNoteChanged()) return;
+    await saveNow(lastProjectId, lastSessionId, lastWindowIdx, pages);
   }
 
   // Watch for session/window changes, and for a switch between the tab's note
@@ -558,11 +674,13 @@
   $: wantedWindowIdx = isProject || scope === 'session' ? SESSION_NOTES : $selectedWindowIdx;
   $: if ($activeProjectId !== lastProjectId || wantedSessionId !== lastSessionId || wantedWindowIdx !== lastWindowIdx) {
     rememberCurrentDraft();
+    cancelRename();
+    closePageMenu();
     // Save current notes before loading new ones
     if (saveTimeout) {
       clearTimeout(saveTimeout);
       saveTimeout = null;
-      void saveNow(lastProjectId, lastSessionId, lastWindowIdx, notes);
+      void saveNow(lastProjectId, lastSessionId, lastWindowIdx, pages);
     }
     void loadNotes();
   }
@@ -571,16 +689,19 @@
   // selection goToMatch makes is lost if the textarea is disabled afterwards
   // for a reload. A note that matched only loosely has nothing to select, so
   // the find bar is closed again rather than left saying "no matches".
-  $: if (revealFirstMatch && !loadingNotes && !activating && !loadError &&
+  $: if (revealJump && !loadingNotes && !activating && !loadError &&
       lastSessionId === $selectedSessionId && lastWindowIdx === wantedWindowIdx) {
-    revealFirstMatch = false;
-    // After a tick, when matches has been recomputed for the loaded text.
-    // In a function, too: read here, matches would depend on this block's
-    // own assignment to showFind.
+    revealJump = false;
+    // The page first, then — after a tick, when matches has been recomputed
+    // for its text — the match. In a function, too: read here, matches would
+    // depend on this block's own assignment to showFind.
+    if (jumpPageId) selectPage(jumpPageId);
+    jumpPageId = undefined;
     void tick().then(revealJumpMatch);
   }
 
   function revealJumpMatch() {
+    if (!showFind) return;
     if (matches.length) {
       goToMatch(0);
     } else {
@@ -593,17 +714,27 @@
   function handleInput() {
     if (loadingNotes || loadError) return;
     recordHistory();
+    pages = setPageText(pages, activePageId, notes);
+    scheduleSave();
+  }
+
+  /**
+   * Queue the open note — all of its pages — to be saved shortly, and record
+   * it as this target's draft until then.
+   */
+  function scheduleSave() {
     if (saveTimeout) {
       clearTimeout(saveTimeout);
     }
     const projectId = lastProjectId;
     const sessionId = lastSessionId;
     const windowIdx = lastWindowIdx;
-    const snapshot = notes;
+    const snapshot = pages;
     if (sessionId) {
       draftsByTarget.set(noteKey(projectId, sessionId, windowIdx), {
-        text: snapshot,
-        saved: lastSaved,
+        pages: snapshot,
+        activePageId,
+        saved: savedPages,
         saveError: '',
         loadError: '',
       });
@@ -616,10 +747,10 @@
     saveTimeout = timeout;
   }
 
-  async function saveNow(projectId: string, sessionId: string | null, windowIdx: number, snapshot: string) {
+  async function saveNow(projectId: string, sessionId: string | null, windowIdx: number, snapshot: NotePage[]) {
     // The project ID is not tested for truth: the default project's is "",
     // and refusing it left every note there unsaved.
-    if (!sessionId || (projectId === lastProjectId && sessionId === lastSessionId && windowIdx === lastWindowIdx && snapshot === lastSaved)) return;
+    if (!sessionId || (projectId === lastProjectId && sessionId === lastSessionId && windowIdx === lastWindowIdx && pagesKey(snapshot) === pagesKey(savedPages))) return;
 
     const key = noteKey(projectId, sessionId, windowIdx);
     const previous = saveQueues.get(key) ?? Promise.resolve();
@@ -627,21 +758,21 @@
       savesInFlight++;
       saving = true;
       try {
-        if (isProject) await App.SetProjectNotes(snapshot, projectId);
-        else await App.SetTabNotes(sessionId, windowIdx, snapshot, projectId);
-        const draft = draftsByTarget.get(key) ?? { text: snapshot, saved: lastSaved, saveError: '', loadError: '' };
+        if (isProject) await App.SetProjectNotePages(snapshot, projectId);
+        else await App.SetTabNotePages(sessionId, windowIdx, snapshot, projectId);
+        const draft = draftsByTarget.get(key) ?? { pages: snapshot, activePageId: snapshot[0]?.id ?? '', saved: savedPages, saveError: '', loadError: '' };
         draftsByTarget.set(key, { ...draft, saved: snapshot, saveError: '', loadError: '' });
-        if (projectId === lastProjectId && projectId === get(activeProjectId) && sessionId === lastSessionId && windowIdx === lastWindowIdx && notes === snapshot) {
-          lastSaved = snapshot;
+        if (projectId === lastProjectId && projectId === get(activeProjectId) && sessionId === lastSessionId && windowIdx === lastWindowIdx && pagesKey(pages) === pagesKey(snapshot)) {
+          savedPages = snapshot;
           saveError = '';
           loadError = '';
         }
         // Notify parent to update status bar preview
-        dispatch('notesChange', { sessionId, windowIdx, notes: snapshot });
+        dispatch('notesChange', { sessionId, windowIdx, notes: notePagesText(snapshot) });
       } catch (e) {
         console.error('Failed to save notes:', e);
         const message = String(e);
-        const draft = draftsByTarget.get(key) ?? { text: snapshot, saved: '', saveError: '', loadError: '' };
+        const draft = draftsByTarget.get(key) ?? { pages: snapshot, activePageId: snapshot[0]?.id ?? '', saved: editablePages([]), saveError: '', loadError: '' };
         draftsByTarget.set(key, { ...draft, saveError: message });
         if (projectId === lastProjectId && projectId === get(activeProjectId) && sessionId === lastSessionId && windowIdx === lastWindowIdx) saveError = message;
       } finally {
@@ -656,13 +787,233 @@
 
   async function retryNotes() {
     if (!lastSessionId) return;
-    if (notes !== lastSaved || saveError) {
-      await saveNow(lastProjectId, lastSessionId, lastWindowIdx, notes);
+    if (openNoteChanged() || saveError) {
+      await saveNow(lastProjectId, lastSessionId, lastWindowIdx, pages);
       if (saveError) return;
     }
     await loadNotes(true);
   }
+
+  /*
+   * Pages. Every change to the list — a new page, a title, a deletion, a
+   * new order — is an edit of the note like typing is: it goes into the
+   * draft and is saved with the rest, so the guards and the retry that cover
+   * text cover it too.
+   */
+  // A function, not a reactive value: it is read from inside other reactive
+  // blocks, which can run before a `$:` declared further down is updated.
+  function pagesLocked(): boolean {
+    return loadingNotes || !!loadError;
+  }
+
+  function showPage(id: string) {
+    activePageId = resolveActivePage(pages, id);
+    notes = activeText();
+    resetHistory();
+    rememberActivePage(currentNoteKey(), activePageId);
+    // Remembered with the draft as well, so coming back to this note in the
+    // same sitting opens this page even before the note is saved.
+    const key = currentNoteKey();
+    const draft = key ? draftsByTarget.get(key) : undefined;
+    if (key && draft) draftsByTarget.set(key, { ...draft, activePageId });
+  }
+
+  function selectPage(id: string) {
+    if (pagesLocked() || id === activePageId || pageIndex(pages, id) === -1) return;
+    showPage(id);
+  }
+
+  function changePages(next: NotePage[], nextActiveId = activePageId) {
+    if (pagesLocked()) return;
+    pages = next;
+    if (nextActiveId !== activePageId || pageIndex(pages, activePageId) === -1) showPage(nextActiveId);
+    scheduleSave();
+  }
+
+  /**
+   * Alt+PgUp / Alt+PgDn step through the pages. Ctrl+PgUp / Ctrl+PgDn — the
+   * usual pair — already switch the session's tabs everywhere, the notes
+   * included, and taking them here would strand the user in the note.
+   */
+  function handlePageStepKey(event: KeyboardEvent): boolean {
+    if (!event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return false;
+    if (event.key !== 'PageUp' && event.key !== 'PageDown') return false;
+    event.preventDefault();
+    event.stopPropagation();
+    if (pages.length > 1) selectPage(stepPage(pages, activePageId, event.key === 'PageDown' ? 1 : -1));
+    return true;
+  }
+
+  let pageStripEl: HTMLElement | undefined;
+
+  // Renaming happens in place: the tab becomes a text field.
+  let renamingPageId: string | null = null;
+  let renameValue = '';
+  let renameInputEl: HTMLInputElement | undefined;
+
+  function startRename(id: string) {
+    if (pagesLocked()) return;
+    closePageMenu();
+    const page = pages[pageIndex(pages, id)];
+    if (!page) return;
+    renamingPageId = id;
+    renameValue = page.title;
+    void tick().then(() => { renameInputEl?.focus(); renameInputEl?.select(); });
+  }
+
+  function commitRename() {
+    const id = renamingPageId;
+    if (!id) return;
+    renamingPageId = null;
+    if (pageIndex(pages, id) !== -1) changePages(renamePage(pages, id, renameValue));
+    void tick().then(() => textareaEl?.focus());
+  }
+
+  function cancelRename() {
+    renamingPageId = null;
+  }
+
+  function handleRenameKeydown(event: KeyboardEvent) {
+    // The field is inside the notes view, whose own keys must not see these.
+    event.stopPropagation();
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      commitRename();
+    } else if (event.key === 'Escape') {
+      event.preventDefault();
+      cancelRename();
+      void tick().then(() => textareaEl?.focus());
+    }
+  }
+
+  /** "+": a new empty page at the end, opened, with its title being typed. */
+  function addNewPage() {
+    if (pagesLocked()) return;
+    const added = addPage(pages, null);
+    changePages(added.pages, added.id);
+    startRename(added.id);
+  }
+
+  let pendingDeletePageId: string | null = null;
+
+  /** Deleting a page with nothing in it needs no confirmation. */
+  function requestDeletePage(id: string) {
+    closePageMenu();
+    const page = pages[pageIndex(pages, id)];
+    if (!page || pages.length <= 1 || pagesLocked()) return;
+    if (page.text.trim() === '') {
+      removePage(id);
+    } else {
+      pendingDeletePageId = id;
+    }
+  }
+
+  function removePage(id: string) {
+    const result = deletePage(pages, id, activePageId);
+    changePages(result.pages, result.activeId);
+  }
+
+  function confirmDeletePage() {
+    const id = pendingDeletePageId;
+    pendingDeletePageId = null;
+    if (id && pageIndex(pages, id) !== -1) removePage(id);
+  }
+
+  function shiftPage(id: string, delta: number) {
+    closePageMenu();
+    const at = pageIndex(pages, id);
+    if (at === -1) return;
+    changePages(movePage(pages, id, at + delta));
+  }
+
+  // The page context menu: one menu open at a time across the app.
+  let pageMenu: { id: string; x: number; y: number } | null = null;
+
+  function openPageMenu(event: MouseEvent, id: string) {
+    event.preventDefault();
+    if (pagesLocked()) return;
+    pageMenu = { id, x: event.clientX, y: event.clientY };
+    claimMenu(closePageMenu);
+  }
+
+  function closePageMenu() {
+    pageMenu = null;
+    releaseMenu(closePageMenu);
+  }
+
+  function handleWindowKeydown(event: KeyboardEvent) {
+    if (pageMenu && event.key === 'Escape') {
+      event.preventDefault();
+      event.stopPropagation();
+      closePageMenu();
+    }
+  }
+
+  // Dragging a page along the strip reorders it; the marker shows which side
+  // of the page under the cursor it would land on.
+  let draggedPageId: string | null = null;
+  let dropMarker: { id: string; after: boolean } | null = null;
+
+  function handlePageDragStart(event: DragEvent, id: string) {
+    if (pagesLocked() || renamingPageId) {
+      event.preventDefault();
+      return;
+    }
+    draggedPageId = id;
+    if (event.dataTransfer) {
+      event.dataTransfer.effectAllowed = 'move';
+      // A type of its own: as text/plain, dropping the page into the note
+      // would type its ID there.
+      event.dataTransfer.setData('application/x-asmgr-note-page', id);
+    }
+  }
+
+  function handlePageDragOver(event: DragEvent, id: string) {
+    if (!draggedPageId) return;
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+    const box = (event.currentTarget as HTMLElement).getBoundingClientRect();
+    dropMarker = { id, after: event.clientX > box.left + box.width / 2 };
+  }
+
+  function handlePageDragLeave(event: DragEvent) {
+    // dragleave fires on entering a child of the page too; only leaving the
+    // page itself clears the marker.
+    const tab = event.currentTarget as HTMLElement;
+    if (event.relatedTarget instanceof Node && tab.contains(event.relatedTarget)) return;
+    dropMarker = null;
+  }
+
+  function handlePageDrop(event: DragEvent, id: string) {
+    event.preventDefault();
+    const dragged = draggedPageId;
+    const after = dropMarker?.id === id ? dropMarker.after : false;
+    handlePageDragEnd();
+    if (!dragged || dragged === id) return;
+    changePages(movePage(pages, dragged, dropIndex(pages, dragged, id, after)));
+  }
+
+  function handlePageDragEnd() {
+    draggedPageId = null;
+    dropMarker = null;
+  }
+
+  function handlePageTabKeydown(event: KeyboardEvent, id: string) {
+    if (handlePageStepKey(event)) return;
+    if (event.key === 'F2') {
+      event.preventDefault();
+      startRename(id);
+    } else if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+      // Arrow keys move along the strip, as in any row of tabs.
+      event.preventDefault();
+      const next = stepPage(pages, id, event.key === 'ArrowRight' ? 1 : -1);
+      selectPage(next);
+      void tick().then(() => (pageStripEl?.querySelector(`[data-page-id="${CSS.escape(next)}"]`) as HTMLElement | null)?.focus());
+    }
+  }
 </script>
+
+<svelte:window on:click={() => { if (pageMenu) closePageMenu(); }} on:keydown={handleWindowKeydown} />
 
 <div class="notes-container">
   <div class="notes-header">
@@ -688,7 +1039,7 @@
     <div class="header-actions">
       {#if saving}
         <span class="save-indicator">{$t('notes.saving')}</span>
-      {:else if notes !== lastSaved}
+      {:else if pagesKey(pages) !== pagesKey(savedPages)}
         <span class="save-indicator unsaved">{$t('notes.unsaved')}</span>
       {/if}
       <!-- Ctrl+F opens the same bar; the button is here for the people who
@@ -720,6 +1071,58 @@
         </svg>
       </button>
     </div>
+  </div>
+  <!-- The note's pages. Click to open one, double-click (or F2) to rename,
+       right-click for the rest; drag to reorder. -->
+  <div class="page-strip" role="tablist" aria-label={$t('notes.pages')} bind:this={pageStripEl}>
+    {#each pages as page, i (page.id)}
+      {#if renamingPageId === page.id}
+        <input
+          class="page-title-input"
+          type="text"
+          maxlength="200"
+          bind:this={renameInputEl}
+          bind:value={renameValue}
+          on:keydown={handleRenameKeydown}
+          on:blur={commitRename}
+          placeholder={pageLabel('', i, pages.length, $t)}
+          aria-label={$t('notes.pageTitle')}
+        />
+      {:else}
+        <button
+          type="button"
+          role="tab"
+          class="page-tab"
+          class:active={page.id === activePageId}
+          class:drop-before={dropMarker?.id === page.id && !dropMarker.after}
+          class:drop-after={dropMarker?.id === page.id && dropMarker.after}
+          class:untitled={!page.title}
+          aria-selected={page.id === activePageId}
+          tabindex={page.id === activePageId ? 0 : -1}
+          data-page-id={page.id}
+          draggable={!loadingNotes && !loadError}
+          disabled={loadingNotes || !!loadError}
+          title="{pageLabel(page.title, i, pages.length, $t)} — {$t('notes.pageHint')}"
+          on:click={() => selectPage(page.id)}
+          on:dblclick={() => startRename(page.id)}
+          on:contextmenu={(e) => openPageMenu(e, page.id)}
+          on:keydown={(e) => handlePageTabKeydown(e, page.id)}
+          on:dragstart={(e) => handlePageDragStart(e, page.id)}
+          on:dragover={(e) => handlePageDragOver(e, page.id)}
+          on:dragleave={handlePageDragLeave}
+          on:drop={(e) => handlePageDrop(e, page.id)}
+          on:dragend={handlePageDragEnd}
+        >{pageLabel(page.title, i, pages.length, $t)}</button>
+      {/if}
+    {/each}
+    <button
+      type="button"
+      class="page-add"
+      on:click={addNewPage}
+      disabled={loadingNotes || !!loadError}
+      title={$t('notes.addPage')}
+      aria-label={$t('notes.addPage')}
+    >+</button>
   </div>
   {#if showFind}
     <div class="find-bar">
@@ -775,6 +1178,44 @@
   </div>
 </div>
 
+{#if pageMenu}
+  {@const menuPageId = pageMenu.id}
+  {@const menuAt = pageIndex(pages, pageMenu.id)}
+  <!-- At body level, like every context menu: inside the project tasks
+       window a fixed menu would be placed against the dialog. The click
+       handler only keeps a click inside from closing it; Escape closes it
+       from the keyboard. -->
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <div
+    class="page-menu"
+    role="menu"
+    tabindex="-1"
+    use:portal
+    use:menuPosition={{ x: pageMenu.x, y: pageMenu.y }}
+    on:click|stopPropagation
+  >
+    <button role="menuitem" on:click={() => startRename(menuPageId)}>{$t('notes.renamePage')}</button>
+    <button role="menuitem" disabled={menuAt <= 0} on:click={() => shiftPage(menuPageId, -1)}>{$t('notes.movePageLeft')}</button>
+    <button role="menuitem" disabled={menuAt === -1 || menuAt >= pages.length - 1} on:click={() => shiftPage(menuPageId, 1)}>{$t('notes.movePageRight')}</button>
+    <div class="menu-divider"></div>
+    <button role="menuitem" class="danger" disabled={pages.length <= 1} on:click={() => requestDeletePage(menuPageId)}>{$t('notes.deletePage')}</button>
+  </div>
+{/if}
+
+{#if pendingDeletePageId}
+  {@const deleteAt = pageIndex(pages, pendingDeletePageId)}
+  <ConfirmDialog
+    show={true}
+    variant="danger"
+    title={$t('notes.deletePageTitle')}
+    message={$t('notes.deletePageMessage', { title: pageLabel(pages[deleteAt]?.title ?? '', deleteAt, pages.length, $t) })}
+    confirmText={$t('notes.deletePage')}
+    cancelText={$t('common.cancel')}
+    on:confirm={confirmDeletePage}
+    on:cancel={() => (pendingDeletePageId = null)}
+  />
+{/if}
+
 {#if pendingDiscard}
   <ConfirmDialog
     show={true}
@@ -789,6 +1230,130 @@
 {/if}
 
 <style>
+  /* The note's pages, as a row of small tabs under the header. */
+  .page-strip {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 4px 12px 0;
+    overflow-x: auto;
+    scrollbar-width: thin;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    background: rgba(0, 0, 0, 0.15);
+  }
+  .page-tab,
+  .page-title-input {
+    flex-shrink: 0;
+    max-width: 220px;
+    padding: 5px 12px;
+    font-size: 12px;
+    border: 1px solid transparent;
+    border-bottom: none;
+    border-radius: 6px 6px 0 0;
+  }
+  .page-tab {
+    position: relative;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    background: transparent;
+    color: #9ca3af;
+    cursor: pointer;
+  }
+  .page-tab.untitled {
+    font-style: italic;
+  }
+  .page-tab:hover:not(:disabled) {
+    color: #e4e4e7;
+    background: rgba(255, 255, 255, 0.04);
+  }
+  .page-tab.active {
+    color: var(--accent-pale, #e4e4e7);
+    background: rgba(var(--accent-rgb), 0.16);
+    border-color: rgba(var(--accent-rgb), 0.3);
+  }
+  .page-tab:disabled {
+    cursor: default;
+    opacity: 0.6;
+  }
+  .page-tab:focus-visible {
+    outline: 1px solid rgba(var(--accent-rgb), 0.6);
+    outline-offset: -1px;
+  }
+  /* Where a dragged page would land: a line on the near side. */
+  .page-tab.drop-before {
+    box-shadow: inset 2px 0 0 var(--accent);
+  }
+  .page-tab.drop-after {
+    box-shadow: inset -2px 0 0 var(--accent);
+  }
+  .page-title-input {
+    width: 160px;
+    background: rgba(0, 0, 0, 0.35);
+    border-color: rgba(var(--accent-rgb), 0.5);
+    color: #e5e7eb;
+    font-family: inherit;
+    outline: none;
+  }
+  .page-add {
+    flex-shrink: 0;
+    width: 24px;
+    height: 24px;
+    margin-left: 4px;
+    border: none;
+    border-radius: 5px;
+    background: transparent;
+    color: #6b7280;
+    font-size: 16px;
+    line-height: 1;
+    cursor: pointer;
+  }
+  .page-add:hover:not(:disabled) {
+    color: #e4e4e7;
+    background: rgba(255, 255, 255, 0.06);
+  }
+  .page-add:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+
+  .page-menu {
+    position: fixed;
+    background: var(--bg-raised);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    padding: 6px 0;
+    min-width: 160px;
+    z-index: 1000;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+  }
+  .page-menu button {
+    display: block;
+    width: 100%;
+    background: transparent;
+    border: none;
+    color: #d1d5db;
+    padding: 8px 16px;
+    font-size: 13px;
+    text-align: left;
+    cursor: pointer;
+  }
+  .page-menu button:hover:not(:disabled) {
+    background: rgba(var(--accent-rgb), 0.1);
+  }
+  .page-menu button:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+  .page-menu button.danger {
+    color: #ef4444;
+  }
+  .menu-divider {
+    height: 1px;
+    background: rgba(255, 255, 255, 0.1);
+    margin: 4px 0;
+  }
+
   /* Two states of one choice, drawn as one control so it reads as "which
      note" rather than as two unrelated buttons. */
   .scope-switch {

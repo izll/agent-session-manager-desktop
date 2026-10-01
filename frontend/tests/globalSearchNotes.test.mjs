@@ -80,7 +80,12 @@ test('the notes view takes the scope and query from the search', () => {
   assert.match(body, /scope = jump\.scope;/);
   assert.doesNotMatch(body, /setScope|localStorage/, 'a search result overwrote the remembered scope');
   assert.match(body, /findQuery = jump\.query;/);
-  assert.match(notes, /function revealJumpMatch\(\) \{\s*if \(matches\.length\) \{\s*goToMatch\(0\);/);
+  assert.match(body, /jumpPageId = jump\.pageId;/, 'the page the match is on is not taken from the search');
+  assert.match(notes, /function revealJumpMatch\(\) \{\s*if \(!showFind\) return;\s*if \(matches\.length\) \{\s*goToMatch\(0\);/);
+  // The page is opened before the match is looked for: find searches the
+  // open page only.
+  assert.match(notes, /if \(jumpPageId\) selectPage\(jumpPageId\);[\s\S]{0,80}void tick\(\)\.then\(revealJumpMatch\)/,
+    'the match is revealed without first opening its page');
 });
 
 test('the note result strings are translated everywhere', () => {

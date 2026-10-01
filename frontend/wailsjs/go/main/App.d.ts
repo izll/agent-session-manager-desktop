@@ -183,7 +183,7 @@ export function GetProjectActivityStatistics(arg1:string,arg2:number):Promise<ma
 
 export function GetProjectGitSummaries(arg1:string):Promise<Array<main.ProjectGitSummary>>;
 
-export function GetProjectNotes():Promise<string>;
+export function GetProjectNotePages():Promise<Array<session.NotePage>>;
 
 export function GetProjectSessions(arg1:string):Promise<Array<main.SessionInfo>>;
 
@@ -217,7 +217,7 @@ export function GetSidebarUpdates():Promise<main.SidebarUpdate>;
 
 export function GetStatusLines():Promise<Record<string, string>>;
 
-export function GetTabNotes(arg1:string,arg2:number):Promise<string>;
+export function GetTabNotePages(arg1:string,arg2:number):Promise<Array<session.NotePage>>;
 
 export function GetTabOrder(arg1:string):Promise<Array<number>>;
 
@@ -423,7 +423,7 @@ export function SetGroupColor(arg1:string,arg2:string,arg3:string,arg4:boolean,a
 
 export function SetLastWindowIndex(arg1:string,arg2:number,arg3:string):Promise<void>;
 
-export function SetProjectNotes(arg1:string,arg2:string):Promise<void>;
+export function SetProjectNotePages(arg1:Array<session.NotePage>,arg2:string):Promise<void>;
 
 export function SetQuickJump(arg1:Array<session.QuickJumpEntry>,arg2:string):Promise<void>;
 
@@ -431,13 +431,11 @@ export function SetQuickJumpLabel(arg1:string,arg2:number,arg3:string,arg4:strin
 
 export function SetSessionColor(arg1:string,arg2:string,arg3:string,arg4:boolean,arg5:string):Promise<void>;
 
-export function SetSessionNotes(arg1:string,arg2:string,arg3:string):Promise<void>;
-
 export function SetTabColor(arg1:string,arg2:number,arg3:string,arg4:string,arg5:string):Promise<void>;
 
 export function SetTabFontSize(arg1:string,arg2:number,arg3:number,arg4:string):Promise<void>;
 
-export function SetTabNotes(arg1:string,arg2:number,arg3:string,arg4:string):Promise<void>;
+export function SetTabNotePages(arg1:string,arg2:number,arg3:Array<session.NotePage>,arg4:string):Promise<void>;
 
 export function SetTabStatusBar(arg1:string,arg2:number,arg3:number,arg4:string):Promise<void>;
 

@@ -110,8 +110,8 @@ test('a move reloads both lists in place rather than resetting open panels', () 
 
 test('the notes view has a project note, saved in the default project too', () => {
   assert.match(notes, /export let project = false;/);
-  assert.match(notes, /isProject \? await App\.GetProjectNotes\(\) : await App\.GetTabNotes\(sessionId, windowIdx\)/);
-  assert.match(notes, /if \(isProject\) await App\.SetProjectNotes\(snapshot, projectId\);/);
+  assert.match(notes, /isProject \? await App\.GetProjectNotePages\(\) : await App\.GetTabNotePages\(sessionId, windowIdx\)/);
+  assert.match(notes, /if \(isProject\) await App\.SetProjectNotePages\(snapshot, projectId\);/);
   // The default project's ID is "": testing it for truth dropped every save.
   const save = notes.match(/async function saveNow[\s\S]*?\n  \}/)?.[0] ?? '';
   assert.doesNotMatch(save, /!projectId/);

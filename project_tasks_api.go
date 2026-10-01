@@ -141,18 +141,22 @@ func (a *App) SendProjectTaskToAgent(taskID, targetSessionID, tabID, expectedPro
 	return inst.SendTaskToAgent(prompt, tabID)
 }
 
-// GetProjectNotes returns the active project's own note.
-func (a *App) GetProjectNotes() (string, error) {
+// GetProjectNotePages returns the pages of the active project's own note.
+func (a *App) GetProjectNotePages() ([]session.NotePage, error) {
 	pages, err := a.storage.ProjectNotePages()
-	return session.NotePagesText(pages), err
+	if err != nil {
+		return nil, err
+	}
+	return nonNilNotePages(pages), nil
 }
 
-// SetProjectNotes replaces the active project's own note.
-func (a *App) SetProjectNotes(notes, expectedProjectID string) error {
+// SetProjectNotePages replaces the active project's own note, all of its
+// pages at once.
+func (a *App) SetProjectNotePages(pages []session.NotePage, expectedProjectID string) error {
 	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return err
 	}
 	defer done()
-	return a.storage.SetProjectNotePages([]session.NotePage{{ID: session.LegacyNotePageID, Text: notes}})
+	return a.storage.SetProjectNotePages(pages)
 }

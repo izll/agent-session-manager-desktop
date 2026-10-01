@@ -358,8 +358,8 @@ export function GetProjectGitSummaries(arg1) {
   return window['go']['main']['App']['GetProjectGitSummaries'](arg1);
 }
 
-export function GetProjectNotes() {
-  return window['go']['main']['App']['GetProjectNotes']();
+export function GetProjectNotePages() {
+  return window['go']['main']['App']['GetProjectNotePages']();
 }
 
 export function GetProjectSessions(arg1) {
@@ -426,8 +426,8 @@ export function GetStatusLines() {
   return window['go']['main']['App']['GetStatusLines']();
 }
 
-export function GetTabNotes(arg1, arg2) {
-  return window['go']['main']['App']['GetTabNotes'](arg1, arg2);
+export function GetTabNotePages(arg1, arg2) {
+  return window['go']['main']['App']['GetTabNotePages'](arg1, arg2);
 }
 
 export function GetTabOrder(arg1) {
@@ -838,8 +838,8 @@ export function SetLastWindowIndex(arg1, arg2, arg3) {
   return window['go']['main']['App']['SetLastWindowIndex'](arg1, arg2, arg3);
 }
 
-export function SetProjectNotes(arg1, arg2) {
-  return window['go']['main']['App']['SetProjectNotes'](arg1, arg2);
+export function SetProjectNotePages(arg1, arg2) {
+  return window['go']['main']['App']['SetProjectNotePages'](arg1, arg2);
 }
 
 export function SetQuickJump(arg1, arg2) {
@@ -854,10 +854,6 @@ export function SetSessionColor(arg1, arg2, arg3, arg4, arg5) {
   return window['go']['main']['App']['SetSessionColor'](arg1, arg2, arg3, arg4, arg5);
 }
 
-export function SetSessionNotes(arg1, arg2, arg3) {
-  return window['go']['main']['App']['SetSessionNotes'](arg1, arg2, arg3);
-}
-
 export function SetTabColor(arg1, arg2, arg3, arg4, arg5) {
   return window['go']['main']['App']['SetTabColor'](arg1, arg2, arg3, arg4, arg5);
 }
@@ -866,8 +862,8 @@ export function SetTabFontSize(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['SetTabFontSize'](arg1, arg2, arg3, arg4);
 }
 
-export function SetTabNotes(arg1, arg2, arg3, arg4) {
-  return window['go']['main']['App']['SetTabNotes'](arg1, arg2, arg3, arg4);
+export function SetTabNotePages(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['SetTabNotePages'](arg1, arg2, arg3, arg4);
 }
 
 export function SetTabStatusBar(arg1, arg2, arg3, arg4) {

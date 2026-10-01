@@ -122,26 +122,26 @@ assert.match(browser, /if \(!file\.root\)/, 'an edit snapshot without a canonica
 // keystroke made the textarea dirty during that flush. Per-target queues keep
 // overlapping writes in order.
 assert.match(notes, /await flushPendingSave\(\)/);
-assert.match(notes, /if \(saveTimeout \|\| notes !== lastSaved\) return/);
+assert.match(notes, /if \(saveTimeout \|\| openNoteChanged\(\)\) return/);
 assert.match(notes, /const saveQueues = new Map/);
 assert.match(notes, /const previous = saveQueues\.get\(key\) \?\? Promise\.resolve\(\)/);
 assert.match(
   notes,
-  /const pendingSave = saveQueues\.get\(targetKey\);[\s\S]*?if \(pendingSave\) await pendingSave;[\s\S]*?App\.GetTabNotes/,
+  /const pendingSave = saveQueues\.get\(targetKey\);[\s\S]*?if \(pendingSave\) await pendingSave;[\s\S]*?App\.GetTabNotePages/,
   'returning to a tab must wait for its previous queued save before reading',
 );
 assert.match(notes, /loadingNotes = true/);
 assert.match(notes, /<textarea[\s\S]*?disabled=\{loadingNotes \|\| !!loadError\}/, 'an incoming or failed load must not expose an editable unknown document');
 assert.match(notes, /if \(loadingNotes \|\| loadError\) return;[\s\S]*?recordHistory\(\)/, 'a synthetic input during loading must not queue a cross-tab save');
 assert.match(notes, /const draftsByTarget = new Map/);
-assert.match(notes, /latestDraft\.saveError \|\| latestDraft\.text !== latestDraft\.saved/,
+assert.match(notes, /if \(latestDraft && draftIsDirty\(latestDraft\)\)/,
   'a failed or dirty per-target draft must win over a stale backend read');
 assert.match(notes, /registerUnsavedGuard\(\{[\s\S]*?isDirty: hasUnsavedDrafts/,
   'failed drafts hidden on another tab must participate in the global destructive-action guard');
 assert.match(notes, /\[\.\.\.draftsByTarget\.values\(\)\]\.some/);
 assert.match(notes, /function noteKey\(projectId: string, sessionId: string, windowIdx: number\)/,
   'same-id tabs in different projects must not share Notes drafts or save queues');
-assert.match(notes, /App\.SetTabNotes\(sessionId, windowIdx, snapshot, projectId\)/,
+assert.match(notes, /App\.SetTabNotePages\(sessionId, windowIdx, snapshot, projectId\)/,
   'a delayed Notes save must fail closed against its captured project');
 
 // Once MCP loading falls back, mutations use the provider that actually

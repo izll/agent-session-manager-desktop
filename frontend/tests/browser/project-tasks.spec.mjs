@@ -116,7 +116,29 @@ test('the project note loads and saves, in the default project too', async ({ pa
   // Autosaved — with the default project's own ID, which is the empty string.
   await expect.poll(() => page.evaluate(() => window.projectTasksFixture.notes()))
     .toBe('Kickoff on Monday\nRelease on Friday');
-  const saved = (await calls(page)).filter((call) => call[0] === 'SetProjectNotes').at(-1);
-  expect(saved).toEqual(['SetProjectNotes', 'Kickoff on Monday\nRelease on Friday', '']);
+  const saved = (await calls(page)).filter((call) => call[0] === 'SetProjectNotePages').at(-1);
+  expect(saved).toEqual(['SetProjectNotePages', [{ id: 'page-1', title: '', text: 'Kickoff on Monday\nRelease on Friday' }], '']);
   await expect(dialog(page).locator('.save-indicator.unsaved')).toHaveCount(0);
+});
+
+test('the project note has pages of its own', async ({ page }) => {
+  await gotoFixture(page);
+  await openWindow(page);
+  await dialog(page).getByRole('tab', { name: 'Notes' }).click();
+  const note = dialog(page).locator('textarea.notes-textarea');
+  await expect(note).toHaveValue('Kickoff on Monday');
+
+  await dialog(page).getByRole('button', { name: 'New page' }).click();
+  const title = dialog(page).locator('.page-title-input');
+  await expect(title).toBeFocused();
+  await title.fill('Budget');
+  await title.press('Enter');
+  await expect(note).toBeFocused();
+  await expect(note).toHaveValue('');
+  await note.fill('Within limits');
+
+  await expect.poll(() => page.evaluate(() => window.projectTasksFixture.notePages().map((p) => [p.title, p.text])))
+    .toEqual([['', 'Kickoff on Monday'], ['Budget', 'Within limits']]);
+  await dialog(page).locator('.page-tab', { hasText: 'Note 1' }).click();
+  await expect(note).toHaveValue('Kickoff on Monday');
 });

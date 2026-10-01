@@ -26,7 +26,9 @@ const lists = new Map<string, FixtureTask[]>([
   ]],
   ['session-a', [task('s1', 'Fix the login', { sessionId: 'session-a' })]],
 ]);
-let projectNotes = 'Kickoff on Monday';
+type Page = { id: string; title: string; text: string };
+// Stored as the backend returns it: a note written before pages is one page.
+let projectNotes: Page[] = [{ id: 'page-1', title: '', text: 'Kickoff on Monday' }];
 const calls: unknown[][] = [];
 const clone = <T,>(value: T): T => JSON.parse(JSON.stringify(value));
 const list = (scope: string) => {
@@ -71,10 +73,10 @@ const backend = new Proxy({
     return clone(moved);
   },
   SendProjectTaskToAgent: async (...args: unknown[]) => { calls.push(['SendProjectTaskToAgent', ...args]); },
-  GetProjectNotes: async () => projectNotes,
-  SetProjectNotes: async (text: string, projectId: string) => {
-    calls.push(['SetProjectNotes', text, projectId]);
-    projectNotes = text;
+  GetProjectNotePages: async () => clone(projectNotes),
+  SetProjectNotePages: async (pages: Page[], projectId: string) => {
+    calls.push(['SetProjectNotePages', clone(pages), projectId]);
+    projectNotes = clone(pages);
   },
   GetAllTasks: async () => [
     ...list(PROJECT).map((item) => ({ ...clone(item), projectId: '', projectName: '', projectPath: '', projectTask: true, overdue: false })),
@@ -101,7 +103,8 @@ selectedSessionId.set('session-a');
 (window as any).projectTasksFixture = {
   calls: () => calls,
   list: (scope: string) => clone(list(scope)),
-  notes: () => projectNotes,
+  notes: () => projectNotes.map((p) => p.text).join('\n---\n'),
+  notePages: () => clone(projectNotes),
 };
 
 const target = document.getElementById('fixture');
