@@ -32,7 +32,8 @@ jobs:
         working-directory: frontend
       - run: npm test
         working-directory: frontend
-      - run: npx playwright install --with-deps chromium
+      # WebKit for the @webkit-tagged subset (see playwright.config.mjs).
+      - run: npx playwright install --with-deps chromium webkit
         working-directory: frontend
       - run: npm run test:browser
         working-directory: frontend

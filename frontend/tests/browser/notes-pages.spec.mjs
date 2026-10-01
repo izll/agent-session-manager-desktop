@@ -2,6 +2,11 @@ import { test, expect } from '@playwright/test';
 
 // A note is a list of titled pages. These run the real Notes view against a
 // stand-in backend (notes-fixture.ts) that keeps each note's pages.
+//
+// Run on WebKit as well as Chromium (see playwright.config.mjs): the app's
+// webview is WebKit on Linux and macOS, and the page strip leans on what
+// engines differ in — HTML5 drag and drop, and keys with Alt.
+const WEBKIT = { tag: '@webkit' };
 
 async function gotoNotes(page, sessionId) {
   await page.goto('/tests/browser/notes-fixture.html');
@@ -13,7 +18,7 @@ async function gotoNotes(page, sessionId) {
 const pageTab = (page, name) => page.locator('.page-tab', { hasText: name });
 const storedPages = (page, id) => page.evaluate((sid) => window.notesFixture.storedPages(sid), id);
 
-test('a text-only note opens as one untitled page', async ({ page }) => {
+test('a text-only note opens as one untitled page', WEBKIT, async ({ page }) => {
   await gotoNotes(page, 'notes-b');
   await expect(page.locator('.notes-textarea')).toHaveValue('saved B');
   await expect(page.locator('.page-tab')).toHaveCount(1);
@@ -21,7 +26,7 @@ test('a text-only note opens as one untitled page', async ({ page }) => {
   await expect(page.locator('.page-tab')).toHaveAttribute('aria-selected', 'true');
 });
 
-test('a new page is added with a title and saved with the rest of the note', async ({ page }) => {
+test('a new page is added with a title and saved with the rest of the note', WEBKIT, async ({ page }) => {
   await gotoNotes(page, 'notes-b');
   const textarea = page.locator('.notes-textarea');
   await expect(textarea).toHaveValue('saved B');
@@ -43,7 +48,7 @@ test('a new page is added with a title and saved with the rest of the note', asy
   await expect(page.locator('.save-indicator.unsaved')).toHaveCount(0);
 });
 
-test('switching pages shows each page and loses no edit', async ({ page }) => {
+test('switching pages shows each page and loses no edit', WEBKIT, async ({ page }) => {
   await gotoNotes(page, 'notes-pages');
   const textarea = page.locator('.notes-textarea');
   await expect(textarea).toHaveValue('alpha and beta');
@@ -74,7 +79,7 @@ test('switching pages shows each page and loses no edit', async ({ page }) => {
 
 // The page keys are shortcuts like any other: rebound in the settings, the
 // new keys step and the old ones do nothing, and the tooltip names the new.
-test('the page keys follow a rebinding', async ({ page }) => {
+test('the page keys follow a rebinding', WEBKIT, async ({ page }) => {
   await gotoNotes(page, 'notes-pages');
   const textarea = page.locator('.notes-textarea');
   await expect(textarea).toHaveValue('alpha and beta');
@@ -96,7 +101,7 @@ test('the page keys follow a rebinding', async ({ page }) => {
 
 // Each page keeps its undo history across page switches; the histories go
 // with the note, so another note and back starts them over.
-test('undo reaches edits made before switching pages', async ({ page }) => {
+test('undo reaches edits made before switching pages', WEBKIT, async ({ page }) => {
   await gotoNotes(page, 'notes-pages');
   const textarea = page.locator('.notes-textarea');
   await expect(textarea).toHaveValue('alpha and beta');
@@ -140,7 +145,7 @@ test('undo reaches edits made before switching pages', async ({ page }) => {
   await expect(textarea).toHaveValue('plan edited');
 });
 
-test('the open page is remembered across a restart', async ({ page }) => {
+test('the open page is remembered across a restart', WEBKIT, async ({ page }) => {
   await gotoNotes(page, 'notes-pages');
   await pageTab(page, 'Risks').click();
   await expect(page.locator('.notes-textarea')).toHaveValue(/hidden needle/);
@@ -152,7 +157,7 @@ test('the open page is remembered across a restart', async ({ page }) => {
   await expect(pageTab(page, 'Risks')).toHaveAttribute('aria-selected', 'true');
 });
 
-test('a page is renamed by double-click and from its menu', async ({ page }) => {
+test('a page is renamed by double-click and from its menu', WEBKIT, async ({ page }) => {
   await gotoNotes(page, 'notes-pages');
   await expect(page.locator('.notes-textarea')).toHaveValue('alpha and beta');
 
@@ -176,7 +181,7 @@ test('a page is renamed by double-click and from its menu', async ({ page }) => 
     .toEqual([['Roadmap', 'alpha and beta'], ['Risks', 'first line\nthe hidden needle is here']]);
 });
 
-test('deleting a page with text asks first; an empty page goes at once', async ({ page }) => {
+test('deleting a page with text asks first; an empty page goes at once', WEBKIT, async ({ page }) => {
   await gotoNotes(page, 'notes-pages');
   const textarea = page.locator('.notes-textarea');
   await expect(textarea).toHaveValue('alpha and beta');
@@ -213,7 +218,7 @@ test('deleting a page with text asks first; an empty page goes at once', async (
   await expect(page.locator('.page-menu')).toHaveCount(0);
 });
 
-test('pages are reordered from the menu and by dragging', async ({ page }) => {
+test('pages are reordered from the menu and by dragging', WEBKIT, async ({ page }) => {
   await gotoNotes(page, 'notes-pages');
   await expect(page.locator('.notes-textarea')).toHaveValue('alpha and beta');
   const order = () => page.locator('.page-tab').allTextContents();
@@ -233,7 +238,32 @@ test('pages are reordered from the menu and by dragging', async ({ page }) => {
   await expect(page.locator('.notes-textarea')).toHaveValue('alpha and beta');
 });
 
-test('a search result opens its note on the page of the match', async ({ page }) => {
+// A page tab dragged out of the strip and dropped into the note is not text:
+// nothing is typed, and the pages stay as they were.
+test('a page dropped onto the note text inserts nothing', WEBKIT, async ({ page }) => {
+  await gotoNotes(page, 'notes-pages');
+  const textarea = page.locator('.notes-textarea');
+  await expect(textarea).toHaveValue('alpha and beta');
+  const order = () => page.locator('.page-tab').allTextContents();
+
+  await pageTab(page, 'Risks').dragTo(textarea, { targetPosition: { x: 40, y: 10 } });
+  // The marker is cleared and the strip is usable again: a drag that ended
+  // anywhere leaves nothing behind.
+  await expect(page.locator('.page-tab.drop-before, .page-tab.drop-after')).toHaveCount(0);
+  await expect(textarea).toHaveValue('alpha and beta');
+  await expect.poll(order).toEqual(['Plan', 'Risks']);
+  await expect(pageTab(page, 'Plan')).toHaveAttribute('aria-selected', 'true');
+  await page.waitForTimeout(700);
+  expect(await storedPages(page, 'notes-pages')).toEqual([
+    ['Plan', 'alpha and beta'], ['Risks', 'first line\nthe hidden needle is here'],
+  ]);
+
+  // And dragging along the strip still works afterwards.
+  await pageTab(page, 'Risks').dragTo(pageTab(page, 'Plan'), { targetPosition: { x: 2, y: 5 } });
+  await expect.poll(order).toEqual(['Risks', 'Plan']);
+});
+
+test('a search result opens its note on the page of the match', WEBKIT, async ({ page }) => {
   await gotoNotes(page, 'notes-pages');
   const textarea = page.locator('.notes-textarea');
   await expect(textarea).toHaveValue('alpha and beta');

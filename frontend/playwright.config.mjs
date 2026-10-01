@@ -21,5 +21,14 @@ export default defineConfig({
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
     },
+    // The app's webview is WebKit (WebKitGTK on Linux, WKWebView on macOS),
+    // so the tests of what engines are known to differ in — drag and drop,
+    // first of all — run there too. Only those tagged @webkit: the suite as a
+    // whole stays on Chromium, and the extra run stays short.
+    {
+      name: 'webkit',
+      use: { ...devices['Desktop Safari'] },
+      grep: /@webkit/,
+    },
   ],
 });
