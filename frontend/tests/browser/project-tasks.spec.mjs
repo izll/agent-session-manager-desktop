@@ -173,3 +173,14 @@ test('a project note found by the global search opens on its page in the project
   // The dashboard's copy behind the window was left alone.
   await expect(page.locator('.fixture-dashboard .find-bar')).toHaveCount(0);
 });
+
+// The project note lives in the project tasks window. Switching to it there
+// hands it the keyboard, as opening the session notes does.
+test('switching to the project note in its window takes the keyboard', async ({ page }) => {
+  await gotoFixture(page);
+  await openWindow(page);
+  await dialog(page).getByRole('tab', { name: 'Notes' }).click();
+  const note = dialog(page).locator('textarea.notes-textarea');
+  await expect(note).toBeEnabled();
+  await expect(note).toBeFocused();
+});

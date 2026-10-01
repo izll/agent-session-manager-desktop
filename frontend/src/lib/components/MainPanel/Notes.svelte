@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy, createEventDispatcher, tick } from 'svelte';
+  import { diffTakesFocusFrom } from '../../utils/diffFocus';
   import { selectedSessionId, selectedWindowIdx, sessions } from '../../stores/sessions';
   import { notePresence } from '../../utils/noteScope';
   import { get } from 'svelte/store';
@@ -670,8 +671,27 @@
       if (saveTimeout || openNoteChanged()) return;
       await loadNotes(true);
     } finally {
-      if (generation === activationGeneration) activating = false;
+      if (generation === activationGeneration) {
+        activating = false;
+        void focusNotesOnShow(generation);
+      }
     }
+  }
+
+  /**
+   * Opening the notes hands them the keyboard, once the note is loaded — the
+   * textarea is disabled until then. The focus stayed where it was, mostly in
+   * the terminal, so the page keys and undo did nothing until a click. Taken
+   * only from the terminal, from nowhere, or from inside the notes' own
+   * window: never from a field being typed in, such as the find bar a search
+   * jump opens, or from another dialog.
+   */
+  async function focusNotesOnShow(generation: number) {
+    await tick();
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    if (generation !== activationGeneration || !active || !textareaEl || textareaEl.disabled) return;
+    if (!diffTakesFocusFrom(document.activeElement, textareaEl)) return;
+    textareaEl.focus({ preventScroll: true });
   }
 
   /**

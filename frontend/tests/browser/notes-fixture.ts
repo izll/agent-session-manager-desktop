@@ -1,3 +1,4 @@
+import NotesFocusWrapper from './notes-focus-wrapper.svelte';
 import { mount } from 'svelte';
 import Notes from '../../src/lib/components/MainPanel/Notes.svelte';
 import { selectedSessionId, selectedWindowIdx } from '../../src/lib/stores/sessions';
@@ -139,7 +140,13 @@ selectedSessionId.set('notes-a');
 selectedWindowIdx.set(0);
 const target = document.getElementById('fixture');
 if (!target) throw new Error('fixture target is missing');
-mount(Notes, { target, props: { active: true } });
+// ?focus=1: the notes start hidden beside a terminal, and show() opens them.
+if (new URLSearchParams(location.search).get('focus') === '1') {
+  const wrapper = mount(NotesFocusWrapper, { target }) as { show(): void };
+  (window as any).notesFocus = { show: () => wrapper.show() };
+} else {
+  mount(Notes, { target, props: { active: true } });
+}
 // Playwright can start eight cold fixture graphs at once. Expose component
 // readiness explicitly instead of using the textarea's appearance as an
 // accidental proxy for Vite having transformed and evaluated this graph.
