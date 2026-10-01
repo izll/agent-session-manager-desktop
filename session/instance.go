@@ -1482,60 +1482,7 @@ func (i *Instance) startWithResume(resumeID string, onlyWindowIdx int) error {
 			time.Sleep(50 * time.Millisecond)
 		}
 
-		// Keep windows alive when their process exits, so a tab whose shell has
-		// been closed shows as dead rather than vanishing.
-		//
-		// Set here AND on every window as it is created, because a window
-		// opened later does not inherit this one.
-		//
-		// Measured on tmux 3.4: setting it session-wide and then opening a
-		// window leaves that window without it, and a shell exiting there takes
-		// the whole window with it — which is what made Ctrl+D close a terminal
-		// tab outright instead of leaving it dead.
-		//
-		// -w is explicit rather than necessary: tmux routes a window option to
-		// the window even without it. Kept because it says which scope is meant,
-		// and a reader should not have to know tmux's routing rules to tell.
-		i.tmuxRun("set-option", "-w", "-t", sessionName, "remain-on-exit", "on")
-
-		// Also on the session, for the windows it will gain later: the global
-		// default above covers the first one, this covers tabs added after the
-		// server-wide value may have been changed by something else.
-		i.tmuxRun("set-option", "-t", sessionName, "history-limit", scrollbackLines)
-		i.tmuxRun("set-option", "-t", sessionName, "mouse", "on")
-
-		// Hide tmux status bar (not needed in GUI, wastes a row)
-		i.tmuxRun("set-option", "-t", sessionName, "status", "off")
-
-		// Use latest client size and aggressive resize for proper terminal following
-		i.tmuxRun("set-option", "-t", sessionName, "window-size", "latest")
-		i.tmuxRun("set-option", "-t", sessionName, "aggressive-resize", "on")
-
-		// xterm-keys used to be set here "for Shift+PageUp/Down support". It was
-		// doing nothing on two counts: tmux removed the option in 3.3 (it is not
-		// in the 3.4 man page, and setting it is accepted in silence), and -t
-		// alongside -g is ignored anyway — the global scope wins. Shift+PageUp
-		// works through the root-table bindings just below, which is what
-		// actually implements it.
-		//
-		// -g here is deliberate and unavoidable: terminal-overrides is a server
-		// option, so this DOES affect other tmux sessions on the same server.
-		// -ga appends rather than replaces, which is what keeps that tolerable.
-		i.tmuxRun("set-option", "-ga", "terminal-overrides", ",xterm*:smcup@:rmcup@")
-
-		// Bind Shift+PageUp/Down for scrolling in copy mode (conditional - only in
-		// asmgr-* sessions). The condition is a native tmux format, not an
-		// `if-shell` pipeline: the Windows multiplexer is psmux and a native install
-		// has neither a `tmux` executable nor grep/POSIX shell syntax.
-		i.tmuxRun(asmgrSessionBinding("root", "S-PageUp", "copy-mode -eu")...)
-		i.tmuxRun(asmgrSessionBinding("root", "S-PageDown", "send-keys PageDown")...)
-		i.tmuxRun(asmgrSessionBinding("copy-mode-vi", "S-PageUp", "send-keys -X page-up")...)
-		i.tmuxRun(asmgrSessionBinding("copy-mode-vi", "S-PageDown", "send-keys -X page-down")...)
-
-		// Bind Ctrl+Y for yolo mode toggle (conditional - only in asmgr-* sessions)
-		// tmux/psmux expands the two formats before invoking the external CLI, so
-		// this command also needs no shell-specific command substitution.
-		i.tmuxRun(asmgrSessionBinding("", "C-y", `run-shell "asmgr yolo \"#{session_name}\" \"#{window_index}\""`)...)
+		i.configureSessionOptions(sessionName)
 
 		// Ctrl+q will be set up with resize in UpdateDetachBinding
 
@@ -1593,6 +1540,70 @@ func (i *Instance) startWithResume(resumeID string, onlyWindowIdx int) error {
 	i.CaptureCodexResumeIDs()
 
 	return nil
+}
+
+// configureSessionOptions applies what every session of ours is run with: dead
+// panes kept, a long scrollback, the mouse, no status bar, sizing that follows
+// the client, and the key bindings scoped to our sessions.
+//
+// Apart from the start because a session can also come into being around a
+// tab moved out of another one (see tab_move.go), and that session has to
+// behave exactly like one that was started.
+func (i *Instance) configureSessionOptions(sessionName string) {
+	// Keep windows alive when their process exits, so a tab whose shell has
+	// been closed shows as dead rather than vanishing.
+	//
+	// Set here AND on every window as it is created, because a window
+	// opened later does not inherit this one.
+	//
+	// Measured on tmux 3.4: setting it session-wide and then opening a
+	// window leaves that window without it, and a shell exiting there takes
+	// the whole window with it — which is what made Ctrl+D close a terminal
+	// tab outright instead of leaving it dead.
+	//
+	// -w is explicit rather than necessary: tmux routes a window option to
+	// the window even without it. Kept because it says which scope is meant,
+	// and a reader should not have to know tmux's routing rules to tell.
+	i.tmuxRun("set-option", "-w", "-t", sessionName, "remain-on-exit", "on")
+
+	// Also on the session, for the windows it will gain later: the global
+	// default above covers the first one, this covers tabs added after the
+	// server-wide value may have been changed by something else.
+	i.tmuxRun("set-option", "-t", sessionName, "history-limit", scrollbackLines)
+	i.tmuxRun("set-option", "-t", sessionName, "mouse", "on")
+
+	// Hide tmux status bar (not needed in GUI, wastes a row)
+	i.tmuxRun("set-option", "-t", sessionName, "status", "off")
+
+	// Use latest client size and aggressive resize for proper terminal following
+	i.tmuxRun("set-option", "-t", sessionName, "window-size", "latest")
+	i.tmuxRun("set-option", "-t", sessionName, "aggressive-resize", "on")
+
+	// xterm-keys used to be set here "for Shift+PageUp/Down support". It was
+	// doing nothing on two counts: tmux removed the option in 3.3 (it is not
+	// in the 3.4 man page, and setting it is accepted in silence), and -t
+	// alongside -g is ignored anyway — the global scope wins. Shift+PageUp
+	// works through the root-table bindings just below, which is what
+	// actually implements it.
+	//
+	// -g here is deliberate and unavoidable: terminal-overrides is a server
+	// option, so this DOES affect other tmux sessions on the same server.
+	// -ga appends rather than replaces, which is what keeps that tolerable.
+	i.tmuxRun("set-option", "-ga", "terminal-overrides", ",xterm*:smcup@:rmcup@")
+
+	// Bind Shift+PageUp/Down for scrolling in copy mode (conditional - only in
+	// asmgr-* sessions). The condition is a native tmux format, not an
+	// `if-shell` pipeline: the Windows multiplexer is psmux and a native install
+	// has neither a `tmux` executable nor grep/POSIX shell syntax.
+	i.tmuxRun(asmgrSessionBinding("root", "S-PageUp", "copy-mode -eu")...)
+	i.tmuxRun(asmgrSessionBinding("root", "S-PageDown", "send-keys PageDown")...)
+	i.tmuxRun(asmgrSessionBinding("copy-mode-vi", "S-PageUp", "send-keys -X page-up")...)
+	i.tmuxRun(asmgrSessionBinding("copy-mode-vi", "S-PageDown", "send-keys -X page-down")...)
+
+	// Bind Ctrl+Y for yolo mode toggle (conditional - only in asmgr-* sessions)
+	// tmux/psmux expands the two formats before invoking the external CLI, so
+	// this command also needs no shell-specific command substitution.
+	i.tmuxRun(asmgrSessionBinding("", "C-y", `run-shell "asmgr yolo \"#{session_name}\" \"#{window_index}\""`)...)
 }
 
 // isMainWindowIndex reports whether windowIdx is the session's own window
