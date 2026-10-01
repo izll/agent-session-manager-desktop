@@ -143,7 +143,8 @@ func (a *App) SendProjectTaskToAgent(taskID, targetSessionID, tabID, expectedPro
 
 // GetProjectNotes returns the active project's own note.
 func (a *App) GetProjectNotes() (string, error) {
-	return a.storage.ProjectNotes()
+	pages, err := a.storage.ProjectNotePages()
+	return session.NotePagesText(pages), err
 }
 
 // SetProjectNotes replaces the active project's own note.
@@ -153,5 +154,5 @@ func (a *App) SetProjectNotes(notes, expectedProjectID string) error {
 		return err
 	}
 	defer done()
-	return a.storage.SetProjectNotes(notes)
+	return a.storage.SetProjectNotePages([]session.NotePage{{ID: session.LegacyNotePageID, Text: notes}})
 }

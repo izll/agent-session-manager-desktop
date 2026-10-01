@@ -79,15 +79,15 @@ type Settings struct {
 	// it's a "hide" flag whose zero value keeps it visible. The resume marker
 	// is the opposite: most sessions continue an earlier conversation, so it
 	// adds noise more than information and is opt-in.
-	HideYoloBadge   bool   `json:"hide_yolo_badge,omitempty"`
-	ShowResumeBadge bool   `json:"show_resume_badge,omitempty"`
+	HideYoloBadge   bool `json:"hide_yolo_badge,omitempty"`
+	ShowResumeBadge bool `json:"show_resume_badge,omitempty"`
 	// HideRemoteBadge hides the marker on tabs that run on a server.
 	//
 	// A "hide" flag, like the YOLO one and for the same reason: where a tab
 	// runs changes what typing into it does and which machine's files it
 	// touches, so it is shown unless the user says otherwise — and the zero
 	// value of a stored setting has to mean "shown".
-	HideRemoteBadge bool   `json:"hide_remote_badge,omitempty"`
+	HideRemoteBadge bool `json:"hide_remote_badge,omitempty"`
 	// ShowUpdateBadge shows the marker for a tab whose agent has an update
 	// waiting in the session list too. Off by default: the list is busy
 	// enough, and the tab bar shows the marker anyway.
@@ -343,6 +343,9 @@ type StorageData struct {
 	// whole, beside the per-session and per-tab notes. Kept in this file so it
 	// is backed up, restored and moved with the project like everything else.
 	Notes string `json:"notes,omitempty"`
+	// NotePages are the pages of Notes, when it has more than one or a
+	// titled one; read and written through ProjectNote.
+	NotePages []NotePage `json:"note_pages,omitempty"`
 }
 
 // DefaultSettings returns the initial settings a brand-new install should have.

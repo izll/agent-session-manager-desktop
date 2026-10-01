@@ -267,11 +267,20 @@ func TestProjectDataDirIsBesideSessionsJSON(t *testing.T) {
 	}
 }
 
+func textPage(text string) []NotePage {
+	return []NotePage{{ID: "p", Text: text}}
+}
+
+func projectNoteText(s *Storage) (string, error) {
+	pages, err := s.ProjectNotePages()
+	return NotePagesText(pages), err
+}
+
 // The project note survives the writes that replace everything else in
 // sessions.json, and stays with its project.
 func TestProjectNotesRoundTripAndStayWithTheirProject(t *testing.T) {
 	s := newTestStorage(t)
-	if err := s.SetProjectNotes("default note"); err != nil {
+	if err := s.SetProjectNotePages(textPage("default note")); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.AddInstance(&Instance{ID: "one", Name: "one", Path: t.TempDir()}); err != nil {
@@ -280,7 +289,7 @@ func TestProjectNotesRoundTripAndStayWithTheirProject(t *testing.T) {
 	if err := s.SaveSettings(&Settings{Language: "hu"}); err != nil {
 		t.Fatal(err)
 	}
-	if got, err := s.ProjectNotes(); err != nil || got != "default note" {
+	if got, err := projectNoteText(s); err != nil || got != "default note" {
 		t.Fatalf("after other writes the note is %q, %v", got, err)
 	}
 
@@ -291,16 +300,16 @@ func TestProjectNotesRoundTripAndStayWithTheirProject(t *testing.T) {
 	if err := s.SetActiveProject(project.ID); err != nil {
 		t.Fatal(err)
 	}
-	if got, _ := s.ProjectNotes(); got != "" {
+	if got, _ := projectNoteText(s); got != "" {
 		t.Errorf("another project sees the default project's note: %q", got)
 	}
-	if err := s.SetProjectNotes("other note"); err != nil {
+	if err := s.SetProjectNotePages(textPage("other note")); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.SetActiveProject(""); err != nil {
 		t.Fatal(err)
 	}
-	if got, _ := s.ProjectNotes(); got != "default note" {
+	if got, _ := projectNoteText(s); got != "default note" {
 		t.Errorf("the default project's note became %q", got)
 	}
 }

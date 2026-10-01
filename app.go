@@ -2457,7 +2457,7 @@ func (a *App) SetSessionNotes(id string, notes string, expectedProjectID string)
 	if err != nil {
 		return err
 	}
-	inst.Notes = notes
+	inst.SessionNote().SetPages([]session.NotePage{{ID: session.LegacyNotePageID, Text: notes}})
 	return a.storage.UpdateInstance(inst)
 }
 
@@ -3018,7 +3018,7 @@ func (a *App) SetTabNotes(sessionID string, windowIdx int, notes, expectedProjec
 	if err != nil {
 		return err
 	}
-	*notesField(inst, windowIdx) = notes
+	noteSlot(inst, windowIdx).SetPages([]session.NotePage{{ID: session.LegacyNotePageID, Text: notes}})
 	return a.storage.UpdateInstance(inst)
 }
 
@@ -3026,22 +3026,22 @@ func (a *App) SetTabNotes(sessionID string, windowIdx int, notes, expectedProjec
 // note rather than a tab's. Negative, so no multiplexer window can have it.
 const SessionNotesWindow = -1
 
-// notesField is where the note for windowIdx is kept: the session's note for
+// noteSlot is where the note for windowIdx is kept: the session's note for
 // SessionNotesWindow, a followed tab's own note, and otherwise the main tab's.
 //
 // The main tab is whatever is not a followed tab. It used to be recognised as
 // index 0, which is only true while tmux's base-index is 0: with base-index 1
 // the main tab's note could not be saved at all ("window not found").
-func notesField(inst *session.Instance, windowIdx int) *string {
+func noteSlot(inst *session.Instance, windowIdx int) session.NoteSlot {
 	if windowIdx == SessionNotesWindow {
-		return &inst.Notes
+		return inst.SessionNote()
 	}
 	for i := range inst.FollowedWindows {
 		if inst.FollowedWindows[i].Index == windowIdx {
-			return &inst.FollowedWindows[i].Notes
+			return inst.FollowedWindows[i].Note()
 		}
 	}
-	return &inst.MainTabNotes
+	return inst.MainTabNote()
 }
 
 // SetTabColor sets the optional text and background colors for a tab.
@@ -3068,7 +3068,7 @@ func (a *App) GetTabNotes(sessionID string, windowIdx int) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return *notesField(inst, windowIdx), nil
+	return session.NotePagesText(noteSlot(inst, windowIdx).Pages()), nil
 }
 
 // GetWindowList returns list of windows

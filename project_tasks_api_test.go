@@ -191,8 +191,8 @@ func TestProjectTaskWritesHonourTheProjectGuard(t *testing.T) {
 	if got := projectTasksOnDisk(t, storage); len(got) != 1 || got[0].SessionID != "" {
 		t.Errorf("a refused write changed the project list: %+v", got)
 	}
-	if notes, _ := storage.ProjectNotes(); notes != "" {
-		t.Errorf("a refused write changed the note: %q", notes)
+	if pages, _ := storage.ProjectNotePages(); len(pages) != 0 {
+		t.Errorf("a refused write changed the note: %+v", pages)
 	}
 }
 

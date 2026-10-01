@@ -2875,6 +2875,22 @@ export namespace session {
 		}
 	}
 
+	export class NotePage {
+	    id: string;
+	    title: string;
+	    text: string;
+
+	    static createFrom(source: any = {}) {
+	        return new NotePage(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.title = source["title"];
+	        this.text = source["text"];
+	    }
+	}
 	export class FollowedWindow {
 	    id?: string;
 	    index: number;
@@ -2884,6 +2900,7 @@ export namespace session {
 	    auto_yes: boolean;
 	    resume_session_id: string;
 	    notes?: string;
+	    note_pages?: NotePage[];
 	    extra_args?: string;
 	    stopped?: boolean;
 	    terminal_theme?: string;
@@ -2913,6 +2930,7 @@ export namespace session {
 	        this.auto_yes = source["auto_yes"];
 	        this.resume_session_id = source["resume_session_id"];
 	        this.notes = source["notes"];
+	        this.note_pages = this.convertValues(source["note_pages"], NotePage);
 	        this.extra_args = source["extra_args"];
 	        this.stopped = source["stopped"];
 	        this.terminal_theme = source["terminal_theme"];
@@ -2928,7 +2946,26 @@ export namespace session {
 	        this.worktree_repo_root = source["worktree_repo_root"];
 	        this.server_id = source["server_id"];
 	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
+
 
 	export class PanelGeometry {
 	    x: number;

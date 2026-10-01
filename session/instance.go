@@ -257,6 +257,13 @@ type Instance struct {
 	// Existing notes stay session notes; this starts empty.
 	MainTabNotes string `json:"main_tab_notes,omitempty"`
 
+	// NotePages and MainTabNotePages are the pages of Notes and MainTabNotes
+	// when a note has more than one page or a titled one; the text fields
+	// then hold the pages joined. Read and written only through SessionNote
+	// and MainTabNote — see note_pages.go.
+	NotePages        []NotePage `json:"note_pages,omitempty"`
+	MainTabNotePages []NotePage `json:"main_tab_note_pages,omitempty"`
+
 	// Worktree records the git worktree created for this session, when it was
 	// given one. Empty for a session working directly in its project, which
 	// is what every session did before and still does by default.
@@ -322,24 +329,25 @@ type FollowedWindow struct {
 	// given along the way — see newTabID. Stored tabs from before this field
 	// get a derived one on load (backfillTabIDs); the session's own window,
 	// which is not a FollowedWindow, is MainTabID.
-	ID               string    `json:"id,omitempty"`
-	Index            int       `json:"index"`
-	Agent            AgentType `json:"agent"`
-	Name             string    `json:"name"`                         // Tab name for display
-	CustomCommand    string    `json:"custom_command"`               // For custom agents
-	AutoYes          bool      `json:"auto_yes"`                     // YOLO mode for this tab
-	ResumeSessionID  string    `json:"resume_session_id"`            // Resume session ID for this tab
-	Notes            string    `json:"notes,omitempty"`              // User notes for this tab
-	ExtraArgs        string    `json:"extra_args,omitempty"`         // Extra CLI arguments for this tab
-	Stopped          bool      `json:"stopped,omitempty"`            // Tab is stopped (window killed but can resume)
-	TerminalTheme    string    `json:"terminal_theme,omitempty"`     // Tab colour palette (empty inherits agent/global)
-	TerminalFontSize int       `json:"terminal_font_size,omitempty"` // Tab font size in px (0 inherits the global setting)
-	HideViewBar      int       `json:"hide_view_bar,omitempty"`      // 0 inherit, 1 hide, 2 show
-	HideStatusBar    int       `json:"hide_status_bar,omitempty"`    // 0 inherit, 1 hide, 2 show
-	TextColor        string    `json:"text_color,omitempty"`         // Tab text color (empty uses the theme default)
-	BackgroundColor  string    `json:"background_color,omitempty"`   // Tab background color (empty uses the theme default)
-	WorkDir          string    `json:"work_dir,omitempty"`           // Tab working directory (empty = session path)
-	HideStatusLine   bool      `json:"hide_status_line,omitempty"`   // Don't show this tab's status line in the session list
+	ID               string     `json:"id,omitempty"`
+	Index            int        `json:"index"`
+	Agent            AgentType  `json:"agent"`
+	Name             string     `json:"name"`                         // Tab name for display
+	CustomCommand    string     `json:"custom_command"`               // For custom agents
+	AutoYes          bool       `json:"auto_yes"`                     // YOLO mode for this tab
+	ResumeSessionID  string     `json:"resume_session_id"`            // Resume session ID for this tab
+	Notes            string     `json:"notes,omitempty"`              // User notes for this tab
+	NotePages        []NotePage `json:"note_pages,omitempty"`         // Pages of Notes; see Note()
+	ExtraArgs        string     `json:"extra_args,omitempty"`         // Extra CLI arguments for this tab
+	Stopped          bool       `json:"stopped,omitempty"`            // Tab is stopped (window killed but can resume)
+	TerminalTheme    string     `json:"terminal_theme,omitempty"`     // Tab colour palette (empty inherits agent/global)
+	TerminalFontSize int        `json:"terminal_font_size,omitempty"` // Tab font size in px (0 inherits the global setting)
+	HideViewBar      int        `json:"hide_view_bar,omitempty"`      // 0 inherit, 1 hide, 2 show
+	HideStatusBar    int        `json:"hide_status_bar,omitempty"`    // 0 inherit, 1 hide, 2 show
+	TextColor        string     `json:"text_color,omitempty"`         // Tab text color (empty uses the theme default)
+	BackgroundColor  string     `json:"background_color,omitempty"`   // Tab background color (empty uses the theme default)
+	WorkDir          string     `json:"work_dir,omitempty"`           // Tab working directory (empty = session path)
+	HideStatusLine   bool       `json:"hide_status_line,omitempty"`   // Don't show this tab's status line in the session list
 	// Worktree records the checkout made for this tab, when it was given one.
 	// Empty for a tab working in its session's directory, which is what every
 	// tab did before and still does by default.

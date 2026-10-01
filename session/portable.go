@@ -34,17 +34,18 @@ const (
 
 // PortableTab is one tab of an exported session.
 type PortableTab struct {
-	Name            string    `json:"name"`
-	Agent           AgentType `json:"agent,omitempty"`
-	CustomCommand   string    `json:"custom_command,omitempty"`
-	AutoYes         bool      `json:"auto_yes,omitempty"`
-	ExtraArgs       string    `json:"extra_args,omitempty"`
-	Notes           string    `json:"notes,omitempty"`
-	WorkDir         string    `json:"work_dir,omitempty"`
-	TerminalTheme   string    `json:"terminal_theme,omitempty"`
-	TextColor       string    `json:"text_color,omitempty"`
-	BackgroundColor string    `json:"background_color,omitempty"`
-	HideStatusLine  bool      `json:"hide_status_line,omitempty"`
+	Name            string     `json:"name"`
+	Agent           AgentType  `json:"agent,omitempty"`
+	CustomCommand   string     `json:"custom_command,omitempty"`
+	AutoYes         bool       `json:"auto_yes,omitempty"`
+	ExtraArgs       string     `json:"extra_args,omitempty"`
+	Notes           string     `json:"notes,omitempty"`
+	NotePages       []NotePage `json:"note_pages,omitempty"`
+	WorkDir         string     `json:"work_dir,omitempty"`
+	TerminalTheme   string     `json:"terminal_theme,omitempty"`
+	TextColor       string     `json:"text_color,omitempty"`
+	BackgroundColor string     `json:"background_color,omitempty"`
+	HideStatusLine  bool       `json:"hide_status_line,omitempty"`
 }
 
 // PortableSession is one exported session: its configuration, without any
@@ -57,6 +58,9 @@ type PortableSession struct {
 	ExtraArgs          string        `json:"extra_args,omitempty"`
 	AutoYes            bool          `json:"auto_yes,omitempty"`
 	Notes              string        `json:"notes,omitempty"`
+	NotePages          []NotePage    `json:"note_pages,omitempty"`
+	MainTabNotes       string        `json:"main_tab_notes,omitempty"`
+	MainTabNotePages   []NotePage    `json:"main_tab_note_pages,omitempty"`
 	Color              string        `json:"color,omitempty"`
 	BgColor            string        `json:"bg_color,omitempty"`
 	FullRowColor       bool          `json:"full_row_color,omitempty"`
@@ -103,13 +107,18 @@ func ToPortable(instances []*Instance, groups []*Group, appVersion string) *Port
 			continue
 		}
 		ps := PortableSession{
-			Name:               inst.Name,
-			Path:               inst.Path,
-			Agent:              inst.Agent,
-			CustomCommand:      inst.CustomCommand,
-			ExtraArgs:          inst.ExtraArgs,
-			AutoYes:            inst.AutoYes,
+			Name:          inst.Name,
+			Path:          inst.Path,
+			Agent:         inst.Agent,
+			CustomCommand: inst.CustomCommand,
+			ExtraArgs:     inst.ExtraArgs,
+			AutoYes:       inst.AutoYes,
+			// Text and pages as stored, the pair an older version reads the
+			// text of and this one the pages (see note_pages.go).
 			Notes:              inst.Notes,
+			NotePages:          inst.NotePages,
+			MainTabNotes:       inst.MainTabNotes,
+			MainTabNotePages:   inst.MainTabNotePages,
 			Color:              inst.Color,
 			BgColor:            inst.BgColor,
 			FullRowColor:       inst.FullRowColor,
@@ -132,6 +141,7 @@ func ToPortable(instances []*Instance, groups []*Group, appVersion string) *Port
 				AutoYes:         w.AutoYes,
 				ExtraArgs:       w.ExtraArgs,
 				Notes:           w.Notes,
+				NotePages:       w.NotePages,
 				WorkDir:         w.WorkDir,
 				TerminalTheme:   w.TerminalTheme,
 				TextColor:       w.TextColor,
@@ -286,7 +296,6 @@ func (p PortableSession) FromPortable(groupID string) *Instance {
 		CustomCommand:      p.CustomCommand,
 		ExtraArgs:          p.ExtraArgs,
 		AutoYes:            p.AutoYes,
-		Notes:              p.Notes,
 		Color:              p.Color,
 		BgColor:            p.BgColor,
 		FullRowColor:       p.FullRowColor,
@@ -298,6 +307,11 @@ func (p PortableSession) FromPortable(groupID string) *Instance {
 		MainWindowName:     p.MainWindowName,
 		GroupID:            groupID,
 	}
+	// Through the note's own reading and writing, so pages from a file are
+	// checked like any others and a file from before pages — text only —
+	// still imports as it always did.
+	inst.SessionNote().SetPages(ReadNotePages(p.Notes, p.NotePages))
+	inst.MainTabNote().SetPages(ReadNotePages(p.MainTabNotes, p.MainTabNotePages))
 	// Tab indices are assigned fresh: the exporting machine's tmux window
 	// numbers mean nothing here.
 	for i, t := range p.Tabs {
@@ -312,13 +326,14 @@ func (p PortableSession) FromPortable(groupID string) *Instance {
 			CustomCommand:   t.CustomCommand,
 			AutoYes:         t.AutoYes,
 			ExtraArgs:       t.ExtraArgs,
-			Notes:           t.Notes,
 			WorkDir:         t.WorkDir,
 			TerminalTheme:   t.TerminalTheme,
 			TextColor:       t.TextColor,
 			BackgroundColor: t.BackgroundColor,
 			HideStatusLine:  t.HideStatusLine,
 		})
+		tab := &inst.FollowedWindows[len(inst.FollowedWindows)-1]
+		tab.Note().SetPages(ReadNotePages(t.Notes, t.NotePages))
 	}
 	return inst
 }

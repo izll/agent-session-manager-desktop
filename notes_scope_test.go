@@ -17,14 +17,14 @@ func TestNotesReachTheSessionOrTheTab(t *testing.T) {
 		},
 	}
 
-	if got := *notesField(inst, SessionNotesWindow); got != "session" {
+	if got := session.NotePagesText(noteSlot(inst, SessionNotesWindow).Pages()); got != "session" {
 		t.Errorf("the session target reads %q", got)
 	}
-	if got := *notesField(inst, 2); got != "tab 2" {
+	if got := session.NotePagesText(noteSlot(inst, 2).Pages()); got != "tab 2" {
 		t.Errorf("a followed tab reads %q", got)
 	}
 
-	*notesField(inst, 0) = "main tab"
+	noteSlot(inst, 0).SetPages([]session.NotePage{{ID: "p", Text: "main tab"}})
 	if inst.MainTabNotes != "main tab" || inst.Notes != "session" {
 		t.Errorf("writing the main tab's note changed the session's: main=%q session=%q",
 			inst.MainTabNotes, inst.Notes)
@@ -36,7 +36,7 @@ func TestNotesReachTheSessionOrTheTab(t *testing.T) {
 // a followed tab is the main tab.
 func TestTheMainTabIsFoundWhateverItsIndex(t *testing.T) {
 	inst := &session.Instance{FollowedWindows: []session.FollowedWindow{{Index: 2}}}
-	*notesField(inst, 1) = "on base-index 1"
+	noteSlot(inst, 1).SetPages([]session.NotePage{{ID: "p", Text: "on base-index 1"}})
 	if inst.MainTabNotes != "on base-index 1" {
 		t.Errorf("the main tab at index 1 did not get its note: %+v", inst)
 	}

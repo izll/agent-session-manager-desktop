@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"time"
 )
 
@@ -39,31 +40,32 @@ func (s *Storage) ProjectDataDirFor(projectID string) (string, error) {
 	return filepath.Join(s.configDir, "projects", projectID), nil
 }
 
-// ProjectNotes returns the active project's note.
-func (s *Storage) ProjectNotes() (string, error) {
+// ProjectNotePages returns the pages of the active project's note.
+func (s *Storage) ProjectNotePages() ([]NotePage, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	data, err := s.loadStorageDataLocked()
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	return data.Notes, nil
+	return data.ProjectNote().Pages(), nil
 }
 
-// SetProjectNotes replaces the active project's note. Loaded and written under
-// the storage lock, like every other edit, so no other field is lost to a
-// concurrent writer's older snapshot.
-func (s *Storage) SetProjectNotes(notes string) error {
+// SetProjectNotePages replaces the active project's note, all of its pages at
+// once. Loaded and written under the storage lock, like every other edit, so
+// no other field is lost to a concurrent writer's older snapshot.
+func (s *Storage) SetProjectNotePages(pages []NotePage) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	data, err := s.loadStorageDataLocked()
 	if err != nil {
 		return err
 	}
-	if data.Notes == notes {
+	text, stored := WriteNotePages(pages)
+	if data.Notes == text && slices.Equal(data.NotePages, stored) {
 		return nil
 	}
-	data.Notes = notes
+	data.ProjectNote().SetPages(pages)
 	data.SchemaVersion = recoverySchemaVersion
 	data.Revision++
 	return s.writeStorageDataLocked(data, true)
