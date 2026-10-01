@@ -8,7 +8,7 @@
   import { sessions, selectSession, selectWindow } from '../../stores/sessions';
   import { activeProjectId } from '../../stores/projects';
   import { requestNoteJump } from '../../stores/noteJump';
-  import { isNoteResult, resolveNoteTarget } from '../../utils/noteSearchResult';
+  import { isNoteResult, resolveNoteTarget, notePageName } from '../../utils/noteSearchResult';
   import DialogCloseButton from '../common/DialogCloseButton.svelte';
 
   interface HistoryEntry {
@@ -24,6 +24,10 @@
     tabId?: string;
     tabName?: string;
     windowIdx?: number;
+    pageId?: string;
+    pageTitle?: string;
+    pageIndex?: number;
+    pageCount?: number;
   }
 
   export let show = false;
@@ -155,6 +159,7 @@
       sessionId: target.sessionId,
       scope: target.scope,
       query: query.trim(),
+      pageId: target.pageId,
     });
     close();
   }
@@ -424,7 +429,7 @@
                       <span class="result-meta">
                         <span class="note-badge">{$t(noteLabelKey(entry))}</span>
                         <span class="note-place">
-                          {entry.sessionName}{#if entry.noteScope === 'tab' && entry.tabName && entry.tabName !== entry.sessionName} · {entry.tabName}{/if}
+                          {entry.sessionName}{#if entry.noteScope === 'tab' && entry.tabName && entry.tabName !== entry.sessionName} · {entry.tabName}{/if}{#if notePageName(entry, $t)} · {notePageName(entry, $t)}{/if}
                         </span>
                       </span>
                     </div>
@@ -459,7 +464,7 @@
               <span class="preview-title">
                 {#if isNoteResult(selectedEntry)}
                   <span>📝</span>
-                  {$t(noteLabelKey(selectedEntry))} · {selectedEntry.sessionName}{#if selectedEntry.noteScope === 'tab' && selectedEntry.tabName && selectedEntry.tabName !== selectedEntry.sessionName} · {selectedEntry.tabName}{/if}
+                  {$t(noteLabelKey(selectedEntry))} · {selectedEntry.sessionName}{#if selectedEntry.noteScope === 'tab' && selectedEntry.tabName && selectedEntry.tabName !== selectedEntry.sessionName} · {selectedEntry.tabName}{/if}{#if notePageName(selectedEntry, $t)} · {notePageName(selectedEntry, $t)}{/if}
                 {:else}
                   <span style="color: {getAgentColor(selectedEntry.agent)}">
                     {getAgentIcon(selectedEntry.agent)}

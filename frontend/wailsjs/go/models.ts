@@ -1084,6 +1084,10 @@ export namespace main {
 	    tabId?: string;
 	    tabName?: string;
 	    windowIdx: number;
+	    pageId?: string;
+	    pageTitle?: string;
+	    pageIndex?: number;
+	    pageCount?: number;
 
 	    static createFrom(source: any = {}) {
 	        return new HistoryEntryInfo(source);
@@ -1102,6 +1106,10 @@ export namespace main {
 	        this.tabId = source["tabId"];
 	        this.tabName = source["tabName"];
 	        this.windowIdx = source["windowIdx"];
+	        this.pageId = source["pageId"];
+	        this.pageTitle = source["pageTitle"];
+	        this.pageIndex = source["pageIndex"];
+	        this.pageCount = source["pageCount"];
 	    }
 	}
 	export class ImportedScheme {

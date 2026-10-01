@@ -31,7 +31,7 @@ const (
 	noteSnippetAfter  = 70
 )
 
-// NoteMatch is one note that matched a global search query.
+// NoteMatch is one page of a note that matched a global search query.
 type NoteMatch struct {
 	SessionID   string
 	SessionName string
@@ -46,8 +46,15 @@ type NoteMatch struct {
 	// tmux, which a search should not do for every session; it is left at
 	// SessionNotesWindow and the main tab is found by TabID instead.
 	WindowIndex int
-	Text        string
-	Snippet     string
+	// PageID, PageTitle and PageIndex say which page of the note this is;
+	// PageCount is how many the note has, so an untitled page can be named
+	// the way the notes view names it ("Note 2").
+	PageID    string
+	PageTitle string
+	PageIndex int
+	PageCount int
+	Text      string
+	Snippet   string
 }
 
 // ID is the opaque identifier a note result is issued under, so a preview can
@@ -57,12 +64,12 @@ func (m NoteMatch) ID() string {
 	if m.Scope == NoteScopeSession {
 		target = string(NoteScopeSession)
 	}
-	return NoteResultID(m.SessionID, target)
+	return NoteResultID(m.SessionID, target, m.PageID)
 }
 
 // NoteResultID builds the ID of a note result; see NoteMatch.ID.
-func NoteResultID(sessionID, target string) string {
-	return fmt.Sprintf("note:%s:%s", sessionID, target)
+func NoteResultID(sessionID, target, pageID string) string {
+	return fmt.Sprintf("note:%s:%s:%s", sessionID, target, pageID)
 }
 
 // IsNoteResultID tells note results apart from history entries, whose IDs are
@@ -71,8 +78,9 @@ func IsNoteResultID(id string) bool {
 	return strings.HasPrefix(id, "note:")
 }
 
-// allNotes lists every non-empty note of the given sessions: for each session
-// its own note first, then the main tab's, then the followed tabs' in order.
+// allNotes lists every page with something in it — text or a title — of the
+// given sessions' notes: for each session its own note first, then the main
+// tab's, then the followed tabs' in order, each note's pages in page order.
 func allNotes(instances []*Instance) []NoteMatch {
 	var notes []NoteMatch
 	for _, inst := range instances {
@@ -80,27 +88,22 @@ func allNotes(instances []*Instance) []NoteMatch {
 			continue
 		}
 		base := NoteMatch{SessionID: inst.ID, SessionName: inst.Name}
-		if strings.TrimSpace(inst.Notes) != "" {
-			note := base
-			note.Scope = NoteScopeSession
-			note.WindowIndex = SessionNotesWindow
-			note.Text = inst.Notes
-			notes = append(notes, note)
-		}
-		if strings.TrimSpace(inst.MainTabNotes) != "" {
-			note := base
-			note.Scope = NoteScopeTab
-			note.TabID = MainTabID
-			// The tab bar labels the main tab with the session's name.
-			note.TabName = inst.Name
-			note.WindowIndex = SessionNotesWindow
-			note.Text = inst.MainTabNotes
-			notes = append(notes, note)
-		}
-		for _, fw := range inst.FollowedWindows {
-			if strings.TrimSpace(fw.Notes) == "" {
-				continue
-			}
+
+		note := base
+		note.Scope = NoteScopeSession
+		note.WindowIndex = SessionNotesWindow
+		notes = appendNotePages(notes, note, inst.SessionNote().Pages())
+
+		note = base
+		note.Scope = NoteScopeTab
+		note.TabID = MainTabID
+		// The tab bar labels the main tab with the session's name.
+		note.TabName = inst.Name
+		note.WindowIndex = SessionNotesWindow
+		notes = appendNotePages(notes, note, inst.MainTabNote().Pages())
+
+		for i := range inst.FollowedWindows {
+			fw := &inst.FollowedWindows[i]
 			note := base
 			note.Scope = NoteScopeTab
 			note.TabID = fw.ID
@@ -111,9 +114,25 @@ func allNotes(instances []*Instance) []NoteMatch {
 				note.TabName = fmt.Sprintf("Tab %d", fw.Index)
 			}
 			note.WindowIndex = fw.Index
-			note.Text = fw.Notes
-			notes = append(notes, note)
+			notes = appendNotePages(notes, note, fw.Note().Pages())
 		}
+	}
+	return notes
+}
+
+// appendNotePages adds one match per page of a note that has anything in it.
+func appendNotePages(notes []NoteMatch, note NoteMatch, pages []NotePage) []NoteMatch {
+	for i, page := range pages {
+		if strings.TrimSpace(page.Text) == "" && page.Title == "" {
+			continue
+		}
+		match := note
+		match.PageID = page.ID
+		match.PageTitle = page.Title
+		match.PageIndex = i
+		match.PageCount = len(pages)
+		match.Text = page.Text
+		notes = append(notes, match)
 	}
 	return notes
 }
@@ -152,11 +171,15 @@ func SearchNotes(instances []*Instance, query string) []NoteMatch {
 	}
 	var results []NoteMatch
 	for _, note := range allNotes(instances) {
-		at := indexFold([]rune(note.Text), needle)
-		if at < 0 {
+		// The text first, so the snippet shows the words around the match;
+		// a page found by its title alone shows the start of its text.
+		if at := indexFold([]rune(note.Text), needle); at >= 0 {
+			note.Snippet = noteSnippet(note.Text, at, len(needle))
+		} else if indexFold([]rune(note.PageTitle), needle) >= 0 {
+			note.Snippet = startSnippet(note)
+		} else {
 			continue
 		}
-		note.Snippet = noteSnippet(note.Text, at, len(needle))
 		results = append(results, note)
 		if len(results) >= noteSearchResultLimit {
 			break
@@ -179,7 +202,7 @@ func FuzzySearchNotes(instances []*Instance, query string) []NoteMatch {
 	var results []NoteMatch
 	for _, match := range fuzzy.FindFrom(query, noteFuzzySource(notes)) {
 		note := notes[match.Index]
-		note.Snippet = noteSnippet(note.Text, -1, 0)
+		note.Snippet = startSnippet(note)
 		results = append(results, note)
 		if len(results) >= noteSearchResultLimit {
 			break
@@ -191,7 +214,8 @@ func FuzzySearchNotes(instances []*Instance, query string) []NoteMatch {
 type noteFuzzySource []NoteMatch
 
 func (s noteFuzzySource) String(i int) string {
-	text := []rune(s[i].Text)
+	// The title leads, as it does on screen: a page is named by it.
+	text := []rune(strings.TrimSpace(s[i].PageTitle + " " + s[i].Text))
 	if len(text) > noteFuzzyPrefix {
 		text = text[:noteFuzzyPrefix]
 	}
@@ -222,6 +246,15 @@ func indexFold(text, needle []rune) int {
 		}
 	}
 	return -1
+}
+
+// startSnippet is the opening of a page's text, or its title when the page
+// has no text: a result is never an empty line.
+func startSnippet(note NoteMatch) string {
+	if snippet := noteSnippet(note.Text, -1, 0); snippet != "" {
+		return snippet
+	}
+	return note.PageTitle
 }
 
 // noteSnippet cuts a single-line excerpt around the match at rune position at

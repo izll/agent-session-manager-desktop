@@ -11,6 +11,7 @@ const {
   FIRST_PAGE_ID, editablePages, pagesKey, notePagesText, hasNoteText, resolveActivePage,
   setPageText, renamePage, addPage, deletePage, movePage, dropIndex, stepPage, pageLabel, cleanTitle,
 } = await import('../src/lib/utils/notePages.ts');
+const { resolveNoteTarget, notePageName } = await import('../src/lib/utils/noteSearchResult.ts');
 
 const plan = { id: 'a', title: 'Plan', text: 'ship on friday' };
 const risks = { id: 'b', title: 'Risks', text: 'the migration' };
@@ -86,6 +87,20 @@ test('an untitled page is named by its place', () => {
   assert.equal(pageLabel('Plan', 0, 3, t), 'Plan');
   assert.equal(pageLabel('', 0, 1, t), 'Note');
   assert.equal(pageLabel('', 1, 3, t), 'Note 2');
+});
+
+// A search result names its page, and opening it asks for that page.
+test('a note result leads to its page', () => {
+  const sessions = [{ id: 's1', mainWindowIndex: 0, followedWindows: [{ id: 't-a', index: 2 }] }];
+  assert.deepEqual(
+    resolveNoteTarget({ kind: 'note', sessionId: 's1', noteScope: 'tab', tabId: 't-a', pageId: 'b' }, sessions),
+    { sessionId: 's1', windowIdx: 2, scope: 'tab', pageId: 'b' });
+  assert.deepEqual(
+    resolveNoteTarget({ kind: 'note', sessionId: 's1', noteScope: 'session' }, sessions),
+    { sessionId: 's1', windowIdx: null, scope: 'session' });
+  assert.equal(notePageName({ pageTitle: 'Risks', pageIndex: 1, pageCount: 2 }, t), 'Risks');
+  assert.equal(notePageName({ pageIndex: 1, pageCount: 2 }, t), 'Note 2');
+  assert.equal(notePageName({ pageIndex: 0, pageCount: 1 }, t), '', 'a single untitled page is named');
 });
 
 // The whole note is saved at once, whichever page changed: a page switch is

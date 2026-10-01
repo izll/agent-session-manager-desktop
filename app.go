@@ -4580,6 +4580,12 @@ type HistoryEntryInfo struct {
 	TabID       string `json:"tabId,omitempty"`
 	TabName     string `json:"tabName,omitempty"`
 	WindowIdx   int    `json:"windowIdx"`
+	// Which page of the note matched, and how many pages the note has, so an
+	// untitled page can be named the way the notes view names it.
+	PageID    string `json:"pageId,omitempty"`
+	PageTitle string `json:"pageTitle,omitempty"`
+	PageIndex int    `json:"pageIndex,omitempty"`
+	PageCount int    `json:"pageCount,omitempty"`
 }
 
 // historyKindNote marks a global search result that is a note.
@@ -4680,6 +4686,10 @@ func noteEntryInfo(n session.NoteMatch) HistoryEntryInfo {
 		TabID:       n.TabID,
 		TabName:     n.TabName,
 		WindowIdx:   n.WindowIndex,
+		PageID:      n.PageID,
+		PageTitle:   n.PageTitle,
+		PageIndex:   n.PageIndex,
+		PageCount:   n.PageCount,
 	}
 }
 

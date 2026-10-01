@@ -129,7 +129,7 @@ func TestFindNoteByResultID(t *testing.T) {
 			t.Fatalf("%q not recognised as a note result", m.ID())
 		}
 	}
-	if _, ok := FindNote(instances, NoteResultID("s1", "gone")); ok {
+	if _, ok := FindNote(instances, NoteResultID("s1", "gone", LegacyNotePageID)); ok {
 		t.Fatal("a note that no longer exists was found")
 	}
 	if IsNoteResultID(generateHistoryID()) {

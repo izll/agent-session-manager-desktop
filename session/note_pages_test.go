@@ -347,3 +347,48 @@ func TestPortableNotePages(t *testing.T) {
 		t.Fatalf("old export's tab note = %+v", got)
 	}
 }
+
+// Every page is searched, by its text and by its title, and a result says
+// which page it is so opening it lands there.
+func TestSearchNotesFindsEveryPage(t *testing.T) {
+	inst := &Instance{ID: "s1", Name: "API"}
+	inst.SessionNote().SetPages([]NotePage{
+		{ID: "a", Title: "Plan", Text: "ship on friday"},
+		{ID: "b", Title: "Risks", Text: "the database migration"},
+		{ID: "c", Title: "Migration owners"},
+		{ID: "d", Text: "untitled page about migration"},
+	})
+	instances := []*Instance{inst}
+
+	matches := SearchNotes(instances, "migration")
+	if len(matches) != 3 {
+		t.Fatalf("got %d matches, want 3: %+v", len(matches), matches)
+	}
+	byPage := map[string]NoteMatch{}
+	for _, m := range matches {
+		byPage[m.PageID] = m
+	}
+	risks := byPage["b"]
+	if risks.PageTitle != "Risks" || risks.PageIndex != 1 || risks.PageCount != 4 ||
+		!strings.Contains(risks.Snippet, "migration") || risks.Scope != NoteScopeSession {
+		t.Fatalf("second page match = %+v", risks)
+	}
+	if owners, ok := byPage["c"]; !ok || owners.Snippet != "Migration owners" {
+		t.Fatalf("a page found by its title alone = %+v (found %v)", owners, ok)
+	}
+	if untitled := byPage["d"]; untitled.PageTitle != "" || untitled.PageIndex != 3 {
+		t.Fatalf("untitled page match = %+v", untitled)
+	}
+	for _, m := range matches {
+		found, ok := FindNote(instances, m.ID())
+		if !ok || found.PageID != m.PageID || found.Text != m.Text {
+			t.Fatalf("FindNote(%q) = %+v, %v", m.ID(), found, ok)
+		}
+	}
+	if got := SearchNotes(instances, "Plan"); len(got) != 1 || got[0].PageID != "a" {
+		t.Fatalf("title search = %+v", got)
+	}
+	if got := FuzzySearchNotes(instances, "rsks"); len(got) == 0 || got[0].PageID != "b" {
+		t.Fatalf("fuzzy title search = %+v", got)
+	}
+}

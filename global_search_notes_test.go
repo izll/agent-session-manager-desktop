@@ -61,6 +61,23 @@ func TestMergeSearchResultsFallsBackToFuzzyNotes(t *testing.T) {
 	}
 }
 
+// A note result names the page it was found on, so the notes view can open
+// that page; every page of a note is searched.
+func TestMergeSearchResultsNamesThePage(t *testing.T) {
+	inst := &session.Instance{ID: "s1", Name: "API"}
+	inst.SessionNote().SetPages([]session.NotePage{
+		{ID: "a", Title: "Plan", Text: "nothing here"},
+		{ID: "b", Title: "Risks", Text: "the release blocker"},
+	})
+	got := mergeSearchResults(nil, false, []*session.Instance{inst}, "blocker")
+	if len(got) != 1 {
+		t.Fatalf("got %d results, want 1: %+v", len(got), got)
+	}
+	if r := got[0]; r.PageID != "b" || r.PageTitle != "Risks" || r.PageIndex != 1 || r.PageCount != 2 {
+		t.Fatalf("result does not name its page: %+v", r)
+	}
+}
+
 // The search issues note results in the same window numbering the notes API
 // reads them back in.
 func TestSessionNotesWindowAgreesWithSearch(t *testing.T) {

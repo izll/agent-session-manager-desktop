@@ -13,6 +13,8 @@ export interface NoteResultFields {
   noteScope?: string;
   tabId?: string;
   windowIdx?: number;
+  /** The page of the note the match is on. */
+  pageId?: string;
 }
 
 /** The parts of a session the lookup reads. */
@@ -27,6 +29,8 @@ export interface NoteTarget {
   /** The tab to select, or null to leave the session on the tab it remembers. */
   windowIdx: number | null;
   scope: NoteResultScope;
+  /** The page to open, when the result names one. */
+  pageId?: string;
 }
 
 export function isNoteResult(entry: { kind?: string }): boolean {
@@ -52,14 +56,34 @@ export function resolveNoteTarget(
   const session = sessions.find((s) => s.id === entry.sessionId);
   if (!session) return null;
   if (entry.noteScope === 'session') {
-    return { sessionId: session.id, windowIdx: null, scope: 'session' };
+    return { sessionId: session.id, windowIdx: null, scope: 'session', ...page(entry) };
   }
   if (entry.tabId === 'main') {
-    return { sessionId: session.id, windowIdx: session.mainWindowIndex ?? 0, scope: 'tab' };
+    return { sessionId: session.id, windowIdx: session.mainWindowIndex ?? 0, scope: 'tab', ...page(entry) };
   }
   const tab = session.followedWindows?.find((w) => !!entry.tabId && w.id === entry.tabId)
     // Stored tabs all carry an ID by now; the index is only the fallback.
     ?? (entry.tabId ? undefined : session.followedWindows?.find((w) => w.index === entry.windowIdx));
   if (!tab) return null;
-  return { sessionId: session.id, windowIdx: tab.index, scope: 'tab' };
+  return { sessionId: session.id, windowIdx: tab.index, scope: 'tab', ...page(entry) };
+}
+
+function page(entry: NoteResultFields): { pageId?: string } {
+  return entry.pageId ? { pageId: entry.pageId } : {};
+}
+
+type Translate = (key: string, params?: Record<string, string | number>) => string;
+
+/**
+ * The page a note result is on, as the notes view names it: its title, or
+ * "Note 2" for an untitled page among several. Empty for a note that is a
+ * single untitled page — there is no page to name.
+ */
+export function notePageName(
+  entry: { pageTitle?: string; pageIndex?: number; pageCount?: number },
+  t: Translate,
+): string {
+  if (entry.pageTitle) return entry.pageTitle;
+  if ((entry.pageCount ?? 0) > 1) return t('notes.untitledPageN', { n: (entry.pageIndex ?? 0) + 1 });
+  return '';
 }
