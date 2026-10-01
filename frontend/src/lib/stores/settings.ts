@@ -69,6 +69,7 @@ export interface Settings {
   hideRemoteBadge: boolean;
   /** Hides the marker on tabs whose agent has an update waiting. Shown by default. */
   showUpdateBadge: boolean;
+  hideTabUpdateBadge: boolean;
   splitView: boolean;
   markedSessionId: string;
   /** Session selected when the app last closed, so it reopens there. */
@@ -179,6 +180,7 @@ function defaultSettings(): Settings {
     showResumeBadge: false,
     hideRemoteBadge: false,
     showUpdateBadge: false,
+    hideTabUpdateBadge: false,
     splitView: false,
     markedSessionId: '',
     lastSessionId: '',

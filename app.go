@@ -4897,6 +4897,7 @@ type SettingsInfo struct {
 	CodexUseDaemon            bool   `json:"codexUseDaemon"`
 	HideYoloBadge             bool   `json:"hideYoloBadge"`
 	ShowUpdateBadge           bool   `json:"showUpdateBadge"`
+	HideTabUpdateBadge        bool   `json:"hideTabUpdateBadge"`
 	ShowResumeBadge           bool   `json:"showResumeBadge"`
 	HideRemoteBadge           bool   `json:"hideRemoteBadge"`
 	SplitView                 bool   `json:"splitView"`
@@ -5029,6 +5030,7 @@ func (a *App) GetSettings() (*SettingsInfo, error) {
 		CodexUseDaemon:            settings.CodexUseDaemon,
 		HideYoloBadge:             settings.HideYoloBadge,
 		ShowUpdateBadge:           settings.ShowUpdateBadge,
+		HideTabUpdateBadge:        settings.HideTabUpdateBadge,
 		ShowResumeBadge:           settings.ShowResumeBadge,
 		HideRemoteBadge:           settings.HideRemoteBadge,
 		SplitView:                 settings.SplitView,
@@ -5125,6 +5127,7 @@ func (a *App) SaveSettings(settings SettingsInfo, expectedProjectID string) erro
 		current.CodexUseDaemon = settings.CodexUseDaemon
 		current.HideYoloBadge = settings.HideYoloBadge
 		current.ShowUpdateBadge = settings.ShowUpdateBadge
+		current.HideTabUpdateBadge = settings.HideTabUpdateBadge
 		current.ShowResumeBadge = settings.ShowResumeBadge
 		current.HideRemoteBadge = settings.HideRemoteBadge
 		current.SplitView = settings.SplitView

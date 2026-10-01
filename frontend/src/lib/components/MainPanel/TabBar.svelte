@@ -1987,7 +1987,7 @@
               <!-- svelte-ignore a11y-no-static-element-interactions -->
               <span class="tab-name" on:dblclick|stopPropagation={() => startTabRename(win.Index, win.Name)}>{win.Name}</span>
             {/if}
-            {#if currentSessionStatus === 'running' && !win.Dead && tabUpdateByIdx[win.Index]}
+            {#if currentSessionStatus === 'running' && !win.Dead && tabUpdateByIdx[win.Index] && !$settings.hideTabUpdateBadge}
               <span class="tab-update-badge {updateBadge(tabUpdateByIdx[win.Index])}"
                 title={updateTooltip(tabUpdateByIdx[win.Index], getAgentName(win.Agent)).map((m) => $t(m.key, m.params)).join('\n')}>&#8593;</span>
             {/if}

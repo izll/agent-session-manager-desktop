@@ -92,11 +92,15 @@ test('every tab row and a single tab\'s name show it, when switched on', () => {
 });
 
 // The session list is busy enough: the marker there is opt-in. The tab bar,
-// where it sits beside the tab it is about, always shows it.
-test('the tab bar always shows it', () => {
+// where it sits beside the tab it is about, shows it unless switched off.
+test('the tab bar shows it unless switched off, on by default', () => {
   const bar = read('../src/lib/components/MainPanel/TabBar.svelte');
-  assert.match(bar, /!win\.Dead && tabUpdateByIdx\[win\.Index\]\}/);
-  assert.doesNotMatch(bar, /UpdateBadge/, 'the tab bar follows the session-list setting');
+  assert.match(bar, /!win\.Dead && tabUpdateByIdx\[win\.Index\] && !\$settings\.hideTabUpdateBadge\}/);
+  const store = read('../src/lib/stores/settings.ts');
+  assert.match(store, /hideTabUpdateBadge: false,/, 'the tabs\' marker is off unless asked for');
+  const dialog = read('../src/lib/components/Dialogs/SettingsDialog.svelte');
+  assert.match(dialog, /saveSettings\(\{ hideTabUpdateBadge: !\$settings\.hideTabUpdateBadge \}\)/);
+  assert.match(dialog, /class:active=\{!\$settings\.hideTabUpdateBadge\}/);
 });
 
 test('the session-list setting is off by default and has a toggle', () => {

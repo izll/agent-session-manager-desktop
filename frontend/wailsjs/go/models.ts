@@ -1956,6 +1956,7 @@ export namespace main {
 	    codexUseDaemon: boolean;
 	    hideYoloBadge: boolean;
 	    showUpdateBadge: boolean;
+	    hideTabUpdateBadge: boolean;
 	    showResumeBadge: boolean;
 	    hideRemoteBadge: boolean;
 	    splitView: boolean;
@@ -2024,6 +2025,7 @@ export namespace main {
 	        this.codexUseDaemon = source["codexUseDaemon"];
 	        this.hideYoloBadge = source["hideYoloBadge"];
 	        this.showUpdateBadge = source["showUpdateBadge"];
+	        this.hideTabUpdateBadge = source["hideTabUpdateBadge"];
 	        this.showResumeBadge = source["showResumeBadge"];
 	        this.hideRemoteBadge = source["hideRemoteBadge"];
 	        this.splitView = source["splitView"];

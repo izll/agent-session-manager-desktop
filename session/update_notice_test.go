@@ -319,3 +319,20 @@ func TestShowUpdateBadgeDefaultsToOff(t *testing.T) {
 		t.Fatalf("flag lost in a round trip: %s", data)
 	}
 }
+
+// The tabs' marker is on unless switched off: a setting saved before the
+// option existed must keep it on.
+func TestTabUpdateBadgeDefaultsToShown(t *testing.T) {
+	var s Settings
+	if err := json.Unmarshal([]byte(`{"compact_list":true}`), &s); err != nil {
+		t.Fatal(err)
+	}
+	if s.HideTabUpdateBadge {
+		t.Error("older settings hide the update marker on the tabs")
+	}
+	data, _ := json.Marshal(Settings{HideTabUpdateBadge: true})
+	var loaded Settings
+	if err := json.Unmarshal(data, &loaded); err != nil || !loaded.HideTabUpdateBadge {
+		t.Fatalf("flag lost in a round trip: %s", data)
+	}
+}

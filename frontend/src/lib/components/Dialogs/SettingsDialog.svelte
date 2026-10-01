@@ -985,6 +985,24 @@
               </button>
             </label>
 
+            <!-- The tabs' marker, shown by default: stored as "hide". -->
+            <label class="setting-item">
+              <span class="setting-info">
+                <span class="setting-label">{$t('settings.showTabUpdateBadge')}</span>
+                <span class="setting-desc">{$t('settings.showTabUpdateBadgeDesc')}</span>
+              </span>
+              <button
+                class="toggle-btn"
+                class:active={!$settings.hideTabUpdateBadge}
+                aria-label={$t('settings.showTabUpdateBadge')}
+                on:click={() => saveSettings({ hideTabUpdateBadge: !$settings.hideTabUpdateBadge })}
+              >
+                <span class="toggle-track">
+                  <span class="toggle-thumb"></span>
+                </span>
+              </button>
+            </label>
+
             <label class="setting-item">
               <span class="setting-info">
                 <span class="setting-label">{$t('settings.showResumeBadge')}</span>

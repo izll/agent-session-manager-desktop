@@ -92,6 +92,9 @@ type Settings struct {
 	// waiting in the session list too. Off by default: the list is busy
 	// enough, and the tab bar shows the marker anyway.
 	ShowUpdateBadge bool   `json:"show_update_badge,omitempty"`
+	// HideTabUpdateBadge hides that marker on the tabs too. Stored as "hide"
+	// so that a setting saved before it existed keeps the tabs' marker on.
+	HideTabUpdateBadge bool `json:"hide_tab_update_badge,omitempty"`
 	SplitView       bool   `json:"split_view,omitempty"`
 	MarkedSessionID string `json:"marked_session_id,omitempty"`
 	// LastSessionID is the session that was selected when the app last closed,
