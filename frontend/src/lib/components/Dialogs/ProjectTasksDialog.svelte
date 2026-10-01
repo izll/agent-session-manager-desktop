@@ -63,7 +63,7 @@
         <DialogCloseButton on:click={close} />
       </div>
       <div class="project-tasks-host">
-        <ProjectWorkspace active={show} on:taskSent={handleTaskSent} />
+        <ProjectWorkspace active={show} followsSearch on:taskSent={handleTaskSent} />
       </div>
     </div>
   </div>

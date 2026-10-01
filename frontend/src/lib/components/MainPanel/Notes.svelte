@@ -30,6 +30,13 @@
    */
   export let project = false;
   const isProject = project;
+  /**
+   * Whether a note opened from the global search shows here. The panel's
+   * view takes the session notes; of the project's views, only the one in
+   * the project window — where the search opens the project's note — so the
+   * dashboard's copy behind it does not take the request first.
+   */
+  export let followsSearch = true;
 
   // Which note is open: this tab's, or the session's — the one every tab of
   // the session shares. The session's is addressed as its own target, window
@@ -642,15 +649,21 @@
    */
   let revealJump = false;
   let jumpPageId: string | undefined;
-  // A jump names a session's note; the project's view leaves it for that one.
-  $: if (active && !isProject && $pendingNoteJump) takeNoteJump($pendingNoteJump);
+  // A jump names either a session's note or the project's; each view leaves
+  // the other kind for the view that shows it.
+  $: if (active && followsSearch && $pendingNoteJump &&
+      ($pendingNoteJump.scope === 'project') === isProject) takeNoteJump($pendingNoteJump);
 
   function takeNoteJump(jump: NoteJump) {
     clearNoteJump();
-    // The search selected this session a moment ago; anything else means the
-    // selection has moved on, and the request is no longer the user's wish.
-    if (jump.projectId !== get(activeProjectId) || jump.sessionId !== get(selectedSessionId)) return;
-    scope = jump.scope;
+    if (jump.projectId !== get(activeProjectId)) return;
+    if (jump.scope !== 'project') {
+      // The search selected this session a moment ago; anything else means
+      // the selection has moved on, and the request is no longer the user's
+      // wish.
+      if (jump.sessionId !== get(selectedSessionId)) return;
+      scope = jump.scope;
+    }
     jumpPageId = jump.pageId;
     if (jump.query) {
       showFind = true;
@@ -690,7 +703,7 @@
   // for a reload. A note that matched only loosely has nothing to select, so
   // the find bar is closed again rather than left saying "no matches".
   $: if (revealJump && !loadingNotes && !activating && !loadError &&
-      lastSessionId === $selectedSessionId && lastWindowIdx === wantedWindowIdx) {
+      lastSessionId === wantedSessionId && lastWindowIdx === wantedWindowIdx) {
     revealJump = false;
     // The page first, then — after a tick, when matches has been recomputed
     // for its text — the match. In a function, too: read here, matches would

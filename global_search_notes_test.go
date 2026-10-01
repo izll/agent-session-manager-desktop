@@ -6,12 +6,12 @@ import (
 	"asmgr-desktop/session"
 )
 
-func globalSearchNoteFixture() []*session.Instance {
-	return []*session.Instance{{
+func globalSearchNoteFixture() session.NoteSources {
+	return session.NoteSources{Instances: []*session.Instance{{
 		ID: "s1", Name: "API",
 		Notes:           "release plan",
 		FollowedWindows: []session.FollowedWindow{{ID: "t-2", Index: 2, Name: "Tests", Notes: "Release blockers"}},
-	}}
+	}}}
 }
 
 // Note hits come first and carry what the frontend needs to open them.
@@ -69,12 +69,32 @@ func TestMergeSearchResultsNamesThePage(t *testing.T) {
 		{ID: "a", Title: "Plan", Text: "nothing here"},
 		{ID: "b", Title: "Risks", Text: "the release blocker"},
 	})
-	got := mergeSearchResults(nil, false, []*session.Instance{inst}, "blocker")
+	got := mergeSearchResults(nil, false, session.NoteSources{Instances: []*session.Instance{inst}}, "blocker")
 	if len(got) != 1 {
 		t.Fatalf("got %d results, want 1: %+v", len(got), got)
 	}
 	if r := got[0]; r.PageID != "b" || r.PageTitle != "Risks" || r.PageIndex != 1 || r.PageCount != 2 {
 		t.Fatalf("result does not name its page: %+v", r)
+	}
+}
+
+// The project's own note is found too: a result with the project scope and no
+// session, which the frontend opens in the project's notes.
+func TestMergeSearchResultsFindsTheProjectNote(t *testing.T) {
+	sources := globalSearchNoteFixture()
+	sources.ProjectPages = []session.NotePage{
+		{ID: "p1", Title: "Roadmap", Text: "nothing here"},
+		{ID: "p2", Title: "Launch", Text: "release train leaves Friday"},
+	}
+	got := mergeSearchResults(nil, false, sources, "release")
+	if len(got) != 3 {
+		t.Fatalf("got %d results, want 3: %+v", len(got), got)
+	}
+	project := got[0]
+	if project.Kind != historyKindNote || project.NoteScope != "project" || project.SessionID != "" ||
+		project.SessionName != "" || project.PageID != "p2" || project.PageTitle != "Launch" ||
+		project.PageIndex != 1 || project.PageCount != 2 || !session.IsNoteResultID(project.ID) {
+		t.Fatalf("project note result = %+v", project)
 	}
 }
 

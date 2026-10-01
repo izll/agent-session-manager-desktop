@@ -37,7 +37,7 @@ func findMatch(t *testing.T, matches []NoteMatch, sessionID string, scope NoteSc
 // followed tab's — and each result says where it came from, so opening it
 // lands on the right note.
 func TestSearchNotesFindsSessionMainAndTabNotes(t *testing.T) {
-	matches := SearchNotes(noteSearchFixture(), "migration")
+	matches := SearchNotes(NoteSources{Instances: noteSearchFixture()}, "migration")
 	if len(matches) != 4 {
 		t.Fatalf("got %d matches, want 4: %+v", len(matches), matches)
 	}
@@ -65,7 +65,7 @@ func TestSearchNotesFindsSessionMainAndTabNotes(t *testing.T) {
 
 func TestSearchNotesIgnoresCase(t *testing.T) {
 	for _, query := range []string{"MIGRATION", "Migration", "migration"} {
-		if got := len(SearchNotes(noteSearchFixture(), query)); got != 4 {
+		if got := len(SearchNotes(NoteSources{Instances: noteSearchFixture()}, query)); got != 4 {
 			t.Fatalf("query %q found %d notes, want 4", query, got)
 		}
 	}
@@ -74,22 +74,22 @@ func TestSearchNotesIgnoresCase(t *testing.T) {
 // A blank note is no note: whitespace alone must not turn up as a result,
 // even for a query that is itself a space.
 func TestSearchNotesSkipsEmptyNotes(t *testing.T) {
-	for _, m := range SearchNotes(noteSearchFixture(), " ") {
+	for _, m := range SearchNotes(NoteSources{Instances: noteSearchFixture()}, " ") {
 		if m.TabID == "t-4" {
 			t.Fatalf("blank note returned: %+v", m)
 		}
 	}
-	if got := SearchNotes(noteSearchFixture(), ""); len(got) != 0 {
+	if got := SearchNotes(NoteSources{Instances: noteSearchFixture()}, ""); len(got) != 0 {
 		t.Fatalf("empty query returned %d notes", len(got))
 	}
-	if got := SearchNotes([]*Instance{{ID: "x", Name: "X"}}, "a"); len(got) != 0 {
+	if got := SearchNotes(NoteSources{Instances: []*Instance{{ID: "x", Name: "X"}}}, "a"); len(got) != 0 {
 		t.Fatalf("session without notes returned %+v", got)
 	}
 }
 
 func TestSearchNotesSnippetSurroundsMatch(t *testing.T) {
 	text := strings.Repeat("lorem ipsum ", 20) + "the NEEDLE sits\nhere " + strings.Repeat("dolor sit ", 20)
-	matches := SearchNotes([]*Instance{{ID: "s", Name: "S", Notes: text}}, "needle")
+	matches := SearchNotes(NoteSources{Instances: []*Instance{{ID: "s", Name: "S", Notes: text}}}, "needle")
 	if len(matches) != 1 {
 		t.Fatalf("got %d matches", len(matches))
 	}
@@ -109,7 +109,7 @@ func TestSearchNotesSnippetSurroundsMatch(t *testing.T) {
 // found in the lowered text cut the original mid-character.
 func TestSearchNotesSnippetStaysValidUTF8(t *testing.T) {
 	text := strings.Repeat("İé", 60) + "árvíztűrő tükörfúrógép" + strings.Repeat("İ", 80)
-	matches := SearchNotes([]*Instance{{ID: "s", Name: "S", Notes: text}}, "TÜKÖR")
+	matches := SearchNotes(NoteSources{Instances: []*Instance{{ID: "s", Name: "S", Notes: text}}}, "TÜKÖR")
 	if len(matches) != 1 {
 		t.Fatalf("got %d matches", len(matches))
 	}
@@ -119,9 +119,9 @@ func TestSearchNotesSnippetStaysValidUTF8(t *testing.T) {
 }
 
 func TestFindNoteByResultID(t *testing.T) {
-	instances := noteSearchFixture()
-	for _, m := range SearchNotes(instances, "migration") {
-		got, ok := FindNote(instances, m.ID())
+	src := NoteSources{Instances: noteSearchFixture()}
+	for _, m := range SearchNotes(src, "migration") {
+		got, ok := FindNote(src, m.ID())
 		if !ok || got.Text != m.Text {
 			t.Fatalf("FindNote(%q) = %+v, %v", m.ID(), got, ok)
 		}
@@ -129,7 +129,7 @@ func TestFindNoteByResultID(t *testing.T) {
 			t.Fatalf("%q not recognised as a note result", m.ID())
 		}
 	}
-	if _, ok := FindNote(instances, NoteResultID("s1", "gone", LegacyNotePageID)); ok {
+	if _, ok := FindNote(src, NoteResultID("s1", "gone", LegacyNotePageID)); ok {
 		t.Fatal("a note that no longer exists was found")
 	}
 	if IsNoteResultID(generateHistoryID()) {
@@ -138,14 +138,15 @@ func TestFindNoteByResultID(t *testing.T) {
 }
 
 func TestFuzzySearchNotesToleratesTypos(t *testing.T) {
-	matches := FuzzySearchNotes([]*Instance{{ID: "s", Name: "S", Notes: "deployment checklist"}}, "dplymnt")
+	matches := FuzzySearchNotes(NoteSources{Instances: []*Instance{{ID: "s", Name: "S", Notes: "deployment checklist"}}}, "dplymnt")
 	if len(matches) != 1 || matches[0].Scope != NoteScopeSession {
 		t.Fatalf("fuzzy matches = %+v", matches)
 	}
 }
 
-// Notes are read from sessions.json, without asking tmux about any session.
-func TestLoadStoredInstancesReadsNotes(t *testing.T) {
+// Notes are read from sessions.json, without asking tmux about any session —
+// the project's own note with the sessions'.
+func TestLoadNoteSourcesReadsNotes(t *testing.T) {
 	storage := newTestStorage(t)
 	instances := []*Instance{{ID: "a", Name: "API", Path: "/tmp/api", Status: StatusStopped,
 		Notes: "session note", MainTabNotes: "main note",
@@ -153,11 +154,55 @@ func TestLoadStoredInstancesReadsNotes(t *testing.T) {
 	if err := storage.SaveAll(instances, nil, DefaultSettings()); err != nil {
 		t.Fatal(err)
 	}
-	loaded, err := storage.LoadStoredInstances()
+	if err := storage.SetProjectNotePages([]NotePage{{ID: "p1", Title: "Roadmap", Text: "project note"}}); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := storage.LoadNoteSources()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := len(SearchNotes(loaded, "NOTE")); got != 3 {
-		t.Fatalf("found %d stored notes, want 3", got)
+	if got := len(SearchNotes(loaded, "NOTE")); got != 4 {
+		t.Fatalf("found %d stored notes, want 4", got)
+	}
+}
+
+// The project's own note is searched, page by page, before the sessions'
+// notes; a result names no session, and its ID finds it again.
+func TestSearchNotesFindsTheProjectNote(t *testing.T) {
+	src := NoteSources{
+		Instances: noteSearchFixture(),
+		ProjectPages: []NotePage{
+			{ID: "p-plan", Title: "Plan", Text: "nothing to see"},
+			{ID: "p-db", Title: "Database", Text: "the migration window is Sunday"},
+		},
+	}
+	matches := SearchNotes(src, "migration")
+	if len(matches) != 5 {
+		t.Fatalf("got %d matches, want 5: %+v", len(matches), matches)
+	}
+	project := matches[0]
+	if project.Scope != NoteScopeProject || project.SessionID != "" || project.SessionName != "" ||
+		project.TabID != "" || project.WindowIndex != SessionNotesWindow ||
+		project.PageID != "p-db" || project.PageTitle != "Database" || project.PageIndex != 1 || project.PageCount != 2 ||
+		!strings.Contains(project.Snippet, "migration") {
+		t.Fatalf("project note result = %+v", project)
+	}
+	if project.ID() != NoteResultID("", "project", "p-db") {
+		t.Fatalf("project note ID = %q", project.ID())
+	}
+	found, ok := FindNote(src, project.ID())
+	if !ok || found.Text != "the migration window is Sunday" {
+		t.Fatalf("FindNote(%q) = %+v, %v", project.ID(), found, ok)
+	}
+	// By its title, and loosely.
+	if got := SearchNotes(src, "plan"); len(got) != 1 || got[0].Scope != NoteScopeProject || got[0].PageID != "p-plan" {
+		t.Fatalf("title search = %+v", got)
+	}
+	if got := FuzzySearchNotes(NoteSources{ProjectPages: src.ProjectPages}, "dtbase"); len(got) == 0 || got[0].PageID != "p-db" {
+		t.Fatalf("fuzzy search = %+v", got)
+	}
+	// An empty project note adds nothing.
+	if got := SearchNotes(NoteSources{ProjectPages: []NotePage{{ID: "x"}}}, " "); len(got) != 0 {
+		t.Fatalf("empty project note matched: %+v", got)
 	}
 }

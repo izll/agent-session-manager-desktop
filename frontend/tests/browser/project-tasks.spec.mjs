@@ -142,3 +142,34 @@ test('the project note has pages of its own', async ({ page }) => {
   await dialog(page).locator('.page-tab', { hasText: 'Note 1' }).click();
   await expect(note).toHaveValue('Kickoff on Monday');
 });
+
+// The global search finds the project's own note, and opening a result opens
+// the project window on the page of the match with the match selected — even
+// with the dashboard's copy of the note on screen behind it.
+test('a project note found by the global search opens on its page in the project window', async ({ page }) => {
+  await page.goto('/tests/browser/project-tasks-fixture.html?dashboard');
+  await expect(page.locator('body')).toHaveAttribute('data-fixture-ready', 'true', { timeout: 15_000 });
+  await page.evaluate(() => window.projectTasksFixture.setNotePages([
+    { id: 'p-plan', title: 'Plan', text: 'Kickoff on Monday' },
+    { id: 'p-launch', title: 'Launch', text: 'first line\nthe release train leaves Friday' },
+  ]));
+
+  await page.evaluate(() => window.openGlobalSearch());
+  await page.locator('.search-input').fill('train');
+  const result = page.locator('.note-result');
+  await expect(result).toHaveCount(1);
+  await expect(result.locator('.note-badge')).toHaveText('Project note');
+  await expect(result.locator('.note-place')).toHaveText('Default · Launch');
+  await result.dblclick();
+
+  await expect(page.locator('.search-input')).toHaveCount(0);
+  await expect(dialog(page)).toBeVisible();
+  await expect(dialog(page).getByRole('tab', { name: 'Notes' })).toHaveAttribute('aria-selected', 'true');
+  const note = dialog(page).locator('textarea.notes-textarea');
+  await expect(dialog(page).locator('.page-tab', { hasText: 'Launch' })).toHaveAttribute('aria-selected', 'true');
+  await expect(note).toHaveValue('first line\nthe release train leaves Friday');
+  await expect(dialog(page).locator('.find-bar input')).toHaveValue('train');
+  await expect.poll(() => note.evaluate((el) => el.value.slice(el.selectionStart, el.selectionEnd))).toBe('train');
+  // The dashboard's copy behind the window was left alone.
+  await expect(page.locator('.fixture-dashboard .find-bar')).toHaveCount(0);
+});

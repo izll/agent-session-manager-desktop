@@ -6,9 +6,10 @@
   import * as App from '../../../../wailsjs/go/main/App';
   import { t } from '../../i18n';
   import { sessions, selectSession, selectWindow } from '../../stores/sessions';
-  import { activeProjectId } from '../../stores/projects';
+  import { activeProjectId, projects } from '../../stores/projects';
+  import { openProjectTasks, PROJECT_TASKS_SCOPE } from '../../stores/projectTasks';
   import { requestNoteJump } from '../../stores/noteJump';
-  import { isNoteResult, resolveNoteTarget, notePageName } from '../../utils/noteSearchResult';
+  import { isNoteResult, resolveNoteTarget, notePlace } from '../../utils/noteSearchResult';
   import DialogCloseButton from '../common/DialogCloseButton.svelte';
 
   interface HistoryEntry {
@@ -133,14 +134,33 @@
     if (generation === previewGeneration) previewLoading = false;
   }
 
+  // Every result is the active project's, so the project's own note is
+  // labelled with its name.
+  $: projectName = $projects.find((project) => project.id === $activeProjectId)?.name || $t('project.default');
+
   /**
    * Take a note result to its note: select the session and, for a tab note,
    * the tab, then ask the notes view to open on that note with the query in
    * its find bar. A conversation result has nowhere to go — its session may
    * never have been an ASMGR session — so only notes open.
+   *
+   * The project's own note opens where the palette's "Open project notes"
+   * does, in the project window; no session is selected for it.
    */
   function openNote(entry: HistoryEntry) {
     const target = resolveNoteTarget(entry, get(sessions));
+    if (target?.scope === 'project') {
+      requestNoteJump({
+        projectId: get(activeProjectId),
+        sessionId: PROJECT_TASKS_SCOPE,
+        scope: 'project',
+        query: query.trim(),
+        pageId: target.pageId,
+      });
+      close();
+      openProjectTasks('notes');
+      return;
+    }
     if (!target) {
       // Gone since the search ran. Dropped from the list rather than shown as
       // an error, which would hide the results that are still good.
@@ -167,6 +187,7 @@
   // A key, not the text: translated in the markup, where Svelte can see $t
   // and re-render on a language change.
   function noteLabelKey(entry: HistoryEntry): string {
+    if (entry.noteScope === 'project') return 'search.projectNote';
     return entry.noteScope === 'session' ? 'search.sessionNote' : 'search.tabNote';
   }
 
@@ -254,6 +275,9 @@
 
     // Wait for DOM update
     setTimeout(() => {
+      // Gone if the result was opened in the meantime: a double-click
+      // selects it (and loads its preview) a moment before opening it.
+      if (!previewContainer) return;
       const marks = previewContainer.querySelectorAll('mark');
       matchCount = marks.length;
       currentMatchIndex = 0;
@@ -429,7 +453,7 @@
                       <span class="result-meta">
                         <span class="note-badge">{$t(noteLabelKey(entry))}</span>
                         <span class="note-place">
-                          {entry.sessionName}{#if entry.noteScope === 'tab' && entry.tabName && entry.tabName !== entry.sessionName} · {entry.tabName}{/if}{#if notePageName(entry, $t)} · {notePageName(entry, $t)}{/if}
+                          {notePlace(entry, projectName, $t)}
                         </span>
                       </span>
                     </div>
@@ -464,7 +488,7 @@
               <span class="preview-title">
                 {#if isNoteResult(selectedEntry)}
                   <span>📝</span>
-                  {$t(noteLabelKey(selectedEntry))} · {selectedEntry.sessionName}{#if selectedEntry.noteScope === 'tab' && selectedEntry.tabName && selectedEntry.tabName !== selectedEntry.sessionName} · {selectedEntry.tabName}{/if}{#if notePageName(selectedEntry, $t)} · {notePageName(selectedEntry, $t)}{/if}
+                  {$t(noteLabelKey(selectedEntry))} · {notePlace(selectedEntry, projectName, $t)}
                 {:else}
                   <span style="color: {getAgentColor(selectedEntry.agent)}">
                     {getAgentIcon(selectedEntry.agent)}

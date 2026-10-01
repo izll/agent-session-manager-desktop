@@ -12,13 +12,15 @@ import (
 // note rather than a tab's. Negative, so no multiplexer window can have it.
 const SessionNotesWindow = -1
 
-// NoteScope says which of a session's notes a search hit came from, matching
-// the [This tab | Session] switch of the notes view.
+// NoteScope says which note a search hit came from: one of a session's,
+// matching the [This tab | Session] switch of the notes view, or the
+// project's own note, which belongs to no session.
 type NoteScope string
 
 const (
 	NoteScopeSession NoteScope = "session"
 	NoteScopeTab     NoteScope = "tab"
+	NoteScopeProject NoteScope = "project"
 )
 
 const (
@@ -31,8 +33,16 @@ const (
 	noteSnippetAfter  = 70
 )
 
+// NoteSources is everything the note search reads: the active project's
+// sessions, and the pages of the project's own note.
+type NoteSources struct {
+	Instances    []*Instance
+	ProjectPages []NotePage
+}
+
 // NoteMatch is one page of a note that matched a global search query.
 type NoteMatch struct {
+	// SessionID and SessionName are empty for the project's own note.
 	SessionID   string
 	SessionName string
 	Scope       NoteScope
@@ -61,8 +71,8 @@ type NoteMatch struct {
 // be asked for without the webview naming a session and tab directly.
 func (m NoteMatch) ID() string {
 	target := m.TabID
-	if m.Scope == NoteScopeSession {
-		target = string(NoteScopeSession)
+	if m.Scope == NoteScopeSession || m.Scope == NoteScopeProject {
+		target = string(m.Scope)
 	}
 	return NoteResultID(m.SessionID, target, m.PageID)
 }
@@ -79,11 +89,16 @@ func IsNoteResultID(id string) bool {
 }
 
 // allNotes lists every page with something in it — text or a title — of the
-// given sessions' notes: for each session its own note first, then the main
-// tab's, then the followed tabs' in order, each note's pages in page order.
-func allNotes(instances []*Instance) []NoteMatch {
-	var notes []NoteMatch
-	for _, inst := range instances {
+// project's own note and the given sessions' notes: the project's first, then
+// for each session its own note, the main tab's and the followed tabs' in
+// order, each note's pages in page order.
+//
+// The project's note has no session: its ID is NoteResultID("", "project",
+// page), which no session note's can be, since session IDs are never empty.
+func allNotes(src NoteSources) []NoteMatch {
+	project := NoteMatch{Scope: NoteScopeProject, WindowIndex: SessionNotesWindow}
+	notes := appendNotePages(nil, project, src.ProjectPages)
+	for _, inst := range src.Instances {
 		if inst == nil {
 			continue
 		}
@@ -137,22 +152,26 @@ func appendNotePages(notes []NoteMatch, note NoteMatch, pages []NotePage) []Note
 	return notes
 }
 
-// LoadStoredInstances reads the active project's sessions as stored, without
-// the tmux status probe LoadAll makes. Notes live in sessions.json, not in
-// tmux, so searching them must not wait on a multiplexer — least of all a
-// remote one — for a status nothing here reads.
-func (s *Storage) LoadStoredInstances() ([]*Instance, error) {
+// LoadNoteSources reads the active project's notes as stored — its sessions'
+// and its own — without the tmux status probe LoadAll makes. Notes live in
+// sessions.json, not in tmux, so searching them must not wait on a
+// multiplexer — least of all a remote one — for a status nothing here reads.
+// One read, so the sessions and the project's note come from the same file.
+func (s *Storage) LoadNoteSources() (NoteSources, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	instances, _, _, err := s.loadAllWithSettingsLocked()
-	return instances, err
+	data, err := s.loadStorageDataLocked()
+	if err != nil {
+		return NoteSources{}, err
+	}
+	return NoteSources{Instances: data.Instances, ProjectPages: data.ProjectNote().Pages()}, nil
 }
 
 // FindNote returns the note a result ID was issued for, read from the given
-// sessions, so a preview shows the note as it is now rather than as it was
+// sources, so a preview shows the note as it is now rather than as it was
 // when the search ran.
-func FindNote(instances []*Instance, id string) (NoteMatch, bool) {
-	for _, note := range allNotes(instances) {
+func FindNote(src NoteSources, id string) (NoteMatch, bool) {
+	for _, note := range allNotes(src) {
 		if note.ID() == id {
 			return note, true
 		}
@@ -161,16 +180,16 @@ func FindNote(instances []*Instance, id string) (NoteMatch, bool) {
 }
 
 // SearchNotes finds the notes containing query, ignoring case — the same
-// match the history search makes first. Notes are read from the instances
+// match the history search makes first. Notes are read from the sources
 // passed in, which the caller loads at query time: notes are small and change
 // all the time, so indexing them would only add a way to be stale.
-func SearchNotes(instances []*Instance, query string) []NoteMatch {
+func SearchNotes(src NoteSources, query string) []NoteMatch {
 	needle := []rune(strings.ToLower(query))
 	if len(needle) == 0 {
 		return nil
 	}
 	var results []NoteMatch
-	for _, note := range allNotes(instances) {
+	for _, note := range allNotes(src) {
 		// The text first, so the snippet shows the words around the match;
 		// a page found by its title alone shows the start of its text.
 		if at := indexFold([]rune(note.Text), needle); at >= 0 {
@@ -191,11 +210,11 @@ func SearchNotes(instances []*Instance, query string) []NoteMatch {
 // FuzzySearchNotes is the typo-tolerant fallback, used only when nothing —
 // neither a history nor a note — contains the query itself; the history search
 // falls back the same way.
-func FuzzySearchNotes(instances []*Instance, query string) []NoteMatch {
+func FuzzySearchNotes(src NoteSources, query string) []NoteMatch {
 	if query == "" {
 		return nil
 	}
-	notes := allNotes(instances)
+	notes := allNotes(src)
 	if len(notes) == 0 {
 		return nil
 	}

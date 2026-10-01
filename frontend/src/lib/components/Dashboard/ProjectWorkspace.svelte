@@ -17,6 +17,9 @@
   import { projectTasksView, projectOpenTaskCount } from '../../stores/projectTasks';
 
   export let active = true;
+  /** Whether the note shows a project note opened from the global search;
+   *  see Notes.svelte. Only the project window's copy does. */
+  export let followsSearch = false;
 </script>
 
 <div class="project-workspace">
@@ -43,7 +46,7 @@
     <TaskPanel project active={active && $projectTasksView === 'tasks'} on:taskSent />
   </div>
   <div class="workspace-panel" class:shown={$projectTasksView === 'notes'}>
-    <Notes project active={active && $projectTasksView === 'notes'} />
+    <Notes project {followsSearch} active={active && $projectTasksView === 'notes'} />
   </div>
 </div>
 

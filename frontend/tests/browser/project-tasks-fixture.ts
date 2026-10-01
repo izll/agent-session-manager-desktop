@@ -74,6 +74,17 @@ const backend = new Proxy({
   },
   SendProjectTaskToAgent: async (...args: unknown[]) => { calls.push(['SendProjectTaskToAgent', ...args]); },
   GetProjectNotePages: async () => clone(projectNotes),
+  // The global search, over the project's note only: enough to open a
+  // project note result the way the real search issues it.
+  GlobalSearch: async (query: string) => projectNotes
+    .map((page, index) => ({ page, index }))
+    .filter(({ page }) => page.text.toLowerCase().includes(query.toLowerCase()))
+    .map(({ page, index }) => ({
+      id: `note::project:${page.id}`, agent: '', content: page.text, sessionId: '', score: 0,
+      kind: 'note', noteScope: 'project', windowIdx: -1,
+      pageId: page.id, pageTitle: page.title, pageIndex: index, pageCount: projectNotes.length,
+    })),
+  GetHistoryPreview: async (id: string) => projectNotes.find((page) => id === `note::project:${page.id}`)?.text ?? '',
   SetProjectNotePages: async (pages: Page[], projectId: string) => {
     calls.push(['SetProjectNotePages', clone(pages), projectId]);
     projectNotes = clone(pages);
@@ -105,6 +116,7 @@ selectedSessionId.set('session-a');
   list: (scope: string) => clone(list(scope)),
   notes: () => projectNotes.map((p) => p.text).join('\n---\n'),
   notePages: () => clone(projectNotes),
+  setNotePages: (pages: Page[]) => { projectNotes = clone(pages); },
 };
 
 const target = document.getElementById('fixture');

@@ -15,7 +15,12 @@ import type { NoteResultScope } from '../utils/noteSearchResult';
 export type NoteJump = {
   /** The project the request was made in; ignored after a switch. */
   projectId: string;
+  /** The session whose note to show; unused for the project's own note. */
   sessionId: string;
+  /**
+   * 'project' asks for the project's own note, which is not in the panel's
+   * notes view but in the project window; whoever asks opens that window.
+   */
   scope: NoteResultScope;
   /** Pre-filled into the notes view's find bar; empty for none. */
   query: string;
@@ -34,7 +39,9 @@ export const notesViewRequested = writable(false);
 
 export function requestNoteJump(jump: NoteJump): void {
   pendingNoteJump.set(jump);
-  notesViewRequested.set(true);
+  // The panel's notes view shows a session's notes only; switching it for
+  // the project's note would only change what is under the project window.
+  if (jump.scope !== 'project') notesViewRequested.set(true);
 }
 
 /** Called by the panel once it has switched views. */

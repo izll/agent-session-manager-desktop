@@ -4,7 +4,11 @@
  * so the rules can be run under plain node.
  */
 
-export type NoteResultScope = 'tab' | 'session';
+/**
+ * Which note a result is: a tab's, a session's, or the project's own — the
+ * one that belongs to no session and opens in the project window.
+ */
+export type NoteResultScope = 'tab' | 'session' | 'project';
 
 /** The fields of a global search result that concern notes. */
 export interface NoteResultFields {
@@ -25,6 +29,7 @@ export interface NoteResultSession {
 }
 
 export interface NoteTarget {
+  /** Empty for the project's note, which has no session. */
   sessionId: string;
   /** The tab to select, or null to leave the session on the tab it remembers. */
   windowIdx: number | null;
@@ -44,7 +49,9 @@ export function isNoteResult(entry: { kind?: string }): boolean {
  * index changes when tabs are reordered or tmux renumbers them, the ID does
  * not. The main tab's index the backend does not even know without asking
  * tmux; the session list already carries it. The session's own note belongs
- * to no tab, so opening it leaves whichever tab the session was on.
+ * to no tab, so opening it leaves whichever tab the session was on. The
+ * project's note belongs to no session, so it leads nowhere in the list: it
+ * is the active project's, as every result is.
  *
  * Null when the session or tab has gone since the search ran.
  */
@@ -53,6 +60,9 @@ export function resolveNoteTarget(
   sessions: NoteResultSession[],
 ): NoteTarget | null {
   if (!isNoteResult(entry)) return null;
+  if (entry.noteScope === 'project') {
+    return { sessionId: '', windowIdx: null, scope: 'project', ...page(entry) };
+  }
   const session = sessions.find((s) => s.id === entry.sessionId);
   if (!session) return null;
   if (entry.noteScope === 'session') {
@@ -86,4 +96,29 @@ export function notePageName(
   if (entry.pageTitle) return entry.pageTitle;
   if ((entry.pageCount ?? 0) > 1) return t('notes.untitledPageN', { n: (entry.pageIndex ?? 0) + 1 });
   return '';
+}
+
+/** The fields of a note result that say where the note is. */
+export interface NotePlaceFields {
+  noteScope?: string;
+  sessionName?: string;
+  tabName?: string;
+  pageTitle?: string;
+  pageIndex?: number;
+  pageCount?: number;
+}
+
+/**
+ * Where a note result is, as the result list and the preview name it: the
+ * session, the tab when it is not the main one (labelled with the session's
+ * name), and the page — or, for the project's note, the project and the page.
+ * The project's name is passed in: the backend sends none, since every result
+ * is from the active project.
+ */
+export function notePlace(entry: NotePlaceFields, projectName: string, t: Translate): string {
+  const parts = entry.noteScope === 'project' ? [projectName] : [entry.sessionName ?? ''];
+  if (entry.noteScope === 'tab' && entry.tabName && entry.tabName !== entry.sessionName) parts.push(entry.tabName);
+  const pageName = notePageName(entry, t);
+  if (pageName) parts.push(pageName);
+  return parts.join(' · ');
 }

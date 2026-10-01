@@ -358,9 +358,9 @@ func TestSearchNotesFindsEveryPage(t *testing.T) {
 		{ID: "c", Title: "Migration owners"},
 		{ID: "d", Text: "untitled page about migration"},
 	})
-	instances := []*Instance{inst}
+	src := NoteSources{Instances: []*Instance{inst}}
 
-	matches := SearchNotes(instances, "migration")
+	matches := SearchNotes(src, "migration")
 	if len(matches) != 3 {
 		t.Fatalf("got %d matches, want 3: %+v", len(matches), matches)
 	}
@@ -380,15 +380,15 @@ func TestSearchNotesFindsEveryPage(t *testing.T) {
 		t.Fatalf("untitled page match = %+v", untitled)
 	}
 	for _, m := range matches {
-		found, ok := FindNote(instances, m.ID())
+		found, ok := FindNote(src, m.ID())
 		if !ok || found.PageID != m.PageID || found.Text != m.Text {
 			t.Fatalf("FindNote(%q) = %+v, %v", m.ID(), found, ok)
 		}
 	}
-	if got := SearchNotes(instances, "Plan"); len(got) != 1 || got[0].PageID != "a" {
+	if got := SearchNotes(src, "Plan"); len(got) != 1 || got[0].PageID != "a" {
 		t.Fatalf("title search = %+v", got)
 	}
-	if got := FuzzySearchNotes(instances, "rsks"); len(got) == 0 || got[0].PageID != "b" {
+	if got := FuzzySearchNotes(src, "rsks"); len(got) == 0 || got[0].PageID != "b" {
 		t.Fatalf("fuzzy title search = %+v", got)
 	}
 }
