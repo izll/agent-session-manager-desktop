@@ -9,7 +9,7 @@
   import { t } from '../../i18n';
   import { describeBackendError } from '../../utils/backendError';
   import { moveTargets } from '../../utils/tabMoveRules';
-  import { mergeSessionWithNotice, moveTabWithNotice } from '../../utils/tabMove';
+  import { mergeSessionWithNotice, moveTabWithNotice, requestTabMove } from '../../utils/tabMove';
   import DialogCloseButton from '../common/DialogCloseButton.svelte';
   import StatusIndicator from '../common/StatusIndicator.svelte';
 
@@ -25,6 +25,11 @@
   export let windowIdx = 0;
   /** The tab's name, or for a merge the session's. */
   export let name = '';
+  /**
+   * The tab is the only one of its session: moving it ends the session, so
+   * the choice is confirmed before anything moves (see requestTabMove).
+   */
+  export let onlyTab = false;
 
   const dispatch = createEventDispatcher();
 
@@ -93,6 +98,12 @@
 
   async function confirm() {
     if (!canChoose(chosenId, targets, refusals) || busy) return;
+    if (mode === 'tab' && onlyTab) {
+      const targetId = chosenId;
+      close();
+      requestTabMove(sourceId, windowIdx, targetId, name, true);
+      return;
+    }
     const current = generation;
     busy = true;
     const ok = mode === 'merge'

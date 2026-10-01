@@ -1649,6 +1649,7 @@
   "error.tabMoveLocalTabToServer": "แท็บที่ทำงานบนคอมพิวเตอร์เครื่องนี้ไม่สามารถเข้าร่วมเซสชันบนเซิร์ฟเวอร์ได้",
   "error.tabMoveRunningUnsupported": "บน Windows ไม่สามารถย้ายแท็บที่กำลังทำงานไปยังเซสชันอื่นได้ — หยุดแท็บก่อน แล้วจึงย้าย",
   "error.tabMoveFailed": "ไม่สามารถย้ายแท็บได้: {0}",
+  "error.tabSplitOnlyTab": "นี่คือแท็บเดียวของเซสชัน — เป็นเซสชันของตัวเองอยู่แล้ว",
   "tabBar.moveToSession": "ย้ายไปยังเซสชัน…",
   "tabBar.moveToNewSession": "ย้ายไปยังเซสชันใหม่",
   "sessionMenu.mergeInto": "รวมเข้ากับเซสชัน…",
@@ -1663,5 +1664,10 @@
   "tabMove.movedToNew": "“{tab}” เป็นเซสชันของตัวเองแล้ว: {session}",
   "tabMove.merged": "รวม “{source}” เข้ากับ {session} แล้ว ({count} แท็บ)",
   "tabMove.failed": "ไม่สามารถย้ายแท็บได้: {error}",
-  "tabMove.mergeFailed": "ไม่สามารถรวมเซสชันได้: {error}"
+  "tabMove.mergeFailed": "ไม่สามารถรวมเซสชันได้: {error}",
+  "tabMove.newSessionDrop": "เซสชันใหม่",
+  "tabMove.newSessionTitle": "ย้าย “{name}” ไปยังเซสชันใหม่",
+  "tabMove.newSessionName": "ชื่อเซสชันใหม่",
+  "tabMove.onlyTabTitle": "ย้ายแท็บเดียวหรือไม่?",
+  "tabMove.onlyTabMessage": "เซสชัน “{name}” มีแท็บนี้เพียงแท็บเดียว — การย้ายจะทำให้เซสชันสิ้นสุด ย้ายหรือไม่?"
 }

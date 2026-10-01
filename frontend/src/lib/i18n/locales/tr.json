@@ -1649,6 +1649,7 @@
   "error.tabMoveLocalTabToServer": "Bu bilgisayarda çalışan bir sekme, sunucudaki bir oturuma katılamaz",
   "error.tabMoveRunningUnsupported": "Windows'ta çalışan bir sekme başka bir oturuma taşınamaz — önce sekmeyi durdurun, sonra taşıyın",
   "error.tabMoveFailed": "Sekme taşınamadı: {0}",
+  "error.tabSplitOnlyTab": "Bu, oturumun tek sekmesi — zaten kendi başına bir oturum",
   "tabBar.moveToSession": "Oturuma taşı…",
   "tabBar.moveToNewSession": "Yeni oturuma taşı",
   "sessionMenu.mergeInto": "Oturumla birleştir…",
@@ -1663,5 +1664,10 @@
   "tabMove.movedToNew": "“{tab}” artık ayrı bir oturum: {session}",
   "tabMove.merged": "“{source}” {session} ile birleştirildi ({count} sekme)",
   "tabMove.failed": "Sekme taşınamadı: {error}",
-  "tabMove.mergeFailed": "Oturum birleştirilemedi: {error}"
+  "tabMove.mergeFailed": "Oturum birleştirilemedi: {error}",
+  "tabMove.newSessionDrop": "Yeni oturum",
+  "tabMove.newSessionTitle": "“{name}” sekmesini yeni bir oturuma taşı",
+  "tabMove.newSessionName": "Yeni oturumun adı",
+  "tabMove.onlyTabTitle": "Tek sekme taşınsın mı?",
+  "tabMove.onlyTabMessage": "“{name}” oturumunun yalnızca bu sekmesi var — taşınırsa oturum sona erer. Taşınsın mı?"
 }

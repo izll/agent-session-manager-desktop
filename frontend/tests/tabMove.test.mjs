@@ -11,8 +11,15 @@ const sessionItem = read('../src/lib/components/Sidebar/SessionItem.svelte');
 const sessionsStore = read('../src/lib/stores/sessions.ts');
 const dialog = read('../src/lib/components/Dialogs/MoveTabDialog.svelte');
 
+const sessionTree = read('../src/lib/components/Sidebar/SessionTree.svelte');
+const dropZone = read('../src/lib/components/Sidebar/NewSessionDropZone.svelte');
+const prompts = read('../src/lib/components/Dialogs/TabMovePrompts.svelte');
+const nameDialog = read('../src/lib/components/Dialogs/MoveToNewSessionDialog.svelte');
+const tabMoveUtil = read('../src/lib/utils/tabMove.ts');
+
 const {
-  TAB_DRAG_MIME, isMovableTab, encodeTabDrag, decodeTabDrag, tabDropState, moveTargets,
+  TAB_DRAG_MIME, isMovableTab, isOnlyTab, encodeTabDrag, decodeTabDrag, tabDropState, newSessionDropState,
+  uniqueSessionName, moveTargets,
 } = await import('../src/lib/utils/tabMoveRules.ts');
 
 const body = (text, start, length = 1500) => {
@@ -106,4 +113,90 @@ test('the picker refuses what the backend refuses, and is a proper dialog', () =
   assert.match(dialog, /App\.TabMoveRefusals\(sourceId, windowIdx\)/);
   assert.match(dialog, /!!id && list.some\(s => s.id === id\) && !refused\[id\]/);
   assert.match(dialog, /claimKeyForDialog\(\);\s*e\.stopPropagation\(\);\s*close\(\);/);
+});
+
+// ── The only tab of a session, and the "new session" target ───────────────
+
+test('the only tab of a session is told apart from the own window beside other tabs', () => {
+  assert.equal(isOnlyTab({ followedWindows: [] }, 0), true);
+  assert.equal(isOnlyTab({ followedWindows: [], mainWindowIndex: 0 }, 0), true);
+  assert.equal(isOnlyTab({ followedWindows: null, mainWindowIndex: 1 }, 1), true, 'base-index 1: its own window is 1');
+  assert.equal(isOnlyTab({ followedWindows: [], mainWindowIndex: 0 }, 3), false,
+    'a window the session does not follow is not the session');
+  assert.equal(isOnlyTab({ followedWindows: [{ index: 1 }] }, 0), false);
+  assert.equal(isOnlyTab({ followedWindows: [{ index: 1 }] }, 1), false);
+  assert.equal(isOnlyTab(null, 0), false);
+  assert.equal(isOnlyTab({ followedWindows: [] }, null), false);
+});
+
+test('a drag says whether it carries the only tab, and nothing else claims to', () => {
+  const payload = { sessionId: 's1', windowIdx: 0, projectId: 'p', name: 'solo', onlyTab: true };
+  assert.deepEqual(decodeTabDrag(encodeTabDrag(payload)), payload);
+  assert.equal(decodeTabDrag(encodeTabDrag({ ...payload, onlyTab: false })).onlyTab, undefined);
+  assert.equal(decodeTabDrag('{"sessionId":"s","windowIdx":0,"projectId":"p","onlyTab":"yes"}').onlyTab, undefined);
+});
+
+test('the "new session" target answers a dragged tab by what the backend said', () => {
+  const drag = { sessionId: 'src', windowIdx: 2, projectId: 'p', name: 't', refusals: {}, newSessionRefusal: '' };
+  assert.equal(newSessionDropState(drag, 'p'), 'ok');
+  assert.equal(newSessionDropState({ ...drag, newSessionRefusal: 'error.tabSplitOnlyTab' }, 'p'), 'refused');
+  assert.equal(newSessionDropState({ ...drag, newSessionRefusal: null }, 'p'), 'ok', 'still being asked');
+  assert.equal(newSessionDropState(drag, 'other-project'), 'none');
+  assert.equal(newSessionDropState(null, 'p'), 'none');
+});
+
+test('the name offered for the new session is the one the backend would give', () => {
+  const sessions = [{ name: 'build' }, { name: 'build 2' }, { name: 'web' }];
+  assert.equal(uniqueSessionName('build', sessions), 'build 3');
+  assert.equal(uniqueSessionName('web', sessions), 'web 2');
+  assert.equal(uniqueSessionName('docs', sessions), 'docs');
+});
+
+test('the only tab is offered to the sidebar too, marked as such', () => {
+  const start = body(tabBar, 'function handleTabDragStart');
+  assert.match(start, /isMovableTab\(sess, win\.Index\) \|\| isOnlyTab\(sess, win\.Index\)/);
+  assert.match(start, /onlyTab: isOnlyTab\(sess, win\.Index\)/);
+  assert.match(tabBar, /\$: tabContextMenuOnlyTab = isOnlyTab\(\$selectedSession, tabContextMenuIndex\)/);
+  assert.match(tabBar, /\$: tabContextMenuMovable = isMovableTab\(\$selectedSession, tabContextMenuIndex\) \|\| tabContextMenuOnlyTab/);
+  assert.match(body(tabBar, 'class:disabled={tabContextMenuOnlyTab}', 300),
+    /aria-disabled=\{tabContextMenuOnlyTab\}[\s\S]*error\.tabSplitOnlyTab[\s\S]*data-menu-action="move-to-new-session"/,
+    '"Move to new session" is inert for the only tab, and says why');
+  assert.match(body(tabBar, 'function tabContextMoveToNewSession', 120), /if \(tabContextMenuOnlyTab\) return;/);
+  assert.match(body(tabBar, 'function tabContextMoveToNewSession', 500), /askNewSessionFor\(sess\.id, windowIdx, name\)/,
+    'the menu asks for the name, as the drop does');
+  assert.match(tabBar, /onlyTab=\{moveTabTarget\.onlyTab\}/);
+  assert.match(tabBar, /<TabMovePrompts \/>/);
+  assert.match(body(tabBar, 'function tabBarDialogOpen', 400), /get\(tabMovePrompt\) !== null/);
+});
+
+test('moving the only tab is asked first, wherever it comes from', () => {
+  assert.match(body(sessionItem, 'function handleTabDrop', 900),
+    /requestTabMove\(payload\.sessionId, payload\.windowIdx, session\.id, payload\.name, !!payload\.onlyTab\)/);
+  const request = body(tabMoveUtil, 'export function requestTabMove', 500);
+  assert.match(request, /if \(!onlyTab\) \{\s*void moveTabWithNotice/);
+  assert.match(request, /tabMovePrompt\.set\(\{ kind: 'onlyTab'/);
+  assert.match(body(dialog, 'async function confirm', 400), /if \(mode === 'tab' && onlyTab\)[\s\S]*requestTabMove\(sourceId, windowIdx, targetId, name, true\)/);
+  assert.match(body(tabMoveUtil, 'export async function moveOnlyTabWithNotice', 400), /mergeSessionInto\(sourceId, targetId\)/,
+    'the only tab moves by merging its session');
+  assert.match(prompts, /<ConfirmDialog[\s\S]*tabMove\.onlyTabMessage[\s\S]*on:confirm=\{confirmOnlyTab\}[\s\S]*on:cancel=\{done\}/);
+  assert.match(prompts, /<MoveToNewSessionDialog/);
+});
+
+test('the "new session" target is there only while a tab of this project is dragged', () => {
+  assert.match(sessionTree, /<NewSessionDropZone \/>/);
+  assert.match(dropZone, /\$: shown = !!\$tabDrag && \$tabDrag\.projectId === \$activeProjectId;/);
+  const over = body(dropZone, 'function handleDragOver', 400);
+  assert.match(over, /types\.includes\(TAB_DRAG_MIME\)/);
+  assert.match(over, /if \(over === 'ok'\) \{\s*e\.preventDefault\(\)/, 'a refusing target must not accept the drop');
+  assert.match(body(dropZone, 'function handleDrop', 700), /endTabDrag\(\);[\s\S]*askNewSessionFor\(payload\.sessionId, payload\.windowIdx, payload\.name\)/);
+  assert.match(body(tabMoveUtil, 'export function beginTabDrag', 900), /App\.TabSplitRefusal\(payload\.sessionId, payload\.windowIdx\)/);
+});
+
+test('the name prompt offers the tab\'s name, refuses what the backend refuses, and splits with the typed one', () => {
+  assert.match(body(nameDialog, 'async function open', 300), /name = uniqueSessionName\(tabName, get\(sessions\)\)/);
+  assert.match(body(nameDialog, 'async function open', 400), /App\.TabSplitRefusal\(sourceId, windowIdx\)/);
+  assert.match(body(nameDialog, 'async function confirm', 400), /splitTabWithNotice\(sourceId, windowIdx, tabName, name\.trim\(\)\)/);
+  assert.match(nameDialog, /return !!value\.trim\(\) && !refused && !working;/);
+  assert.match(nameDialog, /claimKeyForDialog\(\);\s*e\.stopPropagation\(\);\s*close\(\);/);
+  assert.match(body(tabMoveUtil, 'export async function splitTabWithNotice', 300), /moveTabToNewSession\(sourceId, windowIdx, name\)/);
 });

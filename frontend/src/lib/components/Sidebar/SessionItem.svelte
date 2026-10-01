@@ -11,7 +11,7 @@
   import ConfirmDialog from '../Dialogs/ConfirmDialog.svelte';
   import MoveTabDialog from '../Dialogs/MoveTabDialog.svelte';
   import { TAB_DRAG_MIME, decodeTabDrag, tabDropState, type TabDropState } from '../../utils/tabMoveRules';
-  import { tabDrag, endTabDrag, moveTabWithNotice } from '../../utils/tabMove';
+  import { tabDrag, endTabDrag, requestTabMove } from '../../utils/tabMove';
   import { describeBackendError } from '../../utils/backendError';
   import type { Session } from '../../stores/sessions';
   import { selectedSessionId, renameSession, deleteSession, toggleFavorite } from '../../stores/sessions';
@@ -344,7 +344,7 @@
         payload.sessionId === session.id) {
       return true;
     }
-    void moveTabWithNotice(payload.sessionId, payload.windowIdx, session.id, payload.name);
+    requestTabMove(payload.sessionId, payload.windowIdx, session.id, payload.name, !!payload.onlyTab);
     return true;
   }
 

@@ -1,6 +1,7 @@
 <script lang="ts">
   import SessionItem from './SessionItem.svelte';
   import GroupItem from './GroupItem.svelte';
+  import NewSessionDropZone from './NewSessionDropZone.svelte';
   import {
     sessions,
     favorites,
@@ -475,6 +476,10 @@
     {/if}
     {/if}
   </div>
+
+  <!-- A tab dragged here becomes a session of its own. Outside the list, so
+       it is in reach however far the list is scrolled. -->
+  <NewSessionDropZone />
 
   <!-- Footer Buttons -->
   <div class="footer">

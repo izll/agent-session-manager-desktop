@@ -1649,6 +1649,7 @@
   "error.tabMoveLocalTabToServer": "A tab running on this computer cannot join a session on a server",
   "error.tabMoveRunningUnsupported": "On Windows a running tab cannot be moved to another session — stop the tab first, then move it",
   "error.tabMoveFailed": "The tab could not be moved: {0}",
+  "error.tabSplitOnlyTab": "This is the session's only tab — it is a session of its own already",
   "tabBar.moveToSession": "Move to session…",
   "tabBar.moveToNewSession": "Move to new session",
   "sessionMenu.mergeInto": "Merge into session…",
@@ -1663,5 +1664,10 @@
   "tabMove.movedToNew": "“{tab}” is now a session of its own: {session}",
   "tabMove.merged": "“{source}” merged into {session} ({count} tabs)",
   "tabMove.failed": "Could not move the tab: {error}",
-  "tabMove.mergeFailed": "Could not merge the session: {error}"
+  "tabMove.mergeFailed": "Could not merge the session: {error}",
+  "tabMove.newSessionDrop": "New session",
+  "tabMove.newSessionTitle": "Move “{name}” to a new session",
+  "tabMove.newSessionName": "Name of the new session",
+  "tabMove.onlyTabTitle": "Move the only tab?",
+  "tabMove.onlyTabMessage": "The session “{name}” has only this tab — moving it ends the session. Move it?"
 }

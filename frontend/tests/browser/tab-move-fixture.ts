@@ -5,9 +5,9 @@ import { sessions, selectedSessionId, selectedWindowIdx, type Session } from '..
 import { activeProjectId } from '../../src/lib/stores/projects';
 import { appError, appNotice } from '../../src/lib/stores/appErrors';
 
-// Four sessions of one project: the source with one tab besides its own
-// window, a running target, a stopped one, and one on a server that a local
-// tab cannot join. The backend is a stand-in that records what it was asked
+// Five sessions of one project: the source with one tab besides its own
+// window, a running target, a stopped one, one on a server that a local tab
+// cannot join, and one with no tab but its own window. The backend is a stand-in that records what it was asked
 // and answers the way the real one does.
 
 type Fw = { id: string; index: number; name: string; agent: string };
@@ -26,6 +26,7 @@ let state: Session[] = [
   makeSession('dst', 'Dest'),
   makeSession('other', 'Other', { status: 'stopped' }),
   makeSession('remote', 'Remote', { status: 'stopped', serverId: 'srv1', serverName: 'srv1' } as any),
+  makeSession('solo', 'Solo'),
 ];
 
 const calls: Array<{ method: string; args: unknown[] }> = [];
@@ -53,6 +54,12 @@ const backend = new Proxy({
     ];
   },
   TabMoveRefusals: async (source: string) => refusals(source),
+  // The only tab of a session is a session of its own already.
+  TabSplitRefusal: async (source: string, windowIdx: number) => {
+    const from = state.find(s => s.id === source);
+    if (!from || followed(from).some(fw => fw.index === windowIdx)) return '';
+    return followed(from).length === 0 ? 'error.tabSplitOnlyTab' : 'error.tabMoveMainTab';
+  },
   SessionMergeRefusals: async (source: string) => refusals(source),
   MoveTabToSession: async (source: string, windowIdx: number, target: string, projectId: string) => {
     calls.push({ method: 'MoveTabToSession', args: [source, windowIdx, target, projectId] });
@@ -66,9 +73,11 @@ const backend = new Proxy({
   MoveTabToNewSession: async (source: string, windowIdx: number, name: string, projectId: string) => {
     calls.push({ method: 'MoveTabToNewSession', args: [source, windowIdx, name, projectId] });
     const from = state.find(s => s.id === source)!;
-    (from as any).followedWindows = followed(from).filter(fw => fw.index !== windowIdx);
-    state = [...state, makeSession('split', 'worker')];
-    return { sessionId: 'split', sessionName: 'worker', windowIdx: 0, tabsMoved: 1, tasksMoved: 0 };
+    const tab = followed(from).find(fw => fw.index === windowIdx);
+    (from as any).followedWindows = followed(from).filter(fw => fw !== tab);
+    const sessionName = name || tab?.name || '';
+    state = [...state, makeSession('split', sessionName)];
+    return { sessionId: 'split', sessionName, windowIdx: 0, tabsMoved: 1, tasksMoved: 0 };
   },
   MergeSessionInto: async (source: string, target: string, projectId: string) => {
     calls.push({ method: 'MergeSessionInto', args: [source, target, projectId] });
@@ -102,6 +111,7 @@ appError.subscribe(message => { if (message) { errors.push(message); appError.se
   notices: () => [...notices],
   errors: () => [...errors],
   selected: () => ({ sessionId: get(selectedSessionId), windowIdx: get(selectedWindowIdx) }),
+  select: (id: string) => { selectedSessionId.set(id); selectedWindowIdx.set(0); },
 };
 
 const target = document.getElementById('fixture');

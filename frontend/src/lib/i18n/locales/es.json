@@ -1649,6 +1649,7 @@
   "error.tabMoveLocalTabToServer": "Una pestaña que se ejecuta en este equipo no puede unirse a una sesión en un servidor",
   "error.tabMoveRunningUnsupported": "En Windows no se puede mover una pestaña en ejecución a otra sesión: detén primero la pestaña y luego muévela",
   "error.tabMoveFailed": "No se pudo mover la pestaña: {0}",
+  "error.tabSplitOnlyTab": "Es la única pestaña de la sesión — ya es una sesión propia",
   "tabBar.moveToSession": "Mover a sesión…",
   "tabBar.moveToNewSession": "Mover a una sesión nueva",
   "sessionMenu.mergeInto": "Fusionar en sesión…",
@@ -1663,5 +1664,10 @@
   "tabMove.movedToNew": "«{tab}» es ahora una sesión propia: {session}",
   "tabMove.merged": "«{source}» se fusionó en {session} ({count} pestañas)",
   "tabMove.failed": "No se pudo mover la pestaña: {error}",
-  "tabMove.mergeFailed": "No se pudo fusionar la sesión: {error}"
+  "tabMove.mergeFailed": "No se pudo fusionar la sesión: {error}",
+  "tabMove.newSessionDrop": "Sesión nueva",
+  "tabMove.newSessionTitle": "Mover «{name}» a una sesión nueva",
+  "tabMove.newSessionName": "Nombre de la sesión nueva",
+  "tabMove.onlyTabTitle": "¿Mover la única pestaña?",
+  "tabMove.onlyTabMessage": "La sesión «{name}» solo tiene esta pestaña — al moverla, la sesión termina. ¿Moverla?"
 }

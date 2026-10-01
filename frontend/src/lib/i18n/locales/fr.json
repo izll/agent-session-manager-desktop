@@ -1649,6 +1649,7 @@
   "error.tabMoveLocalTabToServer": "Un onglet qui s’exécute sur cet ordinateur ne peut pas rejoindre une session sur un serveur",
   "error.tabMoveRunningUnsupported": "Sous Windows, un onglet en cours d’exécution ne peut pas être déplacé vers une autre session — arrêtez d’abord l’onglet, puis déplacez-le",
   "error.tabMoveFailed": "Impossible de déplacer l’onglet : {0}",
+  "error.tabSplitOnlyTab": "C'est le seul onglet de la session — c'est déjà une session à part entière",
   "tabBar.moveToSession": "Déplacer vers une session…",
   "tabBar.moveToNewSession": "Déplacer vers une nouvelle session",
   "sessionMenu.mergeInto": "Fusionner dans une session…",
@@ -1663,5 +1664,10 @@
   "tabMove.movedToNew": "« {tab} » est désormais une session à part entière : {session}",
   "tabMove.merged": "« {source} » fusionnée dans {session} ({count} onglets)",
   "tabMove.failed": "Impossible de déplacer l’onglet : {error}",
-  "tabMove.mergeFailed": "Impossible de fusionner la session : {error}"
+  "tabMove.mergeFailed": "Impossible de fusionner la session : {error}",
+  "tabMove.newSessionDrop": "Nouvelle session",
+  "tabMove.newSessionTitle": "Déplacer « {name} » vers une nouvelle session",
+  "tabMove.newSessionName": "Nom de la nouvelle session",
+  "tabMove.onlyTabTitle": "Déplacer le seul onglet ?",
+  "tabMove.onlyTabMessage": "La session « {name} » n'a que cet onglet — le déplacer met fin à la session. Le déplacer ?"
 }

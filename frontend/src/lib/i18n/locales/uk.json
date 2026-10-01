@@ -1649,6 +1649,7 @@
   "error.tabMoveLocalTabToServer": "Вкладка, що працює на цьому комп’ютері, не може приєднатися до сеансу на сервері",
   "error.tabMoveRunningUnsupported": "У Windows робочу вкладку не можна перемістити в інший сеанс — спершу зупиніть вкладку, потім перемістіть її",
   "error.tabMoveFailed": "Не вдалося перемістити вкладку: {0}",
+  "error.tabSplitOnlyTab": "Це єдина вкладка сеансу — вона вже окремий сеанс",
   "tabBar.moveToSession": "Перемістити в сеанс…",
   "tabBar.moveToNewSession": "Перемістити в новий сеанс",
   "sessionMenu.mergeInto": "Об’єднати із сеансом…",
@@ -1663,5 +1664,10 @@
   "tabMove.movedToNew": "«{tab}» тепер окремий сеанс: {session}",
   "tabMove.merged": "«{source}» об’єднано з {session} (вкладок: {count})",
   "tabMove.failed": "Не вдалося перемістити вкладку: {error}",
-  "tabMove.mergeFailed": "Не вдалося об’єднати сеанс: {error}"
+  "tabMove.mergeFailed": "Не вдалося об’єднати сеанс: {error}",
+  "tabMove.newSessionDrop": "Новий сеанс",
+  "tabMove.newSessionTitle": "Перемістити «{name}» у новий сеанс",
+  "tabMove.newSessionName": "Назва нового сеансу",
+  "tabMove.onlyTabTitle": "Перемістити єдину вкладку?",
+  "tabMove.onlyTabMessage": "У сеансі «{name}» лише ця вкладка — після переміщення сеанс завершиться. Перемістити?"
 }

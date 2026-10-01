@@ -1649,6 +1649,7 @@
   "error.tabMoveLocalTabToServer": "このコンピューターで実行中のタブは、サーバー上のセッションに移動できません",
   "error.tabMoveRunningUnsupported": "Windows では実行中のタブを別のセッションに移動できません。先にタブを停止してから移動してください",
   "error.tabMoveFailed": "タブを移動できませんでした: {0}",
+  "error.tabSplitOnlyTab": "これはセッションの唯一のタブです — すでに独立したセッションです",
   "tabBar.moveToSession": "セッションへ移動…",
   "tabBar.moveToNewSession": "新しいセッションへ移動",
   "sessionMenu.mergeInto": "セッションに統合…",
@@ -1663,5 +1664,10 @@
   "tabMove.movedToNew": "「{tab}」は独立したセッションになりました: {session}",
   "tabMove.merged": "「{source}」を {session} に統合しました（{count} タブ）",
   "tabMove.failed": "タブを移動できませんでした: {error}",
-  "tabMove.mergeFailed": "セッションを統合できませんでした: {error}"
+  "tabMove.mergeFailed": "セッションを統合できませんでした: {error}",
+  "tabMove.newSessionDrop": "新しいセッション",
+  "tabMove.newSessionTitle": "「{name}」を新しいセッションへ移動",
+  "tabMove.newSessionName": "新しいセッションの名前",
+  "tabMove.onlyTabTitle": "唯一のタブを移動しますか？",
+  "tabMove.onlyTabMessage": "セッション「{name}」にはこのタブしかありません — 移動するとセッションは終了します。移動しますか？"
 }

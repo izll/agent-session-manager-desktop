@@ -1649,6 +1649,7 @@
   "error.tabMoveLocalTabToServer": "Az ezen a gépen futó fül nem kerülhet át egy szerveren futó munkamenetbe",
   "error.tabMoveRunningUnsupported": "Windowson futó fület nem lehet másik munkamenetbe áthelyezni — előbb állítsd le a fület, aztán helyezd át",
   "error.tabMoveFailed": "A fület nem sikerült áthelyezni: {0}",
+  "error.tabSplitOnlyTab": "Ez a munkamenet egyetlen füle — már most is önálló munkamenet",
   "tabBar.moveToSession": "Áthelyezés munkamenetbe…",
   "tabBar.moveToNewSession": "Áthelyezés új munkamenetbe",
   "sessionMenu.mergeInto": "Egyesítés munkamenetbe…",
@@ -1663,5 +1664,10 @@
   "tabMove.movedToNew": "„{tab}” mostantól önálló munkamenet: {session}",
   "tabMove.merged": "„{source}” egyesítve ide: {session} ({count} fül)",
   "tabMove.failed": "A fület nem sikerült áthelyezni: {error}",
-  "tabMove.mergeFailed": "A munkamenetet nem sikerült egyesíteni: {error}"
+  "tabMove.mergeFailed": "A munkamenetet nem sikerült egyesíteni: {error}",
+  "tabMove.newSessionDrop": "Új munkamenet",
+  "tabMove.newSessionTitle": "„{name}” áthelyezése új munkamenetbe",
+  "tabMove.newSessionName": "Az új munkamenet neve",
+  "tabMove.onlyTabTitle": "Áthelyezed az egyetlen fület?",
+  "tabMove.onlyTabMessage": "A(z) „{name}” munkamenetnek csak ez az egy füle van — áthelyezve a munkamenet megszűnik. Áthelyezed?"
 }

@@ -1649,6 +1649,7 @@
   "error.tabMoveLocalTabToServer": "Ein Tab, der auf diesem Computer läuft, kann keiner Sitzung auf einem Server beitreten",
   "error.tabMoveRunningUnsupported": "Unter Windows kann ein laufender Tab nicht in eine andere Sitzung verschoben werden — stoppe den Tab zuerst und verschiebe ihn dann",
   "error.tabMoveFailed": "Der Tab konnte nicht verschoben werden: {0}",
+  "error.tabSplitOnlyTab": "Das ist der einzige Tab der Sitzung — er ist bereits eine eigene Sitzung",
   "tabBar.moveToSession": "In Sitzung verschieben…",
   "tabBar.moveToNewSession": "In neue Sitzung verschieben",
   "sessionMenu.mergeInto": "In Sitzung zusammenführen…",
@@ -1663,5 +1664,10 @@
   "tabMove.movedToNew": "„{tab}“ ist jetzt eine eigene Sitzung: {session}",
   "tabMove.merged": "„{source}“ in {session} zusammengeführt ({count} Tabs)",
   "tabMove.failed": "Der Tab konnte nicht verschoben werden: {error}",
-  "tabMove.mergeFailed": "Die Sitzung konnte nicht zusammengeführt werden: {error}"
+  "tabMove.mergeFailed": "Die Sitzung konnte nicht zusammengeführt werden: {error}",
+  "tabMove.newSessionDrop": "Neue Sitzung",
+  "tabMove.newSessionTitle": "„{name}“ in eine neue Sitzung verschieben",
+  "tabMove.newSessionName": "Name der neuen Sitzung",
+  "tabMove.onlyTabTitle": "Den einzigen Tab verschieben?",
+  "tabMove.onlyTabMessage": "Die Sitzung „{name}“ hat nur diesen Tab — beim Verschieben wird die Sitzung beendet. Verschieben?"
 }

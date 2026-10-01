@@ -1649,6 +1649,7 @@
   "error.tabMoveLocalTabToServer": "Karta běžící na tomto počítači se nemůže připojit k relaci na serveru",
   "error.tabMoveRunningUnsupported": "Ve Windows nelze běžící kartu přesunout do jiné relace — nejprve kartu zastavte a pak ji přesuňte",
   "error.tabMoveFailed": "Kartu se nepodařilo přesunout: {0}",
+  "error.tabSplitOnlyTab": "Toto je jediná karta relace — už je samostatnou relací",
   "tabBar.moveToSession": "Přesunout do relace…",
   "tabBar.moveToNewSession": "Přesunout do nové relace",
   "sessionMenu.mergeInto": "Sloučit do relace…",
@@ -1663,5 +1664,10 @@
   "tabMove.movedToNew": "„{tab}“ je nyní samostatná relace: {session}",
   "tabMove.merged": "„{source}“ sloučena do {session} (karet: {count})",
   "tabMove.failed": "Kartu se nepodařilo přesunout: {error}",
-  "tabMove.mergeFailed": "Relaci se nepodařilo sloučit: {error}"
+  "tabMove.mergeFailed": "Relaci se nepodařilo sloučit: {error}",
+  "tabMove.newSessionDrop": "Nová relace",
+  "tabMove.newSessionTitle": "Přesunout „{name}“ do nové relace",
+  "tabMove.newSessionName": "Název nové relace",
+  "tabMove.onlyTabTitle": "Přesunout jedinou kartu?",
+  "tabMove.onlyTabMessage": "Relace „{name}“ má jen tuto kartu — jejím přesunutím relace zanikne. Přesunout?"
 }

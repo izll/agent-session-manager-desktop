@@ -10,8 +10,9 @@
   import TabColorDialog from '../Dialogs/TabColorDialog.svelte';
   import ConfirmDialog from '../Dialogs/ConfirmDialog.svelte';
   import MoveTabDialog from '../Dialogs/MoveTabDialog.svelte';
-  import { isMovableTab } from '../../utils/tabMoveRules';
-  import { beginTabDrag, endTabDrag, splitTabWithNotice } from '../../utils/tabMove';
+  import TabMovePrompts from '../Dialogs/TabMovePrompts.svelte';
+  import { isMovableTab, isOnlyTab } from '../../utils/tabMoveRules';
+  import { askNewSessionFor, beginTabDrag, endTabDrag, tabMovePrompt } from '../../utils/tabMove';
   import Toast from '../common/Toast.svelte';
   import { sessions, selectedSessionId, selectedWindowIdx, selectWindow, selectedSession, startSession, stopSession, stopTab, restartTab, deleteSession, deleteTab, toggleFavorite, renameTab, reorderTab, loadSessions } from '../../stores/sessions';
   import type { Session } from '../../stores/sessions';
@@ -499,7 +500,7 @@
   let errorToastRevision = 0;
   // The tab being sent to another session from its menu.
   let showMoveTabDialog = false;
-  let moveTabTarget = { sessionId: '', windowIdx: 0, name: '' };
+  let moveTabTarget = { sessionId: '', windowIdx: 0, name: '', onlyTab: false };
 
   function handleCommandNewTab() {
     const session = get(selectedSession);
@@ -511,13 +512,14 @@
   // The dialogs this component owns, by state rather than by rendered DOM.
   function tabBarDialogOpen(): boolean {
     return showNewTabDialog || showQuickTerminalDialog || showDeleteConfirm ||
-      showDeleteTabConfirm || showExtraArgsEditor || showTabColorDialog || showMoveTabDialog;
+      showDeleteTabConfirm || showExtraArgsEditor || showTabColorDialog || showMoveTabDialog ||
+      get(tabMovePrompt) !== null;
   }
 
   // Restore terminal focus when TabBar-local dialogs close
   let prevTabBarDialogOpen = false;
   $: {
-    const open = showNewTabDialog || showQuickTerminalDialog || showDeleteConfirm || showDeleteTabConfirm || showExtraArgsEditor || showTabColorDialog || showMoveTabDialog;
+    const open = showNewTabDialog || showQuickTerminalDialog || showDeleteConfirm || showDeleteTabConfirm || showExtraArgsEditor || showTabColorDialog || showMoveTabDialog || $tabMovePrompt !== null;
     if (prevTabBarDialogOpen && !open) {
       focusTerminal();
     }
@@ -1190,11 +1192,14 @@
     }
     // Any tab but the session's own can also be dropped on another session
     // in the sidebar. The own window is the session: it is not offered, so
-    // the rows do not light up for a drop that could only be refused.
+    // the rows do not light up for a drop that could only be refused —
+    // unless it is the only tab, which moves by merging its session (asked
+    // first, since that ends the session).
     const win = windows[arrayIdx];
     const sess = get(selectedSession);
-    if (win && sess && isMovableTab(sess, win.Index)) {
-      beginTabDrag(e, { sessionId: sess.id, windowIdx: win.Index, projectId: get(activeProjectId), name: win.Name });
+    if (win && sess && (isMovableTab(sess, win.Index) || isOnlyTab(sess, win.Index))) {
+      beginTabDrag(e, { sessionId: sess.id, windowIdx: win.Index, projectId: get(activeProjectId), name: win.Name,
+        onlyTab: isOnlyTab(sess, win.Index) });
     }
   }
 
@@ -1341,29 +1346,32 @@
       { detail: { sessionId: $selectedSession.id, windowIdx } }));
   }
 
-  // Every tab but the session's own can leave it; see isMovableTab.
-  $: tabContextMenuMovable = isMovableTab($selectedSession, tabContextMenuIndex);
+  // Every tab but the session's own can leave it; see isMovableTab. So can
+  // the only tab of a session, into another session (see isOnlyTab) — not
+  // into a new one, which it already is.
+  $: tabContextMenuOnlyTab = isOnlyTab($selectedSession, tabContextMenuIndex);
+  $: tabContextMenuMovable = isMovableTab($selectedSession, tabContextMenuIndex) || tabContextMenuOnlyTab;
 
   function tabContextMoveToSession() {
     const windowIdx = tabContextMenuIndex;
     const name = tabContextMenuName;
+    const onlyTab = tabContextMenuOnlyTab;
     closeTabContextMenu();
     const sess = get(selectedSession);
     if (windowIdx === null || !sess) return;
-    moveTabTarget = { sessionId: sess.id, windowIdx, name };
+    moveTabTarget = { sessionId: sess.id, windowIdx, name, onlyTab };
     showMoveTabDialog = true;
   }
 
   function tabContextMoveToNewSession() {
+    if (tabContextMenuOnlyTab) return;
     const windowIdx = tabContextMenuIndex;
     const name = tabContextMenuName;
     closeTabContextMenu();
     const sess = get(selectedSession);
     if (windowIdx === null || !sess) return;
-    // Named after the tab, numbered if that is taken; renaming the session
-    // afterwards is one double-click, a dialog first would be one more step
-    // for the common case.
-    void splitTabWithNotice(sess.id, windowIdx, name);
+    // Asked for the session's name, offered the tab's.
+    askNewSessionFor(sess.id, windowIdx, name);
   }
 
   function tabContextRename() {
@@ -2184,7 +2192,16 @@
             </svg>
             {$t('tabBar.moveToSession')}
           </button>
-          <button class="tab-context-menu-item" data-menu-action="move-to-new-session" on:click={tabContextMoveToNewSession}>
+          <!-- Shown but inert for the only tab: it is a session of its own
+               already, and the reason is its tooltip. -->
+          <button
+            class="tab-context-menu-item"
+            class:disabled={tabContextMenuOnlyTab}
+            aria-disabled={tabContextMenuOnlyTab}
+            title={tabContextMenuOnlyTab ? $t('error.tabSplitOnlyTab') : undefined}
+            data-menu-action="move-to-new-session"
+            on:click={tabContextMoveToNewSession}
+          >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <rect x="3" y="4" width="18" height="16" rx="2"/>
               <line x1="12" y1="9" x2="12" y2="15"/>
@@ -2488,7 +2505,10 @@
   sourceId={moveTabTarget.sessionId}
   windowIdx={moveTabTarget.windowIdx}
   name={moveTabTarget.name}
+  onlyTab={moveTabTarget.onlyTab}
 />
+
+<TabMovePrompts />
 
 <Toast bind:show={showErrorToast} message={errorMessage} revision={errorToastRevision} variant="error" duration={9000} />
 

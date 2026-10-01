@@ -1649,6 +1649,7 @@
   "error.tabMoveLocalTabToServer": "En flik som körs på den här datorn kan inte gå med i en session på en server",
   "error.tabMoveRunningUnsupported": "I Windows kan en flik som körs inte flyttas till en annan session — stoppa fliken först och flytta den sedan",
   "error.tabMoveFailed": "Fliken kunde inte flyttas: {0}",
+  "error.tabSplitOnlyTab": "Det här är sessionens enda flik — den är redan en egen session",
   "tabBar.moveToSession": "Flytta till session…",
   "tabBar.moveToNewSession": "Flytta till ny session",
   "sessionMenu.mergeInto": "Slå ihop med session…",
@@ -1663,5 +1664,10 @@
   "tabMove.movedToNew": "”{tab}” är nu en egen session: {session}",
   "tabMove.merged": "”{source}” slogs ihop med {session} ({count} flikar)",
   "tabMove.failed": "Fliken kunde inte flyttas: {error}",
-  "tabMove.mergeFailed": "Sessionen kunde inte slås ihop: {error}"
+  "tabMove.mergeFailed": "Sessionen kunde inte slås ihop: {error}",
+  "tabMove.newSessionDrop": "Ny session",
+  "tabMove.newSessionTitle": "Flytta ”{name}” till en ny session",
+  "tabMove.newSessionName": "Namn på den nya sessionen",
+  "tabMove.onlyTabTitle": "Flytta den enda fliken?",
+  "tabMove.onlyTabMessage": "Sessionen ”{name}” har bara den här fliken — flyttas den upphör sessionen. Flytta den?"
 }

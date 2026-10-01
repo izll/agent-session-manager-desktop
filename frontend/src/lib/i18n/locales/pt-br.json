@@ -1649,6 +1649,7 @@
   "error.tabMoveLocalTabToServer": "Uma aba em execução neste computador não pode entrar em uma sessão em um servidor",
   "error.tabMoveRunningUnsupported": "No Windows, uma aba em execução não pode ser movida para outra sessão — pare a aba primeiro e depois mova-a",
   "error.tabMoveFailed": "Não foi possível mover a aba: {0}",
+  "error.tabSplitOnlyTab": "Esta é a única aba da sessão — ela já é uma sessão própria",
   "tabBar.moveToSession": "Mover para sessão…",
   "tabBar.moveToNewSession": "Mover para nova sessão",
   "sessionMenu.mergeInto": "Mesclar em sessão…",
@@ -1663,5 +1664,10 @@
   "tabMove.movedToNew": "“{tab}” agora é uma sessão própria: {session}",
   "tabMove.merged": "“{source}” mesclada em {session} ({count} abas)",
   "tabMove.failed": "Não foi possível mover a aba: {error}",
-  "tabMove.mergeFailed": "Não foi possível mesclar a sessão: {error}"
+  "tabMove.mergeFailed": "Não foi possível mesclar a sessão: {error}",
+  "tabMove.newSessionDrop": "Nova sessão",
+  "tabMove.newSessionTitle": "Mover “{name}” para uma nova sessão",
+  "tabMove.newSessionName": "Nome da nova sessão",
+  "tabMove.onlyTabTitle": "Mover a única aba?",
+  "tabMove.onlyTabMessage": "A sessão “{name}” tem só esta aba — movê-la encerra a sessão. Mover?"
 }

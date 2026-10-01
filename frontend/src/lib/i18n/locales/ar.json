@@ -1649,6 +1649,7 @@
   "error.tabMoveLocalTabToServer": "لا يمكن لعلامة تبويب تعمل على هذا الكمبيوتر الانضمام إلى جلسة على خادم",
   "error.tabMoveRunningUnsupported": "على Windows لا يمكن نقل علامة تبويب قيد التشغيل إلى جلسة أخرى — أوقف علامة التبويب أولًا ثم انقلها",
   "error.tabMoveFailed": "تعذر نقل علامة التبويب: {0}",
+  "error.tabSplitOnlyTab": "هذا هو التبويب الوحيد في الجلسة — وهو جلسة مستقلة بالفعل",
   "tabBar.moveToSession": "نقل إلى جلسة…",
   "tabBar.moveToNewSession": "نقل إلى جلسة جديدة",
   "sessionMenu.mergeInto": "دمج في جلسة…",
@@ -1663,5 +1664,10 @@
   "tabMove.movedToNew": "أصبحت «{tab}» جلسة مستقلة: {session}",
   "tabMove.merged": "دُمجت «{source}» في {session} ({count} علامات تبويب)",
   "tabMove.failed": "تعذر نقل علامة التبويب: {error}",
-  "tabMove.mergeFailed": "تعذر دمج الجلسة: {error}"
+  "tabMove.mergeFailed": "تعذر دمج الجلسة: {error}",
+  "tabMove.newSessionDrop": "جلسة جديدة",
+  "tabMove.newSessionTitle": "نقل «{name}» إلى جلسة جديدة",
+  "tabMove.newSessionName": "اسم الجلسة الجديدة",
+  "tabMove.onlyTabTitle": "نقل التبويب الوحيد؟",
+  "tabMove.onlyTabMessage": "الجلسة «{name}» لا تحتوي إلا على هذا التبويب — نقله ينهي الجلسة. هل تريد نقله؟"
 }

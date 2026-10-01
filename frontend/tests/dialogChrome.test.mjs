@@ -43,7 +43,7 @@ test('there are dialogs to check', () => {
   assert.ok(withDialogs.length > 30, `only found ${withDialogs.length} files with dialogs`);
   // Named, so a dialog that drops the shared panel class drops out loudly
   // rather than quietly escaping every check below.
-  for (const name of ['Dialogs/SettingsDialog.svelte', 'Dialogs/WhatsNewDialog.svelte', 'Dialogs/ProjectTasksDialog.svelte']) {
+  for (const name of ['Dialogs/SettingsDialog.svelte', 'Dialogs/WhatsNewDialog.svelte', 'Dialogs/ProjectTasksDialog.svelte', 'Dialogs/MoveToNewSessionDialog.svelte']) {
     const file = withDialogs.find((f) => f.name.endsWith(name));
     assert.ok(file, `${name} is not checked`);
     assert.match(file.markup, /<div class="dialog-header">/, `${name} has no shared header`);

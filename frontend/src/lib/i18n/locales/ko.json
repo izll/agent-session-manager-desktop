@@ -1649,6 +1649,7 @@
   "error.tabMoveLocalTabToServer": "이 컴퓨터에서 실행 중인 탭은 서버의 세션에 합류할 수 없습니다",
   "error.tabMoveRunningUnsupported": "Windows에서는 실행 중인 탭을 다른 세션으로 옮길 수 없습니다. 먼저 탭을 중지한 다음 옮기세요",
   "error.tabMoveFailed": "탭을 옮기지 못했습니다: {0}",
+  "error.tabSplitOnlyTab": "세션의 유일한 탭입니다 — 이미 독립된 세션입니다",
   "tabBar.moveToSession": "세션으로 이동…",
   "tabBar.moveToNewSession": "새 세션으로 이동",
   "sessionMenu.mergeInto": "세션에 병합…",
@@ -1663,5 +1664,10 @@
   "tabMove.movedToNew": "“{tab}”이(가) 이제 독립 세션입니다: {session}",
   "tabMove.merged": "“{source}”을(를) {session}에 병합했습니다 (탭 {count}개)",
   "tabMove.failed": "탭을 옮기지 못했습니다: {error}",
-  "tabMove.mergeFailed": "세션을 병합하지 못했습니다: {error}"
+  "tabMove.mergeFailed": "세션을 병합하지 못했습니다: {error}",
+  "tabMove.newSessionDrop": "새 세션",
+  "tabMove.newSessionTitle": "“{name}”을(를) 새 세션으로 이동",
+  "tabMove.newSessionName": "새 세션 이름",
+  "tabMove.onlyTabTitle": "유일한 탭을 이동할까요?",
+  "tabMove.onlyTabMessage": "세션 “{name}”에는 이 탭만 있습니다 — 이동하면 세션이 종료됩니다. 이동할까요?"
 }

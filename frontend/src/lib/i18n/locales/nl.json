@@ -1649,6 +1649,7 @@
   "error.tabMoveLocalTabToServer": "Een tabblad dat op deze computer draait, kan niet bij een sessie op een server komen",
   "error.tabMoveRunningUnsupported": "Op Windows kan een actief tabblad niet naar een andere sessie worden verplaatst — stop het tabblad eerst en verplaats het daarna",
   "error.tabMoveFailed": "Het tabblad kon niet worden verplaatst: {0}",
+  "error.tabSplitOnlyTab": "Dit is het enige tabblad van de sessie — het is al een eigen sessie",
   "tabBar.moveToSession": "Naar sessie verplaatsen…",
   "tabBar.moveToNewSession": "Naar nieuwe sessie verplaatsen",
   "sessionMenu.mergeInto": "Samenvoegen in sessie…",
@@ -1663,5 +1664,10 @@
   "tabMove.movedToNew": "„{tab}” is nu een eigen sessie: {session}",
   "tabMove.merged": "„{source}” samengevoegd in {session} ({count} tabbladen)",
   "tabMove.failed": "Het tabblad kon niet worden verplaatst: {error}",
-  "tabMove.mergeFailed": "De sessie kon niet worden samengevoegd: {error}"
+  "tabMove.mergeFailed": "De sessie kon niet worden samengevoegd: {error}",
+  "tabMove.newSessionDrop": "Nieuwe sessie",
+  "tabMove.newSessionTitle": "„{name}” naar een nieuwe sessie verplaatsen",
+  "tabMove.newSessionName": "Naam van de nieuwe sessie",
+  "tabMove.onlyTabTitle": "Het enige tabblad verplaatsen?",
+  "tabMove.onlyTabMessage": "De sessie „{name}” heeft alleen dit tabblad — door het te verplaatsen verdwijnt de sessie. Verplaatsen?"
 }

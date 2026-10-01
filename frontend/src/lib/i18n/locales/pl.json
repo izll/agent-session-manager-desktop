@@ -1649,6 +1649,7 @@
   "error.tabMoveLocalTabToServer": "Karta działająca na tym komputerze nie może dołączyć do sesji na serwerze",
   "error.tabMoveRunningUnsupported": "W systemie Windows działającej karty nie można przenieść do innej sesji — najpierw zatrzymaj kartę, a potem ją przenieś",
   "error.tabMoveFailed": "Nie udało się przenieść karty: {0}",
+  "error.tabSplitOnlyTab": "To jedyna karta sesji — jest już osobną sesją",
   "tabBar.moveToSession": "Przenieś do sesji…",
   "tabBar.moveToNewSession": "Przenieś do nowej sesji",
   "sessionMenu.mergeInto": "Scal z sesją…",
@@ -1663,5 +1664,10 @@
   "tabMove.movedToNew": "„{tab}” jest teraz osobną sesją: {session}",
   "tabMove.merged": "„{source}” scalono z {session} (kart: {count})",
   "tabMove.failed": "Nie udało się przenieść karty: {error}",
-  "tabMove.mergeFailed": "Nie udało się scalić sesji: {error}"
+  "tabMove.mergeFailed": "Nie udało się scalić sesji: {error}",
+  "tabMove.newSessionDrop": "Nowa sesja",
+  "tabMove.newSessionTitle": "Przenieś „{name}” do nowej sesji",
+  "tabMove.newSessionName": "Nazwa nowej sesji",
+  "tabMove.onlyTabTitle": "Przenieść jedyną kartę?",
+  "tabMove.onlyTabMessage": "Sesja „{name}” ma tylko tę kartę — jej przeniesienie zakończy sesję. Przenieść?"
 }

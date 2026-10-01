@@ -237,6 +237,8 @@ const dialogs: Record<string, Entry> = {
   },
   // The project's own tasks and note, in their window.
   projectTasks: { load: () => import('../../src/lib/components/Dialogs/ProjectTasksDialog.svelte') },
+  // A tab moved out into a session of its own, asked the session's name.
+  moveToNewSession: { load: () => import('../../src/lib/components/Dialogs/MoveToNewSessionDialog.svelte'), props: { sourceId: session.id, windowIdx: 1, tabName: 'Second tab' } },
   // The project list's session picker, opened from a task's menu.
   taskSessionPick: { load: taskPanel, props: { active: true, project: true }, open: () => taskMenu(/Move to session/) },
   extraArgs: {
