@@ -43,6 +43,11 @@ contents:
     dst: /usr/bin/asmgr-desktop
     file_info:
       mode: 0755
+  # The in-app updater runs this through pkexec (updater.PackageInstallScript).
+  - src: ./build/linux/install-update
+    dst: /usr/lib/asmgr-desktop/install-update
+    file_info:
+      mode: 0755
   - src: ./build/appicon.png
     dst: /usr/share/icons/hicolor/512x512/apps/asmgr-desktop.png
   - src: ./build/asmgr-desktop.desktop

@@ -1,0 +1,71 @@
+#!/bin/sh
+# Installs a downloaded asmgr-desktop update. The application runs this through
+# pkexec, so everything below runs as root: keep it short enough to read.
+#
+#   install-update deb|rpm PACKAGE SHA256 VERSION
+#
+# PACKAGE sits in the user's own (writable) config directory, so it is copied
+# to a root-only directory first and only that copy is verified and installed:
+# swapping the original after the check can no longer change what is installed.
+
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+export PATH
+umask 077
+
+fail() {
+	echo "install-update: $*" >&2
+	exit 1
+}
+
+[ "$#" -eq 4 ] || fail "usage: install-update deb|rpm PACKAGE SHA256 VERSION"
+kind=$1
+source=$2
+checksum=$3
+version=${4#v}
+
+case $kind in
+deb | rpm) ;;
+*) fail "unsupported package type: $kind" ;;
+esac
+case $checksum in
+*[!0-9a-f]* | '') fail "invalid checksum" ;;
+esac
+[ "${#checksum}" -eq 64 ] || fail "invalid checksum"
+case $version in
+*[!0-9.]* | '' | .* | *. | *..*) fail "invalid version: $4" ;;
+esac
+
+stage=$(mktemp -d /var/tmp/asmgr-update.XXXXXXXXXX) || fail "cannot create a staging directory"
+trap 'rm -rf "$stage"' EXIT
+package=$stage/asmgr-desktop.$kind
+
+cp -- "$source" "$package" || fail "cannot copy $source"
+echo "$checksum  $package" | sha256sum --check --status ||
+	fail "checksum mismatch: the downloaded package is not the published one"
+
+# Only ever this application's own package, only the version that was asked
+# for, and only an upgrade: never a way to install arbitrary packages as root.
+if [ "$kind" = deb ]; then
+	name=$(dpkg-deb --field "$package" Package) || fail "not a valid .deb package"
+	found=$(dpkg-deb --field "$package" Version) || fail "not a valid .deb package"
+	installed=$(dpkg-query --show --showformat='${Version}' asmgr-desktop 2>/dev/null) || installed=
+else
+	name=$(rpm --query --package --queryformat '%{NAME}' "$package") || fail "not a valid .rpm package"
+	found=$(rpm --query --package --queryformat '%{VERSION}' "$package") || fail "not a valid .rpm package"
+	installed=$(rpm --query --queryformat '%{VERSION}' asmgr-desktop 2>/dev/null) || installed=
+fi
+[ "$name" = asmgr-desktop ] || fail "not an asmgr-desktop package: $name"
+[ "$found" = "$version" ] || fail "package version $found is not the expected $version"
+if [ -n "$installed" ]; then
+	newest=$(printf '%s\n%s\n' "$installed" "$found" | sort --version-sort | tail -n 1)
+	if [ "$found" = "$installed" ] || [ "$newest" != "$found" ]; then
+		fail "refusing to replace $installed with $found: not an upgrade"
+	fi
+fi
+
+if [ "$kind" = deb ]; then
+	# No terminal to answer a configuration-file question: keep the local one.
+	dpkg --install --force-confold "$package" || fail "dpkg could not install the package"
+else
+	rpm --upgrade "$package" || fail "rpm could not install the package"
+fi
