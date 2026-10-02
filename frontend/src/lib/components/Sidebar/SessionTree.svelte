@@ -33,8 +33,9 @@
     void saveSettings({ sortByActivity: !$settings?.sortByActivity });
   }
 
-  // The activity filter menu. It stays open while choices are made, so the
-  // two halves — hide inactive and the time window — can be set together.
+  // The activity filter menu. A choice closes it: it used to stay open so
+  // both halves could be set in one go, but the usual case is a single
+  // choice, after which the open menu only covered the list it had filtered.
   let filterMenuOpen = false;
   let filterMenuAnchor = { x: 0, y: 0 };
   let filterButton: HTMLButtonElement;
@@ -70,10 +71,12 @@
   }
 
   function toggleHideInactive() {
+    closeFilterMenu();
     void saveSettings({ sidebarHideInactive: !$sidebarActivityFilter.hideInactive });
   }
 
   function setActiveWithin(days: number) {
+    closeFilterMenu();
     void saveSettings({ sidebarActiveWithinDays: days });
   }
 

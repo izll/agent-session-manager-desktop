@@ -29,14 +29,20 @@ test('the filter menu hides inactive and old sessions, together', async ({ page 
   await filterButton(page).click();
   await expect(menu(page)).toBeVisible();
   await menu(page).getByRole('menuitemcheckbox', { name: 'Hide inactive' }).click();
-  // The menu stays open, so the time window can be set too.
-  await expect(menu(page)).toBeVisible();
+  // A choice closes the menu, out of the way of the list it filtered.
+  await expect(menu(page)).toHaveCount(0);
   await expect(names(page)).toHaveText(['Running api', 'Idle runner']);
   // The empty group goes with its sessions.
   await expect(page.getByText('Old group')).toHaveCount(0);
 
+  // The other half combines with it; the menu shows both as set.
+  await filterButton(page).click();
   await menu(page).getByRole('menuitemradio', { name: 'Active in the last 7 days' }).click();
+  await expect(menu(page)).toHaveCount(0);
   await expect(names(page)).toHaveText(['Running api']);
+  await filterButton(page).click();
+  await expect(menu(page).getByRole('menuitemcheckbox', { name: 'Hide inactive' }))
+    .toHaveAttribute('aria-checked', 'true');
   await expect(menu(page).getByRole('menuitemradio', { name: 'Active in the last 7 days' }))
     .toHaveAttribute('aria-checked', 'true');
   await expect(menu(page).getByRole('menuitemradio', { name: 'Any time' }))
@@ -64,7 +70,6 @@ test('an emptied list says so and clears the filter', async ({ page }) => {
   await gotoFixture(page);
   await filterButton(page).click();
   await menu(page).getByRole('menuitemradio', { name: 'Active in the last day' }).click();
-  await page.keyboard.press('Escape');
   await expect(menu(page)).toHaveCount(0);
   await page.locator('.search-input').fill('weekly');
   await expect(names(page)).toHaveCount(0);
