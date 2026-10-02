@@ -529,19 +529,6 @@ func allDigits(s string) bool {
 	return s != ""
 }
 
-// RunningVersion is the version compiled into this binary, set by main at
-// start-up.
-//
-// Declared here rather than beside the Linux package helper that reads it: main
-// assigns it on every platform, so a build-tagged declaration leaves Windows and
-// macOS failing to compile — which is exactly what happened.
-//
-// The helper needs it to refuse a downgrade, and cannot take the caller's word
-// for the running version: pkexec re-enters this same executable, so the
-// compiled-in value is the one thing an attacker invoking the helper directly
-// cannot choose.
-var RunningVersion string
-
 func validateReleaseVersion(version string) error {
 	parsed, ok := parseSemver(version)
 	if !ok || parsed.prerelease != "" {
@@ -1851,6 +1838,16 @@ func replaceExecutable(execPath, stagedPath string) error {
 	return installTransaction([]stagedInstall{{target: execPath, staged: stagedPath}})
 }
 
+// packageInstallScript is the root-side half of a package update, shipped in
+// the package itself (build/linux/install-update, see build/nfpm.yaml). It
+// copies the download somewhere only root can write, verifies the copy and
+// hands it to dpkg/rpm.
+//
+// A small script rather than this executable re-entered as root: the GUI binary
+// links X11 libraries whose load-time constructors run before main, and under
+// pkexec there is no display — they crashed the install before it began.
+var packageInstallScript = "/usr/lib/asmgr-desktop/install-update"
+
 // installPackageUpdate upgrades a .deb/.rpm installation in place.
 //
 // The TUI can shell out to `sudo dpkg -i` because it owns a terminal to type a
@@ -1863,33 +1860,33 @@ func installPackageUpdate(ctx context.Context, version string, critical func(fun
 		return fmt.Errorf("this installation is managed by the system package manager, and pkexec is not available to ask for permission; install %s %s with: sudo %s",
 			BinaryName, version, manualInstallHint(version))
 	}
+	if _, err := os.Stat(packageInstallScript); err != nil {
+		return fmt.Errorf("the update installer %s is missing; install %s %s with: sudo %s",
+			packageInstallScript, BinaryName, version, manualInstallHint(version))
+	}
 
 	pkgPath, packageKind, trustedChecksum, err := downloadPackageForContext(ctx, version)
 	if err != nil {
 		return err
 	}
 	defer os.Remove(pkgPath)
-	execPath, err := os.Executable()
-	if err != nil {
-		return fmt.Errorf("cannot locate the package-owned updater executable: %w", err)
-	}
-	if resolved, resolveErr := filepath.EvalSymlinks(execPath); resolveErr == nil {
-		execPath = resolved
-	}
-	args := privilegedPackageHelperArgs(execPath, pkgPath, trustedChecksum, packageKind, version)
-	out, err := runPrivilegedPackageInstall(ctx, pkexec, args, func(action func() error) error {
-		// Authentication and root-owned staging are preparation, not mutation.
-		// Acquire the global lock only after the helper is verified and ready, and
-		// keep lock waiting cancellable so shutdown cannot hang behind another
-		// application instance. The lock is retained across the critical package
-		// manager transaction itself.
-		return withInstallLockContext(ctx, func() error {
-			// The package type was selected before the download. Confirm at the
-			// mutation boundary that this executable is still package-owned.
-			if !IsPackageManaged() {
-				return fmt.Errorf("installation type changed while the update was downloading; retry the update")
-			}
-			return critical(action)
+	var out []byte
+	// Lock waiting stays cancellable so shutdown cannot hang behind another
+	// application instance. Past that, the authentication prompt and the
+	// package transaction run as one critical section: once pkexec has started
+	// there is no telling from here whether dpkg/rpm has begun, so a quit
+	// waits for it (bounded by packageInstallTimeout).
+	err = withInstallLockContext(ctx, func() error {
+		// The package type was selected before the download. Confirm at the
+		// mutation boundary that this executable is still package-owned.
+		if !IsPackageManaged() {
+			return fmt.Errorf("installation type changed while the update was downloading; retry the update")
+		}
+		return critical(func() error {
+			var runErr error
+			out, runErr = runPackageCommand(packageInstallTimeout, pkexec,
+				packageInstallScript, packageKind, pkgPath, trustedChecksum, version)
+			return runErr
 		})
 	})
 	if err != nil {
