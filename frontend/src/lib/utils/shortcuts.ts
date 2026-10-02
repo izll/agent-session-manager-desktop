@@ -255,6 +255,20 @@ export const SHORTCUTS: Shortcut[] = [
     sharesKeysWith: ['tab.next'],
   },
   {
+    id: 'view.next',
+    category: 'navigation',
+    descKey: 'help.viewNext',
+    // The tabs' keys with Shift: Ctrl+PgUp/PgDn step the tabs, these step
+    // the views of the tab — terminal, notes, tasks, files, diff.
+    defaults: [{ key: 'pagedown', ctrl: true, shift: true }],
+  },
+  {
+    id: 'view.prev',
+    category: 'navigation',
+    descKey: 'help.viewPrev',
+    defaults: [{ key: 'pageup', ctrl: true, shift: true }],
+  },
+  {
     id: 'session.filter',
     category: 'search',
     descKey: 'help.actionFilterSessions',

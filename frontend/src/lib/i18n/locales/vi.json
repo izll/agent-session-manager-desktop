@@ -1316,6 +1316,8 @@
   "help.diffPrevChange": "Thay đổi trước trong diff",
   "help.notesPrevPage": "Trang trước trong ghi chú",
   "help.notesNextPage": "Trang sau trong ghi chú",
+  "help.viewNext": "Chế độ xem tiếp theo (terminal, ghi chú, công việc, tệp, diff)",
+  "help.viewPrev": "Chế độ xem trước",
   "diff.wholeFile": "Toàn bộ tệp",
   "diff.hunksOnly": "Chỉ thay đổi",
   "diff.showWholeFile": "Hiện thay đổi trong toàn bộ tệp",

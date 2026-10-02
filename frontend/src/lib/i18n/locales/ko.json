@@ -1316,6 +1316,8 @@
   "help.diffPrevChange": "차이의 이전 변경",
   "help.notesPrevPage": "메모의 이전 페이지",
   "help.notesNextPage": "메모의 다음 페이지",
+  "help.viewNext": "다음 보기(터미널, 메모, 작업, 파일, diff)",
+  "help.viewPrev": "이전 보기",
   "diff.wholeFile": "전체 파일",
   "diff.hunksOnly": "변경만",
   "diff.showWholeFile": "전체 파일 안에서 변경 표시",

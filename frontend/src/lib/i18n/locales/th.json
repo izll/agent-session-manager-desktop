@@ -1316,6 +1316,8 @@
   "help.diffPrevChange": "การเปลี่ยนแปลงก่อนหน้าใน diff",
   "help.notesPrevPage": "หน้าก่อนหน้าในโน้ต",
   "help.notesNextPage": "หน้าถัดไปในโน้ต",
+  "help.viewNext": "มุมมองถัดไป (เทอร์มินัล โน้ต งาน ไฟล์ diff)",
+  "help.viewPrev": "มุมมองก่อนหน้า",
   "diff.wholeFile": "ทั้งไฟล์",
   "diff.hunksOnly": "เฉพาะที่เปลี่ยน",
   "diff.showWholeFile": "แสดงการเปลี่ยนแปลงในทั้งไฟล์",

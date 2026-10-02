@@ -1316,6 +1316,8 @@
   "help.diffPrevChange": "Předchozí změna v diffu",
   "help.notesPrevPage": "Předchozí stránka v poznámkách",
   "help.notesNextPage": "Další stránka v poznámkách",
+  "help.viewNext": "Další zobrazení (terminál, poznámky, úkoly, soubory, diff)",
+  "help.viewPrev": "Předchozí zobrazení",
   "diff.wholeFile": "Celý soubor",
   "diff.hunksOnly": "Jen změny",
   "diff.showWholeFile": "Zobrazit změnu v celém souboru",

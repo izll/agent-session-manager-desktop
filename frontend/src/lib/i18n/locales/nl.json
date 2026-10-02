@@ -1316,6 +1316,8 @@
   "help.diffPrevChange": "Vorige wijziging in de diff",
   "help.notesPrevPage": "Vorige pagina in de notities",
   "help.notesNextPage": "Volgende pagina in de notities",
+  "help.viewNext": "Volgende weergave (terminal, notities, taken, bestanden, diff)",
+  "help.viewPrev": "Vorige weergave",
   "diff.wholeFile": "Hele bestand",
   "diff.hunksOnly": "Alleen wijzigingen",
   "diff.showWholeFile": "Toon de wijziging in het hele bestand",

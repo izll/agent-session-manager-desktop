@@ -1316,6 +1316,8 @@
   "help.diffPrevChange": "Попередня зміна в diff",
   "help.notesPrevPage": "Попередня сторінка нотаток",
   "help.notesNextPage": "Наступна сторінка нотаток",
+  "help.viewNext": "Наступний вигляд (термінал, нотатки, завдання, файли, diff)",
+  "help.viewPrev": "Попередній вигляд",
   "diff.wholeFile": "Весь файл",
   "diff.hunksOnly": "Лише зміни",
   "diff.showWholeFile": "Показати зміну в усьому файлі",

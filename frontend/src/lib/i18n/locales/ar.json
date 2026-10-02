@@ -1316,6 +1316,8 @@
   "help.diffPrevChange": "التغيير السابق في الفروق",
   "help.notesPrevPage": "الصفحة السابقة في الملاحظات",
   "help.notesNextPage": "الصفحة التالية في الملاحظات",
+  "help.viewNext": "العرض التالي (الطرفية، الملاحظات، المهام، الملفات، الفروق)",
+  "help.viewPrev": "العرض السابق",
   "diff.wholeFile": "الملف كامل",
   "diff.hunksOnly": "التغييرات فقط",
   "diff.showWholeFile": "عرض التغيير داخل الملف كاملًا",

@@ -1316,6 +1316,8 @@
   "help.diffPrevChange": "Предыдущее изменение в diff",
   "help.notesPrevPage": "Предыдущая страница заметок",
   "help.notesNextPage": "Следующая страница заметок",
+  "help.viewNext": "Следующий вид (терминал, заметки, задачи, файлы, diff)",
+  "help.viewPrev": "Предыдущий вид",
   "diff.wholeFile": "Весь файл",
   "diff.hunksOnly": "Только изменения",
   "diff.showWholeFile": "Показать изменение во всём файле",

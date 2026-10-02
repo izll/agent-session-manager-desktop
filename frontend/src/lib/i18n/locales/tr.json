@@ -1316,6 +1316,8 @@
   "help.diffPrevChange": "Diff'te önceki değişiklik",
   "help.notesPrevPage": "Notlarda önceki sayfa",
   "help.notesNextPage": "Notlarda sonraki sayfa",
+  "help.viewNext": "Sonraki görünüm (terminal, notlar, görevler, dosyalar, diff)",
+  "help.viewPrev": "Önceki görünüm",
   "diff.wholeFile": "Tüm dosya",
   "diff.hunksOnly": "Yalnızca değişiklikler",
   "diff.showWholeFile": "Değişikliği tüm dosya içinde göster",

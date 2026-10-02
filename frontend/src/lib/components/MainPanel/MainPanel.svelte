@@ -1,5 +1,7 @@
 <script lang="ts">
   import { createEventDispatcher, onMount, onDestroy, tick } from 'svelte';
+  import { matchesShortcut } from '../../stores/shortcuts';
+  import { keyClaimedByDialog } from '../../utils/dialogKeys';
   import { browserViewRequested, clearBrowserViewRequest } from '../../stores/fileJump';
   import { notesViewRequested, clearNotesViewRequest } from '../../stores/noteJump';
   import TabBar from './TabBar.svelte';
@@ -339,6 +341,30 @@
     }
     fullDiffActive = true;
   }
+
+  /**
+   * Step through the tab's views — terminal, notes, tasks, files, diff — as
+   * Ctrl+PgUp/PgDn step through its tabs. The diff is left out where the tab
+   * is not in a repository, as its button is. In the capture phase, before
+   * the terminal, which takes Shift+PgUp/PgDn for its own scrolling.
+   */
+  function handleViewStepKey(e: KeyboardEvent) {
+    if (!visible || !$selectedSessionId) return;
+    const next = matchesShortcut(e, 'view.next');
+    if (!next && !matchesShortcut(e, 'view.prev')) return;
+    if (document.querySelector('.dialog-overlay') || keyClaimedByDialog()) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const order: Array<ViewName | 'diff'> = ['terminal', 'notes', 'tasks', 'browser'];
+    if (tabIsGitRepo) order.push('diff');
+    const at = order.indexOf(fullDiffActive ? 'diff' : activeView);
+    const target = order[(at + (next ? 1 : -1) + order.length) % order.length];
+    if (target === 'diff') fullDiffActive = true;
+    else selectView(target);
+  }
+
+  onMount(() => window.addEventListener('keydown', handleViewStepKey, true));
+  onDestroy(() => window.removeEventListener('keydown', handleViewStepKey, true));
 
   onMount(() => window.addEventListener('main-panel:set-view', handleSetView));
   onDestroy(() => {

@@ -1316,6 +1316,8 @@
   "help.diffPrevChange": "Föregående ändring i diffen",
   "help.notesPrevPage": "Föregående sida i anteckningarna",
   "help.notesNextPage": "Nästa sida i anteckningarna",
+  "help.viewNext": "Nästa vy (terminal, anteckningar, uppgifter, filer, diff)",
+  "help.viewPrev": "Föregående vy",
   "diff.wholeFile": "Hela filen",
   "diff.hunksOnly": "Endast ändringar",
   "diff.showWholeFile": "Visa ändringen i hela filen",

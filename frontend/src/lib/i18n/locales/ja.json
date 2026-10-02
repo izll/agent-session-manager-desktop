@@ -1316,6 +1316,8 @@
   "help.diffPrevChange": "差分内の前の変更",
   "help.notesPrevPage": "メモの前のページ",
   "help.notesNextPage": "メモの次のページ",
+  "help.viewNext": "次のビュー(ターミナル、メモ、タスク、ファイル、差分)",
+  "help.viewPrev": "前のビュー",
   "diff.wholeFile": "ファイル全体",
   "diff.hunksOnly": "変更のみ",
   "diff.showWholeFile": "ファイル全体の中で変更を表示",

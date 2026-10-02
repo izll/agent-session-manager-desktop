@@ -1316,6 +1316,8 @@
   "help.diffPrevChange": "Előző eltérés a diffben",
   "help.notesPrevPage": "Előző lap a jegyzetekben",
   "help.notesNextPage": "Következő lap a jegyzetekben",
+  "help.viewNext": "Következő nézet (terminál, jegyzetek, feladatok, fájlok, diff)",
+  "help.viewPrev": "Előző nézet",
   "diff.wholeFile": "Teljes fájl",
   "diff.hunksOnly": "Csak az eltérések",
   "diff.showWholeFile": "Az eltérés megjelenítése a teljes fájlban",

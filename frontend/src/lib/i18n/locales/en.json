@@ -1304,6 +1304,8 @@
   "help.diffPrevChange": "Previous change in the diff",
   "help.notesPrevPage": "Previous page in the notes",
   "help.notesNextPage": "Next page in the notes",
+  "help.viewNext": "Next view (terminal, notes, tasks, files, diff)",
+  "help.viewPrev": "Previous view",
   "diff.wholeFile": "Whole file",
   "diff.hunksOnly": "Changes only",
   "diff.showWholeFile": "Show the change inside the whole file",

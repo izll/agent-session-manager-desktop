@@ -1316,6 +1316,8 @@
   "help.diffPrevChange": "差异中的上一处更改",
   "help.notesPrevPage": "笔记的上一页",
   "help.notesNextPage": "笔记的下一页",
+  "help.viewNext": "下一个视图(终端、笔记、任务、文件、差异)",
+  "help.viewPrev": "上一个视图",
   "diff.wholeFile": "整个文件",
   "diff.hunksOnly": "仅更改",
   "diff.showWholeFile": "在整个文件中显示更改",
