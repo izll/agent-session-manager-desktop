@@ -4909,6 +4909,10 @@ type SettingsInfo struct {
 	UIAccent                  string `json:"uiAccent"`
 	UIBackground              string `json:"uiBackground"`
 	UIBackgroundColor         string `json:"uiBackgroundColor"`
+	NotesBackground           string `json:"notesBackground"`
+	NotesBackgroundColor      string `json:"notesBackgroundColor"`
+	NotesText                 string `json:"notesText"`
+	NotesTextColor            string `json:"notesTextColor"`
 	TerminalRenderer          string `json:"terminalRenderer"`
 	TerminalCopyMode          string `json:"terminalCopyMode"`
 	TerminalFontFamily        string `json:"terminalFontFamily"`
@@ -5042,6 +5046,10 @@ func (a *App) GetSettings() (*SettingsInfo, error) {
 		UIAccent:                  settings.UIAccent,
 		UIBackground:              settings.UIBackground,
 		UIBackgroundColor:         settings.UIBackgroundColor,
+		NotesBackground:           settings.NotesBackground,
+		NotesBackgroundColor:      settings.NotesBackgroundColor,
+		NotesText:                 settings.NotesText,
+		NotesTextColor:            settings.NotesTextColor,
 		TerminalRenderer:          renderer,
 		TerminalShell:             settings.TerminalShell,
 		ShellChoices:              session.ShellChoices(),
@@ -5139,6 +5147,10 @@ func (a *App) SaveSettings(settings SettingsInfo, expectedProjectID string) erro
 		current.UIAccent = settings.UIAccent
 		current.UIBackground = settings.UIBackground
 		current.UIBackgroundColor = settings.UIBackgroundColor
+		current.NotesBackground = settings.NotesBackground
+		current.NotesBackgroundColor = settings.NotesBackgroundColor
+		current.NotesText = settings.NotesText
+		current.NotesTextColor = settings.NotesTextColor
 		current.TerminalRenderer = settings.TerminalRenderer
 		current.TerminalCopyMode = settings.TerminalCopyMode
 		current.TerminalFontFamily = settings.TerminalFontFamily

@@ -1968,6 +1968,10 @@ export namespace main {
 	    uiAccent: string;
 	    uiBackground: string;
 	    uiBackgroundColor: string;
+	    notesBackground: string;
+	    notesBackgroundColor: string;
+	    notesText: string;
+	    notesTextColor: string;
 	    terminalRenderer: string;
 	    terminalCopyMode: string;
 	    terminalFontFamily: string;
@@ -2037,6 +2041,10 @@ export namespace main {
 	        this.uiAccent = source["uiAccent"];
 	        this.uiBackground = source["uiBackground"];
 	        this.uiBackgroundColor = source["uiBackgroundColor"];
+	        this.notesBackground = source["notesBackground"];
+	        this.notesBackgroundColor = source["notesBackgroundColor"];
+	        this.notesText = source["notesText"];
+	        this.notesTextColor = source["notesTextColor"];
 	        this.terminalRenderer = source["terminalRenderer"];
 	        this.terminalCopyMode = source["terminalCopyMode"];
 	        this.terminalFontFamily = source["terminalFontFamily"];

@@ -21,8 +21,17 @@
     type NotePage, editablePages, pagesKey, notePagesText, resolveActivePage, pageIndex,
     setPageText, renamePage, addPage, deletePage, movePage, dropIndex, stepPage, pageLabel,
   } from '../../utils/notePages';
+  import { notesColorVars, notesColorStyle } from '../../utils/notesColors';
 
   export let active = false;
+
+  // The colours chosen in Settings, as variables on the container. Every
+  // setting is passed in: a call that reads the store itself would never run
+  // again. Empty for the default look, which is then the stylesheet's own.
+  $: notesColors = notesColorVars($settings.notesBackground, $settings.notesBackgroundColor,
+                                  $settings.notesText, $settings.notesTextColor);
+  $: notesColorsChosen = Object.keys(notesColors).length > 0;
+
   /**
    * The project's own note instead of a session's or a tab's. It is addressed
    * as one more target — session PROJECT_TASKS_SCOPE — so drafts, the save
@@ -1100,7 +1109,12 @@
 
 <svelte:window on:click={() => { if (pageMenu) closePageMenu(); }} on:keydown={handleWindowKeydown} />
 
-<div class="notes-container" data-note-pages={pages.length}>
+<div
+  class="notes-container"
+  class:custom-colors={notesColorsChosen}
+  style={notesColorStyle(notesColors)}
+  data-note-pages={pages.length}
+>
   <div class="notes-header">
     <span class="notes-title">{isProject ? $t('projectTasks.notesTitle') : $t('notes.title')}</span>
     {#if !isProject}
@@ -1621,16 +1635,20 @@
     overflow: hidden;
   }
 
+  /* The colours come from the Settings (notesColors.ts) as variables on the
+     container; each fallback is the look the notes had before, which is what
+     an unset setting shows. */
   .notes-textarea {
     width: 100%;
     height: 100%;
-    background: rgba(0, 0, 0, 0.2);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: var(--notes-bg, rgba(0, 0, 0, 0.2));
+    border: 1px solid var(--notes-border, rgba(255, 255, 255, 0.08));
     border-radius: 12px;
     padding: 16px;
     font-size: 14px;
     font-family: inherit;
-    color: white;
+    color: var(--notes-fg, white);
+    caret-color: var(--notes-fg, auto);
     resize: none;
     transition: all 0.2s ease;
     line-height: 1.6;
@@ -1643,7 +1661,27 @@
   }
 
   .notes-textarea::placeholder {
-    color: #4b5563;
+    color: var(--notes-placeholder, #4b5563);
+  }
+
+  /* With colours of its own the editor no longer leaves the selection — and
+     with it the find bar's match — to the platform: a system highlight that
+     suits white text on black can swallow dark text on a pale page. The
+     accent shows through, the text keeps its colour. */
+  .custom-colors .notes-textarea::selection {
+    background: rgba(var(--accent-rgb), var(--notes-selection-alpha, 0.4));
+    color: var(--notes-fg);
+  }
+
+  /* Drawn in the text colour, so it shows on a light page as on a dark one. */
+  .custom-colors .notes-textarea::-webkit-scrollbar-thumb {
+    background: var(--notes-scrollbar);
+    background-clip: padding-box;
+  }
+
+  .custom-colors .notes-textarea::-webkit-scrollbar-thumb:hover {
+    background: var(--notes-scrollbar-hover);
+    background-clip: padding-box;
   }
 
 

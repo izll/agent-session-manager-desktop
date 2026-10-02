@@ -124,6 +124,16 @@ type Settings struct {
 	// UIBackgroundColor is the custom background hex, used when UIBackground
 	// is "custom".
 	UIBackgroundColor string `json:"ui_background_color,omitempty"`
+	// NotesBackground is the notes editor's background id (see notesColors.ts);
+	// empty = the default, the dark look the notes always had.
+	// NotesBackgroundColor is the custom hex, used when it is "custom".
+	NotesBackground      string `json:"notes_background,omitempty"`
+	NotesBackgroundColor string `json:"notes_background_color,omitempty"`
+	// NotesText is the notes' text colour id; empty = automatic, worked out
+	// from the background so dark text lands on a light one. NotesTextColor
+	// is the custom hex, used when it is "custom".
+	NotesText      string `json:"notes_text,omitempty"`
+	NotesTextColor string `json:"notes_text_color,omitempty"`
 	// Usage rings in the sidebar, off by default.
 	//
 	// Off means off: with these false nothing is fetched at all. The Claude

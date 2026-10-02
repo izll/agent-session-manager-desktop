@@ -25,6 +25,9 @@
            UI_BACKGROUNDS, DEFAULT_UI_BACKGROUND, CUSTOM_UI_BACKGROUND,
            getUIBackground,
            accentContrastOnBackground, MIN_ACCENT_CONTRAST } from '../../utils/uiThemes';
+  import { NOTES_BACKGROUNDS, NOTES_TEXT_COLORS, DEFAULT_NOTES_BACKGROUND, AUTO_NOTES_TEXT,
+           CUSTOM_NOTES_COLOR, MIN_NOTES_CONTRAST, normaliseHex, contrastRatio,
+           resolveNotesBackground, effectiveNotesText, defaultNotesBackgroundOver } from '../../utils/notesColors';
   import { agents } from '../../stores/agents';
   import ShortcutEditor from '../Settings/ShortcutEditor.svelte';
   import { t, loadTranslations } from '../../i18n';
@@ -234,6 +237,30 @@
     getUIBackground(currentUIBackground, customBackground).base;
   $: customAccentTooDark =
     accentContrastOnBackground(customAccent, activeBackgroundBase) < MIN_ACCENT_CONTRAST;
+
+  // The notes' colours. The swatches preview the pairing — each one an "A"
+  // in the text colour on the background — so both rows are measured against
+  // what the other is set to, and against what the default background really
+  // shows: a wash over the content surface of the interface background.
+  $: notesBgId = $settings.notesBackground || DEFAULT_NOTES_BACKGROUND;
+  $: customNotesBg = normaliseHex($settings.notesBackgroundColor) || '#f4ecd8';
+  $: notesTextId = $settings.notesText || AUTO_NOTES_TEXT;
+  $: customNotesText = normaliseHex($settings.notesTextColor) || '#1f2937';
+  $: defaultNotesBg = defaultNotesBackgroundOver(
+    getUIBackground(currentUIBackground, customBackground).surface);
+  $: notesBgHex = resolveNotesBackground(notesBgId, customNotesBg) ?? defaultNotesBg;
+  $: notesTextHex = effectiveNotesText(notesBgId, customNotesBg, notesTextId, customNotesText);
+  // Auto always reads; a chosen colour may not, and is still the user's to
+  // choose — so a hint, not a refusal.
+  $: notesContrastLow = contrastRatio(notesTextHex, notesBgHex) < MIN_NOTES_CONTRAST;
+
+  function pickCustomNotesBackground(hex: string) {
+    saveSettings({ notesBackground: CUSTOM_NOTES_COLOR, notesBackgroundColor: hex });
+  }
+
+  function pickCustomNotesText(hex: string) {
+    saveSettings({ notesText: CUSTOM_NOTES_COLOR, notesTextColor: hex });
+  }
 
   // Picking a background colour selects the custom entry, same as the accent.
   function pickCustomBackground(hex: string) {
@@ -754,6 +781,103 @@
                   />
                 </label>
               </div>
+            </div>
+
+            <div class="setting-item input-item column-item">
+              <span class="setting-info">
+                <span class="setting-label">{$t('settings.notesBackground')}</span>
+                <span class="setting-desc">{$t('settings.notesBackgroundDesc')}</span>
+              </span>
+              <div class="theme-grid" data-testid="notes-background-swatches">
+                <button
+                  class="theme-swatch notes-swatch"
+                  class:selected={notesBgId === DEFAULT_NOTES_BACKGROUND}
+                  title={$t('settings.notesBgDefault')}
+                  data-notes-color="default"
+                  on:click={() => saveSettings({ notesBackground: DEFAULT_NOTES_BACKGROUND })}
+                >
+                  <span class="theme-dot notes-dot"
+                        style="--dot-bg: {defaultNotesBg}; --dot-fg: {effectiveNotesText(DEFAULT_NOTES_BACKGROUND, customNotesBg, notesTextId, customNotesText)}">A</span>
+                  <span class="theme-name">{$t('settings.notesBgDefault')}</span>
+                </button>
+                {#each NOTES_BACKGROUNDS as bg (bg.id)}
+                  <button
+                    class="theme-swatch notes-swatch"
+                    class:selected={notesBgId === bg.id}
+                    title={$t(bg.labelKey)}
+                    data-notes-color={bg.id}
+                    on:click={() => saveSettings({ notesBackground: bg.id })}
+                  >
+                    <span class="theme-dot notes-dot"
+                          style="--dot-bg: {bg.hex}; --dot-fg: {effectiveNotesText(bg.id, customNotesBg, notesTextId, customNotesText)}">A</span>
+                    <span class="theme-name">{$t(bg.labelKey)}</span>
+                  </button>
+                {/each}
+                <label
+                  class="theme-swatch notes-swatch custom"
+                  class:selected={notesBgId === CUSTOM_NOTES_COLOR}
+                  title={$t('settings.notesCustom')}
+                  data-notes-color="custom"
+                >
+                  <span class="theme-dot notes-dot"
+                        style="--dot-bg: {customNotesBg}; --dot-fg: {effectiveNotesText(CUSTOM_NOTES_COLOR, customNotesBg, notesTextId, customNotesText)}">A</span>
+                  <span class="theme-name">{$t('settings.notesCustom')}</span>
+                  <input
+                    type="color"
+                    value={customNotesBg}
+                    on:input={(e) => pickCustomNotesBackground(e.currentTarget.value)}
+                  />
+                </label>
+              </div>
+            </div>
+
+            <div class="setting-item input-item column-item">
+              <span class="setting-info">
+                <span class="setting-label">{$t('settings.notesText')}</span>
+                <span class="setting-desc">{$t('settings.notesTextDesc')}</span>
+              </span>
+              <div class="theme-grid" data-testid="notes-text-swatches">
+                <button
+                  class="theme-swatch notes-swatch"
+                  class:selected={notesTextId === AUTO_NOTES_TEXT}
+                  title={$t('settings.notesTextAuto')}
+                  data-notes-color="auto"
+                  on:click={() => saveSettings({ notesText: AUTO_NOTES_TEXT })}
+                >
+                  <span class="theme-dot notes-dot"
+                        style="--dot-bg: {notesBgHex}; --dot-fg: {effectiveNotesText(notesBgId, customNotesBg, AUTO_NOTES_TEXT, customNotesText)}">A</span>
+                  <span class="theme-name">{$t('settings.notesTextAuto')}</span>
+                </button>
+                {#each NOTES_TEXT_COLORS as fg (fg.id)}
+                  <button
+                    class="theme-swatch notes-swatch"
+                    class:selected={notesTextId === fg.id}
+                    title={$t(fg.labelKey)}
+                    data-notes-color={fg.id}
+                    on:click={() => saveSettings({ notesText: fg.id })}
+                  >
+                    <span class="theme-dot notes-dot" style="--dot-bg: {notesBgHex}; --dot-fg: {fg.hex}">A</span>
+                    <span class="theme-name">{$t(fg.labelKey)}</span>
+                  </button>
+                {/each}
+                <label
+                  class="theme-swatch notes-swatch custom"
+                  class:selected={notesTextId === CUSTOM_NOTES_COLOR}
+                  title={$t('settings.notesCustom')}
+                  data-notes-color="custom"
+                >
+                  <span class="theme-dot notes-dot" style="--dot-bg: {notesBgHex}; --dot-fg: {customNotesText}">A</span>
+                  <span class="theme-name">{$t('settings.notesCustom')}</span>
+                  <input
+                    type="color"
+                    value={customNotesText}
+                    on:input={(e) => pickCustomNotesText(e.currentTarget.value)}
+                  />
+                </label>
+              </div>
+              {#if notesContrastLow}
+                <p class="accent-warning" data-testid="notes-contrast-warning">{$t('settings.notesLowContrast')}</p>
+              {/if}
             </div>
           </div>
 
@@ -2254,6 +2378,29 @@
   }
 
   .theme-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* The notes' swatches are a preview — an "A" in the text colour on the
+     background — so the dot is drawn from the pair, not from --sw. Their
+     colours can be anything, a near-black among them, so the selected one is
+     marked in the accent rather than in its own colour. */
+  .notes-dot {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    border-radius: 5px;
+    background: var(--dot-bg);
+    color: var(--dot-fg);
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1;
+  }
+  .theme-swatch.notes-swatch.selected {
+    border-color: var(--accent);
+    background: rgba(var(--accent-rgb), 0.14);
+    color: #e4e4e7;
+  }
 
   /* A quiet marker beside the label: useful when comparing against what the
      repository holds, but not something to lead with. */

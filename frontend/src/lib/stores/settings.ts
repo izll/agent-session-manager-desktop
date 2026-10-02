@@ -94,6 +94,14 @@ export interface Settings {
   uiBackground: string;
   /** Custom background hex, used when uiBackground is 'custom'. */
   uiBackgroundColor: string;
+  /** Notes editor background id (see notesColors.ts); '' = the default look. */
+  notesBackground: string;
+  /** Custom notes background hex, used when notesBackground is 'custom'. */
+  notesBackgroundColor: string;
+  /** Notes text colour id; '' = Auto, worked out from the background. */
+  notesText: string;
+  /** Custom notes text hex, used when notesText is 'custom'. */
+  notesTextColor: string;
   terminalRenderer: TerminalRenderer;
   /**
    * Terminal font stack. Empty means the built-in default.
@@ -192,6 +200,10 @@ function defaultSettings(): Settings {
     uiAccent: '#8b5cf6',
     uiBackground: 'midnight',
     uiBackgroundColor: '#0d0d1a',
+    notesBackground: '',
+    notesBackgroundColor: '#f4ecd8',
+    notesText: '',
+    notesTextColor: '#1f2937',
     // Platform-dependent; see defaultTerminalRenderer(). A saved setting
     // overrides this, so it only decides what a fresh install starts with.
     terminalRenderer: defaultTerminalRenderer(),
