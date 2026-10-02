@@ -6,6 +6,24 @@ Entries describe what changed for someone using the app. Internal refactoring,
 test and CI work is left out unless it changed behaviour. Dates are release
 dates; the format follows [Keep a Changelog](https://keepachangelog.com).
 
+## 1.1.21 — 2026-10-02
+
+### Added
+
+- **Choose the notes' background and text colours**, in Settings → General
+  → Appearance: Default, Dim, Paper, Light or a custom colour for the page,
+  and Auto — dark text on a light page, light on a dark one — or a colour of
+  your own for the text. A hint shows when the pair is hard to read. The
+  rest of the window keeps its colours.
+- **Step through a tab's views with Ctrl+Shift+PgUp / Ctrl+Shift+PgDn** —
+  terminal, notes, tasks, files and, in a repository, the diff — as
+  Ctrl+PgUp / Ctrl+PgDn step through the tabs. Both can be rebound.
+
+### Changed
+
+- **The session list's filter menu closes once a filter is chosen**, out of
+  the way of the list it has just filtered.
+
 ## 1.1.20 — 2026-10-01
 
 ### Added
