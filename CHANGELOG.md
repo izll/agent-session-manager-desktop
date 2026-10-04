@@ -6,6 +6,22 @@ Entries describe what changed for someone using the app. Internal refactoring,
 test and CI work is left out unless it changed behaviour. Dates are release
 dates; the format follows [Keep a Changelog](https://keepachangelog.com).
 
+## 1.1.22 — 2026-10-04
+
+### Fixed
+
+- **In-app updates of .deb and .rpm installs no longer fail after the
+  password prompt** with "XOpenDisplay failure!". The privileged step is now
+  a short script shipped in the package, `/usr/lib/asmgr-desktop/install-update`,
+  which checks the download's SHA-256, accepts only an asmgr-desktop upgrade
+  of the version asked for, and installs it. Thanks to @muzsij (#2).
+
+  An installed version updates with its own code, so if updating to 1.1.22
+  from inside the app fails this way, install this release once by hand —
+  `sudo apt install ./asmgr-desktop_1.1.22_linux_x86_64.deb` or
+  `sudo dnf install ./asmgr-desktop_1.1.22_linux_x86_64.rpm`. Later updates
+  work from the app again.
+
 ## 1.1.21 — 2026-10-02
 
 ### Added
