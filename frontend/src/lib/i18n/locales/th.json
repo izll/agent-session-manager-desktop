@@ -271,6 +271,7 @@
   "tabBar.livePreview": "ตัวอย่างสด",
   "tabBar.closeDictation": "ปิด (หยุดการป้อนเสียง)",
   "tabBar.sendToTerminal": "ส่งไปยังเทอร์มินัล (Ctrl+Enter)",
+  "tabBar.sendToField": "ส่งไปยังช่อง (Ctrl+Enter)",
   "tabBar.send": "ส่ง",
   "tabBar.clearText": "ล้างข้อความ",
   "notes.title": "บันทึกเซสชัน",

@@ -313,26 +313,23 @@ func (d *DictationService) ToggleDictation() (bool, error) {
 
 		// Apply handler based on current target and buffer mode setting
 		fmt.Printf("[Dictation] ToggleDictation auto-init: currentTarget=%q\n", d.currentTarget)
+		settings := d.app.GetSettings()
 		if d.currentTarget == "field" {
-			fmt.Println("[Dictation] ToggleDictation auto-init: setting fieldHandler")
-			d.app.SetKeyboardPopupHandler(d.fieldHandler)
-			d.app.SetKeyboardPopupDirect(false)
+			d.applyFieldMode(settings.Mode, settings.BufferMode)
 		} else {
-			settings := d.app.GetSettings()
 			d.applyBufferMode(settings.Mode, settings.BufferMode)
 		}
 
 		d.initialized = true
 	}
 
-	// Only apply buffer mode if target is terminal (don't override field handler)
+	// The buffer setting may have changed since the target was set.
 	fmt.Printf("[Dictation] ToggleDictation pre-toggle: currentTarget=%q\n", d.currentTarget)
-	if d.currentTarget != "field" {
-		fmt.Println("[Dictation] ToggleDictation: applying buffer mode (target is not field)")
-		settings := d.app.GetSettings()
-		d.applyBufferMode(settings.Mode, settings.BufferMode)
+	settings := d.app.GetSettings()
+	if d.currentTarget == "field" {
+		d.applyFieldMode(settings.Mode, settings.BufferMode)
 	} else {
-		fmt.Println("[Dictation] ToggleDictation: SKIPPING applyBufferMode (target is field)")
+		d.applyBufferMode(settings.Mode, settings.BufferMode)
 	}
 
 	// Clear buffer when starting a new recording
@@ -681,6 +678,28 @@ func (d *DictationService) applyBufferMode(mode string, bufferMode bool) {
 	}
 }
 
+// applyFieldMode routes dictation meant for a form field — a task's title,
+// say. With the buffer on, the words gather in the buffer first, as they do
+// for the terminal: the panel shows them to be corrected, and sending puts
+// them into the field. Without it they go into the field as they are heard.
+func (d *DictationService) applyFieldMode(mode string, bufferMode bool) {
+	if d.app == nil {
+		return
+	}
+	handler := d.fieldTargetHandler(mode, bufferMode)
+	fmt.Printf("[Dictation] field target: %T\n", handler)
+	d.app.SetKeyboardPopupHandler(handler)
+	d.app.SetKeyboardPopupDirect(false)
+}
+
+// fieldTargetHandler is the handler a form field's dictation goes through.
+func (d *DictationService) fieldTargetHandler(mode string, bufferMode bool) dictation.PopupTextHandler {
+	if mode == "streaming" && bufferMode {
+		return d.bufferHandler
+	}
+	return d.fieldHandler
+}
+
 // SendBufferText sends the buffer text to the terminal and clears the buffer
 func (d *DictationService) SendBufferText() error {
 	text := d.bufferHandler.GetText()
@@ -727,9 +746,8 @@ func (d *DictationService) SetDictationTarget(target string) {
 
 	switch target {
 	case "field":
-		fmt.Println("[Dictation] SetDictationTarget: setting fieldHandler")
-		d.app.SetKeyboardPopupHandler(d.fieldHandler)
-		d.app.SetKeyboardPopupDirect(false)
+		settings := d.app.GetSettings()
+		d.applyFieldMode(settings.Mode, settings.BufferMode)
 	default:
 		fmt.Println("[Dictation] SetDictationTarget: restoring terminal/buffer mode")
 		// Restore terminal/buffer mode based on settings

@@ -11,7 +11,7 @@
   import Select from '../common/Select.svelte';
   import ConfirmDialog from '../Dialogs/ConfirmDialog.svelte';
   import { createFieldDictation } from '../../utils/dictationField';
-  import { setDictationTarget } from '../../stores/dictationTarget';
+  import { setDictationTarget, dictationPanelForField } from '../../stores/dictationTarget';
   import { viewedWindowOf } from '../../utils/viewedWindow';
   import { EventsOn } from '../../../../wailsjs/runtime/runtime';
   import { t } from '../../i18n';
@@ -1736,9 +1736,9 @@
         </div>
       </div>
       <div class="dialog-body">
-        {#if $dictationListening}
-          <!-- What is being heard, until it is final and goes into the field:
-               the dictation panel over the terminal stays shut for a field. -->
+        {#if $dictationListening && !$dictationPanelForField}
+          <!-- What is being heard, until it is final and goes into the field.
+               With the buffer on the dictation panel shows it instead. -->
           <div class="dictation-live" aria-live="polite">
             <span class="dictation-dot"></span>
             {#if $dictationInterim}<span class="dictation-words">{$dictationInterim}</span>{:else}<span class="dictation-hint">{$t('tasks.dictationListening')}</span>{/if}
@@ -1881,9 +1881,9 @@
         </div>
       </div>
       <div class="dialog-body">
-        {#if $dictationListening}
-          <!-- What is being heard, until it is final and goes into the field:
-               the dictation panel over the terminal stays shut for a field. -->
+        {#if $dictationListening && !$dictationPanelForField}
+          <!-- What is being heard, until it is final and goes into the field.
+               With the buffer on the dictation panel shows it instead. -->
           <div class="dictation-live" aria-live="polite">
             <span class="dictation-dot"></span>
             {#if $dictationInterim}<span class="dictation-words">{$dictationInterim}</span>{:else}<span class="dictation-hint">{$t('tasks.dictationListening')}</span>{/if}
@@ -1990,9 +1990,9 @@
         </div>
       </div>
       <div class="dialog-body">
-        {#if $dictationListening}
-          <!-- What is being heard, until it is final and goes into the field:
-               the dictation panel over the terminal stays shut for a field. -->
+        {#if $dictationListening && !$dictationPanelForField}
+          <!-- What is being heard, until it is final and goes into the field.
+               With the buffer on the dictation panel shows it instead. -->
           <div class="dictation-live" aria-live="polite">
             <span class="dictation-dot"></span>
             {#if $dictationInterim}<span class="dictation-words">{$dictationInterim}</span>{:else}<span class="dictation-hint">{$t('tasks.dictationListening')}</span>{/if}

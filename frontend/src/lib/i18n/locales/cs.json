@@ -271,6 +271,7 @@
   "tabBar.livePreview": "Živý náhled",
   "tabBar.closeDictation": "Zavřít (zastavit diktování)",
   "tabBar.sendToTerminal": "Odeslat do terminálu (Ctrl+Enter)",
+  "tabBar.sendToField": "Odeslat do pole (Ctrl+Enter)",
   "tabBar.send": "Odeslat",
   "tabBar.clearText": "Vymazat text",
   "notes.title": "Poznámky k relaci",

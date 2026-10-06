@@ -271,6 +271,7 @@
   "tabBar.livePreview": "Live voorbeeld",
   "tabBar.closeDictation": "Sluiten (dictatie stoppen)",
   "tabBar.sendToTerminal": "Verzenden naar terminal (Ctrl+Enter)",
+  "tabBar.sendToField": "Naar het veld sturen (Ctrl+Enter)",
   "tabBar.send": "Verzenden",
   "tabBar.clearText": "Tekst wissen",
   "notes.title": "Sessienotities",

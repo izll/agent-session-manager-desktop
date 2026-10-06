@@ -271,6 +271,7 @@
   "tabBar.livePreview": "ライブプレビュー",
   "tabBar.closeDictation": "閉じる（音声入力を停止）",
   "tabBar.sendToTerminal": "ターミナルに送信 (Ctrl+Enter)",
+  "tabBar.sendToField": "フィールドに送信 (Ctrl+Enter)",
   "tabBar.send": "送信",
   "tabBar.clearText": "テキストをクリア",
   "notes.title": "セッションメモ",

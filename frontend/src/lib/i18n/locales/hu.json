@@ -267,6 +267,7 @@
   "tabBar.livePreview": "Élő előnézet",
   "tabBar.closeDictation": "Bezárás (diktálás leállítása)",
   "tabBar.sendToTerminal": "Küldés a terminálba (Ctrl+Enter)",
+  "tabBar.sendToField": "Küldés a mezőbe (Ctrl+Enter)",
   "tabBar.send": "Küldés",
   "tabBar.clearText": "Szöveg törlése",
   "notes.title": "Munkamenet jegyzetek",

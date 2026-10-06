@@ -151,14 +151,29 @@ test('project switching reapplies project-scoped diff and dictation panel geomet
   expect(pageErrors).toEqual([]);
 });
 
-// Dictating into a dialog's field — a task's title — the panel over the
-// terminal stayed shut: open, it covered the dialog, took the field's caret and
-// emptied itself as each sentence went into the field.
-test('dictation into a field opens no panel and leaves the caret in the field', async ({ page }) => {
-  await gotoProjectLayoutFixture(page, '?target=field');
-  await expect(page.locator('.dictation-mic, .tab-bar').first()).toBeVisible();
+// Dictating into a dialog's field — a task's title. Live, the words go
+// straight into the field: the panel over the terminal stays shut, as open it
+// covered the dialog, took the field's caret and emptied itself.
+test('live dictation into a field opens no panel and leaves the caret in the field', async ({ page }) => {
+  await gotoProjectLayoutFixture(page, '?target=field&buffer=0');
   await page.waitForTimeout(300);
   await expect(page.locator('.dictation-buffer')).toHaveCount(0);
+  await expect(page.locator('#dialog-field')).toBeFocused();
+});
+
+// With the buffer on, the panel is what the buffer is for: the words gather
+// there to be corrected, and Send puts them into the field — not into the
+// terminal — and hands the caret back to it.
+test('buffered dictation into a field is sent into the field', async ({ page }) => {
+  await gotoProjectLayoutFixture(page, '?target=field');
+  const buffer = page.locator('.dictation-buffer');
+  await expect(buffer).toBeVisible();
+  await page.evaluate(() => window.projectLayoutFixture.setBufferText('a corrected title'));
+  await expect(buffer.locator('.buffer-editor')).toContainText('a corrected title');
+
+  await buffer.locator('.buffer-btn.send').click();
+  await expect.poll(() => page.evaluate(() => window.projectLayoutFixture.fieldInserts())).toEqual(['a corrected title']);
+  expect(await page.evaluate(() => window.projectLayoutFixture.promptsSent())).toEqual([]);
   await expect(page.locator('#dialog-field')).toBeFocused();
 });
 

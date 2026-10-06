@@ -271,6 +271,7 @@
   "tabBar.livePreview": "Попередній перегляд",
   "tabBar.closeDictation": "Закрити (зупинити диктування)",
   "tabBar.sendToTerminal": "Надіслати в термінал (Ctrl+Enter)",
+  "tabBar.sendToField": "Надіслати в поле (Ctrl+Enter)",
   "tabBar.send": "Надіслати",
   "tabBar.clearText": "Очистити текст",
   "notes.title": "Нотатки сеансу",

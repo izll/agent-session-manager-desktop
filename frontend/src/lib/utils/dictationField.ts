@@ -6,7 +6,7 @@
 import { writable, get } from 'svelte/store';
 import { EventsOn, EventsOff } from '../../../wailsjs/runtime/runtime';
 import * as DictationService from '../../../wailsjs/go/main/DictationService';
-import { setDictationTarget, type DictationTarget } from '../stores/dictationTarget';
+import { setDictationTarget, INSERT_INTO_FIELD_EVENT, type DictationTarget } from '../stores/dictationTarget';
 
 export interface FieldDictation {
   /** Toggle dictation on/off for this field */
@@ -43,6 +43,7 @@ export function createFieldDictation(
   const listening = writable(false);
   const interim = writable('');
   let unsubInterim: (() => void) | null = null;
+  let unsubPanelSend: (() => void) | null = null;
   let unsubFieldText: (() => void) | null = null;
   let unsubFieldDelete: (() => void) | null = null;
   let unsubState: (() => void) | null = null;
@@ -108,6 +109,18 @@ export function createFieldDictation(
 
     unsubInterim = EventsOn('dictation:interimText', (text: string) => interim.set(text || ''));
 
+    // The dictation panel's Send, with the buffer on: the corrected text.
+    const onPanelSend = (event: Event) => {
+      const text = (event as CustomEvent<string>).detail;
+      const el = getElement();
+      if (el && text) {
+        insertAtCursor(el, text);
+        onTextInserted?.();
+      }
+    };
+    window.addEventListener(INSERT_INTO_FIELD_EVENT, onPanelSend);
+    unsubPanelSend = () => window.removeEventListener(INSERT_INTO_FIELD_EVENT, onPanelSend);
+
     unsubFieldText = EventsOn('dictation:fieldText', (text: string) => {
       interim.set('');
       const el = getElement();
@@ -141,6 +154,7 @@ export function createFieldDictation(
 
   function cleanup() {
     if (unsubInterim) { unsubInterim(); unsubInterim = null; }
+    if (unsubPanelSend) { unsubPanelSend(); unsubPanelSend = null; }
     interim.set('');
     if (unsubFieldText) { unsubFieldText(); unsubFieldText = null; }
     if (unsubFieldDelete) { unsubFieldDelete(); unsubFieldDelete = null; }

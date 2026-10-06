@@ -271,6 +271,7 @@
   "tabBar.livePreview": "Live Preview",
   "tabBar.closeDictation": "Close (stop dictation)",
   "tabBar.sendToTerminal": "Send to terminal (Ctrl+Enter)",
+  "tabBar.sendToField": "Send into the field (Ctrl+Enter)",
   "tabBar.send": "Send",
   "tabBar.clearText": "Clear text",
   "notes.title": "Session Notes",

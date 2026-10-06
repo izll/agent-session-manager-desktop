@@ -271,6 +271,7 @@
   "tabBar.livePreview": "Podgląd na żywo",
   "tabBar.closeDictation": "Zamknij (zatrzymaj dyktowanie)",
   "tabBar.sendToTerminal": "Wyślij do terminala (Ctrl+Enter)",
+  "tabBar.sendToField": "Wyślij do pola (Ctrl+Enter)",
   "tabBar.send": "Wyślij",
   "tabBar.clearText": "Wyczyść tekst",
   "notes.title": "Notatki sesji",

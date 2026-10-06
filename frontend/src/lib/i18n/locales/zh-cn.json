@@ -271,6 +271,7 @@
   "tabBar.livePreview": "实时预览",
   "tabBar.closeDictation": "关闭（停止听写）",
   "tabBar.sendToTerminal": "发送到终端 (Ctrl+Enter)",
+  "tabBar.sendToField": "发送到字段 (Ctrl+Enter)",
   "tabBar.send": "发送",
   "tabBar.clearText": "清除文本",
   "notes.title": "会话笔记",

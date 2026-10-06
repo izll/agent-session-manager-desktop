@@ -271,6 +271,7 @@
   "tabBar.livePreview": "Xem trước trực tiếp",
   "tabBar.closeDictation": "Đóng (dừng đọc chính tả)",
   "tabBar.sendToTerminal": "Gửi đến terminal (Ctrl+Enter)",
+  "tabBar.sendToField": "Gửi vào trường (Ctrl+Enter)",
   "tabBar.send": "Gửi",
   "tabBar.clearText": "Xóa văn bản",
   "notes.title": "Ghi chú phiên",

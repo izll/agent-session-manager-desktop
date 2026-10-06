@@ -36,3 +36,13 @@ test('stopping with the dialog open leaves dictation on the field', async ({ pag
   expect(await fixture(page, 'targetCalls')).not.toContain('terminal');
   expect(await fixture(page, 'target')).toBe('field');
 });
+
+// With the buffer on, the corrected text comes from the dictation panel's
+// Send rather than from the backend, and lands at the field's caret.
+test('the panel\'s Send goes into the field', async ({ page }) => {
+  await open(page);
+  await fixture(page, 'toggle');
+  await page.evaluate(() => window.dispatchEvent(
+    new CustomEvent('dictation:insertIntoField', { detail: 'from the buffer' })));
+  await expect(page.locator('#title')).toHaveValue('from the buffer');
+});

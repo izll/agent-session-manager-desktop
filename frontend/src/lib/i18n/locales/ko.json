@@ -271,6 +271,7 @@
   "tabBar.livePreview": "실시간 미리보기",
   "tabBar.closeDictation": "닫기 (받아쓰기 중지)",
   "tabBar.sendToTerminal": "터미널로 전송 (Ctrl+Enter)",
+  "tabBar.sendToField": "필드로 보내기 (Ctrl+Enter)",
   "tabBar.send": "전송",
   "tabBar.clearText": "텍스트 지우기",
   "notes.title": "세션 메모",

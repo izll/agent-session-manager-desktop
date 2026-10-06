@@ -271,6 +271,7 @@
   "tabBar.livePreview": "Liveförhandsgranskning",
   "tabBar.closeDictation": "Stäng (stoppa diktering)",
   "tabBar.sendToTerminal": "Skicka till terminal (Ctrl+Enter)",
+  "tabBar.sendToField": "Skicka till fältet (Ctrl+Enter)",
   "tabBar.send": "Skicka",
   "tabBar.clearText": "Rensa text",
   "notes.title": "Sessionsanteckningar",

@@ -271,6 +271,7 @@
   "tabBar.livePreview": "Предварительный просмотр",
   "tabBar.closeDictation": "Закрыть (остановить диктовку)",
   "tabBar.sendToTerminal": "Отправить в терминал (Ctrl+Enter)",
+  "tabBar.sendToField": "Отправить в поле (Ctrl+Enter)",
   "tabBar.send": "Отправить",
   "tabBar.clearText": "Очистить текст",
   "notes.title": "Заметки сессии",

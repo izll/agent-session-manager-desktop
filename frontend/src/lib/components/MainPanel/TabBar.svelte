@@ -30,7 +30,7 @@
   import PalettePicker from '../common/PalettePicker.svelte';
   import { settings, saveSettings } from '../../stores/settings';
   import * as DictationService from '../../../../wailsjs/go/main/DictationService';
-  import { dictationTarget, setDictationTarget } from '../../stores/dictationTarget';
+  import { dictationTarget, setDictationTarget, dictationPanelForField, INSERT_INTO_FIELD_EVENT } from '../../stores/dictationTarget';
   import { EventsOn, EventsOff } from '../../../../wailsjs/runtime/runtime';
   import type { session } from '../../../../wailsjs/go/models';
   import { afterUnsavedChanges } from '../../stores/unsavedChanges';
@@ -155,7 +155,8 @@
     // would hand the caret back. Doing it here too is harmless when the event
     // does arrive: both land on the same terminal.
     dictationListening = false;
-    focusTerminalAfterSend('close-panel');
+    if (dictationIntoField) restoreFieldFocus();
+    else focusTerminalAfterSend('close-panel');
     void DictationService.ToggleDictation();
   }
 
@@ -634,7 +635,7 @@
       if (listening) {
         startVoiceLevelPoll();
         dictationIntoField = !notesFieldCleanup && get(dictationTarget) === 'field';
-        if (dictationIntoField) {
+        if (dictationIntoField && !bufferMode) {
           // A dialog's field owns this dictation: the caret stays in it.
         } else if (notesFieldCleanup) {
           // Notes field dictation active - focus notes textarea
@@ -643,6 +644,7 @@
             notesTextarea?.focus();
           });
         } else if (bufferMode) {
+          if (dictationIntoField) fieldBeforeBuffer = document.activeElement as HTMLElement | null;
           console.log('[Buffer] Starting buffer text poll');
           startBufferTextPoll();
           tick().then(() => bufferEditor?.focus());
@@ -673,7 +675,8 @@
         // terminal stayed dead to the keyboard until it was clicked. Sending
         // has its own call for this, which is why closing without sending was
         // the case that kept failing.
-        if (bufferMode && !dictationIntoField) focusTerminalAfterSend('dictation-stopped');
+        if (dictationIntoField) restoreFieldFocus();
+        else if (bufferMode) focusTerminalAfterSend('dictation-stopped');
         dictationIntoField = false;
       }
     });
@@ -732,7 +735,7 @@
     // Listen for interim text from streaming recognizer
     const unsubInterim = EventsOn('dictation:interimText', (text: string) => {
       interimText = text || '';
-      if (streamingMode && dictationListening && !dictationIntoField) {
+      if (streamingMode && dictationListening && !fieldWithoutPanel) {
         appendInterimSpan(interimText);
       }
     });
@@ -809,6 +812,22 @@
    * cover the dialog, take its caret and empty itself as each sentence left.
    */
   let dictationIntoField = false;
+  /**
+   * With the buffer on, a field's dictation does use the panel: the words
+   * gather there to be corrected, and Send puts them into the field. Without
+   * it they go straight into the field and the panel stays shut.
+   */
+  $: panelForField = dictationIntoField && bufferMode;
+  $: fieldWithoutPanel = dictationIntoField && !bufferMode;
+  $: dictationPanelForField.set(dictationListening && panelForField);
+  /** The field the panel took the caret from, to give it back. */
+  let fieldBeforeBuffer: HTMLElement | null = null;
+
+  function restoreFieldFocus() {
+    const field = fieldBeforeBuffer;
+    fieldBeforeBuffer = null;
+    void tick().then(() => { if (field?.isConnected) field.focus(); });
+  }
 
   function setupNotesFieldListeners() {
     const unsubText = EventsOn('dictation:fieldText', (text: string) => {
@@ -869,7 +888,10 @@
     const sid = get(selectedSessionId);
     const widx = get(selectedWindowIdx);
     const projectId = get(activeProjectId);
-    if (!sid) return;
+    // Captured now: a field's buffer goes to that field, whatever happens to
+    // the dictation while the send is under way.
+    const intoField = dictationIntoField;
+    if (!sid && !intoField) return;
     bufferBusy = true;
     try {
       // A debounced/in-flight editor sync must finish before ClearBuffer, or it
@@ -887,7 +909,14 @@
       // Name and snapshot the tab as well as the text before the await. A tab
       // switch while SendPromptToWindow is running must not redirect this send,
       // and a second click/key path must not submit the same prompt twice.
-      await App.SendPromptToWindow(sid, widx, submitted, projectId);
+      if (intoField) {
+        // Dictated for a dialog's field: the text goes there, at its caret,
+        // and not to the terminal.
+        window.dispatchEvent(new CustomEvent(INSERT_INTO_FIELD_EVENT, { detail: submitted }));
+      } else {
+        if (!sid) return;
+        await App.SendPromptToWindow(sid, widx, submitted, projectId);
+      }
       if (projectId !== get(activeProjectId)) return;
       // From here the prompt is committed. Clear the visible copy before the
       // second bridge call: if backend cleanup fails, leaving the text in the
@@ -923,7 +952,8 @@
       // open the caret stayed in it — and sending without Enter leaves a
       // prompt in the agent's composer waiting for exactly that key, which
       // then went to the dictation buffer instead.
-      focusTerminalAfterSend('send');
+      if (intoField) restoreFieldFocus();
+      else focusTerminalAfterSend('send');
     } catch (e) {
       console.error('[Dictation] Send buffer failed:', e);
     } finally {
@@ -2357,7 +2387,7 @@
       <!-- Dictation -->
       {#if dictationEnabled}
         <div class="dictation-wrapper">
-          {#if streamingMode && dictationListening && !dictationIntoField}
+          {#if streamingMode && dictationListening && !fieldWithoutPanel}
             <div class="dictation-buffer" class:dragging={isDragging} class:resizing={isResizing} class:live-preview={!bufferMode} bind:this={bufferPanel} style={bufferPanelStyle}>
               <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
               <div class="buffer-header" role="banner" on:mousedown={onHeaderMousedown}>
@@ -2410,7 +2440,7 @@
                       <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
                     </svg>
                   </button>
-                  <button class="buffer-btn send" on:click={sendBuffer} title={$t('tabBar.sendToTerminal')} disabled={!bufferText.trim() || bufferBusy}>
+                  <button class="buffer-btn send" on:click={sendBuffer} title={dictationIntoField ? $t('tabBar.sendToField') : $t('tabBar.sendToTerminal')} disabled={!bufferText.trim() || bufferBusy}>
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                       <line x1="22" y1="2" x2="11" y2="13"/>
                       <polygon points="22 2 15 22 11 13 2 9 22 2"/>

@@ -271,6 +271,7 @@
   "tabBar.livePreview": "Anteprima in Tempo Reale",
   "tabBar.closeDictation": "Chiudi (ferma dettatura)",
   "tabBar.sendToTerminal": "Invia al terminale (Ctrl+Enter)",
+  "tabBar.sendToField": "Invia nel campo (Ctrl+Invio)",
   "tabBar.send": "Invia",
   "tabBar.clearText": "Cancella testo",
   "notes.title": "Note della Sessione",

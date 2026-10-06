@@ -271,6 +271,7 @@
   "tabBar.livePreview": "Canlı Önizleme",
   "tabBar.closeDictation": "Kapat (dikteyi durdur)",
   "tabBar.sendToTerminal": "Terminale gönder (Ctrl+Enter)",
+  "tabBar.sendToField": "Alana gönder (Ctrl+Enter)",
   "tabBar.send": "Gönder",
   "tabBar.clearText": "Metni temizle",
   "notes.title": "Oturum Notları",

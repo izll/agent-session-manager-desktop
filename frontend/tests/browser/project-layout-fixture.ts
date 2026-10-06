@@ -16,14 +16,25 @@ const fixtureSession = {
   mainWindowStopped: true, followedWindows: [],
 };
 
+const fixtureParams = new URLSearchParams(location.search);
+// ?buffer=0: live preview instead of the buffer.
+const bufferOn = fixtureParams.get('buffer') !== '0';
+let bufferText = '';
+const promptsSent: unknown[][] = [];
+const fieldInserts: string[] = [];
+window.addEventListener('dictation:insertIntoField', (e) => fieldInserts.push((e as CustomEvent<string>).detail));
+
 const backend = new Proxy({
   GetWindowList: async () => [{ Index: 0, Name: 'Layout fixture', Agent: 'claude', Dead: true }],
   GetDictationSettings: async () => ({
-    enabled: true, bufferMode: true, mode: 'streaming', bufferCloseOnSend: true,
+    enabled: true, bufferMode: bufferOn, mode: 'streaming', bufferCloseOnSend: true,
   }),
   GetTaskMasterStatus: async () => ({ initialized: false }),
   GetTasks: async () => [],
-  GetBufferText: async () => '',
+  GetBufferText: async () => bufferText,
+  ClearBuffer: async () => { bufferText = ''; },
+  SetBufferText: async (text: string) => { bufferText = text; },
+  SendPromptToWindow: async (...args: unknown[]) => { promptsSent.push(args); },
   GetVoiceLevel: async () => 0,
   GetTabWorkingDirectory: async () => '/fixture',
   GetDiffFolder: async () => ({ path: '/fixture', tabDir: '/fixture', custom: false, locked: '' }),
@@ -58,7 +69,7 @@ const settingsSaves: unknown[][] = [];
 
 // ?target=field: the dictation that starts is a dialog field's, with that
 // field holding the caret.
-if (new URLSearchParams(location.search).get('target') === 'field') {
+if (fixtureParams.get('target') === 'field') {
   dictationTarget.set('field');
   const field = document.createElement('input');
   field.id = 'dialog-field';
@@ -77,6 +88,9 @@ selectedSessionId.set(fixtureSession.id);
 selectedWindowIdx.set(0);
 
 (window as any).projectLayoutFixture = {
+  setBufferText: (text: string) => { bufferText = text; },
+  promptsSent: () => structuredClone(promptsSent),
+  fieldInserts: () => [...fieldInserts],
   settingsSaves: () => structuredClone(settingsSaves),
   switchProject: async (projectId = 'project-b', height = 260, x = 110) => {
     // The real switch first publishes defaults, then the replacement project
