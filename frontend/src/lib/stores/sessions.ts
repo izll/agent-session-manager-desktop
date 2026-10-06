@@ -20,6 +20,8 @@ export interface Session {
   id: string;
   name: string;
   path: string;
+  /** The folder the diff shows instead of `path`; empty when none is chosen. */
+  diffDir?: string;
   status: 'running' | 'paused' | 'stopped';
   agent: string;
   color: string;

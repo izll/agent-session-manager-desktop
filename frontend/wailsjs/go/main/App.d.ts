@@ -137,6 +137,8 @@ export function GetCodexUsage():Promise<main.CodexUsageInfo>;
 
 export function GetCommands():Promise<main.CommandLibraryInfo>;
 
+export function GetDiffFolder(arg1:string,arg2:number):Promise<main.DiffFolder>;
+
 export function GetDiffHiddenRules(arg1:string,arg2:number,arg3:string):Promise<main.DiffHiddenRules>;
 
 export function GetExtraArgs(arg1:string,arg2:number):Promise<string>;
@@ -440,6 +442,8 @@ export function SetQuickJump(arg1:Array<session.QuickJumpEntry>,arg2:string):Pro
 export function SetQuickJumpLabel(arg1:string,arg2:number,arg3:string,arg4:string):Promise<void>;
 
 export function SetSessionColor(arg1:string,arg2:string,arg3:string,arg4:boolean,arg5:string):Promise<void>;
+
+export function SetSessionDiffDir(arg1:string,arg2:string,arg3:string):Promise<void>;
 
 export function SetTabColor(arg1:string,arg2:number,arg3:string,arg4:string,arg5:string):Promise<void>;
 

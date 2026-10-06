@@ -202,7 +202,7 @@
   import { WindowMinimise, WindowToggleMaximise, Quit, EventsOn, EventsOff, EventsEmit } from '../wailsjs/runtime/runtime';
   import { afterUnsavedChanges } from './lib/stores/unsavedChanges';
   import * as DictationService from '../wailsjs/go/main/DictationService';
-  import { IsDevMode, GetMultiplexerStatus, InstallMultiplexer, UnfinishedTasksForSession, GetTabWorkingDirectory, GetUsageRings } from '../wailsjs/go/main/App';
+  import { IsDevMode, GetMultiplexerStatus, InstallMultiplexer, UnfinishedTasksForSession, GetDiffFolder, GetUsageRings } from '../wailsjs/go/main/App';
   import asmgrIcon from './assets/icons/asmgr.svg';
   import { applyUITheme, DEFAULT_UI_THEME,
            applyUIBackground, DEFAULT_UI_BACKGROUND } from './lib/utils/uiThemes';
@@ -761,8 +761,10 @@
 
   async function resolveGitHistoryPath(session: Session, windowIdx: number): Promise<string> {
     try {
-      const live = await GetTabWorkingDirectory(session.id, windowIdx);
-      if (live) return live;
+      // The history of the repository the diff shows: the session's chosen
+      // diff folder when it has one, the tab's working directory otherwise.
+      const folder = await GetDiffFolder(session.id, windowIdx);
+      if (folder?.path) return folder.path;
     } catch (e) {
       console.error('Failed to resolve the tab working directory:', e);
     }

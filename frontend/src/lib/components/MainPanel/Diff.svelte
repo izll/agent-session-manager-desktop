@@ -110,14 +110,95 @@
       line = firstHunk ? parseHunkHeader(firstHunk.header).newStart : undefined;
     }
 
-    requestFileJump(path, line);
+    const target = filesPathOf(path);
+    if (target === null) {
+      editorError = $t('diffFolder.outsideFiles');
+      return;
+    }
+    requestFileJump(target, line);
+  }
+
+  // --- The folder the diff shows -------------------------------------------
+
+  /** The folder shown, and whether it is the session's choice or the tab's. */
+  let diffFolder: main.DiffFolder | null = null;
+
+  /**
+   * A path of the diff as the Files view names it. The two differ once the
+   * session has chosen a folder for its diff: the Files view still shows the
+   * tab's directory. Null for a file outside it.
+   */
+  function filesPathOf(path: string): string | null {
+    if (!diffFolder?.custom) return path;
+    return rebasePath(path, diffFolder.path, diffFolder.tabDir);
+  }
+
+  function folderName(path: string): string {
+    return path.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || path;
+  }
+
+  $: folderTitle = !diffFolder
+    ? ''
+    : diffFolder.locked === 'ownFolder'
+      ? $t('diffFolder.ownFolder', { path: diffFolder.path })
+      : diffFolder.locked === 'remote'
+        ? $t('diffFolder.remote', { path: diffFolder.path })
+        : $t('diffFolder.current', { path: diffFolder.path });
+
+  let folderMenu: { x: number; y: number } | null = null;
+
+  function toggleFolderMenu(e: MouseEvent) {
+    if (folderMenu) {
+      closeFolderMenu();
+      return;
+    }
+    const box = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    folderMenu = { x: box.left, y: box.bottom + 4 };
+    claimMenu(closeFolderMenu);
+  }
+
+  function closeFolderMenu() {
+    if (!folderMenu) return;
+    folderMenu = null;
+    releaseMenu(closeFolderMenu);
+  }
+
+  async function useSessionFolder() {
+    closeFolderMenu();
+    const sessionId = get(selectedSessionId);
+    if (!sessionId || !diffFolder?.custom) return;
+    try {
+      await setDiffFolder(sessionId, '');
+    } catch (e) {
+      editorError = String(e);
+    }
+  }
+
+  async function chooseOtherFolder() {
+    closeFolderMenu();
+    const sessionId = get(selectedSessionId);
+    if (!sessionId || !diffFolder) return;
+    try {
+      await chooseDiffFolder(sessionId, diffFolder.path);
+    } catch (e) {
+      editorError = String(e);
+    }
+  }
+
+  // A choice made here or in the session's menu shows at once.
+  let seenDiffFolderVersion = get(diffFolderVersion);
+  $: if ($diffFolderVersion !== seenDiffFolderVersion) {
+    seenDiffFolderVersion = $diffFolderVersion;
+    if (active) void loadDiff();
   }
   import { selectedSessionId, selectedWindowIdx } from '../../stores/sessions';
   import { parseDiff, buildHunkViews } from '../../utils/diffParse';
   import { get } from 'svelte/store';
   import * as App from '../../../../wailsjs/go/main/App';
   import { ClipboardSetText } from '../../../../wailsjs/runtime/runtime';
-  import type { session } from '../../../../wailsjs/go/models';
+  import type { main, session } from '../../../../wailsjs/go/models';
+  import { diffFolderVersion, chooseDiffFolder, setDiffFolder } from '../../stores/diffFolder';
+  import { rebasePath } from '../../utils/rebasePath';
   import ConfirmDialog from '../Dialogs/ConfirmDialog.svelte';
   import { t } from '../../i18n';
   import VirtualLines from './VirtualLines.svelte';
@@ -392,7 +473,12 @@
   /** The browser names a folder without its trailing slash. */
   function showFolderInFiles(dir: string) {
     closeFileMenu();
-    requestFolderJump(dir.replace(/\/+$/, ''));
+    const target = filesPathOf(dir.replace(/\/+$/, ''));
+    if (target === null) {
+      editorError = $t('diffFolder.outsideFiles');
+      return;
+    }
+    requestFolderJump(target);
   }
 
   function currentTarget(): DiffTarget | null {
@@ -507,6 +593,7 @@
       selectedPath = null;
       loadedDiffKey = '';
       loadedRoot = '';
+      diffFolder = null;
       hiddenRepo = '';
       resetCopyState();
       error = '';
@@ -535,9 +622,13 @@
       // of files — a build dropping its output into the tree produced a diff the
       // webview never finished rendering. A file's hunks are fetched when it is
       // opened, so the cost of listing does not depend on what the files hold.
-      const root = await App.GetTabWorkingDirectory(sessionId, windowIdx);
+      // The tab's working directory, or the folder the session chose for its
+      // diff.
+      const folder = await App.GetDiffFolder(sessionId, windowIdx);
+      const root = folder?.path || '';
       if (generation !== loadGeneration || projectId !== get(activeProjectId) || sessionId !== get(selectedSessionId) ||
           windowIdx !== tabIdx() || mode !== diffMode || !active) return;
+      diffFolder = folder;
       if (!root) throw new Error('diff target has no working directory');
       const rootCacheKey = `${requestedKey}\x1f${root}`;
       if (loadedDiffKey !== requestedKey || loadedRoot !== root) {
@@ -1853,6 +1944,11 @@
       closeFileMenu();
       return;
     }
+    if (folderMenu && event.key === 'Escape') {
+      event.preventDefault();
+      closeFolderMenu();
+      return;
+    }
     if (!active) return;
     if (matchesShortcut(event, 'diff.nextChange')) {
       event.preventDefault();
@@ -2051,13 +2147,37 @@
   }
 </script>
 
-<svelte:window on:keydown={onKeydown} on:click={closeFileMenu} on:blur={closeFileMenu} />
+<svelte:window
+  on:keydown={onKeydown}
+  on:click={() => { closeFileMenu(); closeFolderMenu(); }}
+  on:blur={() => { closeFileMenu(); closeFolderMenu(); }}
+/>
 
 <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
 <div class="diff-container" role="region" tabindex="-1" on:keydown={handleDiffKeydown}>
   <div class="diff-header">
     <div class="header-left">
       <span class="diff-title">{diffMode === 'session' ? $t('diff.session') : $t('diff.full')}</span>
+      {#if diffFolder?.path}
+        <button
+          class="folder-chip"
+          class:custom={diffFolder.custom}
+          data-diff-folder
+          disabled={!!diffFolder.locked}
+          title={folderTitle}
+          aria-haspopup="menu"
+          aria-expanded={!!folderMenu}
+          on:click|stopPropagation={toggleFolderMenu}
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+          </svg>
+          <span class="folder-name">{folderName(diffFolder.path)}</span>
+          {#if !diffFolder.locked}
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+          {/if}
+        </button>
+      {/if}
       {#if diff}
         <div
           class="diff-stats"
@@ -2800,6 +2920,33 @@
   </div>
 {/if}
 
+{#if folderMenu && diffFolder}
+  <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
+  <div
+    class="context-menu diff-folder-menu"
+    role="menu"
+    tabindex="-1"
+    use:portal
+    use:menuPosition={{ x: folderMenu.x, y: folderMenu.y }}
+    on:click|stopPropagation
+    on:contextmenu|preventDefault
+  >
+    <button class="context-menu-item" role="menuitemradio" aria-checked={!diffFolder.custom}
+      data-action="session-folder" title={diffFolder.tabDir} on:click={useSessionFolder}>
+      <span class="check">{diffFolder.custom ? '' : '✓'}</span>{$t('diffFolder.sessionFolder')}
+    </button>
+    {#if diffFolder.custom}
+      <button class="context-menu-item" role="menuitemradio" aria-checked="true" title={diffFolder.path} disabled>
+        <span class="check">✓</span><span class="menu-path">{diffFolder.path}</span>
+      </button>
+    {/if}
+    <div class="menu-divider"></div>
+    <button class="context-menu-item" data-action="other-folder" on:click={chooseOtherFolder}>
+      <span class="check"></span>{$t('diffFolder.other')}
+    </button>
+  </div>
+{/if}
+
 <style>
   /* Focusable so switching here can hand them the keyboard; the focus ring
      would only frame the whole diff. */
@@ -2877,6 +3024,36 @@
     text-transform: uppercase;
     letter-spacing: 0.5px;
     color: #6b7280;
+  }
+
+  .folder-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    max-width: 240px;
+    padding: 2px 8px;
+    border-radius: 5px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: transparent;
+    color: #a1a1aa;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .folder-chip:hover:not(:disabled) { color: #e4e4e7; border-color: rgba(255, 255, 255, 0.2); }
+  .folder-chip:disabled { cursor: default; opacity: 0.75; }
+  /* A folder of the session's choosing, not the tab's: worth noticing, since
+     the terminal beside it is somewhere else. */
+  .folder-chip.custom {
+    color: rgb(var(--accent-rgb));
+    border-color: rgba(var(--accent-rgb), 0.4);
+    background: rgba(var(--accent-rgb), 0.08);
+  }
+  .folder-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  :global(.diff-folder-menu .check) { display: inline-block; width: 16px; }
+  :global(.diff-folder-menu .menu-path) {
+    max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    direction: rtl; text-align: left;
   }
 
   .diff-stats {

@@ -27,6 +27,7 @@
   import { gitBranch, refreshGitBranch, revalidateGitBranch } from '../../stores/gitBranch';
   import GitBranchBadge from '../common/GitBranchBadge.svelte';
   import { get } from 'svelte/store';
+  import { diffFolderVersion } from '../../stores/diffFolder';
   import { resolveViewBarHidden } from '../../utils/terminalThemes';
   import { yoloButtonState } from '../../utils/yoloBadge';
   import * as App from '../../../../wailsjs/go/main/App';
@@ -523,6 +524,14 @@
    * empty pane if clicked in that instant.
    */
   let tabIsGitRepo = true;
+
+  // Choosing a folder for the diff can make a tab that was not a repository
+  // into one that has a diff to show, and back.
+  let seenDiffFolderVersion = get(diffFolderVersion);
+  $: if ($diffFolderVersion !== seenDiffFolderVersion) {
+    seenDiffFolderVersion = $diffFolderVersion;
+    void refreshTabIsGitRepo();
+  }
 
   async function refreshTabIsGitRepo() {
     const sessionId = $selectedSessionId;

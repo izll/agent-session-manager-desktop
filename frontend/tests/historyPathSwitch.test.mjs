@@ -53,10 +53,12 @@ for (const field of ['branch', 'branches', 'currentBranch', 'commits', 'selected
 // opened in its own directory, or cd-ed somewhere else entirely.
 const app = readFileSync(new URL('../src/App.svelte', import.meta.url), 'utf8');
 
+// GetDiffFolder answers with the tab's real directory, resolved from tmux —
+// unless the session chose a folder for its diff, whose history it then is.
 assert.match(
   app,
-  /GetTabWorkingDirectory\(session\.id, windowIdx\)/,
-  "the history must open on the tab's real directory, resolved from tmux",
+  /GetDiffFolder\(session\.id, windowIdx\)/,
+  "the history must open on the folder the diff shows, resolved per tab",
 );
 assert.doesNotMatch(
   app,

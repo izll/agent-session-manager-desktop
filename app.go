@@ -1247,6 +1247,7 @@ type SessionInfo struct {
 	ID              string `json:"id"`
 	Name            string `json:"name"`
 	Path            string `json:"path"`
+	DiffDir         string `json:"diffDir"` // Folder the diff shows instead of Path; empty when none
 	Status          string `json:"status"`
 	Agent           string `json:"agent"`
 	Color           string `json:"color"`
@@ -1361,6 +1362,7 @@ func (a *App) instanceToSessionInfo(inst *session.Instance) SessionInfo {
 		ID:                 inst.ID,
 		Name:               inst.Name,
 		Path:               inst.Path,
+		DiffDir:            inst.DiffDir,
 		Status:             string(inst.Status),
 		Agent:              string(inst.Agent),
 		Color:              inst.Color,
@@ -4411,6 +4413,12 @@ func (a *App) TabIsGitRepo(id string, windowIdx int) bool {
 	if err != nil {
 		return false
 	}
+	// Asked to decide whether the diff can be opened, so it asks about the
+	// folder the diff would show: a session in a folder of several
+	// repositories is not one itself, but the one chosen for its diff is.
+	if inst.DiffRoot != "" {
+		inst.BrowseRoot = inst.DiffRoot
+	}
 	return inst.IsGitRepo()
 }
 
@@ -4431,6 +4439,7 @@ func (a *App) browseInstance(id string, windowIdx int) (*session.Instance, error
 		if dir := a.GetTabWorkingDirectory(id, windowIdx); dir != "" {
 			inst.BrowseRoot = dir
 		}
+		inst.DiffRoot = diffDirFor(inst, windowIdx)
 	}
 	return inst, nil
 }
@@ -4564,16 +4573,37 @@ func validateRootSnapshot(inst *session.Instance, expectedRoot, message string) 
 	if inst.BrowseRoot != "" {
 		actualRoot = inst.BrowseRoot
 	}
+	if resolved, ok := sameRoot(actualRoot, expectedRoot); ok {
+		return resolved, nil
+	}
+	// The diff and the git history show the session's diff folder instead of
+	// the tab's directory, when one is set; a request made from them names it.
+	if inst.DiffRoot != "" {
+		if resolved, ok := sameRoot(inst.DiffRoot, expectedRoot); ok {
+			return resolved, nil
+		}
+	}
+	return "", fmt.Errorf("%s", message)
+}
+
+// sameRoot reports whether two paths name the same directory, through any
+// symlinks, and returns it resolved.
+func sameRoot(actualRoot, expectedRoot string) (string, bool) {
+	if expectedRoot == "" || actualRoot == "" {
+		return "", false
+	}
 	actualAbs, actualErr := filepath.Abs(actualRoot)
 	expectedAbs, expectedErr := filepath.Abs(expectedRoot)
+	if actualErr != nil || expectedErr != nil {
+		return "", false
+	}
 	actualResolved, actualResolveErr := filepath.EvalSymlinks(actualAbs)
 	expectedResolved, expectedResolveErr := filepath.EvalSymlinks(expectedAbs)
-	if expectedRoot == "" || actualRoot == "" || actualErr != nil || expectedErr != nil ||
-		actualResolveErr != nil || expectedResolveErr != nil ||
+	if actualResolveErr != nil || expectedResolveErr != nil ||
 		session.CanonicalProjectPath(actualResolved) != session.CanonicalProjectPath(expectedResolved) {
-		return "", fmt.Errorf("%s", message)
+		return "", false
 	}
-	return actualResolved, nil
+	return actualResolved, true
 }
 
 // ============================================================================

@@ -266,6 +266,10 @@ export function GetCommands() {
   return window['go']['main']['App']['GetCommands']();
 }
 
+export function GetDiffFolder(arg1, arg2) {
+  return window['go']['main']['App']['GetDiffFolder'](arg1, arg2);
+}
+
 export function GetDiffHiddenRules(arg1, arg2, arg3) {
   return window['go']['main']['App']['GetDiffHiddenRules'](arg1, arg2, arg3);
 }
@@ -872,6 +876,10 @@ export function SetQuickJumpLabel(arg1, arg2, arg3, arg4) {
 
 export function SetSessionColor(arg1, arg2, arg3, arg4, arg5) {
   return window['go']['main']['App']['SetSessionColor'](arg1, arg2, arg3, arg4, arg5);
+}
+
+export function SetSessionDiffDir(arg1, arg2, arg3) {
+  return window['go']['main']['App']['SetSessionDiffDir'](arg1, arg2, arg3);
 }
 
 export function SetTabColor(arg1, arg2, arg3, arg4, arg5) {

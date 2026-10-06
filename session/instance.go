@@ -294,7 +294,15 @@ type Instance struct {
 	// can be opened in its own directory, and the files view showed the session's
 	// tree whichever tab you were on. Deliberately not persisted: it describes
 	// one request, not the session.
-	BrowseRoot       string `json:"-"`
+	BrowseRoot string `json:"-"`
+	// DiffRoot is a second root a request may name: the session's diff folder
+	// (DiffDir), when it applies to the tab being asked about. Set per call
+	// alongside BrowseRoot, and for the same reason not persisted.
+	DiffRoot string `json:"-"`
+	// DiffDir is the folder the diff and the git history show for the tabs that
+	// work in the session's own directory — a repository inside a folder that
+	// holds several, say. Empty follows the tab, as it always did.
+	DiffDir          string `json:"diff_dir,omitempty"`
 	TabOrder         []int  `json:"tab_order,omitempty"`          // Custom tab display order (tmux window indices); if empty, default order is used
 	TerminalTheme    string `json:"terminal_theme,omitempty"`     // Main window colour palette (empty inherits agent/global)
 	TerminalFontSize int    `json:"terminal_font_size,omitempty"` // Main window font size in px (0 inherits the global setting)
@@ -2164,6 +2172,33 @@ func (i *Instance) TabPlacement(windowIdx int) (serverID, workDir string) {
 		return window.ServerID, workDir
 	}
 	return "", i.Path
+}
+
+// UsesSessionDirectory reports whether a tab works where the session does:
+// in its directory, on its machine. The main window always does; a tab opened
+// in a folder of its own — a worktree, say — or on a server does not.
+func (i *Instance) UsesSessionDirectory(windowIdx int) bool {
+	for _, window := range i.FollowedWindows {
+		if window.Index != windowIdx {
+			continue
+		}
+		if window.WorkDir != "" && window.WorkDir != i.Path {
+			return false
+		}
+		return window.ServerID == "" || window.ServerID == i.ServerID
+	}
+	return true
+}
+
+// DiffDirFor returns the session's diff folder if it applies to a tab, or ""
+// when the tab shows its own directory. It applies to the tabs that would
+// otherwise show the session's directory: one with a folder of its own is
+// showing that folder on purpose.
+func (i *Instance) DiffDirFor(windowIdx int) string {
+	if i.DiffDir == "" || !i.UsesSessionDirectory(windowIdx) {
+		return ""
+	}
+	return i.DiffDir
 }
 
 func (i *Instance) newTerminalWindowOn(serverID string, name string, workDir string, detached bool) (int, error) {

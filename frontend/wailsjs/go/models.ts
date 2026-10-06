@@ -728,6 +728,24 @@ export namespace main {
 	        this.removed = source["removed"];
 	    }
 	}
+	export class DiffFolder {
+	    path: string;
+	    tabDir: string;
+	    custom: boolean;
+	    locked: string;
+
+	    static createFrom(source: any = {}) {
+	        return new DiffFolder(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.path = source["path"];
+	        this.tabDir = source["tabDir"];
+	        this.custom = source["custom"];
+	        this.locked = source["locked"];
+	    }
+	}
 	export class DiffHiddenRules {
 	    repo: string;
 	    rules: string[];
@@ -1782,6 +1800,7 @@ export namespace main {
 	    id: string;
 	    name: string;
 	    path: string;
+	    diffDir: string;
 	    status: string;
 	    agent: string;
 	    color: string;
@@ -1821,6 +1840,7 @@ export namespace main {
 	        this.id = source["id"];
 	        this.name = source["name"];
 	        this.path = source["path"];
+	        this.diffDir = source["diffDir"];
 	        this.status = source["status"];
 	        this.agent = source["agent"];
 	        this.color = source["color"];

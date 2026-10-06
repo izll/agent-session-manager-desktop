@@ -26,6 +26,7 @@
   import { sortByTabOrder } from '../../utils/tabOrder';
   import { afterUnsavedChanges } from '../../stores/unsavedChanges';
   import { activeProjectId } from '../../stores/projects';
+  import { chooseDiffFolder, setDiffFolder } from '../../stores/diffFolder';
   import { UnfinishedTasksForSession } from '../../../../wailsjs/go/main/App';
   import {
     gradientTextStyle,
@@ -284,6 +285,26 @@
   function handleColor() {
     closeContextMenu();
     showColorDialog = true;
+  }
+
+  // Here as well as in the diff's header: while the session's own folder is not
+  // a repository the diff cannot be opened, and this is the way in.
+  async function handleChooseDiffFolder() {
+    closeContextMenu();
+    try {
+      await chooseDiffFolder(session.id, session.diffDir || session.path);
+    } catch (e) {
+      console.error('Failed to choose the diff folder:', e);
+    }
+  }
+
+  async function handleResetDiffFolder() {
+    closeContextMenu();
+    try {
+      await setDiffFolder(session.id, '');
+    } catch (e) {
+      console.error('Failed to reset the diff folder:', e);
+    }
   }
 
   // Saving an arrangement starts from the session that already has it, so the
@@ -587,6 +608,28 @@
       </svg>
       {$t('sessionMenu.color')}
     </button>
+    {#if !session.serverId}
+      <button
+        class="context-menu-item"
+        data-menu-action="diff-folder"
+        title={session.diffDir ? $t('diffFolder.current', { path: session.diffDir }) : $t('diffFolder.hint')}
+        on:click={handleChooseDiffFolder}
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+          <path d="M9 14h6M12 11v6"/>
+        </svg>
+        {$t('diffFolder.choose')}
+      </button>
+      {#if session.diffDir}
+        <button class="context-menu-item" data-menu-action="diff-folder-reset" on:click={handleResetDiffFolder}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/>
+          </svg>
+          {$t('diffFolder.reset')}
+        </button>
+      {/if}
+    {/if}
     <button class="context-menu-item" on:click={handleSaveAsTemplate}>
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
