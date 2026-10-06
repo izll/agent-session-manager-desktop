@@ -6,6 +6,43 @@ Entries describe what changed for someone using the app. Internal refactoring,
 test and CI work is left out unless it changed behaviour. Dates are release
 dates; the format follows [Keep a Changelog](https://keepachangelog.com).
 
+## 1.1.23 — 2026-10-06
+
+### Added
+
+- **Markdown files open rendered in the Files view** — headings, tables,
+  task lists, code — with a Source / Rendered switch that is remembered.
+  Web links open in the browser, `#anchors` scroll to their heading, links
+  to other files of the repository open them in the view, and the
+  repository's own images are shown. HTML in a file cannot run.
+- **Find in a rendered Markdown file** with Ctrl+F, the matches marked in
+  the text. The Files view's find bar for source and edit is now the same
+  bar as the diff's — field, counter, arrows, close button — with match
+  case, regex and whole word as buttons, and replace in the edit view.
+- **Choose the folder a session's diff shows** — a repository inside a
+  folder that holds several — from the folder chip in the diff's header or
+  from the session's menu. The default is still the session's folder; the
+  commit history follows the choice, and a tab with a folder of its own,
+  such as a worktree, keeps showing that.
+- **Run a saved command in a terminal of its own, in the background**: it
+  opens a tab named after the command, beside the one it was picked from,
+  and runs it there without switching to it.
+
+### Fixed
+
+- **A task assigned to no tab is sent to the tab on screen.** It went to
+  the session's first window instead — so a task sent while looking at a
+  Codex tab reached the Claude in the main window.
+- **Dictating into a task's fields works again.** With the buffer on, the
+  dictation panel gathers the words for correcting and Send puts them into
+  the field instead of the terminal; live, the words go straight into the
+  field and the dialog shows what is being heard. Stopping with the dialog
+  still open no longer points the next dictation at the terminal.
+- **Coming back from the full diff reopens the file** that was open in the
+  Files view, at the same place, with its folders open in the tree.
+- **Ctrl+F in the Files view works without clicking into the text first.**
+- **A saved command meant for a tab on a server is typed on that server.**
+
 ## 1.1.22 — 2026-10-04
 
 ### Fixed
