@@ -34,14 +34,14 @@ func TestSendingATaskGoesToItsAssignedTab(t *testing.T) {
 	})
 	session := inst.TmuxSessionName()
 
-	if err := inst.SendTaskToAgent("local work", "shell"); err != nil {
+	if err := inst.SendTaskToAgent("local work", "shell", -1); err != nil {
 		t.Fatal(err)
 	}
 	if got := sentTo(local.seen()); len(got) != 1 || got[0] != session+":2" {
 		t.Fatalf("a task for the local tab was typed into %v", got)
 	}
 
-	if err := inst.SendTaskToAgent("server work", "codex"); err != nil {
+	if err := inst.SendTaskToAgent("server work", "codex", -1); err != nil {
 		t.Fatal(err)
 	}
 	if got := sentTo(remote.seen()); len(got) != 1 || got[0] != session+":100" {
@@ -52,7 +52,7 @@ func TestSendingATaskGoesToItsAssignedTab(t *testing.T) {
 	}
 
 	// A tab that is gone is no assignment: the active window, as before.
-	if err := inst.SendTaskToAgent("orphan", "closed-long-ago"); err != nil {
+	if err := inst.SendTaskToAgent("orphan", "closed-long-ago", -1); err != nil {
 		t.Fatal(err)
 	}
 	if got := sentTo(local.seen()); len(got) != 2 || got[1] != session {
@@ -60,11 +60,43 @@ func TestSendingATaskGoesToItsAssignedTab(t *testing.T) {
 	}
 
 	// A stopped tab is refused rather than silently swapped for another.
-	if err := inst.SendTaskToAgent("parked", "parked"); err == nil ||
+	if err := inst.SendTaskToAgent("parked", "parked", -1); err == nil ||
 		!strings.Contains(err.Error(), "error.assignedTabStopped") {
 		t.Errorf("sending to a stopped tab: %v", err)
 	}
 	if got := sentTo(local.seen()); len(got) != 2 {
 		t.Errorf("text was typed for a stopped tab: %v", got)
+	}
+}
+
+// A task assigned to no tab goes to the tab on screen. The app shows each tab
+// through a view of its own, so the multiplexer's active window is not that
+// tab: a task sent while looking at a Codex tab went to the main window's
+// Claude.
+func TestAnUnassignedTaskGoesToTheTabOnScreen(t *testing.T) {
+	local := &recordingExecutor{}
+	inst := &Instance{ID: "send-viewed", Name: "send-viewed", Status: StatusRunning,
+		FollowedWindows: []FollowedWindow{
+			{ID: "codex", Index: 7, Agent: AgentCodex},
+			{ID: "shell", Index: 2, Agent: AgentTerminal},
+		}}
+	SetExecutor(inst.ID, local)
+	t.Cleanup(func() { ClearExecutor(inst.ID) })
+	session := inst.TmuxSessionName()
+
+	if err := inst.SendTaskToAgent("for codex", "", 7); err != nil {
+		t.Fatal(err)
+	}
+	// A closed tab is no assignment either.
+	if err := inst.SendTaskToAgent("orphan", "closed-long-ago", 7); err != nil {
+		t.Fatal(err)
+	}
+	// An assignment still wins over what is on screen.
+	if err := inst.SendTaskToAgent("for the shell", "shell", 7); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{session + ":7", session + ":7", session + ":2"}
+	if got := sentTo(local.seen()); strings.Join(got, " ") != strings.Join(want, " ") {
+		t.Errorf("typed into %v, want %v", got, want)
 	}
 }

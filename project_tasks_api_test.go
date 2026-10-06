@@ -167,7 +167,7 @@ func TestProjectTaskWritesHonourTheProjectGuard(t *testing.T) {
 			return err
 		},
 		"SendProjectTaskToAgent": func() error {
-			return app.SendProjectTaskToAgent(created.ID, instance.ID, "", stale)
+			return app.SendProjectTaskToAgent(created.ID, instance.ID, "", -1, stale)
 		},
 		"SetProjectNotePages": func() error { return app.SetProjectNotePages(onePage("x"), stale) },
 	}

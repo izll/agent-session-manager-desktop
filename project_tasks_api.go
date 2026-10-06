@@ -116,10 +116,11 @@ func (a *App) MoveTaskToProject(sessionID, taskID, expectedProjectID string) (*T
 // SendTaskToAgent does for a session's own task.
 //
 // The session, and optionally its tab, are chosen at send time: a project task
-// belongs to none of them. An empty or unknown tab sends to the session's
-// active window. The task stays in the project's list, unchanged — sending
-// asks an agent to work on it; moving it is a separate, deliberate act.
-func (a *App) SendProjectTaskToAgent(taskID, targetSessionID, tabID, expectedProjectID string) error {
+// belongs to none of them. An empty or unknown tab sends to the tab being
+// looked at (viewedWindow), or to the session's active window when that is -1.
+// The task stays in the project's list, unchanged — sending asks an agent to
+// work on it; moving it is a separate, deliberate act.
+func (a *App) SendProjectTaskToAgent(taskID, targetSessionID, tabID string, viewedWindow int, expectedProjectID string) error {
 	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return err
@@ -137,8 +138,8 @@ func (a *App) SendProjectTaskToAgent(taskID, targetSessionID, tabID, expectedPro
 	if err != nil {
 		return err
 	}
-	log.Printf("[TaskManager] SendProjectTaskToAgent taskID=%s session=%s tab=%q", taskID, targetSessionID, tabID)
-	return inst.SendTaskToAgent(prompt, tabID)
+	log.Printf("[TaskManager] SendProjectTaskToAgent taskID=%s session=%s tab=%q viewed=%d", taskID, targetSessionID, tabID, viewedWindow)
+	return inst.SendTaskToAgent(prompt, tabID, viewedWindow)
 }
 
 // GetProjectNotePages returns the pages of the active project's own note.

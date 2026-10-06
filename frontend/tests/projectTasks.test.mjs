@@ -91,7 +91,7 @@ test('the task panel is reused for the project list, not copied', () => {
   assert.match(taskPanel, /openSessionPicker\('move', menuTask\.id, contextMenuTarget\)/);
   assert.match(taskPanel, /if \(isProject\) \{\s*openSessionPicker\('send', taskId, requestedTarget\);/);
   assert.match(taskPanel, /moveTaskToSession\(pick\.taskId, sessionId, tabId\)/);
-  assert.match(taskPanel, /sendProjectTaskToAgent\(pick\.taskId, sessionId, tabId\)/);
+  assert.match(taskPanel, /sendProjectTaskToAgent\(pick\.taskId, sessionId, tabId, viewedWindowOf\(sessionId\)\)/);
   // Moving back out of a session is only for the app's own list.
   assert.match(taskPanel, /\{:else if contextMenuTarget\?\.provider === 'local'\}\s*<button on:click=\{\(\) => handleMoveToProject/);
   // The menu lives at body level, so the window it opens in cannot offset it.

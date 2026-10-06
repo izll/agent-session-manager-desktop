@@ -113,7 +113,11 @@ export async function moveTaskToProject(sessionId: string, taskId: string): Prom
   return moved as unknown as Task;
 }
 
-/** Type a project task into a session's agent; the task stays where it is. */
-export async function sendProjectTaskToAgent(taskId: string, sessionId: string, tabId: string): Promise<void> {
-  await App.SendProjectTaskToAgent(taskId, sessionId, tabId, get(activeProjectId));
+/**
+ * Type a project task into a session's agent; the task stays where it is. With
+ * no tab chosen it goes to the session's tab on screen, viewedWindow
+ * (viewedWindowOf), or to its active window when that is -1.
+ */
+export async function sendProjectTaskToAgent(taskId: string, sessionId: string, tabId: string, viewedWindow = -1): Promise<void> {
+  await App.SendProjectTaskToAgent(taskId, sessionId, tabId, viewedWindow, get(activeProjectId));
 }

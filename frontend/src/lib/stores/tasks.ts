@@ -805,15 +805,19 @@ export function createTaskStore({ localOnly = false }: TaskStoreOptions = {}) {
   }
 
   // Send task to agent
-  async function sendTaskToAgent(sessionId: string, taskId: string, requestedProvider?: TaskProvider) {
+  /**
+   * viewedWindow is the session's tab on screen (viewedWindowOf), which takes
+   * a task assigned to no tab; -1 leaves it to the backend.
+   */
+  async function sendTaskToAgent(sessionId: string, taskId: string, requestedProvider?: TaskProvider, viewedWindow = -1) {
     if (!sessionId || !taskId) return;
     const projectId = get(activeProjectId);
 
     try {
       if ((requestedProvider ?? providerFor(sessionId, projectId)) === 'mcp') {
-        await App.TaskMasterSendToAgent(sessionId, taskId, projectId);
+        await App.TaskMasterSendToAgent(sessionId, taskId, viewedWindow, projectId);
       } else {
-        await App.SendTaskToAgent(sessionId, taskId, projectId);
+        await App.SendTaskToAgent(sessionId, taskId, viewedWindow, projectId);
       }
     } catch (e) {
       if (isActiveTasksProject(sessionId, projectId)) taskError.set(String(e));

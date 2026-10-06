@@ -830,8 +830,8 @@ export function SendInput(arg1, arg2, arg3) {
   return window['go']['main']['App']['SendInput'](arg1, arg2, arg3);
 }
 
-export function SendProjectTaskToAgent(arg1, arg2, arg3, arg4) {
-  return window['go']['main']['App']['SendProjectTaskToAgent'](arg1, arg2, arg3, arg4);
+export function SendProjectTaskToAgent(arg1, arg2, arg3, arg4, arg5) {
+  return window['go']['main']['App']['SendProjectTaskToAgent'](arg1, arg2, arg3, arg4, arg5);
 }
 
 export function SendPrompt(arg1, arg2, arg3) {
@@ -842,8 +842,8 @@ export function SendPromptToWindow(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['SendPromptToWindow'](arg1, arg2, arg3, arg4);
 }
 
-export function SendTaskToAgent(arg1, arg2, arg3) {
-  return window['go']['main']['App']['SendTaskToAgent'](arg1, arg2, arg3);
+export function SendTaskToAgent(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['SendTaskToAgent'](arg1, arg2, arg3, arg4);
 }
 
 export function SessionMergeRefusals(arg1) {
@@ -1022,8 +1022,8 @@ export function TaskMasterRemoveTask(arg1, arg2, arg3) {
   return window['go']['main']['App']['TaskMasterRemoveTask'](arg1, arg2, arg3);
 }
 
-export function TaskMasterSendToAgent(arg1, arg2, arg3) {
-  return window['go']['main']['App']['TaskMasterSendToAgent'](arg1, arg2, arg3);
+export function TaskMasterSendToAgent(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['TaskMasterSendToAgent'](arg1, arg2, arg3, arg4);
 }
 
 export function TaskMasterSetStatus(arg1, arg2, arg3, arg4) {

@@ -12,6 +12,7 @@
   import ConfirmDialog from '../Dialogs/ConfirmDialog.svelte';
   import { createFieldDictation } from '../../utils/dictationField';
   import { setDictationTarget } from '../../stores/dictationTarget';
+  import { viewedWindowOf } from '../../utils/viewedWindow';
   import { EventsOn } from '../../../../wailsjs/runtime/runtime';
   import { t } from '../../i18n';
   import { offerUndo } from '../../stores/undo';
@@ -836,7 +837,7 @@
     const task = get(tasks).find(candidate => candidate.id === taskId);
     const windowIdx = task ? resolveTaskTab(task, sessionId, tabs)?.windowIdx : undefined;
     try {
-      await sendTaskToAgent(sessionId, taskId, operation.target.provider);
+      await sendTaskToAgent(sessionId, taskId, operation.target.provider, viewedWindowOf(sessionId));
       if (!operationIsCurrent(operation)) return;
       dispatch('taskSent', { taskId, windowIdx });
     } catch (e) {
@@ -910,7 +911,7 @@
           undo: () => moveTaskToProject(sessionId, moved.id).then(() => undefined),
         });
       } else {
-        await sendProjectTaskToAgent(pick.taskId, sessionId, tabId);
+        await sendProjectTaskToAgent(pick.taskId, sessionId, tabId, viewedWindowOf(sessionId));
         if (!operationIsCurrent(operation) || sessionPick !== pick) return;
         closeSessionPicker();
         const windowIdx = pickTabs.find((tab) => tab.id === tabId)?.windowIdx;

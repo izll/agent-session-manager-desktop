@@ -419,13 +419,13 @@ export function SelectProject(arg1:string):Promise<void>;
 
 export function SendInput(arg1:string,arg2:string,arg3:string):Promise<void>;
 
-export function SendProjectTaskToAgent(arg1:string,arg2:string,arg3:string,arg4:string):Promise<void>;
+export function SendProjectTaskToAgent(arg1:string,arg2:string,arg3:string,arg4:number,arg5:string):Promise<void>;
 
 export function SendPrompt(arg1:string,arg2:string,arg3:string):Promise<void>;
 
 export function SendPromptToWindow(arg1:string,arg2:number,arg3:string,arg4:string):Promise<void>;
 
-export function SendTaskToAgent(arg1:string,arg2:string,arg3:string):Promise<void>;
+export function SendTaskToAgent(arg1:string,arg2:string,arg3:number,arg4:string):Promise<void>;
 
 export function SessionMergeRefusals(arg1:string):Promise<Record<string, string>>;
 
@@ -515,7 +515,7 @@ export function TaskMasterRemoveSubtask(arg1:string,arg2:string,arg3:string):Pro
 
 export function TaskMasterRemoveTask(arg1:string,arg2:string,arg3:string):Promise<void>;
 
-export function TaskMasterSendToAgent(arg1:string,arg2:string,arg3:string):Promise<void>;
+export function TaskMasterSendToAgent(arg1:string,arg2:string,arg3:number,arg4:string):Promise<void>;
 
 export function TaskMasterSetStatus(arg1:string,arg2:string,arg3:string,arg4:string):Promise<void>;
 

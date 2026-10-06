@@ -98,7 +98,9 @@ test('sending a project task asks for the session and leaves the task where it i
   await picker.getByRole('button', { name: 'Send', exact: true }).click();
   await expect(picker).toHaveCount(0);
   const sent = (await calls(page)).find((call) => call[0] === 'SendProjectTaskToAgent');
-  expect(sent).toEqual(['SendProjectTaskToAgent', 'p2', 'session-a', '', '']);
+  // No tab chosen: the session's tab on screen (session-a is the one selected,
+  // on its tab 0) takes it, not whichever window the multiplexer holds active.
+  expect(sent).toEqual(['SendProjectTaskToAgent', 'p2', 'session-a', '', 0, '']);
   // The window followed the task to its agent; the list still has it.
   await expect(dialog(page)).toHaveCount(0);
   expect(await page.evaluate(() => window.projectTasksFixture.list('@project').map((t) => t.id))).toContain('p2');

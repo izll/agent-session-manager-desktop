@@ -102,7 +102,7 @@ func TestTaskMasterOptInBlocksNpx(t *testing.T) {
 			errOf(app.TaskMasterExpandTask(inst.ID, "1", false, false, "")),
 			errOf(app.TaskMasterExpandAll(inst.ID, false, "")),
 			errOf(app.TaskMasterRemoveTask(inst.ID, "1", "")),
-			errOf(app.TaskMasterSendToAgent(inst.ID, "1", "")),
+			errOf(app.TaskMasterSendToAgent(inst.ID, "1", -1, "")),
 			errOf(app.TaskMasterAddSubtask(inst.ID, "1", "t", "d", "")),
 			errOf(app.TaskMasterRemoveSubtask(inst.ID, "1.1", "")),
 			errOf(app.TaskMasterClearSubtasks(inst.ID, "1", "")),

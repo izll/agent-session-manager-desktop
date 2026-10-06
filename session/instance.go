@@ -4277,15 +4277,25 @@ func (i *Instance) SendPrompt(text string) error {
 }
 
 // SendTaskToAgent types a task's prompt into the tab the task is assigned to,
-// or into the active window when it is assigned to none.
+// or, when it is assigned to none, into the tab being looked at — viewedWindow,
+// or -1 when no tab of this session is on screen, which leaves the session's
+// active window.
+//
+// The tab on screen, not the active window: the app shows each tab through a
+// view of its own, so the multiplexer's active window is whichever was active
+// last in the session itself — the main window, typically. A task sent while
+// looking at a Codex tab went to the Claude in the main window instead.
 //
 // A tab ID this session no longer has — the tab was closed — counts as no
 // assignment, so the prompt still goes somewhere rather than nowhere, as it
 // always did. A tab that exists but is stopped is refused instead: its pane is
 // dead, and silently handing the work to whichever agent happens to be active
 // is not what assigning it to that tab asked for.
-func (i *Instance) SendTaskToAgent(prompt, tabID string) error {
-	windowIdx := -1
+func (i *Instance) SendTaskToAgent(prompt, tabID string, viewedWindow int) error {
+	windowIdx := viewedWindow
+	if windowIdx < 0 {
+		windowIdx = -1
+	}
 	if idx, stopped, ok := i.WindowForTabID(tabID); ok {
 		if stopped {
 			return fmt.Errorf("error.assignedTabStopped")

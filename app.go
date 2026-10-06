@@ -6441,8 +6441,9 @@ func (a *App) GetNextTask(sessionID string) (*TaskInfo, error) {
 	return &info, nil
 }
 
-// SendTaskToAgent sends a task as a prompt to the active agent
-func (a *App) SendTaskToAgent(sessionID, taskID, expectedProjectID string) error {
+// SendTaskToAgent sends a task as a prompt to its tab's agent, or to the tab
+// being looked at (viewedWindow, -1 for none) when it is assigned to no tab.
+func (a *App) SendTaskToAgent(sessionID, taskID string, viewedWindow int, expectedProjectID string) error {
 	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return err
@@ -6466,8 +6467,8 @@ func (a *App) SendTaskToAgent(sessionID, taskID, expectedProjectID string) error
 	if err != nil {
 		return err
 	}
-	log.Printf("[TaskManager] SendToAgent taskID=%s tab=%q", taskID, task.TabID)
-	return inst.SendTaskToAgent(prompt, assignedTabIn(sessionID, task.SessionID, task.TabID))
+	log.Printf("[TaskManager] SendToAgent taskID=%s tab=%q viewed=%d", taskID, task.TabID, viewedWindow)
+	return inst.SendTaskToAgent(prompt, assignedTabIn(sessionID, task.SessionID, task.TabID), viewedWindow)
 }
 
 // assignedTabIn is the tab a task is assigned to, if that tab belongs to the
@@ -7005,8 +7006,9 @@ func (a *App) TaskMasterRemoveTask(sessionID, taskID, expectedProjectID string) 
 	return tm.RemoveTask(taskID)
 }
 
-// TaskMasterSendToAgent sends a task as a prompt to the agent
-func (a *App) TaskMasterSendToAgent(sessionID, taskID, expectedProjectID string) error {
+// TaskMasterSendToAgent sends a task as a prompt to the agent, the way
+// SendTaskToAgent does.
+func (a *App) TaskMasterSendToAgent(sessionID, taskID string, viewedWindow int, expectedProjectID string) error {
 	done, err := a.beginExpectedProjectMutation(expectedProjectID)
 	if err != nil {
 		return err
@@ -7027,8 +7029,8 @@ func (a *App) TaskMasterSendToAgent(sessionID, taskID, expectedProjectID string)
 	if err != nil {
 		return err
 	}
-	log.Printf("[TaskMaster] SendToAgent taskID=%s tab=%q", taskID, task.TabID)
-	return inst.SendTaskToAgent(prompt, assignedTabIn(sessionID, task.SessionID, task.TabID))
+	log.Printf("[TaskMaster] SendToAgent taskID=%s tab=%q viewed=%d", taskID, task.TabID, viewedWindow)
+	return inst.SendTaskToAgent(prompt, assignedTabIn(sessionID, task.SessionID, task.TabID), viewedWindow)
 }
 
 // StopTaskMaster stops the Task Master MCP server for a project
