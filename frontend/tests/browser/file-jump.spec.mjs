@@ -57,3 +57,20 @@ for (const [what, jump, rowPath] of [
     if (what === 'file') await expect(page.locator('.cm-content')).toContainText('content of zz/deep/target.txt');
   });
 }
+
+// The full diff replaces the area the Files view lives in, so going to it and
+// back builds a new view — which used to come back empty.
+test('a file open before the view was rebuilt is open again after', async ({ page }) => {
+  await open(page);
+  await page.evaluate(() => window.fileJumpFixture.requestFileJump('zz/deep/target.txt'));
+  await expect(page.locator('.selected-name')).toHaveText('target.txt');
+  // A folder opened by hand, beside the one the file is in.
+  await page.locator('[data-tree-path="d03"]').click();
+
+  await page.evaluate(() => window.fileJumpFixture.remountBrowser());
+
+  await expect(page.locator('.selected-name')).toHaveText('target.txt');
+  await expect(page.locator('.editor.read .cm-content')).toContainText('content of zz/deep/target.txt');
+  await expect(page.locator('[data-tree-path="zz/deep/target.txt"]')).toBeInViewport();
+  await expect(page.locator('[data-tree-path="d03"]')).toHaveAttribute('aria-expanded', 'true');
+});

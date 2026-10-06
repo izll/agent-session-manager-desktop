@@ -74,7 +74,10 @@ assert.doesNotMatch(reset, /pendingLeave = null/, 'session reset must not erase 
 assert.match(browser, /if \(modified\) \{[\s\S]*?applyBrowseTarget/, 'dirty target changes must be deferred');
 
 // The browser owns one tree and one location per session+tab, not per session.
-assert.match(browser, /const lastFileByTab = new Map/);
+// Held outside the component, which the full diff unmounts on the way to it.
+assert.match(browser, /import \{[^}]*lastFileByTab[^}]*\} from '\.\.\/\.\.\/stores\/fileBrowserMemory'/);
+assert.match(readFileSync(new URL('../src/lib/stores/fileBrowserMemory.ts', import.meta.url), 'utf8'),
+  /export const lastFileByTab = new Map/);
 assert.match(browser, /return `\$\{loadedBrowseKey\}\|\$\{path \|\| ''\}`/);
 assert.match(browser, /let openedRoot = ''/);
 assert.match(browser, /App\.SaveSessionFileEdit\([\s\S]*?openedRoot/,

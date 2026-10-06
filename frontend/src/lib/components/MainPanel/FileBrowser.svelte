@@ -21,6 +21,7 @@
   import ConfirmDialog from '../Dialogs/ConfirmDialog.svelte';
   import FileQuickOpen from './FileQuickOpen.svelte';
   import MarkdownView from './MarkdownView.svelte';
+  import { lastFileByTab, expandedByTab, placeByFile } from '../../stores/fileBrowserMemory';
   import { isMarkdownPath } from '../../utils/markdownLinks';
 
   export let active = false;
@@ -418,6 +419,8 @@
   });
 
   onDestroy(() => {
+    // Before anything is torn down: the place is read off the editor.
+    rememberTab();
     destroyed = true;
     treeGeneration++;
     fileGeneration++;
@@ -1040,21 +1043,11 @@
   //
   // Gated on `active` for the same reason the diff view is: reading a directory
   // for a tab nobody is looking at is work the user never asked for.
-  // Which file was open in each session tab, and where the caret was in it, so
-  // switching away and back returns you to the spot rather than to an empty
-  // pane or the top of the file. In memory only: it records where you are in
-  // this sitting, not a preference worth persisting.
-  const lastFileByTab = new Map<string, string>();
-
-  /**
-   * Where the user was in each file, keyed by session, tab, and path.
-   *
-   * Per FILE rather than per session: switching tabs, sessions or away to the
-   * terminal and back should land where you were, but picking a different file
-   * should start at its top — and it does, because a file never opened has no
-   * entry here.
-   */
-  const placeByFile = new Map<string, number>();
+  // Which file was open in each session tab, where the caret was in it, and
+  // which folders were open, so switching away and back — to another tab, or
+  // to the full diff, which unmounts this view — returns you to the spot
+  // rather than to an empty pane. Held in fileBrowserMemory, outside the
+  // component, for that unmount.
   /** Set just before a mount that should restore rather than start at the top. */
   let restoreOffset = 0;
 
@@ -1101,10 +1094,35 @@
     applyBrowseTarget(targetKey, sessionId, windowIdx);
   }
 
-  function applyBrowseTarget(targetKey: string, sessionId: string | null, windowIdx: number) {
+  /** Record this tab's file, place and open folders for the way back. */
+  function rememberTab() {
     rememberPlace();
-    if (loadedBrowseKey && selectedPath) lastFileByTab.set(loadedBrowseKey, selectedPath);
+    if (!loadedBrowseKey) return;
+    if (selectedPath) lastFileByTab.set(loadedBrowseKey, selectedPath);
+    expandedByTab.set(loadedBrowseKey, [...expanded].filter(Boolean));
+  }
+
+  /**
+   * Open again the folders that were open, parents first: a folder's row only
+   * exists once its parent is listed. One gone since is left closed.
+   */
+  async function restoreExpanded(saved: string[], targetKey: string) {
+    const byDepth = [...saved].sort((a, b) => a.split('/').length - b.split('/').length);
+    const next = new Set(expanded);
+    for (const dir of byDepth) {
+      const parent = dir.includes('/') ? dir.slice(0, dir.lastIndexOf('/')) : '';
+      if (!next.has(parent)) continue;
+      await loadDir(dir);
+      if (destroyed || loadedBrowseKey !== targetKey) return;
+      if (dirs[dir]) next.add(dir);
+    }
+    expanded = next;
+  }
+
+  function applyBrowseTarget(targetKey: string, sessionId: string | null, windowIdx: number) {
+    rememberTab();
     const returningTo = sessionId ? lastFileByTab.get(targetKey) : undefined;
+    const reopen = sessionId ? expandedByTab.get(targetKey) ?? [] : [];
 
     loadedSessionId = sessionId;
     loadedWindowIdx = windowIdx;
@@ -1113,8 +1131,14 @@
     pendingLeaveCancel = null;
     resetForSession();
     if (!sessionId) return;
-    void loadDir('').then(() => {
-      if (returningTo && !selectedPath && loadedBrowseKey === targetKey) selectFile(returningTo);
+    void loadDir('').then(async () => {
+      if (destroyed || loadedBrowseKey !== targetKey) return;
+      await restoreExpanded(reopen, targetKey);
+      if (destroyed || loadedBrowseKey !== targetKey) return;
+      if (returningTo && !selectedPath) {
+        selectFile(returningTo);
+        void revealInTree(returningTo).then(() => scrollTreeTo(returningTo));
+      }
     });
   }
 

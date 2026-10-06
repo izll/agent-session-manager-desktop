@@ -1,4 +1,4 @@
-import { mount, tick } from 'svelte';
+import { mount, unmount, tick } from 'svelte';
 import FileBrowser from '../../src/lib/components/MainPanel/FileBrowser.svelte';
 import { activeProjectId } from '../../src/lib/stores/projects';
 import { selectedSessionId, selectedWindowIdx } from '../../src/lib/stores/sessions';
@@ -45,8 +45,18 @@ const target = document.getElementById('browser');
 if (!target) throw new Error('fixture target is missing');
 // ?late=1: the browser is mounted only when asked, after a jump was requested
 // — as in the app, where the full diff replaces the view the browser lives in.
-const mountBrowser = () => mount(FileBrowser, { target, props: { active: true } });
+let browser: ReturnType<typeof mount> | null = null;
+const mountBrowser = () => { browser = mount(FileBrowser, { target, props: { active: true } }); };
 (window as any).fileJumpFixture.mountBrowser = async () => {
+  mountBrowser();
+  await tick();
+};
+// What a switch to the full diff and back does: the view is torn down and a
+// new one built in its place.
+(window as any).fileJumpFixture.remountBrowser = async () => {
+  if (browser) await unmount(browser);
+  browser = null;
+  await tick();
   mountBrowser();
   await tick();
 };
