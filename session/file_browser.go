@@ -2,6 +2,7 @@ package session
 
 import (
 	"bytes"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"os"
@@ -325,6 +326,70 @@ func (i *Instance) ReadFileForBrowse(rel string) (*BrowseFile, error) {
 	}
 	result.Content = string(data)
 	return result, nil
+}
+
+// MaxBrowseImageBytes caps an image shown inside a rendered Markdown file. It
+// travels as a data URL, a third larger than the file, through the bridge.
+const MaxBrowseImageBytes = 8 << 20 // 8 MiB
+
+// browseImageTypes are the images a Markdown file may show, by extension. A
+// list of what is allowed rather than of what is not: anything else stays a
+// file the view does not hand to the page.
+var browseImageTypes = map[string]string{
+	".png":  "image/png",
+	".jpg":  "image/jpeg",
+	".jpeg": "image/jpeg",
+	".gif":  "image/gif",
+	".webp": "image/webp",
+	".avif": "image/avif",
+	".bmp":  "image/bmp",
+	".ico":  "image/x-icon",
+	// Shown through an <img>, an SVG cannot run its scripts or load anything.
+	".svg": "image/svg+xml",
+}
+
+// ReadImageForBrowse returns an image of the browsed directory as a data URL,
+// for a rendered Markdown file that refers to it.
+//
+// The same containment as ReadFileForBrowse: a README cannot reach a file
+// outside the directory being browsed by naming it.
+func (i *Instance) ReadImageForBrowse(rel string) (string, error) {
+	if strings.TrimSpace(rel) == "" {
+		return "", fmt.Errorf("no file given")
+	}
+	mime, ok := browseImageTypes[strings.ToLower(filepath.Ext(rel))]
+	if !ok {
+		return "", fmt.Errorf("%s is not an image", displayPath(rel))
+	}
+	abs, _, err := i.resolveBrowsePath(rel)
+	if err != nil {
+		return "", err
+	}
+	info, err := os.Stat(abs)
+	if err != nil {
+		return "", fmt.Errorf("could not open %s: %w", displayPath(rel), err)
+	}
+	if !info.Mode().IsRegular() {
+		return "", fmt.Errorf("%s is not a regular file", displayPath(rel))
+	}
+	if info.Size() > MaxBrowseImageBytes {
+		return "", fmt.Errorf("%s is too large to show", displayPath(rel))
+	}
+	f, err := os.Open(abs)
+	if err != nil {
+		return "", fmt.Errorf("could not open %s: %w", displayPath(rel), err)
+	}
+	defer f.Close()
+	// Bounded by the cap rather than the stat'd size, which can be stale for a
+	// file being written.
+	data, err := readAtMost(f, nil, MaxBrowseImageBytes+1)
+	if err != nil {
+		return "", fmt.Errorf("could not read %s: %w", displayPath(rel), err)
+	}
+	if len(data) > MaxBrowseImageBytes {
+		return "", fmt.Errorf("%s is too large to show", displayPath(rel))
+	}
+	return "data:" + mime + ";base64," + base64.StdEncoding.EncodeToString(data), nil
 }
 
 // readAtMost fills buf from r with at most limit bytes.

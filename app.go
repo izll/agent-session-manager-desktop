@@ -4469,6 +4469,22 @@ func (a *App) ReadSessionDirectoryFile(id, path string, windowIdx int, expectedR
 	return inst.ReadFileForBrowse(path)
 }
 
+// ReadSessionImage returns an image of the browsed directory as a data URL,
+// for a Markdown file shown rendered in the Files view. Read-only, and held to
+// the same directory as ReadSessionDirectoryFile.
+func (a *App) ReadSessionImage(id, path string, windowIdx int, expectedRoot string) (string, error) {
+	inst, err := a.browseInstance(id, windowIdx)
+	if err != nil {
+		return "", err
+	}
+	resolvedRoot, err := validateBrowseRoot(inst, expectedRoot)
+	if err != nil {
+		return "", err
+	}
+	inst.BrowseRoot = resolvedRoot
+	return inst.ReadImageForBrowse(path)
+}
+
 // OpenSessionFileForEdit returns a file decomposed into editable text plus the
 // byte-layout details the editor cannot represent (BOM, line-ending convention,
 // trailing newline), which are handed straight back to SaveSessionFileEdit so an

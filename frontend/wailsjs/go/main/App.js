@@ -670,6 +670,10 @@ export function ReadSessionFile() {
   return window['go']['main']['App']['ReadSessionFile']();
 }
 
+export function ReadSessionImage(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['ReadSessionImage'](arg1, arg2, arg3, arg4);
+}
+
 export function ReconnectServer(arg1) {
   return window['go']['main']['App']['ReconnectServer'](arg1);
 }

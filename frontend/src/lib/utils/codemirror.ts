@@ -112,6 +112,9 @@ const highlightStyle = HighlightStyle.define([
  * Values are taken from FileBrowser.svelte's existing rules rather than from
  * One Dark, so the CM6 views drop into the pane without a seam.
  */
+/** The app's interface font, for the find panel's controls. */
+const UI_FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif";
+
 const theme = EditorView.theme(
   {
     '&': {
@@ -143,6 +146,66 @@ const theme = EditorView.theme(
       backgroundColor: 'rgba(var(--accent-rgb), 0.25)',
     },
     '.cm-selectionMatch': { backgroundColor: 'rgba(var(--accent-rgb), 0.15)' },
+    // The find panel (findPanel.ts): the values of the diff's find bar,
+    // DiffFindBar.svelte, so the two cannot be told apart.
+    '.cm-panels.cm-panels-top': {
+      backgroundColor: 'var(--bg-raised)',
+      color: '#d4d4d8',
+      borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+    },
+    '.asmgr-find': { fontFamily: UI_FONT },
+    '.asmgr-find .find-row': {
+      display: 'flex',
+      alignItems: 'center',
+      gap: '6px',
+      padding: '6px 10px',
+    },
+    '.asmgr-find .find-row + .find-row': { paddingTop: '0' },
+    '.asmgr-find input': {
+      flex: '1',
+      minWidth: '0',
+      padding: '5px 9px',
+      backgroundColor: 'rgba(0, 0, 0, 0.3)',
+      border: '1px solid rgba(255, 255, 255, 0.12)',
+      borderRadius: '6px',
+      color: '#e5e7eb',
+      fontSize: '13px',
+      fontFamily: 'inherit',
+    },
+    '.asmgr-find input:focus': { outline: 'none', borderColor: 'rgba(var(--accent-rgb), 0.6)' },
+    '.asmgr-find .find-count': {
+      fontSize: '12px',
+      color: '#6b7280',
+      fontVariantNumeric: 'tabular-nums',
+      minWidth: '52px',
+      textAlign: 'center',
+    },
+    '.asmgr-find button': {
+      padding: '4px 9px',
+      backgroundColor: 'transparent',
+      border: '1px solid rgba(255, 255, 255, 0.12)',
+      borderRadius: '5px',
+      color: '#9ca3af',
+      fontSize: '13px',
+      fontFamily: 'inherit',
+      lineHeight: '1',
+      cursor: 'pointer',
+    },
+    '.asmgr-find button:hover:not(:disabled)': { backgroundColor: 'rgba(255, 255, 255, 0.07)', color: '#e5e7eb' },
+    '.asmgr-find button:disabled': { opacity: '0.4', cursor: 'default' },
+    // The search options, which the diff's bar does not have: the same
+    // buttons, lit while on.
+    '.asmgr-find .find-option': { fontFamily: "'JetBrains Mono', 'Fira Code', monospace", fontSize: '12px' },
+    '.asmgr-find .find-option[aria-pressed="true"]': {
+      color: 'rgb(var(--accent-rgb))',
+      borderColor: 'rgba(var(--accent-rgb), 0.5)',
+      backgroundColor: 'rgba(var(--accent-rgb), 0.12)',
+    },
+    '.cm-content .cm-searchMatch': {
+      backgroundColor: 'rgba(250, 204, 21, 0.22)',
+      outline: '1px solid rgba(250, 204, 21, 0.45)',
+    },
+    '.cm-content .cm-searchMatch.cm-searchMatch-selected': { backgroundColor: 'rgba(var(--accent-rgb), 0.5)' },
     // The pane's own scrollbars, so the editor matches .file-content.
     '.cm-scroller::-webkit-scrollbar': { width: '6px', height: '6px' },
     '.cm-scroller::-webkit-scrollbar-track': { background: 'transparent' },

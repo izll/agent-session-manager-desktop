@@ -339,6 +339,8 @@ export function ReadSessionDirectoryFile(arg1:string,arg2:string,arg3:number,arg
 
 export function ReadSessionFile():Promise<main.PortableFileInfo>;
 
+export function ReadSessionImage(arg1:string,arg2:string,arg3:number,arg4:string):Promise<string>;
+
 export function ReconnectServer(arg1:string):Promise<void>;
 
 export function RedrawWindow(arg1:string,arg2:number,arg3:string):Promise<void>;

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { keyClaimedByDialog } from '../../utils/dialogKeys';
+  import { diffTakesFocusFrom } from '../../utils/diffFocus';
   import { onMount, onDestroy, createEventDispatcher, tick } from 'svelte';
   import { pendingFileJump, clearFileJump } from '../../stores/fileJump';
   import { registerUnsavedGuard } from '../../stores/unsavedChanges';
@@ -16,8 +17,11 @@
   import { search, searchKeymap, highlightSelectionMatches, openSearchPanel } from '@codemirror/search';
   import { history, historyKeymap, defaultKeymap } from '@codemirror/commands';
   import { baseExtensions, insertTabKeymap, loadLanguage, cachedLanguage } from '../../utils/codemirror';
+  import { createFindPanel } from '../../utils/findPanel';
   import ConfirmDialog from '../Dialogs/ConfirmDialog.svelte';
   import FileQuickOpen from './FileQuickOpen.svelte';
+  import MarkdownView from './MarkdownView.svelte';
+  import { isMarkdownPath } from '../../utils/markdownLinks';
 
   export let active = false;
 
@@ -30,6 +34,9 @@
     guardUnsaved(async () => {
       if (editing) leaveEditModeQuietly();
       selectedPath = path;
+      // A jump to a line means the text at that line: a rendered page has no
+      // lines to land on.
+      sourceOverridePath = line && line > 1 ? path : '';
       // The request has reached the initialized target. From here a failed read
       // is a normal file error, not a jump that should retry in another tab.
       clearFileJump();
@@ -62,9 +69,57 @@
    */
   function handleBrowserKeydown(event: KeyboardEvent) {
     if (!(event.ctrlKey || event.metaKey) || event.key !== 'f') return;
+    if (showRendered) {
+      // The rendered page searches the text as it is shown.
+      if (!markdownView) return;
+      event.preventDefault();
+      void markdownView.openFind();
+      return;
+    }
     if (!view) return;
     event.preventDefault();
     openSearchPanel(view);
+  }
+
+  // --- Markdown -------------------------------------------------------------
+
+  const MARKDOWN_MODE_KEY = 'asmgr.browser.markdownMode';
+
+  function readMarkdownMode(): 'rendered' | 'source' {
+    try {
+      return localStorage.getItem(MARKDOWN_MODE_KEY) === 'source' ? 'source' : 'rendered';
+    } catch {
+      return 'rendered';
+    }
+  }
+
+  /** How Markdown files are shown; the choice holds for every one of them. */
+  let markdownMode = readMarkdownMode();
+  /**
+   * One file shown as source regardless of the mode: the target of a jump to
+   * a line. Cleared by opening any other file.
+   */
+  let sourceOverridePath = '';
+  let markdownView: { openFind(): Promise<void> } | undefined;
+
+  $: isMarkdown = !!selectedPath && isMarkdownPath(selectedPath);
+  $: showRendered = isMarkdown && markdownMode === 'rendered' && sourceOverridePath !== selectedPath;
+
+  function toggleMarkdownMode() {
+    markdownMode = showRendered ? 'source' : 'rendered';
+    sourceOverridePath = '';
+    try {
+      localStorage.setItem(MARKDOWN_MODE_KEY, markdownMode);
+    } catch {
+      // A preference that cannot be stored still applies for this run.
+    }
+  }
+
+  /** An image a Markdown file refers to, read from the browsed directory. */
+  function loadMarkdownImage(path: string): Promise<string> {
+    const sessionId = get(selectedSessionId);
+    if (!sessionId || !rootAbsPath) return Promise.reject(new Error('no session'));
+    return App.ReadSessionImage(sessionId, path, get(selectedWindowIdx) ?? 0, rootAbsPath);
   }
 
   function scrollToLine(line: number) {
@@ -255,6 +310,16 @@
   let showQuickOpen = false;
 
   function handleWindowKeydown(e: KeyboardEvent) {
+    // Ctrl+F with the focus nowhere — a clicked tree row redrawn from under
+    // it, say — still means this view, the only one on screen. Focus anywhere
+    // else (a field, a dialog) is left to its owner; inside the view the
+    // container's own handler has already answered.
+    if (active && (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key === 'f' &&
+        !e.defaultPrevented && focusIsNowhere() &&
+        !(document.querySelector('.dialog-overlay') || keyClaimedByDialog())) {
+      handleBrowserKeydown(e);
+      return;
+    }
     if (!active || !(e.ctrlKey || e.metaKey) || !e.shiftKey || e.altKey) return;
     if (e.key.toLowerCase() !== 'o') return;
     // Another dialog owning the keyboard must keep it — the overlay opening
@@ -655,7 +720,7 @@
         // search keymap so Ctrl+S wins, which means this binding would
         // otherwise close the whole editor while the user was only trying to
         // dismiss the search box.
-        if (target.dom.querySelector('.cm-search')) return false;
+        if (target.dom.querySelector('.asmgr-find')) return false;
         guardUnsaved(leaveEditMode);
         return true;
       },
@@ -813,7 +878,7 @@
       //
       // highlightSelectionMatches shows the other occurrences of whatever is
       // selected, which is what makes the panel's own count meaningful.
-      search({ top: true }),
+      search({ top: true, createPanel: createFindPanel(get(t)) }),
       highlightSelectionMatches(),
       keymap.of(searchKeymap),
     ];
@@ -880,7 +945,7 @@
    * path and mode are unchanged, but the buffer must be replaced wholesale.
    */
   let editGeneration = 0;
-  $: showReadEditor = shouldRender && !editing && !!selectedFile && !selectedFile.binary;
+  $: showReadEditor = shouldRender && !editing && !!selectedFile && !selectedFile.binary && !showRendered;
   $: showEditEditor = editing && canEdit;
   // The tab index is part of the identity even though the tabs of one session
   // share a directory. Switching tabs tears the host element down and back up,
@@ -1078,6 +1143,9 @@
     const leftTheView = wasActive && !active;
     const cameBack = !wasActive && active;
     wasActive = active;
+    // Switched to, the view takes the keyboard, as the diff does: otherwise
+    // Ctrl+F did nothing until something in it had been clicked.
+    if (cameBack) void focusBrowserOnShow();
     // Leaving for the terminal is a switch like any other: record the spot so
     // coming back does not start at the top.
     if (leftTheView) rememberPlace();
@@ -1097,6 +1165,23 @@
     // requires openedFile to be the file actually selected — and dropping the
     // buffer here would have thrown away edits the user came back to finish.
     void cameBack;
+  }
+
+  function focusIsNowhere(): boolean {
+    const el = document.activeElement;
+    return !el || el === document.body || el === document.documentElement;
+  }
+
+  let browserEl: HTMLElement | null = null;
+
+  async function focusBrowserOnShow() {
+    await tick();
+    // After the frame of the switch, so a focus the switch hands back to the
+    // terminal does not win.
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    if (!active || destroyed || !diffTakesFocusFrom(document.activeElement)) return;
+    if (browserEl?.contains(document.activeElement)) return;
+    browserEl?.focus({ preventScroll: true });
   }
 
   function refresh() {
@@ -1226,6 +1311,7 @@
       rememberPlace();
       if (editing) leaveEditModeQuietly();
       selectedPath = path;
+      sourceOverridePath = '';
       void loadFile(path);
     });
   }
@@ -1312,7 +1398,7 @@
 </script>
 
 <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
-<div class="browser-container" role="region" tabindex="-1" on:keydown={handleBrowserKeydown}>
+<div class="browser-container" role="region" tabindex="-1" bind:this={browserEl} on:keydown={handleBrowserKeydown}>
   <div class="browser-header">
     <div class="header-left">
       <span class="browser-title">{$t('browser.title')}</span>
@@ -1497,6 +1583,16 @@
             {:else if selectedFile && !selectedFile.binary && !selectedFile.truncated}
               <button class="edit-btn" on:click={enterEditMode}>{$t('browser.edit')}</button>
             {/if}
+            {#if isMarkdown && !editing && selectedFile && !selectedFile.binary}
+              <button
+                class="edit-btn"
+                data-markdown-toggle
+                title={showRendered ? $t('browser.markdownShowSourceHint') : $t('browser.markdownShowRenderedHint')}
+                on:click={toggleMarkdownMode}
+              >
+                {showRendered ? $t('browser.markdownShowSource') : $t('browser.markdownShowRendered')}
+              </button>
+            {/if}
             {#if selectedFile}
               <!-- Heavy editing goes where the user already does it; this view
                    stays a quick look. Offered for binary and truncated files
@@ -1600,9 +1696,19 @@
             {#if selectedFile.truncated}
               <div class="file-notice">{$t('browser.fileTruncated', { size: formatSize(selectedFile.size) })}</div>
             {/if}
-            <!-- The same CodeMirror as the edit view, read-only, so the two are
-                 identical rather than merely similar. -->
-            <div class="editor read" bind:this={readHost}></div>
+            {#if showRendered}
+              <MarkdownView
+                bind:this={markdownView}
+                source={selectedFile.content}
+                filePath={selectedPath}
+                loadImage={loadMarkdownImage}
+                openFile={(path) => void openRequestedFile(path)}
+              />
+            {:else}
+              <!-- The same CodeMirror as the edit view, read-only, so the two are
+                   identical rather than merely similar. -->
+              <div class="editor read" bind:this={readHost}></div>
+            {/if}
           {/if}
         </div>
         {/if}
@@ -1639,6 +1745,9 @@
     flex-direction: column;
     background: var(--bg-surface);
   }
+
+  /* Focused to take the keyboard, not to be pointed at. */
+  .browser-container:focus { outline: none; }
 
   .browser-header {
     display: flex;
