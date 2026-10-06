@@ -751,6 +751,46 @@ test('CommandPicker snapshots its target and suppresses duplicate execution', as
   await page.evaluate(() => window.dialogRacesFixture.resolveRun());
 });
 
+// A background command opens a tab of its own. The tab bar has to learn about
+// it, but the user stays on the tab they picked the command from.
+test('CommandPicker shows a background command\'s new tab without switching to it', async ({ page }) => {
+  await gotoDialogRacesFixture(page, 'command');
+  const row = page.locator('.cmd-row').filter({ hasText: 'Background build' });
+  await expect(row.locator('.cmd-badge')).toBeVisible();
+  const before = await page.evaluate(() => window.dialogRacesFixture.selectedWindow());
+  const loadsBefore = await page.evaluate(() => window.dialogRacesFixture.recoverySessionLoads());
+
+  await row.click();
+  await expect.poll(() => page.evaluate(() => window.dialogRacesFixture.runCalls().length)).toBe(1);
+  await page.evaluate(() => window.dialogRacesFixture.resolveRun(7));
+
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  expect(await page.evaluate(() => window.dialogRacesFixture.recoverySessionLoads())).toBeGreaterThan(loadsBefore);
+  expect(await page.evaluate(() => window.dialogRacesFixture.selectedWindow())).toBe(before);
+});
+
+test('CommandManager saves whether a command runs in the background', async ({ page }) => {
+  await gotoDialogRacesFixture(page, 'commandmanager');
+  const dialog = page.getByRole('dialog');
+  await dialog.locator('.cmd-row').filter({ hasText: 'Background build' })
+    .getByTitle(/edit command|parancs szerkesztése/i).click();
+
+  const background = dialog.getByRole('checkbox', { name: /background|háttérben/i });
+  const sendEnter = dialog.getByRole('checkbox', { name: /Send Enter|Enter küldése/ });
+  await expect(background).toBeChecked();
+  // Always run in the background, so Enter is not a choice there.
+  await expect(sendEnter).toBeChecked();
+  await expect(sendEnter).toBeDisabled();
+
+  await background.uncheck();
+  await expect(sendEnter).toBeEnabled();
+  await expect(sendEnter).not.toBeChecked();
+  await dialog.getByRole('button', { name: /^(Save|Mentés)$/ }).click();
+  await expect.poll(() => page.evaluate(() => window.dialogRacesFixture.saveCommandCalls().length)).toBe(1);
+  expect(await page.evaluate(() => window.dialogRacesFixture.saveCommandCalls()[0].slice(5)))
+    .toEqual([false, false]);
+});
+
 test('CommandPicker closes when its captured session or tab changes', async ({ page }) => {
   await gotoDialogRacesFixture(page, 'command');
   await expect(page.locator('.cmd-row').filter({ hasText: 'Fixture command' })).toBeVisible();

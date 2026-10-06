@@ -2134,6 +2134,39 @@ func (i *Instance) NewWindow() error {
 // that works on any server at all, including one with no agent installed, so
 // this is the path most remote tabs take.
 func (i *Instance) NewWindowWithNameOn(serverID string, name string, workDir string) (int, error) {
+	return i.newTerminalWindowOn(serverID, name, workDir, false)
+}
+
+// NewBackgroundWindowOn creates a terminal tab without making it the
+// session's current window, for a command started beside the tab in use.
+//
+// The GUI shows whichever tab it selects either way; this is for anything
+// else attached to the session, such as a plain terminal running tmux attach,
+// which would otherwise be switched over to the new tab.
+func (i *Instance) NewBackgroundWindowOn(serverID string, name string, workDir string) (int, error) {
+	return i.newTerminalWindowOn(serverID, name, workDir, true)
+}
+
+// TabPlacement reports where a tab runs: the server it was placed on (empty
+// for the session's own machine) and its working directory.
+//
+// A tab with no directory of its own, and the session's main window, work in
+// the session's directory.
+func (i *Instance) TabPlacement(windowIdx int) (serverID, workDir string) {
+	for _, window := range i.FollowedWindows {
+		if window.Index != windowIdx {
+			continue
+		}
+		workDir = window.WorkDir
+		if workDir == "" {
+			workDir = i.Path
+		}
+		return window.ServerID, workDir
+	}
+	return "", i.Path
+}
+
+func (i *Instance) newTerminalWindowOn(serverID string, name string, workDir string, detached bool) (int, error) {
 	if workDir == "" && serverID == "" {
 		workDir = i.Path
 	}
@@ -2156,7 +2189,7 @@ func (i *Instance) NewWindowWithNameOn(serverID string, name string, workDir str
 		createTarget = fmt.Sprintf("%s:%d", sessionName, i.nextRemoteWindowIndex(serverID))
 	}
 	output, err := i.tmuxOutputOn(serverID,
-		newTmuxWindowArgs(createTarget, workDir, name, false, nil)...)
+		newTmuxWindowArgs(createTarget, workDir, name, detached, nil)...)
 	if err != nil {
 		return -1, err
 	}
@@ -4137,19 +4170,70 @@ func (i *Instance) SendText(text string) error {
 // SendTextToWindow types text into a specific window, optionally pressing
 // Enter afterwards. Sent with -l so the text is taken literally: a saved
 // command containing "C-c" or "Enter" is text, not a key name.
+//
+// A tab placed on a server is typed into there, as SendPromptToWindow does:
+// the session's own multiplexer has no such window, or another tab under the
+// same number.
 func (i *Instance) SendTextToWindow(windowIdx int, text string, pressEnter bool) error {
-	if !i.IsAlive() {
+	run := i.tmuxRun
+	alive := i.IsAlive
+	if server := i.serverForWindow(windowIdx); server != i.ServerID {
+		run = func(args ...string) error { return i.tmuxRunOn(server, args...) }
+		alive = func() bool { return i.windowAliveContext(context.Background(), windowIdx) }
+	}
+	if !alive() {
 		return fmt.Errorf("session not running")
 	}
 	target := fmt.Sprintf("%s:%d", i.TmuxSessionName(), windowIdx)
-	if err := i.tmuxRun("send-keys", "-l", "-t", target, text); err != nil {
+	if err := run("send-keys", "-l", "-t", target, text); err != nil {
 		return fmt.Errorf("could not send the command: %w", err)
 	}
 	if !pressEnter {
 		return nil
 	}
 	// Separate call: Enter is a key name, so it must not carry -l.
-	return i.tmuxRun("send-keys", "-t", target, "Enter")
+	return run("send-keys", "-t", target, "Enter")
+}
+
+// Pacing for TypeIntoFreshShell. Variables so a test can shorten them.
+var (
+	shellPromptPollInterval = 100 * time.Millisecond
+	// shellPromptSteadyPolls is how many polls in a row must find the cursor
+	// where it was, away from the first column, before the shell counts as
+	// waiting at its prompt.
+	shellPromptSteadyPolls = 3
+)
+
+// TypeIntoFreshShell runs a command in the shell of a tab that has just been
+// opened, once that shell is ready for it.
+//
+// Typed at once, the command is echoed and then lost: a shell's startup files
+// can flush the terminal's input, and some prompt integrations do, so what
+// arrived before the prompt is thrown away. Ready is read off the cursor — a
+// shell at its prompt leaves it after the prompt, away from the first column,
+// and stops moving it. A shell that never settles within the timeout gets the
+// command anyway; a lost command is no worse than one never sent.
+func (i *Instance) TypeIntoFreshShell(windowIdx int, text string, timeout time.Duration) error {
+	server := i.serverForWindow(windowIdx)
+	target := fmt.Sprintf("%s:%d", i.TmuxSessionName(), windowIdx)
+	deadline := time.Now().Add(timeout)
+	last, steady := "", 0
+	for steady < shellPromptSteadyPolls && time.Now().Before(deadline) {
+		time.Sleep(shellPromptPollInterval)
+		out, err := i.tmuxOutputOn(server, "display-message", "-p", "-t", target,
+			"#{cursor_x} #{cursor_y} #{history_size}")
+		if err != nil {
+			continue
+		}
+		cursor := strings.TrimSpace(string(out))
+		if cursor == last && !strings.HasPrefix(cursor, "0 ") {
+			steady++
+		} else {
+			steady = 0
+		}
+		last = cursor
+	}
+	return i.SendTextToWindow(windowIdx, text, true)
 }
 
 // SendPrompt sends a prompt text followed by Enter key

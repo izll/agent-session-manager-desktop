@@ -58,9 +58,14 @@ type SavedCommand struct {
 	GroupID string `json:"group_id,omitempty"`
 	// SendEnter runs the command instead of only typing it. Off by default so
 	// a half-remembered command can be reviewed before it executes.
-	SendEnter bool      `json:"send_enter,omitempty"`
-	CreatedAt time.Time `json:"created_at,omitempty"`
-	UsedAt    time.Time `json:"used_at,omitempty"`
+	SendEnter bool `json:"send_enter,omitempty"`
+	// InBackground runs the command in a terminal tab of its own, opened
+	// without switching to it, so a build or a server started from the
+	// library does not take over the tab it was picked from. It always runs:
+	// typing a command into a tab nobody is looking at would do nothing.
+	InBackground bool      `json:"in_background,omitempty"`
+	CreatedAt    time.Time `json:"created_at,omitempty"`
+	UsedAt       time.Time `json:"used_at,omitempty"`
 	// UseCount drives "most used first" ordering in the picker.
 	UseCount int `json:"use_count,omitempty"`
 }

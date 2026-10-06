@@ -2,15 +2,16 @@ import { mount } from 'svelte';
 import { get } from 'svelte/store';
 import DialogRacesFixture from './dialog-races-fixture.svelte';
 import { activeProjectId, projects } from '../../src/lib/stores/projects';
-import { selectedSessionId, sessions } from '../../src/lib/stores/sessions';
+import { selectedSessionId, selectedWindowIdx, sessions } from '../../src/lib/stores/sessions';
 import { agents } from '../../src/lib/stores/agents';
 import { settings } from '../../src/lib/stores/settings';
 import { refreshOpenCount } from '../../src/lib/stores/taskAlerts';
 
 let resolveSearch: ((value: unknown[]) => void) | null = null;
-let resolveRun: (() => void) | null = null;
+let resolveRun: ((newIdx: number) => void) | null = null;
 const searchCalls: string[] = [];
 const runCalls: unknown[][] = [];
+const saveCommandCalls: unknown[][] = [];
 const historyResolvers = new Map<string, (value: unknown) => void>();
 const historyCalls: string[] = [];
 const quickJumpResolvers: Array<(value: unknown[]) => void> = [];
@@ -59,11 +60,18 @@ const backend = new Proxy({
     commands: [{
       id: 'command-1', name: 'Fixture command', command: 'echo fixture',
       description: '', groupId: '', placeholders: [],
+    }, {
+      id: 'command-2', name: 'Background build', command: 'make watch',
+      description: '', groupId: '', placeholders: [], sendEnter: false, inBackground: true,
     }],
   }),
   RunCommand: (...args: unknown[]) => {
     runCalls.push(args);
-    return new Promise<void>((resolve) => { resolveRun = resolve; });
+    return new Promise<number>((resolve) => { resolveRun = resolve; });
+  },
+  SaveCommand: async (...args: unknown[]) => {
+    saveCommandCalls.push(args);
+    return String(args[0] || 'command-new');
   },
   ListGitBranches: async (_sessionId: string, _windowIdx: number, root: string) => ({
     branches: [{ name: root, current: true }],
@@ -184,7 +192,9 @@ const backend = new Proxy({
 agents.set([{ type: 'claude', name: 'Claude', icon: '', supportsResume: false, supportsAutoYes: true, supportsFork: false }]);
 (window as any).dialogRacesFixture = {
   resolveSearch: (value: unknown[]) => resolveSearch?.(value),
-  resolveRun: () => resolveRun?.(),
+  resolveRun: (newIdx = -1) => resolveRun?.(newIdx),
+  saveCommandCalls: () => structuredClone(saveCommandCalls),
+  selectedWindow: () => get(selectedWindowIdx),
   searchCalls: () => structuredClone(searchCalls),
   runCalls: () => structuredClone(runCalls),
   resolveHistory: (path: string, subject: string) => historyResolvers.get(path)?.({

@@ -5,6 +5,7 @@
   import { t } from '../../i18n';
   import { autoFocusDialog } from '../../utils/dialogActions';
   import { activeProjectId } from '../../stores/projects';
+  import { loadSessions } from '../../stores/sessions';
   import { get } from 'svelte/store';
   import DialogCloseButton from '../common/DialogCloseButton.svelte';
 
@@ -179,9 +180,14 @@
     error = '';
     try {
       await App.RunCommand(c.id, targetSession, targetWindow, submittedValues, targetProject);
+      // A background command opened a tab of its own: show it in the tab bar,
+      // but leave the selection where the user is.
+      if (c.inBackground) await loadSessions();
       if (!show || generation !== operationGeneration || targetProject !== get(activeProjectId)) return;
       close();
     } catch (e) {
+      // The tab can exist even when the command could not be typed into it.
+      if (c.inBackground) void loadSessions();
       if (!show || generation !== operationGeneration || targetProject !== get(activeProjectId)) return;
       error = String(e);
       pending = null;
@@ -380,6 +386,9 @@
                       <span class="cmd-name">{c.name}</span>
                       <span class="cmd-text">{c.command}</span>
                     </div>
+                    {#if c.inBackground}
+                      <span class="cmd-badge" title={$t('commands.inBackgroundHint')}>{$t('commands.inBackgroundBadge')}</span>
+                    {/if}
                     <span class="cmd-group">{sec.name}</span>
                   </div>
                 {/each}
@@ -441,6 +450,10 @@
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   .cmd-group { font-size: 11px; color: #71717a; flex-shrink: 0; }
+  .cmd-badge {
+    padding: 1px 6px; border-radius: 4px; font-size: 10px; flex-shrink: 0;
+    color: rgb(var(--accent-rgb)); background: rgba(var(--accent-rgb), 0.14);
+  }
 
   .pending-head { display: flex; flex-direction: column; gap: 2px; margin-bottom: 12px; }
   .pending-name { font-size: 14px; color: #e4e4e7; }

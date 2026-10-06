@@ -457,6 +457,7 @@ export namespace main {
 	    description: string;
 	    groupId: string;
 	    sendEnter: boolean;
+	    inBackground: boolean;
 	    useCount: number;
 	    placeholders: session.Placeholder[];
 
@@ -472,6 +473,7 @@ export namespace main {
 	        this.description = source["description"];
 	        this.groupId = source["groupId"];
 	        this.sendEnter = source["sendEnter"];
+	        this.inBackground = source["inBackground"];
 	        this.useCount = source["useCount"];
 	        this.placeholders = this.convertValues(source["placeholders"], session.Placeholder);
 	    }

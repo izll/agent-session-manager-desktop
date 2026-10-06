@@ -152,7 +152,7 @@ func TestCommandLibraryRoundTrips(t *testing.T) {
 
 	lib.Groups = []CommandGroup{{ID: "g1", Name: "Deploy"}}
 	lib.Commands = []SavedCommand{
-		{ID: "c1", Name: "logs", Command: "docker logs -f {{konténer}}", GroupID: "g1"},
+		{ID: "c1", Name: "logs", Command: "docker logs -f {{konténer}}", GroupID: "g1", InBackground: true},
 	}
 	if err := s.SaveCommands(lib); err != nil {
 		t.Fatalf("save: %v", err)
@@ -164,6 +164,9 @@ func TestCommandLibraryRoundTrips(t *testing.T) {
 	}
 	if len(loaded.Commands) != 1 || loaded.Commands[0].Command != "docker logs -f {{konténer}}" {
 		t.Errorf("commands lost: %+v", loaded.Commands)
+	}
+	if len(loaded.Commands) == 1 && !loaded.Commands[0].InBackground {
+		t.Errorf("running in the background was not kept: %+v", loaded.Commands[0])
 	}
 	if len(loaded.Groups) != 1 || loaded.Groups[0].Name != "Deploy" {
 		t.Errorf("groups lost: %+v", loaded.Groups)

@@ -391,9 +391,9 @@ export function RevertDiffFile(arg1:string,arg2:string,arg3:boolean,arg4:number,
 
 export function RevertDiffHunk(arg1:string,arg2:string,arg3:number,arg4:string,arg5:string):Promise<void>;
 
-export function RunCommand(arg1:string,arg2:string,arg3:number,arg4:Record<string, string>,arg5:string):Promise<void>;
+export function RunCommand(arg1:string,arg2:string,arg3:number,arg4:Record<string, string>,arg5:string):Promise<number>;
 
-export function SaveCommand(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string,arg6:boolean):Promise<string>;
+export function SaveCommand(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string,arg6:boolean,arg7:boolean):Promise<string>;
 
 export function SaveCommandGroup(arg1:string,arg2:string):Promise<string>;
 

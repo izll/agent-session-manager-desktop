@@ -30,6 +30,7 @@
   let fDescription = '';
   let fGroupId = '';
   let fSendEnter = true;
+  let fInBackground = false;
 
   // Group editor state.
   let editingGroup = false;
@@ -132,6 +133,7 @@
     fDescription = '';
     fGroupId = '';
     fSendEnter = true;
+    fInBackground = false;
   }
 
   function newCommand(groupId = '') {
@@ -151,6 +153,7 @@
     fDescription = c.description || '';
     fGroupId = c.groupId || '';
     fSendEnter = c.sendEnter;
+    fInBackground = c.inBackground;
     editing = true;
   }
 
@@ -162,14 +165,14 @@
     const targetId = editingId;
     const submitted = {
       name: fName.trim(), command: fCommand, description: fDescription.trim(),
-      groupId: fGroupId, sendEnter: fSendEnter,
+      groupId: fGroupId, sendEnter: fSendEnter, inBackground: fInBackground,
     };
     savingCommand = true;
     error = '';
     try {
       await App.SaveCommand(
         targetId, submitted.name, submitted.command, submitted.description,
-        submitted.groupId, submitted.sendEnter
+        submitted.groupId, submitted.sendEnter, submitted.inBackground
       );
       if (!show || generation !== operationGeneration || !editing || editingId !== targetId) return;
       editing = false;
@@ -381,7 +384,22 @@
             </div>
 
             <label class="toggle-row">
-              <input type="checkbox" bind:checked={fSendEnter} />
+              <input type="checkbox" bind:checked={fInBackground} />
+              <span class="toggle-main">
+                <span class="toggle-label">{$t('commands.inBackground')}</span>
+                <span class="toggle-hint">{$t('commands.inBackgroundHint')}</span>
+              </span>
+            </label>
+
+            <!-- A background command always runs: typed into a tab nobody is
+                 looking at, it would only sit there. -->
+            <label class="toggle-row" class:disabled={fInBackground}>
+              <input
+                type="checkbox"
+                checked={fSendEnter || fInBackground}
+                disabled={fInBackground}
+                on:change={(e) => (fSendEnter = e.currentTarget.checked)}
+              />
               <span class="toggle-main">
                 <span class="toggle-label">{$t('commands.sendEnter')}</span>
                 <span class="toggle-hint">{$t('commands.sendEnterHint')}</span>
@@ -439,7 +457,12 @@
                 {#each sec.items as c (c.id)}
                   <div class="cmd-row">
                     <div class="cmd-main">
-                      <span class="cmd-name">{c.name}</span>
+                      <span class="cmd-name">
+                        {c.name}
+                        {#if c.inBackground}
+                          <span class="cmd-badge" title={$t('commands.inBackgroundHint')}>{$t('commands.inBackgroundBadge')}</span>
+                        {/if}
+                      </span>
                       <span class="cmd-text">{c.command}</span>
                       {#if c.description}<span class="cmd-desc">{c.description}</span>{/if}
                     </div>
@@ -566,6 +589,11 @@
 
   .toggle-row { display: flex; align-items: flex-start; gap: 9px; cursor: pointer; }
   .toggle-row input { margin-top: 2px; accent-color: var(--accent); }
+  .toggle-row.disabled { cursor: default; opacity: 0.55; }
+  .cmd-badge {
+    margin-left: 6px; padding: 1px 6px; border-radius: 4px; font-size: 10px;
+    vertical-align: 1px; color: rgb(var(--accent-rgb)); background: rgba(var(--accent-rgb), 0.14);
+  }
   .toggle-main { display: flex; flex-direction: column; gap: 1px; }
   .toggle-label { font-size: 13px; color: #e4e4e7; }
   .toggle-hint { font-size: 11px; color: #6b7280; }
