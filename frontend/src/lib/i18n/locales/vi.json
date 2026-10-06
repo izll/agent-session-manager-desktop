@@ -411,6 +411,7 @@
   "tasks.numberOfTasks": "Số lượng công việc",
   "tasks.parsing": "Đang phân tích...",
   "tasks.addNewTask": "Thêm công việc mới",
+  "tasks.dictationListening": "Đang nghe… văn bản sẽ được nhập vào trường.",
   "tasks.manual": "Thủ công",
   "tasks.aiGenerated": "AI tạo",
   "tasks.manualDesc": "Tạo công việc thủ công bằng cách điền các trường bên dưới.",

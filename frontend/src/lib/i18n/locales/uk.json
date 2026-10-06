@@ -411,6 +411,7 @@
   "tasks.numberOfTasks": "Кількість завдань",
   "tasks.parsing": "Обробка...",
   "tasks.addNewTask": "Додати нове завдання",
+  "tasks.dictationListening": "Слухаю… текст потрапить у поле.",
   "tasks.manual": "Вручну",
   "tasks.aiGenerated": "Згенеровано AI",
   "tasks.manualDesc": "Створіть завдання вручну, заповнивши поля нижче.",

@@ -411,6 +411,7 @@
   "tasks.numberOfTasks": "Antal uppgifter",
   "tasks.parsing": "Tolkar...",
   "tasks.addNewTask": "Lägg till ny uppgift",
+  "tasks.dictationListening": "Lyssnar… texten hamnar i fältet.",
   "tasks.manual": "Manuell",
   "tasks.aiGenerated": "AI-genererad",
   "tasks.manualDesc": "Skapa en uppgift manuellt genom att fylla i fälten nedan.",

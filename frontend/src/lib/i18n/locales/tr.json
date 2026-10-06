@@ -411,6 +411,7 @@
   "tasks.numberOfTasks": "Görev Sayısı",
   "tasks.parsing": "Ayrıştırılıyor...",
   "tasks.addNewTask": "Yeni Görev Ekle",
+  "tasks.dictationListening": "Dinliyorum… metin alana yazılacak.",
   "tasks.manual": "Manuel",
   "tasks.aiGenerated": "Yapay Zeka Oluşturma",
   "tasks.manualDesc": "Aşağıdaki alanları doldurarak manuel olarak görev oluşturun.",

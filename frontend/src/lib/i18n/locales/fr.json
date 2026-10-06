@@ -411,6 +411,7 @@
   "tasks.numberOfTasks": "Nombre de tâches",
   "tasks.parsing": "Analyse en cours...",
   "tasks.addNewTask": "Ajouter une nouvelle tâche",
+  "tasks.dictationListening": "À l'écoute… le texte ira dans le champ.",
   "tasks.manual": "Manuel",
   "tasks.aiGenerated": "Généré par IA",
   "tasks.manualDesc": "Créez une tâche manuellement en remplissant les champs ci-dessous.",

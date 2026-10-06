@@ -411,6 +411,7 @@
   "tasks.numberOfTasks": "Numero di Attività",
   "tasks.parsing": "Analisi in corso...",
   "tasks.addNewTask": "Aggiungi Nuova Attività",
+  "tasks.dictationListening": "In ascolto… il testo andrà nel campo.",
   "tasks.manual": "Manuale",
   "tasks.aiGenerated": "Generato dall'IA",
   "tasks.manualDesc": "Crea un'attività manualmente compilando i campi sottostanti.",

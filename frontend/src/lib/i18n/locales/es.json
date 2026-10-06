@@ -411,6 +411,7 @@
   "tasks.numberOfTasks": "Número de tareas",
   "tasks.parsing": "Analizando...",
   "tasks.addNewTask": "Añadir nueva tarea",
+  "tasks.dictationListening": "Escuchando… el texto irá al campo.",
   "tasks.manual": "Manual",
   "tasks.aiGenerated": "Generado por IA",
   "tasks.manualDesc": "Crea una tarea manualmente completando los campos a continuación.",

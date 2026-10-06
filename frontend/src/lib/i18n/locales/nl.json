@@ -411,6 +411,7 @@
   "tasks.numberOfTasks": "Aantal taken",
   "tasks.parsing": "Verwerken...",
   "tasks.addNewTask": "Nieuwe taak toevoegen",
+  "tasks.dictationListening": "Aan het luisteren… de tekst komt in het veld.",
   "tasks.manual": "Handmatig",
   "tasks.aiGenerated": "AI-gegenereerd",
   "tasks.manualDesc": "Maak handmatig een taak aan door de onderstaande velden in te vullen.",

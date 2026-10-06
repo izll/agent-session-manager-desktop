@@ -411,6 +411,7 @@
   "tasks.numberOfTasks": "任务数量",
   "tasks.parsing": "解析中...",
   "tasks.addNewTask": "添加新任务",
+  "tasks.dictationListening": "正在聆听… 文字将输入到字段中。",
   "tasks.manual": "手动",
   "tasks.aiGenerated": "AI 生成",
   "tasks.manualDesc": "通过填写以下字段手动创建任务。",

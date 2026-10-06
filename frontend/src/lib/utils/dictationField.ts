@@ -6,6 +6,7 @@
 import { writable, get } from 'svelte/store';
 import { EventsOn, EventsOff } from '../../../wailsjs/runtime/runtime';
 import * as DictationService from '../../../wailsjs/go/main/DictationService';
+import { setDictationTarget, type DictationTarget } from '../stores/dictationTarget';
 
 export interface FieldDictation {
   /** Toggle dictation on/off for this field */
@@ -20,6 +21,8 @@ export interface FieldDictation {
   destroy: () => void;
   /** Whether dictation is currently active for this field */
   listening: import('svelte/store').Writable<boolean>;
+  /** The words heard so far of the sentence not yet final, for showing them. */
+  interim: import('svelte/store').Writable<string>;
 }
 
 /**
@@ -29,9 +32,17 @@ export interface FieldDictation {
  */
 export function createFieldDictation(
   getElement: () => HTMLTextAreaElement | HTMLInputElement | null,
-  onTextInserted?: () => void
+  onTextInserted?: () => void,
+  /**
+   * Where dictation is pointed once it stops. The terminal by default; a
+   * dialog that stays open answers 'field', so the next hotkey press still
+   * writes into it rather than into the terminal hidden behind it.
+   */
+  releaseTo: () => DictationTarget = () => 'terminal',
 ): FieldDictation {
   const listening = writable(false);
+  const interim = writable('');
+  let unsubInterim: (() => void) | null = null;
   let unsubFieldText: (() => void) | null = null;
   let unsubFieldDelete: (() => void) | null = null;
   let unsubState: (() => void) | null = null;
@@ -95,7 +106,10 @@ export function createFieldDictation(
   function setupListeners() {
     if (unsubFieldText) return; // Already set up
 
+    unsubInterim = EventsOn('dictation:interimText', (text: string) => interim.set(text || ''));
+
     unsubFieldText = EventsOn('dictation:fieldText', (text: string) => {
+      interim.set('');
       const el = getElement();
       if (el) {
         insertAtCursor(el, text);
@@ -118,7 +132,7 @@ export function createFieldDictation(
         cleanup();
         // Only restore terminal target if not externally managed (modal manages its own target)
         if (!externallyManaged) {
-          DictationService.SetDictationTarget('terminal').catch(() => {});
+          setDictationTarget(releaseTo()).catch(() => {});
         }
         externallyManaged = false;
       }
@@ -126,6 +140,8 @@ export function createFieldDictation(
   }
 
   function cleanup() {
+    if (unsubInterim) { unsubInterim(); unsubInterim = null; }
+    interim.set('');
     if (unsubFieldText) { unsubFieldText(); unsubFieldText = null; }
     if (unsubFieldDelete) { unsubFieldDelete(); unsubFieldDelete = null; }
     if (unsubState) { unsubState(); unsubState = null; }
@@ -136,14 +152,14 @@ export function createFieldDictation(
       await stop();
     } else {
       // Set target to field before starting
-      await DictationService.SetDictationTarget('field');
+      await setDictationTarget('field');
       setupListeners();
       try {
         await DictationService.ToggleDictation();
         listening.set(true);
       } catch (e) {
         cleanup();
-        await DictationService.SetDictationTarget('terminal');
+        await setDictationTarget(releaseTo());
         throw e;
       }
     }
@@ -156,7 +172,7 @@ export function createFieldDictation(
       } catch (_) {}
       listening.set(false);
       cleanup();
-      await DictationService.SetDictationTarget('terminal').catch(() => {});
+      await setDictationTarget(releaseTo()).catch(() => {});
     }
   }
 
@@ -181,7 +197,7 @@ export function createFieldDictation(
       // Fire-and-forget stop
       DictationService.ToggleDictation().catch(() => {});
       if (!externallyManaged) {
-        DictationService.SetDictationTarget('terminal').catch(() => {});
+        setDictationTarget(releaseTo()).catch(() => {});
       }
     }
     externallyManaged = false;
@@ -189,5 +205,5 @@ export function createFieldDictation(
     cleanup();
   }
 
-  return { toggle, stop, startExternally, stopExternally, destroy, listening };
+  return { toggle, stop, startExternally, stopExternally, destroy, listening, interim };
 }

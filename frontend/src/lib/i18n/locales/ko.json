@@ -411,6 +411,7 @@
   "tasks.numberOfTasks": "작업 수",
   "tasks.parsing": "분석 중...",
   "tasks.addNewTask": "새 작업 추가",
+  "tasks.dictationListening": "듣는 중… 텍스트가 필드에 입력됩니다.",
   "tasks.manual": "수동",
   "tasks.aiGenerated": "AI 생성",
   "tasks.manualDesc": "아래 필드를 작성하여 수동으로 작업을 만듭니다.",

@@ -411,6 +411,7 @@
   "tasks.numberOfTasks": "จำนวนงาน",
   "tasks.parsing": "กำลังวิเคราะห์...",
   "tasks.addNewTask": "เพิ่มงานใหม่",
+  "tasks.dictationListening": "กำลังฟัง… ข้อความจะใส่ในช่อง",
   "tasks.manual": "ด้วยตนเอง",
   "tasks.aiGenerated": "สร้างโดย AI",
   "tasks.manualDesc": "สร้างงานด้วยตนเองโดยกรอกข้อมูลด้านล่าง",

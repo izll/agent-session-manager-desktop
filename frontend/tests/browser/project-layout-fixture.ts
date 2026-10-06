@@ -3,6 +3,7 @@ import { mount, tick } from 'svelte';
 import ProjectLayoutFixture from './project-layout-fixture.svelte';
 import { activeProjectId } from '../../src/lib/stores/projects';
 import { settings } from '../../src/lib/stores/settings';
+import { dictationTarget } from '../../src/lib/stores/dictationTarget';
 import { sessions, selectedSessionId, selectedWindowIdx } from '../../src/lib/stores/sessions';
 
 const fixtureSession = {
@@ -54,6 +55,16 @@ const settingsSaves: unknown[][] = [];
     return (..._args: unknown[]) => () => undefined;
   },
 });
+
+// ?target=field: the dictation that starts is a dialog field's, with that
+// field holding the caret.
+if (new URLSearchParams(location.search).get('target') === 'field') {
+  dictationTarget.set('field');
+  const field = document.createElement('input');
+  field.id = 'dialog-field';
+  document.body.prepend(field);
+  field.focus();
+}
 
 activeProjectId.set('project-a');
 settings.set({

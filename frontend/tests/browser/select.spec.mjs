@@ -46,8 +46,8 @@ async function gotoProjectSettingsFixture(page) {
   await expect(page.locator('body')).toHaveAttribute('data-fixture-ready', 'true', { timeout: 15_000 });
 }
 
-async function gotoProjectLayoutFixture(page) {
-  await page.goto('/tests/browser/project-layout-fixture.html');
+async function gotoProjectLayoutFixture(page, query = '') {
+  await page.goto(`/tests/browser/project-layout-fixture.html${query}`);
   // This fixture compiles the real MainPanel/TabBar graph. A clean npm install
   // measured just over 15 s for the first transform; wait on its explicit
   // post-mount signal with the same cold-start budget as the content fixture.
@@ -149,6 +149,17 @@ test('project switching reapplies project-scoped diff and dictation panel geomet
   await expect(buffer).toHaveCSS('width', '360px');
   await expect(buffer).toHaveCSS('height', '210px');
   expect(pageErrors).toEqual([]);
+});
+
+// Dictating into a dialog's field — a task's title — the panel over the
+// terminal stayed shut: open, it covered the dialog, took the field's caret and
+// emptied itself as each sentence went into the field.
+test('dictation into a field opens no panel and leaves the caret in the field', async ({ page }) => {
+  await gotoProjectLayoutFixture(page, '?target=field');
+  await expect(page.locator('.dictation-mic, .tab-bar').first()).toBeVisible();
+  await page.waitForTimeout(300);
+  await expect(page.locator('.dictation-buffer')).toHaveCount(0);
+  await expect(page.locator('#dialog-field')).toBeFocused();
 });
 
 test('layout gestures cannot save old-project geometry after a project switch', async ({ page }) => {

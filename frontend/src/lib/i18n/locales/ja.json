@@ -411,6 +411,7 @@
   "tasks.numberOfTasks": "タスク数",
   "tasks.parsing": "解析中...",
   "tasks.addNewTask": "新規タスクを追加",
+  "tasks.dictationListening": "聞き取り中… 文字はフィールドに入力されます。",
   "tasks.manual": "手動",
   "tasks.aiGenerated": "AI 生成",
   "tasks.manualDesc": "下のフィールドに入力して手動でタスクを作成します。",

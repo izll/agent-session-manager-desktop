@@ -30,6 +30,7 @@
   import PalettePicker from '../common/PalettePicker.svelte';
   import { settings, saveSettings } from '../../stores/settings';
   import * as DictationService from '../../../../wailsjs/go/main/DictationService';
+  import { dictationTarget, setDictationTarget } from '../../stores/dictationTarget';
   import { EventsOn, EventsOff } from '../../../../wailsjs/runtime/runtime';
   import type { session } from '../../../../wailsjs/go/models';
   import { afterUnsavedChanges } from '../../stores/unsavedChanges';
@@ -632,7 +633,10 @@
       dictationListening = listening;
       if (listening) {
         startVoiceLevelPoll();
-        if (notesFieldCleanup) {
+        dictationIntoField = !notesFieldCleanup && get(dictationTarget) === 'field';
+        if (dictationIntoField) {
+          // A dialog's field owns this dictation: the caret stays in it.
+        } else if (notesFieldCleanup) {
           // Notes field dictation active - focus notes textarea
           tick().then(() => {
             const notesTextarea = document.querySelector('.notes-textarea') as HTMLTextAreaElement;
@@ -669,7 +673,8 @@
         // terminal stayed dead to the keyboard until it was clicked. Sending
         // has its own call for this, which is why closing without sending was
         // the case that kept failing.
-        if (bufferMode) focusTerminalAfterSend('dictation-stopped');
+        if (bufferMode && !dictationIntoField) focusTerminalAfterSend('dictation-stopped');
+        dictationIntoField = false;
       }
     });
 
@@ -727,7 +732,7 @@
     // Listen for interim text from streaming recognizer
     const unsubInterim = EventsOn('dictation:interimText', (text: string) => {
       interimText = text || '';
-      if (streamingMode && dictationListening) {
+      if (streamingMode && dictationListening && !dictationIntoField) {
         appendInterimSpan(interimText);
       }
     });
@@ -798,6 +803,12 @@
 
   // Notes field dictation routing
   let notesFieldCleanup: (() => void) | null = null;
+  /**
+   * The dictation running is a dialog field's — a task's title, say — and not
+   * the terminal's. Its words go into that field, so the panel here would only
+   * cover the dialog, take its caret and empty itself as each sentence left.
+   */
+  let dictationIntoField = false;
 
   function setupNotesFieldListeners() {
     const unsubText = EventsOn('dictation:fieldText', (text: string) => {
@@ -830,7 +841,7 @@
     if (notesFieldCleanup) {
       notesFieldCleanup();
       notesFieldCleanup = null;
-      DictationService.SetDictationTarget('terminal').catch(() => {});
+      setDictationTarget('terminal').catch(() => {});
     }
   }
 
@@ -839,7 +850,7 @@
     try {
       // If starting dictation while notes view is active, target the notes field
       if (!dictationListening && activeView === 'notes') {
-        await DictationService.SetDictationTarget('field');
+        await setDictationTarget('field');
         setupNotesFieldListeners();
       }
       await DictationService.ToggleDictation();
@@ -2346,7 +2357,7 @@
       <!-- Dictation -->
       {#if dictationEnabled}
         <div class="dictation-wrapper">
-          {#if streamingMode && dictationListening}
+          {#if streamingMode && dictationListening && !dictationIntoField}
             <div class="dictation-buffer" class:dragging={isDragging} class:resizing={isResizing} class:live-preview={!bufferMode} bind:this={bufferPanel} style={bufferPanelStyle}>
               <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
               <div class="buffer-header" role="banner" on:mousedown={onHeaderMousedown}>

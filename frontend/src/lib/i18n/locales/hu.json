@@ -407,6 +407,7 @@
   "tasks.numberOfTasks": "Feladatok száma",
   "tasks.parsing": "Feldolgozás...",
   "tasks.addNewTask": "Új feladat hozzáadása",
+  "tasks.dictationListening": "Hallgatlak… a szöveg a mezőbe kerül.",
   "tasks.manual": "Kézi",
   "tasks.aiGenerated": "MI által generált",
   "tasks.manualDesc": "Feladat manuális létrehozása az alábbi mezők kitöltésével.",

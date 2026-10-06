@@ -411,6 +411,7 @@
   "tasks.numberOfTasks": "عدد المهام",
   "tasks.parsing": "جارٍ التحليل...",
   "tasks.addNewTask": "إضافة مهمة جديدة",
+  "tasks.dictationListening": "أستمع… سيُكتب النص في الحقل.",
   "tasks.manual": "يدوي",
   "tasks.aiGenerated": "مُنشأ بالذكاء الاصطناعي",
   "tasks.manualDesc": "أنشئ مهمة يدويًا بملء الحقول أدناه.",

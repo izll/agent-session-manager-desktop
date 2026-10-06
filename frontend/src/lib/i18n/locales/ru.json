@@ -411,6 +411,7 @@
   "tasks.numberOfTasks": "Количество задач",
   "tasks.parsing": "Разбор...",
   "tasks.addNewTask": "Добавить новую задачу",
+  "tasks.dictationListening": "Слушаю… текст попадёт в поле.",
   "tasks.manual": "Вручную",
   "tasks.aiGenerated": "Сгенерировано ИИ",
   "tasks.manualDesc": "Создайте задачу вручную, заполнив поля ниже.",

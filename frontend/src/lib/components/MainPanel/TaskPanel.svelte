@@ -11,7 +11,7 @@
   import Select from '../common/Select.svelte';
   import ConfirmDialog from '../Dialogs/ConfirmDialog.svelte';
   import { createFieldDictation } from '../../utils/dictationField';
-  import * as DictationService from '../../../../wailsjs/go/main/DictationService';
+  import { setDictationTarget } from '../../stores/dictationTarget';
   import { EventsOn } from '../../../../wailsjs/runtime/runtime';
   import { t } from '../../i18n';
   import { offerUndo } from '../../stores/undo';
@@ -354,6 +354,19 @@
 
   // Dictation support - one controller, follows focused field in dialog
   let activeDictationEl: HTMLTextAreaElement | HTMLInputElement | null = null;
+
+  /**
+   * The field dictation writes into when none is focused: the open dialog's
+   * first. Without it a sentence spoken before any field was clicked — or in
+   * the AI mode, whose only field is the prompt — went nowhere.
+   */
+  function defaultModalField(): HTMLTextAreaElement | HTMLInputElement | null {
+    if (showAddTaskModal) return addTitleEl || addPromptEl || addDescEl || null;
+    if (showEditTaskModal) return editTitleEl || editDescEl || null;
+    if (showAddSubtaskModal) return subtaskTitleEl || subtaskDescEl || null;
+    return null;
+  }
+
   const dictation = createFieldDictation(() => {
     // Always prefer currently focused field in dialog (allows switching fields mid-dictation)
     const active = document.activeElement;
@@ -364,10 +377,13 @@
         return activeDictationEl;
       }
     }
-    // Fallback to last known active field (e.g. when terminal steals focus)
+    // Fallback to the last field written into, then to the dialog's first.
+    if (activeDictationEl?.isConnected) return activeDictationEl;
+    activeDictationEl = defaultModalField();
     return activeDictationEl;
-  });
+  }, undefined, () => (showAddTaskModal || showEditTaskModal || showAddSubtaskModal) ? 'field' : 'terminal');
   const dictationListening = dictation.listening;
+  const dictationInterim = dictation.interim;
 
   // Element refs for dictation
   let addTitleEl: HTMLInputElement;
@@ -404,7 +420,7 @@
 
   function setupModalFieldTarget() {
     if (modalFieldCleanup) return; // already set up
-    DictationService.SetDictationTarget('field').catch(() => {});
+    setDictationTarget('field').catch(() => {});
 
     // Listen for hotkey-triggered dictation (state changes we didn't initiate)
     const unsubState = EventsOn('dictation:state', (isListening: boolean) => {
@@ -417,11 +433,7 @@
             const inDialog = active.closest('.dialog-content');
             if (inDialog) activeDictationEl = active as HTMLTextAreaElement | HTMLInputElement;
           }
-          if (!activeDictationEl) {
-            if (showAddTaskModal) activeDictationEl = addTitleEl || addDescEl;
-            else if (showEditTaskModal) activeDictationEl = editTitleEl || editDescEl;
-            else if (showAddSubtaskModal) activeDictationEl = subtaskTitleEl || subtaskDescEl;
-          }
+          if (!activeDictationEl) activeDictationEl = defaultModalField();
         }
         dictation.startExternally();
       } else if (!isListening && $dictationListening) {
@@ -429,13 +441,13 @@
         dictation.stopExternally();
         activeDictationEl = null;
         // Re-set field target since modal is still open (for next hotkey press)
-        DictationService.SetDictationTarget('field').catch(() => {});
+        setDictationTarget('field').catch(() => {});
       }
     });
 
     modalFieldCleanup = () => {
       unsubState();
-      DictationService.SetDictationTarget('terminal').catch(() => {});
+      setDictationTarget('terminal').catch(() => {});
     };
   }
 
@@ -1716,13 +1728,21 @@
       <div class="dialog-header">
         <h2>{$t('tasks.addNewTask')}</h2>
         <div class="dialog-header-actions">
-          <button class="dialog-header-btn dictation-btn" class:active={$dictationListening} on:click|preventDefault={toggleModalDictation} title={$t('tabBar.dictateToField')} aria-label={$t('tabBar.dictateToField')}>
+          <button class="dialog-header-btn dictation-btn" class:active={$dictationListening} on:mousedown|preventDefault on:click|preventDefault={toggleModalDictation} title={$t('tabBar.dictateToField')} aria-label={$t('tabBar.dictateToField')}>
             <svg width="16" height="16" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
           </button>
           <DialogCloseButton on:click={() => showAddTaskModal = false} />
         </div>
       </div>
       <div class="dialog-body">
+        {#if $dictationListening}
+          <!-- What is being heard, until it is final and goes into the field:
+               the dictation panel over the terminal stays shut for a field. -->
+          <div class="dictation-live" aria-live="polite">
+            <span class="dictation-dot"></span>
+            {#if $dictationInterim}<span class="dictation-words">{$dictationInterim}</span>{:else}<span class="dictation-hint">{$t('tasks.dictationListening')}</span>{/if}
+          </div>
+        {/if}
         <!-- Mode toggle. The AI half asks Task Master to write the task from a
              description, so with the integration off there is only one way to
              add a task and no choice to present. -->
@@ -1853,13 +1873,21 @@
       <div class="dialog-header">
         <h2>{$t('tasks.editTask')}</h2>
         <div class="dialog-header-actions">
-          <button class="dialog-header-btn dictation-btn" class:active={$dictationListening} on:click|preventDefault={toggleModalDictation} title={$t('tabBar.dictateToField')} aria-label={$t('tabBar.dictateToField')}>
+          <button class="dialog-header-btn dictation-btn" class:active={$dictationListening} on:mousedown|preventDefault on:click|preventDefault={toggleModalDictation} title={$t('tabBar.dictateToField')} aria-label={$t('tabBar.dictateToField')}>
             <svg width="16" height="16" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
           </button>
           <DialogCloseButton on:click={() => showEditTaskModal = false} />
         </div>
       </div>
       <div class="dialog-body">
+        {#if $dictationListening}
+          <!-- What is being heard, until it is final and goes into the field:
+               the dictation panel over the terminal stays shut for a field. -->
+          <div class="dictation-live" aria-live="polite">
+            <span class="dictation-dot"></span>
+            {#if $dictationInterim}<span class="dictation-words">{$dictationInterim}</span>{:else}<span class="dictation-hint">{$t('tasks.dictationListening')}</span>{/if}
+          </div>
+        {/if}
         <label>
           {$t('tasks.titleLabel')}
           <input
@@ -1954,13 +1982,21 @@
       <div class="dialog-header">
         <h2 title={addSubtaskTitle}>{addSubtaskTitle}</h2>
         <div class="dialog-header-actions">
-          <button class="dialog-header-btn dictation-btn" class:active={$dictationListening} on:click|preventDefault={toggleModalDictation} title={$t('tabBar.dictateToField')} aria-label={$t('tabBar.dictateToField')}>
+          <button class="dialog-header-btn dictation-btn" class:active={$dictationListening} on:mousedown|preventDefault on:click|preventDefault={toggleModalDictation} title={$t('tabBar.dictateToField')} aria-label={$t('tabBar.dictateToField')}>
             <svg width="16" height="16" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
           </button>
           <DialogCloseButton on:click={() => showAddSubtaskModal = false} />
         </div>
       </div>
       <div class="dialog-body">
+        {#if $dictationListening}
+          <!-- What is being heard, until it is final and goes into the field:
+               the dictation panel over the terminal stays shut for a field. -->
+          <div class="dictation-live" aria-live="polite">
+            <span class="dictation-dot"></span>
+            {#if $dictationInterim}<span class="dictation-words">{$dictationInterim}</span>{:else}<span class="dictation-hint">{$t('tasks.dictationListening')}</span>{/if}
+          </div>
+        {/if}
         <label>
           {$t('tasks.titleLabel')}
           <input
@@ -3206,6 +3242,30 @@
 
 
   /* The shared header button (style.css); listening also pulses. */
+  .dictation-live {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+    padding: 7px 10px;
+    border-radius: 6px;
+    border: 1px solid rgba(var(--accent-rgb), 0.35);
+    background: rgba(var(--accent-rgb), 0.08);
+    font-size: 13px;
+    color: #e4e4e7;
+  }
+  .dictation-dot {
+    width: 8px;
+    height: 8px;
+    flex-shrink: 0;
+    border-radius: 50%;
+    background: #ef4444;
+    animation: dictation-pulse 1.2s ease-in-out infinite;
+  }
+  @keyframes dictation-pulse { 50% { opacity: 0.35; } }
+  .dictation-words { font-style: italic; overflow-wrap: anywhere; }
+  .dictation-hint { color: #9ca3af; }
+
   .dictation-btn.active {
     animation: mic-pulse 1.5s ease-in-out infinite;
   }

@@ -411,6 +411,7 @@
   "tasks.numberOfTasks": "Počet úkolů",
   "tasks.parsing": "Zpracovávání...",
   "tasks.addNewTask": "Přidat nový úkol",
+  "tasks.dictationListening": "Poslouchám… text půjde do pole.",
   "tasks.manual": "Ručně",
   "tasks.aiGenerated": "Generováno AI",
   "tasks.manualDesc": "Vytvořte úkol ručně vyplněním polí níže.",
