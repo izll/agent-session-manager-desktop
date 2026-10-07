@@ -407,6 +407,8 @@ export function RevertDiffHunk(arg1:string,arg2:string,arg3:number,arg4:string,a
 
 export function RunCommand(arg1:string,arg2:string,arg3:number,arg4:Record<string, string>,arg5:string):Promise<number>;
 
+export function RunningTabCommands():Promise<Array<main.RunningTabCommand>>;
+
 export function SaveCommand(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string,arg6:boolean,arg7:string):Promise<string>;
 
 export function SaveCommandGroup(arg1:string,arg2:string):Promise<string>;
@@ -463,6 +465,8 @@ export function SetTabFontSize(arg1:string,arg2:number,arg3:number,arg4:string):
 
 export function SetTabNotePages(arg1:string,arg2:number,arg3:Array<session.NotePage>,arg4:string):Promise<void>;
 
+export function SetTabRunCommand(arg1:string,arg2:number,arg3:string,arg4:string):Promise<void>;
+
 export function SetTabStatusBar(arg1:string,arg2:number,arg3:number,arg4:string):Promise<void>;
 
 export function SetTabStatusLineVisibility(arg1:string,arg2:number,arg3:boolean,arg4:string):Promise<void>;
@@ -479,6 +483,8 @@ export function StartSession(arg1:string,arg2:string):Promise<void>;
 
 export function StartSessionWithResume(arg1:string,arg2:string,arg3:string):Promise<void>;
 
+export function StartTabCommand(arg1:string,arg2:number,arg3:string):Promise<void>;
+
 export function StartTabOnly(arg1:string,arg2:number,arg3:string):Promise<void>;
 
 export function StopBackgroundAgent(arg1:string,arg2:string):Promise<void>;
@@ -488,6 +494,8 @@ export function StopCodexDaemon(arg1:string,arg2:string):Promise<void>;
 export function StopSession(arg1:string,arg2:string):Promise<void>;
 
 export function StopTab(arg1:string,arg2:number,arg3:string):Promise<void>;
+
+export function StopTabCommand(arg1:string,arg2:number,arg3:string):Promise<void>;
 
 export function StopTaskMaster(arg1:string,arg2:string):Promise<void>;
 

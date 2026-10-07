@@ -806,6 +806,10 @@ export function RunCommand(arg1, arg2, arg3, arg4, arg5) {
   return window['go']['main']['App']['RunCommand'](arg1, arg2, arg3, arg4, arg5);
 }
 
+export function RunningTabCommands() {
+  return window['go']['main']['App']['RunningTabCommands']();
+}
+
 export function SaveCommand(arg1, arg2, arg3, arg4, arg5, arg6, arg7) {
   return window['go']['main']['App']['SaveCommand'](arg1, arg2, arg3, arg4, arg5, arg6, arg7);
 }
@@ -918,6 +922,10 @@ export function SetTabNotePages(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['SetTabNotePages'](arg1, arg2, arg3, arg4);
 }
 
+export function SetTabRunCommand(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['SetTabRunCommand'](arg1, arg2, arg3, arg4);
+}
+
 export function SetTabStatusBar(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['SetTabStatusBar'](arg1, arg2, arg3, arg4);
 }
@@ -950,6 +958,10 @@ export function StartSessionWithResume(arg1, arg2, arg3) {
   return window['go']['main']['App']['StartSessionWithResume'](arg1, arg2, arg3);
 }
 
+export function StartTabCommand(arg1, arg2, arg3) {
+  return window['go']['main']['App']['StartTabCommand'](arg1, arg2, arg3);
+}
+
 export function StartTabOnly(arg1, arg2, arg3) {
   return window['go']['main']['App']['StartTabOnly'](arg1, arg2, arg3);
 }
@@ -968,6 +980,10 @@ export function StopSession(arg1, arg2) {
 
 export function StopTab(arg1, arg2, arg3) {
   return window['go']['main']['App']['StopTab'](arg1, arg2, arg3);
+}
+
+export function StopTabCommand(arg1, arg2, arg3) {
+  return window['go']['main']['App']['StopTabCommand'](arg1, arg2, arg3);
 }
 
 export function StopTaskMaster(arg1, arg2) {

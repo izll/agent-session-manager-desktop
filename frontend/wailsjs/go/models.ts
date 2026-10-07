@@ -1693,6 +1693,26 @@ export namespace main {
 	        this.added = source["added"];
 	    }
 	}
+	export class RunningTabCommand {
+	    sessionId: string;
+	    sessionName: string;
+	    windowIdx: number;
+	    tabName: string;
+	    command: string;
+
+	    static createFrom(source: any = {}) {
+	        return new RunningTabCommand(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.sessionId = source["sessionId"];
+	        this.sessionName = source["sessionName"];
+	        this.windowIdx = source["windowIdx"];
+	        this.tabName = source["tabName"];
+	        this.command = source["command"];
+	    }
+	}
 	export class SSHConfigHostInfo {
 	    alias: string;
 	    hostName: string;
@@ -2264,6 +2284,8 @@ export namespace main {
 	    unreachable?: boolean;
 	    missing?: boolean;
 	    hideStatusLine: boolean;
+	    runCommand?: string;
+	    runState?: string;
 	    update?: session.UpdateNotice;
 
 	    static createFrom(source: any = {}) {
@@ -2283,6 +2305,8 @@ export namespace main {
 	        this.unreachable = source["unreachable"];
 	        this.missing = source["missing"];
 	        this.hideStatusLine = source["hideStatusLine"];
+	        this.runCommand = source["runCommand"];
+	        this.runState = source["runState"];
 	        this.update = this.convertValues(source["update"], session.UpdateNotice);
 	    }
 
@@ -3000,6 +3024,7 @@ export namespace session {
 	    background_color?: string;
 	    work_dir?: string;
 	    hide_status_line?: boolean;
+	    run_command?: string;
 	    worktree_dir?: string;
 	    worktree_branch?: string;
 	    worktree_repo_root?: string;
@@ -3031,6 +3056,7 @@ export namespace session {
 	        this.background_color = source["background_color"];
 	        this.work_dir = source["work_dir"];
 	        this.hide_status_line = source["hide_status_line"];
+	        this.run_command = source["run_command"];
 	        this.worktree_dir = source["worktree_dir"];
 	        this.worktree_branch = source["worktree_branch"];
 	        this.worktree_repo_root = source["worktree_repo_root"];
@@ -3160,6 +3186,7 @@ export namespace session {
 	    Followed: boolean;
 	    Agent: string;
 	    Dead: boolean;
+	    ExitStatus: number;
 	    TextColor: string;
 	    BackgroundColor: string;
 
@@ -3175,6 +3202,7 @@ export namespace session {
 	        this.Followed = source["Followed"];
 	        this.Agent = source["Agent"];
 	        this.Dead = source["Dead"];
+	        this.ExitStatus = source["ExitStatus"];
 	        this.TextColor = source["TextColor"];
 	        this.BackgroundColor = source["BackgroundColor"];
 	    }

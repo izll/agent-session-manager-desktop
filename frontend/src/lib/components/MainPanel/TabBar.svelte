@@ -15,7 +15,7 @@
   import { isMovableTab, isOnlyTab } from '../../utils/tabMoveRules';
   import { askNewSessionFor, beginTabDrag, endTabDrag, tabMovePrompt } from '../../utils/tabMove';
   import Toast from '../common/Toast.svelte';
-  import { sessions, selectedSessionId, selectedWindowIdx, selectWindow, selectedSession, startSession, stopSession, stopTab, restartTab, deleteSession, deleteTab, toggleFavorite, renameTab, reorderTab, loadSessions } from '../../stores/sessions';
+  import { sessions, selectedSessionId, selectedWindowIdx, selectWindow, selectedSession, startSession, stopSession, stopTab, startTabCommand, stopTabCommand, restartTab, deleteSession, deleteTab, toggleFavorite, renameTab, reorderTab, loadSessions } from '../../stores/sessions';
   import type { Session } from '../../stores/sessions';
   import { agents, getAgentName } from '../../stores/agents';
   import { get } from 'svelte/store';
@@ -491,6 +491,10 @@
   let deleteSessionTarget: { projectId: string; sessionId: string; name: string } | null = null;
   let showDeleteTabConfirm = false;
   let deleteTabTarget: { projectId: string; sessionId: string; windowIdx: number } | null = null;
+  let showRunCommandEditor = false;
+  let runCommandValue = '';
+  let runCommandTarget: { projectId: string; sessionId: string; windowIdx: number; generation: number } | null = null;
+  let runCommandGeneration = 0;
   let showExtraArgsEditor = false;
   let showTabColorDialog = false;
   let tabColorTarget: TabColorTarget | null = null;
@@ -515,14 +519,15 @@
   // The dialogs this component owns, by state rather than by rendered DOM.
   function tabBarDialogOpen(): boolean {
     return showNewTabDialog || showQuickTerminalDialog || showDeleteConfirm ||
-      showDeleteTabConfirm || showExtraArgsEditor || showTabColorDialog || showMoveTabDialog ||
+      showDeleteTabConfirm || showStopRunnerConfirm || showRunCommandEditor || showExtraArgsEditor ||
+      showTabColorDialog || showMoveTabDialog ||
       get(tabMovePrompt) !== null;
   }
 
   // Restore terminal focus when TabBar-local dialogs close
   let prevTabBarDialogOpen = false;
   $: {
-    const open = showNewTabDialog || showQuickTerminalDialog || showDeleteConfirm || showDeleteTabConfirm || showExtraArgsEditor || showTabColorDialog || showMoveTabDialog || $tabMovePrompt !== null;
+    const open = showNewTabDialog || showQuickTerminalDialog || showDeleteConfirm || showDeleteTabConfirm || showStopRunnerConfirm || showRunCommandEditor || showExtraArgsEditor || showTabColorDialog || showMoveTabDialog || $tabMovePrompt !== null;
     if (prevTabBarDialogOpen && !open) {
       focusTerminal();
     }
@@ -1075,6 +1080,7 @@
         Name: sess.name,
         Agent: sess.agent,
         Dead: false,
+        ExitStatus: -1,
         Active: true,
         Followed: false,
         TextColor: sess.tabTextColor || '',
@@ -1088,6 +1094,9 @@
           Name: fw.name || `Tab ${fw.index}`,
           Agent: fw.agent || sess.agent,
           Dead: false,
+          // Nothing has been asked of tmux yet, so the status is unknown
+          // rather than zero, which would read as "exited cleanly".
+          ExitStatus: -1,
           Active: false,
           Followed: true,
           TextColor: fw.text_color || '',
@@ -1170,6 +1179,75 @@
     }
     return map;
   })();
+
+  // Per-tab runner state, keyed by window index. Only a tab with a command
+  // of its own appears here, which is what keeps the start/stop control off
+  // every other tab.
+  $: tabRunByIdx = (() => {
+    const map: Record<number, { command: string; state: 'running' | 'stopped' | 'failed' }> = {};
+    const list = $selectedSessionId ? $tabStatuses[$selectedSessionId] : undefined;
+    if (list) {
+      for (const ts of list) {
+        if (ts.runCommand && ts.runState) {
+          map[ts.windowIdx] = { command: ts.runCommand, state: ts.runState };
+        }
+      }
+    }
+    return map;
+  })();
+
+  // Which runner is mid-start or mid-stop, so the control shows it is
+  // working and a second click cannot stack two operations.
+  let runnerBusyIdx: number | null = null;
+  let showStopRunnerConfirm = false;
+  let stopRunnerTarget: { projectId: string; sessionId: string; windowIdx: number; command: string } | null = null;
+
+  /** ▶ starts; ■ asks first, since stopping a server loses what it held. */
+  async function toggleRunner(windowIdx: number) {
+    if (runnerBusyIdx !== null) return;
+    const runner = tabRunByIdx[windowIdx];
+    const sessionId = $selectedSessionId;
+    if (!runner || !sessionId) return;
+
+    if (runner.state === 'running') {
+      stopRunnerTarget = {
+        projectId: get(activeProjectId), sessionId, windowIdx, command: runner.command,
+      };
+      showStopRunnerConfirm = true;
+      return;
+    }
+    await runRunnerOperation(sessionId, windowIdx, () => startTabCommand(sessionId, windowIdx));
+  }
+
+  function confirmStopRunner() {
+    const target = stopRunnerTarget;
+    stopRunnerTarget = null;
+    if (!target) return;
+    // The same identity re-check the tab deletion does: a confirmation can
+    // outlive the project or session it was asked about.
+    if ($selectedSessionId !== target.sessionId || get(activeProjectId) !== target.projectId) return;
+    void runRunnerOperation(target.sessionId, target.windowIdx,
+      () => stopTabCommand(target.sessionId, target.windowIdx));
+    focusTerminal();
+  }
+
+  function cancelStopRunner() {
+    stopRunnerTarget = null;
+    focusTerminal();
+  }
+
+  async function runRunnerOperation(sessionId: string, windowIdx: number, operation: () => Promise<void>) {
+    runnerBusyIdx = windowIdx;
+    try {
+      await operation();
+    } catch (e) {
+      errorMessage = String(e);
+      errorToastRevision++;
+      showErrorToast = true;
+    } finally {
+      if (runnerBusyIdx === windowIdx) runnerBusyIdx = null;
+    }
+  }
 
   // Per-tab agent update notice, keyed by window index, for the small arrow
   // after the tab's name (the session list shows the same).
@@ -1688,6 +1766,60 @@
     closeTabContextMenu();
   }
 
+  function tabContextSetRunCommand() {
+    if (tabContextMenuIndex !== null && $selectedSessionId) {
+      const generation = ++runCommandGeneration;
+      runCommandValue = tabRunByIdx[tabContextMenuIndex]?.command ?? '';
+      runCommandTarget = {
+        projectId: get(activeProjectId), sessionId: $selectedSessionId,
+        windowIdx: tabContextMenuIndex, generation,
+      };
+      showRunCommandEditor = true;
+    }
+    closeTabContextMenu();
+  }
+
+  async function saveRunCommand() {
+    const target = runCommandTarget;
+    if (!target || target.generation !== runCommandGeneration ||
+        $selectedSessionId !== target.sessionId || $activeProjectId !== target.projectId) return;
+    const submitted = runCommandValue.trim();
+    try {
+      await App.SetTabRunCommand(target.sessionId, target.windowIdx, submitted, target.projectId);
+      if (target === runCommandTarget && target.generation === runCommandGeneration) {
+        await loadSessions();
+      }
+    } catch (e) {
+      if (target === runCommandTarget && target.generation === runCommandGeneration) {
+        errorMessage = describeBackendError(e);
+        errorToastRevision++;
+        showErrorToast = true;
+      }
+    } finally {
+      if (target === runCommandTarget && target.generation === runCommandGeneration) {
+        showRunCommandEditor = false;
+        runCommandTarget = null;
+      }
+    }
+  }
+
+  function cancelRunCommand() {
+    runCommandGeneration++;
+    showRunCommandEditor = false;
+    runCommandTarget = null;
+  }
+
+  function handleRunCommandKeydown(e: KeyboardEvent) {
+    e.stopPropagation();
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      void saveRunCommand();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      cancelRunCommand();
+    }
+  }
+
   async function saveExtraArgs() {
     const target = extraArgsTarget;
     if (!target || target.generation !== extraArgsGeneration || $selectedSessionId !== target.sessionId ||
@@ -1967,6 +2099,13 @@
     showDeleteTabConfirm = false;
     cancelTabDelete();
   }
+  $: if (runCommandTarget && ($selectedSessionId !== runCommandTarget.sessionId || $activeProjectId !== runCommandTarget.projectId)) {
+    cancelRunCommand();
+  }
+  $: if (stopRunnerTarget && ($selectedSessionId !== stopRunnerTarget.sessionId || $activeProjectId !== stopRunnerTarget.projectId)) {
+    showStopRunnerConfirm = false;
+    stopRunnerTarget = null;
+  }
   $: if (extraArgsTarget && ($selectedSessionId !== extraArgsTarget.sessionId || $activeProjectId !== extraArgsTarget.projectId)) {
     cancelExtraArgs();
   }
@@ -2080,6 +2219,39 @@
             on:drop={(e) => handleTabDrop(e, winArrayIdx)}
           >
             <span class="tab-indicator" style="background: {getAgentColor(win.Agent)}"></span>
+            {#if tabRunByIdx[win.Index]}
+              <!-- A span, not a button: this sits inside the tab's own
+                   button, and a button inside a button is invalid HTML that
+                   browsers resolve by dropping one of them. stopPropagation
+                   keeps ▶/■ from also selecting the tab. -->
+              <span
+                class="tab-run-btn"
+                class:running={tabRunByIdx[win.Index].state === 'running'}
+                class:failed={tabRunByIdx[win.Index].state === 'failed'}
+                role="button"
+                tabindex="-1"
+                aria-label={tabRunByIdx[win.Index].state === 'running'
+                  ? $t('runner.stopTitle', { command: tabRunByIdx[win.Index].command })
+                  : $t('runner.startTitle', { command: tabRunByIdx[win.Index].command })}
+                title={tabRunByIdx[win.Index].state === 'running'
+                  ? $t('runner.stopTitle', { command: tabRunByIdx[win.Index].command })
+                  : tabRunByIdx[win.Index].state === 'failed'
+                    ? $t('runner.failedTitle', { command: tabRunByIdx[win.Index].command })
+                    : $t('runner.startTitle', { command: tabRunByIdx[win.Index].command })}
+                on:click|stopPropagation={() => toggleRunner(win.Index)}
+                on:keydown|stopPropagation={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); void toggleRunner(win.Index); }
+                }}
+              >
+                {#if runnerBusyIdx === win.Index}
+                  <span class="runner-spin">◌</span>
+                {:else if tabRunByIdx[win.Index].state === 'running'}
+                  ■
+                {:else}
+                  ▶
+                {/if}
+              </span>
+            {/if}
             {#if currentSessionStatus === 'running' && !win.Dead && tabActivityByIdx[win.Index] && tabActivityByIdx[win.Index] !== 'idle'}
               <!-- Live per-tab status dot: orange = busy, cyan = waiting input -->
               <span class="tab-status-dot" title={tabActivityByIdx[win.Index] === 'waiting' ? 'Bemenetre vár' : 'Dolgozik'}>
@@ -2223,6 +2395,16 @@
           </svg>
           {$t('tabBar.resetFontSize')}
         </button>
+        <!-- Not on the session's own tab: that one is the agent's, and a
+             second command wanting the same pane has nowhere to go. -->
+        {#if tabContextMenuIndex !== null && tabContextMenuIndex !== 0}
+          <button class="tab-context-menu-item" on:click={tabContextSetRunCommand}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="5 3 19 12 5 21 5 3"/>
+            </svg>
+            {tabRunByIdx[tabContextMenuIndex] ? $t('runner.editCommand') : $t('runner.setCommand')}
+          </button>
+        {/if}
         {#if tabContextMenuIndex !== null && windows.find(w => w.Index === tabContextMenuIndex)?.Agent !== 'terminal' && windows.find(w => w.Index === tabContextMenuIndex)?.Agent !== 'custom'}
           <button class="tab-context-menu-item" on:click={tabContextEditExtraArgs}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -2537,6 +2719,17 @@
 />
 
 <ConfirmDialog
+  bind:show={showStopRunnerConfirm}
+  title={$t('runner.stopConfirmTitle')}
+  message={$t('runner.stopConfirmMessage', { command: stopRunnerTarget?.command ?? '' })}
+  confirmText={$t('runner.stopConfirm')}
+  cancelText={$t('common.cancel')}
+  variant="warning"
+  on:confirm={confirmStopRunner}
+  on:cancel={cancelStopRunner}
+/>
+
+<ConfirmDialog
   bind:show={showDeleteTabConfirm}
   title={$t('tabBar.deleteTabTitle')}
   message={$t('tabBar.deleteTabMessage')}
@@ -2546,6 +2739,33 @@
   on:confirm={confirmDeleteTab}
   on:cancel={cancelTabDelete}
 />
+
+{#if showRunCommandEditor}
+  <div class="dialog-overlay" use:autoFocusDialog on:click|self={cancelRunCommand} on:keydown={handleRunCommandKeydown} role="dialog" aria-modal="true" tabindex="-1">
+    <div class="dialog-content extra-args-dialog">
+      <div class="dialog-header">
+        <h2>{$t('runner.editTitle')}</h2>
+        <DialogCloseButton on:click={cancelRunCommand} />
+      </div>
+      <div class="dialog-body">
+        <!-- svelte-ignore a11y-autofocus -->
+        <input
+          class="extra-args-input"
+          type="text"
+          bind:value={runCommandValue}
+          on:keydown={handleRunCommandKeydown}
+          placeholder="./gradlew bootRun"
+          autofocus
+        />
+        <span class="extra-args-hint">{$t('runner.editHint')}</span>
+      </div>
+      <div class="dialog-footer">
+        <button class="btn-cancel" on:click={cancelRunCommand}>{$t('common.cancel')}</button>
+        <button class="btn-primary" on:click={saveRunCommand}>{$t('common.save')}</button>
+      </div>
+    </div>
+  </div>
+{/if}
 
 {#if showExtraArgsEditor}
   <div class="dialog-overlay" use:autoFocusDialog on:click|self={cancelExtraArgs} on:keydown={handleExtraArgsKeydown} role="dialog" aria-modal="true" tabindex="-1">
@@ -2763,6 +2983,19 @@
   }
 
   /* Inline per-tab activity dot (busy/waiting), shown before the agent icon. */
+  .tab-run-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 16px; height: 16px; flex-shrink: 0; cursor: pointer;
+    border-radius: 3px; font-size: 9px; line-height: 1;
+    color: #a1a1aa; background: rgba(255, 255, 255, 0.07);
+  }
+  .tab-run-btn:hover { color: #e4e4e7; background: rgba(255, 255, 255, 0.14); }
+  .tab-run-btn.running { color: #fb7185; background: rgba(251, 113, 133, 0.14); }
+  .tab-run-btn.running:hover { background: rgba(251, 113, 133, 0.24); }
+  .tab-run-btn.failed { color: #fbbf24; background: rgba(251, 191, 36, 0.14); }
+  .runner-spin { display: inline-block; animation: runner-spin 900ms linear infinite; }
+  @keyframes runner-spin { to { transform: rotate(360deg); } }
+
   .tab-status-dot {
     display: inline-flex;
     align-items: center;

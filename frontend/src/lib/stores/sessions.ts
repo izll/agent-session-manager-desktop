@@ -329,6 +329,41 @@ export async function stopSession(id: string) {
   }
 }
 
+/**
+ * Start a runner tab's own command.
+ *
+ * The pool entry is dropped first: starting respawns a dead pane, and a
+ * WebSocket still attached to the old one would draw into a pane that no
+ * longer exists — the same reason restartTab does it.
+ */
+export async function startTabCommand(id: string, windowIdx: number) {
+  const target = projectTarget();
+  try {
+    dropPoolForWindow(id, windowIdx);
+    await App.StartTabCommand(id, windowIdx, target.projectId);
+    if (!projectTargetIsCurrent(target)) return;
+    await loadSessions();
+  } catch (e) {
+    if (!projectTargetIsCurrent(target)) return;
+    error.set(String(e));
+    throw e;
+  }
+}
+
+/** Stop a runner tab's own command: Ctrl+C, then the pane if it ignores it. */
+export async function stopTabCommand(id: string, windowIdx: number) {
+  const target = projectTarget();
+  try {
+    await App.StopTabCommand(id, windowIdx, target.projectId);
+    if (!projectTargetIsCurrent(target)) return;
+    await loadSessions();
+  } catch (e) {
+    if (!projectTargetIsCurrent(target)) return;
+    error.set(String(e));
+    throw e;
+  }
+}
+
 export async function stopTab(id: string, windowIdx: number) {
   const target = projectTarget();
   try {

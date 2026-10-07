@@ -28,5 +28,15 @@ test('the palette and the stopped tab bar list one tab per index', () => {
 test('the backend reports one status per tab index', () => {
   const app = read('../../app.go');
   assert.match(app, /listed := map\[int\]bool\{mainWindowIdx: true\}/);
-  assert.match(app, /if !listed\[fw\.Index\] && !fw\.Stopped \{\n\t+listed\[fw\.Index\] = true/);
+  // An index already listed is skipped, and the index is recorded for the
+  // next one — the duplicate guard itself, whatever else the loop grows.
+  assert.match(app, /if listed\[fw\.Index\] \|\|[^\n]*\{\n\t+continue\n/);
+  assert.match(app, /\n\t+listed\[fw\.Index\] = true\n/);
+});
+
+// A stopped tab is left out of the status sweep, except a runner: its whole
+// point is that it can be started again, and dropping it took the ▶ away the
+// moment it was stopped.
+test('a stopped runner tab is still reported', () => {
+  assert.match(read('../../app.go'), /fw\.Stopped && fw\.RunCommand == ""/);
 });

@@ -59,6 +59,12 @@ export interface TabStatusInfo {
   // Set when this tab's server answered but holds no window for it: the tab
   // is waiting to be started there, not failing.
   missing?: boolean;
+  // The build or server command this tab is the home of, empty for every
+  // other tab. Its presence is what gives the tab a start/stop control.
+  runCommand?: string;
+  // How that command is doing: running, stopped (finished or not started)
+  // or failed (it exited non-zero).
+  runState?: 'running' | 'stopped' | 'failed';
   // The agent's own notice that a newer version is waiting. A blocking one
   // (Codex's update prompt) also makes activity 'waiting'.
   update?: UpdateNotice;
