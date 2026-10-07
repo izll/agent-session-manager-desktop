@@ -48,11 +48,13 @@ func (a *App) GetRunnerSuggestions(sessionID string, windowIdx int) ([]RunnerSug
 		return nil, nil
 	}
 
-	// Mark the ones already saved. Compared on the command text rather than
-	// the name, since the name is the user's to change and the text is what
+	// Mark the ones already saved, in either library: a suggestion added to
+	// this project last week must not be offered again merely because it is
+	// not in the shared list. Compared on the command text rather than the
+	// name, since the name is the user's to change and the text is what
 	// would actually be duplicated.
 	saved := make(map[string]bool)
-	if lib, err := a.storage.LoadCommands(); err == nil {
+	for _, lib := range a.bothCommandLibraries() {
 		for _, c := range lib.Commands {
 			saved[strings.TrimSpace(c.Command)] = true
 		}
@@ -69,6 +71,21 @@ func (a *App) GetRunnerSuggestions(sessionID string, windowIdx int) ([]RunnerSug
 		})
 	}
 	return out, nil
+}
+
+// bothCommandLibraries returns the libraries a saved command can be in, each
+// one skipped when it cannot be read: this is used to avoid offering a
+// duplicate, where a failed read means one fewer thing known, not an error
+// worth failing the list for.
+func (a *App) bothCommandLibraries() []*session.CommandLibrary {
+	var out []*session.CommandLibrary
+	if shared, err := a.storage.LoadCommands(); err == nil && shared != nil {
+		out = append(out, shared)
+	}
+	if project, err := a.storage.LoadProjectCommands(); err == nil && project != nil {
+		out = append(out, project)
+	}
+	return out
 }
 
 // AddRunnerSuggestion saves one suggested command to the library and returns
@@ -90,11 +107,30 @@ func (a *App) AddRunnerSuggestion(name, command, runIn string) (string, error) {
 		runIn = session.RunInCurrent
 	}
 
+	// A build command belongs to the project it builds, so it goes to that
+	// project's library when there is one. With no named project active there
+	// is no such library, and the shared one is the only place it can go.
+	update := a.storage.UpdateProjectCommands
+	if a.storage.GetActiveProjectID() == "" {
+		update = a.storage.UpdateCommands
+	}
+
+	// Adding the same suggestion twice is a no-op rather than an error: the
+	// list marks what is already there, but two clicks in a row should not
+	// produce two identical entries. Checked across both libraries, since a
+	// duplicate in either is still a duplicate in the one list the user sees.
+	for _, lib := range a.bothCommandLibraries() {
+		for i := range lib.Commands {
+			if strings.TrimSpace(lib.Commands[i].Command) == command {
+				return lib.Commands[i].ID, nil
+			}
+		}
+	}
+
 	var newID string
-	err := a.storage.UpdateCommands(func(lib *session.CommandLibrary) error {
-		// Adding the same suggestion twice is a no-op rather than an error:
-		// the list marks what is already there, but two clicks in a row
-		// should not produce two identical entries.
+	err := update(func(lib *session.CommandLibrary) error {
+		// Re-checked under the lock: another window may have added it between
+		// the check above and this write.
 		for i := range lib.Commands {
 			if strings.TrimSpace(lib.Commands[i].Command) == command {
 				newID = lib.Commands[i].ID

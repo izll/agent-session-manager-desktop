@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"strings"
@@ -23,8 +24,11 @@ type SavedCommandInfo struct {
 	// RunIn is "current", "newtab" or "background" — the tab the command was
 	// picked from, a new tab switched to, or a new tab left unselected.
 	// Always one of the three: the older stored form is resolved here.
-	RunIn    string `json:"runIn"`
-	UseCount int    `json:"useCount"`
+	RunIn string `json:"runIn"`
+	// ProjectOnly marks a command kept with this project rather than shared
+	// across all of them, so the UI can group and label it.
+	ProjectOnly bool `json:"projectOnly"`
+	UseCount    int  `json:"useCount"`
 	// Placeholders is derived, not stored: the UI asks for these before
 	// sending, and deriving it here keeps one definition of what counts.
 	// Each carries the default written as {name:default}, if any.
@@ -45,39 +49,107 @@ type CommandLibraryInfo struct {
 }
 
 // GetCommands returns the saved commands, ordered for the picker.
+//
+// Both libraries at once, the project's own first: a build command belongs to
+// the project it builds, while "tail the deploy log" belongs everywhere, and
+// someone looking for either wants one list rather than a place to look
+// twice. Within each, the usual most-used-first order.
 func (a *App) GetCommands() (*CommandLibraryInfo, error) {
-	lib, err := a.storage.LoadCommands()
+	shared, err := a.storage.LoadCommands()
 	if err != nil {
 		return nil, err
 	}
-	session.SortCommands(lib.Commands)
-	session.SortGroups(lib.Groups)
+	// A project library that cannot be read must not hide the shared one,
+	// which is the list most commands are in.
+	project, projectErr := a.storage.LoadProjectCommands()
+	if projectErr != nil || project == nil {
+		project = &session.CommandLibrary{}
+	}
+	session.SortCommands(shared.Commands)
+	session.SortGroups(shared.Groups)
+	session.SortCommands(project.Commands)
+	session.SortGroups(project.Groups)
 
 	out := &CommandLibraryInfo{
-		Commands: make([]SavedCommandInfo, 0, len(lib.Commands)),
-		Groups:   make([]CommandGroupInfo, 0, len(lib.Groups)),
+		Commands: make([]SavedCommandInfo, 0, len(shared.Commands)+len(project.Commands)),
+		Groups:   make([]CommandGroupInfo, 0, len(shared.Groups)+len(project.Groups)),
 	}
-	for _, c := range lib.Commands {
-		out.Commands = append(out.Commands, SavedCommandInfo{
-			ID:           c.ID,
-			Name:         c.Name,
-			Command:      c.Command,
-			Description:  c.Description,
-			GroupID:      c.GroupID,
-			SendEnter:    c.SendEnter,
-			RunIn:        c.RunTarget(),
-			UseCount:     c.UseCount,
-			Placeholders: session.PlaceholderList(c.Command),
-		})
+	appendCommands := func(cmds []session.SavedCommand, projectOnly bool) {
+		for _, c := range cmds {
+			out.Commands = append(out.Commands, SavedCommandInfo{
+				ID:           c.ID,
+				Name:         c.Name,
+				Command:      c.Command,
+				Description:  c.Description,
+				GroupID:      c.GroupID,
+				SendEnter:    c.SendEnter,
+				RunIn:        c.RunTarget(),
+				ProjectOnly:  projectOnly,
+				UseCount:     c.UseCount,
+				Placeholders: session.PlaceholderList(c.Command),
+			})
+		}
 	}
-	for _, g := range lib.Groups {
+	appendCommands(project.Commands, true)
+	appendCommands(shared.Commands, false)
+	for _, g := range project.Groups {
+		out.Groups = append(out.Groups, CommandGroupInfo{ID: g.ID, Name: g.Name, Order: g.Order})
+	}
+	for _, g := range shared.Groups {
 		out.Groups = append(out.Groups, CommandGroupInfo{ID: g.ID, Name: g.Name, Order: g.Order})
 	}
 	return out, nil
 }
 
+// updateCommandHolding applies change to whichever library holds id.
+//
+// Which one a command is in is not the caller's to track: an ID identifies a
+// command, and editing or deleting one must reach it wherever it lives. The
+// project's library is tried first and the shared one only if the command is
+// not there, so a change can never be applied to both.
+func (a *App) updateCommandHolding(id string, change func(*session.CommandLibrary) error) error {
+	found := false
+	probe := func(lib *session.CommandLibrary) error {
+		for i := range lib.Commands {
+			if lib.Commands[i].ID == id {
+				found = true
+				return change(lib)
+			}
+		}
+		return nil
+	}
+	if err := a.storage.UpdateProjectCommands(probe); err != nil {
+		// No active project is not a failure: there is simply no project
+		// library to look in, so the shared one is the only candidate.
+		if !errors.Is(err, session.ErrNoActiveProject) {
+			return err
+		}
+	}
+	if found {
+		return nil
+	}
+	if err := a.storage.UpdateCommands(probe); err != nil {
+		return err
+	}
+	if !found {
+		return fmt.Errorf("no such command")
+	}
+	return nil
+}
+
 // SaveCommand adds or updates one command. An empty ID creates a new entry.
 func (a *App) SaveCommand(id, name, command, description, groupID string, sendEnter bool, runIn string) (string, error) {
+	return a.saveCommandIn(id, name, command, description, groupID, sendEnter, runIn, false)
+}
+
+// SaveProjectCommand is SaveCommand for a command kept with the active
+// project rather than shared. Editing an existing command ignores the
+// distinction: it is already in one library, and that is where it stays.
+func (a *App) SaveProjectCommand(id, name, command, description, groupID string, sendEnter bool, runIn string) (string, error) {
+	return a.saveCommandIn(id, name, command, description, groupID, sendEnter, runIn, true)
+}
+
+func (a *App) saveCommandIn(id, name, command, description, groupID string, sendEnter bool, runIn string, projectOnly bool) (string, error) {
 	// An unrecognised target (an old caller passing nothing) means the tab the
 	// command was picked from, which is what the library did before the other
 	// two existed.
@@ -97,26 +169,40 @@ func (a *App) SaveCommand(id, name, command, description, groupID string, sendEn
 		return "", err
 	}
 
-	err := a.storage.UpdateCommands(func(lib *session.CommandLibrary) error {
-		if id == "" {
-			taken := make(map[string]bool, len(lib.Commands))
-			for _, c := range lib.Commands {
-				taken[c.ID] = true
-			}
-			entry.ID = session.NewUniqueID("cmd", taken)
-			entry.CreatedAt = time.Now()
-			lib.Commands = append(lib.Commands, entry)
-			return nil
+	add := func(lib *session.CommandLibrary) error {
+		taken := make(map[string]bool, len(lib.Commands))
+		for _, c := range lib.Commands {
+			taken[c.ID] = true
 		}
+		entry.ID = session.NewUniqueID("cmd", taken)
+		entry.CreatedAt = time.Now()
+		lib.Commands = append(lib.Commands, entry)
+		return nil
+	}
+	if id == "" {
+		var err error
+		if projectOnly {
+			err = a.storage.UpdateProjectCommands(add)
+		} else {
+			err = a.storage.UpdateCommands(add)
+		}
+		if err != nil {
+			return "", err
+		}
+		return entry.ID, nil
+	}
+
+	err := a.updateCommandHolding(id, func(lib *session.CommandLibrary) error {
 		for i := range lib.Commands {
-			if lib.Commands[i].ID == id {
-				// Usage statistics belong to the command, not to this edit.
-				entry.CreatedAt = lib.Commands[i].CreatedAt
-				entry.UsedAt = lib.Commands[i].UsedAt
-				entry.UseCount = lib.Commands[i].UseCount
-				lib.Commands[i] = entry
-				return nil
+			if lib.Commands[i].ID != id {
+				continue
 			}
+			// Usage statistics belong to the command, not to this edit.
+			entry.CreatedAt = lib.Commands[i].CreatedAt
+			entry.UsedAt = lib.Commands[i].UsedAt
+			entry.UseCount = lib.Commands[i].UseCount
+			lib.Commands[i] = entry
+			return nil
 		}
 		return fmt.Errorf("no such command")
 	})
@@ -128,7 +214,7 @@ func (a *App) SaveCommand(id, name, command, description, groupID string, sendEn
 
 // DeleteCommand removes one command.
 func (a *App) DeleteCommand(id string) error {
-	return a.storage.UpdateCommands(func(lib *session.CommandLibrary) error {
+	return a.updateCommandHolding(id, func(lib *session.CommandLibrary) error {
 		out := lib.Commands[:0]
 		removed := false
 		for _, c := range lib.Commands {
@@ -212,19 +298,9 @@ func (a *App) DeleteCommandGroup(id string) error {
 // targets open the same way — whether to select the new tab is the caller's
 // to decide from the command's runIn, since only the UI can switch tabs.
 func (a *App) RunCommand(id, sessionID string, windowIdx int, values map[string]string, expectedProjectID string) (int, error) {
-	lib, err := a.storage.LoadCommands()
+	found, err := a.findCommand(id)
 	if err != nil {
 		return -1, err
-	}
-	var found *session.SavedCommand
-	for i := range lib.Commands {
-		if lib.Commands[i].ID == id {
-			found = &lib.Commands[i]
-			break
-		}
-	}
-	if found == nil {
-		return -1, fmt.Errorf("no such command")
 	}
 
 	text := session.Expand(found.Command, values)
@@ -336,10 +412,32 @@ func (a *App) openBackgroundTab(sessionID, serverID string, connection *serverCo
 }
 
 // recordCommandUse bumps the statistics that order the picker.
+// findCommand looks an ID up in the project's library and then the shared
+// one, so running a command does not depend on knowing which it is in.
+func (a *App) findCommand(id string) (*session.SavedCommand, error) {
+	if project, err := a.storage.LoadProjectCommands(); err == nil && project != nil {
+		for i := range project.Commands {
+			if project.Commands[i].ID == id {
+				return &project.Commands[i], nil
+			}
+		}
+	}
+	shared, err := a.storage.LoadCommands()
+	if err != nil {
+		return nil, err
+	}
+	for i := range shared.Commands {
+		if shared.Commands[i].ID == id {
+			return &shared.Commands[i], nil
+		}
+	}
+	return nil, fmt.Errorf("no such command")
+}
+
 func (a *App) recordCommandUse(id string) {
 	// A failed statistics write must not look like a failed command: the
 	// command already ran.
-	if serr := a.storage.UpdateCommands(func(latest *session.CommandLibrary) error {
+	if serr := a.updateCommandHolding(id, func(latest *session.CommandLibrary) error {
 		for i := range latest.Commands {
 			if latest.Commands[i].ID == id {
 				latest.Commands[i].UsedAt = time.Now()

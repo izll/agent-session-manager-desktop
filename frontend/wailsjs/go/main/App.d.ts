@@ -411,6 +411,8 @@ export function SaveCommand(arg1:string,arg2:string,arg3:string,arg4:string,arg5
 
 export function SaveCommandGroup(arg1:string,arg2:string):Promise<string>;
 
+export function SaveProjectCommand(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string,arg6:boolean,arg7:string):Promise<string>;
+
 export function SaveServer(arg1:main.ServerSaveRequest):Promise<Array<main.ServerInfo>>;
 
 export function SaveSessionAsTemplate(arg1:string,arg2:string,arg3:boolean,arg4:string):Promise<string>;

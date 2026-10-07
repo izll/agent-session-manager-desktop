@@ -2,6 +2,7 @@ package session
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -231,13 +232,97 @@ func SortGroups(groups []CommandGroup) {
 
 // --- Persistence ---------------------------------------------------------
 //
-// The library lives beside the app config rather than inside a project:
-// commands like "tail the deploy log" are useful everywhere, and duplicating
-// them per project would be busywork.
+// There are two libraries, and the difference is which commands belong
+// everywhere.
+//
+// The shared one lives beside the app config, because commands like "tail the
+// deploy log" are useful in every project and duplicating them per project
+// would be busywork. That was the only library at first, and it is still the
+// one a command goes to by default.
+//
+// A project library sits beside that project's sessions. It exists because
+// the shared list is where a build command does not belong: "./gradlew
+// bootRun" is an offer in a Java project and noise in a Node one, and a
+// single list shows every entry everywhere. The two are read together, the
+// project's first, so nothing had to move for this to arrive.
 
-// commandsPath returns the library file path.
+// ErrNoActiveProject is returned when a project-only operation is asked for
+// while the default (unnamed) project is active, which has no library of its
+// own. A sentinel rather than a message, so callers can tell this apart from
+// a real failure without matching on text.
+var ErrNoActiveProject = errors.New("no project is active")
+
+// commandsPath returns the shared library's file path.
 func (s *Storage) commandsPath() string {
 	return filepath.Join(s.configDir, "commands.json")
+}
+
+// projectCommandsPath returns the active project's library file, or "" when
+// the default (unnamed) project is active — that one has no directory of its
+// own, so its commands are the shared ones.
+func (s *Storage) projectCommandsPath() string {
+	if s.projectID == "" {
+		return ""
+	}
+	return filepath.Join(s.configDir, "projects", s.projectID, "commands.json")
+}
+
+// LoadProjectCommands reads the active project's own library. A missing file,
+// or no active project, means an empty one rather than an error.
+func (s *Storage) LoadProjectCommands() (*CommandLibrary, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.loadProjectCommandsLocked()
+}
+
+func (s *Storage) loadProjectCommandsLocked() (*CommandLibrary, error) {
+	path := s.projectCommandsPath()
+	if path == "" {
+		return &CommandLibrary{}, nil
+	}
+	data, err := readFileAtMost(path, commandLibraryMaxBytes)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return &CommandLibrary{}, nil
+		}
+		return nil, err
+	}
+	var lib CommandLibrary
+	if err := json.Unmarshal(data, &lib); err != nil {
+		return nil, fmt.Errorf("the project's saved commands file is unreadable: %w", err)
+	}
+	if err := validateCommandLibrary(&lib); err != nil {
+		return nil, fmt.Errorf("the project's saved commands file is invalid: %w", err)
+	}
+	return &lib, nil
+}
+
+// UpdateProjectCommands applies change to the active project's library under
+// the same cross-process lock the shared one uses.
+//
+// Refuses when no project is active: writing would land in the shared
+// library, which is not what a caller asking for the project's one meant.
+func (s *Storage) UpdateProjectCommands(change func(*CommandLibrary) error) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	path := s.projectCommandsPath()
+	if path == "" {
+		return ErrNoActiveProject
+	}
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return fmt.Errorf("failed to create the project directory: %w", err)
+	}
+	return withCrossProcessFileLock(filepath.Join(dir, "commands.lock"), func() error {
+		lib, err := s.loadProjectCommandsLocked()
+		if err != nil {
+			return err
+		}
+		if err := change(lib); err != nil {
+			return err
+		}
+		return s.writeCommandsTo(path, lib)
+	})
 }
 
 // LoadCommands reads the saved commands. A missing file is not an error —
@@ -316,6 +401,15 @@ func (s *Storage) SaveCommands(lib *CommandLibrary) error {
 }
 
 func (s *Storage) saveCommandsLocked(lib *CommandLibrary) error {
+	if err := os.MkdirAll(s.configDir, 0o755); err != nil {
+		return err
+	}
+	return s.writeCommandsTo(s.commandsPath(), lib)
+}
+
+// writeCommandsTo validates a library and writes it to path. Shared by the
+// two libraries so neither can be written unvalidated or non-atomically.
+func (s *Storage) writeCommandsTo(path string, lib *CommandLibrary) error {
 	if lib == nil {
 		lib = &CommandLibrary{}
 	}
@@ -326,15 +420,8 @@ func (s *Storage) saveCommandsLocked(lib *CommandLibrary) error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(s.configDir, 0o755); err != nil {
-		return err
-	}
-	path := s.commandsPath()
 	// Through the shared helper so the write is fsynced before the rename.
-	if err := writeFileAtomic(path, data, 0600); err != nil {
-		return err
-	}
-	return nil
+	return writeFileAtomic(path, data, 0600)
 }
 
 // UpdateCommands performs a complete load/change/save cycle while holding the

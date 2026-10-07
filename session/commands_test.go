@@ -1,6 +1,7 @@
 package session
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -339,5 +340,88 @@ func TestValidateRejectsAnUnknownRunTarget(t *testing.T) {
 		if err := cmd.Validate(); err != nil {
 			t.Errorf("Validate rejected %q: %v", target, err)
 		}
+	}
+}
+
+// The two libraries are separate files: a project's build commands must not
+// land in the shared list, which is shown in every project.
+func TestProjectCommandsStaySeparateFromTheSharedOnes(t *testing.T) {
+	storage := newTestStorage(t)
+	project, err := storage.AddProject("java-app")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := storage.SetActiveProject(project.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := storage.UpdateCommands(func(lib *CommandLibrary) error {
+		lib.Commands = append(lib.Commands, SavedCommand{
+			ID: "cmd-shared", Name: "Tail the log", Command: "tail -f deploy.log",
+		})
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := storage.UpdateProjectCommands(func(lib *CommandLibrary) error {
+		lib.Commands = append(lib.Commands, SavedCommand{
+			ID: "cmd-project", Name: "Boot run", Command: "./gradlew bootRun", RunIn: RunInBackground,
+		})
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	shared, err := storage.LoadCommands()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(shared.Commands) != 1 || shared.Commands[0].ID != "cmd-shared" {
+		t.Errorf("shared library = %+v, want only the shared command", shared.Commands)
+	}
+	own, err := storage.LoadProjectCommands()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(own.Commands) != 1 || own.Commands[0].ID != "cmd-project" {
+		t.Errorf("project library = %+v, want only the project command", own.Commands)
+	}
+
+	// Another project sees its own empty library, not this one's.
+	other, err := storage.AddProject("node-app")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := storage.SetActiveProject(other.ID); err != nil {
+		t.Fatal(err)
+	}
+	own, err = storage.LoadProjectCommands()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(own.Commands) != 0 {
+		t.Errorf("a second project sees %+v, want nothing", own.Commands)
+	}
+	// The shared list, though, follows everywhere — that is its purpose.
+	shared, err = storage.LoadCommands()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(shared.Commands) != 1 {
+		t.Errorf("shared library in a second project = %+v, want the shared command", shared.Commands)
+	}
+}
+
+// Without a named project there is no project library, and a write must say
+// so rather than quietly going to the shared list.
+func TestProjectCommandsRefuseTheDefaultProject(t *testing.T) {
+	storage := newTestStorage(t)
+	lib, err := storage.LoadProjectCommands()
+	if err != nil || lib == nil || len(lib.Commands) != 0 {
+		t.Fatalf("LoadProjectCommands() = %+v, %v; want an empty library", lib, err)
+	}
+	err = storage.UpdateProjectCommands(func(*CommandLibrary) error { return nil })
+	if !errors.Is(err, ErrNoActiveProject) {
+		t.Errorf("UpdateProjectCommands() = %v, want ErrNoActiveProject", err)
 	}
 }

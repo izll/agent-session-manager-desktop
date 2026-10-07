@@ -397,6 +397,9 @@
                       <span class="cmd-name">{c.name}</span>
                       <span class="cmd-text">{c.command}</span>
                     </div>
+                    {#if c.projectOnly}
+                      <span class="cmd-badge project" title={$t('commands.projectOnlyHint')}>{$t('commands.projectOnlyBadge')}</span>
+                    {/if}
                     {#if ownTab(c)}
                       <span class="cmd-badge" title={$t(`commands.runIn.${c.runIn}Hint`)}>{$t(`commands.runIn.${c.runIn}Badge`)}</span>
                     {/if}
@@ -464,6 +467,9 @@
   .cmd-badge {
     padding: 1px 6px; border-radius: 4px; font-size: 10px; flex-shrink: 0;
     color: rgb(var(--accent-rgb)); background: rgba(var(--accent-rgb), 0.14);
+  }
+  .cmd-badge.project {
+    color: #a1a1aa; background: rgba(255, 255, 255, 0.07);
   }
 
   .pending-head { display: flex; flex-direction: column; gap: 2px; margin-bottom: 12px; }

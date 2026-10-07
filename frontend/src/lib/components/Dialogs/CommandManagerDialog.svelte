@@ -44,6 +44,9 @@
   let fSendEnter = true;
   type RunIn = 'current' | 'newtab' | 'background';
   let fRunIn: RunIn = 'current';
+  // Where a NEW command is saved. Editing leaves a command where it is: it
+  // is already in one library, and moving it silently would surprise.
+  let fProjectOnly = false;
 
   /** Narrows what the backend sends; anything unexpected means this tab. */
   function asRunIn(value: string | undefined): RunIn {
@@ -198,6 +201,7 @@
     fGroupId = '';
     fSendEnter = true;
     fRunIn = 'current';
+    fProjectOnly = false;
   }
 
   function newCommand(groupId = '') {
@@ -218,6 +222,7 @@
     fGroupId = c.groupId || '';
     fSendEnter = c.sendEnter;
     fRunIn = asRunIn(c.runIn);
+    fProjectOnly = c.projectOnly;
     editing = true;
   }
 
@@ -239,12 +244,14 @@
     const targetId = editingId;
     const submitted = {
       name: fName.trim(), command: fCommand, description: fDescription.trim(),
-      groupId: fGroupId, sendEnter: fSendEnter, runIn: fRunIn,
+      groupId: fGroupId, sendEnter: fSendEnter, runIn: fRunIn, projectOnly: fProjectOnly,
     };
     savingCommand = true;
     error = '';
     try {
-      await App.SaveCommand(
+      // Only a new command chooses its library; an edit stays where it is.
+      const save = !targetId && submitted.projectOnly ? App.SaveProjectCommand : App.SaveCommand;
+      await save(
         targetId, submitted.name, submitted.command, submitted.description,
         submitted.groupId, submitted.sendEnter, submitted.runIn
       );
@@ -467,6 +474,19 @@
               <span class="field-hint">{$t(`commands.runIn.${fRunIn}Hint`)}</span>
             </div>
 
+            <!-- Only offered for a new command, and only with a project open:
+                 an edit leaves a command in the library it is already in, and
+                 the default project has no library of its own. -->
+            {#if !editingId && sessionId}
+              <label class="toggle-row">
+                <input type="checkbox" bind:checked={fProjectOnly} />
+                <span class="toggle-main">
+                  <span class="toggle-label">{$t('commands.projectOnly')}</span>
+                  <span class="toggle-hint">{$t('commands.projectOnlyHint')}</span>
+                </span>
+              </label>
+            {/if}
+
             <!-- A command in a tab of its own always runs: typed into a fresh
                  shell nobody has touched, it would only sit there. -->
             <label class="toggle-row" class:disabled={ownTab}>
@@ -582,6 +602,9 @@
                     <div class="cmd-main">
                       <span class="cmd-name">
                         {c.name}
+                        {#if c.projectOnly}
+                          <span class="cmd-badge project" title={$t('commands.projectOnlyHint')}>{$t('commands.projectOnlyBadge')}</span>
+                        {/if}
                         {#if c.runIn === 'newtab' || c.runIn === 'background'}
                           <span class="cmd-badge" title={$t(`commands.runIn.${c.runIn}Hint`)}>{$t(`commands.runIn.${c.runIn}Badge`)}</span>
                         {/if}
@@ -750,6 +773,9 @@
   }
   .suggest-added { font-size: 11px; color: #6b7280; flex-shrink: 0; }
 
+  .cmd-badge.project {
+    color: #a1a1aa; background: rgba(255, 255, 255, 0.07);
+  }
   .toggle-main { display: flex; flex-direction: column; gap: 1px; }
   .toggle-label { font-size: 13px; color: #e4e4e7; }
   .toggle-hint { font-size: 11px; color: #6b7280; }
