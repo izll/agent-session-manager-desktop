@@ -279,6 +279,13 @@
 
   // Tab state
   let activeTab: 'general' | 'terminal' | 'shortcuts' | 'agents' | 'dictation' | 'maintenance' = 'general';
+  let settingsList: HTMLDivElement | null = null;
+  // The tabs share one scrolling list, so a new tab would open at the place
+  // the previous one was scrolled to.
+  function scrollListToTop(_tab: typeof activeTab) {
+    if (settingsList) settingsList.scrollTop = 0;
+  }
+  $: scrollListToTop(activeTab);
   /** Whether the API key is currently readable. */
   let showApiKey = false;
   // App keeps this component mounted and only toggles its `show` prop. Cover
@@ -680,7 +687,7 @@
         </button>
       </div>
 
-      <div class="settings-list">
+      <div class="settings-list" bind:this={settingsList}>
         <!-- General Tab -->
         {#if activeTab === 'general'}
           <div class="settings-section">

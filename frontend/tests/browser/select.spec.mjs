@@ -958,6 +958,18 @@ test('Settings sets the global view order on its General tab', async ({ page }) 
     .toEqual(['terminal', 'notes', 'tasks', 'diff', 'browser']);
 });
 
+test('Settings opens every tab scrolled to its top', async ({ page }) => {
+  await gotoDialogRacesFixture(page, 'settings');
+  const list = page.locator('.settings-list');
+  await expect(list).toBeVisible();
+  // The fixture has no app stylesheet, so the dialog doesn't cap the list's
+  // height the way it does in the app; cap it here so it scrolls.
+  await list.evaluate((el) => { el.style.height = '300px'; el.scrollTop = el.scrollHeight; });
+  expect(await list.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
+  await page.locator('.tabs .tab').nth(1).click();
+  await expect.poll(() => list.evaluate((el) => el.scrollTop)).toBe(0);
+});
+
 test('dashboard usage polling is single-flight per provider', async ({ page }) => {
   await page.clock.install();
   await gotoDialogRacesFixture(page, 'dashboard');
