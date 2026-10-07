@@ -910,6 +910,10 @@ export function SetTabViewBar(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['SetTabViewBar'](arg1, arg2, arg3, arg4);
 }
 
+export function SetTabViewOrder(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['SetTabViewOrder'](arg1, arg2, arg3, arg4);
+}
+
 export function SetWindowAutoYes(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['SetWindowAutoYes'](arg1, arg2, arg3, arg4);
 }

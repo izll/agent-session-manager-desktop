@@ -50,6 +50,8 @@ export interface Session {
   terminalFontSize: number;
   /** View bar: 0 follow the global setting, 1 hide, 2 show. */
   hideViewBar: number;
+  /** The main window's own view bar order; empty follows the global one. */
+  viewOrder?: string[];
   /** Bottom status bar, same tri-state. */
   hideStatusBar: number;
   /** Main window's tmux index — not always 0. */

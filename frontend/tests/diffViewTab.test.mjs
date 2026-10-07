@@ -36,7 +36,7 @@ assert.doesNotMatch(
 
 // Greyed out, not hidden: a control that vanishes reads as a bug, while a
 // disabled one with a reason says what the tab is.
-const button = panel.match(/class="view-tab \{fullDiffActive[\s\S]{0,600}?<\/button>/);
+const button = panel.match(/class="view-tab \{fullDiffActive[\s\S]{0,800}?<\/button>/);
 assert.ok(button, 'the diff button should be findable');
 assert.match(button[0], /disabled=\{!tabIsGitRepo\}/, 'it must be disabled outside a repository');
 assert.match(button[0], /notARepository/, 'and say why');

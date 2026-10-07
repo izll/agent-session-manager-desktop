@@ -1283,6 +1283,9 @@ type SessionInfo struct {
 	TerminalFontSize   int    `json:"terminalFontSize"`
 	HideViewBar        int    `json:"hideViewBar"`
 	HideStatusBar      int    `json:"hideStatusBar"`
+	// ViewOrder is the main window's own view bar order; empty follows the
+	// global one.
+	ViewOrder []string `json:"viewOrder"`
 	// The main window isn't always index 0, so the frontend needs it to map a
 	// tab back to the session-level palette.
 	MainWindowIndex int `json:"mainWindowIndex"`
@@ -1389,6 +1392,7 @@ func (a *App) instanceToSessionInfo(inst *session.Instance) SessionInfo {
 		TerminalFontSize:   inst.TerminalFontSize,
 		HideViewBar:        inst.HideViewBar,
 		HideStatusBar:      inst.HideStatusBar,
+		ViewOrder:          inst.ViewOrder,
 		MainWindowIndex:    inst.GetMainWindowIndex(),
 		LastWindowIndex:    inst.LastWindowIndex,
 		IsGitRepo:          inst.IsGitRepo(),
@@ -5003,6 +5007,9 @@ type SettingsInfo struct {
 	// user-defined palette used when a theme id is "custom".
 	AgentTerminalThemes  map[string]string             `json:"agentTerminalThemes"`
 	CustomTerminalThemes []session.CustomTerminalTheme `json:"customTerminalThemes"`
+
+	// ViewOrder is the view bar's order for every tab without one of its own.
+	ViewOrder []string `json:"viewOrder"`
 }
 
 // GetSettings returns UI settings
@@ -5114,6 +5121,7 @@ func (a *App) GetSettings() (*SettingsInfo, error) {
 		AgentFontSize:             settings.AgentFontSize,
 		HideViewBar:               settings.HideViewBar,
 		AgentHideViewBar:          settings.AgentHideViewBar,
+		ViewOrder:                 settings.ViewOrder,
 		HideStatusBar:             settings.HideStatusBar,
 		AgentHideStatusBar:        settings.AgentHideStatusBar,
 		NotifyOnWaiting:           settings.NotifyOnWaiting,
@@ -5214,6 +5222,7 @@ func (a *App) SaveSettings(settings SettingsInfo, expectedProjectID string) erro
 		current.AgentFontSize = settings.AgentFontSize
 		current.HideViewBar = settings.HideViewBar
 		current.AgentHideViewBar = settings.AgentHideViewBar
+		current.ViewOrder = validViewOrder(settings.ViewOrder)
 		current.HideStatusBar = settings.HideStatusBar
 		current.AgentHideStatusBar = settings.AgentHideStatusBar
 		current.TerminalTheme = settings.TerminalTheme

@@ -10,6 +10,7 @@
   import TabColorDialog from '../Dialogs/TabColorDialog.svelte';
   import ConfirmDialog from '../Dialogs/ConfirmDialog.svelte';
   import MoveTabDialog from '../Dialogs/MoveTabDialog.svelte';
+  import TabViewOrderDialog from '../Dialogs/TabViewOrderDialog.svelte';
   import TabMovePrompts from '../Dialogs/TabMovePrompts.svelte';
   import { isMovableTab, isOnlyTab } from '../../utils/tabMoveRules';
   import { askNewSessionFor, beginTabDrag, endTabDrag, tabMovePrompt } from '../../utils/tabMove';
@@ -1405,6 +1406,19 @@
   $: tabContextMenuOnlyTab = isOnlyTab($selectedSession, tabContextMenuIndex);
   $: tabContextMenuMovable = isMovableTab($selectedSession, tabContextMenuIndex) || tabContextMenuOnlyTab;
 
+  let showViewOrderDialog = false;
+  let viewOrderTarget = { sessionId: '', windowIdx: 0, name: '' };
+
+  function tabContextViewOrder() {
+    const windowIdx = tabContextMenuIndex;
+    const name = tabContextMenuName;
+    closeTabContextMenu();
+    const sess = get(selectedSession);
+    if (windowIdx === null || !sess) return;
+    viewOrderTarget = { sessionId: sess.id, windowIdx, name };
+    showViewOrderDialog = true;
+  }
+
   function tabContextMoveToSession() {
     const windowIdx = tabContextMenuIndex;
     const name = tabContextMenuName;
@@ -2236,6 +2250,13 @@
           </svg>
           {statusBarHiddenForMenu ? $t('tabBar.showStatusBar') : $t('tabBar.hideStatusBar')}
         </button>
+        <button class="tab-context-menu-item" data-menu-action="view-order" on:click={tabContextViewOrder}>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M7 4v16M7 20l-3-3M7 20l3-3"/>
+            <path d="M17 20V4M17 4l-3 3M17 4l3 3"/>
+          </svg>
+          {$t('viewOrder.menuItem')}
+        </button>
         {#if tabContextMenuMovable}
           <button class="tab-context-menu-item" data-menu-action="move-to-session" on:click={tabContextMoveToSession}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -2551,6 +2572,13 @@
     </div>
   </div>
 {/if}
+
+<TabViewOrderDialog
+  bind:show={showViewOrderDialog}
+  sessionId={viewOrderTarget.sessionId}
+  windowIdx={viewOrderTarget.windowIdx}
+  tabName={viewOrderTarget.name}
+/>
 
 <MoveTabDialog
   bind:show={showMoveTabDialog}

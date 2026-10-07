@@ -29,6 +29,7 @@
   import { get } from 'svelte/store';
   import { diffFolderVersion } from '../../stores/diffFolder';
   import { resolveViewBarHidden } from '../../utils/terminalThemes';
+  import { resolveViewOrder } from '../../utils/viewOrder';
   import { yoloButtonState } from '../../utils/yoloBadge';
   import * as App from '../../../../wailsjs/go/main/App';
   import { t } from '../../i18n';
@@ -356,8 +357,8 @@
     if (document.querySelector('.dialog-overlay') || keyClaimedByDialog()) return;
     e.preventDefault();
     e.stopPropagation();
-    const order: Array<ViewName | 'diff'> = ['terminal', 'notes', 'tasks', 'browser'];
-    if (tabIsGitRepo) order.push('diff');
+    // The order the view bar shows them in.
+    const order = viewOrder.filter((view) => view !== 'diff' || tabIsGitRepo);
     const at = order.indexOf(fullDiffActive ? 'diff' : activeView);
     const target = order[(at + (next ? 1 : -1) + order.length) % order.length];
     if (target === 'diff') fullDiffActive = true;
@@ -628,6 +629,15 @@
       tabState, $settings.hideStatusBar, $settings.agentHideStatusBar, currentTabAgent);
   })();
 
+  // The view bar's order: this tab's own, else the one set for every tab.
+  $: viewOrder = (() => {
+    const s = currentSession;
+    const idx = $selectedWindowIdx ?? 0;
+    const fw = (s?.followedWindows || []).find((f: any) => f.index === idx);
+    const own = !s ? null : idx === (s.mainWindowIndex ?? 0) ? s.viewOrder : fw?.view_order;
+    return resolveViewOrder(own, $settings.viewOrder);
+  })();
+
   $: viewBarHidden = (() => {
     const s = currentSession;
     if (!s) return !!$settings.hideViewBar;
@@ -797,8 +807,12 @@
            reachable from the command palette meanwhile. -->
       <div class="view-tabs" class:is-hidden={viewBarHidden}>
         <div class="view-tabs-left">
+          <!-- In the order set for this tab, or in Settings for every tab. -->
+          {#each viewOrder as view (view)}
+          {#if view === 'terminal'}
           <button
             class="view-tab {activeView === 'terminal' ? 'active' : ''}"
+            data-view="terminal"
             class:behind-diff={fullDiffActive && activeView === 'terminal'}
             on:click={() => selectView('terminal')}
           >
@@ -808,8 +822,10 @@
             </svg>
             {$t('mainPanel.terminal')}
           </button>
+          {:else if view === 'notes'}
           <button
             class="view-tab {activeView === 'notes' ? 'active' : ''}"
+            data-view="notes"
             class:behind-diff={fullDiffActive && activeView === 'notes'}
             on:click={() => selectView('notes')}
           >
@@ -828,11 +844,13 @@
               <span class="tab-dot" title={notesDotTitle}></span>
             {/if}
           </button>
+          {:else if view === 'tasks'}
           <!-- Always available: a task list is the app's own, stored by it and
                usable without anything installed. The Task Master setting gates
                the actions that shell out to npx, inside the panel. -->
           <button
             class="view-tab {activeView === 'tasks' ? 'active' : ''}"
+            data-view="tasks"
             class:behind-diff={fullDiffActive && activeView === 'tasks'}
             on:click={() => selectView('tasks')}
           >
@@ -853,10 +871,12 @@
               >{$taskStats.pending}</span>
             {/if}
           </button>
+          {:else if view === 'browser'}
           <!-- Always offered: unlike the diff, a browser only needs a
                directory, and every session has one. -->
           <button
             class="view-tab {activeView === 'browser' ? 'active' : ''}"
+            data-view="browser"
             class:behind-diff={fullDiffActive && activeView === 'browser'}
             on:click={() => selectView('browser')}
           >
@@ -865,6 +885,7 @@
             </svg>
             {$t('mainPanel.browser')}
           </button>
+          {:else if view === 'diff'}
           <!-- Beside Files, because it answers the same question about the same
                directory: what is in this tab, and what changed in it. It used
                to live in the tab bar, which put it a level above the thing it
@@ -876,6 +897,7 @@
                what the tab is. -->
           <button
             class="view-tab {fullDiffActive ? 'active' : ''}"
+            data-view="diff"
             disabled={!tabIsGitRepo}
             on:click={() => toggleFullDiff()}
             title={tabIsGitRepo ? $t('tabBar.fullDiff') : $t('history.notARepository')}
@@ -887,6 +909,8 @@
             </svg>
             {$t('tabBar.diffLabel')}
           </button>
+          {/if}
+          {/each}
         </div>
         <div class="view-tabs-right">
           <!-- Here rather than in the history or the branch badge: a

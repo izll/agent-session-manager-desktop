@@ -944,6 +944,20 @@ test('Settings persists a focused ntfy address before Escape removes the input',
   })).toBe('https://ntfy.sh/new-topic');
 });
 
+// Every tab's, agent and terminal alike, so it is on the General tab — the
+// one Settings opens on — rather than the Terminal tab's.
+test('Settings sets the global view order on its General tab', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 1600 });
+  await gotoDialogRacesFixture(page, 'settings');
+  const setting = page.locator('[data-setting="view-order"]');
+  await expect(setting).toBeVisible();
+  const up = setting.locator('[data-view="diff"] [data-move="up"]');
+  await up.evaluate((el) => el.scrollIntoView({ block: 'center' }));
+  await up.click();
+  await expect.poll(() => page.evaluate(() => window.dialogRacesFixture.settingsSaves().at(-1)?.viewOrder))
+    .toEqual(['terminal', 'notes', 'tasks', 'diff', 'browser']);
+});
+
 test('dashboard usage polling is single-flight per provider', async ({ page }) => {
   await page.clock.install();
   await gotoDialogRacesFixture(page, 'dashboard');

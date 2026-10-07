@@ -1827,6 +1827,7 @@ export namespace main {
 	    terminalFontSize: number;
 	    hideViewBar: number;
 	    hideStatusBar: number;
+	    viewOrder: string[];
 	    mainWindowIndex: number;
 	    lastWindowIndex: number;
 	    isGitRepo: boolean;
@@ -1867,6 +1868,7 @@ export namespace main {
 	        this.terminalFontSize = source["terminalFontSize"];
 	        this.hideViewBar = source["hideViewBar"];
 	        this.hideStatusBar = source["hideStatusBar"];
+	        this.viewOrder = source["viewOrder"];
 	        this.mainWindowIndex = source["mainWindowIndex"];
 	        this.lastWindowIndex = source["lastWindowIndex"];
 	        this.isGitRepo = source["isGitRepo"];
@@ -2029,6 +2031,7 @@ export namespace main {
 	    diffLastFile: Record<string, string>;
 	    agentTerminalThemes: Record<string, string>;
 	    customTerminalThemes: session.CustomTerminalTheme[];
+	    viewOrder: string[];
 
 	    static createFrom(source: any = {}) {
 	        return new SettingsInfo(source);
@@ -2102,6 +2105,7 @@ export namespace main {
 	        this.diffLastFile = source["diffLastFile"];
 	        this.agentTerminalThemes = source["agentTerminalThemes"];
 	        this.customTerminalThemes = this.convertValues(source["customTerminalThemes"], session.CustomTerminalTheme);
+	        this.viewOrder = source["viewOrder"];
 	    }
 
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -2967,6 +2971,7 @@ export namespace session {
 	    terminal_font_size?: number;
 	    hide_view_bar?: number;
 	    hide_status_bar?: number;
+	    view_order?: string[];
 	    text_color?: string;
 	    background_color?: string;
 	    work_dir?: string;
@@ -2997,6 +3002,7 @@ export namespace session {
 	        this.terminal_font_size = source["terminal_font_size"];
 	        this.hide_view_bar = source["hide_view_bar"];
 	        this.hide_status_bar = source["hide_status_bar"];
+	        this.view_order = source["view_order"];
 	        this.text_color = source["text_color"];
 	        this.background_color = source["background_color"];
 	        this.work_dir = source["work_dir"];

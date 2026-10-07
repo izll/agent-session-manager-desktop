@@ -13,8 +13,9 @@ const fixtureSession = {
   resumeSessionId: '', extraArgs: '', tabTextColor: '', tabBackgroundColor: '',
   terminalTheme: '', terminalFontSize: 0, hideViewBar: 0, hideStatusBar: 0,
   mainWindowIndex: 0, lastWindowIndex: 0, isGitRepo: true, tabOrder: [0],
-  mainWindowStopped: true, followedWindows: [],
+  mainWindowStopped: true, followedWindows: [], viewOrder: [] as string[],
 };
+const viewOrderCalls: unknown[][] = [];
 
 const fixtureParams = new URLSearchParams(location.search);
 // ?buffer=0: live preview instead of the buffer.
@@ -46,6 +47,12 @@ const backend = new Proxy({
   GetGitBranch: async () => ({ isRepo: true, branch: 'main' }),
   SaveSettings: async (...args: unknown[]) => { settingsSaves.push(structuredClone(args)); },
   LogFrontend: async () => undefined,
+  SetTabViewOrder: async (sessionId: string, windowIdx: number, order: string[]) => {
+    viewOrderCalls.push([sessionId, windowIdx, order]);
+    fixtureSession.viewOrder = order;
+  },
+  GetSessions: async () => [structuredClone(fixtureSession)],
+  GetGroups: async () => [],
 }, {
   get(target, key) {
     if (key in target) return target[key as keyof typeof target];
@@ -57,7 +64,8 @@ const settingsSaves: unknown[][] = [];
 (window as any).go = { main: { App: backend, DictationService: backend } };
 (window as any).runtime = new Proxy({
   EventsOnMultiple: (name: string, callback: (...args: unknown[]) => void) => {
-    if (name === 'dictation:state') queueMicrotask(() => callback(true));
+    // ?dictation=0: no dictation running, so its panel covers nothing.
+    if (name === 'dictation:state' && fixtureParams.get('dictation') !== '0') queueMicrotask(() => callback(true));
     return () => undefined;
   },
 }, {
@@ -88,6 +96,16 @@ selectedSessionId.set(fixtureSession.id);
 selectedWindowIdx.set(0);
 
 (window as any).projectLayoutFixture = {
+  setGlobalViewOrder: async (order: string[] | null) => {
+    settings.set({ ...get(settings), viewOrder: order });
+    await tick();
+  },
+  setTabViewOrder: async (order: string[]) => {
+    fixtureSession.viewOrder = order;
+    sessions.set([structuredClone(fixtureSession) as any]);
+    await tick();
+  },
+  viewOrderCalls: () => structuredClone(viewOrderCalls),
   setBufferText: (text: string) => { bufferText = text; },
   promptsSent: () => structuredClone(promptsSent),
   fieldInserts: () => [...fieldInserts],

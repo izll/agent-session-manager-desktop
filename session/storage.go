@@ -288,6 +288,7 @@ type Settings struct {
 	TerminalFontSize    int               `json:"terminal_font_size,omitempty"`
 	AgentFontSize       int               `json:"agent_font_size,omitempty"`
 	HideViewBar         bool              `json:"hide_view_bar,omitempty"`
+	ViewOrder           []string          `json:"view_order,omitempty"`
 	AgentHideViewBar    bool              `json:"agent_hide_view_bar,omitempty"`
 	HideStatusBar       bool              `json:"hide_status_bar,omitempty"`
 	AgentHideStatusBar  bool              `json:"agent_hide_status_bar,omitempty"`

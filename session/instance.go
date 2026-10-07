@@ -310,6 +310,9 @@ type Instance struct {
 	// A plain bool could not express "explicitly shown" against a global hide.
 	HideViewBar   int `json:"hide_view_bar,omitempty"`
 	HideStatusBar int `json:"hide_status_bar,omitempty"`
+	// ViewOrder is the main window's order of the view bar's views (terminal,
+	// notes, tasks, browser, diff); empty follows the global setting.
+	ViewOrder []string `json:"view_order,omitempty"`
 	// LastWindowIndex is the tab that was open when the session was last
 	// left, so reopening it lands where the user was. Advisory only: the
 	// window may be gone by then, so callers must validate it.
@@ -352,6 +355,7 @@ type FollowedWindow struct {
 	TerminalFontSize int        `json:"terminal_font_size,omitempty"` // Tab font size in px (0 inherits the global setting)
 	HideViewBar      int        `json:"hide_view_bar,omitempty"`      // 0 inherit, 1 hide, 2 show
 	HideStatusBar    int        `json:"hide_status_bar,omitempty"`    // 0 inherit, 1 hide, 2 show
+	ViewOrder        []string   `json:"view_order,omitempty"`         // Tab's view bar order (empty follows the global setting)
 	TextColor        string     `json:"text_color,omitempty"`         // Tab text color (empty uses the theme default)
 	BackgroundColor  string     `json:"background_color,omitempty"`   // Tab background color (empty uses the theme default)
 	WorkDir          string     `json:"work_dir,omitempty"`           // Tab working directory (empty = session path)

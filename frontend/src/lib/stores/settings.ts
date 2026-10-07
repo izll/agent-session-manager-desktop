@@ -155,6 +155,8 @@ export interface Settings {
   /** Hide the Terminal/Notes/Tasks bar under the tabs. */
   hideViewBar: boolean;
   agentHideViewBar: boolean;
+  /** The view bar's order for tabs without one of their own; null is the default. */
+  viewOrder: string[] | null;
   /** Same again for the bottom bar (path + agent badge). */
   hideStatusBar: boolean;
   agentHideStatusBar: boolean;
@@ -221,6 +223,7 @@ function defaultSettings(): Settings {
     agentFontSize: 0,
     hideViewBar: false,
     agentHideViewBar: false,
+    viewOrder: null,
     hideStatusBar: false,
     agentHideStatusBar: false,
     notifyOnWaiting: false,

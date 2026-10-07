@@ -459,6 +459,8 @@ export function SetTabTerminalTheme(arg1:string,arg2:number,arg3:string,arg4:str
 
 export function SetTabViewBar(arg1:string,arg2:number,arg3:number,arg4:string):Promise<void>;
 
+export function SetTabViewOrder(arg1:string,arg2:number,arg3:Array<string>,arg4:string):Promise<void>;
+
 export function SetWindowAutoYes(arg1:string,arg2:number,arg3:boolean,arg4:string):Promise<void>;
 
 export function StartSession(arg1:string,arg2:string):Promise<void>;

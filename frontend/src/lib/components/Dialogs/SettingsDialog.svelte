@@ -32,6 +32,8 @@
   import ShortcutEditor from '../Settings/ShortcutEditor.svelte';
   import { t, loadTranslations } from '../../i18n';
   import DialogCloseButton from '../common/DialogCloseButton.svelte';
+  import ViewOrderEditor from '../common/ViewOrderEditor.svelte';
+  import { normalizeViewOrder, isDefaultViewOrder } from '../../utils/viewOrder';
 
   export let show = false;
 
@@ -878,6 +880,31 @@
               {#if notesContrastLow}
                 <p class="accent-warning" data-testid="notes-contrast-warning">{$t('settings.notesLowContrast')}</p>
               {/if}
+            </div>
+
+            <!-- Here rather than on the Terminal or Agents tab: it is every
+                 tab's, agent and terminal alike — those without an order of
+                 their own; a tab sets one from its menu. The default is stored
+                 as none, so a later change of the default reaches everyone who
+                 never moved anything. -->
+            <div class="setting-item input-item column-item" data-setting="view-order">
+              <span class="setting-info">
+                <span class="setting-label">{$t('settings.viewOrder')}</span>
+                <span class="setting-desc">{$t('settings.viewOrderDesc')}</span>
+              </span>
+              <div class="view-order-setting">
+                <ViewOrderEditor
+                  order={normalizeViewOrder($settings.viewOrder)}
+                  on:change={(e) => saveSettings({ viewOrder: isDefaultViewOrder(e.detail) ? null : e.detail })}
+                />
+                <button
+                  type="button"
+                  class="view-order-reset"
+                  data-action="reset-view-order"
+                  disabled={!$settings.viewOrder?.length}
+                  on:click={() => saveSettings({ viewOrder: null })}
+                >{$t('viewOrder.resetDefault')}</button>
+              </div>
             </div>
           </div>
 
@@ -2104,6 +2131,19 @@
   /* Must beat .input-item's align-items:flex-start, which would shrink a
      grid child to its content width and collapse it to a single column. */
   .setting-item.column-item { align-items: stretch; }
+  .view-order-setting { display: flex; flex-direction: column; gap: 8px; max-width: 360px; }
+  .view-order-reset {
+    align-self: flex-start;
+    padding: 4px 10px;
+    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: transparent;
+    color: #9ca3af;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .view-order-reset:hover:not(:disabled) { background: rgba(255, 255, 255, 0.07); color: #e5e7eb; }
+  .view-order-reset:disabled { opacity: 0.4; cursor: default; }
   .column-item { flex-direction: column; gap: 10px; }
   .column-item > :global(*) { width: 100%; }
   .agent-theme-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 8px; }
