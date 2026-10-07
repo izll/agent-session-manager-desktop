@@ -14,6 +14,10 @@ export function AddQuickJump(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['AddQuickJump'](arg1, arg2, arg3, arg4);
 }
 
+export function AddRunnerSuggestion(arg1, arg2, arg3) {
+  return window['go']['main']['App']['AddRunnerSuggestion'](arg1, arg2, arg3);
+}
+
 export function AddSubtask(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['AddSubtask'](arg1, arg2, arg3, arg4);
 }
@@ -392,6 +396,10 @@ export function GetResumeSessions(arg1, arg2) {
 
 export function GetResumeSessionsOn(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['GetResumeSessionsOn'](arg1, arg2, arg3, arg4);
+}
+
+export function GetRunnerSuggestions(arg1, arg2) {
+  return window['go']['main']['App']['GetRunnerSuggestions'](arg1, arg2);
 }
 
 export function GetSSHConfigHosts() {

@@ -1671,6 +1671,26 @@ export namespace main {
 	        this.error = source["error"];
 	    }
 	}
+	export class RunnerSuggestionInfo {
+	    tool: string;
+	    name: string;
+	    command: string;
+	    runIn: string;
+	    added: boolean;
+
+	    static createFrom(source: any = {}) {
+	        return new RunnerSuggestionInfo(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.tool = source["tool"];
+	        this.name = source["name"];
+	        this.command = source["command"];
+	        this.runIn = source["runIn"];
+	        this.added = source["added"];
+	    }
+	}
 	export class SSHConfigHostInfo {
 	    alias: string;
 	    hostName: string;

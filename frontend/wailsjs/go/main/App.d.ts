@@ -11,6 +11,8 @@ export function AddDiffHiddenRule(arg1:string,arg2:number,arg3:string,arg4:strin
 
 export function AddQuickJump(arg1:string,arg2:number,arg3:string,arg4:string):Promise<void>;
 
+export function AddRunnerSuggestion(arg1:string,arg2:string,arg3:string):Promise<string>;
+
 export function AddSubtask(arg1:string,arg2:string,arg3:string,arg4:string):Promise<main.SubtaskInfo>;
 
 export function AssignToGroup(arg1:string,arg2:string,arg3:string):Promise<void>;
@@ -200,6 +202,8 @@ export function GetQuickJump():Promise<Array<session.QuickJumpEntry>>;
 export function GetResumeSessions(arg1:string,arg2:string):Promise<Array<main.AgentSessionInfo>>;
 
 export function GetResumeSessionsOn(arg1:string,arg2:string,arg3:string,arg4:string):Promise<Array<main.AgentSessionInfo>>;
+
+export function GetRunnerSuggestions(arg1:string,arg2:number):Promise<Array<main.RunnerSuggestionInfo>>;
 
 export function GetSSHConfigHosts():Promise<Array<main.SSHConfigHostInfo>>;
 

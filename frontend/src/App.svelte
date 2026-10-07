@@ -1943,7 +1943,11 @@
     windowIdx={$selectedWindowIdx}
     onOpenManager={openCommandManager}
   />
-  <CommandManagerDialog bind:show={showCommandManager} />
+  <CommandManagerDialog
+    bind:show={showCommandManager}
+    sessionId={$selectedSessionId || ''}
+    windowIdx={$selectedWindowIdx}
+  />
   <ServerManagerDialog bind:show={showServerManager} />
   <SessionTemplateDialog bind:show={showTemplateDialog} useTemplateId={templateToUse} />
   <!-- Opened from the tab bar's colour button. The sidebar's context-menu

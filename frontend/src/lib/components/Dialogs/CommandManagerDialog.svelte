@@ -9,8 +9,12 @@
   import DialogCloseButton from '../common/DialogCloseButton.svelte';
 
   export let show = false;
+  /** The tab whose directory is examined for build-tool suggestions. */
+  export let sessionId = '';
+  export let windowIdx = 0;
 
   type Cmd = main.SavedCommandInfo;
+  type Suggestion = main.RunnerSuggestionInfo;
   type Group = main.CommandGroupInfo;
 
   let commands: Cmd[] = [];
@@ -18,6 +22,14 @@
   let loading = false;
   let error = '';
   let loadGeneration = 0;
+
+  // Build-tool suggestions for the open tab's directory. Collapsed by
+  // default: the library is what this dialog is for, and a list of things
+  // the project could run should not push it off the screen.
+  let suggestions: Suggestion[] = [];
+  let suggestionsOpen = false;
+  let addingSuggestion = '';
+  let suggestionError = '';
   let operationGeneration = 0;
   let savingCommand = false;
   let savingGroup = false;
@@ -60,6 +72,45 @@
     lastShow = show;
   }
 
+  // Suggestions are read from disk, so they are loaded with the library
+  // rather than on every keystroke. A failure here is shown in the panel and
+  // never blocks the library itself: a directory that cannot be read is a
+  // reason to offer nothing, not to break the dialog.
+  async function loadSuggestions() {
+    const generation = loadGeneration;
+    if (!sessionId) {
+      suggestions = [];
+      return;
+    }
+    try {
+      const found = await App.GetRunnerSuggestions(sessionId, windowIdx);
+      if (!show || generation !== loadGeneration) return;
+      suggestions = (found || []) as Suggestion[];
+      suggestionError = '';
+    } catch (e) {
+      if (!show || generation !== loadGeneration) return;
+      suggestions = [];
+      suggestionError = String(e);
+    }
+  }
+
+  async function addSuggestion(s: Suggestion) {
+    if (addingSuggestion) return;
+    const generation = loadGeneration;
+    addingSuggestion = s.command;
+    suggestionError = '';
+    try {
+      await App.AddRunnerSuggestion(s.name, s.command, s.runIn);
+      if (!show || generation !== loadGeneration) return;
+      await load();
+    } catch (e) {
+      if (!show || generation !== loadGeneration) return;
+      suggestionError = String(e);
+    } finally {
+      if (generation === loadGeneration) addingSuggestion = '';
+    }
+  }
+
   async function load() {
     const generation = ++loadGeneration;
     loading = true;
@@ -69,6 +120,9 @@
       if (!show || generation !== loadGeneration) return;
       commands = (lib?.commands || []) as Cmd[];
       groups = (lib?.groups || []) as Group[];
+      // After the library, since each suggestion is marked with whether it
+      // is already saved.
+      await loadSuggestions();
     } catch (e) {
       if (!show || generation !== loadGeneration) return;
       error = String(e);
@@ -83,6 +137,10 @@
     error = '';
     savingCommand = false;
     savingGroup = false;
+    suggestions = [];
+    suggestionsOpen = false;
+    addingSuggestion = '';
+    suggestionError = '';
     clearForm();
   }
 
@@ -449,7 +507,54 @@
           </div>
         {:else if loading}
           <div class="state">{$t('common.loading')}</div>
-        {:else if commands.length === 0 && groups.length === 0}
+        {:else}
+          <!-- Offered before the library itself, because an empty library is
+               exactly when a project's own build commands are most useful.
+               Collapsed until asked for: it is a suggestion, not the point of
+               the dialog. -->
+          {#if suggestions.length > 0}
+            <div class="suggest">
+              <button
+                class="suggest-head"
+                aria-expanded={suggestionsOpen}
+                on:click={() => (suggestionsOpen = !suggestionsOpen)}
+              >
+                <span class="suggest-caret" class:open={suggestionsOpen}>▸</span>
+                <span class="suggest-title">{$t('commands.suggestTitle')}</span>
+                <span class="suggest-count">{suggestions.length}</span>
+              </button>
+              {#if suggestionsOpen}
+                <p class="suggest-hint">{$t('commands.suggestHint')}</p>
+                {#if suggestionError}
+                  <div class="state error">{suggestionError}</div>
+                {/if}
+                {#each suggestions as s (s.tool + s.command)}
+                  <div class="suggest-row">
+                    <div class="suggest-main">
+                      <span class="suggest-name">
+                        {s.name}
+                        <span class="suggest-tool">{s.tool}</span>
+                      </span>
+                      <span class="cmd-text">{s.command}</span>
+                    </div>
+                    {#if s.added}
+                      <span class="suggest-added">{$t('commands.suggestAdded')}</span>
+                    {:else}
+                      <button
+                        class="link-btn add"
+                        disabled={addingSuggestion !== ''}
+                        on:click={() => addSuggestion(s)}
+                      >
+                        {addingSuggestion === s.command ? $t('common.loading') : $t('commands.suggestAdd')}
+                      </button>
+                    {/if}
+                  </div>
+                {/each}
+              {/if}
+            </div>
+          {/if}
+
+        {#if commands.length === 0 && groups.length === 0}
           <div class="empty">
             <p class="empty-title">{$t('commands.emptyTitle')}</p>
             <p class="empty-hint">{$t('commands.managerEmptyHint')}</p>
@@ -491,6 +596,7 @@
               {/if}
             </div>
           {/each}
+        {/if}
         {/if}
       </div>
 
@@ -612,6 +718,38 @@
     margin-left: 6px; padding: 1px 6px; border-radius: 4px; font-size: 10px;
     vertical-align: 1px; color: rgb(var(--accent-rgb)); background: rgba(var(--accent-rgb), 0.14);
   }
+  .field-hint { font-size: 11px; color: #6b7280; }
+
+  /* Build-tool suggestions: a quieter block than the library itself, so the
+     saved commands stay the thing the eye lands on. */
+  .suggest {
+    border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px;
+    padding: 6px; margin-bottom: 10px; background: rgba(255, 255, 255, 0.02);
+  }
+  .suggest-head {
+    display: flex; align-items: center; gap: 7px; width: 100%;
+    border: 0; background: none; padding: 3px 4px; cursor: pointer; text-align: start;
+  }
+  .suggest-caret {
+    color: #71717a; font-size: 10px; transition: transform 120ms ease;
+  }
+  .suggest-caret.open { transform: rotate(90deg); }
+  .suggest-title { font-size: 12px; color: #a1a1aa; }
+  .suggest-count {
+    margin-inline-start: auto; padding: 1px 6px; border-radius: 4px; font-size: 10px;
+    color: #a1a1aa; background: rgba(255, 255, 255, 0.06);
+  }
+  .suggest-hint { margin: 4px 4px 8px; font-size: 11px; color: #6b7280; line-height: 1.45; }
+  .suggest-row {
+    display: flex; align-items: center; gap: 8px; padding: 5px 4px;
+  }
+  .suggest-main { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+  .suggest-name { font-size: 12px; color: #d4d4d8; }
+  .suggest-tool {
+    margin-inline-start: 6px; font-size: 10px; color: #71717a;
+  }
+  .suggest-added { font-size: 11px; color: #6b7280; flex-shrink: 0; }
+
   .toggle-main { display: flex; flex-direction: column; gap: 1px; }
   .toggle-label { font-size: 13px; color: #e4e4e7; }
   .toggle-hint { font-size: 11px; color: #6b7280; }
