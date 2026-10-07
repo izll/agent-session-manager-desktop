@@ -23,6 +23,8 @@
   import MarkdownView from './MarkdownView.svelte';
   import { lastFileByTab, expandedByTab, placeByFile } from '../../stores/fileBrowserMemory';
   import { isMarkdownPath } from '../../utils/markdownLinks';
+  import { offerUndo } from '../../stores/undo';
+  import { reportError } from '../../stores/appErrors';
 
   export let active = false;
 
@@ -1340,6 +1342,68 @@
     });
   }
 
+  // --- Deleting -------------------------------------------------------------
+
+  /** The file waiting on the delete confirmation. */
+  let deleteTarget: string | null = null;
+
+  function askDelete(path: string | null) {
+    if (!path) return;
+    // Deleting the file being edited throws the edits away with it.
+    if (editing && samePath(path, selectedPath)) {
+      guardUnsaved(() => { deleteTarget = path; });
+    } else {
+      deleteTarget = path;
+    }
+  }
+
+  /**
+   * Delete the confirmed file, and offer to take it back.
+   *
+   * The backend moves the file out of the tree at once and holds it; the undo
+   * puts it back, and the offer running out removes it for good.
+   */
+  async function confirmDelete() {
+    const path = deleteTarget;
+    deleteTarget = null;
+    const sessionId = get(selectedSessionId);
+    const expectedRoot = rootAbsPath;
+    if (!path || !sessionId || !expectedRoot) return;
+    const windowIdx = get(selectedWindowIdx) ?? 0;
+    const targetKey = browseKey;
+    const parent = splitPath(path).dir.replace(/\/$/, '');
+    const name = splitPath(path).name;
+    let token: string;
+    try {
+      token = await App.DeleteSessionFile(sessionId, path, windowIdx, expectedRoot, get(activeProjectId));
+    } catch (e) {
+      reportError(String(e));
+      return;
+    }
+    const wasSelected = samePath(path, selectedPath);
+    if (!destroyed && targetKey === browseKey) {
+      if (wasSelected) {
+        if (editing) leaveEditModeQuietly();
+        selectedPath = null;
+        selectedFile = null;
+        fileError = '';
+        fileGeneration++;
+        fileLoading = false;
+      }
+      void loadDir(parent, true);
+    }
+    offerUndo({
+      message: $t('undo.fileDeleted', { name }),
+      undo: async () => {
+        await App.RestoreDeletedSessionFile(token);
+        if (destroyed || targetKey !== browseKey) return;
+        await loadDir(parent, true);
+        if (wasSelected && !selectedPath) selectFile(path);
+      },
+      expire: () => { App.DiscardDeletedSessionFile(token).catch(() => {}); },
+    });
+  }
+
   /** Leave edit mode without re-reading — the caller is loading a file anyway. */
   function leaveEditModeQuietly() {
     editing = false;
@@ -1537,7 +1601,10 @@
                 tabindex="0"
                 title={file.entry.unreadable ? $t('browser.unreadable') : file.path}
                 on:click={() => selectFile(file.path)}
-                on:keydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectFile(file.path); } }}
+                on:keydown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectFile(file.path); }
+                  else if (e.key === 'Delete') { e.preventDefault(); askDelete(file.path); }
+                }}
               >
                 <div class="file-main">
                   <!-- The page icon stays: it is what separates a file row from
@@ -1624,6 +1691,14 @@
               <button class="edit-btn" on:click={openSelectedInEditor}>
                 {$t('browser.openInEditor')}
               </button>
+            {/if}
+            {#if !editing}
+              <button
+                class="edit-btn danger"
+                data-action="delete-file"
+                title={$t('browser.deleteTooltip')}
+                on:click={() => askDelete(selectedPath)}
+              >{$t('common.delete')}</button>
             {/if}
           </div>
         {/if}
@@ -1759,6 +1834,19 @@
     cancelText={$t('browser.keepEditing')}
     on:confirm={confirmDiscard}
     on:cancel={cancelDiscard}
+  />
+{/if}
+
+{#if deleteTarget}
+  <ConfirmDialog
+    show={true}
+    variant="danger"
+    title={$t('browser.deleteTitle')}
+    message={$t('browser.deleteMessage', { name: splitPath(deleteTarget).name })}
+    confirmText={$t('common.delete')}
+    cancelText={$t('common.cancel')}
+    on:confirm={confirmDelete}
+    on:cancel={() => (deleteTarget = null)}
   />
 {/if}
 
@@ -2128,6 +2216,14 @@
   }
   .edit-btn.primary:hover:not(:disabled) {
     background: rgba(var(--accent-rgb), 0.32);
+  }
+  .edit-btn.danger {
+    color: #fca5a5;
+    border-color: rgba(239, 68, 68, 0.3);
+  }
+  .edit-btn.danger:hover:not(:disabled) {
+    background: rgba(239, 68, 68, 0.15);
+    color: #fecaca;
   }
 
   /* The unsaved marker sits next to the file name, where the eye already is

@@ -16,6 +16,12 @@ export type UndoAction = {
   message: string;
   /** Puts it back. Awaited, so a failure can be reported rather than assumed. */
   undo: () => Promise<void>;
+  /**
+   * Called when the offer ends without an undo — it ran out, was dismissed or
+   * replaced by a newer one — for an action that holds something back until
+   * then, like a deleted file kept for restoring.
+   */
+  expire?: () => void;
 };
 
 type UndoState = {
@@ -33,6 +39,16 @@ const WINDOW_SECONDS = 10;
 
 let timer: ReturnType<typeof setInterval> | null = null;
 let revision = 0;
+
+/** End the current offer for good, letting its action know. */
+function expireCurrent(): void {
+  let ending: UndoAction | null = null;
+  undoState.update((state) => {
+    ending = state.action;
+    return { action: null, remaining: 0, error: null };
+  });
+  (ending as UndoAction | null)?.expire?.();
+}
 
 function stopTimer() {
   if (timer !== null) {
@@ -52,6 +68,7 @@ function stopTimer() {
 export function offerUndo(action: UndoAction): void {
   revision++;
   stopTimer();
+  expireCurrent();
   undoState.set({ action, remaining: WINDOW_SECONDS, error: null });
 
   startTimer();
@@ -60,14 +77,19 @@ export function offerUndo(action: UndoAction): void {
 function startTimer(): void {
   stopTimer();
   timer = setInterval(() => {
+    let ended = false;
     undoState.update((state) => {
       const remaining = state.remaining - 1;
       if (remaining <= 0) {
-        stopTimer();
-        return { action: null, remaining: 0, error: null };
+        ended = true;
+        return state;
       }
       return { ...state, remaining };
     });
+    if (ended) {
+      stopTimer();
+      expireCurrent();
+    }
   }, 1000);
 }
 
@@ -75,7 +97,7 @@ function startTimer(): void {
 export function dismissUndo(): void {
   revision++;
   stopTimer();
-  undoState.set({ action: null, remaining: 0, error: null });
+  expireCurrent();
 }
 
 /**
@@ -103,6 +125,9 @@ export async function runUndo(): Promise<boolean> {
     if (revision === startedAtRevision) {
       undoState.set({ action: pending, remaining: WINDOW_SECONDS, error: String(e) });
       startTimer();
+    } else {
+      // A newer offer took the bar meanwhile; this one is over.
+      (pending as UndoAction).expire?.();
     }
     return false;
   }

@@ -94,6 +94,9 @@ type App struct {
 	// GUI on the same project can't fight over its tmux sessions.
 	projectLocked    bool
 	otherInstancePID int
+	// deletedFiles holds files deleted from the file browser while the
+	// deletion can be undone (deleted_files.go).
+	deletedFiles deletedFileHolds
 }
 
 type eventThrottle struct {
@@ -193,6 +196,7 @@ func (a *App) startup(ctx context.Context) {
 		return
 	}
 	a.storage = storage
+	go purgeStaleDeletedFiles(storage.DeletedFilesDir(), time.Now())
 
 	// Apply the active project's process/tmux settings before anything can
 	// restart a pane or launch a provider. The same helper runs after every
@@ -438,6 +442,8 @@ func (a *App) shutdown(ctx context.Context) {
 	a.stopPreviewPolling()
 	a.stopOrphanCleanup()
 	a.stopTmuxMaintenance()
+	// A deletion still undoable when the app closes is final.
+	a.deletedFiles.discardAll()
 	// Dictation owns audio/hotkey goroutines whose callbacks can write to the
 	// terminal and emit frontend events. Drain and detach them before stopping
 	// the TerminalServer or releasing the active project's ownership.

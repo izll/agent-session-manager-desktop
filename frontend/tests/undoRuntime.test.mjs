@@ -59,4 +59,30 @@ state = readStore(undoState);
 assert.equal(state.action?.message, 'new action', 'a late failure must not overwrite a newer undo offer');
 
 dismissUndo();
+
+// expire: called once when an offer ends without an undo, never after one.
+const expired = [];
+const expiring = (message, undo = async () => {}) => ({ message, undo, expire: () => expired.push(message) });
+
+offerUndo(expiring('undone'));
+assert.equal(await runUndo(), true);
+assert.deepEqual(expired, [], 'an undone action is not expired');
+
+offerUndo(expiring('replaced'));
+offerUndo(expiring('dismissed'));
+assert.deepEqual(expired, ['replaced'], 'a newer offer expires the one it replaces');
+dismissUndo();
+assert.deepEqual(expired, ['replaced', 'dismissed'], 'dismissing expires the offer');
+dismissUndo();
+assert.deepEqual(expired, ['replaced', 'dismissed'], 'an empty bar expires nothing');
+
+let rejectLate;
+offerUndo(expiring('failed late', () => new Promise((_, reject) => { rejectLate = reject; })));
+const lateRun = runUndo();
+offerUndo(expiring('newest'));
+rejectLate(new Error('too late'));
+await lateRun;
+assert.deepEqual(expired, ['replaced', 'dismissed', 'failed late'],
+  'a failed undo superseded by a newer offer is expired, not left held');
+dismissUndo();
 console.log('undoRuntime: ok');

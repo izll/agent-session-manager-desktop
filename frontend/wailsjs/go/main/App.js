@@ -150,6 +150,10 @@ export function DeleteSession(arg1, arg2) {
   return window['go']['main']['App']['DeleteSession'](arg1, arg2);
 }
 
+export function DeleteSessionFile(arg1, arg2, arg3, arg4, arg5) {
+  return window['go']['main']['App']['DeleteSessionFile'](arg1, arg2, arg3, arg4, arg5);
+}
+
 export function DeleteSessionTemplate(arg1) {
   return window['go']['main']['App']['DeleteSessionTemplate'](arg1);
 }
@@ -176,6 +180,10 @@ export function DetectedEditor() {
 
 export function DetectionPatternsVersion() {
   return window['go']['main']['App']['DetectionPatternsVersion']();
+}
+
+export function DiscardDeletedSessionFile(arg1) {
+  return window['go']['main']['App']['DiscardDeletedSessionFile'](arg1);
 }
 
 export function DiscardTrashedWorktree(arg1, arg2) {
@@ -756,6 +764,10 @@ export function RestoreBackup(arg1, arg2) {
 
 export function RestoreCheckpoint(arg1, arg2, arg3, arg4, arg5) {
   return window['go']['main']['App']['RestoreCheckpoint'](arg1, arg2, arg3, arg4, arg5);
+}
+
+export function RestoreDeletedSessionFile(arg1) {
+  return window['go']['main']['App']['RestoreDeletedSessionFile'](arg1);
 }
 
 export function RestoreDeletedSubtask(arg1, arg2, arg3, arg4, arg5) {

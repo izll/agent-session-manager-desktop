@@ -79,6 +79,8 @@ export function DeleteServer(arg1:string):Promise<Array<main.ServerInfo>>;
 
 export function DeleteSession(arg1:string,arg2:string):Promise<void>;
 
+export function DeleteSessionFile(arg1:string,arg2:string,arg3:number,arg4:string,arg5:string):Promise<string>;
+
 export function DeleteSessionTemplate(arg1:string):Promise<void>;
 
 export function DeleteSubtask(arg1:string,arg2:string,arg3:string,arg4:string):Promise<void>;
@@ -92,6 +94,8 @@ export function DetachSession(arg1:string):Promise<void>;
 export function DetectedEditor():Promise<string>;
 
 export function DetectionPatternsVersion():Promise<number>;
+
+export function DiscardDeletedSessionFile(arg1:string):Promise<void>;
 
 export function DiscardTrashedWorktree(arg1:string,arg2:boolean):Promise<void>;
 
@@ -382,6 +386,8 @@ export function RestartTabWithResume(arg1:string,arg2:number,arg3:string,arg4:st
 export function RestoreBackup(arg1:string,arg2:string):Promise<void>;
 
 export function RestoreCheckpoint(arg1:string,arg2:number,arg3:string,arg4:string,arg5:string):Promise<main.CheckpointRestoreResult>;
+
+export function RestoreDeletedSessionFile(arg1:string):Promise<void>;
 
 export function RestoreDeletedSubtask(arg1:string,arg2:string,arg3:string,arg4:main.DeletedSubtaskSnapshot,arg5:string):Promise<void>;
 
