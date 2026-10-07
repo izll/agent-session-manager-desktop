@@ -523,6 +523,7 @@
   "confirm.deleteConfirm": "ลบ",
   "confirm.quitApp": "ออกจากแอปพลิเคชัน",
   "confirm.quitMessage": "คุณแน่ใจหรือไม่ว่าต้องการออก? เซสชันที่กำลังทำงานจะยังคงทำงานอยู่เบื้องหลัง",
+  "confirm.quitMessageRunning": "มีคำสั่ง {count} รายการที่ยังทำงานอยู่: {commands} โดยจะทำงานต่อแม้ปิดแอปแล้ว เช่นเดียวกับเซสชัน",
   "confirm.quitConfirm": "ออก",
   "newSession.title": "เซสชันใหม่",
   "newSession.agentType": "ประเภท Agent",

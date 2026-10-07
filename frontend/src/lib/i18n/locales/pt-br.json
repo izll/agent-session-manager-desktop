@@ -523,6 +523,7 @@
   "confirm.deleteConfirm": "Excluir",
   "confirm.quitApp": "Sair do Aplicativo",
   "confirm.quitMessage": "Tem certeza que deseja sair? Todas as sessões em execução continuarão ativas em segundo plano.",
+  "confirm.quitMessageRunning": "{count} comando(s) ainda estão rodando: {commands}. Eles continuam depois que o app fecha, como as próprias sessões.",
   "confirm.quitConfirm": "Sair",
   "newSession.title": "Nova Sessão",
   "newSession.agentType": "Tipo de Agente",

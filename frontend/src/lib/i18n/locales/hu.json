@@ -519,6 +519,7 @@
   "confirm.deleteConfirm": "Törlés",
   "confirm.quitApp": "Kilépés az alkalmazásból",
   "confirm.quitMessage": "Biztosan ki szeretnél lépni? Minden futó munkamenet a háttérben aktív marad.",
+  "confirm.quitMessageRunning": "{count} parancs még fut: {commands}. Az alkalmazás bezárása után is futnak tovább, ahogy a munkamenetek is.",
   "confirm.quitConfirm": "Kilépés",
   "newSession.title": "Új munkamenet",
   "newSession.agentType": "Agent típusa",

@@ -191,6 +191,8 @@
   import { statusLines, tabStatuses } from './lib/stores/statusLines';
   import { QuickReplyTab, ExportSessions, PendingUpdate, AddQuickJump } from '../wailsjs/go/main/App';
   import { WhatsNewOnLaunch, MarkWhatsNewSeen } from '../wailsjs/go/main/App';
+  import { RunningTabCommands } from '../wailsjs/go/main/App';
+  import type { main } from '../wailsjs/go/models';
   import { activeProjectId, loadProjects, otherInstancePID, projects, refreshLockStatus } from './lib/stores/projects';
   import { appView, goBack, showTasksView } from './lib/stores/navigation';
   import { openTaskCount, watchOpenCount, refreshOpenCount } from './lib/stores/taskAlerts';
@@ -1284,9 +1286,37 @@
     showDeleteConfirm = false;
   }
 
+  // What is still running when the quit is asked for, so the confirmation can
+  // name it rather than ask in general.
+  let runningCommands: main.RunningTabCommand[] = [];
+  let quitPromptRevision = 0;
+
   function handleQuit() {
+    // Shown at once and filled in after: the list is a tmux round trip per
+    // runner tab, and a dialog that waits for it would feel like a stall on
+    // the one action people expect to be instant.
+    runningCommands = [];
+    const revision = ++quitPromptRevision;
     showQuitConfirm = true;
+    void RunningTabCommands()
+      .then((list) => {
+        if (revision !== quitPromptRevision || !showQuitConfirm) return;
+        runningCommands = list ?? [];
+      })
+      .catch(() => {
+        // Not knowing is not a reason to block the quit; the generic
+        // question stands.
+      });
   }
+
+  // The commands keep running after the app closes — they live in tmux, like
+  // the sessions themselves — so this reports rather than warns.
+  $: quitMessage = runningCommands.length > 0
+    ? $t('confirm.quitMessageRunning', {
+        count: String(runningCommands.length),
+        commands: runningCommands.map((c) => c.command).join(', '),
+      })
+    : $t('confirm.quitMessage');
 
   /**
    * Shutdown is not instant: the app saves where each session left off, detaches
@@ -1972,7 +2002,7 @@
   <ConfirmDialog
     bind:show={showQuitConfirm}
     title={$t('confirm.quitApp')}
-    message={$t('confirm.quitMessage')}
+    message={quitMessage}
     confirmText={$t('confirm.quitConfirm')}
     cancelText={$t('common.cancel')}
     variant="warning"

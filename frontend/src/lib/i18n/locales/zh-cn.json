@@ -523,6 +523,7 @@
   "confirm.deleteConfirm": "删除",
   "confirm.quitApp": "退出应用程序",
   "confirm.quitMessage": "确定要退出吗？所有运行中的会话将在后台保持活跃。",
+  "confirm.quitMessageRunning": "还有 {count} 个命令在运行：{commands}。它们会在关闭应用后继续运行，就像会话一样。",
   "confirm.quitConfirm": "退出",
   "newSession.title": "新建会话",
   "newSession.agentType": "代理类型",

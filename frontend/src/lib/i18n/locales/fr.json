@@ -523,6 +523,7 @@
   "confirm.deleteConfirm": "Supprimer",
   "confirm.quitApp": "Quitter l'application",
   "confirm.quitMessage": "Êtes-vous sûr de vouloir quitter ? Toutes les sessions en cours resteront actives en arrière-plan.",
+  "confirm.quitMessageRunning": "{count} commande(s) tournent encore : {commands}. Elles continuent après la fermeture de l'application, comme les sessions.",
   "confirm.quitConfirm": "Quitter",
   "newSession.title": "Nouvelle session",
   "newSession.agentType": "Type d'agent",

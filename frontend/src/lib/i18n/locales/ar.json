@@ -523,6 +523,7 @@
   "confirm.deleteConfirm": "حذف",
   "confirm.quitApp": "إنهاء التطبيق",
   "confirm.quitMessage": "هل أنت متأكد من الإنهاء؟ ستبقى جميع الجلسات النشطة تعمل في الخلفية.",
+  "confirm.quitMessageRunning": "لا تزال {count} من الأوامر تعمل: {commands}. ستستمر بعد إغلاق التطبيق، مثل الجلسات نفسها.",
   "confirm.quitConfirm": "إنهاء",
   "newSession.title": "جلسة جديدة",
   "newSession.agentType": "نوع الوكيل",

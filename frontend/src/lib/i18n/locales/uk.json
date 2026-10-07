@@ -523,6 +523,7 @@
   "confirm.deleteConfirm": "Видалити",
   "confirm.quitApp": "Вийти з програми",
   "confirm.quitMessage": "Ви впевнені, що хочете вийти? Усі запущені сеанси залишаться активними у фоновому режимі.",
+  "confirm.quitMessageRunning": "Ще працюють команди ({count}): {commands}. Вони продовжать роботу після закриття застосунку, як і самі сесії.",
   "confirm.quitConfirm": "Вийти",
   "newSession.title": "Новий сеанс",
   "newSession.agentType": "Тип агента",

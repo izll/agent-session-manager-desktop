@@ -523,6 +523,7 @@
   "confirm.deleteConfirm": "Smazat",
   "confirm.quitApp": "Ukončit aplikaci",
   "confirm.quitMessage": "Opravdu chcete ukončit? Všechny běžící relace zůstanou aktivní na pozadí.",
+  "confirm.quitMessageRunning": "{count} příkazů stále běží: {commands}. Běží dál i po zavření aplikace, stejně jako samotné relace.",
   "confirm.quitConfirm": "Ukončit",
   "newSession.title": "Nová relace",
   "newSession.agentType": "Typ agenta",

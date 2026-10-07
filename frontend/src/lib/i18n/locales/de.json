@@ -523,6 +523,7 @@
   "confirm.deleteConfirm": "Löschen",
   "confirm.quitApp": "Anwendung beenden",
   "confirm.quitMessage": "Möchtest du wirklich beenden? Alle laufenden Sitzungen bleiben im Hintergrund aktiv.",
+  "confirm.quitMessageRunning": "{count} Befehl(e) laufen noch: {commands}. Sie laufen nach dem Schließen der App weiter, genau wie die Sitzungen.",
   "confirm.quitConfirm": "Beenden",
   "newSession.title": "Neue Sitzung",
   "newSession.agentType": "Agent-Typ",

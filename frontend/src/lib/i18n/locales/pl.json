@@ -523,6 +523,7 @@
   "confirm.deleteConfirm": "Usuń",
   "confirm.quitApp": "Zamknij aplikację",
   "confirm.quitMessage": "Czy na pewno chcesz wyjść? Wszystkie uruchomione sesje pozostaną aktywne w tle.",
+  "confirm.quitMessageRunning": "{count} poleceń wciąż działa: {commands}. Działają dalej po zamknięciu aplikacji, tak jak same sesje.",
   "confirm.quitConfirm": "Zamknij",
   "newSession.title": "Nowa sesja",
   "newSession.agentType": "Typ agenta",

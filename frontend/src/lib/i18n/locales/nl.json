@@ -523,6 +523,7 @@
   "confirm.deleteConfirm": "Verwijderen",
   "confirm.quitApp": "Applicatie afsluiten",
   "confirm.quitMessage": "Weet je zeker dat je wilt afsluiten? Alle draaiende sessies blijven actief op de achtergrond.",
+  "confirm.quitMessageRunning": "{count} opdracht(en) draaien nog: {commands}. Ze blijven draaien nadat de app is gesloten, net als de sessies.",
   "confirm.quitConfirm": "Afsluiten",
   "newSession.title": "Nieuwe sessie",
   "newSession.agentType": "Agenttype",

@@ -523,6 +523,7 @@
   "confirm.deleteConfirm": "Sil",
   "confirm.quitApp": "Uygulamadan Çık",
   "confirm.quitMessage": "Çıkmak istediğinizden emin misiniz? Tüm çalışan oturumlar arka planda aktif kalacaktır.",
+  "confirm.quitMessageRunning": "{count} komut hâlâ çalışıyor: {commands}. Uygulama kapandıktan sonra da, oturumlar gibi, çalışmaya devam ederler.",
   "confirm.quitConfirm": "Çık",
   "newSession.title": "Yeni Oturum",
   "newSession.agentType": "Ajan Türü",

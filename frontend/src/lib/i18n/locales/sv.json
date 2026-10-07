@@ -523,6 +523,7 @@
   "confirm.deleteConfirm": "Ta bort",
   "confirm.quitApp": "Avsluta programmet",
   "confirm.quitMessage": "Är du säker på att du vill avsluta? Alla körande sessioner fortsätter i bakgrunden.",
+  "confirm.quitMessageRunning": "{count} kommando(n) kör fortfarande: {commands}. De fortsätter köra efter att appen stängts, precis som sessionerna.",
   "confirm.quitConfirm": "Avsluta",
   "newSession.title": "Ny session",
   "newSession.agentType": "Agenttyp",

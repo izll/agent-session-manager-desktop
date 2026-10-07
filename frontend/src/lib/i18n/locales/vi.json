@@ -523,6 +523,7 @@
   "confirm.deleteConfirm": "Xóa",
   "confirm.quitApp": "Thoát ứng dụng",
   "confirm.quitMessage": "Bạn có chắc chắn muốn thoát? Tất cả các phiên đang chạy sẽ tiếp tục hoạt động ở nền.",
+  "confirm.quitMessageRunning": "Còn {count} lệnh đang chạy: {commands}. Chúng vẫn chạy sau khi đóng ứng dụng, giống như các phiên.",
   "confirm.quitConfirm": "Thoát",
   "newSession.title": "Phiên mới",
   "newSession.agentType": "Loại Agent",

@@ -523,6 +523,7 @@
   "confirm.deleteConfirm": "Delete",
   "confirm.quitApp": "Quit Application",
   "confirm.quitMessage": "Are you sure you want to quit? All running sessions will remain active in the background.",
+  "confirm.quitMessageRunning": "{count} command(s) are still running: {commands}. They keep running after the app closes, like the sessions themselves.",
   "confirm.quitConfirm": "Quit",
   "newSession.title": "New Session",
   "newSession.agentType": "Agent Type",

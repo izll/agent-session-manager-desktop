@@ -523,6 +523,7 @@
   "confirm.deleteConfirm": "삭제",
   "confirm.quitApp": "애플리케이션 종료",
   "confirm.quitMessage": "종료하시겠습니까? 실행 중인 모든 세션은 백그라운드에서 계속 활성 상태를 유지합니다.",
+  "confirm.quitMessageRunning": "명령 {count}개가 아직 실행 중입니다: {commands}. 세션과 마찬가지로 앱을 닫아도 계속 실행됩니다.",
   "confirm.quitConfirm": "종료",
   "newSession.title": "새 세션",
   "newSession.agentType": "에이전트 유형",

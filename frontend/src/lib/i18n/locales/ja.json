@@ -523,6 +523,7 @@
   "confirm.deleteConfirm": "削除",
   "confirm.quitApp": "アプリケーションを終了",
   "confirm.quitMessage": "終了しますか？実行中のすべてのセッションはバックグラウンドで動作し続けます。",
+  "confirm.quitMessageRunning": "{count} 個のコマンドがまだ実行中です: {commands}。セッションと同じく、アプリを閉じても実行され続けます。",
   "confirm.quitConfirm": "終了",
   "newSession.title": "新規セッション",
   "newSession.agentType": "エージェントタイプ",

@@ -523,6 +523,7 @@
   "confirm.deleteConfirm": "Удалить",
   "confirm.quitApp": "Выход из приложения",
   "confirm.quitMessage": "Вы уверены, что хотите выйти? Все запущенные сессии останутся активными в фоновом режиме.",
+  "confirm.quitMessageRunning": "Ещё работают команды ({count}): {commands}. Они продолжат работу после закрытия приложения, как и сами сессии.",
   "confirm.quitConfirm": "Выйти",
   "newSession.title": "Новая сессия",
   "newSession.agentType": "Тип агента",
