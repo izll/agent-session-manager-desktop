@@ -59,15 +59,55 @@ type SavedCommand struct {
 	// SendEnter runs the command instead of only typing it. Off by default so
 	// a half-remembered command can be reviewed before it executes.
 	SendEnter bool `json:"send_enter,omitempty"`
-	// InBackground runs the command in a terminal tab of its own, opened
-	// without switching to it, so a build or a server started from the
-	// library does not take over the tab it was picked from. It always runs:
-	// typing a command into a tab nobody is looking at would do nothing.
-	InBackground bool      `json:"in_background,omitempty"`
-	CreatedAt    time.Time `json:"created_at,omitempty"`
-	UsedAt       time.Time `json:"used_at,omitempty"`
+	// InBackground is the old two-way form of RunIn, kept so a library
+	// written before RunIn existed still runs its commands where it meant
+	// to. Read through RunTarget, never directly; writers set RunIn.
+	InBackground bool `json:"in_background,omitempty"`
+	// RunIn is where the command runs: RunInCurrent types it into the tab it
+	// was picked from, RunInNewTab opens a tab and switches to it, and
+	// RunInBackground opens one without switching, so a build or a server
+	// does not take over the tab it was started from.
+	//
+	// A tab of its own always runs the command: typing it into a tab nobody
+	// is looking at would do nothing.
+	RunIn     string    `json:"run_in,omitempty"`
+	CreatedAt time.Time `json:"created_at,omitempty"`
+	UsedAt    time.Time `json:"used_at,omitempty"`
 	// UseCount drives "most used first" ordering in the picker.
 	UseCount int `json:"use_count,omitempty"`
+}
+
+// Where a saved command runs.
+const (
+	RunInCurrent    = "current"
+	RunInNewTab     = "newtab"
+	RunInBackground = "background"
+)
+
+// ValidRunIn reports whether target is one of the three run targets.
+func ValidRunIn(target string) bool {
+	switch target {
+	case RunInCurrent, RunInNewTab, RunInBackground:
+		return true
+	}
+	return false
+}
+
+// RunTarget is where this command runs, resolving the older InBackground
+// flag for libraries written before RunIn existed.
+//
+// An unset RunIn means one of two different things, which is why the old
+// flag cannot simply be dropped: with InBackground set, the command was
+// saved to run in a tab of its own, and answering "current" would move a
+// running server into the tab the user was reading.
+func (c *SavedCommand) RunTarget() string {
+	if ValidRunIn(c.RunIn) {
+		return c.RunIn
+	}
+	if c.InBackground {
+		return RunInBackground
+	}
+	return RunInCurrent
 }
 
 // CommandGroup organises saved commands.
@@ -153,6 +193,12 @@ func (c *SavedCommand) Validate() error {
 	}
 	if strings.TrimSpace(c.Command) == "" {
 		return fmt.Errorf("the command is empty")
+	}
+	// Empty is allowed: it is how a library written before RunIn existed
+	// reads, and RunTarget resolves it. An unrecognised value is not, so a
+	// typo cannot silently become "type it into the tab you are reading".
+	if c.RunIn != "" && !ValidRunIn(c.RunIn) {
+		return fmt.Errorf("unknown run target %q", c.RunIn)
 	}
 	return nil
 }

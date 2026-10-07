@@ -20,9 +20,11 @@ type SavedCommandInfo struct {
 	Description string `json:"description"`
 	GroupID     string `json:"groupId"`
 	SendEnter   bool   `json:"sendEnter"`
-	// InBackground runs the command in a new terminal tab, left unselected.
-	InBackground bool `json:"inBackground"`
-	UseCount     int  `json:"useCount"`
+	// RunIn is "current", "newtab" or "background" — the tab the command was
+	// picked from, a new tab switched to, or a new tab left unselected.
+	// Always one of the three: the older stored form is resolved here.
+	RunIn    string `json:"runIn"`
+	UseCount int    `json:"useCount"`
 	// Placeholders is derived, not stored: the UI asks for these before
 	// sending, and deriving it here keeps one definition of what counts.
 	// Each carries the default written as {name:default}, if any.
@@ -63,7 +65,7 @@ func (a *App) GetCommands() (*CommandLibraryInfo, error) {
 			Description:  c.Description,
 			GroupID:      c.GroupID,
 			SendEnter:    c.SendEnter,
-			InBackground: c.InBackground,
+			RunIn:        c.RunTarget(),
 			UseCount:     c.UseCount,
 			Placeholders: session.PlaceholderList(c.Command),
 		})
@@ -75,15 +77,21 @@ func (a *App) GetCommands() (*CommandLibraryInfo, error) {
 }
 
 // SaveCommand adds or updates one command. An empty ID creates a new entry.
-func (a *App) SaveCommand(id, name, command, description, groupID string, sendEnter, inBackground bool) (string, error) {
+func (a *App) SaveCommand(id, name, command, description, groupID string, sendEnter bool, runIn string) (string, error) {
+	// An unrecognised target (an old caller passing nothing) means the tab the
+	// command was picked from, which is what the library did before the other
+	// two existed.
+	if !session.ValidRunIn(runIn) {
+		runIn = session.RunInCurrent
+	}
 	entry := session.SavedCommand{
-		ID:           id,
-		Name:         strings.TrimSpace(name),
-		Command:      strings.TrimSpace(command),
-		Description:  strings.TrimSpace(description),
-		GroupID:      groupID,
-		SendEnter:    sendEnter,
-		InBackground: inBackground,
+		ID:          id,
+		Name:        strings.TrimSpace(name),
+		Command:     strings.TrimSpace(command),
+		Description: strings.TrimSpace(description),
+		GroupID:     groupID,
+		SendEnter:   sendEnter,
+		RunIn:       runIn,
 	}
 	if err := entry.Validate(); err != nil {
 		return "", err
@@ -199,9 +207,10 @@ func (a *App) DeleteCommandGroup(id string) error {
 // RunCommand types a saved command into a session window, substituting the
 // given placeholder values, and records that it was used.
 //
-// A command marked to run in the background goes to a new terminal tab
-// instead, and the index of that tab is returned so the caller can show it;
-// otherwise the result is -1.
+// A command that runs in a tab of its own gets a new terminal tab instead,
+// and that tab's index is returned; otherwise the result is -1. Both tab
+// targets open the same way — whether to select the new tab is the caller's
+// to decide from the command's runIn, since only the UI can switch tabs.
 func (a *App) RunCommand(id, sessionID string, windowIdx int, values map[string]string, expectedProjectID string) (int, error) {
 	lib, err := a.storage.LoadCommands()
 	if err != nil {
@@ -226,9 +235,10 @@ func (a *App) RunCommand(id, sessionID string, windowIdx int, values map[string]
 	}
 
 	newIdx := -1
-	if found.InBackground {
+	switch found.RunTarget() {
+	case session.RunInNewTab, session.RunInBackground:
 		newIdx, err = a.runCommandInNewTab(sessionID, windowIdx, found.Name, text, expectedProjectID)
-	} else {
+	default:
 		err = a.typeCommandIntoTab(sessionID, windowIdx, text, found.SendEnter, expectedProjectID)
 	}
 	if err != nil {

@@ -30,7 +30,13 @@
   let fDescription = '';
   let fGroupId = '';
   let fSendEnter = true;
-  let fInBackground = false;
+  type RunIn = 'current' | 'newtab' | 'background';
+  let fRunIn: RunIn = 'current';
+
+  /** Narrows what the backend sends; anything unexpected means this tab. */
+  function asRunIn(value: string | undefined): RunIn {
+    return value === 'newtab' || value === 'background' ? value : 'current';
+  }
 
   // Group editor state.
   let editingGroup = false;
@@ -133,7 +139,7 @@
     fDescription = '';
     fGroupId = '';
     fSendEnter = true;
-    fInBackground = false;
+    fRunIn = 'current';
   }
 
   function newCommand(groupId = '') {
@@ -153,9 +159,19 @@
     fDescription = c.description || '';
     fGroupId = c.groupId || '';
     fSendEnter = c.sendEnter;
-    fInBackground = c.inBackground;
+    fRunIn = asRunIn(c.runIn);
     editing = true;
   }
+
+  // Both tab targets open a tab of their own, which is what forces the
+  // command to run; only switching to it differs.
+  $: ownTab = fRunIn === 'newtab' || fRunIn === 'background';
+
+  $: runInOptions = [
+    { value: 'current', label: $t('commands.runIn.current') },
+    { value: 'newtab', label: $t('commands.runIn.newtab') },
+    { value: 'background', label: $t('commands.runIn.background') },
+  ];
 
   $: canSave = fName.trim().length > 0 && fCommand.trim().length > 0 && !savingCommand;
 
@@ -165,14 +181,14 @@
     const targetId = editingId;
     const submitted = {
       name: fName.trim(), command: fCommand, description: fDescription.trim(),
-      groupId: fGroupId, sendEnter: fSendEnter, inBackground: fInBackground,
+      groupId: fGroupId, sendEnter: fSendEnter, runIn: fRunIn,
     };
     savingCommand = true;
     error = '';
     try {
       await App.SaveCommand(
         targetId, submitted.name, submitted.command, submitted.description,
-        submitted.groupId, submitted.sendEnter, submitted.inBackground
+        submitted.groupId, submitted.sendEnter, submitted.runIn
       );
       if (!show || generation !== operationGeneration || !editing || editingId !== targetId) return;
       editing = false;
@@ -383,21 +399,23 @@
               />
             </div>
 
-            <label class="toggle-row">
-              <input type="checkbox" bind:checked={fInBackground} />
-              <span class="toggle-main">
-                <span class="toggle-label">{$t('commands.inBackground')}</span>
-                <span class="toggle-hint">{$t('commands.inBackgroundHint')}</span>
-              </span>
-            </label>
+            <div class="field">
+              <span class="field-label">{$t('commands.runIn')}</span>
+              <Select
+                value={fRunIn}
+                options={runInOptions}
+                on:change={(e) => fRunIn = asRunIn(e.detail)}
+              />
+              <span class="field-hint">{$t(`commands.runIn.${fRunIn}Hint`)}</span>
+            </div>
 
-            <!-- A background command always runs: typed into a tab nobody is
-                 looking at, it would only sit there. -->
-            <label class="toggle-row" class:disabled={fInBackground}>
+            <!-- A command in a tab of its own always runs: typed into a fresh
+                 shell nobody has touched, it would only sit there. -->
+            <label class="toggle-row" class:disabled={ownTab}>
               <input
                 type="checkbox"
-                checked={fSendEnter || fInBackground}
-                disabled={fInBackground}
+                checked={fSendEnter || ownTab}
+                disabled={ownTab}
                 on:change={(e) => (fSendEnter = e.currentTarget.checked)}
               />
               <span class="toggle-main">
@@ -459,8 +477,8 @@
                     <div class="cmd-main">
                       <span class="cmd-name">
                         {c.name}
-                        {#if c.inBackground}
-                          <span class="cmd-badge" title={$t('commands.inBackgroundHint')}>{$t('commands.inBackgroundBadge')}</span>
+                        {#if c.runIn === 'newtab' || c.runIn === 'background'}
+                          <span class="cmd-badge" title={$t(`commands.runIn.${c.runIn}Hint`)}>{$t(`commands.runIn.${c.runIn}Badge`)}</span>
                         {/if}
                       </span>
                       <span class="cmd-text">{c.command}</span>

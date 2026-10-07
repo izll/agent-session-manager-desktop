@@ -62,7 +62,7 @@ const backend = new Proxy({
       description: '', groupId: '', placeholders: [],
     }, {
       id: 'command-2', name: 'Background build', command: 'make watch',
-      description: '', groupId: '', placeholders: [], sendEnter: false, inBackground: true,
+      description: '', groupId: '', placeholders: [], sendEnter: false, runIn: 'background',
     }],
   }),
   RunCommand: (...args: unknown[]) => {

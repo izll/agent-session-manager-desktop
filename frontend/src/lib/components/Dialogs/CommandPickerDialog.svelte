@@ -5,7 +5,7 @@
   import { t } from '../../i18n';
   import { autoFocusDialog } from '../../utils/dialogActions';
   import { activeProjectId } from '../../stores/projects';
-  import { loadSessions } from '../../stores/sessions';
+  import { loadSessions, selectedSessionId, selectedWindowIdx } from '../../stores/sessions';
   import { get } from 'svelte/store';
   import DialogCloseButton from '../common/DialogCloseButton.svelte';
 
@@ -169,6 +169,11 @@
     requestAnimationFrame(() => valueInputs[0]?.focus());
   }
 
+  /** Both tab targets open a tab; only "newtab" switches to it. */
+  function ownTab(c: Cmd): boolean {
+    return c.runIn === 'newtab' || c.runIn === 'background';
+  }
+
   async function run(c: Cmd, vals: Record<string, string>) {
     if (running || !targetSessionId) return;
     const generation = operationGeneration;
@@ -179,15 +184,21 @@
     running = true;
     error = '';
     try {
-      await App.RunCommand(c.id, targetSession, targetWindow, submittedValues, targetProject);
-      // A background command opened a tab of its own: show it in the tab bar,
-      // but leave the selection where the user is.
-      if (c.inBackground) await loadSessions();
+      const newIdx = await App.RunCommand(c.id, targetSession, targetWindow, submittedValues, targetProject);
+      // Either tab target opened a tab of its own: show it in the tab bar.
+      // Only "newtab" also moves the selection there; "background" leaves it
+      // where the user is, which is the whole difference between the two.
+      if (ownTab(c)) {
+        await loadSessions();
+        if (c.runIn === 'newtab' && newIdx >= 0 && get(selectedSessionId) === targetSession) {
+          selectedWindowIdx.set(newIdx);
+        }
+      }
       if (!show || generation !== operationGeneration || targetProject !== get(activeProjectId)) return;
       close();
     } catch (e) {
       // The tab can exist even when the command could not be typed into it.
-      if (c.inBackground) void loadSessions();
+      if (ownTab(c)) void loadSessions();
       if (!show || generation !== operationGeneration || targetProject !== get(activeProjectId)) return;
       error = String(e);
       pending = null;
@@ -386,8 +397,8 @@
                       <span class="cmd-name">{c.name}</span>
                       <span class="cmd-text">{c.command}</span>
                     </div>
-                    {#if c.inBackground}
-                      <span class="cmd-badge" title={$t('commands.inBackgroundHint')}>{$t('commands.inBackgroundBadge')}</span>
+                    {#if ownTab(c)}
+                      <span class="cmd-badge" title={$t(`commands.runIn.${c.runIn}Hint`)}>{$t(`commands.runIn.${c.runIn}Badge`)}</span>
                     {/if}
                     <span class="cmd-group">{sec.name}</span>
                   </div>

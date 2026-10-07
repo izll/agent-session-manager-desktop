@@ -297,3 +297,47 @@ func TestPlaceholderNextToShellBraces(t *testing.T) {
 		t.Errorf("expanded = %q, want %q", expanded, want)
 	}
 }
+
+// A library written before RunIn existed must still run its commands where it
+// meant to: the old flag said "a tab of its own", and resolving that to
+// "current" would move a running server into the tab the user is reading.
+func TestRunTargetResolvesTheOlderFlag(t *testing.T) {
+	cases := []struct {
+		name string
+		cmd  SavedCommand
+		want string
+	}{
+		{"unset means the current tab", SavedCommand{}, RunInCurrent},
+		{"the old flag means a tab of its own", SavedCommand{InBackground: true}, RunInBackground},
+		{"RunIn wins over the old flag", SavedCommand{InBackground: true, RunIn: RunInCurrent}, RunInCurrent},
+		{"a new tab is kept", SavedCommand{RunIn: RunInNewTab}, RunInNewTab},
+		{"an unknown value falls back", SavedCommand{RunIn: "elsewhere"}, RunInCurrent},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := c.cmd.RunTarget(); got != c.want {
+				t.Errorf("RunTarget() = %q, want %q", got, c.want)
+			}
+		})
+	}
+}
+
+// A typo must not be stored: it would read back as "type it into the tab the
+// user is reading", which is the one target that cannot be undone by looking
+// away.
+func TestValidateRejectsAnUnknownRunTarget(t *testing.T) {
+	cmd := SavedCommand{Name: "build", Command: "make", RunIn: "elsewhere"}
+	if err := cmd.Validate(); err == nil {
+		t.Fatal("Validate accepted an unknown run target")
+	}
+	cmd.RunIn = ""
+	if err := cmd.Validate(); err != nil {
+		t.Errorf("Validate rejected an empty run target: %v", err)
+	}
+	for _, target := range []string{RunInCurrent, RunInNewTab, RunInBackground} {
+		cmd.RunIn = target
+		if err := cmd.Validate(); err != nil {
+			t.Errorf("Validate rejected %q: %v", target, err)
+		}
+	}
+}
