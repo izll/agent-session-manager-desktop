@@ -5016,6 +5016,9 @@ type SettingsInfo struct {
 
 	// ViewOrder is the view bar's order for every tab without one of its own.
 	ViewOrder []string `json:"viewOrder"`
+	// ViewOrderDrag is what dragging a view changes: "global", "tab" or ""
+	// (ask).
+	ViewOrderDrag string `json:"viewOrderDrag"`
 }
 
 // GetSettings returns UI settings
@@ -5128,6 +5131,7 @@ func (a *App) GetSettings() (*SettingsInfo, error) {
 		HideViewBar:               settings.HideViewBar,
 		AgentHideViewBar:          settings.AgentHideViewBar,
 		ViewOrder:                 settings.ViewOrder,
+		ViewOrderDrag:             validViewOrderDrag(settings.ViewOrderDrag),
 		HideStatusBar:             settings.HideStatusBar,
 		AgentHideStatusBar:        settings.AgentHideStatusBar,
 		NotifyOnWaiting:           settings.NotifyOnWaiting,
@@ -5229,6 +5233,7 @@ func (a *App) SaveSettings(settings SettingsInfo, expectedProjectID string) erro
 		current.HideViewBar = settings.HideViewBar
 		current.AgentHideViewBar = settings.AgentHideViewBar
 		current.ViewOrder = validViewOrder(settings.ViewOrder)
+		current.ViewOrderDrag = validViewOrderDrag(settings.ViewOrderDrag)
 		current.HideStatusBar = settings.HideStatusBar
 		current.AgentHideStatusBar = settings.AgentHideStatusBar
 		current.TerminalTheme = settings.TerminalTheme

@@ -12,10 +12,12 @@
   import TaskPanel from './TaskPanel.svelte';
   import ForkDialog from '../Dialogs/ForkDialog.svelte';
   import CheckpointsDialog from '../Dialogs/CheckpointsDialog.svelte';
+  import ViewOrderDropDialog from '../Dialogs/ViewOrderDropDialog.svelte';
   import { activities } from '../../stores/activities';
   import { checkpointsUnavailable, sessionAgentBusy } from '../../utils/checkpoints';
   import { focusTerminal } from '../../utils/focus';
-  import { sessions, selectedSessionId, selectedWindowIdx, selectSession, selectWindow, toggleAutoYes, cycleYoloMode } from '../../stores/sessions';
+  import { sessions, selectedSessionId, selectedWindowIdx, selectSession, selectWindow, toggleAutoYes, cycleYoloMode, loadSessions } from '../../stores/sessions';
+  import { reportError } from '../../stores/appErrors';
   import { agents } from '../../stores/agents';
   import { tabStatuses } from '../../stores/statusLines';
   // For the count on the tasks tab. TaskPanel is mounted whether or not its
@@ -29,7 +31,7 @@
   import { get } from 'svelte/store';
   import { diffFolderVersion } from '../../stores/diffFolder';
   import { resolveViewBarHidden } from '../../utils/terminalThemes';
-  import { resolveViewOrder } from '../../utils/viewOrder';
+  import { resolveViewOrder, moveView, isDefaultViewOrder, type ViewId } from '../../utils/viewOrder';
   import { yoloButtonState } from '../../utils/yoloBadge';
   import * as App from '../../../../wailsjs/go/main/App';
   import { t } from '../../i18n';
@@ -630,13 +632,114 @@
   })();
 
   // The view bar's order: this tab's own, else the one set for every tab.
-  $: viewOrder = (() => {
+  $: ownViewOrder = (() => {
     const s = currentSession;
     const idx = $selectedWindowIdx ?? 0;
     const fw = (s?.followedWindows || []).find((f: any) => f.index === idx);
-    const own = !s ? null : idx === (s.mainWindowIndex ?? 0) ? s.viewOrder : fw?.view_order;
-    return resolveViewOrder(own, $settings.viewOrder);
+    return (!s ? null : idx === (s.mainWindowIndex ?? 0) ? s.viewOrder : fw?.view_order) as string[] | null | undefined;
   })();
+  $: viewOrder = resolveViewOrder(ownViewOrder, $settings.viewOrder);
+
+  // --- Reordering the view bar by dragging ----------------------------------
+
+  /** The view being dragged, and the gap it would land in (0 = first). */
+  let dragView: ViewId | null = null;
+  let dropGap: number | null = null;
+
+  function onViewDragStart(e: DragEvent, view: ViewId) {
+    dragView = view;
+    if (e.dataTransfer) {
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', view);
+    }
+  }
+
+  /**
+   * The gap under the cursor, worked out on the whole bar rather than per
+   * button: the Diff button is disabled outside a repository, and a disabled
+   * button gets no drag events of its own.
+   */
+  function onViewDragOver(e: DragEvent) {
+    if (!dragView) return;
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+    const buttons = Array.from((e.currentTarget as HTMLElement).querySelectorAll<HTMLElement>('[data-view]'));
+    const gap = buttons.findIndex((button) => {
+      const box = button.getBoundingClientRect();
+      return e.clientX < box.left + box.width / 2;
+    });
+    dropGap = gap < 0 ? buttons.length : gap;
+  }
+
+  function onViewDragLeave(e: DragEvent) {
+    const entering = e.relatedTarget as Node | null;
+    if (entering && (e.currentTarget as HTMLElement).contains(entering)) return;
+    dropGap = null;
+  }
+
+  function onViewDragEnd() {
+    dragView = null;
+    dropGap = null;
+  }
+
+  function onViewDrop(e: DragEvent) {
+    e.preventDefault();
+    const view = dragView;
+    const gap = dropGap;
+    onViewDragEnd();
+    if (!view || gap === null) return;
+    const from = viewOrder.indexOf(view);
+    // Taking the view out first moves every later gap one to the left.
+    const to = from < gap ? gap - 1 : gap;
+    if (from < 0 || from === to) return;
+    const drop: ViewOrderDrop = {
+      order: moveView(viewOrder, from, to),
+      sessionId: $selectedSessionId,
+      windowIdx: $selectedWindowIdx ?? 0,
+      hasOwn: !!ownViewOrder?.length,
+    };
+    const target = $settings.viewOrderDrag;
+    if (target === 'global' || target === 'tab') void storeViewOrder(drop, target);
+    else pendingViewDrop = drop;
+  }
+
+  /** A dropped order, with the tab it was dropped in. */
+  type ViewOrderDrop = { order: ViewId[]; sessionId: string | null; windowIdx: number; hasOwn: boolean };
+
+  /** A drop waiting on the question of what it changes. */
+  let pendingViewDrop: ViewOrderDrop | null = null;
+
+  async function chooseViewDropTarget(target: 'global' | 'tab', remember: boolean) {
+    const drop = pendingViewDrop;
+    pendingViewDrop = null;
+    if (!drop) return;
+    if (remember) await saveSettings({ viewOrderDrag: target });
+    await storeViewOrder(drop, target);
+  }
+
+  /**
+   * Store a dropped order as this tab's own, or as every tab's. Every tab's
+   * also drops this tab's own order: the drag was made here, and with its own
+   * order kept the bar it was made in would not change.
+   */
+  async function storeViewOrder(drop: ViewOrderDrop, target: 'global' | 'tab') {
+    const projectId = get(activeProjectId);
+    try {
+      if (target === 'tab') {
+        if (!drop.sessionId) return;
+        await App.SetTabViewOrder(drop.sessionId, drop.windowIdx, drop.order, projectId);
+        await loadSessions();
+        return;
+      }
+      await saveSettings({ viewOrder: isDefaultViewOrder(drop.order) ? null : drop.order });
+      if (drop.hasOwn && drop.sessionId) {
+        await App.SetTabViewOrder(drop.sessionId, drop.windowIdx, [], projectId);
+        await loadSessions();
+      }
+    } catch (err) {
+      reportError(String(err));
+    }
+  }
 
   $: viewBarHidden = (() => {
     const s = currentSession;
@@ -806,13 +909,25 @@
            the tab bar keeps a button to bring it back, and the views stay
            reachable from the command palette meanwhile. -->
       <div class="view-tabs" class:is-hidden={viewBarHidden}>
-        <div class="view-tabs-left">
+        <!-- svelte-ignore a11y-no-static-element-interactions -->
+        <div
+          class="view-tabs-left"
+          on:dragover={onViewDragOver}
+          on:dragleave={onViewDragLeave}
+          on:drop={onViewDrop}
+        >
           <!-- In the order set for this tab, or in Settings for every tab. -->
           {#each viewOrder as view (view)}
           {#if view === 'terminal'}
           <button
             class="view-tab {activeView === 'terminal' ? 'active' : ''}"
             data-view="terminal"
+            draggable="true"
+            class:view-dragging={dragView === 'terminal'}
+            class:view-drop-before={dragView !== null && dropGap === viewOrder.indexOf('terminal')}
+            class:view-drop-after={dragView !== null && dropGap === viewOrder.length && viewOrder.indexOf('terminal') === viewOrder.length - 1}
+            on:dragstart={(e) => onViewDragStart(e, 'terminal')}
+            on:dragend={onViewDragEnd}
             class:behind-diff={fullDiffActive && activeView === 'terminal'}
             on:click={() => selectView('terminal')}
           >
@@ -826,6 +941,12 @@
           <button
             class="view-tab {activeView === 'notes' ? 'active' : ''}"
             data-view="notes"
+            draggable="true"
+            class:view-dragging={dragView === 'notes'}
+            class:view-drop-before={dragView !== null && dropGap === viewOrder.indexOf('notes')}
+            class:view-drop-after={dragView !== null && dropGap === viewOrder.length && viewOrder.indexOf('notes') === viewOrder.length - 1}
+            on:dragstart={(e) => onViewDragStart(e, 'notes')}
+            on:dragend={onViewDragEnd}
             class:behind-diff={fullDiffActive && activeView === 'notes'}
             on:click={() => selectView('notes')}
           >
@@ -851,6 +972,12 @@
           <button
             class="view-tab {activeView === 'tasks' ? 'active' : ''}"
             data-view="tasks"
+            draggable="true"
+            class:view-dragging={dragView === 'tasks'}
+            class:view-drop-before={dragView !== null && dropGap === viewOrder.indexOf('tasks')}
+            class:view-drop-after={dragView !== null && dropGap === viewOrder.length && viewOrder.indexOf('tasks') === viewOrder.length - 1}
+            on:dragstart={(e) => onViewDragStart(e, 'tasks')}
+            on:dragend={onViewDragEnd}
             class:behind-diff={fullDiffActive && activeView === 'tasks'}
             on:click={() => selectView('tasks')}
           >
@@ -877,6 +1004,12 @@
           <button
             class="view-tab {activeView === 'browser' ? 'active' : ''}"
             data-view="browser"
+            draggable="true"
+            class:view-dragging={dragView === 'browser'}
+            class:view-drop-before={dragView !== null && dropGap === viewOrder.indexOf('browser')}
+            class:view-drop-after={dragView !== null && dropGap === viewOrder.length && viewOrder.indexOf('browser') === viewOrder.length - 1}
+            on:dragstart={(e) => onViewDragStart(e, 'browser')}
+            on:dragend={onViewDragEnd}
             class:behind-diff={fullDiffActive && activeView === 'browser'}
             on:click={() => selectView('browser')}
           >
@@ -898,6 +1031,12 @@
           <button
             class="view-tab {fullDiffActive ? 'active' : ''}"
             data-view="diff"
+            draggable="true"
+            class:view-dragging={dragView === 'diff'}
+            class:view-drop-before={dragView !== null && dropGap === viewOrder.indexOf('diff')}
+            class:view-drop-after={dragView !== null && dropGap === viewOrder.length && viewOrder.indexOf('diff') === viewOrder.length - 1}
+            on:dragstart={(e) => onViewDragStart(e, 'diff')}
+            on:dragend={onViewDragEnd}
             disabled={!tabIsGitRepo}
             on:click={() => toggleFullDiff()}
             title={tabIsGitRepo ? $t('tabBar.fullDiff') : $t('history.notARepository')}
@@ -1219,6 +1358,14 @@
   on:close={checkpointsClosed}
 />
 
+{#if pendingViewDrop}
+  <ViewOrderDropDialog
+    hasOwn={pendingViewDrop.hasOwn}
+    on:choose={(e) => chooseViewDropTarget(e.detail.target, e.detail.remember)}
+    on:cancel={() => (pendingViewDrop = null)}
+  />
+{/if}
+
 <style>
   .main-panel {
     background: linear-gradient(180deg, rgba(var(--bg-sunken-rgb), 0.8) 0%, rgba(var(--bg-surface-rgb), 0.9) 100%);
@@ -1317,6 +1464,23 @@
     opacity: 0.4;
     cursor: not-allowed;
   }
+
+  .view-tab.view-dragging { opacity: 0.45; }
+  .view-tab.view-drop-before,
+  .view-tab.view-drop-after { position: relative; }
+  .view-tab.view-drop-before::after,
+  .view-tab.view-drop-after::after {
+    content: '';
+    position: absolute;
+    top: 4px;
+    bottom: 4px;
+    width: 3px;
+    border-radius: 2px;
+    background: var(--accent-light);
+    pointer-events: none;
+  }
+  .view-tab.view-drop-before::after { left: -4px; }
+  .view-tab.view-drop-after::after { right: -4px; }
 
   /* The view the diff is covering.
      Still marked, because that is how you can tell where pressing Diff again

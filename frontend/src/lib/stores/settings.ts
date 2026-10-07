@@ -157,6 +157,8 @@ export interface Settings {
   agentHideViewBar: boolean;
   /** The view bar's order for tabs without one of their own; null is the default. */
   viewOrder: string[] | null;
+  /** What dragging a view in the bar changes; '' asks each time. */
+  viewOrderDrag: '' | 'global' | 'tab';
   /** Same again for the bottom bar (path + agent badge). */
   hideStatusBar: boolean;
   agentHideStatusBar: boolean;
@@ -224,6 +226,7 @@ function defaultSettings(): Settings {
     hideViewBar: false,
     agentHideViewBar: false,
     viewOrder: null,
+    viewOrderDrag: '',
     hideStatusBar: false,
     agentHideStatusBar: false,
     notifyOnWaiting: false,

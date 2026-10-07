@@ -37,6 +37,14 @@ func validViewOrder(order []string) []string {
 	return order
 }
 
+// validViewOrderDrag keeps a known drag target; anything else asks.
+func validViewOrderDrag(target string) string {
+	if target == "global" || target == "tab" {
+		return target
+	}
+	return ""
+}
+
 // SetTabViewOrder sets one tab's view bar order; an empty order follows the
 // global one again.
 func (a *App) SetTabViewOrder(sessionID string, windowIdx int, order []string, expectedProjectID string) error {

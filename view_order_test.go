@@ -78,3 +78,31 @@ func TestTheGlobalViewOrderIsSaved(t *testing.T) {
 		t.Errorf("an invalid order was kept: %v", got.ViewOrder)
 	}
 }
+
+func TestWhatADragChangesIsSaved(t *testing.T) {
+	app := checkpointTestApp(t, &session.Instance{ID: "vo", Name: "vo", Path: t.TempDir(), Status: session.StatusStopped})
+	project := app.storage.GetActiveProjectID()
+	settings, err := app.GetSettings()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if settings.ViewOrderDrag != "" {
+		t.Fatalf("default = %q, want asking", settings.ViewOrderDrag)
+	}
+	for _, target := range []string{"tab", "global", ""} {
+		settings.ViewOrderDrag = target
+		if err := app.SaveSettings(*settings, project); err != nil {
+			t.Fatal(err)
+		}
+		if got, _ := app.GetSettings(); got.ViewOrderDrag != target {
+			t.Errorf("saved %q, read back %q", target, got.ViewOrderDrag)
+		}
+	}
+	settings.ViewOrderDrag = "everywhere"
+	if err := app.SaveSettings(*settings, project); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := app.GetSettings(); got.ViewOrderDrag != "" {
+		t.Errorf("an unknown target was kept: %q", got.ViewOrderDrag)
+	}
+}

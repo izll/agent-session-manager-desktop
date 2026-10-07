@@ -62,3 +62,92 @@ test('a tab gets an order of its own from its menu, and gives it back @webkit', 
   expect((await fixture(page, 'viewOrderCalls')).at(-1)).toEqual(['same-session', 0, []]);
   await expect(dialog.locator('.source')).toHaveAttribute('data-source', 'global');
 });
+
+const dragView = async (page, view, onto, side) => {
+  const target = page.locator(`.view-tabs-left [data-view="${onto}"]`);
+  const box = await target.boundingBox();
+  await page.locator(`.view-tabs-left [data-view="${view}"]`).dragTo(target, {
+    targetPosition: { x: side === 'before' ? 3 : box.width - 3, y: box.height / 2 },
+  });
+};
+
+const dropDialog = (page) => page.locator('[data-dialog="view-order-drop"]');
+const DEFAULT = ['terminal', 'notes', 'tasks', 'browser', 'diff'];
+
+test('a drop asks what it changes, and "every tab" sets the global order @webkit', async ({ page }) => {
+  await open(page);
+  await dragView(page, 'browser', 'terminal', 'before');
+  await expect(dropDialog(page)).toBeVisible();
+  // Nothing is stored before the answer.
+  expect(await shownOrder(page)).toEqual(DEFAULT);
+  await dropDialog(page).locator('[data-target="global"]').click();
+  await expect(dropDialog(page)).toHaveCount(0);
+  await expect.poll(() => shownOrder(page)).toEqual(['browser', 'terminal', 'notes', 'tasks', 'diff']);
+  expect((await fixture(page, 'settingsSaves')).at(-1)[0].viewOrder)
+    .toEqual(['browser', 'terminal', 'notes', 'tasks', 'diff']);
+  expect(await fixture(page, 'viewOrderCalls')).toEqual([]);
+
+  // Past the last one's middle is after it.
+  await dragView(page, 'terminal', 'diff', 'after');
+  await dropDialog(page).locator('[data-target="global"]').click();
+  await expect.poll(() => shownOrder(page)).toEqual(['browser', 'notes', 'tasks', 'diff', 'terminal']);
+});
+
+test('"this tab only" gives the tab an order of its own', async ({ page }) => {
+  await open(page);
+  await dragView(page, 'diff', 'terminal', 'before');
+  await dropDialog(page).locator('[data-target="tab"]').click();
+  await expect.poll(() => shownOrder(page)).toEqual(['diff', 'terminal', 'notes', 'tasks', 'browser']);
+  expect((await fixture(page, 'viewOrderCalls')).at(-1)).toEqual(
+    ['same-session', 0, ['diff', 'terminal', 'notes', 'tasks', 'browser']]);
+  expect(await fixture(page, 'settingsSaves')).toEqual([]);
+});
+
+test('"every tab" in a tab with its own order also hands it back to the global one', async ({ page }) => {
+  await open(page);
+  await fixture(page, 'setTabViewOrder', ['notes', 'terminal', 'tasks', 'browser', 'diff']);
+  await expect.poll(() => shownOrder(page)).toEqual(['notes', 'terminal', 'tasks', 'browser', 'diff']);
+  await dragView(page, 'diff', 'notes', 'before');
+  await expect(dropDialog(page).locator('[data-target="global"]')).toContainText('gives up its own');
+  await dropDialog(page).locator('[data-target="global"]').click();
+  await expect.poll(() => shownOrder(page)).toEqual(['diff', 'notes', 'terminal', 'tasks', 'browser']);
+  expect((await fixture(page, 'settingsSaves')).at(-1)[0].viewOrder)
+    .toEqual(['diff', 'notes', 'terminal', 'tasks', 'browser']);
+  expect((await fixture(page, 'viewOrderCalls')).at(-1)).toEqual(['same-session', 0, []]);
+});
+
+test('a remembered answer is saved and the next drop does not ask', async ({ page }) => {
+  await open(page);
+  await dragView(page, 'browser', 'terminal', 'before');
+  await dropDialog(page).locator('[data-remember]').check();
+  await dropDialog(page).locator('[data-target="tab"]').click();
+  await expect.poll(async () => (await fixture(page, 'settingsSaves')).map((save) => save[0].viewOrderDrag))
+    .toContain('tab');
+  await expect.poll(() => shownOrder(page)).toEqual(['browser', 'terminal', 'notes', 'tasks', 'diff']);
+
+  await dragView(page, 'diff', 'browser', 'before');
+  await expect.poll(() => shownOrder(page)).toEqual(['diff', 'browser', 'terminal', 'notes', 'tasks']);
+  await expect(dropDialog(page)).toHaveCount(0);
+  expect((await fixture(page, 'viewOrderCalls')).at(-1)).toEqual(
+    ['same-session', 0, ['diff', 'browser', 'terminal', 'notes', 'tasks']]);
+});
+
+test('cancelling the question changes nothing', async ({ page }) => {
+  await open(page);
+  await dragView(page, 'browser', 'terminal', 'before');
+  await page.keyboard.press('Escape');
+  await expect(dropDialog(page)).toHaveCount(0);
+  expect(await shownOrder(page)).toEqual(DEFAULT);
+  expect(await fixture(page, 'settingsSaves')).toEqual([]);
+  expect(await fixture(page, 'viewOrderCalls')).toEqual([]);
+});
+
+test('dropping a view where it already is asks nothing and changes nothing', async ({ page }) => {
+  await open(page);
+  await dragView(page, 'notes', 'tasks', 'before');
+  await dragView(page, 'notes', 'notes', 'after');
+  await expect(dropDialog(page)).toHaveCount(0);
+  expect(await shownOrder(page)).toEqual(DEFAULT);
+  expect(await fixture(page, 'settingsSaves')).toEqual([]);
+  expect(await fixture(page, 'viewOrderCalls')).toEqual([]);
+});

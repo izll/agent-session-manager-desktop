@@ -289,6 +289,9 @@ type Settings struct {
 	AgentFontSize       int               `json:"agent_font_size,omitempty"`
 	HideViewBar         bool              `json:"hide_view_bar,omitempty"`
 	ViewOrder           []string          `json:"view_order,omitempty"`
+	// ViewOrderDrag is what dragging a view in the bar changes: "global",
+	// "tab", or "" to ask each time.
+	ViewOrderDrag string `json:"view_order_drag,omitempty"`
 	AgentHideViewBar    bool              `json:"agent_hide_view_bar,omitempty"`
 	HideStatusBar       bool              `json:"hide_status_bar,omitempty"`
 	AgentHideStatusBar  bool              `json:"agent_hide_status_bar,omitempty"`

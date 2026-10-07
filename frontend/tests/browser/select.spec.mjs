@@ -958,6 +958,18 @@ test('Settings sets the global view order on its General tab', async ({ page }) 
     .toEqual(['terminal', 'notes', 'tasks', 'diff', 'browser']);
 });
 
+test('Settings sets what a drag in the view bar changes', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 1600 });
+  await gotoDialogRacesFixture(page, 'settings');
+  const setting = page.locator('[data-setting="view-order-drag"]');
+  await setting.evaluate((el) => el.scrollIntoView({ block: 'center' }));
+  await expect(setting.locator('.select-value')).toHaveText('Ask each time');
+  await setting.locator('.select-trigger').click();
+  await page.locator('body > .select-dropdown').getByRole('button', { name: 'This tab only' }).click();
+  await expect.poll(() => page.evaluate(() => window.dialogRacesFixture.settingsSaves().at(-1)?.viewOrderDrag))
+    .toBe('tab');
+});
+
 test('Settings opens every tab scrolled to its top', async ({ page }) => {
   await gotoDialogRacesFixture(page, 'settings');
   const list = page.locator('.settings-list');

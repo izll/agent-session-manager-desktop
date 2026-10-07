@@ -115,6 +115,10 @@
     { value: 'dom', label: 'DOM (legkompatibilisebb)' },
   ];
 
+  function changeViewOrderDrag(target: string) {
+    saveSettings({ viewOrderDrag: target === 'global' || target === 'tab' ? target : '' });
+  }
+
   function changeRenderer(r: string) {
     saveSettings({ terminalRenderer: r as 'canvas' | 'webgl' | 'dom' });
   }
@@ -912,6 +916,22 @@
                   on:click={() => saveSettings({ viewOrder: null })}
                 >{$t('viewOrder.resetDefault')}</button>
               </div>
+            </div>
+
+            <div class="setting-item input-item" data-setting="view-order-drag">
+              <span class="setting-info">
+                <span class="setting-label">{$t('settings.viewOrderDrag')}</span>
+                <span class="setting-desc">{$t('settings.viewOrderDragDesc')}</span>
+              </span>
+              <Select
+                value={$settings.viewOrderDrag || ''}
+                options={[
+                  { value: '', label: $t('settings.viewOrderDragAsk') },
+                  { value: 'global', label: $t('viewOrder.dropGlobal') },
+                  { value: 'tab', label: $t('viewOrder.dropTab') },
+                ]}
+                on:change={(e) => changeViewOrderDrag(e.detail)}
+              />
             </div>
           </div>
 

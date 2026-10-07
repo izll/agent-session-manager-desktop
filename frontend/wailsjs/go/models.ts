@@ -2032,6 +2032,7 @@ export namespace main {
 	    agentTerminalThemes: Record<string, string>;
 	    customTerminalThemes: session.CustomTerminalTheme[];
 	    viewOrder: string[];
+	    viewOrderDrag: string;
 
 	    static createFrom(source: any = {}) {
 	        return new SettingsInfo(source);
@@ -2106,6 +2107,7 @@ export namespace main {
 	        this.agentTerminalThemes = source["agentTerminalThemes"];
 	        this.customTerminalThemes = this.convertValues(source["customTerminalThemes"], session.CustomTerminalTheme);
 	        this.viewOrder = source["viewOrder"];
+	        this.viewOrderDrag = source["viewOrderDrag"];
 	    }
 
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
