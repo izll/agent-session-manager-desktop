@@ -3259,10 +3259,46 @@ type TabStatusInfo struct {
 	// HideStatusLine: per-tab user preference — the session list omits this
 	// tab's status line row when set.
 	HideStatusLine bool `json:"hideStatusLine"`
+	// RunCommand is the build or server command this tab is the home of,
+	// empty for every other tab. Its presence is what gives the tab a ▶/■
+	// control, so an agent or plain terminal tab is untouched.
+	RunCommand string `json:"runCommand,omitempty"`
+	// RunState is how that command is doing: "running", "stopped" (it
+	// finished or was never started) or "failed" (it exited non-zero).
+	// Empty when the tab is not a runner.
+	RunState string `json:"runState,omitempty"`
 	// Update: the agent's own notice that a newer version is waiting, read
 	// from the same capture as Activity. A blocking one also makes Activity
 	// "waiting".
 	Update *session.UpdateNotice `json:"update,omitempty"`
+}
+
+// runStateFor says how a runner tab's command is doing.
+//
+// Three answers, and the third is the reason this exists: a command that
+// exited non-zero looks exactly like one that finished, and the tab bar
+// should not report a failed build as simply done. A pane stopped by a
+// signal — which is what ■ does — reports no status and counts as stopped,
+// not failed: the user asked for it.
+func runStateFor(runCommand string, stopped bool, pane session.WindowInfo) string {
+	if runCommand == "" {
+		return ""
+	}
+	if stopped {
+		return "stopped"
+	}
+	// No listing for this index: its window is gone, which is the same
+	// position as never started.
+	if pane.Index == 0 && pane.Name == "" {
+		return "stopped"
+	}
+	if !pane.Dead {
+		return "running"
+	}
+	if pane.ExitStatus > 0 {
+		return "failed"
+	}
+	return "stopped"
 }
 
 // tabWindowMissing reports a tab on a server whose server answered but has no
@@ -3588,6 +3624,10 @@ func (a *App) getSidebarUpdates(ctx context.Context) SidebarUpdate {
 				agent    session.AgentType
 				name     string
 				hideLine bool
+				// runCommand is set only for a runner tab, and stopped says
+				// its window was parked rather than left running.
+				runCommand string
+				stopped    bool
 			}
 			windows := []windowInfo{{idx: mainWindowIdx, agent: mainAgent, name: inst.Name, hideLine: inst.HideStatusLine}}
 			// An old store can hold two records for one index. They are one
@@ -3595,14 +3635,35 @@ func (a *App) getSidebarUpdates(ctx context.Context) SidebarUpdate {
 			// one key, which a keyed list refuses by throwing.
 			listed := map[int]bool{mainWindowIdx: true}
 			for _, fw := range inst.FollowedWindows {
-				if !listed[fw.Index] && !fw.Stopped {
-					listed[fw.Index] = true
-					name := fw.Name
-					if name == "" {
-						name = string(fw.Agent)
-					}
-					windows = append(windows, windowInfo{idx: fw.Index, agent: fw.Agent, name: name, hideLine: fw.HideStatusLine})
+				// A stopped tab has nothing to report — except a runner,
+				// whose whole point is that it can be started again. Leaving
+				// it out took its ▶ away the moment it was stopped.
+				if listed[fw.Index] || (fw.Stopped && fw.RunCommand == "") {
+					continue
 				}
+				listed[fw.Index] = true
+				name := fw.Name
+				if name == "" {
+					name = string(fw.Agent)
+				}
+				windows = append(windows, windowInfo{
+					idx: fw.Index, agent: fw.Agent, name: name,
+					hideLine: fw.HideStatusLine, runCommand: fw.RunCommand, stopped: fw.Stopped,
+				})
+			}
+
+			// One listing for the whole session, and only when a runner tab
+			// is present: it is a tmux round trip per machine, and nothing
+			// else in this loop needs it.
+			paneState := map[int]session.WindowInfo{}
+			for _, w := range windows {
+				if w.runCommand == "" {
+					continue
+				}
+				for _, listed := range inst.GetWindowList() {
+					paneState[listed.Index] = listed
+				}
+				break
 			}
 
 			var tabStatuses []TabStatusInfo
@@ -3634,6 +3695,8 @@ func (a *App) getSidebarUpdates(ctx context.Context) SidebarUpdate {
 
 				yolo := inst.DetectYoloStateForWindowContext(ctx, w.idx)
 				tabStatuses = append(tabStatuses, TabStatusInfo{
+					RunCommand:      w.runCommand,
+					RunState:        runStateFor(w.runCommand, w.stopped, paneState[w.idx]),
 					WindowIdx:       w.idx,
 					Agent:           string(w.agent),
 					Name:            w.name,
