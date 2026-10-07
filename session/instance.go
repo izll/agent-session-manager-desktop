@@ -360,6 +360,15 @@ type FollowedWindow struct {
 	BackgroundColor  string     `json:"background_color,omitempty"`   // Tab background color (empty uses the theme default)
 	WorkDir          string     `json:"work_dir,omitempty"`           // Tab working directory (empty = session path)
 	HideStatusLine   bool       `json:"hide_status_line,omitempty"`   // Don't show this tab's status line in the session list
+	// RunCommand makes this tab the home of one build or server command,
+	// started and stopped from the tab bar rather than retyped.
+	//
+	// Distinct from CustomCommand, which is how a custom AGENT is launched:
+	// that one defines what the tab is, while this is a command the tab runs,
+	// stops and runs again — the tab outlives it either way. Empty for every
+	// tab that is not a runner, which is what the ▶/■ control keys off, so
+	// an agent or plain terminal tab looks exactly as it did.
+	RunCommand string `json:"run_command,omitempty"`
 	// Worktree records the checkout made for this tab, when it was given one.
 	// Empty for a tab working in its session's directory, which is what every
 	// tab did before and still does by default.
@@ -3049,14 +3058,18 @@ func (i *Instance) RenameWindow(index int, name string) (string, error) {
 
 // WindowInfo contains information about a tmux window
 type WindowInfo struct {
-	Index           int
-	Name            string
-	Active          bool
-	Followed        bool      // Whether this window is tracked as an agent
-	Agent           AgentType // Agent type if followed
-	Dead            bool      // Whether the window's pane has exited (command finished)
-	TextColor       string    // Tab text color (empty uses the theme default)
-	BackgroundColor string    // Tab background color (empty uses the theme default)
+	Index    int
+	Name     string
+	Active   bool
+	Followed bool      // Whether this window is tracked as an agent
+	Agent    AgentType // Agent type if followed
+	Dead     bool      // Whether the window's pane has exited (command finished)
+	// ExitStatus is what the pane's command exited with, or -1 when it is
+	// still running or tmux reported nothing — a pane stopped by a signal
+	// has no status, and neither does one that never ran.
+	ExitStatus      int
+	TextColor       string // Tab text color (empty uses the theme default)
+	BackgroundColor string // Tab background color (empty uses the theme default)
 }
 
 // IsWindowFollowed checks if a window index is being tracked as an agent
@@ -3322,9 +3335,13 @@ func (i *Instance) appendMissingTabs(windows []WindowInfo) []WindowInfo {
 // listWindowsOn reads one machine's windows for this session.
 func (i *Instance) listWindowsOn(serverID string) []WindowInfo {
 	sessionName := i.TmuxSessionName()
-	// Format: index:name:active_flag:pane_dead
+	// Format: index:active_flag:pane_dead:pane_dead_status:name
+	//
+	// The name goes last because it is the one field that can contain a
+	// colon: with it in the middle, a tab named "a:b" pushed every later
+	// field along and the dead flag was read out of the name's tail.
 	output, err := i.tmuxOutputOn(serverID, "list-windows", "-t", sessionName,
-		"-F", "#{window_index}:#{window_name}:#{window_active}:#{pane_dead}")
+		"-F", "#{window_index}:#{window_active}:#{pane_dead}:#{pane_dead_status}:#{window_name}")
 	if err != nil {
 		return nil
 	}
@@ -3357,8 +3374,8 @@ func (i *Instance) listWindowsOn(serverID string) []WindowInfo {
 		if line == "" {
 			continue
 		}
-		parts := strings.SplitN(line, ":", 4)
-		if len(parts) >= 4 {
+		parts := strings.SplitN(line, ":", 5)
+		if len(parts) >= 5 {
 			var idx int
 			fmt.Sscanf(parts[0], "%d", &idx)
 
@@ -3378,13 +3395,21 @@ func (i *Instance) listWindowsOn(serverID string) []WindowInfo {
 				}
 			}
 
+			// An empty dead status is what a live pane reports, and also
+			// what a pane killed by a signal reports; neither is a failure.
+			exitStatus := -1
+			if parts[2] == "1" && parts[3] != "" {
+				fmt.Sscanf(parts[3], "%d", &exitStatus)
+			}
+
 			windows = append(windows, WindowInfo{
 				Index:           idx,
-				Name:            parts[1],
-				Active:          parts[2] == "1",
+				Name:            parts[4],
+				Active:          parts[1] == "1",
 				Followed:        followed,
 				Agent:           agent,
-				Dead:            parts[3] == "1",
+				Dead:            parts[2] == "1",
+				ExitStatus:      exitStatus,
 				TextColor:       textColor,
 				BackgroundColor: backgroundColor,
 			})

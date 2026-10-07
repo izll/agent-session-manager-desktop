@@ -147,8 +147,8 @@ func TestASessionKeepsARoutePerMachineItReaches(t *testing.T) {
 // only means something inside one multiplexer, so every remote tab was simply
 // absent from the listing and therefore from the bar.
 func TestTabsOnAServerAreListedToo(t *testing.T) {
-	local := &recordingExecutor{output: []byte("0:main:1:0\n1:notes:0:0\n")}
-	remote := &recordingExecutor{output: []byte("100:db work:1:0\n")}
+	local := &recordingExecutor{output: []byte("0:1:0::main\n1:0:0::notes\n")}
+	remote := &recordingExecutor{output: []byte("100:1:0::db work\n")}
 
 	SetExecutor("s1", local)
 	SetTabExecutor("s1", "srv1", remote)
@@ -200,7 +200,7 @@ func TestTabsOnAServerAreListedToo(t *testing.T) {
 // A server that does not answer must not make its tabs disappear. The work is
 // still running on the far side; only the connection is missing.
 func TestATabSurvivesAServerThatDoesNotAnswer(t *testing.T) {
-	local := &recordingExecutor{output: []byte("0:main:1:0\n")}
+	local := &recordingExecutor{output: []byte("0:1:0::main\n")}
 
 	SetExecutor("s2", local)
 	t.Cleanup(func() { ClearExecutor("s2") })
@@ -235,7 +235,7 @@ func TestATabSurvivesAServerThatDoesNotAnswer(t *testing.T) {
 // Windows come back ordered by index whichever machine answered first, so the
 // bar does not reshuffle between polls.
 func TestWindowsAreOrderedByIndex(t *testing.T) {
-	local := &recordingExecutor{output: []byte("2:second:0:0\n0:first:1:0\n")}
+	local := &recordingExecutor{output: []byte("2:0:0::second\n0:1:0::first\n")}
 	SetExecutor("s3", local)
 	t.Cleanup(func() { ClearExecutor("s3") })
 
@@ -262,8 +262,8 @@ func TestWindowsAreOrderedByIndex(t *testing.T) {
 // so the server's idle shell replaced the session's agent in the bar, and the
 // real tabs were left with no listing of their own and drawn as dead.
 func TestAServersPlaceholderWindowDoesNotDisplaceTheSessionsOwn(t *testing.T) {
-	own := &recordingExecutor{output: []byte("0:claude:1:0\n1:cmd:0:0\n")}
-	server := &recordingExecutor{output: []byte("0:bash:0:0\n101:db work:1:0\n")}
+	own := &recordingExecutor{output: []byte("0:1:0::claude\n1:0:0::cmd\n")}
+	server := &recordingExecutor{output: []byte("0:0:0::bash\n101:1:0::db work\n")}
 
 	SetExecutor("s4", own)
 	SetTabExecutor("s4", "srvB", server)
