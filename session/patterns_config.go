@@ -39,9 +39,13 @@ type patternsFile struct {
 	// against the whole pane, that mean a spawned agent is still working while
 	// the main thread sits idle. Wording that Anthropic can reword at will, so
 	// it belongs here rather than compiled in.
-	BackgroundAgentBusy []string                  `json:"backgroundAgentBusy"`
-	ThinkingIndicators  []string                  `json:"thinkingIndicators"`
-	Agents              map[string]agentPatterned `json:"agents"`
+	BackgroundAgentBusy []string `json:"backgroundAgentBusy"`
+	// BackgroundAgentRow are regular expressions for one row of the agent list
+	// Claude Code draws under its status bar. Matched only below the input
+	// box, where the transcript cannot reach.
+	BackgroundAgentRow []string                  `json:"backgroundAgentRow"`
+	ThinkingIndicators []string                  `json:"thinkingIndicators"`
+	Agents             map[string]agentPatterned `json:"agents"`
 }
 
 type agentPatterned struct {
@@ -160,6 +164,15 @@ func thinkingIndicatorsFromFile() []string {
 func backgroundAgentPatternsFromFile() []string {
 	if p := currentPatterns(); p != nil && len(p.BackgroundAgentBusy) > 0 {
 		return p.BackgroundAgentBusy
+	}
+	return nil
+}
+
+// backgroundAgentRowPatternsFromFile returns the configured expressions, or
+// nil to use the compiled ones.
+func backgroundAgentRowPatternsFromFile() []string {
+	if p := currentPatterns(); p != nil && len(p.BackgroundAgentRow) > 0 {
+		return p.BackgroundAgentRow
 	}
 	return nil
 }

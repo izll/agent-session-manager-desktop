@@ -241,3 +241,105 @@ func TestTheNoticeAboveTheInputBoxIsLive(t *testing.T) {
 		t.Fatal("the live notice above the input box was missed")
 	}
 }
+
+// Claude Code 2.1.310, captured while two agents worked and the main thread sat
+// at the prompt. The "waiting for background agents" notice is gone: the agent
+// list under the status bar is the only sign, and the app showed the tab idle.
+var agentListPane = []string{
+	"● Az S2B forrásvak tesztjei elkészültek: 31 teszt, a régi kódon zöldek.",
+	"● Agent \"Source-blind S2B review tests\" finished · 24m 19s",
+	strings.Repeat("─", 120),
+	"❯ ",
+	strings.Repeat("─", 120),
+	"  ⏵⏵ auto mode on · 1 shell · ← 2 agents · ↓ to manage",
+	"  ● main",
+	"  ◯ general-purpose  Hashing PERF-S2B-PROPOSAL.md and PROVENANCE.md" + strings.Repeat(" ", 60) + "1h 0m 27s · ↓ 298.8k tokens",
+	"  ◯ general-purpose  Timing n250 Grid bottom-left path" + strings.Repeat(" ", 60) + "26m 50s · ↓ 341.6k tokens",
+}
+
+func TestAnAgentInTheListIsBusy(t *testing.T) {
+	if !hasBackgroundAgentRow(agentListPane) {
+		t.Fatal("an agent named in the list under the status bar was not seen")
+	}
+	if got := detectClaudeActivity(agentListPane, getAgentPatterns(AgentClaude), ""); got != ActivityBusy {
+		t.Fatalf("detectClaudeActivity = %v, want busy", got)
+	}
+}
+
+// Why the list needed a check of its own: nothing else on this pane says busy.
+func TestTheOtherBusyIndicatorsMissTheAgentList(t *testing.T) {
+	if hasRunningBackgroundAgent(agentListPane) || hasEscToInterrupt(agentListPane) || hasActiveThinking(agentListPane, 20) {
+		t.Error("another indicator now matches; the agent list check may be redundant")
+	}
+}
+
+// As tmux hands it over: the row is drawn dim, each part coloured separately.
+func TestAnAgentRowSurvivesItsColouring(t *testing.T) {
+	pane := []string{
+		strings.Repeat("─", 72),
+		"\x1b[38;5;246m \x1b[39m \x1b[38;5;246m◯\x1b[39m \x1b[38;5;246mgeneral-purpose\x1b[39m  \x1b[38;5;246mTiming n250 Grid bottom-left path\x1b[39m   \x1b[38;5;246m26m 50s\x1b[39m",
+	}
+	if !hasBackgroundAgentRow(pane) {
+		t.Fatal("ANSI codes hid the agent row")
+	}
+}
+
+// The main thread's row is on screen whenever the list is, and the count in the
+// status bar outlives the agents. Neither is an agent at work.
+func TestTheMainRowAndTheCountAreNotAnAgent(t *testing.T) {
+	pane := []string{
+		"✻ Sautéed for 32s · done vasárnap 13:00",
+		strings.Repeat("─", 72),
+		"❯ ",
+		strings.Repeat("─", 72),
+		"  ⏵⏵ bypass permissions on (shift+tab to cycle) · ← 2 agents · ↓ to manage",
+		"  ● main",
+	}
+	if hasBackgroundAgentRow(pane) {
+		t.Fatal("a session with no agent left was marked busy")
+	}
+}
+
+// A row quoted in the transcript — pasted, or in an answer about this very
+// feature — sits above the input box and must not count.
+func TestAnAgentRowInTheTranscriptIsNotLive(t *testing.T) {
+	pane := []string{
+		"  ◯ general-purpose  Timing n250 Grid bottom-left path   26m 50s · ↓ 341.6k tokens",
+		"● That row means the agent is still running.",
+		strings.Repeat("─", 72),
+		"❯ ",
+		strings.Repeat("─", 72),
+		"  ⏵⏵ auto mode on (shift+tab to cycle)",
+	}
+	if hasBackgroundAgentRow(pane) {
+		t.Fatal("a row quoted in the transcript was taken for a live agent")
+	}
+}
+
+func TestAgentRowPatternsComeFromTheFile(t *testing.T) {
+	setPatternsForTest(t, &patternsFile{
+		Version:            99,
+		BackgroundAgentRow: []string{`^\s+» helper`},
+	})
+	if !hasBackgroundAgentRow([]string{"  » helper doing things"}) {
+		t.Fatal("a row pattern from the file was not used")
+	}
+	if hasBackgroundAgentRow(agentListPane) {
+		t.Fatal("the compiled default was used even though the file supplied patterns")
+	}
+}
+
+func TestShippedPatternsFileCarriesTheAgentRow(t *testing.T) {
+	var shipped patternsFile
+	if err := json.Unmarshal(embeddedPatterns, &shipped); err != nil {
+		t.Fatalf("the embedded patterns.json does not parse: %v", err)
+	}
+	if !slicesEqual(shipped.BackgroundAgentRow, defaultBackgroundAgentRowPatterns) {
+		t.Fatalf("patterns.json row patterns %q differ from the compiled default %q",
+			shipped.BackgroundAgentRow, defaultBackgroundAgentRowPatterns)
+	}
+	setPatternsForTest(t, &shipped)
+	if !hasBackgroundAgentRow(agentListPane) {
+		t.Fatal("the shipped patterns do not match the pane this was written for")
+	}
+}

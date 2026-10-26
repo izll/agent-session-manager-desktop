@@ -560,6 +560,10 @@ func detectClaudeActivityContext(ctx context.Context, lines []string, patterns A
 		debugf("[StatusDebug] %s → BUSY (background agent)", target)
 		return ActivityBusy
 	}
+	if hasBackgroundAgentRow(lines) {
+		debugf("[StatusDebug] %s → BUSY (agent list)", target)
+		return ActivityBusy
+	}
 
 	// --- Busy detection 2: extended thinking indicator (✽/✻ with …) - FAST, no delay ---
 	if hasActiveThinking(lines, 20) {
@@ -1080,39 +1084,69 @@ var defaultBackgroundAgentPatterns = []string{
 	`waiting for \d+ background agents? to finish`,
 }
 
+// defaultBackgroundAgentRowPatterns is the fallback when patterns.json has
+// none: a row of the agent list Claude Code draws under its status bar.
+var defaultBackgroundAgentRowPatterns = []string{
+	// "  ◯ general-purpose  Timing the grid path   26m 50s · ↓ 341.6k tokens":
+	// a marker, the agent's type, then — two spaces on — what it is doing. The
+	// main thread's row ("  ● main") has no description, and it is on screen
+	// whenever the list is, busy or not.
+	`^\s+[◯○●◉◎◐◑◒◓]\s+\S+\s{2,}\S`,
+}
+
+// regexpCache compiles a configured pattern list, reusing the result while the
+// configuration is unchanged.
+type regexpCache struct {
+	mu       sync.Mutex
+	source   []string
+	compiled []*regexp.Regexp
+}
+
 var (
-	backgroundAgentMu       sync.Mutex
-	backgroundAgentCompiled []*regexp.Regexp
-	backgroundAgentSource   []string
+	backgroundAgentCache    regexpCache
+	backgroundAgentRowCache regexpCache
 )
 
-// backgroundAgentPatterns compiles the configured expressions, reusing the last
-// result while the configuration is unchanged. An expression that does not
-// compile is skipped rather than fatal: the pattern file is updated over the
-// network, and one bad entry must not stop the rest from working.
+// backgroundAgentPatterns returns the expressions for the "waiting for
+// background agents" notice.
 func backgroundAgentPatterns() []*regexp.Regexp {
 	source := backgroundAgentPatternsFromFile()
 	if source == nil {
 		source = defaultBackgroundAgentPatterns
 	}
+	return backgroundAgentCache.get(source)
+}
 
-	backgroundAgentMu.Lock()
-	defer backgroundAgentMu.Unlock()
-	if slicesEqual(source, backgroundAgentSource) {
-		return backgroundAgentCompiled
+// backgroundAgentRowPatterns returns the expressions for an agent list row.
+func backgroundAgentRowPatterns() []*regexp.Regexp {
+	source := backgroundAgentRowPatternsFromFile()
+	if source == nil {
+		source = defaultBackgroundAgentRowPatterns
+	}
+	return backgroundAgentRowCache.get(source)
+}
+
+// get compiles the expressions case-insensitively. An expression that does not
+// compile is skipped rather than fatal: the pattern file is updated over the
+// network, and one bad entry must not stop the rest from working.
+func (c *regexpCache) get(source []string) []*regexp.Regexp {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.compiled != nil && slicesEqual(source, c.source) {
+		return c.compiled
 	}
 
 	compiled := make([]*regexp.Regexp, 0, len(source))
 	for _, expr := range source {
 		re, err := regexp.Compile("(?i)" + expr)
 		if err != nil {
-			debugf("[StatusDebug] ignoring unparsable background-agent pattern %q: %v", expr, err)
+			debugf("[StatusDebug] ignoring unparsable pattern %q: %v", expr, err)
 			continue
 		}
 		compiled = append(compiled, re)
 	}
-	backgroundAgentSource = append([]string(nil), source...)
-	backgroundAgentCompiled = compiled
+	c.source = append([]string(nil), source...)
+	c.compiled = compiled
 	return compiled
 }
 
@@ -1164,6 +1198,40 @@ func hasRunningBackgroundAgent(lines []string) bool {
 			return false
 		}
 
+		for _, re := range patterns {
+			if re.MatchString(clean) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// hasBackgroundAgentRow reports whether the agent list under the status bar
+// names a spawned agent.
+//
+// Newer Claude Code no longer prints the "waiting for background agents"
+// notice: the list is where it says an agent is still around, with its task,
+// running time and tokens. A finished agent leaves the list; the status bar's
+// "← 2 agents" count stays, which is why only the rows count.
+//
+// Only what is below the input box is searched. The rows look like nothing
+// else there, while above it the transcript can quote one.
+func hasBackgroundAgentRow(lines []string) bool {
+	patterns := backgroundAgentRowPatterns()
+	if len(patterns) == 0 {
+		return false
+	}
+	for j := len(lines) - 1; j >= 0; j-- {
+		clean := stripANSIForDetect(lines[j])
+		trimmed := strings.TrimSpace(clean)
+		if trimmed == "" {
+			continue
+		}
+		sepCount := strings.Count(trimmed, "─") + strings.Count(trimmed, "━") + strings.Count(trimmed, "╌")
+		if sepCount > 20 {
+			return false
+		}
 		for _, re := range patterns {
 			if re.MatchString(clean) {
 				return true
