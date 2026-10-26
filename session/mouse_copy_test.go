@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -390,6 +391,19 @@ func TestSelectionEndingAgainstTmux(t *testing.T) {
 	}
 	defer tm("kill-server")
 	tm("new-session", "-d", "-s", "p", "-x", "80", "-y", "10", "seq 1 200; sleep 60")
+	// Wait for the output to reach the history. Paging up before it has is
+	// paging up nothing: the view is still at the bottom, and the binding
+	// rightly leaves the mode — seen on a loaded CI runner.
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		if n, _ := strconv.Atoi(tm("display", "-p", "-t", "p", "#{history_size}")); n >= 100 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the pane's output never reached its history")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
 	tm(MouseCopyBinding("copy-mode-vi", true)...)
 	if got := tm("list-keys", "-T", "copy-mode-vi", "MouseDragEnd1Pane"); !strings.Contains(got, "copy-selection-and-cancel") {
 		t.Fatalf("the drag binding was not stored whole: %q", got)
