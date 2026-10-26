@@ -795,26 +795,28 @@ test('CommandPicker shows a background command\'s new tab without switching to i
   expect(await page.evaluate(() => window.dialogRacesFixture.selectedWindow())).toBe(before);
 });
 
-test('CommandManager saves whether a command runs in the background', async ({ page }) => {
+test('CommandManager saves where a command runs', async ({ page }) => {
   await gotoDialogRacesFixture(page, 'commandmanager');
   const dialog = page.getByRole('dialog');
   await dialog.locator('.cmd-row').filter({ hasText: 'Background build' })
     .getByTitle(/edit command|parancs szerkesztése/i).click();
 
-  const background = dialog.getByRole('checkbox', { name: /background|háttérben/i });
+  const runIn = dialog.locator('.field').filter({ hasText: /Where it runs|Hol fusson/ });
   const sendEnter = dialog.getByRole('checkbox', { name: /Send Enter|Enter küldése/ });
-  await expect(background).toBeChecked();
-  // Always run in the background, so Enter is not a choice there.
+  await expect(runIn.locator('.select-value')).toHaveText(/in the background|háttérben/i);
+  // A tab of its own always runs the command, so Enter is not a choice there.
   await expect(sendEnter).toBeChecked();
   await expect(sendEnter).toBeDisabled();
 
-  await background.uncheck();
+  await runIn.locator('.select-trigger').click();
+  await page.locator('body > .select-dropdown')
+    .getByRole('button', { name: /^(This tab|Ezen a fülön)$/ }).click();
   await expect(sendEnter).toBeEnabled();
   await expect(sendEnter).not.toBeChecked();
   await dialog.getByRole('button', { name: /^(Save|Mentés)$/ }).click();
   await expect.poll(() => page.evaluate(() => window.dialogRacesFixture.saveCommandCalls().length)).toBe(1);
   expect(await page.evaluate(() => window.dialogRacesFixture.saveCommandCalls()[0].slice(5)))
-    .toEqual([false, false]);
+    .toEqual([false, 'current']);
 });
 
 test('CommandPicker closes when its captured session or tab changes', async ({ page }) => {
