@@ -6,6 +6,47 @@ Entries describe what changed for someone using the app. Internal refactoring,
 test and CI work is left out unless it changed behaviour. Dates are release
 dates; the format follows [Keep a Changelog](https://keepachangelog.com).
 
+## 1.1.24 — 2026-10-26
+
+### Added
+
+- **Reorder the view bar** — terminal, notes, tasks, diff, files — in
+  Settings for every tab, or from a tab's menu for that tab alone, which
+  can go back to the global order at any time. The views can also be
+  dragged in the bar; the drag asks whether the new order is for every tab
+  or this one, and the answer can be remembered (Settings → "Dragging in the
+  view bar").
+- **Delete a file in the Files view**, with a confirmation and ten seconds
+  to undo — from the toolbar, or with Delete on a row of the tree. The
+  undo never overwrites a file that took the name in the meantime.
+- **Choose where a saved command runs**: in this tab, in a new tab you are
+  switched to, or in a new tab left in the background.
+- **Build commands offered from the project's files.** The command manager
+  reads the tab's folder and offers the Gradle tasks, Maven phases and
+  server plugin, npm scripts and Make targets really defined there. Adding
+  one saves it for editing; nothing runs by itself.
+- **Commands kept with one project.** A command can belong to the active
+  project instead of the shared list, so a project's build commands are not
+  offered in every other one. Suggested build commands go there by default.
+- **A tab can be the home of a build or server command**, with ▶ and ■ in
+  the tab bar to start and stop it (right-click the tab → "Run a command
+  here"). An amber ▶ means the last run exited with an error. Stopping asks
+  first, then sends Ctrl+C and ends the process only if it ignores that.
+- **Quitting names the commands still running**, and says that they go on
+  running after the app closes, as the sessions do.
+
+### Fixed
+
+- **A Claude tab with background agents at work shows as busy again.**
+  Claude Code 2.1.310 no longer prints "Waiting for background agents"; the
+  agents are listed under its status bar instead, which the app now reads.
+  Installs that are not updated pick this up from the pattern file too.
+- **Each Settings tab opens scrolled to its top**, instead of halfway down
+  where the previous tab was left.
+- **A tab whose name has a colon is read correctly** — it looked alive
+  whatever its command was doing.
+- Hungarian: "fülön" instead of "fülon" in the run-target labels.
+
 ## 1.1.23 — 2026-10-06
 
 ### Added
