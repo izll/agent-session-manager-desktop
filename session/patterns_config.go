@@ -40,9 +40,10 @@ type patternsFile struct {
 	// the main thread sits idle. Wording that Anthropic can reword at will, so
 	// it belongs here rather than compiled in.
 	BackgroundAgentBusy []string `json:"backgroundAgentBusy"`
-	// BackgroundAgentRow are regular expressions for one row of the agent list
-	// Claude Code draws under its status bar. Matched only below the input
-	// box, where the transcript cannot reach.
+	// BackgroundAgentRow are regular expressions for what Claude Code draws
+	// under its input box while work goes on in the background: a row of the
+	// agent list, or the status bar's count of running shells. Matched only
+	// below the input box, where the transcript cannot reach.
 	BackgroundAgentRow []string                  `json:"backgroundAgentRow"`
 	ThinkingIndicators []string                  `json:"thinkingIndicators"`
 	Agents             map[string]agentPatterned `json:"agents"`

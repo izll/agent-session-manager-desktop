@@ -343,3 +343,62 @@ func TestShippedPatternsFileCarriesTheAgentRow(t *testing.T) {
 		t.Fatal("the shipped patterns do not match the pane this was written for")
 	}
 }
+
+// madisocad, Claude Code 2.1.310: the agents are done and the main thread has
+// stopped, but it is waiting on a test gate it left running in the background.
+// The status bar's shell count is the live sign of that; the "still running"
+// on the done line above is only what was true when the turn ended.
+var backgroundShellPane = []string{
+	"● A review-t teljesen elolvastam. Várom a kapu eredményét.",
+	"",
+	"✻ Baked for 1h 9m 59s · done 22:42 · 1 shell still running",
+	"",
+	strings.Repeat("─", 120),
+	"❯ ",
+	strings.Repeat("─", 120),
+	"  ⏵⏵ auto mode on · 1 shell · ← 2 agents · ↓ to manage",
+}
+
+func TestARunningShellIsBusy(t *testing.T) {
+	if !hasBackgroundAgentRow(backgroundShellPane) {
+		t.Fatal("a shell counted in the status bar was not seen")
+	}
+	if got := detectClaudeActivity(backgroundShellPane, getAgentPatterns(AgentClaude), ""); got != ActivityBusy {
+		t.Fatalf("detectClaudeActivity = %v, want busy", got)
+	}
+}
+
+func TestTheShellCountIsReadWhereverItStands(t *testing.T) {
+	for _, bar := range []string{
+		"  2 shells · ← 1 agent",
+		"  ⏵⏵ bypass permissions on (shift+tab to cycle) · 3 shells",
+		"  ⏵⏵ auto mode on·1 shell·← 2 agents",
+	} {
+		if !hasBackgroundAgentRow([]string{strings.Repeat("─", 72), bar}) {
+			t.Errorf("the shell count in %q was missed", bar)
+		}
+	}
+}
+
+// Once the shell ends the count goes; the done line that mentioned it stays in
+// the transcript, above the input box, and must not keep the session busy.
+func TestAFinishedShellIsNotBusy(t *testing.T) {
+	pane := append([]string(nil), backgroundShellPane...)
+	pane[len(pane)-1] = "  ⏵⏵ auto mode on · ← 2 agents"
+	if hasBackgroundAgentRow(pane) {
+		t.Fatal("a shell mentioned only in the transcript kept the session busy")
+	}
+}
+
+// "shell" in the status bar's other words is not a count.
+func TestShellWithoutACountIsNotBusy(t *testing.T) {
+	for _, bar := range []string{
+		"  ! for shell mode",
+		"  ⏵⏵ auto mode on · shell mode · ← 2 agents",
+		"  ⏵⏵ auto mode on · ← 2 agents · subshells",
+	} {
+		if hasBackgroundAgentRow([]string{strings.Repeat("─", 72), bar}) {
+			t.Errorf("%q was taken for a running shell", bar)
+		}
+	}
+}

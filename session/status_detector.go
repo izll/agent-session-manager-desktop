@@ -1092,6 +1092,11 @@ var defaultBackgroundAgentRowPatterns = []string{
 	// main thread's row ("  ● main") has no description, and it is on screen
 	// whenever the list is, busy or not.
 	`^\s+[◯○●◉◎◐◑◒◓]\s+\S+\s{2,}\S`,
+	// "  ⏵⏵ auto mode on · 1 shell · ← 2 agents": a command Claude left
+	// running in the background. Claude picks the work up again when it ends,
+	// so the session is not done — it is often waiting on exactly that, a
+	// build or a test gate. The count is live, unlike the agents' one.
+	`(?:^|·)\s*\d+\s+shells?(?:\s|·|$)`,
 }
 
 // regexpCache compiles a configured pattern list, reusing the result while the
@@ -1207,13 +1212,15 @@ func hasRunningBackgroundAgent(lines []string) bool {
 	return false
 }
 
-// hasBackgroundAgentRow reports whether the agent list under the status bar
-// names a spawned agent.
+// hasBackgroundAgentRow reports whether what Claude Code draws under its input
+// box says work is still going on in the background: an agent named in the
+// list under the status bar, or a shell counted in the status bar itself.
 //
 // Newer Claude Code no longer prints the "waiting for background agents"
 // notice: the list is where it says an agent is still around, with its task,
 // running time and tokens. A finished agent leaves the list; the status bar's
-// "← 2 agents" count stays, which is why only the rows count.
+// "← 2 agents" count stays, which is why only the rows count. The shell count
+// does go away when the shell ends.
 //
 // Only what is below the input box is searched. The rows look like nothing
 // else there, while above it the transcript can quote one.

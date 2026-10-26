@@ -20,7 +20,7 @@
     "version: increment when changing anything here. The app only replaces its",
     "copy with a higher version, so an older file cannot overwrite a newer one."
   ],
-  "version": 4,
+  "version": 5,
   "defaultSpinners": [
     "⠋",
     "⠙",
@@ -41,9 +41,10 @@
   "backgroundAgentBusy": [
     "waiting for \\d+ background agents? to finish"
   ],
-  "$comment_backgroundAgentRow": "Case-insensitive regular expressions for one row of the agent list Claude Code draws under its status bar (\"  ◯ general-purpose  Timing the grid path  26m 50s · ↓ 341.6k tokens\"). Newer Claude Code shows a running agent only there. Matched only below the input box, so the transcript cannot trigger it. The main thread's own row (\"  ● main\") has no description and must not match: it is there whenever the list is.",
+  "$comment_backgroundAgentRow": "Case-insensitive regular expressions for what Claude Code draws under its input box while work goes on in the background: a row of the agent list (\"  ◯ general-purpose  Timing the grid path  26m 50s · ↓ 341.6k tokens\") — newer Claude Code shows a running agent only there — or the status bar's live count of running shells (\"· 1 shell ·\"), which Claude resumes from when they end. Matched only below the input box, so the transcript cannot trigger it. The main thread's own row (\"  ● main\") has no description and must not match: it is there whenever the list is.",
   "backgroundAgentRow": [
-    "^\\s+[◯○●◉◎◐◑◒◓]\\s+\\S+\\s{2,}\\S"
+    "^\\s+[◯○●◉◎◐◑◒◓]\\s+\\S+\\s{2,}\\S",
+    "(?:^|·)\\s*\\d+\\s+shells?(?:\\s|·|$)"
   ],
   "agents": {
     "claude": {
