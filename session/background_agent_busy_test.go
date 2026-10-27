@@ -344,61 +344,42 @@ func TestShippedPatternsFileCarriesTheAgentRow(t *testing.T) {
 	}
 }
 
-// madisocad, Claude Code 2.1.310: the agents are done and the main thread has
-// stopped, but it is waiting on a test gate it left running in the background.
-// The status bar's shell count is the live sign of that; the "still running"
-// on the done line above is only what was true when the turn ended.
-var backgroundShellPane = []string{
-	"● A review-t teljesen elolvastam. Várom a kapu eredményét.",
+// madisocad, Claude Code 2.1.310: the frontend and backend dev servers Claude
+// started run as background shells, and the status bar counts them. A count
+// was tried as a sign of work — a test gate Claude waits on looks the same —
+// and removed: servers run for days, and the tab never went idle.
+var devServersPane = []string{
+	"● Fut a frontend és a backend, a böngészőben megnézheted.",
 	"",
-	"✻ Baked for 1h 9m 59s · done 22:42 · 1 shell still running",
+	"✻ Baked for 2m 3s · done 9:40 · 2 shells still running",
 	"",
 	strings.Repeat("─", 120),
 	"❯ ",
 	strings.Repeat("─", 120),
-	"  ⏵⏵ auto mode on · 1 shell · ← 2 agents · ↓ to manage",
+	"  ⏵⏵ auto mode on · 2 shells · ← 2 agents · ↓ to manage",
 }
 
-func TestARunningShellIsBusy(t *testing.T) {
-	if !hasBackgroundAgentRow(backgroundShellPane) {
-		t.Fatal("a shell counted in the status bar was not seen")
+func TestRunningShellsAreNotWork(t *testing.T) {
+	if hasBackgroundAgentRow(devServersPane) {
+		t.Fatal("the status bar's shell count was taken for an agent at work")
 	}
-	if got := detectClaudeActivity(backgroundShellPane, getAgentPatterns(AgentClaude), ""); got != ActivityBusy {
-		t.Fatalf("detectClaudeActivity = %v, want busy", got)
-	}
-}
-
-func TestTheShellCountIsReadWhereverItStands(t *testing.T) {
-	for _, bar := range []string{
-		"  2 shells · ← 1 agent",
-		"  ⏵⏵ bypass permissions on (shift+tab to cycle) · 3 shells",
-		"  ⏵⏵ auto mode on·1 shell·← 2 agents",
-	} {
-		if !hasBackgroundAgentRow([]string{strings.Repeat("─", 72), bar}) {
-			t.Errorf("the shell count in %q was missed", bar)
-		}
+	if got := detectClaudeActivity(devServersPane, getAgentPatterns(AgentClaude), ""); got != ActivityIdle {
+		t.Fatalf("detectClaudeActivity = %v, want idle", got)
 	}
 }
 
-// Once the shell ends the count goes; the done line that mentioned it stays in
-// the transcript, above the input box, and must not keep the session busy.
-func TestAFinishedShellIsNotBusy(t *testing.T) {
-	pane := append([]string(nil), backgroundShellPane...)
-	pane[len(pane)-1] = "  ⏵⏵ auto mode on · ← 2 agents"
-	if hasBackgroundAgentRow(pane) {
-		t.Fatal("a shell mentioned only in the transcript kept the session busy")
+// The shipped file must not bring the shell count back: version 5 carried it,
+// and only a higher version replaces a copy an install already downloaded.
+func TestShippedPatternsIgnoreTheShellCount(t *testing.T) {
+	var shipped patternsFile
+	if err := json.Unmarshal(embeddedPatterns, &shipped); err != nil {
+		t.Fatalf("the embedded patterns.json does not parse: %v", err)
 	}
-}
-
-// "shell" in the status bar's other words is not a count.
-func TestShellWithoutACountIsNotBusy(t *testing.T) {
-	for _, bar := range []string{
-		"  ! for shell mode",
-		"  ⏵⏵ auto mode on · shell mode · ← 2 agents",
-		"  ⏵⏵ auto mode on · ← 2 agents · subshells",
-	} {
-		if hasBackgroundAgentRow([]string{strings.Repeat("─", 72), bar}) {
-			t.Errorf("%q was taken for a running shell", bar)
-		}
+	if shipped.Version <= 5 {
+		t.Fatalf("patterns.json version %d does not replace version 5, which counted shells", shipped.Version)
+	}
+	setPatternsForTest(t, &shipped)
+	if hasBackgroundAgentRow(devServersPane) {
+		t.Fatal("the shipped patterns read the shell count as work")
 	}
 }
