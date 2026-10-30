@@ -34,6 +34,8 @@ func TestTheAttachStartsAtTheViewersSize(t *testing.T) {
 		`attachSizeFrom(r.URL.Query().Get("cols"), r.URL.Query().Get("rows"))`,
 		`session.StartTerminalWithSize(cmd, attachCols, attachRows)`,
 		`ts.attachRemote(inst, winIdx, windowTarget, attachCols, attachRows)`,
+		// No size from the terminal: the viewer's remembered one, not 80x24.
+		"if attachCols == 0 {\n\t\tattachCols, attachRows = session.StartSize()\n\t}",
 	} {
 		if !strings.Contains(src, want) {
 			t.Errorf("terminal_ws.go no longer has %s", want)

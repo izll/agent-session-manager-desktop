@@ -860,6 +860,12 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 	// Also the size sessions started out of view are given, so an agent there
 	// does not lay its output out for 80 columns.
 	session.SetStartSize(attachCols, attachRows)
+	// A terminal that could not measure itself sends none. Attached at no size
+	// the client is 80x24, and the window follows it until the real size
+	// arrives; the viewer's last known size is far closer.
+	if attachCols == 0 {
+		attachCols, attachRows = session.StartSize()
+	}
 	projectValues, projectPresent := r.URL.Query()["project"]
 
 	// Require the per-launch token before doing anything else (and before

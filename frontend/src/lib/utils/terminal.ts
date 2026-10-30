@@ -754,17 +754,27 @@ function measuredAgainstContainer(terminalInstance: TerminalInstance): boolean {
  * real size arrived a moment later. Claude Code redrew its whole output at 80
  * columns in between, and that narrow copy stayed in the scrollback: paging
  * back showed text wrapped at two different widths. The fit to the container
- * is used where it can be measured; a terminal not laid out yet sends none.
+ * is used where it can be measured.
+ *
+ * Where it cannot — a pooled terminal attaches while still hidden — the size
+ * it last announced stands in, and a terminal that never announced one sends
+ * nothing, leaving the backend to use the viewer's size it remembers. Not the
+ * xterm's own cols and rows: until the first fit those are xterm's default,
+ * 80x24, which sent as a size is the very shrink this exists to prevent —
+ * measured, every fresh attach dropped the window to 80x24 for 200-500ms.
  */
-export function attachSizeQuery(instance: { terminal: { cols: number; rows: number }; fitAddon?: { proposeDimensions(): { cols: number; rows: number } | undefined } }): string {
+export function attachSizeQuery(instance: { terminal: { cols: number; rows: number }; fitAddon?: { proposeDimensions(): { cols: number; rows: number } | undefined }; lastSentSize?: string }): string {
   let size: { cols: number; rows: number } | undefined;
   try {
     size = instance.fitAddon?.proposeDimensions();
   } catch {
     size = undefined;
   }
-  size ??= { cols: instance.terminal.cols, rows: instance.terminal.rows };
-  if (!size || !(size.cols >= 20) || !(size.rows >= 5)) return '';
+  if (!size || !(size.cols >= 20) || !(size.rows >= 5)) {
+    const [cols, rows] = (instance.lastSentSize ?? '').split('x').map(Number);
+    size = { cols, rows };
+  }
+  if (!(size.cols >= 20) || !(size.rows >= 5)) return '';
   return `&cols=${Math.floor(size.cols)}&rows=${Math.floor(size.rows)}`;
 }
 
