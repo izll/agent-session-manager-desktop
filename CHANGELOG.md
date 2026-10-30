@@ -8,6 +8,12 @@ dates; the format follows [Keep a Changelog](https://keepachangelog.com).
 
 ## 1.1.25 — 2026-10-31
 
+### Changed
+
+- **The macOS build needs macOS 15 (Sequoia) or later**, up from macOS 14.
+  GitHub is retiring the macOS 14 machines it was built on, and the audio
+  library it bundles comes built for the system it is built on.
+
 ### Fixed
 
 - **A session started out of view no longer fills its scrollback at 80
