@@ -6,6 +6,21 @@ Entries describe what changed for someone using the app. Internal refactoring,
 test and CI work is left out unless it changed behaviour. Dates are release
 dates; the format follows [Keep a Changelog](https://keepachangelog.com).
 
+## 1.1.25 — 2026-10-31
+
+### Fixed
+
+- **A session started out of view no longer fills its scrollback at 80
+  columns.** Sessions reopened at launch, and sessions and tabs started in
+  the background, began at the terminal's default 80x24 until a terminal
+  opened on them — and Claude Code, reprinting the conversation as it
+  resumed, laid it all out that narrow. They now start at the size of the
+  app's terminal, remembered between runs for the reopen at launch.
+- **Opening a terminal no longer squeezes the pane for a moment.** Each
+  fresh attach — after a launch, a reload or a tab restart — took the pane
+  to 80 columns for up to half a second, and whatever the agent drew then
+  stayed in the scrollback wrapped at that width.
+
 ## 1.1.24 — 2026-10-26
 
 ### Added
