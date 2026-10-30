@@ -233,7 +233,7 @@ jobs:
   release-macos:
     name: Build & Release (macOS)
     needs: release
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -281,7 +281,7 @@ jobs:
           mv wails.json.tmp wails.json
 
       - name: Build (Wails, macOS arm64)
-        # Build arm64 only: the macos-14 runner is Apple Silicon and Homebrew's
+        # Build arm64 only: the macos-15 runner is Apple Silicon and Homebrew's
         # portaudio is arm64-only, so a universal build fails to link the x86_64
         # slice. This artifact therefore supports Apple Silicon Macs only.
         env:

@@ -251,7 +251,7 @@ sudo rpm -i asmgr-desktop_*_linux_x86_64.rpm
 Installs to `/usr/bin/asmgr-desktop` with an app-menu entry; runtime deps
 (`libwebkit2gtk-4.1-0`/`webkit2gtk4.1`, `tmux`) are pulled in automatically.
 
-**macOS** (Apple Silicon; Intel via Rosetta 2)
+**macOS** (Apple Silicon, macOS 15 or later)
 
 ```bash
 tar -xzf asmgr-desktop_*_darwin_arm64.tar.gz   # → asmgr-desktop.app
