@@ -620,7 +620,7 @@ const noTabRunning = -2
 func (i *Instance) newParkedSession(dir string) error {
 	sessionName := i.TmuxSessionName()
 	_ = i.tmuxRun("set-option", "-g", "history-limit", scrollbackLines)
-	args := []string{"new-session", "-d", "-s", sessionName, "-c", dir}
+	args := newSessionArgs(sessionName, dir, i.IsRemote())
 	markStarted(sessionName)
 	if i.IsRemote() {
 		if err := i.tmuxRun(args...); err != nil {

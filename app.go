@@ -197,6 +197,9 @@ func (a *App) startup(ctx context.Context) {
 	}
 	a.storage = storage
 	go purgeStaleDeletedFiles(storage.DeletedFilesDir(), time.Now())
+	// Before anything can start a session: reopening interrupted ones at
+	// start needs the size they ran at, and no terminal has one yet.
+	session.ConfigureStartSize(storage.StartSizePath())
 
 	// Apply the active project's process/tmux settings before anything can
 	// restart a pane or launch a provider. The same helper runs after every
@@ -444,6 +447,7 @@ func (a *App) shutdown(ctx context.Context) {
 	a.stopTmuxMaintenance()
 	// A deletion still undoable when the app closes is final.
 	a.deletedFiles.discardAll()
+	session.FlushStartSize()
 	// Dictation owns audio/hotkey goroutines whose callbacks can write to the
 	// terminal and emit frontend events. Drain and detach them before stopping
 	// the TerminalServer or releasing the active project's ownership.

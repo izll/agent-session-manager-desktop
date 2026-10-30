@@ -92,7 +92,7 @@ func TestScrollbackIsSetBeforeTheSessionExists(t *testing.T) {
 	text := strings.ReplaceAll(string(source), "\r\n", "\n")
 
 	setAt := strings.Index(text, `"set-option", "-g", "history-limit"`)
-	createAt := strings.Index(text, `[]string{"new-session", "-d", "-s", sessionName`)
+	createAt := strings.Index(text, `newSessionArgs(sessionName, i.Path`)
 
 	if setAt < 0 {
 		t.Fatal("the scrollback is no longer set on the multiplexer server, so " +

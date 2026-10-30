@@ -857,6 +857,9 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 	windowIdx := r.URL.Query().Get("window")
 	// The viewer's size, so the attach starts at it (see StartTerminalWithSize).
 	attachCols, attachRows := attachSizeFrom(r.URL.Query().Get("cols"), r.URL.Query().Get("rows"))
+	// Also the size sessions started out of view are given, so an agent there
+	// does not lay its output out for 80 columns.
+	session.SetStartSize(attachCols, attachRows)
 	projectValues, projectPresent := r.URL.Query()["project"]
 
 	// Require the per-launch token before doing anything else (and before
@@ -1457,6 +1460,7 @@ func (ts *TerminalServer) handleTerminal(w http.ResponseWriter, r *http.Request)
 						// resize-window below entirely (exits 0, changes
 						// nothing), so this call is what sizes the pane.
 						session.SetTerminalSize(ptmx, cols, rows)
+						session.SetStartSize(cols, rows)
 						// Resize this mirror's window to EXACTLY this client's
 						// size. We deliberately do NOT use `-A` (aggregate =
 						// largest client): with grouped per-tab mirrors, `-A`

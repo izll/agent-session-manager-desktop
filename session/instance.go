@@ -652,7 +652,7 @@ func (i *Instance) ensureRemoteSessionFor(serverID, workDir string) error {
 
 	// Detached, and holding nothing but a shell: the tabs are what the user
 	// asked for, and this window only keeps the session alive.
-	if err := i.tmuxRunOn(serverID, "new-session", "-d", "-s", sessionName, "-c", workDir); err != nil {
+	if err := i.tmuxRunOn(serverID, newSessionArgs(sessionName, workDir, true)...); err != nil {
 		return fmt.Errorf("error.couldNotStartRemoteSession")
 	}
 
@@ -1471,7 +1471,7 @@ func (i *Instance) startWithResume(resumeID string, onlyWindowIdx int) error {
 		// not a broken one.
 		_ = i.tmuxRun("set-option", "-g", "history-limit", scrollbackLines)
 
-		tmuxArgs := append([]string{"new-session", "-d", "-s", sessionName, "-c", i.Path}, argv...)
+		tmuxArgs := append(newSessionArgs(sessionName, i.Path, i.IsRemote()), argv...)
 		// Recorded before the command is issued: the mark is what tells a
 		// subsequent start to wait for a slow registration rather than create a
 		// duplicate, and the window it guards opens the moment we ask.
