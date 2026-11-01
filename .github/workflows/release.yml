@@ -125,6 +125,16 @@ jobs:
           jq --arg version "$VERSION" '.info.productVersion = $version' wails.json > wails.json.tmp
           mv wails.json.tmp wails.json
 
+      - name: Build the server helpers
+        # Embedded in the application: without them a release cannot set up a
+        # server, and it has no Go toolchain to build one with. Checked here so
+        # a release missing them fails now, not on a user's first connection.
+        env:
+          VERSION: ${{ steps.ver.outputs.num }}
+        run: |
+          go run ./cmd/buildhelpers
+          ASMGR_REQUIRE_HELPERS=1 go test ./remote/helperbin/
+
       - name: Build (Wails, webkit2_41)
         # Wails' "generating bindings" step runs the app's Go init() code, and a
         # dependency (robotn/gohook, global hotkey) calls XOpenDisplay on init —
@@ -279,6 +289,16 @@ jobs:
         run: |
           jq --arg version "$VERSION" '.info.productVersion = $version' wails.json > wails.json.tmp
           mv wails.json.tmp wails.json
+
+      - name: Build the server helpers
+        # Embedded in the application: without them a release cannot set up a
+        # server, and it has no Go toolchain to build one with. Checked here so
+        # a release missing them fails now, not on a user's first connection.
+        env:
+          VERSION: ${{ steps.ver.outputs.num }}
+        run: |
+          go run ./cmd/buildhelpers
+          ASMGR_REQUIRE_HELPERS=1 go test ./remote/helperbin/
 
       - name: Build (Wails, macOS arm64)
         # Build arm64 only: the macos-15 runner is Apple Silicon and Homebrew's
@@ -572,6 +592,16 @@ jobs:
           VERSION: ${{ steps.ver.outputs.num }}
         run: |
           node -e 'const fs=require("fs"); const p="wails.json"; const c=JSON.parse(fs.readFileSync(p)); c.info.productVersion=process.env.VERSION; fs.writeFileSync(p, JSON.stringify(c, null, 2)+"\n")'
+
+      - name: Build the server helpers
+        # Embedded in the application: without them a release cannot set up a
+        # server, and it has no Go toolchain to build one with. Checked here so
+        # a release missing them fails now, not on a user's first connection.
+        env:
+          VERSION: ${{ steps.ver.outputs.num }}
+        run: |
+          go run ./cmd/buildhelpers
+          ASMGR_REQUIRE_HELPERS=1 go test ./remote/helperbin/
 
       - name: Build (Wails, Windows amd64)
         env:

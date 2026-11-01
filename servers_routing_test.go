@@ -217,3 +217,43 @@ func TestRestoringATrashedServerTabConnectsFirst(t *testing.T) {
 		t.Error("the tab is routed before the session is known to be current")
 	}
 }
+
+// A release cannot set up a server unless it was built with the helpers, and a
+// job that builds without them still passes everything else.
+func TestEveryReleaseBuildEmbedsTheHelpers(t *testing.T) {
+	source, err := os.ReadFile(".github/workflows/release.yml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := strings.ReplaceAll(string(source), "\r\n", "\n")
+	for _, build := range []string{"- name: Build (Wails, webkit2_41)", "- name: Build (Wails, macOS arm64)", "- name: Build (Wails, Windows amd64)"} {
+		at := strings.Index(text, build)
+		if at < 0 {
+			t.Fatalf("%s is gone; this test needs rewriting", build)
+		}
+		job := text[:at]
+		if start := strings.LastIndex(job, "runs-on:"); start >= 0 {
+			job = job[start:]
+		}
+		if !strings.Contains(job, "go run ./cmd/buildhelpers") {
+			t.Errorf("the job of %q does not build the helpers before it", build)
+		}
+		if !strings.Contains(job, "ASMGR_REQUIRE_HELPERS=1 go test ./remote/helperbin/") {
+			t.Errorf("the job of %q does not check the helpers", build)
+		}
+	}
+}
+
+// Finding a helper must prefer what the build carries: on a user's machine there
+// is nothing to compile one with.
+func TestAReleasePrefersTheEmbeddedHelper(t *testing.T) {
+	source, err := os.ReadFile("servers_pool.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := functionBody(t, string(source), "var helperBinaryFor = func(")
+	embedded, built := strings.Index(body, "helperbin.Binary(arch)"), strings.Index(body, "buildHelper(arch)")
+	if embedded < 0 || built < 0 || embedded > built {
+		t.Fatalf("the embedded helper is not tried first:\n%s", body)
+	}
+}

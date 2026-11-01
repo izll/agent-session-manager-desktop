@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"asmgr-desktop/remote"
+	"asmgr-desktop/remote/helperbin"
 	"asmgr-desktop/session"
 )
 
@@ -331,7 +332,6 @@ func (a *App) connectInBackground(serverID string) {
 	}()
 }
 
-
 // tabServers lists the servers this session's tabs sit on, other than the
 // session's own machine.
 func tabServers(inst *session.Instance) []string {
@@ -356,10 +356,14 @@ func tabServers(inst *session.Instance) []string {
 
 // helperBinaryFor supplies the helper for a server's architecture.
 //
-// Built on demand from this repository during development; a release ships the
-// binaries beside the app. Kept as a variable so a test can substitute one.
+// A release carries it inside the application; a development build has none and
+// compiles one from this repository. Kept as a variable so a test can substitute
+// one.
 var helperBinaryFor = func(arch string) ([]byte, error) {
-	path, err := helperBinaryPath(arch)
+	if binary, err := helperbin.Binary(arch); err == nil {
+		return binary, nil
+	}
+	path, err := buildHelper(arch)
 	if err != nil {
 		return nil, err
 	}

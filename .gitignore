@@ -17,6 +17,9 @@ dictation/api_usage_log.json
 *.deb
 *.rpm
 
+# Built by cmd/buildhelpers for a release; embedded, not versioned.
+remote/helperbin/bin/*.gz
+
 # Test binary that `go test` leaves in the package root; the real build
 # output goes to build/bin.
 /asmgr-desktop

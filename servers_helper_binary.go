@@ -9,12 +9,10 @@ import (
 	"sync"
 )
 
-// Finding the helper binary to send to a server.
-//
-// A release ships one per architecture beside the application; a development
-// build has none, and compiles one on demand from this repository. The second
-// path is what makes it possible to work on the helper without a release cycle
-// — and it fails loudly rather than silently sending a stale binary.
+// Compiling the helper for a development build, which carries none: see
+// remote/helperbin for what a release does. This is what makes it possible to
+// work on the helper without a release cycle, and it fails loudly rather than
+// silently sending a stale binary.
 
 // helperBuildOnce keeps a development build from being repeated for every
 // server connected in one run.
@@ -24,31 +22,6 @@ type helperBuild struct {
 	once sync.Once
 	path string
 	err  error
-}
-
-// helperBinaryPath returns a file holding the helper for this architecture.
-func helperBinaryPath(arch string) (string, error) {
-	if shipped, err := shippedHelperPath(arch); err == nil {
-		return shipped, nil
-	}
-	return buildHelper(arch)
-}
-
-// shippedHelperPath looks beside the application.
-//
-// Named by architecture rather than by a single "asmgrd", because one install
-// serves servers of both kinds and picking the wrong one produces "exec format
-// error" on the far end, with nothing to explain it.
-func shippedHelperPath(arch string) (string, error) {
-	executable, err := os.Executable()
-	if err != nil {
-		return "", err
-	}
-	candidate := filepath.Join(filepath.Dir(executable), "helpers", "asmgrd-linux-"+arch)
-	if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
-		return candidate, nil
-	}
-	return "", fmt.Errorf("no helper shipped for linux/%s", arch)
 }
 
 // buildHelper compiles one from source, for development builds.
@@ -91,8 +64,7 @@ func buildHelper(arch string) (string, error) {
 
 // repositoryRoot finds the source tree, for a development build.
 func repositoryRoot() (string, error) {
-	// The working directory during development is the repository; a release
-	// never reaches here because it has shipped binaries.
+	// The working directory during development is the repository.
 	working, err := os.Getwd()
 	if err != nil {
 		return "", err
@@ -107,12 +79,9 @@ func repositoryRoot() (string, error) {
 		}
 		directory = parent
 	}
-	return "", fmt.Errorf("no helper binary is installed, and this does not look like " +
+	return "", fmt.Errorf("this build carries no helper, and this does not look like " +
 		"a development checkout to build one from")
 }
-
-// HelperArchitectures are the servers a release can talk to.
-var HelperArchitectures = []string{"amd64", "arm64"}
 
 // LocalGOARCH is exposed for diagnostics, so a log can say what the app itself
 // runs on when a helper mismatch is being investigated.
