@@ -399,19 +399,40 @@ func TestTheMainThreadsDirectoryWins(t *testing.T) {
 // A session holds only its current conversation, and starting another
 // overwrites it. What was learned stays.
 func TestAnOwnerIsRememberedAfterTheSessionMovesOn(t *testing.T) {
-	s, root := openTestStore(t), t.TempDir()
-	write(t, root, claudePath(conversationA), claudeLine("m1", "r1", 1, 1, 1, 1))
-	sync(t, s, root)
+	s := openTestStore(t)
 	ctx := context.Background()
-	if err := s.RememberOwners(ctx, []Owner{{Conversation: conversationA, SessionID: "s1", SessionName: "API", TabName: "tab"}}); err != nil {
+	if err := s.RememberOwners(ctx, []Owner{{Machine: LocalMachine, Conversation: conversationA, Directory: "/work", SessionID: "s1", SessionName: "API", TabName: "tab"}}); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.RememberOwners(ctx, []Owner{{Conversation: conversationB, SessionID: "s1", SessionName: "API"}}); err != nil {
+	if err := s.RememberOwners(ctx, []Owner{{Machine: LocalMachine, Conversation: conversationB, Directory: "/work", SessionID: "s1", SessionName: "API"}}); err != nil {
 		t.Fatal(err)
 	}
-	items, err := s.Items(ctx, 0)
-	if err != nil || len(items) != 1 || items[0].Owner == nil || items[0].Owner.SessionName != "API" || items[0].Owner.TabName != "tab" {
-		t.Fatalf("items = %+v, err = %v", items, err)
+	owners, err := s.Owners(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := owners[OwnerKey(LocalMachine, conversationA)]
+	if len(got) != 1 || got[0].SessionName != "API" || got[0].TabName != "tab" || got[0].Directory != "/work" {
+		t.Fatalf("owners = %+v", got)
+	}
+}
+
+// Seen here: two sessions storing one conversation id. Neither replaces the other.
+func TestEveryClaimOnAConversationIsKept(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	claim := func(session string) Owner {
+		return Owner{Machine: LocalMachine, Conversation: conversationA, Directory: "/" + session, SessionID: session, SessionName: session}
+	}
+	if err := s.RememberOwners(ctx, []Owner{claim("pbx"), claim("weberp")}); err != nil {
+		t.Fatal(err)
+	}
+	owners, err := s.Owners(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := owners[OwnerKey(LocalMachine, conversationA)]; len(got) != 2 {
+		t.Fatalf("owners = %+v", got)
 	}
 }
 
@@ -477,5 +498,47 @@ func TestAScanCancelledPartWayLosesNothing(t *testing.T) {
 	sync(t, s, root)
 	if got := sum(t, s); got.responses != 5 {
 		t.Fatalf("got %+v", got)
+	}
+}
+
+func TestDirectoryOwnersAreReplacedPerMachine(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	entry := func(machine, directory, session string) DirectoryOwner {
+		return DirectoryOwner{Machine: machine, Directory: directory, Owner: Owner{SessionID: session, SessionName: session}}
+	}
+	if err := s.ReplaceDirectoryOwners(ctx, "a", []DirectoryOwner{entry("a", "/one", "s1")}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.ReplaceDirectoryOwners(ctx, "b", []DirectoryOwner{entry("b", "/one", "s2")}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.ReplaceDirectoryOwners(ctx, "a", []DirectoryOwner{entry("a", "/two", "s3")}); err != nil {
+		t.Fatal(err)
+	}
+	owners, err := s.DirectoryOwners(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := map[string]string{}
+	for _, owner := range owners {
+		found[owner.Machine+owner.Directory] = owner.Owner.SessionID
+	}
+	if len(found) != 2 || found["a/two"] != "s3" || found["b/one"] != "s2" {
+		t.Fatalf("owners = %+v", found)
+	}
+}
+
+func TestAProjectLinkIsSetChangedAndRemoved(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	for _, step := range []struct{ name, want string }{{"Sparrow", "Sparrow"}, {"MADisoCAD", "MADisoCAD"}, {"", ""}} {
+		if err := s.SetProjectLink(ctx, "session:s1", step.name); err != nil {
+			t.Fatal(err)
+		}
+		links, err := s.ProjectLinks(ctx)
+		if err != nil || links["session:s1"] != step.want {
+			t.Fatalf("after %q: %v, %v", step.name, links, err)
+		}
 	}
 }

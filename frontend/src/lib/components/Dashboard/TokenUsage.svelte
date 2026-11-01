@@ -6,18 +6,19 @@
    * what used it, which is what this is for.
    */
   import { onMount, onDestroy } from 'svelte';
-  import { GetTokenUsage, RefreshTokenUsage } from '../../../../wailsjs/go/main/App';
+  import { GetTokenUsage, RefreshTokenUsage, SetTokenUsageMachineEnabled, SetTokenUsageProject } from '../../../../wailsjs/go/main/App';
   import { EventsOn, EventsOff } from '../../../../wailsjs/runtime/runtime';
   import { t } from '../../i18n';
   import { goBack } from '../../stores/navigation';
   import { describeBackendError } from '../../utils/backendError';
   import Select from '../common/Select.svelte';
   import {
-    formatShare, formatTokens, groupUsage, shortDirectory,
-    type TokenUsageItem, type UsageBasis, type UsageGroup, type UsageGroupBy,
+    filterUsageGroups, formatShare, formatTokens, groupUsage, searchFindsConversation, shortDirectory,
+    usageLinkNames, usageRowKey,
+    type TokenUsageItem, type UsageBasis, type UsageGroup, type UsageGroupBy, type UsageLinks,
   } from '../../utils/tokenUsage';
 
-  type UsageMachine = { id: string; name: string; local: boolean; lastScanUnix: number; error: string };
+  type UsageMachine = { id: string; name: string; local: boolean; lastScanUnix: number; error: string; enabled: boolean };
   type UsageProgress = { machine: string; done: number; total: number };
 
   let items: TokenUsageItem[] = [];
@@ -32,6 +33,14 @@
   let basis: UsageBasis = 'new';
   let machineFilter = '';
   let expanded = new Set<string>();
+  let search = '';
+  let machinesOpen = false;
+  let links: UsageLinks = {};
+
+  // How often the table refreshes during a read. Not on every batch: each reload
+  // walks every project's sessions.
+  const LIVE_RELOAD_MS = 3000;
+  let lastLiveLoad = 0;
 
   // A slow answer for last month must not replace the one for today that was
   // asked for after it.
@@ -48,7 +57,7 @@
     const sample = group.sample;
     switch (groupBy) {
       case 'project':
-        return sample.sessionId ? projectLabel(sample.projectName) : $t('tokenUsage.outside');
+        return links[usageRowKey(sample)] || (sample.sessionId ? projectLabel(sample.projectName) : $t('tokenUsage.outside'));
       case 'machine':
         return machineLabel(sample.machine, sample.machineName);
       case 'model':
@@ -59,10 +68,14 @@
   };
 
   $: groupSubtitle = (group: UsageGroup) => {
-    if (groupBy !== 'session') return $t('tokenUsage.conversations', { count: group.conversations.length });
     const sample = group.sample;
-    const place = sample.sessionId ? projectLabel(sample.projectName) : $t('tokenUsage.outside');
-    return `${place} · ${machineLabel(sample.machine, sample.machineName)}`;
+    const elsewhere = sample.machine === 'local' ? '' : ` · ${machineLabel(sample.machine, sample.machineName)}`;
+    if (groupBy === 'machine') return $t('tokenUsage.conversations', { count: group.conversations.length });
+    if (groupBy !== 'session') return `${$t('tokenUsage.conversations', { count: group.conversations.length })}${groupBy === 'project' ? elsewhere : ''}`;
+    const place = links[usageRowKey(sample)] || (sample.sessionId ? projectLabel(sample.projectName) : $t('tokenUsage.outside'));
+    // With one conversation in the row, its id is what someone may be looking for.
+    const only = group.conversations.length === 1 ? ` · ${group.conversations[0].conversation.slice(0, 8)}` : '';
+    return `${place} · ${machineLabel(sample.machine, sample.machineName)}${only}`;
   };
 
   $: scanLabel = (machine: UsageMachine) => machine.lastScanUnix
@@ -85,13 +98,18 @@
     { value: 'new', label: $t('tokenUsage.basisNew') },
     { value: 'all', label: $t('tokenUsage.basisAll') },
   ];
+  $: enabledMachines = machines.filter((machine) => machine.enabled);
+  $: failedMachines = enabledMachines.filter((machine) => machine.error);
   $: machineOptions = [
     { value: '', label: $t('tokenUsage.machineAll') },
-    ...machines.map((machine) => ({ value: machine.id, label: machineLabel(machine.id, machine.name) })),
+    ...enabledMachines.map((machine) => ({ value: machine.id, label: machineLabel(machine.id, machine.name) })),
   ];
 
   $: shown = machineFilter ? items.filter((item) => item.machine === machineFilter) : items;
-  $: grouped = groupUsage(shown, groupBy, basis);
+  $: grouped = groupUsage(shown, groupBy, basis, links);
+  $: linkNames = usageLinkNames(links);
+  $: visibleGroups = filterUsageGroups(grouped.groups, search);
+  $: isOpen = (group: UsageGroup) => expanded.has(group.key) || searchFindsConversation(group, search);
 
   function machineScanning(id: string): boolean {
     return scanning && progress?.machine === id;
@@ -121,14 +139,46 @@
       if (generation !== loadGeneration) return;
       items = (report?.items || []) as TokenUsageItem[];
       machines = (report?.machines || []) as UsageMachine[];
-      scanning = !!report?.scanning;
-      if (machineFilter && !machines.some((machine) => machine.id === machineFilter)) machineFilter = '';
+      links = (report?.links || {}) as UsageLinks;
+      // Only ever turned off by the event that says it finished: a reload answered
+      // just before a scan began must not end the spinner of the one now running.
+      scanning = scanning || !!report?.scanning;
+      if (machineFilter && !machines.some((machine) => machine.id === machineFilter && machine.enabled)) machineFilter = '';
       error = '';
     } catch (e) {
       if (generation === loadGeneration) error = describeBackendError(e);
     } finally {
       if (generation === loadGeneration) loading = false;
     }
+  }
+
+  async function setMachineEnabled(machine: UsageMachine, input: HTMLInputElement) {
+    const enabled = input.checked;
+    try {
+      await SetTokenUsageMachineEnabled(machine.id, enabled);
+    } catch (e) {
+      // Nothing changed, so the box goes back: Svelte will not touch it, since
+      // the value it was given has not moved.
+      input.checked = machine.enabled;
+      error = describeBackendError(e);
+      return;
+    }
+    await load();
+    // Turned back on, it has catching up to do.
+    if (enabled && !scanning) await refresh();
+  }
+
+  async function setProject(group: UsageGroup, input: HTMLInputElement, name: string) {
+    const rowKey = usageRowKey(group.sample);
+    if (name.trim() === (links[rowKey] || '')) return;
+    try {
+      await SetTokenUsageProject(rowKey, name);
+    } catch (e) {
+      input.value = links[rowKey] || '';
+      error = describeBackendError(e);
+      return;
+    }
+    await load();
   }
 
   async function refresh() {
@@ -146,6 +196,13 @@
     EventsOn('tokenUsage:progress', (next: UsageProgress) => {
       scanning = true;
       progress = next;
+      // A first read can take minutes. Everything read so far is already stored,
+      // so the table can fill up in front of the reader instead of sitting empty.
+      const now = Date.now();
+      if (now - lastLiveLoad >= LIVE_RELOAD_MS) {
+        lastLiveLoad = now;
+        void load();
+      }
     });
     EventsOn('tokenUsage:updated', () => {
       scanning = false;
@@ -163,6 +220,11 @@
   });
 </script>
 
+<svelte:window
+  on:click={() => (machinesOpen = false)}
+  on:keydown={(e) => { if (e.key === 'Escape' && machinesOpen) { e.stopPropagation(); machinesOpen = false; } }}
+/>
+
 <div class="token-usage" data-view="token-usage">
   <div class="head">
     <button class="back-btn" on:click={goBack} title={$t('allTasks.back')}>
@@ -171,6 +233,14 @@
       </svg>
       {$t('allTasks.back')}
     </button>
+    <input
+      class="search"
+      type="search"
+      data-control="search"
+      placeholder={$t('tokenUsage.searchPlaceholder')}
+      aria-label={$t('tokenUsage.searchPlaceholder')}
+      bind:value={search}
+    />
     <div class="periods" role="group" aria-label={$t('tokenUsage.period')}>
       {#each periods as period}
         <button class:active={days === period.days} data-period={period.days} on:click={() => setPeriod(period.days)}>{period.label}</button>
@@ -184,12 +254,47 @@
       <span>{$t('tokenUsage.basis')}</span>
       <Select value={basis} options={basisOptions} small on:change={(e) => (basis = e.detail === 'all' ? 'all' : 'new')} />
     </div>
-    {#if machines.length > 1}
+    {#if enabledMachines.length > 1}
       <div class="control" data-control="machine">
         <span>{$t('tokenUsage.machine')}</span>
-        <Select value={machineFilter} options={machineOptions} small on:change={(e) => (machineFilter = e.detail)} />
+        <Select value={machineFilter} options={machineOptions} small searchable={machineOptions.length > 8} on:change={(e) => (machineFilter = e.detail)} />
       </div>
     {/if}
+    <div class="machines-control">
+      <button class="machines-button" class:has-failed={failedMachines.length > 0} data-action="machines" aria-expanded={machinesOpen} on:click|stopPropagation={() => (machinesOpen = !machinesOpen)}>
+        {$t('tokenUsage.machinesButton', { on: enabledMachines.length, total: machines.length })}
+      </button>
+      {#if machinesOpen}
+        <!-- A list that opens on request: there can be twenty of these, and they
+             are set once and rarely looked at again. -->
+        <!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
+        <div class="machines-panel" data-machines on:click|stopPropagation>
+          {#each machines as machine (machine.id)}
+            <span class="machine" class:failed={machine.enabled && !!machine.error} class:off={!machine.enabled} data-machine={machine.id}>
+              <label class="machine-toggle" title={$t('tokenUsage.readMachine')}>
+                <input
+                  type="checkbox"
+                  checked={machine.enabled}
+                  aria-label={`${$t('tokenUsage.readMachine')}: ${machineLabel(machine.id, machine.name)}`}
+                  on:change={(e) => setMachineEnabled(machine, e.currentTarget)}
+                />
+                <span class="machine-name">{machineLabel(machine.id, machine.name)}</span>
+              </label>
+              {#if !machine.enabled}
+                <span>{$t('tokenUsage.machineOff')}</span>
+              {:else if machineScanning(machine.id) && progress}
+                <span>{$t('tokenUsage.scanning', { done: progress.done, total: progress.total })}</span>
+              {:else}
+                <span>{scanLabel(machine)}</span>
+                {#if machine.error}
+                  <span class="machine-error" title={describeBackendError(machine.error)}>{describeBackendError(machine.error)}</span>
+                {/if}
+              {/if}
+            </span>
+          {/each}
+        </div>
+      {/if}
+    </div>
     <button class="refresh" data-action="refresh" disabled={scanning} on:click={refresh} title={$t('tokenUsage.refresh')}>
       <svg class:spin={scanning} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/>
@@ -220,21 +325,16 @@
     <div class="error" role="alert">{error}</div>
   {/if}
 
-  <div class="machines" data-machines>
-    {#each machines as machine (machine.id)}
-      <span class="machine" class:failed={!!machine.error} data-machine={machine.id}>
-        <span class="machine-name">{machineLabel(machine.id, machine.name)}</span>
-        {#if machineScanning(machine.id) && progress}
-          <span>{$t('tokenUsage.scanning', { done: progress.done, total: progress.total })}</span>
-        {:else}
-          <span>{scanLabel(machine)}</span>
-          {#if machine.error}
-            <span class="machine-error" title={describeBackendError(machine.error)}>{describeBackendError(machine.error)}</span>
-          {/if}
-        {/if}
-      </span>
-    {/each}
-  </div>
+  {#if (scanning && progress) || failedMachines.length}
+    <div class="scan-status" data-scan-status>
+      {#if scanning && progress}
+        <span>{machineLabel(progress.machine, machines.find((m) => m.id === progress?.machine)?.name || '')}: {$t('tokenUsage.scanning', { done: progress.done, total: progress.total })}</span>
+      {/if}
+      {#if failedMachines.length}
+        <button class="failed-link" data-action="show-failed" on:click|stopPropagation={() => (machinesOpen = true)}>{$t('tokenUsage.machinesFailed', { count: failedMachines.length })}</button>
+      {/if}
+    </div>
+  {/if}
 
   <div class="table" role="table">
     <div class="row row-head" role="row">
@@ -247,8 +347,8 @@
       <span class="col-num" role="columnheader">{$t('tokenUsage.columnSubagents')}</span>
     </div>
     <div class="rows">
-      {#each grouped.groups as group (group.key)}
-        <button class="row group-row" role="row" data-group={group.key} aria-expanded={expanded.has(group.key)} on:click={() => toggle(group.key)}>
+      {#each visibleGroups as group (group.key)}
+        <button class="row group-row" role="row" data-group={group.key} aria-expanded={isOpen(group)} on:click={() => toggle(group.key)}>
           <span class="col-name">
             <span class="group-title" title={group.sample.cwd}>{groupTitle(group)}</span>
             <span class="group-subtitle">{groupSubtitle(group)}</span>
@@ -263,7 +363,26 @@
           <span class="col-num muted">{formatTokens(group.cacheRead)}</span>
           <span class="col-num">{group.subagent > 0 ? formatShare(group.subagentShare) : '–'}</span>
         </button>
-        {#if expanded.has(group.key)}
+        {#if isOpen(group)}
+          {#if groupBy === 'session'}
+            <div class="link-row" data-link={group.key}>
+              <label>
+                <span>{$t('tokenUsage.linkProject')}</span>
+                <input
+                  type="text"
+                  value={links[usageRowKey(group.sample)] || ''}
+                  placeholder={$t('tokenUsage.linkPlaceholder')}
+                  on:change={(e) => setProject(group, e.currentTarget, e.currentTarget.value)}
+                  on:keydown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+                />
+              </label>
+              {#each linkNames as name (name)}
+                {#if name !== links[usageRowKey(group.sample)]}
+                  <button class="link-chip" data-link-name={name} on:click={(e) => setProject(group, e.currentTarget.parentElement?.querySelector('input') as HTMLInputElement, name)}>{name}</button>
+                {/if}
+              {/each}
+            </div>
+          {/if}
           {#each group.conversations as conversation (conversation.key)}
             <div class="row conversation-row" role="row" data-conversation={conversation.conversation}>
               <span class="col-name">
@@ -286,7 +405,7 @@
         {/if}
       {:else}
         {#if !loading}
-          <div class="empty" data-empty>{scanning ? $t('tokenUsage.emptyScanning') : $t('tokenUsage.empty')}</div>
+          <div class="empty" data-empty>{search.trim() && grouped.groups.length ? $t('tokenUsage.noMatch') : scanning ? $t('tokenUsage.emptyScanning') : $t('tokenUsage.empty')}</div>
         {/if}
       {/each}
     </div>
@@ -327,6 +446,21 @@
   }
   .back-btn:hover, .refresh:hover:not(:disabled) {
     background: rgba(107, 114, 128, 0.15);
+  }
+  .search {
+    width: 190px;
+    padding: 5px 9px;
+    font-size: 12px;
+    font-family: inherit;
+    color: inherit;
+    background: transparent;
+    border: 1px solid #374151;
+    border-radius: 6px;
+    box-sizing: border-box;
+  }
+  .search:focus {
+    outline: none;
+    border-color: rgba(var(--accent-rgb), 0.6);
   }
   .periods {
     display: flex;
@@ -409,27 +543,97 @@
     background: rgba(239, 68, 68, 0.12);
     color: #f87171;
   }
-  .machines {
+  .machines-control {
+    position: relative;
+  }
+  .machines-button {
+    padding: 5px 10px;
+    font-size: 12px;
+    font-family: inherit;
+    color: #d1d5db;
+    background: transparent;
+    border: 1px solid #374151;
+    border-radius: 6px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .machines-button:hover {
+    background: rgba(107, 114, 128, 0.15);
+  }
+  .machines-button.has-failed {
+    border-color: rgba(251, 191, 36, 0.5);
+  }
+  .machines-panel {
+    position: absolute;
+    top: calc(100% + 4px);
+    right: 0;
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    width: min(460px, 80vw);
+    max-height: 320px;
+    overflow-y: auto;
+    padding: 6px;
+    box-sizing: border-box;
+    font-size: 11px;
+    color: #9ca3af;
+    background: #15161c;
+    border: 1px solid #374151;
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  }
+  .scan-status {
     display: flex;
     flex-wrap: wrap;
     gap: 4px 16px;
     font-size: 11px;
     color: #9ca3af;
   }
+  .failed-link {
+    padding: 0;
+    font-size: 11px;
+    font-family: inherit;
+    color: #fbbf24;
+    background: none;
+    border: none;
+    cursor: pointer;
+    text-decoration: underline;
+  }
   .machine {
-    display: inline-flex;
-    gap: 6px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 2px 6px;
+    padding: 4px 6px;
     min-width: 0;
+    border-radius: 4px;
+  }
+  .machine:hover {
+    background: rgba(107, 114, 128, 0.12);
   }
   .machine-name {
     font-weight: 600;
     color: #d1d5db;
   }
+  .machine-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+  }
+  .machine-toggle input {
+    margin: 0;
+  }
+  .machine.off .machine-name {
+    color: #6b7280;
+    font-weight: 400;
+  }
   .machine.failed .machine-name, .machine-error {
     color: #fbbf24;
   }
   .machine-error {
-    max-width: 480px;
+    flex-basis: 100%;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -474,6 +678,49 @@
   }
   .group-row:hover, .group-row:focus-visible {
     background: rgba(107, 114, 128, 0.12);
+  }
+  .link-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 8px 6px 24px;
+    font-size: 12px;
+    color: #9ca3af;
+    background: rgba(255, 255, 255, 0.015);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  }
+  .link-row label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .link-row input {
+    width: 200px;
+    padding: 3px 7px;
+    font-size: 12px;
+    font-family: inherit;
+    color: inherit;
+    background: transparent;
+    border: 1px solid #374151;
+    border-radius: 5px;
+  }
+  .link-row input:focus {
+    outline: none;
+    border-color: rgba(var(--accent-rgb), 0.6);
+  }
+  .link-chip {
+    padding: 2px 8px;
+    font-size: 11px;
+    font-family: inherit;
+    color: #d1d5db;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid #374151;
+    border-radius: 999px;
+    cursor: pointer;
+  }
+  .link-chip:hover {
+    background: rgba(var(--accent-rgb), 0.18);
   }
   .conversation-row {
     padding-left: 24px;

@@ -79,15 +79,48 @@ CREATE TABLE IF NOT EXISTS parents (
   PRIMARY KEY (machine, child)
 ) WITHOUT ROWID;
 
--- Which session a conversation belonged to, remembered once seen: a session
--- holds only its current conversation id, and starting another overwrites it.
-CREATE TABLE IF NOT EXISTS owners (
-  conversation TEXT PRIMARY KEY,
+-- Which sessions say they hold a conversation, remembered once seen: a session
+-- holds only its current conversation, and starting another overwrites it. Several
+-- can claim one, and a claim can be wrong, so all are kept with the directory each
+-- claims it from, and the conversation's own directory decides.
+DROP TABLE IF EXISTS owners;
+CREATE TABLE IF NOT EXISTS conversation_owners (
+  machine      TEXT NOT NULL,
+  conversation TEXT NOT NULL,
+  session_id   TEXT NOT NULL,
+  tab_name     TEXT NOT NULL,
+  directory    TEXT NOT NULL,
+  project_id   TEXT NOT NULL,
+  project_name TEXT NOT NULL,
+  session_name TEXT NOT NULL,
+  PRIMARY KEY (machine, conversation, session_id, tab_name)
+) WITHOUT ROWID;
+
+-- Who works where on a machine that keeps its own session list, for the
+-- conversations no session names any more. Replaced whole on each read.
+CREATE TABLE IF NOT EXISTS directory_owners (
+  machine      TEXT NOT NULL,
+  directory    TEXT NOT NULL,
   project_id   TEXT NOT NULL,
   project_name TEXT NOT NULL,
   session_id   TEXT NOT NULL,
   session_name TEXT NOT NULL,
-  tab_name     TEXT NOT NULL
+  tab_name     TEXT NOT NULL,
+  PRIMARY KEY (machine, directory, session_id, tab_name)
+) WITHOUT ROWID;
+
+-- Which project a usage row was said to belong to, by the user. Keyed by the row
+-- (a session, or a directory on a machine) and matched by name, so rows on
+-- different machines add up.
+CREATE TABLE IF NOT EXISTS project_links (
+  row_key TEXT PRIMARY KEY,
+  name    TEXT NOT NULL
+) WITHOUT ROWID;
+
+-- Machines the user does not want read. Kept apart from what was read from them,
+-- so turning one back on carries on where it stopped.
+CREATE TABLE IF NOT EXISTS disabled_machines (
+  machine TEXT PRIMARY KEY
 ) WITHOUT ROWID;
 
 CREATE TABLE IF NOT EXISTS scans (
@@ -378,14 +411,18 @@ func (s *Store) DayOf(moment time.Time) int {
 	return dayOf(moment.Unix(), s.loc)
 }
 
-// Owner says which session a conversation belonged to.
+// Owner says which session claims a conversation.
 type Owner struct {
+	Machine      string
 	Conversation string
-	ProjectID    string
-	ProjectName  string
-	SessionID    string
-	SessionName  string
-	TabName      string
+	// Directory is where that session or tab works, which is what the claim is
+	// checked against.
+	Directory   string
+	ProjectID   string
+	ProjectName string
+	SessionID   string
+	SessionName string
+	TabName     string
 }
 
 // RememberOwners stores what the sessions say now. Nothing is removed, so a
@@ -399,8 +436,9 @@ func (s *Store) RememberOwners(ctx context.Context, owners []Owner) error {
 		return err
 	}
 	defer tx.Rollback()
-	statement, err := tx.PrepareContext(ctx, `INSERT OR REPLACE INTO owners
-		(conversation, project_id, project_name, session_id, session_name, tab_name) VALUES (?, ?, ?, ?, ?, ?)`)
+	statement, err := tx.PrepareContext(ctx, `INSERT OR REPLACE INTO conversation_owners
+		(machine, conversation, session_id, tab_name, directory, project_id, project_name, session_name)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return err
 	}
@@ -409,12 +447,59 @@ func (s *Store) RememberOwners(ctx context.Context, owners []Owner) error {
 		if owner.Conversation == "" {
 			continue
 		}
-		if _, err := statement.ExecContext(ctx, owner.Conversation, owner.ProjectID, owner.ProjectName,
-			owner.SessionID, owner.SessionName, owner.TabName); err != nil {
+		if _, err := statement.ExecContext(ctx, owner.Machine, owner.Conversation, owner.SessionID, owner.TabName,
+			owner.Directory, owner.ProjectID, owner.ProjectName, owner.SessionName); err != nil {
 			return err
 		}
 	}
 	return tx.Commit()
+}
+
+// DirectoryOwner says who works in a directory on a machine.
+type DirectoryOwner struct {
+	Machine   string
+	Directory string
+	Owner     Owner
+}
+
+// ReplaceDirectoryOwners records who works where on one machine now.
+func (s *Store) ReplaceDirectoryOwners(ctx context.Context, machine string, owners []DirectoryOwner) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, `DELETE FROM directory_owners WHERE machine = ?`, machine); err != nil {
+		return err
+	}
+	for _, entry := range owners {
+		if _, err := tx.ExecContext(ctx, `INSERT OR REPLACE INTO directory_owners
+			(machine, directory, project_id, project_name, session_id, session_name, tab_name) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+			machine, entry.Directory, entry.Owner.ProjectID, entry.Owner.ProjectName,
+			entry.Owner.SessionID, entry.Owner.SessionName, entry.Owner.TabName); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+// DirectoryOwners returns who works where on the machines that said.
+func (s *Store) DirectoryOwners(ctx context.Context) ([]DirectoryOwner, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT machine, directory, project_id, project_name, session_id, session_name, tab_name FROM directory_owners`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var owners []DirectoryOwner
+	for rows.Next() {
+		var entry DirectoryOwner
+		if err := rows.Scan(&entry.Machine, &entry.Directory, &entry.Owner.ProjectID, &entry.Owner.ProjectName,
+			&entry.Owner.SessionID, &entry.Owner.SessionName, &entry.Owner.TabName); err != nil {
+			return nil, err
+		}
+		owners = append(owners, entry)
+	}
+	return owners, rows.Err()
 }
 
 // Item is one conversation's use of one model, in a period.
@@ -431,17 +516,12 @@ type Item struct {
 	CacheRead    int64
 	CacheWrite   int64
 	Responses    int64
-	Owner        *Owner
 }
 
 // Items returns everything from a day on; fromDay 0 means all of it. A spawned
 // thread's use is reported under the conversation at the top of its chain.
 func (s *Store) Items(ctx context.Context, fromDay int) ([]Item, error) {
 	parents, err := s.loadParents(ctx)
-	if err != nil {
-		return nil, err
-	}
-	owners, err := s.loadOwners(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -500,12 +580,7 @@ func (s *Store) Items(ctx context.Context, fromDay int) ([]Item, error) {
 
 	items := make([]Item, 0, len(order))
 	for _, key := range order {
-		item := merged[key]
-		if owner, found := owners[item.Conversation]; found {
-			copied := owner
-			item.Owner = &copied
-		}
-		items = append(items, *item)
+		items = append(items, *merged[key])
 	}
 	return items, nil
 }
@@ -530,22 +605,48 @@ func (s *Store) loadParents(ctx context.Context) (map[string]map[string]string, 
 	return parents, rows.Err()
 }
 
-func (s *Store) loadOwners(ctx context.Context) (map[string]Owner, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT conversation, project_id, project_name, session_id, session_name, tab_name FROM owners`)
+// OwnerKey is how Owners files a conversation's claimants.
+func OwnerKey(machine, conversation string) string {
+	return machine + "\x00" + conversation
+}
+
+// Owners returns who claims each conversation, in a fixed order.
+func (s *Store) Owners(ctx context.Context) (map[string][]Owner, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT machine, conversation, session_id, tab_name, directory, project_id, project_name, session_name
+		FROM conversation_owners ORDER BY session_name, session_id, tab_name`)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	owners := map[string]Owner{}
+	owners := map[string][]Owner{}
 	for rows.Next() {
 		var owner Owner
-		if err := rows.Scan(&owner.Conversation, &owner.ProjectID, &owner.ProjectName,
-			&owner.SessionID, &owner.SessionName, &owner.TabName); err != nil {
+		if err := rows.Scan(&owner.Machine, &owner.Conversation, &owner.SessionID, &owner.TabName, &owner.Directory,
+			&owner.ProjectID, &owner.ProjectName, &owner.SessionName); err != nil {
 			return nil, err
 		}
-		owners[owner.Conversation] = owner
+		key := OwnerKey(owner.Machine, owner.Conversation)
+		owners[key] = append(owners[key], owner)
 	}
 	return owners, rows.Err()
+}
+
+// ConversationDirectories returns where each conversation ran, by OwnerKey.
+func (s *Store) ConversationDirectories(ctx context.Context) (map[string]string, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT machine, id, cwd FROM conversations`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	directories := map[string]string{}
+	for rows.Next() {
+		var machine, id, cwd string
+		if err := rows.Scan(&machine, &id, &cwd); err != nil {
+			return nil, err
+		}
+		directories[OwnerKey(machine, id)] = cwd
+	}
+	return directories, rows.Err()
 }
 
 // rootOf follows a spawned thread up to the conversation that started the
@@ -560,6 +661,84 @@ func rootOf(parents map[string]string, conversation string) string {
 		current = parent
 	}
 	return conversation
+}
+
+// SetMachineEnabled says whether a machine's logs are read and shown.
+func (s *Store) SetMachineEnabled(ctx context.Context, machine string, enabled bool) error {
+	var err error
+	if enabled {
+		_, err = s.db.ExecContext(ctx, `DELETE FROM disabled_machines WHERE machine = ?`, machine)
+	} else {
+		_, err = s.db.ExecContext(ctx, `INSERT OR IGNORE INTO disabled_machines (machine) VALUES (?)`, machine)
+	}
+	return err
+}
+
+// DisabledMachines returns the machines turned off.
+func (s *Store) DisabledMachines(ctx context.Context) (map[string]bool, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT machine FROM disabled_machines`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	disabled := map[string]bool{}
+	for rows.Next() {
+		var machine string
+		if err := rows.Scan(&machine); err != nil {
+			return nil, err
+		}
+		disabled[machine] = true
+	}
+	return disabled, rows.Err()
+}
+
+// KnownMachines returns every machine anything was recorded for, including
+// servers since removed from the list: their numbers are still there, so they
+// have to stay something that can be turned off.
+func (s *Store) KnownMachines(ctx context.Context) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT machine FROM scans UNION SELECT DISTINCT machine FROM usage ORDER BY 1`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var machines []string
+	for rows.Next() {
+		var machine string
+		if err := rows.Scan(&machine); err != nil {
+			return nil, err
+		}
+		machines = append(machines, machine)
+	}
+	return machines, rows.Err()
+}
+
+// SetProjectLink says which project a row belongs to; an empty name removes it.
+func (s *Store) SetProjectLink(ctx context.Context, rowKey, name string) error {
+	var err error
+	if name == "" {
+		_, err = s.db.ExecContext(ctx, `DELETE FROM project_links WHERE row_key = ?`, rowKey)
+	} else {
+		_, err = s.db.ExecContext(ctx, `INSERT OR REPLACE INTO project_links (row_key, name) VALUES (?, ?)`, rowKey, name)
+	}
+	return err
+}
+
+// ProjectLinks returns every row's assigned project.
+func (s *Store) ProjectLinks(ctx context.Context) (map[string]string, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT row_key, name FROM project_links`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	links := map[string]string{}
+	for rows.Next() {
+		var key, name string
+		if err := rows.Scan(&key, &name); err != nil {
+			return nil, err
+		}
+		links[key] = name
+	}
+	return links, rows.Err()
 }
 
 // Scan is the outcome of the last look at a machine.

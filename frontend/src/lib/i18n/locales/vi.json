@@ -1795,5 +1795,13 @@
   "tokenUsage.summaryAll": "Tất cả token",
   "tokenUsage.empty": "Không có mức dùng token trong khoảng này.",
   "tokenUsage.emptyScanning": "Đang đọc nhật ký lần đầu…",
-  "tokenUsage.note": "Từ nhật ký của Claude Code và Codex. Token mới gồm đầu vào, đầu ra và ghi bộ nhớ đệm. Tỷ lệ tính theo token, không phải phần chính xác của giới hạn gói, và đầu ra có thể hơi thấp nếu nhật ký không chứa giá trị cuối cùng."
+  "tokenUsage.note": "Từ nhật ký của Claude Code và Codex. Token mới gồm đầu vào, đầu ra và ghi bộ nhớ đệm. Tỷ lệ tính theo token, không phải phần chính xác của giới hạn gói, và đầu ra có thể hơi thấp nếu nhật ký không chứa giá trị cuối cùng.",
+  "tokenUsage.readMachine": "Đọc nhật ký của máy này",
+  "tokenUsage.machineOff": "Không đọc",
+  "tokenUsage.searchPlaceholder": "Tìm tên, thẻ, thư mục, id…",
+  "tokenUsage.noMatch": "Không có kết quả cho tìm kiếm này.",
+  "tokenUsage.linkProject": "Dự án",
+  "tokenUsage.linkPlaceholder": "Tên chung cho những gì đi cùng nhau",
+  "tokenUsage.machinesButton": "Máy: {on}/{total}",
+  "tokenUsage.machinesFailed": "{count} máy lỗi"
 }

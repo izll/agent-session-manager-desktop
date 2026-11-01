@@ -1795,5 +1795,13 @@
   "tokenUsage.summaryAll": "Tüm tokenler",
   "tokenUsage.empty": "Bu dönemde token kullanımı yok.",
   "tokenUsage.emptyScanning": "Günlükler ilk kez okunuyor…",
-  "tokenUsage.note": "Claude Code ve Codex günlüklerinden. Yeni tokenler girdi, çıktı ve önbellek yazmalarıdır. Pay tokenlere aittir, bir planın sınırının tam bir parçası değildir ve günlükte nihai değer yoksa çıktı biraz düşük görünebilir."
+  "tokenUsage.note": "Claude Code ve Codex günlüklerinden. Yeni tokenler girdi, çıktı ve önbellek yazmalarıdır. Pay tokenlere aittir, bir planın sınırının tam bir parçası değildir ve günlükte nihai değer yoksa çıktı biraz düşük görünebilir.",
+  "tokenUsage.readMachine": "Bu makinenin günlüklerini oku",
+  "tokenUsage.machineOff": "Okunmuyor",
+  "tokenUsage.searchPlaceholder": "Ad, sekme, klasör, kimlik ara…",
+  "tokenUsage.noMatch": "Bu aramayla eşleşen sonuç yok.",
+  "tokenUsage.linkProject": "Proje",
+  "tokenUsage.linkPlaceholder": "Birbirine ait olanlar için ortak ad",
+  "tokenUsage.machinesButton": "Makineler: {on}/{total}",
+  "tokenUsage.machinesFailed": "{count} hatalı"
 }

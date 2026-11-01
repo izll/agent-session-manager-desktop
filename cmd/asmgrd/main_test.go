@@ -219,3 +219,27 @@ func TestUsageReadRejectsBadParameters(t *testing.T) {
 		t.Fatal("bad parameters were accepted")
 	}
 }
+
+func TestUsageOwnersNameTheServersOwnSessions(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	dir := filepath.Join(home, ".config", "agent-session-manager-desktop")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	content := `{"instances":[{"id":"s1","name":"MADisoCAD","path":"/work","resume_session_id":"c1"}]}`
+	if err := os.WriteFile(filepath.Join(dir, "sessions.json"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	response := handle(&protocol.Request{ID: 1, Method: protocol.MethodUsageOwners})
+	if response.Error != "" {
+		t.Fatal(response.Error)
+	}
+	var result protocol.UsageOwnersResult
+	if err := json.Unmarshal(response.Result, &result); err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Owners) != 1 || result.Owners[0].SessionName != "MADisoCAD" || result.Owners[0].Conversation != "c1" {
+		t.Fatalf("owners = %+v", result.Owners)
+	}
+}

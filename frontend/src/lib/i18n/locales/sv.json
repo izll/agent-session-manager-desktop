@@ -1795,5 +1795,13 @@
   "tokenUsage.summaryAll": "Alla tokens",
   "tokenUsage.empty": "Ingen tokenanvändning under perioden.",
   "tokenUsage.emptyScanning": "Läser loggarna för första gången…",
-  "tokenUsage.note": "Från loggarna för Claude Code och Codex. Nya tokens är indata, utdata och cacheskrivningar. Andelen gäller tokens, inte en exakt del av en plans gräns, och utdata kan bli något låg om en logg saknar slutvärdet."
+  "tokenUsage.note": "Från loggarna för Claude Code och Codex. Nya tokens är indata, utdata och cacheskrivningar. Andelen gäller tokens, inte en exakt del av en plans gräns, och utdata kan bli något låg om en logg saknar slutvärdet.",
+  "tokenUsage.readMachine": "Läs den här datorns loggar",
+  "tokenUsage.machineOff": "Läses inte",
+  "tokenUsage.searchPlaceholder": "Sök namn, flik, mapp, id…",
+  "tokenUsage.noMatch": "Inget matchar sökningen.",
+  "tokenUsage.linkProject": "Projekt",
+  "tokenUsage.linkPlaceholder": "Ett gemensamt namn för det som hör ihop",
+  "tokenUsage.machinesButton": "Datorer: {on}/{total}",
+  "tokenUsage.machinesFailed": "{count} med fel"
 }

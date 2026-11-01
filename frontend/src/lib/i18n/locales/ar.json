@@ -1795,5 +1795,13 @@
   "tokenUsage.summaryAll": "كل الرموز",
   "tokenUsage.empty": "لا يوجد استخدام للرموز في هذه الفترة.",
   "tokenUsage.emptyScanning": "قراءة السجلات لأول مرة…",
-  "tokenUsage.note": "من سجلات Claude Code وCodex. الرموز الجديدة هي الإدخال والإخراج وكتابات الذاكرة المؤقتة. النسبة خاصة بالرموز وليست جزءًا دقيقًا من حد الخطة، وقد يظهر الإخراج أقل قليلًا إذا لم يتضمن السجل القيمة النهائية."
+  "tokenUsage.note": "من سجلات Claude Code وCodex. الرموز الجديدة هي الإدخال والإخراج وكتابات الذاكرة المؤقتة. النسبة خاصة بالرموز وليست جزءًا دقيقًا من حد الخطة، وقد يظهر الإخراج أقل قليلًا إذا لم يتضمن السجل القيمة النهائية.",
+  "tokenUsage.readMachine": "قراءة سجلات هذا الجهاز",
+  "tokenUsage.machineOff": "غير مقروء",
+  "tokenUsage.searchPlaceholder": "البحث بالاسم أو علامة التبويب أو المجلد أو المعرّف…",
+  "tokenUsage.noMatch": "لا توجد نتائج لهذا البحث.",
+  "tokenUsage.linkProject": "المشروع",
+  "tokenUsage.linkPlaceholder": "اسم مشترك لما ينتمي معًا",
+  "tokenUsage.machinesButton": "الأجهزة: {on}/{total}",
+  "tokenUsage.machinesFailed": "{count} بها أخطاء"
 }

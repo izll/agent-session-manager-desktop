@@ -1795,5 +1795,13 @@
   "tokenUsage.summaryAll": "Усі токени",
   "tokenUsage.empty": "За цей період токени не використовувалися.",
   "tokenUsage.emptyScanning": "Перше читання журналів…",
-  "tokenUsage.note": "За журналами Claude Code і Codex. Нові токени — це ввід, вивід і запис у кеш. Частка стосується токенів, а не точної частини ліміту тарифу, а вивід може бути трохи заниженим, якщо в журналі немає підсумкового значення."
+  "tokenUsage.note": "За журналами Claude Code і Codex. Нові токени — це ввід, вивід і запис у кеш. Частка стосується токенів, а не точної частини ліміту тарифу, а вивід може бути трохи заниженим, якщо в журналі немає підсумкового значення.",
+  "tokenUsage.readMachine": "Читати журнали цієї машини",
+  "tokenUsage.machineOff": "Не читається",
+  "tokenUsage.searchPlaceholder": "Пошук: назва, вкладка, тека, id…",
+  "tokenUsage.noMatch": "За цим запитом нічого не знайдено.",
+  "tokenUsage.linkProject": "Проєкт",
+  "tokenUsage.linkPlaceholder": "Спільна назва для того, що пов'язане",
+  "tokenUsage.machinesButton": "Машини: {on}/{total}",
+  "tokenUsage.machinesFailed": "З помилками: {count}"
 }

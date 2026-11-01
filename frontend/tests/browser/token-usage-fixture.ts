@@ -21,10 +21,17 @@ const items = params.has('empty') ? [] : [
 ];
 
 const machines = [
-  { id: 'local', name: '', local: true, lastScanUnix: 1_790_000_000, error: '' },
-  { id: 'srv-1', name: 'web server', local: false, lastScanUnix: 1_789_000_000, error: 'error.serverNotConnected' },
+  { id: 'local', name: '', local: true, lastScanUnix: 1_790_000_000, error: '', enabled: true },
+  { id: 'srv-1', name: 'web server', local: false, lastScanUnix: 1_789_000_000, error: 'error.serverNotConnected', enabled: true },
 ];
 
+if (params.has('many')) {
+  for (let n = 1; n <= 20; n++) {
+    machines.push({ id: `srv-m${n}`, name: `server ${n}`, local: false, lastScanUnix: 1_789_000_000, error: n % 5 === 0 ? 'error.serverNotConnected' : '', enabled: true });
+  }
+}
+
+const links: Record<string, string> = {};
 const calls: { method: string; args: unknown[] }[] = [];
 const listeners = new Map<string, ((data: unknown) => void)[]>();
 const emit = (name: string, data?: unknown) => (listeners.get(name) || []).forEach((cb) => cb(data));
@@ -33,7 +40,19 @@ const backend = new Proxy({
   GetTokenUsage: async (days: number) => {
     calls.push({ method: 'GetTokenUsage', args: [days] });
     // A narrower period has less in it, so a period change is visible.
-    return { items: days === 1 ? items.slice(0, 1) : items, machines, scanning: false };
+    const off = new Set(machines.filter((machine) => !machine.enabled).map((machine) => machine.id));
+    const shown = (days === 1 ? items.slice(0, 1) : items).filter((entry) => !off.has(entry.machine as string));
+    return { items: shown, machines: structuredClone(machines), scanning: false, links: { ...links } };
+  },
+  SetTokenUsageProject: async (rowKey: string, name: string) => {
+    calls.push({ method: 'SetTokenUsageProject', args: [rowKey, name] });
+    if (name.trim()) links[rowKey] = name.trim();
+    else delete links[rowKey];
+  },
+  SetTokenUsageMachineEnabled: async (machine: string, enabled: boolean) => {
+    calls.push({ method: 'SetTokenUsageMachineEnabled', args: [machine, enabled] });
+    if (params.has('failToggle')) throw new Error('error.serverNotConnected');
+    machines.find((entry) => entry.id === machine)!.enabled = enabled;
   },
   RefreshTokenUsage: async () => {
     calls.push({ method: 'RefreshTokenUsage', args: [] });

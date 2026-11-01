@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -70,6 +71,9 @@ type TokenUsageMachine struct {
 	Local        bool   `json:"local"`
 	LastScanUnix int64  `json:"lastScanUnix"`
 	Error        string `json:"error"`
+	// Enabled says the machine is read and counted. A turned-off one is neither
+	// connected to nor added up, and what was read from it stays for later.
+	Enabled bool `json:"enabled"`
 }
 
 // TokenUsageReport is what the view shows.
@@ -77,6 +81,8 @@ type TokenUsageReport struct {
 	Items    []TokenUsageItem    `json:"items"`
 	Machines []TokenUsageMachine `json:"machines"`
 	Scanning bool                `json:"scanning"`
+	// Links says which project the user put a row in, by the row's key.
+	Links map[string]string `json:"links"`
 }
 
 // TokenUsageProgress reports a running scan.
@@ -90,7 +96,11 @@ type tokenUsageState struct {
 	mu       sync.Mutex
 	store    *store.Store
 	scanning bool
-	stopped  bool
+	// scanMachine and cancelMachine say which machine is being read, so turning
+	// it off can stop a first read that takes minutes.
+	scanMachine   string
+	cancelMachine context.CancelFunc
+	stopped       bool
 	// ctx ends with the app, and with it the timer and any scan under way.
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -135,6 +145,12 @@ func (a *App) GetTokenUsage(days int) (*TokenUsageReport, error) {
 	ctx := a.lifecycleContext()
 
 	owned := a.rememberTokenUsageOwners(ctx, usage)
+	if remembered, err := usage.DirectoryOwners(ctx); err == nil {
+		for _, entry := range remembered {
+			key := directoryKey(entry.Machine, normaliseUsageDirectory(entry.Directory))
+			owned.directories[key] = append(owned.directories[key], entry.Owner)
+		}
+	}
 
 	fromDay := 0
 	if days > 0 {
@@ -154,12 +170,33 @@ func (a *App) GetTokenUsage(days int) (*TokenUsageReport, error) {
 		names[machine.ID] = machine.Name
 	}
 
+	links, err := usage.ProjectLinks(ctx)
+	if err != nil {
+		return nil, err
+	}
+	claims, err := usage.Owners(ctx)
+	if err != nil {
+		return nil, err
+	}
+	directories, err := usage.ConversationDirectories(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	report := &TokenUsageReport{
 		Items:    make([]TokenUsageItem, 0, len(items)),
 		Machines: machines,
 		Scanning: a.tokenUsageScanning(),
+		Links:    links,
+	}
+	disabled := map[string]bool{}
+	for _, machine := range machines {
+		disabled[machine.ID] = !machine.Enabled
 	}
 	for _, item := range items {
+		if disabled[item.Machine] {
+			continue
+		}
 		entry := TokenUsageItem{
 			Machine:      item.Machine,
 			MachineName:  names[item.Machine],
@@ -175,14 +212,7 @@ func (a *App) GetTokenUsage(days int) (*TokenUsageReport, error) {
 			CacheWrite:   item.CacheWrite,
 			Responses:    item.Responses,
 		}
-		if entry.MachineName == "" && item.Machine != store.LocalMachine {
-			// A server since removed from the list: its numbers still happened.
-			entry.MachineName = item.Machine
-		}
-		owner := item.Owner
-		if owner == nil {
-			owner = owned.ownerOfDirectory(item.Machine, item.Cwd)
-		}
+		owner := owned.ownerOf(item.Machine, item.Conversation, item.Cwd, claims, directories)
 		if owner != nil {
 			entry.ProjectID = owner.ProjectID
 			entry.ProjectName = owner.ProjectName
@@ -206,8 +236,40 @@ func (a *App) rememberTokenUsageOwners(ctx context.Context, usage *store.Store) 
 	return owned
 }
 
-// RefreshTokenUsage starts a scan of every machine, connecting to servers that
-// are not connected yet. It returns at once; the view listens for the events.
+// SetTokenUsageMachineEnabled says whether a machine is read and counted.
+// Turning one off also stops a read of it that is under way.
+func (a *App) SetTokenUsageMachineEnabled(machine string, enabled bool) error {
+	usage, err := a.tokenUsageStore()
+	if err != nil {
+		return err
+	}
+	if err := usage.SetMachineEnabled(a.lifecycleContext(), machine, enabled); err != nil {
+		return err
+	}
+	if !enabled {
+		a.tokenUsage.mu.Lock()
+		if a.tokenUsage.scanMachine == machine && a.tokenUsage.cancelMachine != nil {
+			a.tokenUsage.cancelMachine()
+		}
+		a.tokenUsage.mu.Unlock()
+	}
+	return nil
+}
+
+// SetTokenUsageProject puts a usage row in a project of the user's naming, or
+// takes it out with an empty name. Only for this view: the sessions themselves stay
+// in whichever project they are in.
+func (a *App) SetTokenUsageProject(rowKey, name string) error {
+	usage, err := a.tokenUsageStore()
+	if err != nil {
+		return err
+	}
+	return usage.SetProjectLink(a.lifecycleContext(), rowKey, strings.TrimSpace(name))
+}
+
+// RefreshTokenUsage starts a scan of every machine turned on, connecting to
+// servers that are not connected yet. It returns at once; the view listens for
+// the events.
 func (a *App) RefreshTokenUsage() {
 	a.startTokenUsageScan(true)
 }
@@ -304,11 +366,20 @@ func (a *App) scanTokenUsage(ctx context.Context, connect bool) {
 	}
 	a.rememberTokenUsageOwners(ctx, usage)
 
-	roots, err := tokenusage.DefaultRoots()
-	if err == nil {
-		a.scanTokenUsageMachine(ctx, usage, store.LocalMachine, store.LocalSource{Roots: roots})
-	} else {
-		a.recordTokenUsageScan(ctx, usage, store.LocalMachine, err)
+	// Asked again before each machine: the first read of one can take minutes,
+	// and the next may have been turned off meanwhile.
+	turnedOff := func(machine string) bool {
+		disabled, err := usage.DisabledMachines(ctx)
+		return err == nil && disabled[machine]
+	}
+
+	if !turnedOff(store.LocalMachine) {
+		roots, err := tokenusage.DefaultRoots()
+		if err == nil {
+			a.scanTokenUsageMachine(ctx, usage, store.LocalMachine, store.LocalSource{Roots: roots})
+		} else {
+			a.recordTokenUsageScan(ctx, usage, store.LocalMachine, err)
+		}
 	}
 
 	list, err := a.storage.LoadServers()
@@ -323,8 +394,10 @@ func (a *App) scanTokenUsage(ctx context.Context, connect bool) {
 		}
 		server := &list.Servers[index]
 		machine := usageServerKey(server)
-		// Two entries for one host are one set of logs.
-		if scanned[machine] {
+		// Two entries for one host are one set of logs. Checked before connecting:
+		// a machine turned off is not to be touched, which connecting does by
+		// installing the helper.
+		if scanned[machine] || turnedOff(machine) {
 			continue
 		}
 		var connection *serverConnection
@@ -338,19 +411,71 @@ func (a *App) scanTokenUsage(ctx context.Context, connect bool) {
 			continue
 		}
 		scanned[machine] = true
-		a.scanTokenUsageMachine(ctx, usage, machine, helperUsageSource{helper: connection.helper})
+		source := helperUsageSource{helper: connection.helper}
+		a.rememberServerOwners(ctx, usage, machine, source)
+		a.scanTokenUsageMachine(ctx, usage, machine, source)
+	}
+}
+
+// rememberServerOwners learns the names a server keeps for its own sessions. Those
+// are worth having and not worth failing for: without them the numbers are still
+// right, and a row reads as its directory.
+func (a *App) rememberServerOwners(ctx context.Context, usage *store.Store, machine string, source helperUsageSource) {
+	remote, err := source.Owners(ctx)
+	if err != nil {
+		log.Printf("[tokens] %s: could not read its session names: %v", machine, err)
+		return
+	}
+	var owners []store.Owner
+	var directories []store.DirectoryOwner
+	for _, entry := range remote {
+		// Ids of that machine's own list, so its default project stays apart
+		// from this one's, and from any other server's.
+		owner := store.Owner{
+			Machine:      machine,
+			Conversation: entry.Conversation,
+			Directory:    entry.Directory,
+			ProjectID:    machine + "/" + entry.ProjectID,
+			ProjectName:  entry.ProjectName,
+			SessionID:    machine + "/" + entry.SessionID,
+			SessionName:  entry.SessionName,
+			TabName:      entry.TabName,
+		}
+		if entry.Conversation != "" {
+			owners = append(owners, owner)
+		}
+		if entry.Directory != "" {
+			directories = append(directories, store.DirectoryOwner{Machine: machine, Directory: entry.Directory, Owner: owner})
+		}
+	}
+	if err := usage.RememberOwners(ctx, owners); err != nil {
+		log.Printf("[tokens] %s: could not record its session names: %v", machine, err)
+	}
+	if err := usage.ReplaceDirectoryOwners(ctx, machine, directories); err != nil {
+		log.Printf("[tokens] %s: could not record its session names: %v", machine, err)
 	}
 }
 
 func (a *App) scanTokenUsageMachine(ctx context.Context, usage *store.Store, machine string, source store.Source) {
-	err := usage.Sync(ctx, machine, source, func(done, total int) {
+	machineCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	a.tokenUsage.mu.Lock()
+	a.tokenUsage.scanMachine, a.tokenUsage.cancelMachine = machine, cancel
+	a.tokenUsage.mu.Unlock()
+	defer func() {
+		a.tokenUsage.mu.Lock()
+		a.tokenUsage.scanMachine, a.tokenUsage.cancelMachine = "", nil
+		a.tokenUsage.mu.Unlock()
+	}()
+
+	err := usage.Sync(machineCtx, machine, source, func(done, total int) {
 		a.emitTokenUsage(tokenUsageProgressEvent, TokenUsageProgress{Machine: machine, Done: done, Total: total})
 	})
-	a.recordTokenUsageScan(ctx, usage, machine, err)
+	a.recordTokenUsageScan(machineCtx, usage, machine, err)
 }
 
 func (a *App) recordTokenUsageScan(ctx context.Context, usage *store.Store, machine string, scanErr error) {
-	// Being shut down is no fault of the machine's.
+	// Being shut down or turned off is no fault of the machine's.
 	if ctx.Err() != nil {
 		return
 	}
@@ -403,29 +528,63 @@ func (h helperUsageSource) Read(ctx context.Context, requests []tokenusage.ReadR
 	return result.Results, nil
 }
 
+// Owners reads the names the server keeps for its own sessions.
+func (h helperUsageSource) Owners(ctx context.Context) ([]tokenusage.Owner, error) {
+	callCtx, cancel := context.WithTimeout(ctx, tokenUsageReadTimeout)
+	defer cancel()
+	var result protocol.UsageOwnersResult
+	if err := h.helper.Call(callCtx, protocol.MethodUsageOwners, struct{}{}, &result); err != nil {
+		return nil, err
+	}
+	return result.Owners, nil
+}
+
 func (a *App) tokenUsageMachines(ctx context.Context, usage *store.Store) ([]TokenUsageMachine, error) {
 	scans, err := usage.Scans(ctx)
 	if err != nil {
 		return nil, err
 	}
+	disabled, err := usage.DisabledMachines(ctx)
+	if err != nil {
+		return nil, err
+	}
 	local := scans[store.LocalMachine]
 	// Named by the frontend: "this computer" is a translated string.
-	machines := []TokenUsageMachine{{ID: store.LocalMachine, Local: true, LastScanUnix: local.LastUnix, Error: local.Error}}
-	list, err := a.storage.LoadServers()
-	if err != nil {
-		return machines, nil
+	machines := []TokenUsageMachine{{
+		ID: store.LocalMachine, Local: true, LastScanUnix: local.LastUnix, Error: local.Error,
+		Enabled: !disabled[store.LocalMachine],
+	}}
+	listed := map[string]bool{store.LocalMachine: true}
+	if list, err := a.storage.LoadServers(); err == nil {
+		for index := range list.Servers {
+			server := &list.Servers[index]
+			machine := usageServerKey(server)
+			if listed[machine] {
+				continue
+			}
+			listed[machine] = true
+			scan := scans[machine]
+			machines = append(machines, TokenUsageMachine{
+				ID: machine, Name: server.DisplayName(), LastScanUnix: scan.LastUnix, Error: scan.Error,
+				Enabled: !disabled[machine],
+			})
+		}
 	}
-	listed := map[string]bool{}
-	for index := range list.Servers {
-		server := &list.Servers[index]
-		machine := usageServerKey(server)
+	// A server since removed still has its numbers in the totals, so it has to
+	// stay on the list to be turned off.
+	known, err := usage.KnownMachines(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, machine := range known {
 		if listed[machine] {
 			continue
 		}
 		listed[machine] = true
 		scan := scans[machine]
 		machines = append(machines, TokenUsageMachine{
-			ID: machine, Name: server.DisplayName(), LastScanUnix: scan.LastUnix, Error: scan.Error,
+			ID: machine, Name: machine, LastScanUnix: scan.LastUnix, Error: scan.Error,
+			Enabled: !disabled[machine],
 		})
 	}
 	return machines, nil
@@ -450,9 +609,42 @@ type tokenUsageOwners struct {
 	directories map[string][]store.Owner
 }
 
+// ownerOf decides which session a conversation belongs to.
+//
+// A session's stored id is a claim, not a fact. Measured here: 11 of 54 pointed
+// at a conversation from another directory, and one tab of pbx-go, not used in
+// weeks, took the credit for WebERP's two largest conversations. The log says
+// where a conversation really ran, so a claim counts only if it agrees.
+func (o *tokenUsageOwners) ownerOf(machine, conversation, cwd string, claims map[string][]store.Owner, directories map[string]string) *store.Owner {
+	for _, claim := range claims[store.OwnerKey(machine, conversation)] {
+		if directoryHolds(claim.Directory, cwd) {
+			chosen := claim
+			return &chosen
+		}
+	}
+	if owner := o.ownerOfDirectory(machine, cwd); owner != nil {
+		return owner
+	}
+	// Its directory names the conversation it was made for.
+	if parent := conversationOfScratchpad(cwd); parent != "" && parent != conversation {
+		return o.ownerOf(machine, parent, directories[store.OwnerKey(machine, parent)], claims, directories)
+	}
+	return nil
+}
+
+// directoryHolds says a conversation ran in a session's directory or below it:
+// an agent can be started in a subfolder of the session's project.
+func directoryHolds(directory, cwd string) bool {
+	if directory == "" || cwd == "" {
+		return false
+	}
+	directory, cwd = normaliseUsageDirectory(directory), normaliseUsageDirectory(cwd)
+	return cwd == directory || strings.HasPrefix(filepath.ToSlash(cwd), strings.TrimSuffix(filepath.ToSlash(directory), "/")+"/")
+}
+
 // ownerOfDirectory ties a conversation to a session by where it ran, when only
-// one session works there. A session holds only its current conversation, so
-// this is what finds the ones before it.
+// one session works there. A session holds only its current conversation, and that
+// not always correctly, so this is what finds the rest.
 //
 // Exact match only. A session in the home directory would otherwise claim every
 // conversation on the machine. Two sessions sharing a directory cannot be told
@@ -474,6 +666,20 @@ func (o *tokenUsageOwners) ownerOfDirectory(machine, cwd string) *store.Owner {
 		}
 	}
 	return &owner
+}
+
+var scratchpadConversation = regexp.MustCompile(`/claude-[0-9]+/[^/]+/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?:/|$)`)
+
+// conversationOfScratchpad reads which Claude conversation a directory was made
+// for. A Codex run started from a Claude session's scratchpad shows up as an
+// unrelated conversation, in /tmp/claude-1000/<project>/<conversation>/scratchpad/
+// and the like, but its work is that session's: the path says so.
+func conversationOfScratchpad(directory string) string {
+	match := scratchpadConversation.FindStringSubmatch(filepath.ToSlash(directory))
+	if match == nil {
+		return ""
+	}
+	return match[1]
 }
 
 func directoryKey(machine, directory string) string {
@@ -557,7 +763,7 @@ func (a *App) collectTokenUsageOwners() *tokenUsageOwners {
 func (o *tokenUsageOwners) add(owner store.Owner, conversation, machine, directory string) {
 	if conversation != "" {
 		named := owner
-		named.Conversation = conversation
+		named.Machine, named.Conversation, named.Directory = machine, conversation, directory
 		o.owners = append(o.owners, named)
 	}
 	if directory != "" {

@@ -1795,5 +1795,13 @@
   "tokenUsage.summaryAll": "全トークン",
   "tokenUsage.empty": "この期間のトークン使用はありません。",
   "tokenUsage.emptyScanning": "ログを初めて読み取っています…",
-  "tokenUsage.note": "Claude Code と Codex のログに基づきます。新規トークンは入力、出力、キャッシュ書き込みです。割合はトークンに対するもので、プランの上限に対する正確な割合ではありません。ログに最終値がない場合、出力はやや少なく表示されることがあります。"
+  "tokenUsage.note": "Claude Code と Codex のログに基づきます。新規トークンは入力、出力、キャッシュ書き込みです。割合はトークンに対するもので、プランの上限に対する正確な割合ではありません。ログに最終値がない場合、出力はやや少なく表示されることがあります。",
+  "tokenUsage.readMachine": "このマシンのログを読み取る",
+  "tokenUsage.machineOff": "読み取りなし",
+  "tokenUsage.searchPlaceholder": "名前、タブ、フォルダー、ID で検索…",
+  "tokenUsage.noMatch": "この検索に一致するものはありません。",
+  "tokenUsage.linkProject": "プロジェクト",
+  "tokenUsage.linkPlaceholder": "まとめたいものに共通の名前",
+  "tokenUsage.machinesButton": "マシン: {on}/{total}",
+  "tokenUsage.machinesFailed": "エラーあり: {count}"
 }

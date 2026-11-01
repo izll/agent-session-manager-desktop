@@ -511,3 +511,88 @@ func TestMergedRowsNeverCrossAQuarterHour(t *testing.T) {
 		t.Fatalf("rows = %+v", rows)
 	}
 }
+
+func TestReadOwnersFindsSessionsAndTabsInEveryProject(t *testing.T) {
+	dir := t.TempDir()
+	write := func(rel, content string) {
+		full := filepath.Join(dir, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("sessions.json", `{"instances":[{"id":"s1","name":"MADisoCAD","path":"/work/mad","resume_session_id":"main-conv","notes":"private",
+		"followed_windows":[{"name":"claude tab","resume_session_id":"tab-conv","work_dir":"/work/sparrow"},{"name":"Terminal","resume_session_id":""}]}]}`)
+	write("projects.json", `{"projects":[{"id":"p1","name":"Clients"},{"id":"../evil","name":"x"}]}`)
+	write("projects/p1/sessions.json", `{"instances":[{"id":"s2","name":"Site","path":"/work/site","resume_session_id":"site-conv"}]}`)
+
+	owners, err := ReadOwners(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	byConversation := map[string]Owner{}
+	for _, owner := range owners {
+		byConversation[owner.Conversation] = owner
+	}
+	if got := byConversation["tab-conv"]; got.SessionName != "MADisoCAD" || got.TabName != "claude tab" || got.Directory != "/work/sparrow" {
+		t.Fatalf("tab owner = %+v", got)
+	}
+	if got := byConversation["main-conv"]; got.SessionID != "s1" || got.TabName != "" || got.Directory != "/work/mad" {
+		t.Fatalf("session owner = %+v", got)
+	}
+	if got := byConversation["site-conv"]; got.ProjectID != "p1" || got.ProjectName != "Clients" || got.SessionName != "Site" {
+		t.Fatalf("project owner = %+v", got)
+	}
+	// A tab with no conversation still says who works in its directory.
+	if got := byConversation[""]; got.SessionID != "s1" || got.Directory != "/work/mad" {
+		t.Fatalf("tab without a conversation = %+v", got)
+	}
+	if strings.Contains(fmt.Sprintf("%+v", owners), "private") {
+		t.Fatal("more than names left the file")
+	}
+}
+
+// Its logs are that machine's, and it has a list of its own to say so.
+func TestASessionOnAnotherMachineIsLeftOut(t *testing.T) {
+	dir := t.TempDir()
+	content := `{"instances":[{"id":"s1","name":"Remote","path":"/there","server_id":"srv","resume_session_id":"c1",
+		"followed_windows":[{"name":"t","resume_session_id":"c2","work_dir":"/also/there"}]},
+		{"id":"s2","name":"Mixed","path":"/here","followed_windows":[{"name":"far","resume_session_id":"c3","server_id":"srv2","work_dir":"/far"}]}]}`
+	if err := os.WriteFile(filepath.Join(dir, "sessions.json"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	owners, err := ReadOwners(dir)
+	if err != nil || len(owners) != 1 || owners[0].SessionName != "Mixed" || owners[0].Conversation != "" || owners[0].Directory != "/here" {
+		t.Fatalf("owners = %+v, err = %v", owners, err)
+	}
+}
+
+// A server with no app on it simply has no names.
+func TestNoAppMeansNoOwners(t *testing.T) {
+	owners, err := ReadOwners(filepath.Join(t.TempDir(), "nope"))
+	if err != nil || len(owners) != 0 {
+		t.Fatalf("owners = %+v, err = %v", owners, err)
+	}
+}
+
+func TestADamagedProjectDoesNotCostTheOthers(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "projects", "bad"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for rel, content := range map[string]string{
+		"sessions.json":              `{"instances":[{"id":"s1","name":"Fine","resume_session_id":"c1"}]}`,
+		"projects.json":              `{"projects":[{"id":"bad","name":"Bad"}]}`,
+		"projects/bad/sessions.json": `{broken`,
+	} {
+		if err := os.WriteFile(filepath.Join(dir, filepath.FromSlash(rel)), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	owners, err := ReadOwners(dir)
+	if err != nil || len(owners) != 1 || owners[0].SessionName != "Fine" {
+		t.Fatalf("owners = %+v, err = %v", owners, err)
+	}
+}

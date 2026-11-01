@@ -1795,5 +1795,13 @@
   "tokenUsage.summaryAll": "Všechny tokeny",
   "tokenUsage.empty": "V tomto období nebyly použity žádné tokeny.",
   "tokenUsage.emptyScanning": "První čtení protokolů…",
-  "tokenUsage.note": "Z protokolů Claude Code a Codexu. Nové tokeny jsou vstup, výstup a zápisy do mezipaměti. Podíl se týká tokenů, ne přesné části limitu tarifu, a výstup může být mírně nižší, pokud protokol neobsahuje konečnou hodnotu."
+  "tokenUsage.note": "Z protokolů Claude Code a Codexu. Nové tokeny jsou vstup, výstup a zápisy do mezipaměti. Podíl se týká tokenů, ne přesné části limitu tarifu, a výstup může být mírně nižší, pokud protokol neobsahuje konečnou hodnotu.",
+  "tokenUsage.readMachine": "Číst protokoly tohoto stroje",
+  "tokenUsage.machineOff": "Nečte se",
+  "tokenUsage.searchPlaceholder": "Hledat název, kartu, složku, id…",
+  "tokenUsage.noMatch": "Tomuto hledání nic neodpovídá.",
+  "tokenUsage.linkProject": "Projekt",
+  "tokenUsage.linkPlaceholder": "Společný název pro to, co k sobě patří",
+  "tokenUsage.machinesButton": "Stroje: {on}/{total}",
+  "tokenUsage.machinesFailed": "S chybou: {count}"
 }

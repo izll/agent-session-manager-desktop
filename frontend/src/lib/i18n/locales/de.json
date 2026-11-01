@@ -1795,5 +1795,13 @@
   "tokenUsage.summaryAll": "Alle Tokens",
   "tokenUsage.empty": "Keine Token-Nutzung in diesem Zeitraum.",
   "tokenUsage.emptyScanning": "Protokolle werden zum ersten Mal gelesen…",
-  "tokenUsage.note": "Aus den Protokollen von Claude Code und Codex. Neue Tokens sind Eingabe, Ausgabe und Cache-Schreibvorgänge. Der Anteil bezieht sich auf Tokens, nicht exakt auf das Limit eines Tarifs, und die Ausgabe kann etwas zu niedrig sein, wenn ein Protokoll den endgültigen Wert nicht enthält."
+  "tokenUsage.note": "Aus den Protokollen von Claude Code und Codex. Neue Tokens sind Eingabe, Ausgabe und Cache-Schreibvorgänge. Der Anteil bezieht sich auf Tokens, nicht exakt auf das Limit eines Tarifs, und die Ausgabe kann etwas zu niedrig sein, wenn ein Protokoll den endgültigen Wert nicht enthält.",
+  "tokenUsage.readMachine": "Protokolle dieses Rechners lesen",
+  "tokenUsage.machineOff": "Wird nicht gelesen",
+  "tokenUsage.searchPlaceholder": "Name, Tab, Ordner, ID suchen…",
+  "tokenUsage.noMatch": "Keine Treffer für diese Suche.",
+  "tokenUsage.linkProject": "Projekt",
+  "tokenUsage.linkPlaceholder": "Gemeinsamer Name für Zusammengehöriges",
+  "tokenUsage.machinesButton": "Rechner: {on}/{total}",
+  "tokenUsage.machinesFailed": "{count} mit Fehlern"
 }

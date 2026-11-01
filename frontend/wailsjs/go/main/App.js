@@ -954,6 +954,14 @@ export function SetTabViewOrder(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['SetTabViewOrder'](arg1, arg2, arg3, arg4);
 }
 
+export function SetTokenUsageMachineEnabled(arg1, arg2) {
+  return window['go']['main']['App']['SetTokenUsageMachineEnabled'](arg1, arg2);
+}
+
+export function SetTokenUsageProject(arg1, arg2) {
+  return window['go']['main']['App']['SetTokenUsageProject'](arg1, arg2);
+}
+
 export function SetWindowAutoYes(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['SetWindowAutoYes'](arg1, arg2, arg3, arg4);
 }

@@ -1795,5 +1795,13 @@
   "tokenUsage.summaryAll": "Todos los tokens",
   "tokenUsage.empty": "Sin uso de tokens en este periodo.",
   "tokenUsage.emptyScanning": "Leyendo los registros por primera vez…",
-  "tokenUsage.note": "A partir de los registros de Claude Code y Codex. Los tokens nuevos son entrada, salida y escrituras de caché. La proporción es de tokens, no una parte exacta del límite de un plan, y la salida puede quedar algo baja si un registro no contiene el valor final."
+  "tokenUsage.note": "A partir de los registros de Claude Code y Codex. Los tokens nuevos son entrada, salida y escrituras de caché. La proporción es de tokens, no una parte exacta del límite de un plan, y la salida puede quedar algo baja si un registro no contiene el valor final.",
+  "tokenUsage.readMachine": "Leer los registros de esta máquina",
+  "tokenUsage.machineOff": "Sin leer",
+  "tokenUsage.searchPlaceholder": "Buscar nombre, pestaña, carpeta, id…",
+  "tokenUsage.noMatch": "Nada coincide con esta búsqueda.",
+  "tokenUsage.linkProject": "Proyecto",
+  "tokenUsage.linkPlaceholder": "Un nombre común para lo que va junto",
+  "tokenUsage.machinesButton": "Máquinas: {on}/{total}",
+  "tokenUsage.machinesFailed": "{count} con errores"
 }

@@ -1795,5 +1795,13 @@
   "tokenUsage.summaryAll": "Alle tokens",
   "tokenUsage.empty": "Geen tokengebruik in deze periode.",
   "tokenUsage.emptyScanning": "De logs worden voor het eerst gelezen…",
-  "tokenUsage.note": "Uit de logs van Claude Code en Codex. Nieuwe tokens zijn invoer, uitvoer en cache-writes. Het aandeel gaat over tokens, niet over een exact deel van de limiet van een abonnement, en de uitvoer kan wat lager uitvallen als een log de eindwaarde niet bevat."
+  "tokenUsage.note": "Uit de logs van Claude Code en Codex. Nieuwe tokens zijn invoer, uitvoer en cache-writes. Het aandeel gaat over tokens, niet over een exact deel van de limiet van een abonnement, en de uitvoer kan wat lager uitvallen als een log de eindwaarde niet bevat.",
+  "tokenUsage.readMachine": "Logs van deze machine lezen",
+  "tokenUsage.machineOff": "Niet gelezen",
+  "tokenUsage.searchPlaceholder": "Zoek naam, tabblad, map, id…",
+  "tokenUsage.noMatch": "Geen resultaten voor deze zoekopdracht.",
+  "tokenUsage.linkProject": "Project",
+  "tokenUsage.linkPlaceholder": "Een gedeelde naam voor wat bij elkaar hoort",
+  "tokenUsage.machinesButton": "Machines: {on}/{total}",
+  "tokenUsage.machinesFailed": "{count} met fouten"
 }

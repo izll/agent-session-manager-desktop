@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"asmgr-desktop/session"
+	"asmgr-desktop/tokenusage"
 	"asmgr-desktop/tokenusage/store"
 )
 
@@ -68,7 +69,7 @@ func TestTheReportNamesTheSessionHoldingTheConversation(t *testing.T) {
 	if err := app.storage.AddInstance(inst); err != nil {
 		t.Fatal(err)
 	}
-	writeClaudeUsage(t, home, usageConversation, "/somewhere/else", 42)
+	writeClaudeUsage(t, home, usageConversation, "/work/api/sub", 42)
 	scanTokenUsageNow(t, app)
 
 	report, err := app.GetTokenUsage(0)
@@ -81,15 +82,83 @@ func TestTheReportNamesTheSessionHoldingTheConversation(t *testing.T) {
 	}
 }
 
+// Found on a real machine: a tab of pbx-go, unused for weeks, stored the id of
+// WebERP's largest conversation and took the credit for all of it. The log says
+// where a conversation really ran, and a stored id that disagrees is not believed.
+func TestAStoredIDFromAnotherDirectoryIsNotBelieved(t *testing.T) {
+	app, home := tokenUsageTestApp(t)
+	for _, inst := range []*session.Instance{
+		{ID: "pbx", Name: "pbx-go", Path: "/work/pbx-go", FollowedWindows: []session.FollowedWindow{{Index: 1, Name: "claude tab", ResumeSessionID: usageConversation}}},
+		{ID: "erp", Name: "WebErp", Path: "/work/weberp"},
+	} {
+		if err := app.storage.AddInstance(inst); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeClaudeUsage(t, home, usageConversation, "/work/weberp", 42)
+	scanTokenUsageNow(t, app)
+	report, err := app.GetTokenUsage(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if item := findUsageItem(t, report, usageConversation); item.SessionName != "WebErp" {
+		t.Fatalf("credited to %q: %+v", item.SessionName, item)
+	}
+}
+
+// Seen here too: two sessions storing one id, and the one where it really ran wins
+// whichever came first.
+func TestOfTwoClaimsTheOneInTheRightDirectoryWins(t *testing.T) {
+	app, home := tokenUsageTestApp(t)
+	for _, inst := range []*session.Instance{
+		{ID: "a", Name: "a first", Path: "/work/a", ResumeSessionID: usageConversation},
+		{ID: "z", Name: "z last", Path: "/work/z", ResumeSessionID: usageConversation},
+		// A second session in the directory, so only the claim can decide.
+		{ID: "z2", Name: "z other", Path: "/work/z"},
+	} {
+		if err := app.storage.AddInstance(inst); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeClaudeUsage(t, home, usageConversation, "/work/z", 42)
+	scanTokenUsageNow(t, app)
+	report, err := app.GetTokenUsage(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if item := findUsageItem(t, report, usageConversation); item.SessionID != "z" {
+		t.Fatalf("credited to %q: %+v", item.SessionName, item)
+	}
+}
+
+// An unrelated directory with no claim and no session reads as what it is.
+func TestAWrongClaimWithNoRightfulOwnerLeavesItOutside(t *testing.T) {
+	app, home := tokenUsageTestApp(t)
+	inst := &session.Instance{ID: "pbx", Name: "pbx-go", Path: "/work/pbx-go", ResumeSessionID: usageConversation}
+	if err := app.storage.AddInstance(inst); err != nil {
+		t.Fatal(err)
+	}
+	writeClaudeUsage(t, home, usageConversation, "/somewhere/else", 42)
+	scanTokenUsageNow(t, app)
+	report, err := app.GetTokenUsage(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if item := findUsageItem(t, report, usageConversation); item.SessionID != "" {
+		t.Fatalf("credited to %q", item.SessionName)
+	}
+}
+
 func TestATabsConversationNamesTheTab(t *testing.T) {
 	app, home := tokenUsageTestApp(t)
 	inst := &session.Instance{ID: "s1", Name: "API", Path: "/work/api", FollowedWindows: []session.FollowedWindow{
-		{Index: 2, Name: "review", ResumeSessionID: usageConversation},
+		{Index: 2, Name: "review", ResumeSessionID: usageConversation, WorkDir: "/work/sparrow"},
 	}}
 	if err := app.storage.AddInstance(inst); err != nil {
 		t.Fatal(err)
 	}
-	writeClaudeUsage(t, home, usageConversation, "/work/api", 1)
+	// The tab works elsewhere than its session, and its own directory is the test.
+	writeClaudeUsage(t, home, usageConversation, "/work/sparrow", 1)
 	scanTokenUsageNow(t, app)
 	report, err := app.GetTokenUsage(0)
 	if err != nil {
@@ -322,10 +391,14 @@ func TestAStoppedAppStartsNoScan(t *testing.T) {
 func TestAScanRemembersWhoHoldsWhat(t *testing.T) {
 	app, home := tokenUsageTestApp(t)
 	inst := &session.Instance{ID: "s1", Name: "API", Path: "/work/api", ResumeSessionID: usageConversation}
-	if err := app.storage.AddInstance(inst); err != nil {
-		t.Fatal(err)
+	// A second session in the directory, so only the remembered id can name it.
+	other := &session.Instance{ID: "s2", Name: "Other", Path: "/work/api"}
+	for _, each := range []*session.Instance{inst, other} {
+		if err := app.storage.AddInstance(each); err != nil {
+			t.Fatal(err)
+		}
 	}
-	writeClaudeUsage(t, home, usageConversation, "/somewhere/else", 42)
+	writeClaudeUsage(t, home, usageConversation, "/work/api", 42)
 	scanTokenUsageNow(t, app)
 
 	inst.ResumeSessionID = usageConversationOld
@@ -433,6 +506,267 @@ func TestStoppingDoesNotWaitForeverForAScan(t *testing.T) {
 	}
 }
 
+func addUsageServer(t *testing.T, app *App) {
+	t.Helper()
+	if err := app.storage.UpdateServers(func(list *session.ServerList) error {
+		list.Servers = append(list.Servers, session.Server{ID: "srv-1", Name: "web", Host: "web.example", User: "me"})
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func machineInReport(t *testing.T, report *TokenUsageReport, id string) TokenUsageMachine {
+	t.Helper()
+	for _, machine := range report.Machines {
+		if machine.ID == id {
+			return machine
+		}
+	}
+	t.Fatalf("no machine %s in %+v", id, report.Machines)
+	return TokenUsageMachine{}
+}
+
+func TestMachinesAreOnUntilTurnedOff(t *testing.T) {
+	app, _ := tokenUsageTestApp(t)
+	addUsageServer(t, app)
+	report, err := app.GetTokenUsage(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !machineInReport(t, report, store.LocalMachine).Enabled || !machineInReport(t, report, "me@web.example").Enabled {
+		t.Fatalf("machines = %+v", report.Machines)
+	}
+}
+
+// Off means not read: this computer's new logs are left alone, and what was
+// already read comes back with it.
+func TestAMachineTurnedOffIsNotReadOrCounted(t *testing.T) {
+	app, home := tokenUsageTestApp(t)
+	writeClaudeUsage(t, home, usageConversation, "/work/api", 5)
+	scanTokenUsageNow(t, app)
+
+	if err := app.SetTokenUsageMachineEnabled(store.LocalMachine, false); err != nil {
+		t.Fatal(err)
+	}
+	report, err := app.GetTokenUsage(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(report.Items) != 0 || machineInReport(t, report, store.LocalMachine).Enabled {
+		t.Fatalf("a machine turned off is still shown: %+v", report)
+	}
+
+	writeClaudeUsage(t, home, usageConversationOld, "/work/api", 7)
+	scanTokenUsageNow(t, app)
+	if err := app.SetTokenUsageMachineEnabled(store.LocalMachine, true); err != nil {
+		t.Fatal(err)
+	}
+	report, err = app.GetTokenUsage(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(report.Items) != 1 || report.Items[0].Conversation != usageConversation {
+		t.Fatalf("read while turned off, or lost what was read: %+v", report.Items)
+	}
+
+	scanTokenUsageNow(t, app)
+	report, err = app.GetTokenUsage(0)
+	if err != nil || len(report.Items) != 2 {
+		t.Fatalf("turned back on, it did not carry on: %+v, %v", report, err)
+	}
+}
+
+// Connecting installs the helper, so a machine turned off must not even be tried,
+// by a scan that was asked to connect.
+func TestAServerTurnedOffIsNotConnectedTo(t *testing.T) {
+	app, _ := tokenUsageTestApp(t)
+	addUsageServer(t, app)
+	if err := app.SetTokenUsageMachineEnabled("me@web.example", false); err != nil {
+		t.Fatal(err)
+	}
+	app.scanTokenUsage(context.Background(), true)
+	usage, err := app.tokenUsageStore()
+	if err != nil {
+		t.Fatal(err)
+	}
+	scans, err := usage.Scans(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if scan, tried := scans["me@web.example"]; tried {
+		t.Fatalf("the server was tried: %+v", scan)
+	}
+}
+
+// slowUsageSource holds a read open until told, as a first read of a big machine
+// does for minutes.
+type slowUsageSource struct {
+	listed  chan struct{}
+	release chan struct{}
+}
+
+func (s slowUsageSource) List(ctx context.Context) ([]tokenusage.FileInfo, error) {
+	close(s.listed)
+	select {
+	case <-s.release:
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+	return nil, nil
+}
+
+func (s slowUsageSource) Read(context.Context, []tokenusage.ReadRequest) ([]tokenusage.FileResult, error) {
+	return nil, nil
+}
+
+// A first read can take minutes, and that is when someone turns it off.
+func TestTurningAMachineOffStopsItsRead(t *testing.T) {
+	app, _ := tokenUsageTestApp(t)
+	usage, err := app.tokenUsageStore()
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := slowUsageSource{listed: make(chan struct{}), release: make(chan struct{})}
+	defer close(source.release)
+	finished := make(chan struct{})
+	go func() {
+		app.scanTokenUsageMachine(context.Background(), usage, "me@web.example", source)
+		close(finished)
+	}()
+	<-source.listed
+	if err := app.SetTokenUsageMachineEnabled("me@web.example", false); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-finished:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the read went on after the machine was turned off")
+	}
+	scans, err := usage.Scans(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if scan, recorded := scans["me@web.example"]; recorded {
+		t.Fatalf("being turned off was recorded as a fault: %+v", scan)
+	}
+}
+
+// Its numbers are still in the totals, so it has to stay something to turn off.
+func TestAServerNoLongerListedCanStillBeTurnedOff(t *testing.T) {
+	app, _ := tokenUsageTestApp(t)
+	usage, err := app.tokenUsageStore()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := usage.RecordScan(context.Background(), "me@gone.example", time.Now(), nil); err != nil {
+		t.Fatal(err)
+	}
+	report, err := app.GetTokenUsage(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if machine := machineInReport(t, report, "me@gone.example"); machine.Name != "me@gone.example" || !machine.Enabled {
+		t.Fatalf("machine = %+v", machine)
+	}
+}
+
+// Remembered from a server, so a conversation running there reads as the session
+// it belongs to rather than as a directory. The case that started this: a tab of
+// MADisoCAD_v1 working in the sparrow directory, seen from another computer.
+func TestAServersSessionNamesReachTheReport(t *testing.T) {
+	app, _ := tokenUsageTestApp(t)
+	usage, err := app.tokenUsageStore()
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	const machine = "me@web.example"
+	if err := usage.RememberOwners(ctx, []store.Owner{{Machine: machine, Conversation: usageConversation, Directory: "/work/sparrow", ProjectID: machine + "/", SessionID: machine + "/s1", SessionName: "MADisoCAD_v1", TabName: "claude tab"}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := usage.ReplaceDirectoryOwners(ctx, machine, []store.DirectoryOwner{{Machine: machine, Directory: "/work/older", Owner: store.Owner{ProjectID: machine + "/", SessionID: machine + "/s2", SessionName: "Older"}}}); err != nil {
+		t.Fatal(err)
+	}
+	row := func(id, cwd string) tokenusage.FileResult {
+		return tokenusage.FileResult{Agent: "claude", Conversation: id, Cursor: tokenusage.Cursor{Offset: 1}, Rows: []tokenusage.Row{{Key: 1 + uint64(len(cwd)), Unix: 1_790_000_000, Model: "m", Cwd: cwd, Output: 9}}}
+	}
+	if err := usage.Apply(ctx, machine, []store.Applied{
+		{FileID: "claude:a", Size: 1, Result: row(usageConversation, "/work/sparrow")},
+		{FileID: "claude:b", Size: 1, Result: row(usageConversationOld, "/work/older")},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	report, err := app.GetTokenUsage(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if item := findUsageItem(t, report, usageConversation); item.SessionName != "MADisoCAD_v1" || item.TabName != "claude tab" {
+		t.Fatalf("named conversation: %+v", item)
+	}
+	if item := findUsageItem(t, report, usageConversationOld); item.SessionName != "Older" {
+		t.Fatalf("conversation found by directory: %+v", item)
+	}
+}
+
+// A Codex run started from a Claude session's scratchpad is that session's work,
+// and its path says which: seen here as dozens of unrelated /tmp rows.
+func TestAScratchpadConversationBelongsToItsParent(t *testing.T) {
+	const parent = "27632e09-68b7-4baf-92e6-eccba6e8cede"
+	for directory, want := range map[string]string{
+		"/tmp/claude-1000/-home-me-sparrow/" + parent + "/scratchpad/codex-img": parent,
+		"/tmp/claude-1000/-home-me-sparrow/" + parent:                           parent,
+		"/home/me/" + parent + "/scratchpad":                                    "",
+		"/tmp/claude-1000/-home-me-sparrow/not-a-conversation/scratchpad":       "",
+		"/work/api": "",
+		"":          "",
+	} {
+		if got := conversationOfScratchpad(directory); got != want {
+			t.Errorf("%q: got %q, want %q", directory, got, want)
+		}
+	}
+
+	app, home := tokenUsageTestApp(t)
+	inst := &session.Instance{ID: "s1", Name: "MADisoCAD_v1", Path: "/work/mad", ResumeSessionID: parent}
+	if err := app.storage.AddInstance(inst); err != nil {
+		t.Fatal(err)
+	}
+	writeClaudeUsage(t, home, parent, "/work/mad", 1)
+	writeClaudeUsage(t, home, usageConversationOld, "/tmp/claude-1000/-home-me-sparrow/"+parent+"/scratchpad/codex-img", 7)
+	scanTokenUsageNow(t, app)
+	report, err := app.GetTokenUsage(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if item := findUsageItem(t, report, usageConversationOld); item.SessionName != "MADisoCAD_v1" {
+		t.Fatalf("item = %+v", item)
+	}
+}
+
+func TestAProjectLinkReachesTheReport(t *testing.T) {
+	app, _ := tokenUsageTestApp(t)
+	if err := app.SetTokenUsageProject("session:s1", "  Sparrow  "); err != nil {
+		t.Fatal(err)
+	}
+	report, err := app.GetTokenUsage(7)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Links["session:s1"] != "Sparrow" {
+		t.Fatalf("links = %+v", report.Links)
+	}
+	if err := app.SetTokenUsageProject("session:s1", " "); err != nil {
+		t.Fatal(err)
+	}
+	report, err = app.GetTokenUsage(7)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, linked := report.Links["session:s1"]; linked {
+		t.Fatalf("a blank name did not remove the link: %+v", report.Links)
+	}
+}
+
 // Wiring that only the running app exercises.
 func TestTokenUsageIsStartedAndStoppedWithTheApp(t *testing.T) {
 	source, err := os.ReadFile("app.go")
@@ -444,5 +778,15 @@ func TestTokenUsageIsStartedAndStoppedWithTheApp(t *testing.T) {
 	}
 	if !strings.Contains(functionBody(t, string(source), "func (a *App) shutdown("), "a.stopTokenUsage()") {
 		t.Error("shutdown does not stop the usage scan")
+	}
+
+	// Without this a conversation on a server reads as its directory: the names
+	// live on that machine.
+	api, err := os.ReadFile("token_usage_api.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(functionBody(t, string(api), "func (a *App) scanTokenUsage("), "a.rememberServerOwners(ctx, usage, machine, source)") {
+		t.Error("a scan does not ask a server for its session names")
 	}
 }

@@ -24,6 +24,14 @@ export type TokenUsageItem = {
   tabName: string;
 };
 
+/** Which project the user put a row in, by usageRowKey. */
+export type UsageLinks = Record<string, string>;
+
+/** The row someone sees in the session grouping, which is what gets linked. */
+export function usageRowKey(item: TokenUsageItem): string {
+  return usageGroupKey(item, 'session');
+}
+
 export type UsageGroupBy = 'session' | 'project' | 'machine' | 'model';
 
 /**
@@ -48,6 +56,8 @@ export type UsageTotals = {
 
 export type UsageConversation = UsageTotals & {
   key: string;
+  /** Lowercase id and tab name: what names this one conversation. */
+  searchOwn: string;
   conversation: string;
   tabName: string;
   agent: string;
@@ -61,6 +71,8 @@ export type UsageGroup = UsageTotals & {
   key: string;
   /** How the group is named, resolved by the view since some are translated. */
   sample: TokenUsageItem;
+  /** Lowercase text of everything in the group, for the filter. */
+  search: string;
   value: number;
   share: number;
   subagentShare: number;
@@ -95,10 +107,15 @@ function addItem(totals: UsageTotals, item: TokenUsageItem, basis: UsageBasis) {
  * "Not in any session" is told apart from the default project, whose id is
  * also empty.
  */
-export function usageGroupKey(item: TokenUsageItem, groupBy: UsageGroupBy): string {
+export function usageGroupKey(item: TokenUsageItem, groupBy: UsageGroupBy, links: UsageLinks = {}): string {
   switch (groupBy) {
-    case 'project':
+    case 'project': {
+      // By the name's letters, not its case: what was typed on two rows on two
+      // machines is meant to be one project.
+      const linked = links[usageRowKey(item)];
+      if (linked) return `link:${linked.toLowerCase()}`;
       return item.sessionId ? `project:${item.projectId}` : 'outside';
+    }
     case 'machine':
       return `machine:${item.machine}`;
     case 'model':
@@ -108,7 +125,7 @@ export function usageGroupKey(item: TokenUsageItem, groupBy: UsageGroupBy): stri
   }
 }
 
-export function groupUsage(items: TokenUsageItem[], groupBy: UsageGroupBy, basis: UsageBasis): { groups: UsageGroup[]; totals: UsageTotals; value: number } {
+export function groupUsage(items: TokenUsageItem[], groupBy: UsageGroupBy, basis: UsageBasis, links: UsageLinks = {}): { groups: UsageGroup[]; totals: UsageTotals; value: number } {
   const totals = emptyTotals();
   const groups = new Map<string, UsageGroup>();
   const conversations = new Map<string, Map<string, UsageConversation>>();
@@ -116,21 +133,23 @@ export function groupUsage(items: TokenUsageItem[], groupBy: UsageGroupBy, basis
   for (const item of items) {
     addItem(totals, item, basis);
 
-    const key = usageGroupKey(item, groupBy);
+    const key = usageGroupKey(item, groupBy, links);
     let group = groups.get(key);
     if (!group) {
-      group = { ...emptyTotals(), key, sample: item, value: 0, share: 0, subagentShare: 0, conversations: [] };
+      group = { ...emptyTotals(), key, sample: item, search: '', value: 0, share: 0, subagentShare: 0, conversations: [] };
       groups.set(key, group);
       conversations.set(key, new Map());
     }
     addItem(group, item, basis);
+    group.search += ` ${itemSearchText(item)} ${(links[usageRowKey(item)] || '').toLowerCase()}`;
 
     const conversationKey = `${item.machine}:${item.conversation}`;
     const inGroup = conversations.get(key)!;
     let conversation = inGroup.get(conversationKey);
     if (!conversation) {
       conversation = {
-        ...emptyTotals(), key: conversationKey, conversation: item.conversation, tabName: item.tabName,
+        ...emptyTotals(), key: conversationKey, searchOwn: `${item.conversation} ${item.tabName}`.toLowerCase(),
+        conversation: item.conversation, tabName: item.tabName,
         agent: item.agent, models: [], lastUnix: 0, value: 0, share: 0,
       };
       inGroup.set(conversationKey, conversation);
@@ -155,6 +174,34 @@ export function groupUsage(items: TokenUsageItem[], groupBy: UsageGroupBy, basis
   }
   sorted.sort((a, b) => b.value - a.value || a.key.localeCompare(b.key));
   return { groups: sorted, totals, value };
+}
+
+function itemSearchText(item: TokenUsageItem): string {
+  return [item.sessionName, item.tabName, item.projectName, item.machineName, item.cwd, item.conversation, item.model, item.agent]
+    .join(' ').toLowerCase();
+}
+
+/**
+ * The groups a search finds, with their figures left whole.
+ *
+ * Shares stay shares of everything. Worked out again from what the filter left,
+ * the session being looked for would always read as 100%, which is the one thing
+ * it is not.
+ */
+export function filterUsageGroups(groups: UsageGroup[], query: string): UsageGroup[] {
+  const needle = query.trim().toLowerCase();
+  return needle ? groups.filter((group) => group.search.includes(needle)) : groups;
+}
+
+/** Whether a search names one of the group's conversations, so it opens by itself. */
+export function searchFindsConversation(group: UsageGroup, query: string): boolean {
+  const needle = query.trim().toLowerCase();
+  return !!needle && group.conversations.some((conversation) => conversation.searchOwn.includes(needle));
+}
+
+/** The project names already used, for offering them again. */
+export function usageLinkNames(links: UsageLinks): string[] {
+  return [...new Set(Object.values(links))].sort((a, b) => a.localeCompare(b));
 }
 
 /** 1 234 567 reads as 1.2 M: the magnitude is what is being compared. */

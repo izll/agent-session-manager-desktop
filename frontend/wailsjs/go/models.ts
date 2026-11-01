@@ -2523,6 +2523,7 @@ export namespace main {
 	    local: boolean;
 	    lastScanUnix: number;
 	    error: string;
+	    enabled: boolean;
 
 	    static createFrom(source: any = {}) {
 	        return new TokenUsageMachine(source);
@@ -2535,12 +2536,14 @@ export namespace main {
 	        this.local = source["local"];
 	        this.lastScanUnix = source["lastScanUnix"];
 	        this.error = source["error"];
+	        this.enabled = source["enabled"];
 	    }
 	}
 	export class TokenUsageReport {
 	    items: TokenUsageItem[];
 	    machines: TokenUsageMachine[];
 	    scanning: boolean;
+	    links: Record<string, string>;
 
 	    static createFrom(source: any = {}) {
 	        return new TokenUsageReport(source);
@@ -2551,6 +2554,7 @@ export namespace main {
 	        this.items = this.convertValues(source["items"], TokenUsageItem);
 	        this.machines = this.convertValues(source["machines"], TokenUsageMachine);
 	        this.scanning = source["scanning"];
+	        this.links = source["links"];
 	    }
 
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

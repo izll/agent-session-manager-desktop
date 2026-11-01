@@ -5,7 +5,7 @@ import ts from 'typescript';
 
 const source = readFileSync(new URL('../src/lib/utils/tokenUsage.ts', import.meta.url), 'utf8');
 const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
-const { groupUsage, usageGroupKey, usageValue, formatTokens, formatShare, shortDirectory } =
+const { groupUsage, usageGroupKey, usageValue, formatTokens, formatShare, shortDirectory, filterUsageGroups, searchFindsConversation, usageRowKey, usageLinkNames } =
   await import(`data:text/javascript,${encodeURIComponent(compiled)}`);
 
 function item(overrides = {}) {
@@ -106,4 +106,63 @@ test('a directory shortens to what identifies it', () => {
   assert.equal(shortDirectory('C:\\Users\\me\\api'), 'me/api');
   assert.equal(shortDirectory('/'), '/');
   assert.equal(shortDirectory(''), '');
+});
+
+const searchable = () => groupUsage([
+  item({ sessionId: 'mad', sessionName: 'MADisoCAD_v1', tabName: 'claude tab', conversation: '27632e09-68b7', cwd: '/work/sparrow', output: 75 }),
+  item({ sessionId: 'site', sessionName: 'Site', conversation: 'bbbb', cwd: '/work/site', model: 'gpt-6', output: 25 }),
+], 'session', 'new').groups;
+
+test('the filter finds a session by anything that identifies it', () => {
+  for (const query of ['madisocad', 'CLAUDE TAB', 'sparrow', '27632e09', '  madisocad  ']) {
+    assert.deepEqual(filterUsageGroups(searchable(), query).map((g) => g.key), ['session:mad'], query);
+  }
+  assert.deepEqual(filterUsageGroups(searchable(), 'gpt-6').map((g) => g.key), ['session:site']);
+  assert.equal(filterUsageGroups(searchable(), 'nothing like it').length, 0);
+  assert.equal(filterUsageGroups(searchable(), '').length, 2);
+});
+
+// Worked out again from the filtered rows, whatever is found would read as 100%.
+test('a filtered row keeps its share of everything', () => {
+  assert.equal(filterUsageGroups(searchable(), 'site')[0].share, 0.25);
+});
+
+test('only a search for a conversation itself opens the row', () => {
+  const [mad] = searchable();
+  assert.equal(searchFindsConversation(mad, '27632E09'), true);
+  assert.equal(searchFindsConversation(mad, 'claude tab'), true);
+  assert.equal(searchFindsConversation(mad, 'madisocad'), false);
+  assert.equal(searchFindsConversation(mad, ''), false);
+});
+
+test('rows linked to one project add up across machines and sessions', () => {
+  const mad = item({ sessionId: 'mad', projectId: '', output: 60 });
+  const outside = item({ sessionId: '', machine: 'srv', cwd: '/work/sparrow', conversation: 'x', output: 30 });
+  const other = item({ sessionId: 'site', conversation: 'y', output: 10 });
+  const links = { [usageRowKey(mad)]: 'Sparrow', [usageRowKey(outside)]: 'sparrow' };
+
+  const { groups } = groupUsage([mad, outside, other], 'project', 'new', links);
+  assert.equal(groups.length, 2);
+  assert.equal(groups[0].key, 'link:sparrow');
+  assert.equal(groups[0].share, 0.9);
+  assert.equal(groups[1].key, 'project:');
+});
+
+test('a link changes the project grouping and no other', () => {
+  const mad = item({ sessionId: 'mad', output: 60 });
+  const links = { [usageRowKey(mad)]: 'Sparrow' };
+  assert.equal(usageGroupKey(mad, 'session', links), 'session:mad');
+  assert.equal(usageGroupKey(mad, 'machine', links), 'machine:local');
+  assert.equal(usageGroupKey(mad, 'project', links), 'link:sparrow');
+  assert.equal(usageGroupKey(mad, 'project', {}), 'project:');
+});
+
+test('a linked project can be searched for', () => {
+  const mad = item({ sessionId: 'mad', sessionName: 'Other name', output: 60 });
+  const { groups } = groupUsage([mad], 'session', 'new', { [usageRowKey(mad)]: 'Sparrow' });
+  assert.equal(filterUsageGroups(groups, 'sparrow').length, 1);
+});
+
+test('names already used are offered once, in order', () => {
+  assert.deepEqual(usageLinkNames({ a: 'Sparrow', b: 'MADisoCAD', c: 'Sparrow' }), ['MADisoCAD', 'Sparrow']);
 });

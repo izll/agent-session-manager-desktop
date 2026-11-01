@@ -1795,5 +1795,13 @@
   "tokenUsage.summaryAll": "全部令牌",
   "tokenUsage.empty": "此时间段内没有令牌用量。",
   "tokenUsage.emptyScanning": "正在首次读取日志…",
-  "tokenUsage.note": "来自 Claude Code 和 Codex 的日志。新令牌包括输入、输出和缓存写入。占比按令牌计算，并不是套餐限额的精确比例；如果日志中没有最终值，输出可能略微偏低。"
+  "tokenUsage.note": "来自 Claude Code 和 Codex 的日志。新令牌包括输入、输出和缓存写入。占比按令牌计算，并不是套餐限额的精确比例；如果日志中没有最终值，输出可能略微偏低。",
+  "tokenUsage.readMachine": "读取这台机器的日志",
+  "tokenUsage.machineOff": "不读取",
+  "tokenUsage.searchPlaceholder": "搜索名称、标签页、文件夹、ID…",
+  "tokenUsage.noMatch": "没有符合此搜索的结果。",
+  "tokenUsage.linkProject": "项目",
+  "tokenUsage.linkPlaceholder": "相关内容的共同名称",
+  "tokenUsage.machinesButton": "机器：{on}/{total}",
+  "tokenUsage.machinesFailed": "{count} 台出错"
 }

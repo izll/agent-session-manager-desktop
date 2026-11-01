@@ -1795,5 +1795,13 @@
   "tokenUsage.summaryAll": "Tous les tokens",
   "tokenUsage.empty": "Aucune utilisation de tokens sur cette période.",
   "tokenUsage.emptyScanning": "Première lecture des journaux…",
-  "tokenUsage.note": "D'après les journaux de Claude Code et Codex. Les nouveaux tokens sont l'entrée, la sortie et les écritures du cache. La part porte sur les tokens, pas exactement sur la limite d'un forfait, et la sortie peut être un peu sous-estimée si un journal ne contient pas la valeur finale."
+  "tokenUsage.note": "D'après les journaux de Claude Code et Codex. Les nouveaux tokens sont l'entrée, la sortie et les écritures du cache. La part porte sur les tokens, pas exactement sur la limite d'un forfait, et la sortie peut être un peu sous-estimée si un journal ne contient pas la valeur finale.",
+  "tokenUsage.readMachine": "Lire les journaux de cette machine",
+  "tokenUsage.machineOff": "Non lu",
+  "tokenUsage.searchPlaceholder": "Chercher nom, onglet, dossier, id…",
+  "tokenUsage.noMatch": "Aucun résultat pour cette recherche.",
+  "tokenUsage.linkProject": "Projet",
+  "tokenUsage.linkPlaceholder": "Un nom commun à ce qui va ensemble",
+  "tokenUsage.machinesButton": "Machines : {on}/{total}",
+  "tokenUsage.machinesFailed": "{count} en erreur"
 }

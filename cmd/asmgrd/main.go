@@ -148,6 +148,14 @@ func handle(request *protocol.Request) *protocol.Response {
 		}
 		response.Result = result
 
+	case protocol.MethodUsageOwners:
+		result, err := usageOwners()
+		if err != nil {
+			response.Error = err.Error()
+			return response
+		}
+		response.Result = result
+
 	default:
 		response.Error = fmt.Sprintf("unknown method %q — the app and this helper "+
 			"are different versions", request.Method)
@@ -179,6 +187,18 @@ func usageRead(raw json.RawMessage) (json.RawMessage, error) {
 	return json.Marshal(protocol.UsageReadResult{
 		Results: tokenusage.ReadBatch(roots, params.Requests, tokenusage.DefaultLimits),
 	})
+}
+
+func usageOwners() (json.RawMessage, error) {
+	dir, err := tokenusage.DefaultConfigDir()
+	if err != nil {
+		return nil, err
+	}
+	owners, err := tokenusage.ReadOwners(dir)
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(protocol.UsageOwnersResult{Owners: owners})
 }
 
 func runCommand(raw json.RawMessage) (json.RawMessage, error) {

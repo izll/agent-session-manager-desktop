@@ -1795,5 +1795,13 @@
   "tokenUsage.summaryAll": "Wszystkie tokeny",
   "tokenUsage.empty": "Brak użycia tokenów w tym okresie.",
   "tokenUsage.emptyScanning": "Pierwszy odczyt dzienników…",
-  "tokenUsage.note": "Na podstawie dzienników Claude Code i Codex. Nowe tokeny to wejście, wyjście i zapisy do cache. Udział dotyczy tokenów, a nie dokładnej części limitu planu, a wyjście może być nieco zaniżone, jeśli dziennik nie zawiera wartości końcowej."
+  "tokenUsage.note": "Na podstawie dzienników Claude Code i Codex. Nowe tokeny to wejście, wyjście i zapisy do cache. Udział dotyczy tokenów, a nie dokładnej części limitu planu, a wyjście może być nieco zaniżone, jeśli dziennik nie zawiera wartości końcowej.",
+  "tokenUsage.readMachine": "Odczytuj dzienniki tej maszyny",
+  "tokenUsage.machineOff": "Nie odczytano",
+  "tokenUsage.searchPlaceholder": "Szukaj: nazwa, karta, folder, id…",
+  "tokenUsage.noMatch": "Brak wyników tego wyszukiwania.",
+  "tokenUsage.linkProject": "Projekt",
+  "tokenUsage.linkPlaceholder": "Wspólna nazwa dla tego, co się łączy",
+  "tokenUsage.machinesButton": "Maszyny: {on}/{total}",
+  "tokenUsage.machinesFailed": "Z błędami: {count}"
 }

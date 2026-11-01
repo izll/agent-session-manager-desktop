@@ -22,7 +22,7 @@ import (
 // re-uploading a binary over SSH for every patch. It is bumped when a message
 // changes shape, and an exact match is required in both directions — an older
 // helper is as wrong as an older app.
-const Version = 2
+const Version = 3
 
 // Method names. Constants because both ends switch on them, and a typo would
 // otherwise surface as "unknown method" at run time.
@@ -40,6 +40,9 @@ const (
 	// them itself and answers with numbers: the logs run to gigabytes and can
 	// hold credentials, so they stay where they are.
 	MethodUsageRead = "usageRead"
+	// MethodUsageOwners says which of the server's own sessions holds what. The
+	// names live there, so a desktop reading the logs cannot know them otherwise.
+	MethodUsageOwners = "usageOwners"
 )
 
 // Request is one message from the app.
@@ -120,6 +123,11 @@ type UsageReadParams struct {
 // absent, and the app asks for it again.
 type UsageReadResult struct {
 	Results []tokenusage.FileResult `json:"results"`
+}
+
+// UsageOwnersResult answers MethodUsageOwners.
+type UsageOwnersResult struct {
+	Owners []tokenusage.Owner `json:"owners"`
 }
 
 // MaxMessageBytes caps one message in either direction.

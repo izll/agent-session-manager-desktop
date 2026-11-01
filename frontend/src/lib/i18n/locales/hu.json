@@ -1795,5 +1795,13 @@
   "tokenUsage.summaryAll": "Minden token",
   "tokenUsage.empty": "Ebben az időszakban nincs tokenhasználat.",
   "tokenUsage.emptyScanning": "A naplók első beolvasása folyamatban…",
-  "tokenUsage.note": "A Claude Code és a Codex naplóiból. Az új tokenek a bemenet, a kimenet és a gyorsítótár-írás. Az arány a tokenekre vonatkozik, nem egy előfizetés limitjének pontos része, és a kimenet kissé alacsonyabb lehet, ha a napló nem tartalmazza a végleges értéket."
+  "tokenUsage.note": "A Claude Code és a Codex naplóiból. Az új tokenek a bemenet, a kimenet és a gyorsítótár-írás. Az arány a tokenekre vonatkozik, nem egy előfizetés limitjének pontos része, és a kimenet kissé alacsonyabb lehet, ha a napló nem tartalmazza a végleges értéket.",
+  "tokenUsage.readMachine": "A gép naplóinak beolvasása",
+  "tokenUsage.machineOff": "Nincs beolvasva",
+  "tokenUsage.searchPlaceholder": "Keresés: név, fül, mappa, azonosító…",
+  "tokenUsage.noMatch": "Erre a keresésre nincs találat.",
+  "tokenUsage.linkProject": "Projekt",
+  "tokenUsage.linkPlaceholder": "Az összetartozók közös neve",
+  "tokenUsage.machinesButton": "Gépek: {on}/{total}",
+  "tokenUsage.machinesFailed": "{count} gép hibával"
 }
