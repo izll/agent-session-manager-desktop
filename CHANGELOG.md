@@ -6,6 +6,50 @@ Entries describe what changed for someone using the app. Internal refactoring,
 test and CI work is left out unless it changed behaviour. Dates are release
 dates; the format follows [Keep a Changelog](https://keepachangelog.com).
 
+## 1.1.26 — 2026-11-02
+
+### Added
+
+- **A password picker.** Ctrl+Shift+E or the key button types a saved password
+  into the tab in front of you. Passwords can come from the app's own list,
+  kept in the system keyring, from a KeePassXC database, from Bitwarden, or from
+  any other tool that has a command line. The interface only ever holds names,
+  Enter is pressed only if you ask for it, and a tab running an agent warns
+  first, since an agent passes on what it reads to its model provider. Opened
+  vaults lock themselves after 15 minutes without use.
+- **Several Bitwarden accounts, including servers you run yourself.** Each server
+  is an entry of its own with its own login. A button opens a terminal tab for
+  logging in, which also takes care of the second factor, and closes it when
+  done. The `bw` inside the Bitwarden desktop Flatpak is found on its own.
+- **Other password managers by two commands**, one that lists names and one that
+  prints a password, with ready-made entries for gopass, rbw and LastPass. They
+  run on this computer without a shell, and an entry's name can never become part
+  of a command. Those ready-made entries follow the tools' documentation and have
+  not been tried against the real tools yet.
+- **Token use per session, across machines.** A view adds up what each session,
+  tab and model used on this computer and on the servers you choose, with search,
+  and shows background agents under the tab they came from.
+- **Browse for the key file** when setting up a server.
+
+### Changed
+
+- **A command run "in a new tab, in the background" closes its tab when it ends**,
+  on its own or by Ctrl+C, instead of leaving another shell behind each time. A
+  command that fails keeps its tab, so the reason can be read. It runs in a shell of
+  its own, so aliases and functions from your shell's startup files are not known
+  to it. Tabs left over from before stay until you close them.
+
+### Fixed
+
+- **An installed app can set up a server.** The packages never included the helper
+  that gets installed on a server, so this only worked when running from source.
+- **A stopped tab no longer takes over another session's conversation.** A pane
+  whose program has exited keeps reporting its old process number, which the system
+  later gives to something else, and a stopped tab could store the conversation of
+  an agent in another session, and resume it by mistake.
+- **A background agent counts as busy only while its clock is moving.** One waiting
+  on its own background work kept its tab marked busy for hours.
+
 ## 1.1.25 — 2026-10-31
 
 ### Changed
