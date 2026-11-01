@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 )
 
 // setPatternsForTest installs a pattern set for the duration of one test and
@@ -257,12 +258,144 @@ var agentListPane = []string{
 	"  ◯ general-purpose  Timing n250 Grid bottom-left path" + strings.Repeat(" ", 60) + "26m 50s · ↓ 341.6k tokens",
 }
 
-func TestAnAgentInTheListIsBusy(t *testing.T) {
+func TestAnAgentInTheListIsSeen(t *testing.T) {
 	if !hasBackgroundAgentRow(agentListPane) {
 		t.Fatal("an agent named in the list under the status bar was not seen")
 	}
-	if got := detectClaudeActivity(agentListPane, getAgentPatterns(AgentClaude), ""); got != ActivityBusy {
-		t.Fatalf("detectClaudeActivity = %v, want busy", got)
+}
+
+// useAgentClock runs a test on a clock of its own, with no watch left from before.
+func useAgentClock(t *testing.T) (advance func(time.Duration)) {
+	t.Helper()
+	now := time.Date(2026, 11, 1, 12, 0, 0, 0, time.UTC)
+	agentRowWatchMu.Lock()
+	agentRowNow = func() time.Time { return now }
+	agentRowWatches = map[string]*agentRowWatch{}
+	agentRowWatchMu.Unlock()
+	t.Cleanup(func() {
+		agentRowWatchMu.Lock()
+		agentRowNow = time.Now
+		agentRowWatches = map[string]*agentRowWatch{}
+		agentRowWatchMu.Unlock()
+	})
+	return func(d time.Duration) {
+		agentRowWatchMu.Lock()
+		now = now.Add(d)
+		agentRowWatchMu.Unlock()
+	}
+}
+
+func agentListPaneOf(rows ...string) []string {
+	return append([]string{
+		strings.Repeat("─", 120),
+		"❯ ",
+		strings.Repeat("─", 120),
+		"  ⏵⏵ auto mode on · ← 2 agents · ↓ to manage",
+		"  ● main",
+	}, rows...)
+}
+
+func agentRow(task, timer string) string {
+	return "  ◯ general-purpose  " + task + strings.Repeat(" ", 40) + timer + " · ↓ 90.8k tokens"
+}
+
+func TestAnAgentWhoseClockMovesIsBusy(t *testing.T) {
+	advance := useAgentClock(t)
+	patterns := getAgentPatterns(AgentClaude)
+	detect := func(timer string) SessionActivity {
+		return detectClaudeActivity(agentListPaneOf(agentRow("Comparing functions", timer)), patterns, "pane")
+	}
+	// One look cannot tell a clock that moves from one that stopped.
+	if got := detect("3m 49s"); got != ActivityIdle {
+		t.Fatalf("first look = %v", got)
+	}
+	advance(time.Second)
+	if got := detect("3m 50s"); got != ActivityBusy {
+		t.Fatalf("clock moved = %v", got)
+	}
+	// Two polls can land inside one second.
+	advance(200 * time.Millisecond)
+	if got := detect("3m 50s"); got != ActivityBusy {
+		t.Fatalf("same second = %v", got)
+	}
+}
+
+// Seen here: an agent waiting on its own background work, at 1h 0m 27s for hours.
+func TestAnAgentWhoseClockStoppedIsNotBusy(t *testing.T) {
+	advance := useAgentClock(t)
+	patterns := getAgentPatterns(AgentClaude)
+	detect := func(timer string) SessionActivity {
+		return detectClaudeActivity(agentListPaneOf(agentRow("Hashing files", timer)), patterns, "pane")
+	}
+	detect("1h 0m 26s")
+	advance(time.Second)
+	if got := detect("1h 0m 27s"); got != ActivityBusy {
+		t.Fatalf("still moving = %v", got)
+	}
+	advance(agentTickWindow + time.Second)
+	if got := detect("1h 0m 27s"); got != ActivityIdle {
+		t.Fatalf("stopped = %v", got)
+	}
+}
+
+// One of two moving is the session working.
+func TestOneMovingAgentIsEnough(t *testing.T) {
+	advance := useAgentClock(t)
+	frozen := agentRow("Hashing files", "1h 0m 27s")
+	backgroundAgentTicking(agentListPaneOf(frozen, agentRow("Timing", "26m 50s")), "pane")
+	advance(2 * time.Second)
+	if !backgroundAgentTicking(agentListPaneOf(frozen, agentRow("Timing", "26m 52s")), "pane") {
+		t.Fatal("the moving agent was not seen")
+	}
+}
+
+func TestAClockWithHoursAndOnlySecondsAreRead(t *testing.T) {
+	advance := useAgentClock(t)
+	for _, step := range [][2]string{{"59s", "1m 0s"}, {"59m 59s", "1h 0m 0s"}} {
+		backgroundAgentTicking(agentListPaneOf(agentRow("Task", step[0])), step[0])
+		advance(time.Second)
+		if !backgroundAgentTicking(agentListPaneOf(agentRow("Task", step[1])), step[0]) {
+			t.Fatalf("%s to %s was not seen as moving", step[0], step[1])
+		}
+	}
+}
+
+// A new agent, or one on to its next task, is doing something.
+func TestANewRowIsWork(t *testing.T) {
+	advance := useAgentClock(t)
+	backgroundAgentTicking(agentListPaneOf(agentRow("First", "10s")), "pane")
+	advance(time.Second)
+	if !backgroundAgentTicking(agentListPaneOf(agentRow("First", "10s"), agentRow("Second", "1s")), "pane") {
+		t.Fatal("a new agent was not seen")
+	}
+}
+
+// Older versions draw a row with no time; it cannot say, so it counts.
+func TestARowWithNoClockCountsAsWorking(t *testing.T) {
+	useAgentClock(t)
+	if !backgroundAgentTicking(agentListPaneOf("  ◯ general-purpose  Updating margin figures in doc.go"), "pane") {
+		t.Fatal("a row with no time was not counted")
+	}
+}
+
+// Each pane has a clock of its own.
+func TestPanesAreWatchedApart(t *testing.T) {
+	advance := useAgentClock(t)
+	backgroundAgentTicking(agentListPaneOf(agentRow("Task", "10s")), "one")
+	advance(time.Second)
+	if backgroundAgentTicking(agentListPaneOf(agentRow("Task", "11s")), "two") {
+		t.Fatal("another pane's clock counted")
+	}
+}
+
+// When the list empties, an agent that comes back later is a first look again.
+func TestAnEmptyListForgetsThePane(t *testing.T) {
+	advance := useAgentClock(t)
+	backgroundAgentTicking(agentListPaneOf(agentRow("Task", "10s")), "pane")
+	backgroundAgentTicking(agentListPaneOf(), "pane")
+	advance(time.Minute)
+	if backgroundAgentTicking(agentListPaneOf(agentRow("Task", "10s")), "pane") {
+		t.Fatal("a first look after an empty list said busy")
 	}
 }
 

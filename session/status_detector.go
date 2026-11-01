@@ -560,7 +560,7 @@ func detectClaudeActivityContext(ctx context.Context, lines []string, patterns A
 		debugf("[StatusDebug] %s → BUSY (background agent)", target)
 		return ActivityBusy
 	}
-	if hasBackgroundAgentRow(lines) {
+	if backgroundAgentTicking(lines, target) {
 		debugf("[StatusDebug] %s → BUSY (agent list)", target)
 		return ActivityBusy
 	}
@@ -1222,10 +1222,83 @@ func hasRunningBackgroundAgent(lines []string) bool {
 // Only what is below the input box is searched. The rows look like nothing
 // else there, while above it the transcript can quote one.
 func hasBackgroundAgentRow(lines []string) bool {
-	patterns := backgroundAgentRowPatterns()
-	if len(patterns) == 0 {
+	return len(backgroundAgentRows(lines)) > 0
+}
+
+// agentRowTimer finds a row's running time: "1h 0m 27s · ↓ 298.8k tokens".
+var agentRowTimer = regexp.MustCompile(`((?:\d+h\s+)?(?:\d+m\s+)?\d+s)\s+·\s`)
+
+// agentTickWindow is how long a timer that moved counts as moving. Longer than the
+// second it ticks by, since polls can land twice inside one.
+const agentTickWindow = 5 * time.Second
+
+type agentRowWatch struct {
+	timers  map[string]string
+	movedAt time.Time
+}
+
+var (
+	agentRowWatchMu sync.Mutex
+	agentRowWatches = map[string]*agentRowWatch{}
+	agentRowNow     = time.Now
+)
+
+// backgroundAgentTicking reports whether an agent in the list is at work now.
+//
+// Being listed is not enough. An agent waiting on its own background work stays in
+// the list with its clock stopped, one seen here at 1h 0m 27s for hours, and the
+// tab read as busy all that time. The running time moves while it works and only
+// then, so that is the sign, which takes two looks: the first one at a pane knows
+// nothing yet and says no.
+//
+// A row with no time on it cannot say, and counts as working, as older versions of
+// Claude Code draw them that way.
+func backgroundAgentTicking(lines []string, target string) bool {
+	rows := backgroundAgentRows(lines)
+
+	agentRowWatchMu.Lock()
+	defer agentRowWatchMu.Unlock()
+	if len(rows) == 0 {
+		delete(agentRowWatches, target)
 		return false
 	}
+
+	now := agentRowNow()
+	timers := make(map[string]string, len(rows))
+	untimed := false
+	for _, row := range rows {
+		match := agentRowTimer.FindStringSubmatchIndex(row)
+		if match == nil {
+			untimed = true
+			continue
+		}
+		timers[strings.Join(strings.Fields(row[:match[0]]), " ")] = row[match[2]:match[3]]
+	}
+
+	watch := agentRowWatches[target]
+	if watch == nil {
+		agentRowWatches[target] = &agentRowWatch{timers: timers}
+		return untimed
+	}
+	for key, timer := range timers {
+		// A row not seen before is an agent just started, or one that moved on to
+		// another task; either way it is doing something.
+		if previous, known := watch.timers[key]; !known || previous != timer {
+			watch.movedAt = now
+			break
+		}
+	}
+	watch.timers = timers
+	return untimed || (!watch.movedAt.IsZero() && now.Sub(watch.movedAt) < agentTickWindow)
+}
+
+// backgroundAgentRows returns the agent list's rows, from below the input box.
+func backgroundAgentRows(lines []string) []string {
+	patterns := backgroundAgentRowPatterns()
+	if len(patterns) == 0 {
+		return nil
+	}
+	var rows []string
 	for j := len(lines) - 1; j >= 0; j-- {
 		clean := stripANSIForDetect(lines[j])
 		trimmed := strings.TrimSpace(clean)
@@ -1234,15 +1307,16 @@ func hasBackgroundAgentRow(lines []string) bool {
 		}
 		sepCount := strings.Count(trimmed, "─") + strings.Count(trimmed, "━") + strings.Count(trimmed, "╌")
 		if sepCount > 20 {
-			return false
+			break
 		}
 		for _, re := range patterns {
 			if re.MatchString(clean) {
-				return true
+				rows = append(rows, clean)
+				break
 			}
 		}
 	}
-	return false
+	return rows
 }
 
 func hasActiveThinking(lines []string, maxLines int) bool {
