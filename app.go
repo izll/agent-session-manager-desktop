@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -2377,15 +2378,12 @@ func getClaudeSessionIDFromTmuxWindowContext(ctx context.Context, tmuxSession st
 	// Get the PID of the process in the tmux pane
 	target := fmt.Sprintf("%s:%d", tmuxSession, windowIdx)
 	commandCtx, cancel := context.WithTimeout(ctx, session.TmuxCommandTimeout)
-	out, err := session.TmuxCommandContext(commandCtx, "display-message", "-t", target, "-p", "#{pane_pid}").Output()
+	livePID, alive := session.LivePanePIDContext(commandCtx, target)
 	cancel()
-	if err != nil {
+	if !alive {
 		return ""
 	}
-	panePID := strings.TrimSpace(string(out))
-	if panePID == "" {
-		return ""
-	}
+	panePID := strconv.Itoa(livePID)
 
 	// Look at the pane's own process first, then its children.
 	//

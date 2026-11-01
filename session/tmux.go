@@ -3,6 +3,7 @@ package session
 import (
 	"context"
 	"os/exec"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -175,4 +176,39 @@ func RefreshSessionClientsContext(ctx context.Context, sessionName string) int {
 		}
 	}
 	return refreshed
+}
+
+// livePanePIDFormat asks for a pane's process and whether it is still there.
+const livePanePIDFormat = "#{pane_dead}:#{pane_pid}"
+
+// LivePanePIDContext returns the process running in a pane, or nothing for a pane
+// whose process has exited.
+//
+// A dead pane goes on reporting the pid its process had. The system hands that
+// number out again, and on a busy machine soon: the counter here wraps in about
+// half a day. Asked about that pid, /proc answers for whatever has it now, which
+// can be an agent in another session entirely. That is how a dead tab of pbx-go
+// came to store the id of WebERP's largest conversation, so that resuming the tab
+// would have opened someone else's work. Anything that acts on a pane's process
+// has to start here.
+func LivePanePIDContext(ctx context.Context, target string) (int, bool) {
+	output, err := TmuxCommandContext(ctx, "display-message", "-p", "-t", target, livePanePIDFormat).Output()
+	if err != nil {
+		return 0, false
+	}
+	return parseLivePanePID(string(output))
+}
+
+// parseLivePanePID reads livePanePIDFormat. A multiplexer that does not report
+// pane_dead leaves it empty, which is not the same as saying it is dead.
+func parseLivePanePID(output string) (int, bool) {
+	dead, pidText, found := strings.Cut(strings.TrimSpace(output), ":")
+	if !found || dead == "1" {
+		return 0, false
+	}
+	pid, err := strconv.Atoi(pidText)
+	if err != nil || pid <= 0 {
+		return 0, false
+	}
+	return pid, true
 }

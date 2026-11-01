@@ -41,12 +41,8 @@ func DetectCursorChatIDFromTmuxContext(ctx context.Context, tmuxSession string, 
 	target := fmt.Sprintf("%s:%d", tmuxSession, windowIdx)
 	commandCtx, cancel := context.WithTimeout(discoveryCtx, TmuxCommandTimeout)
 	defer cancel()
-	out, err := TmuxCommandContext(commandCtx, "display-message", "-p", "-t", target, "#{pane_pid}").Output()
-	if err != nil {
-		return ""
-	}
-	panePID, err := strconv.Atoi(strings.TrimSpace(string(out)))
-	if err != nil || panePID <= 0 {
+	panePID, ok := LivePanePIDContext(commandCtx, target)
+	if !ok {
 		return ""
 	}
 

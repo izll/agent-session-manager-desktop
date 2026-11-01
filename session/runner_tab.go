@@ -3,7 +3,6 @@ package session
 import (
 	"context"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -84,19 +83,16 @@ func (i *Instance) RunnerCommandRunning(windowIdx int) bool {
 }
 
 // panePID returns the PID of the process a tab's pane is running — the
-// shell, for a tab at its prompt.
+// shell, for a tab at its prompt — or nothing for a dead pane; see
+// LivePanePIDContext.
 func (i *Instance) panePID(windowIdx int) (int, bool) {
 	target := fmt.Sprintf("%s:%d", i.TmuxSessionName(), windowIdx)
 	output, err := i.tmuxOutputOn(i.serverForWindow(windowIdx),
-		"display-message", "-p", "-t", target, "#{pane_pid}")
+		"display-message", "-p", "-t", target, livePanePIDFormat)
 	if err != nil {
 		return 0, false
 	}
-	pid, err := strconv.Atoi(strings.TrimSpace(string(output)))
-	if err != nil || pid <= 0 {
-		return 0, false
-	}
-	return pid, true
+	return parseLivePanePID(string(output))
 }
 
 // isShellCommand reports whether a pane's current command is just the shell
