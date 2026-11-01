@@ -42,6 +42,10 @@ export function BrowseDirectory(arg1) {
   return window['go']['main']['App']['BrowseDirectory'](arg1);
 }
 
+export function BrowseKeyFile(arg1) {
+  return window['go']['main']['App']['BrowseKeyFile'](arg1);
+}
+
 export function CancelGitSync() {
   return window['go']['main']['App']['CancelGitSync']();
 }

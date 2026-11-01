@@ -5,11 +5,14 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/wailsapp/wails/v2/pkg/runtime"
 
 	"asmgr-desktop/remote"
 	"asmgr-desktop/session"
@@ -872,4 +875,54 @@ func shellQuoteForServer(path string) string {
 		return path
 	}
 	return "'" + strings.ReplaceAll(path, "'", `'\''`) + "'"
+}
+
+// BrowseKeyFile asks for a private key on this computer. An empty answer means
+// the dialog was cancelled.
+func (a *App) BrowseKeyFile(current string) (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	path, err := runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{
+		Title:            "Select SSH private key",
+		DefaultDirectory: keyFileStartDir(current, home),
+		// Key files have no extension to filter by, and .ssh is itself hidden.
+		ShowHiddenFiles: true,
+	})
+	if err != nil || path == "" {
+		return "", err
+	}
+	return shortenHome(path, home), nil
+}
+
+// keyFileStartDir opens the dialog where the key already named lies, or else
+// where keys are kept. A directory that does not exist would leave it up to the
+// toolkit where the dialog opens.
+func keyFileStartDir(current, home string) string {
+	current = strings.TrimSpace(current)
+	if current == "~" || strings.HasPrefix(current, "~/") || strings.HasPrefix(current, `~\`) {
+		current = filepath.Join(home, current[1:])
+	}
+	candidates := []string{filepath.Join(home, ".ssh"), home}
+	if current != "" {
+		candidates = append([]string{filepath.Dir(current)}, candidates...)
+	}
+	for _, candidate := range candidates {
+		if info, err := os.Stat(candidate); err == nil && info.IsDir() {
+			return candidate
+		}
+	}
+	return home
+}
+
+// shortenHome writes a path under the home directory the way the field's example
+// does. The form is saved as typed, and this keeps it readable and the same on a
+// machine with another home.
+func shortenHome(path, home string) string {
+	rel, err := filepath.Rel(home, path)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return path
+	}
+	return "~/" + filepath.ToSlash(rel)
 }

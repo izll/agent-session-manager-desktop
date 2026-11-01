@@ -25,6 +25,8 @@ export function AttachSession(arg1:string,arg2:number,arg3:string):Promise<strin
 
 export function BrowseDirectory(arg1:string):Promise<string>;
 
+export function BrowseKeyFile(arg1:string):Promise<string>;
+
 export function CancelGitSync():Promise<void>;
 
 export function CheckForUpdate():Promise<main.UpdateInfo>;

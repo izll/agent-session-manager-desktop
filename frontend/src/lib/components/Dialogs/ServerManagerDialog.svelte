@@ -1,6 +1,7 @@
 <script lang="ts">
   import { claimKeyForDialog } from '../../utils/dialogKeys';
   import * as App from '../../../../wailsjs/go/main/App';
+  import { describeBackendError } from '../../utils/backendError';
   import type { main, remote } from '../../../../wailsjs/go/models';
   import Select from '../common/Select.svelte';
   import ConfirmDialog from './ConfirmDialog.svelte';
@@ -142,6 +143,19 @@
     fIsDefault = !!srv.isDefault;
     fPassword = '';
     hasStoredPassword = !!srv.hasPassword;
+  }
+
+  async function browseKeyFile() {
+    const startedOn = fKeyPath;
+    const startedFor = editingId;
+    try {
+      const path = await App.BrowseKeyFile(fKeyPath);
+      // Typed over, or moved to another server, while the dialog was open: what
+      // the user did since stands.
+      if (path && editing && editingId === startedFor && fKeyPath === startedOn) fKeyPath = path;
+    } catch (e) {
+      error = describeBackendError(e);
+    }
   }
 
   async function save() {
@@ -596,10 +610,13 @@
             </label>
 
             {#if fAuthMethod === 'key'}
-              <label class="field">
-                <span class="field-label">{$t('servers.fieldKeyPath')}</span>
-                <input bind:value={fKeyPath} placeholder="~/.ssh/id_ed25519" />
-              </label>
+              <div class="field">
+                <label class="field-label" for="server-key-path">{$t('servers.fieldKeyPath')}</label>
+                <div class="path-input">
+                  <input id="server-key-path" bind:value={fKeyPath} placeholder="~/.ssh/id_ed25519" />
+                  <button type="button" class="browse-key" data-action="browse-key" on:click={browseKeyFile}>{$t('newSession.browse')}</button>
+                </div>
+              </div>
             {/if}
 
             {#if fAuthMethod === 'password'}
@@ -1360,6 +1377,32 @@
   .field-row {
     display: flex;
     gap: 10px;
+  }
+
+  .path-input {
+    display: flex;
+    gap: 6px;
+  }
+
+  .path-input input {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .browse-key {
+    flex-shrink: 0;
+    padding: 0 10px;
+    font-size: 12px;
+    font-family: inherit;
+    color: #d1d5db;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+    cursor: pointer;
+  }
+
+  .browse-key:hover {
+    background: rgba(255, 255, 255, 0.1);
   }
 
   .field.grow {
