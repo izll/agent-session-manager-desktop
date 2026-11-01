@@ -570,28 +570,33 @@ func TestWindowsSavingAtOnceLoseNothing(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	var wg sync.WaitGroup
-	for n, id := range ids {
-		manager := first
-		if n%2 == 1 {
-			manager = second
-		}
-		wg.Add(1)
-		go func(manager *Manager, id string) {
-			defer wg.Done()
-			if _, err := manager.SaveLocal(id, "new", "", ""); err != nil {
-				t.Error(err)
+	// Several rounds, as on Windows it takes a read and a save meeting at the wrong
+	// moment, which one round of this catches only about every other time.
+	for round := range 8 {
+		name := fmt.Sprintf("name %d", round)
+		var wg sync.WaitGroup
+		for n, id := range ids {
+			manager := first
+			if n%2 == 1 {
+				manager = second
 			}
-		}(manager, id)
-	}
-	wg.Wait()
-	entries, _ := first.List(context.Background(), false)
-	if len(entries) != count {
-		t.Fatalf("entries = %d", len(entries))
-	}
-	for _, entry := range entries {
-		if entry.Name != "new" {
-			t.Fatalf("a change was lost: %+v", entry)
+			wg.Add(1)
+			go func(manager *Manager, id string) {
+				defer wg.Done()
+				if _, err := manager.SaveLocal(id, name, "", ""); err != nil {
+					t.Error(err)
+				}
+			}(manager, id)
+		}
+		wg.Wait()
+		entries, _ := first.List(context.Background(), false)
+		if len(entries) != count {
+			t.Fatalf("entries = %d", len(entries))
+		}
+		for _, entry := range entries {
+			if entry.Name != name {
+				t.Fatalf("a change was lost: %+v", entry)
+			}
 		}
 	}
 }

@@ -124,14 +124,8 @@ func Open(path string, run Runner) (*Manager, error) {
 		run = runCommand
 	}
 	m := &Manager{path: path, keepass: &keePassXC{run: run}, run: run, bitwardens: map[string]*bitwarden{}, cache: map[string][]Entry{}}
-	data, err := os.ReadFile(path)
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
+	if err := m.reload(); err != nil {
 		return nil, err
-	}
-	if err == nil {
-		if err := json.Unmarshal(data, &m.cfg); err != nil {
-			return nil, err
-		}
 	}
 	m.keepass.configure(m.cfg.KeePassXCDB, m.cfg.KeePassXCKeyFile)
 	return m, nil
@@ -177,7 +171,7 @@ func (m *Manager) change(edit func()) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return session.WithCrossProcessFileLock(m.path+".lock", func() error {
-		if err := m.reload(); err != nil {
+		if err := m.readSettings(); err != nil {
 			return err
 		}
 		edit()
@@ -189,6 +183,12 @@ func (m *Manager) change(edit func()) error {
 // of them, and writing a copy read at startup would drop entries added since, leaving
 // their secrets in the keyring with nothing naming them.
 func (m *Manager) reload() error {
+	// Under the lock even to read: on Windows a file open for reading cannot be
+	// replaced, so another window's save would fail with access denied.
+	return session.WithCrossProcessFileLock(m.path+".lock", m.readSettings)
+}
+
+func (m *Manager) readSettings() error {
 	data, err := os.ReadFile(m.path)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
