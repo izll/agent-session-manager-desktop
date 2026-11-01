@@ -1800,8 +1800,9 @@
   "tokenUsage.machineOff": "Não lido",
   "tokenUsage.searchPlaceholder": "Buscar nome, aba, pasta, id…",
   "tokenUsage.noMatch": "Nada corresponde a esta busca.",
-  "tokenUsage.linkProject": "Projeto",
-  "tokenUsage.linkPlaceholder": "Um nome comum para o que anda junto",
   "tokenUsage.machinesButton": "Máquinas: {on}/{total}",
-  "tokenUsage.machinesFailed": "{count} com erros"
+  "tokenUsage.machinesFailed": "{count} com erros",
+  "tokenUsage.noTab": "Sem aba",
+  "tokenUsage.backgroundHint": "Executado em segundo plano, sem terminal",
+  "tokenUsage.autoTitleHint": "Título escrito pelo Claude Code a partir da primeira mensagem; pode estar desatualizado"
 }

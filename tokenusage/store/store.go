@@ -28,6 +28,15 @@ import (
 // from the server list, which survives a rename.
 const LocalMachine = "local"
 
+// dataVersion is bumped when what is read from the logs changes shape. The cursors
+// say the lines were read, so a new kind of fact in them would never be seen: all
+// that was read is dropped and read again, while what the user chose stays. Not to
+// be bumped lightly, since the numbers of a log already deleted do not come back.
+const dataVersion = 3
+
+// readTables hold what can be read from the logs again.
+var readTables = []string{"files", "seen", "usage", "conversations", "parents", "continuations", "scans"}
+
 const schema = `
 CREATE TABLE IF NOT EXISTS files (
   machine TEXT NOT NULL,
@@ -68,7 +77,18 @@ CREATE TABLE IF NOT EXISTS conversations (
   cwd          TEXT NOT NULL,
   cwd_is_main  INTEGER NOT NULL,
   last_unix    INTEGER NOT NULL,
+  name         TEXT NOT NULL DEFAULT '',
+  title        TEXT NOT NULL DEFAULT '',
+  background   INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (machine, id)
+) WITHOUT ROWID;
+
+-- A conversation carried on in another, as moving one to the background does.
+CREATE TABLE IF NOT EXISTS continuations (
+  machine TEXT NOT NULL,
+  child   TEXT NOT NULL,
+  parent  TEXT NOT NULL,
+  PRIMARY KEY (machine, child)
 ) WITHOUT ROWID;
 
 -- A spawned Codex thread names the thread that spawned it.
@@ -84,7 +104,8 @@ CREATE TABLE IF NOT EXISTS parents (
 -- can claim one, and a claim can be wrong, so all are kept with the directory each
 -- claims it from, and the conversation's own directory decides.
 DROP TABLE IF EXISTS owners;
-CREATE TABLE IF NOT EXISTS conversation_owners (
+DROP TABLE IF EXISTS conversation_owners;
+CREATE TABLE IF NOT EXISTS session_claims (
   machine      TEXT NOT NULL,
   conversation TEXT NOT NULL,
   session_id   TEXT NOT NULL,
@@ -109,13 +130,7 @@ CREATE TABLE IF NOT EXISTS directory_owners (
   PRIMARY KEY (machine, directory, session_id, tab_name)
 ) WITHOUT ROWID;
 
--- Which project a usage row was said to belong to, by the user. Keyed by the row
--- (a session, or a directory on a machine) and matched by name, so rows on
--- different machines add up.
-CREATE TABLE IF NOT EXISTS project_links (
-  row_key TEXT PRIMARY KEY,
-  name    TEXT NOT NULL
-) WITHOUT ROWID;
+DROP TABLE IF EXISTS project_links;
 
 -- Machines the user does not want read. Kept apart from what was read from them,
 -- so turning one back on carries on where it stopped.
@@ -155,11 +170,30 @@ func Open(path string, loc *time.Location) (*Store, error) {
 		return nil, err
 	}
 	db.SetMaxOpenConns(1)
-	if _, err := db.Exec(schema); err != nil {
+	if err := prepare(db); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("could not prepare the usage database: %w", err)
 	}
 	return &Store{db: db, loc: loc}, nil
+}
+
+func prepare(db *sql.DB) error {
+	var version int
+	if err := db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil {
+		return err
+	}
+	if version != dataVersion {
+		for _, table := range readTables {
+			if _, err := db.Exec(`DROP TABLE IF EXISTS ` + table); err != nil {
+				return err
+			}
+		}
+	}
+	if _, err := db.Exec(schema); err != nil {
+		return err
+	}
+	_, err := db.Exec(fmt.Sprintf(`PRAGMA user_version = %d`, dataVersion))
+	return err
 }
 
 // databaseDSN builds the file URI. A Windows path carries a drive letter, which
@@ -232,6 +266,9 @@ type conversationUpdate struct {
 	agent, cwd string
 	cwdIsMain  bool
 	lastUnix   int64
+	name       string
+	title      string
+	background bool
 }
 
 // Apply stores one batch atomically: the rows and the cursors that say they
@@ -341,6 +378,31 @@ func (s *Store) Apply(ctx context.Context, machine string, batch []Applied) erro
 			}
 		}
 
+		for _, child := range result.ContinuedIn {
+			if child == result.Own || result.Own == "" {
+				continue
+			}
+			if _, err := tx.ExecContext(ctx, `INSERT OR REPLACE INTO continuations (machine, child, parent) VALUES (?, ?, ?)`,
+				machine, child, result.Own); err != nil {
+				return err
+			}
+		}
+		// Said even by a file with nothing to count yet.
+		if result.Name != "" || result.Title != "" || result.Background {
+			update := conversations[result.Conversation]
+			if update == nil {
+				update = &conversationUpdate{agent: result.Agent}
+				conversations[result.Conversation] = update
+			}
+			if result.Name != "" {
+				update.name = result.Name
+			}
+			if result.Title != "" {
+				update.title = result.Title
+			}
+			update.background = update.background || result.Background
+		}
+
 		if result.Parent != "" && result.Own != "" && result.Parent != result.Own {
 			if _, err := tx.ExecContext(ctx, `INSERT OR REPLACE INTO parents (machine, child, parent) VALUES (?, ?, ?)`,
 				machine, result.Own, result.Parent); err != nil {
@@ -384,14 +446,21 @@ func (s *Store) Apply(ctx context.Context, machine string, batch []Applied) erro
 		if update.cwdIsMain {
 			isMain = 1
 		}
-		if _, err := tx.ExecContext(ctx, `INSERT INTO conversations (machine, id, agent, cwd, cwd_is_main, last_unix)
-			VALUES (?, ?, ?, ?, ?, ?)
+		background := 0
+		if update.background {
+			background = 1
+		}
+		if _, err := tx.ExecContext(ctx, `INSERT INTO conversations (machine, id, agent, cwd, cwd_is_main, last_unix, name, title, background)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 			ON CONFLICT (machine, id) DO UPDATE SET
+			  name = CASE WHEN excluded.name <> '' THEN excluded.name ELSE conversations.name END,
+			  title = CASE WHEN excluded.title <> '' THEN excluded.title ELSE conversations.title END,
+			  background = MAX(conversations.background, excluded.background),
 			  cwd = CASE WHEN conversations.cwd_is_main = 1 OR excluded.cwd = '' OR (conversations.cwd <> '' AND excluded.cwd_is_main = 0)
 			             THEN conversations.cwd ELSE excluded.cwd END,
 			  cwd_is_main = MAX(conversations.cwd_is_main, excluded.cwd_is_main),
 			  last_unix = MAX(conversations.last_unix, excluded.last_unix)`,
-			machine, id, update.agent, update.cwd, isMain, update.lastUnix); err != nil {
+			machine, id, update.agent, update.cwd, isMain, update.lastUnix, update.name, update.title, background); err != nil {
 			return err
 		}
 	}
@@ -436,7 +505,7 @@ func (s *Store) RememberOwners(ctx context.Context, owners []Owner) error {
 		return err
 	}
 	defer tx.Rollback()
-	statement, err := tx.PrepareContext(ctx, `INSERT OR REPLACE INTO conversation_owners
+	statement, err := tx.PrepareContext(ctx, `INSERT OR REPLACE INTO session_claims
 		(machine, conversation, session_id, tab_name, directory, project_id, project_name, session_name)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
@@ -516,6 +585,10 @@ type Item struct {
 	CacheRead    int64
 	CacheWrite   int64
 	Responses    int64
+	// Name, Title and Background come from the log and outlive it.
+	Name       string
+	Title      string
+	Background bool
 }
 
 // Items returns everything from a day on; fromDay 0 means all of it. A spawned
@@ -528,7 +601,8 @@ func (s *Store) Items(ctx context.Context, fromDay int) ([]Item, error) {
 
 	rows, err := s.db.QueryContext(ctx, `SELECT u.machine, u.conversation, u.model, u.subagent,
 		  SUM(u.input), SUM(u.output), SUM(u.cache_read), SUM(u.cache_write), SUM(u.responses),
-		  COALESCE(c.agent, ''), COALESCE(c.cwd, ''), COALESCE(c.last_unix, 0)
+		  COALESCE(c.agent, ''), COALESCE(c.cwd, ''), COALESCE(c.last_unix, 0),
+		  COALESCE(c.name, ''), COALESCE(c.title, ''), COALESCE(c.background, 0)
 		FROM usage u
 		LEFT JOIN conversations c ON c.machine = u.machine AND c.id = u.conversation
 		WHERE u.day >= ?
@@ -546,13 +620,14 @@ func (s *Store) Items(ctx context.Context, fromDay int) ([]Item, error) {
 	var order []mergeKey
 	for rows.Next() {
 		var item Item
-		var subagent int
+		var subagent, background int
 		if err := rows.Scan(&item.Machine, &item.Conversation, &item.Model, &subagent,
 			&item.Input, &item.Output, &item.CacheRead, &item.CacheWrite, &item.Responses,
-			&item.Agent, &item.Cwd, &item.LastUnix); err != nil {
+			&item.Agent, &item.Cwd, &item.LastUnix, &item.Name, &item.Title, &background); err != nil {
 			return nil, err
 		}
 		item.Subagent = subagent != 0
+		item.Background = background != 0
 
 		root := rootOf(parents[item.Machine], item.Conversation)
 		key := mergeKey{item.Machine, root, item.Model, item.Subagent || root != item.Conversation}
@@ -613,7 +688,7 @@ func OwnerKey(machine, conversation string) string {
 // Owners returns who claims each conversation, in a fixed order.
 func (s *Store) Owners(ctx context.Context) (map[string][]Owner, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT machine, conversation, session_id, tab_name, directory, project_id, project_name, session_name
-		FROM conversation_owners ORDER BY session_name, session_id, tab_name`)
+		FROM session_claims ORDER BY session_name, session_id, tab_name`)
 	if err != nil {
 		return nil, err
 	}
@@ -629,6 +704,24 @@ func (s *Store) Owners(ctx context.Context) (map[string][]Owner, error) {
 		owners[key] = append(owners[key], owner)
 	}
 	return owners, rows.Err()
+}
+
+// Continuations returns which conversation each was carried on from, by OwnerKey.
+func (s *Store) Continuations(ctx context.Context) (map[string]string, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT machine, child, parent FROM continuations`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	continuations := map[string]string{}
+	for rows.Next() {
+		var machine, child, parent string
+		if err := rows.Scan(&machine, &child, &parent); err != nil {
+			return nil, err
+		}
+		continuations[OwnerKey(machine, child)] = parent
+	}
+	return continuations, rows.Err()
 }
 
 // ConversationDirectories returns where each conversation ran, by OwnerKey.
@@ -710,35 +803,6 @@ func (s *Store) KnownMachines(ctx context.Context) ([]string, error) {
 		machines = append(machines, machine)
 	}
 	return machines, rows.Err()
-}
-
-// SetProjectLink says which project a row belongs to; an empty name removes it.
-func (s *Store) SetProjectLink(ctx context.Context, rowKey, name string) error {
-	var err error
-	if name == "" {
-		_, err = s.db.ExecContext(ctx, `DELETE FROM project_links WHERE row_key = ?`, rowKey)
-	} else {
-		_, err = s.db.ExecContext(ctx, `INSERT OR REPLACE INTO project_links (row_key, name) VALUES (?, ?)`, rowKey, name)
-	}
-	return err
-}
-
-// ProjectLinks returns every row's assigned project.
-func (s *Store) ProjectLinks(ctx context.Context) (map[string]string, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT row_key, name FROM project_links`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	links := map[string]string{}
-	for rows.Next() {
-		var key, name string
-		if err := rows.Scan(&key, &name); err != nil {
-			return nil, err
-		}
-		links[key] = name
-	}
-	return links, rows.Err()
 }
 
 // Scan is the outcome of the last look at a machine.

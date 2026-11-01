@@ -1800,8 +1800,9 @@
   "tokenUsage.machineOff": "読み取りなし",
   "tokenUsage.searchPlaceholder": "名前、タブ、フォルダー、ID で検索…",
   "tokenUsage.noMatch": "この検索に一致するものはありません。",
-  "tokenUsage.linkProject": "プロジェクト",
-  "tokenUsage.linkPlaceholder": "まとめたいものに共通の名前",
   "tokenUsage.machinesButton": "マシン: {on}/{total}",
-  "tokenUsage.machinesFailed": "エラーあり: {count}"
+  "tokenUsage.machinesFailed": "エラーあり: {count}",
+  "tokenUsage.noTab": "タブなし",
+  "tokenUsage.backgroundHint": "端末なしでバックグラウンド実行",
+  "tokenUsage.autoTitleHint": "Claude Code が最初のメッセージから付けた題名です。古い場合があります"
 }

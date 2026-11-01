@@ -17,20 +17,20 @@ export type TokenUsageItem = {
   cacheRead: number;
   cacheWrite: number;
   responses: number;
+  /** What it was called on purpose, read from the log and kept after the log is gone. */
+  name: string;
+  /** The caption written from its first message, which can be long out of date. */
+  title: string;
+  /** It ran detached (claude --bg). */
+  background: boolean;
+  /** The conversation this one carried on from. */
+  continues: string;
   projectId: string;
   projectName: string;
   sessionId: string;
   sessionName: string;
   tabName: string;
 };
-
-/** Which project the user put a row in, by usageRowKey. */
-export type UsageLinks = Record<string, string>;
-
-/** The row someone sees in the session grouping, which is what gets linked. */
-export function usageRowKey(item: TokenUsageItem): string {
-  return usageGroupKey(item, 'session');
-}
 
 export type UsageGroupBy = 'session' | 'project' | 'machine' | 'model';
 
@@ -60,6 +60,10 @@ export type UsageConversation = UsageTotals & {
   searchOwn: string;
   conversation: string;
   tabName: string;
+  name: string;
+  title: string;
+  background: boolean;
+  continues: string;
   agent: string;
   models: string[];
   lastUnix: number;
@@ -107,15 +111,10 @@ function addItem(totals: UsageTotals, item: TokenUsageItem, basis: UsageBasis) {
  * "Not in any session" is told apart from the default project, whose id is
  * also empty.
  */
-export function usageGroupKey(item: TokenUsageItem, groupBy: UsageGroupBy, links: UsageLinks = {}): string {
+export function usageGroupKey(item: TokenUsageItem, groupBy: UsageGroupBy): string {
   switch (groupBy) {
-    case 'project': {
-      // By the name's letters, not its case: what was typed on two rows on two
-      // machines is meant to be one project.
-      const linked = links[usageRowKey(item)];
-      if (linked) return `link:${linked.toLowerCase()}`;
+    case 'project':
       return item.sessionId ? `project:${item.projectId}` : 'outside';
-    }
     case 'machine':
       return `machine:${item.machine}`;
     case 'model':
@@ -125,7 +124,7 @@ export function usageGroupKey(item: TokenUsageItem, groupBy: UsageGroupBy, links
   }
 }
 
-export function groupUsage(items: TokenUsageItem[], groupBy: UsageGroupBy, basis: UsageBasis, links: UsageLinks = {}): { groups: UsageGroup[]; totals: UsageTotals; value: number } {
+export function groupUsage(items: TokenUsageItem[], groupBy: UsageGroupBy, basis: UsageBasis): { groups: UsageGroup[]; totals: UsageTotals; value: number } {
   const totals = emptyTotals();
   const groups = new Map<string, UsageGroup>();
   const conversations = new Map<string, Map<string, UsageConversation>>();
@@ -133,7 +132,7 @@ export function groupUsage(items: TokenUsageItem[], groupBy: UsageGroupBy, basis
   for (const item of items) {
     addItem(totals, item, basis);
 
-    const key = usageGroupKey(item, groupBy, links);
+    const key = usageGroupKey(item, groupBy);
     let group = groups.get(key);
     if (!group) {
       group = { ...emptyTotals(), key, sample: item, search: '', value: 0, share: 0, subagentShare: 0, conversations: [] };
@@ -141,15 +140,16 @@ export function groupUsage(items: TokenUsageItem[], groupBy: UsageGroupBy, basis
       conversations.set(key, new Map());
     }
     addItem(group, item, basis);
-    group.search += ` ${itemSearchText(item)} ${(links[usageRowKey(item)] || '').toLowerCase()}`;
+    group.search += ` ${itemSearchText(item)}`;
 
     const conversationKey = `${item.machine}:${item.conversation}`;
     const inGroup = conversations.get(key)!;
     let conversation = inGroup.get(conversationKey);
     if (!conversation) {
       conversation = {
-        ...emptyTotals(), key: conversationKey, searchOwn: `${item.conversation} ${item.tabName}`.toLowerCase(),
+        ...emptyTotals(), key: conversationKey, searchOwn: `${item.conversation} ${item.tabName} ${item.name} ${item.title}`.toLowerCase(),
         conversation: item.conversation, tabName: item.tabName,
+        name: item.name, title: item.title, background: item.background, continues: item.continues,
         agent: item.agent, models: [], lastUnix: 0, value: 0, share: 0,
       };
       inGroup.set(conversationKey, conversation);
@@ -177,7 +177,7 @@ export function groupUsage(items: TokenUsageItem[], groupBy: UsageGroupBy, basis
 }
 
 function itemSearchText(item: TokenUsageItem): string {
-  return [item.sessionName, item.tabName, item.projectName, item.machineName, item.cwd, item.conversation, item.model, item.agent]
+  return [item.sessionName, item.tabName, item.name, item.title, item.projectName, item.machineName, item.cwd, item.conversation, item.model, item.agent]
     .join(' ').toLowerCase();
 }
 
@@ -199,9 +199,62 @@ export function searchFindsConversation(group: UsageGroup, query: string): boole
   return !!needle && group.conversations.some((conversation) => conversation.searchOwn.includes(needle));
 }
 
-/** The project names already used, for offering them again. */
-export function usageLinkNames(links: UsageLinks): string[] {
-  return [...new Set(Object.values(links))].sort((a, b) => a.localeCompare(b));
+export type UsageRow =
+  | { kind: 'tab'; key: string; tabName: string; share: number }
+  | { kind: 'conversation'; key: string; conversation: UsageConversation; depth: number };
+
+/**
+ * A session's conversations as they are read: by tab, the largest first, and under
+ * each conversation the ones carried on from it, such as a move to the background.
+ * A child stands under its parent whichever tab it claims, and goes back to the top
+ * when its parent is not in the list, as when the period does not reach it.
+ */
+export function usageConversationRows(group: UsageGroup, withTabs: boolean): UsageRow[] {
+  const present = new Map(group.conversations.map((c) => [c.conversation, c]));
+  const children = new Map<string, UsageConversation[]>();
+  const roots: UsageConversation[] = [];
+  for (const conversation of group.conversations) {
+    const parent = conversation.continues;
+    if (parent && parent !== conversation.conversation && present.has(parent)) {
+      children.set(parent, [...(children.get(parent) || []), conversation]);
+    } else {
+      roots.push(conversation);
+    }
+  }
+
+  const seen = new Set<string>();
+  const subtree = (conversation: UsageConversation, depth: number): UsageRow[] => {
+    if (seen.has(conversation.conversation)) return [];
+    seen.add(conversation.conversation);
+    return [
+      { kind: 'conversation', key: conversation.key, conversation, depth },
+      ...(children.get(conversation.conversation) || []).flatMap((child) => subtree(child, depth + 1)),
+    ];
+  };
+  const valueOf = (rows: UsageRow[]) =>
+    rows.reduce((sum, row) => sum + (row.kind === 'conversation' ? row.conversation.value : 0), 0);
+
+  let rows: UsageRow[];
+  if (!withTabs) {
+    rows = roots.flatMap((root) => subtree(root, 0));
+  } else {
+    const tabs = new Map<string, UsageRow[]>();
+    for (const root of roots) {
+      tabs.set(root.tabName, [...(tabs.get(root.tabName) || []), ...subtree(root, 0)]);
+    }
+    rows = [...tabs.entries()]
+      .map(([tabName, tabRows]) => ({ tabName, tabRows, value: valueOf(tabRows) }))
+      .sort((a, b) => b.value - a.value || a.tabName.localeCompare(b.tabName))
+      .flatMap(({ tabName, tabRows, value }): UsageRow[] => [
+        { kind: 'tab', key: `tab:${tabName}`, tabName, share: group.value > 0 ? value / group.value : 0 },
+        ...tabRows,
+      ]);
+  }
+  // Damaged logs that name each other in a circle have no root; still listed.
+  for (const conversation of group.conversations) {
+    if (!seen.has(conversation.conversation)) rows.push(...subtree(conversation, 0));
+  }
+  return rows;
 }
 
 /** 1 234 567 reads as 1.2 M: the magnitude is what is being compared. */

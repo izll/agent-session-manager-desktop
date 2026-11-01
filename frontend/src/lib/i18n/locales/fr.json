@@ -1800,8 +1800,9 @@
   "tokenUsage.machineOff": "Non lu",
   "tokenUsage.searchPlaceholder": "Chercher nom, onglet, dossier, id…",
   "tokenUsage.noMatch": "Aucun résultat pour cette recherche.",
-  "tokenUsage.linkProject": "Projet",
-  "tokenUsage.linkPlaceholder": "Un nom commun à ce qui va ensemble",
   "tokenUsage.machinesButton": "Machines : {on}/{total}",
-  "tokenUsage.machinesFailed": "{count} en erreur"
+  "tokenUsage.machinesFailed": "{count} en erreur",
+  "tokenUsage.noTab": "Sans onglet",
+  "tokenUsage.backgroundHint": "Exécuté en arrière-plan, sans terminal",
+  "tokenUsage.autoTitleHint": "Titre écrit par Claude Code à partir du premier message ; il peut être dépassé"
 }

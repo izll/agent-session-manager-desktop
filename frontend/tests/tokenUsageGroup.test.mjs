@@ -5,14 +5,14 @@ import ts from 'typescript';
 
 const source = readFileSync(new URL('../src/lib/utils/tokenUsage.ts', import.meta.url), 'utf8');
 const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
-const { groupUsage, usageGroupKey, usageValue, formatTokens, formatShare, shortDirectory, filterUsageGroups, searchFindsConversation, usageRowKey, usageLinkNames } =
+const { groupUsage, usageGroupKey, usageValue, formatTokens, formatShare, shortDirectory, filterUsageGroups, searchFindsConversation, usageConversationRows } =
   await import(`data:text/javascript,${encodeURIComponent(compiled)}`);
 
 function item(overrides = {}) {
   return {
     machine: 'local', machineName: '', conversation: 'c1', agent: 'claude', cwd: '/work/api', lastUnix: 100,
     model: 'opus', subagent: false, input: 0, output: 0, cacheRead: 0, cacheWrite: 0, responses: 1,
-    projectId: '', projectName: '', sessionId: 's1', sessionName: 'API', tabName: '',
+    name: '', title: '', background: false, continues: '', projectId: '', projectName: '', sessionId: 's1', sessionName: 'API', tabName: '',
     ...overrides,
   };
 }
@@ -135,34 +135,55 @@ test('only a search for a conversation itself opens the row', () => {
   assert.equal(searchFindsConversation(mad, ''), false);
 });
 
-test('rows linked to one project add up across machines and sessions', () => {
-  const mad = item({ sessionId: 'mad', projectId: '', output: 60 });
-  const outside = item({ sessionId: '', machine: 'srv', cwd: '/work/sparrow', conversation: 'x', output: 30 });
-  const other = item({ sessionId: 'site', conversation: 'y', output: 10 });
-  const links = { [usageRowKey(mad)]: 'Sparrow', [usageRowKey(outside)]: 'sparrow' };
+const shape = (rows) => rows.map((row) => row.kind === 'tab' ? `# ${row.tabName}` : `${' '.repeat(row.depth)}${row.conversation.conversation}`);
 
-  const { groups } = groupUsage([mad, outside, other], 'project', 'new', links);
-  assert.equal(groups.length, 2);
-  assert.equal(groups[0].key, 'link:sparrow');
-  assert.equal(groups[0].share, 0.9);
-  assert.equal(groups[1].key, 'project:');
+test('conversations read by tab, the largest tab first, children under their parent', () => {
+  const { groups } = groupUsage([
+    item({ conversation: 'small', tabName: 'review', output: 10 }),
+    item({ conversation: 'main', tabName: 'build', output: 20 }),
+    item({ conversation: 'bg', tabName: 'build', continues: 'main', background: true, output: 70 }),
+  ], 'session', 'new');
+  assert.deepEqual(shape(usageConversationRows(groups[0], true)), ['# build', 'main', ' bg', '# review', 'small']);
+  assert.equal(usageConversationRows(groups[0], true)[0].share, 0.9);
 });
 
-test('a link changes the project grouping and no other', () => {
-  const mad = item({ sessionId: 'mad', output: 60 });
-  const links = { [usageRowKey(mad)]: 'Sparrow' };
-  assert.equal(usageGroupKey(mad, 'session', links), 'session:mad');
-  assert.equal(usageGroupKey(mad, 'machine', links), 'machine:local');
-  assert.equal(usageGroupKey(mad, 'project', links), 'link:sparrow');
-  assert.equal(usageGroupKey(mad, 'project', {}), 'project:');
+// The continuation may name no tab of its own; it goes where its parent is.
+test('a child stands under its parent whatever tab it claims', () => {
+  const { groups } = groupUsage([
+    item({ conversation: 'main', tabName: 'build', output: 5 }),
+    item({ conversation: 'bg', tabName: '', continues: 'main', output: 5 }),
+  ], 'session', 'new');
+  assert.deepEqual(shape(usageConversationRows(groups[0], true)), ['# build', 'main', ' bg']);
 });
 
-test('a linked project can be searched for', () => {
-  const mad = item({ sessionId: 'mad', sessionName: 'Other name', output: 60 });
-  const { groups } = groupUsage([mad], 'session', 'new', { [usageRowKey(mad)]: 'Sparrow' });
-  assert.equal(filterUsageGroups(groups, 'sparrow').length, 1);
+test('a child whose parent is out of the period stands alone', () => {
+  const { groups } = groupUsage([item({ conversation: 'bg', continues: 'gone', output: 5 })], 'session', 'new');
+  assert.deepEqual(shape(usageConversationRows(groups[0], false)), ['bg']);
 });
 
-test('names already used are offered once, in order', () => {
-  assert.deepEqual(usageLinkNames({ a: 'Sparrow', b: 'MADisoCAD', c: 'Sparrow' }), ['MADisoCAD', 'Sparrow']);
+test('without tabs the headings stay out', () => {
+  const { groups } = groupUsage([item({ conversation: 'a', tabName: 'x', output: 1 })], 'model', 'new');
+  assert.deepEqual(shape(usageConversationRows(groups[0], false)), ['a']);
 });
+
+test('logs that name each other in a circle lose nothing and do not hang', () => {
+  const { groups } = groupUsage([
+    item({ conversation: 'a', continues: 'b', output: 1 }),
+    item({ conversation: 'b', continues: 'a', output: 1 }),
+  ], 'session', 'new');
+  const rows = usageConversationRows(groups[0], true).filter((row) => row.kind === 'conversation');
+  assert.equal(rows.length, 2);
+});
+
+test('an agent can be searched for by its name, and that opens its row', () => {
+  const { groups } = groupUsage([item({ conversation: 'c', name: 'legacy-form', output: 1 })], 'session', 'new');
+  assert.equal(filterUsageGroups(groups, 'legacy').length, 1);
+  assert.equal(searchFindsConversation(groups[0], 'legacy'), true);
+});
+
+test('an automatic title can be searched for too', () => {
+  const { groups } = groupUsage([item({ conversation: 'c', title: 'Admin felület', output: 1 })], 'session', 'new');
+  assert.equal(filterUsageGroups(groups, 'admin').length, 1);
+  assert.equal(searchFindsConversation(groups[0], 'admin'), true);
+});
+

@@ -77,7 +77,7 @@ func TestTheReportNamesTheSessionHoldingTheConversation(t *testing.T) {
 		t.Fatal(err)
 	}
 	item := findUsageItem(t, report, usageConversation)
-	if item.SessionID != "s1" || item.SessionName != "API" || item.Output != 42 || item.Machine != store.LocalMachine {
+	if item.SessionID != "s1" || item.SessionName != "API" || item.TabName != "claude" || item.Output != 42 || item.Machine != store.LocalMachine {
 		t.Fatalf("item = %+v", item)
 	}
 }
@@ -743,27 +743,45 @@ func TestAScratchpadConversationBelongsToItsParent(t *testing.T) {
 	}
 }
 
-func TestAProjectLinkReachesTheReport(t *testing.T) {
-	app, _ := tokenUsageTestApp(t)
-	if err := app.SetTokenUsageProject("session:s1", "  Sparrow  "); err != nil {
-		t.Fatal(err)
+// Measured: WebErp 2's main conversation was moved to the background and carried on
+// as another, which no tab or session holds. It stays with the tab it left, even
+// where a directory would not decide, and says what it is.
+func TestAContinuationStaysWithTheTabItLeft(t *testing.T) {
+	app, home := tokenUsageTestApp(t)
+	const child = "cccccccc-0000-0000-0000-000000000003"
+	for _, inst := range []*session.Instance{
+		{ID: "erp", Name: "WebErp 2", Path: "/work/erp", FollowedWindows: []session.FollowedWindow{{Index: 1, Name: "review", ResumeSessionID: usageConversation}}},
+		// Sharing the directory, so only the link can place it.
+		{ID: "other", Name: "Other", Path: "/work/erp"},
+	} {
+		if err := app.storage.AddInstance(inst); err != nil {
+			t.Fatal(err)
+		}
 	}
-	report, err := app.GetTokenUsage(7)
+	writeClaudeUsage(t, home, usageConversation, "/work/erp", 1)
+	parent := filepath.Join(home, ".claude", "projects", "-work", usageConversation+".jsonl")
+	file, err := os.OpenFile(parent, os.O_APPEND|os.O_WRONLY, 0o644)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if report.Links["session:s1"] != "Sparrow" {
-		t.Fatalf("links = %+v", report.Links)
-	}
-	if err := app.SetTokenUsageProject("session:s1", " "); err != nil {
+	fmt.Fprintf(file, `{"type":"continued-in","sessionId":%q,"continuedInSessionId":%q}`+"\n", usageConversation, child)
+	file.Close()
+
+	childPath := filepath.Join(home, ".claude", "projects", "-work", child+".jsonl")
+	line := (`{"type":"agent-name","agentName":"legacy-form"}`+"\n"+
+		`{"type":"assistant","sessionKind":"bg","requestId":"r9","timestamp":"2026-10-21T10:00:00Z","cwd":"/work/erp","message":{"id":"m9","model":"m","usage":{"input_tokens":1,"output_tokens":5}}}`+"\n")
+	if err := os.WriteFile(childPath, []byte(line), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	report, err = app.GetTokenUsage(7)
+	scanTokenUsageNow(t, app)
+
+	report, err := app.GetTokenUsage(0)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, linked := report.Links["session:s1"]; linked {
-		t.Fatalf("a blank name did not remove the link: %+v", report.Links)
+	item := findUsageItem(t, report, child)
+	if item.SessionID != "erp" || item.TabName != "review" || !item.Background || item.Name != "legacy-form" || item.Continues != usageConversation {
+		t.Fatalf("item = %+v", item)
 	}
 }
 

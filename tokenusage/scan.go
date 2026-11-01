@@ -220,7 +220,17 @@ type FileResult struct {
 	Own    string `json:"n,omitempty"`
 	Parent string `json:"e,omitempty"`
 	Cursor Cursor `json:"u"`
-	Rows   []Row  `json:"r,omitempty"`
+	// Name is what the conversation was called on purpose (agent-name), and Title
+	// the caption Claude Code wrote itself from its first message, which goes stale:
+	// a two-month conversation still bears the words of its opening question.
+	// Background says it ran detached (claude --bg) rather than in a terminal.
+	Name       string `json:"b,omitempty"`
+	Title      string `json:"h,omitempty"`
+	Background bool   `json:"g,omitempty"`
+	// ContinuedIn lists the conversations this file says it was carried on in.
+	// Moving a Claude conversation to the background starts a new one.
+	ContinuedIn []string `json:"o,omitempty"`
+	Rows        []Row    `json:"r,omitempty"`
 	// More says the limits stopped this file before its end.
 	More bool `json:"x,omitempty"`
 	// Err is why this file could not be read. Per file, because one vanished or
@@ -392,6 +402,10 @@ type lineParser interface {
 type claudeParser struct {
 	conversation string
 	subagent     bool
+	name         string
+	title        string
+	background   bool
+	continuedIn  []string
 }
 
 // newClaudeParser reads the conversation from where the file lies:
@@ -429,11 +443,52 @@ type claudeLine struct {
 	} `json:"message"`
 }
 
-var usageMarker = []byte(`"usage"`)
+var (
+	usageMarker        = []byte(`"usage"`)
+	agentNameMarker    = []byte(`{"type":"agent-name"`)
+	aiTitleMarker      = []byte(`{"type":"ai-title"`)
+	continuedInMarker  = []byte(`{"type":"continued-in"`)
+	backgroundKindMark = []byte(`"sessionKind":"bg"`)
+)
+
+// readFacts takes what a file says about its conversation, as opposed to what any
+// one response cost. These are short lines of their own, so a prefix finds them
+// without decoding the long ones.
+func (p *claudeParser) readFacts(line []byte) bool {
+	switch {
+	case bytes.HasPrefix(line, agentNameMarker):
+		var entry struct {
+			AgentName string `json:"agentName"`
+		}
+		if decodeLine(line, &entry) && entry.AgentName != "" {
+			p.name = entry.AgentName
+		}
+	case bytes.HasPrefix(line, aiTitleMarker):
+		var entry struct {
+			AITitle string `json:"aiTitle"`
+		}
+		if decodeLine(line, &entry) && entry.AITitle != "" {
+			p.title = entry.AITitle
+		}
+	case bytes.HasPrefix(line, continuedInMarker):
+		var entry struct {
+			ContinuedIn string `json:"continuedInSessionId"`
+		}
+		if decodeLine(line, &entry) && entry.ContinuedIn != "" {
+			p.continuedIn = append(p.continuedIn, entry.ContinuedIn)
+		}
+	default:
+		return false
+	}
+	return true
+}
 
 func (p *claudeParser) parse(line []byte) (Row, bool) {
-	if !bytes.Contains(line, usageMarker) {
+	if p.readFacts(line) || !bytes.Contains(line, usageMarker) {
 		return Row{}, false
+	}
+	if !p.subagent && bytes.Contains(line, backgroundKindMark) {
+		p.background = true
 	}
 	var entry claudeLine
 	if !decodeLine(line, &entry) {
@@ -465,6 +520,14 @@ func (p *claudeParser) parse(line []byte) (Row, bool) {
 func (p *claudeParser) finish(result *FileResult) {
 	result.Conversation = p.conversation
 	result.Own = p.conversation
+	// A subagent's own name is not the conversation's.
+	if p.subagent {
+		return
+	}
+	result.Name = p.name
+	result.Title = p.title
+	result.Background = p.background
+	result.ContinuedIn = p.continuedIn
 }
 
 // responseKey is never zero, which means "no key". A line with no id at all

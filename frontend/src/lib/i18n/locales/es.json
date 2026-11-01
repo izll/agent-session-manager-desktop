@@ -1800,8 +1800,9 @@
   "tokenUsage.machineOff": "Sin leer",
   "tokenUsage.searchPlaceholder": "Buscar nombre, pestaña, carpeta, id…",
   "tokenUsage.noMatch": "Nada coincide con esta búsqueda.",
-  "tokenUsage.linkProject": "Proyecto",
-  "tokenUsage.linkPlaceholder": "Un nombre común para lo que va junto",
   "tokenUsage.machinesButton": "Máquinas: {on}/{total}",
-  "tokenUsage.machinesFailed": "{count} con errores"
+  "tokenUsage.machinesFailed": "{count} con errores",
+  "tokenUsage.noTab": "Sin pestaña",
+  "tokenUsage.backgroundHint": "Se ejecutó en segundo plano, sin terminal",
+  "tokenUsage.autoTitleHint": "Título escrito por Claude Code a partir del primer mensaje; puede estar desactualizado"
 }

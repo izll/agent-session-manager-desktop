@@ -1800,8 +1800,9 @@
   "tokenUsage.machineOff": "Not read",
   "tokenUsage.searchPlaceholder": "Search name, tab, folder, id…",
   "tokenUsage.noMatch": "Nothing matches this search.",
-  "tokenUsage.linkProject": "Project",
-  "tokenUsage.linkPlaceholder": "A name shared by what belongs together",
   "tokenUsage.machinesButton": "Machines: {on}/{total}",
-  "tokenUsage.machinesFailed": "{count} with errors"
+  "tokenUsage.machinesFailed": "{count} with errors",
+  "tokenUsage.noTab": "Without a tab",
+  "tokenUsage.backgroundHint": "Ran in the background, detached from any terminal",
+  "tokenUsage.autoTitleHint": "Caption Claude Code wrote from the first message; it may be out of date"
 }

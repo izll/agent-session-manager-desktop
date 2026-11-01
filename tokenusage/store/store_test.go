@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -529,16 +530,118 @@ func TestDirectoryOwnersAreReplacedPerMachine(t *testing.T) {
 	}
 }
 
-func TestAProjectLinkIsSetChangedAndRemoved(t *testing.T) {
-	s := openTestStore(t)
+// The question asked of a background agent: what if it is gone? Its process, and
+// later its log, can both go. The name and the numbers stay.
+func TestABackgroundAgentOutlivesItsLog(t *testing.T) {
+	s, root := openTestStore(t), t.TempDir()
+	row := strings.Replace(claudeLine("m1", "r1", 2, 30, 400, 5), `"type":"assistant",`, `"type":"assistant","sessionKind":"bg",`, 1)
+	full := write(t, root, claudePath(conversationA), `{"type":"agent-name","agentName":"legacy-form"}`+"\n"+row)
+	write(t, root, claudePath(conversationB), `{"type":"continued-in","sessionId":"x","continuedInSessionId":"`+conversationA+`"}`+"\n"+claudeLine("m2", "r2", 1, 1, 1, 1))
+	sync(t, s, root)
+	if err := os.Remove(full); err != nil {
+		t.Fatal(err)
+	}
+	sync(t, s, root)
+
 	ctx := context.Background()
-	for _, step := range []struct{ name, want string }{{"Sparrow", "Sparrow"}, {"MADisoCAD", "MADisoCAD"}, {"", ""}} {
-		if err := s.SetProjectLink(ctx, "session:s1", step.name); err != nil {
-			t.Fatal(err)
+	items, err := s.Items(ctx, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var found bool
+	for _, item := range items {
+		if item.Conversation == conversationA {
+			found = item.Name == "legacy-form" && item.Background && item.Output == 30
 		}
-		links, err := s.ProjectLinks(ctx)
-		if err != nil || links["session:s1"] != step.want {
-			t.Fatalf("after %q: %v, %v", step.name, links, err)
-		}
+	}
+	if !found {
+		t.Fatalf("items = %+v", items)
+	}
+	continuations, err := s.Continuations(ctx)
+	if err != nil || continuations[OwnerKey(LocalMachine, conversationA)] != conversationB {
+		t.Fatalf("continuations = %+v, %v", continuations, err)
+	}
+}
+
+// The name can arrive in a later read than the numbers, and later lines replace it.
+func TestANameIsTakenFromTheLatestRead(t *testing.T) {
+	s, root := openTestStore(t), t.TempDir()
+	full := write(t, root, claudePath(conversationA), `{"type":"agent-name","agentName":"first"}`+"\n"+claudeLine("m1", "r1", 1, 1, 1, 1))
+	sync(t, s, root)
+	add(t, full, claudeLine("m2", "r2", 1, 1, 1, 1))
+	sync(t, s, root)
+	items, _ := s.Items(context.Background(), 0)
+	if len(items) != 1 || items[0].Name != "first" {
+		t.Fatalf("a later read with no name cost it the name: %+v", items)
+	}
+	add(t, full, `{"type":"agent-name","agentName":"second"}`+"\n")
+	sync(t, s, root)
+	items, _ = s.Items(context.Background(), 0)
+	if len(items) != 1 || items[0].Name != "second" {
+		t.Fatalf("items = %+v", items)
+	}
+}
+
+// Lines already passed are not read again, so a new kind of fact needs a fresh read.
+// What the user chose is not something a log can give back.
+func TestANewDataVersionReadsAgainAndKeepsChoices(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "usage.db")
+	root := t.TempDir()
+	write(t, root, claudePath(conversationA), claudeLine("m1", "r1", 1, 1, 1, 1))
+	source := LocalSource{Roots: tokenusage.Roots{Claude: filepath.Join(root, "claude")}}
+	ctx := context.Background()
+
+	first, err := Open(path, time.UTC)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := first.Sync(ctx, LocalMachine, source, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := first.SetMachineEnabled(ctx, "srv", false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := first.db.Exec(`PRAGMA user_version = 1`); err != nil {
+		t.Fatal(err)
+	}
+	first.Close()
+
+	second, err := Open(path, time.UTC)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer second.Close()
+	if items, _ := second.Items(ctx, 0); len(items) != 0 {
+		t.Fatalf("old numbers survived: %+v", items)
+	}
+	if err := second.Sync(ctx, LocalMachine, source, nil); err != nil {
+		t.Fatal(err)
+	}
+	if got := sum(t, second); got.output != 1 {
+		t.Fatalf("not read again: %+v", got)
+	}
+	disabled, _ := second.DisabledMachines(ctx)
+	if !disabled["srv"] {
+		t.Fatalf("choice lost: %v", disabled)
+	}
+
+	// Opened again at the same version, nothing is dropped.
+	third, err := Open(path, time.UTC)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer third.Close()
+	if got := sum(t, third); got.output != 1 {
+		t.Fatalf("dropped at the same version: %+v", got)
+	}
+}
+
+func TestNameAndTitleAreKeptApart(t *testing.T) {
+	s, root := openTestStore(t), t.TempDir()
+	write(t, root, claudePath(conversationA), `{"type":"ai-title","aiTitle":"Admin felület subdomain"}`+"\n"+claudeLine("m1", "r1", 1, 1, 1, 1))
+	sync(t, s, root)
+	items, err := s.Items(context.Background(), 0)
+	if err != nil || len(items) != 1 || items[0].Name != "" || items[0].Title != "Admin felület subdomain" {
+		t.Fatalf("items = %+v, %v", items, err)
 	}
 }

@@ -1800,8 +1800,9 @@
   "tokenUsage.machineOff": "Не читається",
   "tokenUsage.searchPlaceholder": "Пошук: назва, вкладка, тека, id…",
   "tokenUsage.noMatch": "За цим запитом нічого не знайдено.",
-  "tokenUsage.linkProject": "Проєкт",
-  "tokenUsage.linkPlaceholder": "Спільна назва для того, що пов'язане",
   "tokenUsage.machinesButton": "Машини: {on}/{total}",
-  "tokenUsage.machinesFailed": "З помилками: {count}"
+  "tokenUsage.machinesFailed": "З помилками: {count}",
+  "tokenUsage.noTab": "Без вкладки",
+  "tokenUsage.backgroundHint": "Працювало у фоні, без термінала",
+  "tokenUsage.autoTitleHint": "Заголовок, створений Claude Code за першим повідомленням; може бути застарілим"
 }

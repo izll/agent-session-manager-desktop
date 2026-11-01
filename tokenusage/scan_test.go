@@ -539,7 +539,7 @@ func TestReadOwnersFindsSessionsAndTabsInEveryProject(t *testing.T) {
 	if got := byConversation["tab-conv"]; got.SessionName != "MADisoCAD" || got.TabName != "claude tab" || got.Directory != "/work/sparrow" {
 		t.Fatalf("tab owner = %+v", got)
 	}
-	if got := byConversation["main-conv"]; got.SessionID != "s1" || got.TabName != "" || got.Directory != "/work/mad" {
+	if got := byConversation["main-conv"]; got.SessionID != "s1" || got.TabName != "claude" || got.Directory != "/work/mad" {
 		t.Fatalf("session owner = %+v", got)
 	}
 	if got := byConversation["site-conv"]; got.ProjectID != "p1" || got.ProjectName != "Clients" || got.SessionName != "Site" {
@@ -594,5 +594,71 @@ func TestADamagedProjectDoesNotCostTheOthers(t *testing.T) {
 	owners, err := ReadOwners(dir)
 	if err != nil || len(owners) != 1 || owners[0].SessionName != "Fine" {
 		t.Fatalf("owners = %+v, err = %v", owners, err)
+	}
+}
+
+// Taken from real logs: a conversation moved to the background.
+func TestClaudeFactsAreReadFromTheirOwnLines(t *testing.T) {
+	root := t.TempDir()
+	rel := "projects/-work-app/" + testConversation + ".jsonl"
+	bgRow := strings.Replace(claudeRow("msg_1", "req_1", 1, 1, 1, 1), `"type":"assistant",`, `"type":"assistant","sessionKind":"bg",`, 1)
+	writeLog(t, root, rel,
+		`{"type":"ai-title","aiTitle":"a title","sessionId":"x"}`,
+		`{"type":"agent-name","agentName":"legacy-form","sessionId":"x"}`,
+		`{"type":"continued-in","timestamp":"2026-10-27T22:15:40.641Z","sessionId":"x","continuedInSessionId":"child-conv"}`,
+		bgRow,
+	)
+	result := readOne(t, Roots{Claude: root}, "claude:"+rel, Cursor{})
+	if result.Name != "legacy-form" || result.Title != "a title" || !result.Background || len(result.ContinuedIn) != 1 || result.ContinuedIn[0] != "child-conv" {
+		t.Fatalf("result = %+v", result)
+	}
+	if len(result.Rows) != 1 {
+		t.Fatalf("rows = %+v", result.Rows)
+	}
+}
+
+func TestAnInteractiveConversationIsNotBackground(t *testing.T) {
+	root := t.TempDir()
+	rel := "projects/-work-app/" + testConversation + ".jsonl"
+	writeLog(t, root, rel, `{"type":"ai-title","aiTitle":"just a title"}`, claudeRow("msg_1", "req_1", 1, 1, 1, 1))
+	result := readOne(t, Roots{Claude: root}, "claude:"+rel, Cursor{})
+	// A caption written from the first message is not a name.
+	if result.Background || result.Name != "" || result.Title != "just a title" {
+		t.Fatalf("result = %+v", result)
+	}
+}
+
+// A subagent's name and kind are its own, not the conversation's.
+func TestASubagentFileSaysNothingAboutItsConversation(t *testing.T) {
+	root := t.TempDir()
+	rel := "projects/-work-app/" + testConversation + "/subagents/agent-a1.jsonl"
+	bgRow := strings.Replace(claudeRow("msg_1", "req_1", 1, 1, 1, 1), `"type":"assistant",`, `"type":"assistant","sessionKind":"bg",`, 1)
+	writeLog(t, root, rel, `{"type":"agent-name","agentName":"helper"}`, `{"type":"ai-title","aiTitle":"its own"}`, bgRow)
+	result := readOne(t, Roots{Claude: root}, "claude:"+rel, Cursor{})
+	if result.Name != "" || result.Title != "" || result.Background {
+		t.Fatalf("result = %+v", result)
+	}
+}
+
+// The session's own window is a tab with a name, as the app shows it.
+func TestTheMainTabIsNamedAsTheAppNamesIt(t *testing.T) {
+	dir := t.TempDir()
+	content := `{"instances":[
+		{"id":"a","name":"A","resume_session_id":"c1"},
+		{"id":"b","name":"B","agent":"codex","resume_session_id":"c2"},
+		{"id":"c","name":"C","agent":"codex","main_window_name":"own name","resume_session_id":"c3"}]}`
+	if err := os.WriteFile(filepath.Join(dir, "sessions.json"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	owners, err := ReadOwners(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]string{}
+	for _, owner := range owners {
+		got[owner.Conversation] = owner.TabName
+	}
+	if got["c1"] != "claude" || got["c2"] != "codex" || got["c3"] != "own name" {
+		t.Fatalf("tabs = %+v", got)
 	}
 }

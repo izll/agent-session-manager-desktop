@@ -22,7 +22,7 @@ import (
 // re-uploading a binary over SSH for every patch. It is bumped when a message
 // changes shape, and an exact match is required in both directions — an older
 // helper is as wrong as an older app.
-const Version = 3
+const Version = 6
 
 // Method names. Constants because both ends switch on them, and a typo would
 // otherwise surface as "unknown method" at run time.

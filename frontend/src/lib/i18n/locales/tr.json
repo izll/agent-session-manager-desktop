@@ -1800,8 +1800,9 @@
   "tokenUsage.machineOff": "Okunmuyor",
   "tokenUsage.searchPlaceholder": "Ad, sekme, klasör, kimlik ara…",
   "tokenUsage.noMatch": "Bu aramayla eşleşen sonuç yok.",
-  "tokenUsage.linkProject": "Proje",
-  "tokenUsage.linkPlaceholder": "Birbirine ait olanlar için ortak ad",
   "tokenUsage.machinesButton": "Makineler: {on}/{total}",
-  "tokenUsage.machinesFailed": "{count} hatalı"
+  "tokenUsage.machinesFailed": "{count} hatalı",
+  "tokenUsage.noTab": "Sekmesiz",
+  "tokenUsage.backgroundHint": "Arka planda, terminalsiz çalıştı",
+  "tokenUsage.autoTitleHint": "Claude Code'un ilk iletiden yazdığı başlık; güncel olmayabilir"
 }

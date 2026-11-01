@@ -1800,8 +1800,9 @@
   "tokenUsage.machineOff": "Не читается",
   "tokenUsage.searchPlaceholder": "Поиск: имя, вкладка, папка, id…",
   "tokenUsage.noMatch": "По этому запросу ничего не найдено.",
-  "tokenUsage.linkProject": "Проект",
-  "tokenUsage.linkPlaceholder": "Общее имя для того, что связано",
   "tokenUsage.machinesButton": "Машины: {on}/{total}",
-  "tokenUsage.machinesFailed": "С ошибками: {count}"
+  "tokenUsage.machinesFailed": "С ошибками: {count}",
+  "tokenUsage.noTab": "Без вкладки",
+  "tokenUsage.backgroundHint": "Работало в фоне, без терминала",
+  "tokenUsage.autoTitleHint": "Заголовок, созданный Claude Code по первому сообщению; может быть устаревшим"
 }

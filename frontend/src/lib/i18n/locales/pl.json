@@ -1800,8 +1800,9 @@
   "tokenUsage.machineOff": "Nie odczytano",
   "tokenUsage.searchPlaceholder": "Szukaj: nazwa, karta, folder, id…",
   "tokenUsage.noMatch": "Brak wyników tego wyszukiwania.",
-  "tokenUsage.linkProject": "Projekt",
-  "tokenUsage.linkPlaceholder": "Wspólna nazwa dla tego, co się łączy",
   "tokenUsage.machinesButton": "Maszyny: {on}/{total}",
-  "tokenUsage.machinesFailed": "Z błędami: {count}"
+  "tokenUsage.machinesFailed": "Z błędami: {count}",
+  "tokenUsage.noTab": "Bez karty",
+  "tokenUsage.backgroundHint": "Działało w tle, bez terminala",
+  "tokenUsage.autoTitleHint": "Tytuł napisany przez Claude Code z pierwszej wiadomości; może być nieaktualny"
 }

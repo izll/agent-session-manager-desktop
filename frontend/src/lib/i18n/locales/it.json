@@ -1800,8 +1800,9 @@
   "tokenUsage.machineOff": "Non letto",
   "tokenUsage.searchPlaceholder": "Cerca nome, scheda, cartella, id…",
   "tokenUsage.noMatch": "Nessun risultato per questa ricerca.",
-  "tokenUsage.linkProject": "Progetto",
-  "tokenUsage.linkPlaceholder": "Un nome comune per ciò che va insieme",
   "tokenUsage.machinesButton": "Macchine: {on}/{total}",
-  "tokenUsage.machinesFailed": "{count} con errori"
+  "tokenUsage.machinesFailed": "{count} con errori",
+  "tokenUsage.noTab": "Senza scheda",
+  "tokenUsage.backgroundHint": "Eseguito in background, senza terminale",
+  "tokenUsage.autoTitleHint": "Titolo scritto da Claude Code dal primo messaggio; può essere superato"
 }

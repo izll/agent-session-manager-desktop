@@ -1800,8 +1800,9 @@
   "tokenUsage.machineOff": "Niet gelezen",
   "tokenUsage.searchPlaceholder": "Zoek naam, tabblad, map, id…",
   "tokenUsage.noMatch": "Geen resultaten voor deze zoekopdracht.",
-  "tokenUsage.linkProject": "Project",
-  "tokenUsage.linkPlaceholder": "Een gedeelde naam voor wat bij elkaar hoort",
   "tokenUsage.machinesButton": "Machines: {on}/{total}",
-  "tokenUsage.machinesFailed": "{count} met fouten"
+  "tokenUsage.machinesFailed": "{count} met fouten",
+  "tokenUsage.noTab": "Zonder tabblad",
+  "tokenUsage.backgroundHint": "Liep op de achtergrond, zonder terminal",
+  "tokenUsage.autoTitleHint": "Titel die Claude Code uit het eerste bericht schreef; kan verouderd zijn"
 }

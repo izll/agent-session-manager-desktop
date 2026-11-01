@@ -55,6 +55,13 @@ type TokenUsageItem struct {
 	CacheRead    int64  `json:"cacheRead"`
 	CacheWrite   int64  `json:"cacheWrite"`
 	Responses    int64  `json:"responses"`
+	// Name is what the conversation was called on purpose, Title the caption
+	// written from its first message, and Background says it ran detached.
+	// Continues is the conversation this one carried on from.
+	Name       string `json:"name"`
+	Title      string `json:"title"`
+	Background bool   `json:"background"`
+	Continues  string `json:"continues"`
 	// Empty session means no session of the app could be tied to it, such as an
 	// agent started in a terminal elsewhere.
 	ProjectID   string `json:"projectId"`
@@ -81,8 +88,6 @@ type TokenUsageReport struct {
 	Items    []TokenUsageItem    `json:"items"`
 	Machines []TokenUsageMachine `json:"machines"`
 	Scanning bool                `json:"scanning"`
-	// Links says which project the user put a row in, by the row's key.
-	Links map[string]string `json:"links"`
 }
 
 // TokenUsageProgress reports a running scan.
@@ -170,10 +175,6 @@ func (a *App) GetTokenUsage(days int) (*TokenUsageReport, error) {
 		names[machine.ID] = machine.Name
 	}
 
-	links, err := usage.ProjectLinks(ctx)
-	if err != nil {
-		return nil, err
-	}
 	claims, err := usage.Owners(ctx)
 	if err != nil {
 		return nil, err
@@ -182,12 +183,16 @@ func (a *App) GetTokenUsage(days int) (*TokenUsageReport, error) {
 	if err != nil {
 		return nil, err
 	}
+	continuations, err := usage.Continuations(ctx)
+	if err != nil {
+		return nil, err
+	}
+	facts := usageFacts{claims: claims, directories: directories, continuations: continuations}
 
 	report := &TokenUsageReport{
 		Items:    make([]TokenUsageItem, 0, len(items)),
 		Machines: machines,
 		Scanning: a.tokenUsageScanning(),
-		Links:    links,
 	}
 	disabled := map[string]bool{}
 	for _, machine := range machines {
@@ -211,8 +216,12 @@ func (a *App) GetTokenUsage(days int) (*TokenUsageReport, error) {
 			CacheRead:    item.CacheRead,
 			CacheWrite:   item.CacheWrite,
 			Responses:    item.Responses,
+			Name:         item.Name,
+			Title:        item.Title,
+			Background:   item.Background,
+			Continues:    continuations[store.OwnerKey(item.Machine, item.Conversation)],
 		}
-		owner := owned.ownerOf(item.Machine, item.Conversation, item.Cwd, claims, directories)
+		owner := owned.ownerOf(item.Machine, item.Conversation, item.Cwd, facts, 0)
 		if owner != nil {
 			entry.ProjectID = owner.ProjectID
 			entry.ProjectName = owner.ProjectName
@@ -254,17 +263,6 @@ func (a *App) SetTokenUsageMachineEnabled(machine string, enabled bool) error {
 		a.tokenUsage.mu.Unlock()
 	}
 	return nil
-}
-
-// SetTokenUsageProject puts a usage row in a project of the user's naming, or
-// takes it out with an empty name. Only for this view: the sessions themselves stay
-// in whichever project they are in.
-func (a *App) SetTokenUsageProject(rowKey, name string) error {
-	usage, err := a.tokenUsageStore()
-	if err != nil {
-		return err
-	}
-	return usage.SetProjectLink(a.lifecycleContext(), rowKey, strings.TrimSpace(name))
 }
 
 // RefreshTokenUsage starts a scan of every machine turned on, connecting to
@@ -615,11 +613,22 @@ type tokenUsageOwners struct {
 // at a conversation from another directory, and one tab of pbx-go, not used in
 // weeks, took the credit for WebERP's two largest conversations. The log says
 // where a conversation really ran, so a claim counts only if it agrees.
-func (o *tokenUsageOwners) ownerOf(machine, conversation, cwd string, claims map[string][]store.Owner, directories map[string]string) *store.Owner {
-	for _, claim := range claims[store.OwnerKey(machine, conversation)] {
+func (o *tokenUsageOwners) ownerOf(machine, conversation, cwd string, facts usageFacts, depth int) *store.Owner {
+	key := store.OwnerKey(machine, conversation)
+	for _, claim := range facts.claims[key] {
 		if directoryHolds(claim.Directory, cwd) {
 			chosen := claim
 			return &chosen
+		}
+	}
+	// Bounded, in case damaged logs name each other.
+	if depth >= 16 {
+		return o.ownerOfDirectory(machine, cwd)
+	}
+	// Carried on from another: it stays with the tab it left.
+	if parent := facts.continuations[key]; parent != "" {
+		if owner := o.ownerOf(machine, parent, facts.directories[store.OwnerKey(machine, parent)], facts, depth+1); owner != nil {
+			return owner
 		}
 	}
 	if owner := o.ownerOfDirectory(machine, cwd); owner != nil {
@@ -627,9 +636,17 @@ func (o *tokenUsageOwners) ownerOf(machine, conversation, cwd string, claims map
 	}
 	// Its directory names the conversation it was made for.
 	if parent := conversationOfScratchpad(cwd); parent != "" && parent != conversation {
-		return o.ownerOf(machine, parent, directories[store.OwnerKey(machine, parent)], claims, directories)
+		return o.ownerOf(machine, parent, facts.directories[store.OwnerKey(machine, parent)], facts, depth+1)
 	}
 	return nil
+}
+
+// usageFacts is what the logs and the sessions say about ownership, by
+// store.OwnerKey.
+type usageFacts struct {
+	claims        map[string][]store.Owner
+	directories   map[string]string
+	continuations map[string]string
 }
 
 // directoryHolds says a conversation ran in a session's directory or below it:
@@ -741,7 +758,11 @@ func (a *App) collectTokenUsageOwners() *tokenUsageOwners {
 				ProjectID: project.id, ProjectName: project.name,
 				SessionID: instance.ID, SessionName: instance.Name,
 			}
-			collected.add(owner, instance.ResumeSessionID, usageMachine(instance.ServerID), instance.Path)
+			// The session's own window is a tab like the others, with a name of its
+			// own, and leaving that out read as a conversation of no tab at all.
+			main := owner
+			main.TabName = instance.WindowName()
+			collected.add(main, instance.ResumeSessionID, usageMachine(instance.ServerID), instance.Path)
 			for _, window := range instance.FollowedWindows {
 				tab := owner
 				tab.TabName = window.Name

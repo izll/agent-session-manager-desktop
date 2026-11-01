@@ -1800,8 +1800,9 @@
   "tokenUsage.machineOff": "Läses inte",
   "tokenUsage.searchPlaceholder": "Sök namn, flik, mapp, id…",
   "tokenUsage.noMatch": "Inget matchar sökningen.",
-  "tokenUsage.linkProject": "Projekt",
-  "tokenUsage.linkPlaceholder": "Ett gemensamt namn för det som hör ihop",
   "tokenUsage.machinesButton": "Datorer: {on}/{total}",
-  "tokenUsage.machinesFailed": "{count} med fel"
+  "tokenUsage.machinesFailed": "{count} med fel",
+  "tokenUsage.noTab": "Utan flik",
+  "tokenUsage.backgroundHint": "Kördes i bakgrunden, utan terminal",
+  "tokenUsage.autoTitleHint": "Rubrik som Claude Code skrev från första meddelandet; kan vara inaktuell"
 }

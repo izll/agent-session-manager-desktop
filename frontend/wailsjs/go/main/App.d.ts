@@ -485,8 +485,6 @@ export function SetTabViewOrder(arg1:string,arg2:number,arg3:Array<string>,arg4:
 
 export function SetTokenUsageMachineEnabled(arg1:string,arg2:boolean):Promise<void>;
 
-export function SetTokenUsageProject(arg1:string,arg2:string):Promise<void>;
-
 export function SetWindowAutoYes(arg1:string,arg2:number,arg3:boolean,arg4:string):Promise<void>;
 
 export function StartSession(arg1:string,arg2:string):Promise<void>;

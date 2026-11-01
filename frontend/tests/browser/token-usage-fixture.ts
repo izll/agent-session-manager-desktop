@@ -9,7 +9,8 @@ const params = new URLSearchParams(location.search);
 const item = (overrides: Record<string, unknown>) => ({
   machine: 'local', machineName: '', conversation: 'aaaaaaaa-1', agent: 'claude', cwd: '/work/api', lastUnix: 1_790_000_000,
   model: 'claude-opus-5-5', subagent: false, input: 0, output: 0, cacheRead: 0, cacheWrite: 0, responses: 1,
-  projectId: '', projectName: '', sessionId: 'api', sessionName: 'API refactor', tabName: '',
+  name: '', title: '', background: false, continues: '',
+  projectId: '', projectName: '', sessionId: 'api', sessionName: 'API refactor', tabName: 'claude',
   ...overrides,
 });
 
@@ -19,6 +20,11 @@ const items = params.has('empty') ? [] : [
   item({ machine: 'srv-1', machineName: 'web server', sessionId: 'site', sessionName: 'Site', projectId: 'p1', projectName: 'Clients', conversation: 'bbbbbbbb-1', model: 'gpt-6', agent: 'codex', output: 200 }),
   item({ sessionId: '', sessionName: '', cwd: '/home/me/scratch', conversation: 'cccccccc-1', output: 100 }),
 ];
+
+if (params.has('bg')) {
+  items.push(item({ conversation: 'eeeeeeee-1', tabName: 'crawling', title: 'Admin felület subdomain', output: 10 }));
+  items.push(item({ conversation: 'dddddddd-1', tabName: 'review', name: 'legacy-form', background: true, continues: 'aaaaaaaa-2', output: 50 }));
+}
 
 const machines = [
   { id: 'local', name: '', local: true, lastScanUnix: 1_790_000_000, error: '', enabled: true },
@@ -31,7 +37,6 @@ if (params.has('many')) {
   }
 }
 
-const links: Record<string, string> = {};
 const calls: { method: string; args: unknown[] }[] = [];
 const listeners = new Map<string, ((data: unknown) => void)[]>();
 const emit = (name: string, data?: unknown) => (listeners.get(name) || []).forEach((cb) => cb(data));
@@ -42,12 +47,7 @@ const backend = new Proxy({
     // A narrower period has less in it, so a period change is visible.
     const off = new Set(machines.filter((machine) => !machine.enabled).map((machine) => machine.id));
     const shown = (days === 1 ? items.slice(0, 1) : items).filter((entry) => !off.has(entry.machine as string));
-    return { items: shown, machines: structuredClone(machines), scanning: false, links: { ...links } };
-  },
-  SetTokenUsageProject: async (rowKey: string, name: string) => {
-    calls.push({ method: 'SetTokenUsageProject', args: [rowKey, name] });
-    if (name.trim()) links[rowKey] = name.trim();
-    else delete links[rowKey];
+    return { items: shown, machines: structuredClone(machines), scanning: false };
   },
   SetTokenUsageMachineEnabled: async (machine: string, enabled: boolean) => {
     calls.push({ method: 'SetTokenUsageMachineEnabled', args: [machine, enabled] });

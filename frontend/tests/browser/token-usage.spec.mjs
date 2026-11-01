@@ -72,9 +72,14 @@ test('a row opens to its conversations', async ({ page }) => {
   await expect(page.locator('.conversation-row')).toHaveCount(0);
   await rows(page).nth(0).click();
   await expect(page.locator('.conversation-row')).toHaveCount(2);
-  await expect(page.locator('[data-conversation="aaaaaaaa-1"] .group-title')).toHaveText('aaaaaaaa');
+  // The whole id, to find or resume it by.
+  await expect(page.locator('[data-conversation="aaaaaaaa-1"] .group-title')).toHaveText('aaaaaaaa-1');
   await expect(page.locator('[data-conversation="aaaaaaaa-1"] .group-subtitle')).toContainText('claude-opus-5-5');
-  await expect(page.locator('[data-conversation="aaaaaaaa-2"] .group-title')).toHaveText('review');
+  // Read by tab, with the conversations under their tab's name.
+  await expect(page.locator('[data-tab="review"]')).toBeVisible();
+  await expect(page.locator('[data-tab="claude"]')).toContainText('claude');
+  await expect(page.locator('[data-tab=""]')).toHaveCount(0);
+  await expect(page.locator('[data-conversation="aaaaaaaa-2"] .group-title')).toHaveText('aaaaaaaa-2');
   await rows(page).nth(0).click();
   await expect(page.locator('.conversation-row')).toHaveCount(0);
 });
@@ -226,51 +231,6 @@ test('a row of one conversation shows its id', async ({ page }) => {
   await expect(rows(page).nth(1).locator('.group-subtitle')).toContainText('bbbbbbbb');
 });
 
-async function groupBy(page, name) {
-  await page.locator('[data-control="group"] .select-trigger').click();
-  await page.locator('body > .select-dropdown').getByRole('button', { name, exact: true }).click();
-}
-
-test('rows put in one project add up across machines', async ({ page }) => {
-  await open(page);
-  await rows(page).nth(0).click();
-  const input = page.locator('.link-row input');
-  await input.fill('Sparrow');
-  await input.press('Enter');
-  await expect(rows(page).nth(0).locator('.group-subtitle')).toContainText('Sparrow');
-
-  // The other row, on the server: the name is offered, one click away.
-  await rows(page).nth(0).click();
-  await rows(page).nth(1).click();
-  await page.locator('[data-link-name="Sparrow"]').click();
-  await expect(rows(page).nth(1).locator('.group-subtitle')).toContainText('Sparrow');
-
-  await groupBy(page, 'Project');
-  await expect(rows(page).nth(0).locator('.group-title')).toHaveText('Sparrow');
-  await expect(rows(page).nth(0).locator('[data-share]')).toHaveText('90.9%');
-  await expect(rows(page)).toHaveCount(2);
-});
-
-test('a blank name takes a row out of its project', async ({ page }) => {
-  await open(page);
-  await rows(page).nth(0).click();
-  const input = page.locator('.link-row input');
-  await input.fill('Sparrow');
-  await input.press('Enter');
-  await expect(rows(page).nth(0).locator('.group-subtitle')).toContainText('Sparrow');
-  await page.locator('.link-row input').fill('');
-  await page.locator('.link-row input').press('Enter');
-  await expect(rows(page).nth(0).locator('.group-subtitle')).toContainText('Default');
-});
-
-test('the link is offered only where a row is a session', async ({ page }) => {
-  await open(page);
-  await groupBy(page, 'Model');
-  await rows(page).nth(0).click();
-  await expect(page.locator('.conversation-row').first()).toBeVisible();
-  await expect(page.locator('.link-row')).toHaveCount(0);
-});
-
 test('twenty machines stay out of the way until asked for', async ({ page }) => {
   await page.setViewportSize({ width: 1000, height: 600 });
   await open(page, '?many');
@@ -320,6 +280,37 @@ test('a machine turned off no longer counts as failed', async ({ page }) => {
   await page.locator('[data-machine="srv-1"]').getByRole('checkbox').uncheck();
   await expect(page.locator('[data-action="show-failed"]')).toHaveCount(0);
   await expect(page.locator('[data-action="machines"]')).toHaveText('Machines: 1/2');
+});
+
+test('a background agent stands under the conversation it carried on, with its name', async ({ page }) => {
+  await open(page, '?bg');
+  await rows(page).nth(0).click();
+  const child = page.locator('[data-conversation="dddddddd-1"]');
+  await expect(child.locator('.bg-badge')).toHaveText('bg');
+  await expect(child.locator('.group-title')).toContainText('legacy-form');
+  await expect(child.locator('.group-subtitle')).toContainText('dddddddd-1');
+  // Directly under its parent, and further in.
+  const parent = page.locator('[data-conversation="aaaaaaaa-2"]');
+  await expect(parent.locator('+ [data-conversation="dddddddd-1"]')).toHaveCount(1);
+  const indent = (locator) => locator.evaluate((el) => parseFloat(getComputedStyle(el).paddingLeft));
+  expect(await indent(child)).toBeGreaterThan(await indent(parent));
+  await expect(parent.locator('.bg-badge')).toHaveCount(0);
+});
+
+// A caption from the first message goes stale; it must not read as the name.
+test('an automatic title stays second to the id', async ({ page }) => {
+  await open(page, '?bg');
+  await rows(page).nth(0).click();
+  const row = page.locator('[data-conversation="eeeeeeee-1"]');
+  await expect(row.locator('.group-title')).toHaveText('eeeeeeee-1');
+  await expect(row.locator('.auto-title')).toHaveText('Admin felület subdomain');
+});
+
+test('a background agent is found by its name', async ({ page }) => {
+  await open(page, '?bg');
+  await page.locator('[data-control="search"]').fill('legacy-form');
+  await expect(rows(page)).toHaveCount(1);
+  await expect(page.locator('[data-conversation="dddddddd-1"]')).toBeVisible();
 });
 
 test('no usage says so instead of an empty table', async ({ page }) => {

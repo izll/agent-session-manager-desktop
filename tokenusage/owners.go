@@ -44,6 +44,8 @@ type storedInstance struct {
 	ID              string         `json:"id"`
 	Name            string         `json:"name"`
 	Path            string         `json:"path"`
+	Agent           string         `json:"agent"`
+	MainWindowName  string         `json:"main_window_name"`
 	ResumeSessionID string         `json:"resume_session_id"`
 	ServerID        string         `json:"server_id"`
 	FollowedWindows []storedWindow `json:"followed_windows"`
@@ -96,7 +98,9 @@ func ReadOwners(configDir string) ([]Owner, error) {
 		}
 		for _, instance := range stored.Instances {
 			base := Owner{ProjectID: entry.id, ProjectName: entry.name, SessionID: instance.ID, SessionName: instance.Name}
-			owners = appendOwner(owners, base, instance.ResumeSessionID, instance.Path, instance.ServerID == "")
+			main := base
+			main.TabName = instance.mainTabName()
+			owners = appendOwner(owners, main, instance.ResumeSessionID, instance.Path, instance.ServerID == "")
 			for _, window := range instance.FollowedWindows {
 				tab := base
 				tab.TabName = window.Name
@@ -113,6 +117,18 @@ func ReadOwners(configDir string) ([]Owner, error) {
 		}
 	}
 	return owners, nil
+}
+
+// mainTabName is what the app calls a session's own tab, as Instance.WindowName
+// does on the machine that runs it.
+func (i storedInstance) mainTabName() string {
+	if i.MainWindowName != "" {
+		return i.MainWindowName
+	}
+	if i.Agent != "" {
+		return i.Agent
+	}
+	return AgentClaude
 }
 
 func appendOwner(owners []Owner, owner Owner, conversation, directory string, here bool) []Owner {

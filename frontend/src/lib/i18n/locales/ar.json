@@ -1800,8 +1800,9 @@
   "tokenUsage.machineOff": "غير مقروء",
   "tokenUsage.searchPlaceholder": "البحث بالاسم أو علامة التبويب أو المجلد أو المعرّف…",
   "tokenUsage.noMatch": "لا توجد نتائج لهذا البحث.",
-  "tokenUsage.linkProject": "المشروع",
-  "tokenUsage.linkPlaceholder": "اسم مشترك لما ينتمي معًا",
   "tokenUsage.machinesButton": "الأجهزة: {on}/{total}",
-  "tokenUsage.machinesFailed": "{count} بها أخطاء"
+  "tokenUsage.machinesFailed": "{count} بها أخطاء",
+  "tokenUsage.noTab": "بدون علامة تبويب",
+  "tokenUsage.backgroundHint": "عمل في الخلفية دون طرفية",
+  "tokenUsage.autoTitleHint": "عنوان كتبه Claude Code من الرسالة الأولى، وقد يكون قديمًا"
 }

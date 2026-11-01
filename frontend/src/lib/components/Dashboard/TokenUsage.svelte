@@ -6,7 +6,7 @@
    * what used it, which is what this is for.
    */
   import { onMount, onDestroy } from 'svelte';
-  import { GetTokenUsage, RefreshTokenUsage, SetTokenUsageMachineEnabled, SetTokenUsageProject } from '../../../../wailsjs/go/main/App';
+  import { GetTokenUsage, RefreshTokenUsage, SetTokenUsageMachineEnabled } from '../../../../wailsjs/go/main/App';
   import { EventsOn, EventsOff } from '../../../../wailsjs/runtime/runtime';
   import { t } from '../../i18n';
   import { goBack } from '../../stores/navigation';
@@ -14,8 +14,8 @@
   import Select from '../common/Select.svelte';
   import {
     filterUsageGroups, formatShare, formatTokens, groupUsage, searchFindsConversation, shortDirectory,
-    usageLinkNames, usageRowKey,
-    type TokenUsageItem, type UsageBasis, type UsageGroup, type UsageGroupBy, type UsageLinks,
+    usageConversationRows,
+    type TokenUsageItem, type UsageBasis, type UsageGroup, type UsageGroupBy,
   } from '../../utils/tokenUsage';
 
   type UsageMachine = { id: string; name: string; local: boolean; lastScanUnix: number; error: string; enabled: boolean };
@@ -35,7 +35,6 @@
   let expanded = new Set<string>();
   let search = '';
   let machinesOpen = false;
-  let links: UsageLinks = {};
 
   // How often the table refreshes during a read. Not on every batch: each reload
   // walks every project's sessions.
@@ -57,7 +56,7 @@
     const sample = group.sample;
     switch (groupBy) {
       case 'project':
-        return links[usageRowKey(sample)] || (sample.sessionId ? projectLabel(sample.projectName) : $t('tokenUsage.outside'));
+        return sample.sessionId ? projectLabel(sample.projectName) : $t('tokenUsage.outside');
       case 'machine':
         return machineLabel(sample.machine, sample.machineName);
       case 'model':
@@ -72,7 +71,7 @@
     const elsewhere = sample.machine === 'local' ? '' : ` · ${machineLabel(sample.machine, sample.machineName)}`;
     if (groupBy === 'machine') return $t('tokenUsage.conversations', { count: group.conversations.length });
     if (groupBy !== 'session') return `${$t('tokenUsage.conversations', { count: group.conversations.length })}${groupBy === 'project' ? elsewhere : ''}`;
-    const place = links[usageRowKey(sample)] || (sample.sessionId ? projectLabel(sample.projectName) : $t('tokenUsage.outside'));
+    const place = sample.sessionId ? projectLabel(sample.projectName) : $t('tokenUsage.outside');
     // With one conversation in the row, its id is what someone may be looking for.
     const only = group.conversations.length === 1 ? ` · ${group.conversations[0].conversation.slice(0, 8)}` : '';
     return `${place} · ${machineLabel(sample.machine, sample.machineName)}${only}`;
@@ -106,8 +105,7 @@
   ];
 
   $: shown = machineFilter ? items.filter((item) => item.machine === machineFilter) : items;
-  $: grouped = groupUsage(shown, groupBy, basis, links);
-  $: linkNames = usageLinkNames(links);
+  $: grouped = groupUsage(shown, groupBy, basis);
   $: visibleGroups = filterUsageGroups(grouped.groups, search);
   $: isOpen = (group: UsageGroup) => expanded.has(group.key) || searchFindsConversation(group, search);
 
@@ -139,7 +137,6 @@
       if (generation !== loadGeneration) return;
       items = (report?.items || []) as TokenUsageItem[];
       machines = (report?.machines || []) as UsageMachine[];
-      links = (report?.links || {}) as UsageLinks;
       // Only ever turned off by the event that says it finished: a reload answered
       // just before a scan began must not end the spinner of the one now running.
       scanning = scanning || !!report?.scanning;
@@ -166,19 +163,6 @@
     await load();
     // Turned back on, it has catching up to do.
     if (enabled && !scanning) await refresh();
-  }
-
-  async function setProject(group: UsageGroup, input: HTMLInputElement, name: string) {
-    const rowKey = usageRowKey(group.sample);
-    if (name.trim() === (links[rowKey] || '')) return;
-    try {
-      await SetTokenUsageProject(rowKey, name);
-    } catch (e) {
-      input.value = links[rowKey] || '';
-      error = describeBackendError(e);
-      return;
-    }
-    await load();
   }
 
   async function refresh() {
@@ -364,43 +348,37 @@
           <span class="col-num">{group.subagent > 0 ? formatShare(group.subagentShare) : '–'}</span>
         </button>
         {#if isOpen(group)}
-          {#if groupBy === 'session'}
-            <div class="link-row" data-link={group.key}>
-              <label>
-                <span>{$t('tokenUsage.linkProject')}</span>
-                <input
-                  type="text"
-                  value={links[usageRowKey(group.sample)] || ''}
-                  placeholder={$t('tokenUsage.linkPlaceholder')}
-                  on:change={(e) => setProject(group, e.currentTarget, e.currentTarget.value)}
-                  on:keydown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
-                />
-              </label>
-              {#each linkNames as name (name)}
-                {#if name !== links[usageRowKey(group.sample)]}
-                  <button class="link-chip" data-link-name={name} on:click={(e) => setProject(group, e.currentTarget.parentElement?.querySelector('input') as HTMLInputElement, name)}>{name}</button>
-                {/if}
-              {/each}
-            </div>
-          {/if}
-          {#each group.conversations as conversation (conversation.key)}
-            <div class="row conversation-row" role="row" data-conversation={conversation.conversation}>
-              <span class="col-name">
-                <span class="group-title">{conversation.tabName || conversation.conversation.slice(0, 8)}</span>
-                <span class="group-subtitle">
-                  {conversation.agent}{conversation.models.length ? ` · ${conversation.models.join(', ')}` : ''}{conversation.lastUnix ? ` · ${new Date(conversation.lastUnix * 1000).toLocaleDateString()}` : ''}
+          {#each usageConversationRows(group, groupBy === 'session') as row (row.key)}
+            {#if row.kind === 'tab'}
+              <div class="tab-row" data-tab={row.tabName}>
+                <span>{row.tabName || $t('tokenUsage.noTab')}</span>
+                <span class="tab-share">{formatShare(row.share)}</span>
+              </div>
+            {:else}
+              {@const conversation = row.conversation}
+              {@const heading = conversation.name || (groupBy === 'session' ? '' : conversation.tabName)}
+              <div class="row conversation-row" role="row" data-conversation={conversation.conversation} style="padding-left: {24 + row.depth * 18}px">
+                <span class="col-name">
+                  <span class="group-title" title={conversation.conversation}>
+                    {#if conversation.background}<span class="bg-badge" title={$t('tokenUsage.backgroundHint')}>bg</span>{/if}
+                    {#if row.depth > 0}<span class="child-mark">↳</span>{/if}
+                    {#if heading}{heading}{:else}<span class="conversation-id">{conversation.conversation}</span>{/if}
+                  </span>
+                  <span class="group-subtitle">
+                    {#if heading}<span class="conversation-id" title={conversation.conversation}>{conversation.conversation}</span> · {/if}{#if conversation.title && conversation.title !== heading}<span class="auto-title" title={$t('tokenUsage.autoTitleHint')}>{conversation.title}</span> · {/if}{conversation.agent}{conversation.models.length ? ` · ${conversation.models.join(', ')}` : ''}{conversation.lastUnix ? ` · ${new Date(conversation.lastUnix * 1000).toLocaleDateString()}` : ''}
+                  </span>
                 </span>
-              </span>
-              <span class="col-share">
-                <span class="bar"><span class="bar-fill" style="width: {Math.min(100, conversation.share * 100)}%"></span></span>
-                <span class="share-text">{formatShare(conversation.share)}</span>
-              </span>
-              <span class="col-num">{formatTokens(conversation.input)}</span>
-              <span class="col-num">{formatTokens(conversation.output)}</span>
-              <span class="col-num">{formatTokens(conversation.cacheWrite)}</span>
-              <span class="col-num muted">{formatTokens(conversation.cacheRead)}</span>
-              <span class="col-num">{conversation.subagent > 0 && conversation.value > 0 ? formatShare(conversation.subagent / conversation.value) : '–'}</span>
-            </div>
+                  <span class="col-share">
+                    <span class="bar"><span class="bar-fill" style="width: {Math.min(100, conversation.share * 100)}%"></span></span>
+                    <span class="share-text">{formatShare(conversation.share)}</span>
+                  </span>
+                  <span class="col-num">{formatTokens(conversation.input)}</span>
+                  <span class="col-num">{formatTokens(conversation.output)}</span>
+                  <span class="col-num">{formatTokens(conversation.cacheWrite)}</span>
+                  <span class="col-num muted">{formatTokens(conversation.cacheRead)}</span>
+                  <span class="col-num">{conversation.subagent > 0 && conversation.value > 0 ? formatShare(conversation.subagent / conversation.value) : '–'}</span>
+              </div>
+            {/if}
           {/each}
         {/if}
       {:else}
@@ -679,52 +657,39 @@
   .group-row:hover, .group-row:focus-visible {
     background: rgba(107, 114, 128, 0.12);
   }
-  .link-row {
+  .tab-row {
     display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 6px;
-    padding: 6px 8px 6px 24px;
-    font-size: 12px;
-    color: #9ca3af;
-    background: rgba(255, 255, 255, 0.015);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-  }
-  .link-row label {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-  }
-  .link-row input {
-    width: 200px;
-    padding: 3px 7px;
-    font-size: 12px;
-    font-family: inherit;
-    color: inherit;
-    background: transparent;
-    border: 1px solid #374151;
-    border-radius: 5px;
-  }
-  .link-row input:focus {
-    outline: none;
-    border-color: rgba(var(--accent-rgb), 0.6);
-  }
-  .link-chip {
-    padding: 2px 8px;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 5px 8px 3px 24px;
     font-size: 11px;
-    font-family: inherit;
+    font-weight: 600;
     color: #d1d5db;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid #374151;
-    border-radius: 999px;
-    cursor: pointer;
-  }
-  .link-chip:hover {
-    background: rgba(var(--accent-rgb), 0.18);
-  }
-  .conversation-row {
-    padding-left: 24px;
     background: rgba(255, 255, 255, 0.015);
+  }
+  .tab-share {
+    font-weight: 400;
+    color: #9ca3af;
+    font-variant-numeric: tabular-nums;
+  }
+  .auto-title {
+    font-style: italic;
+    color: #6b7280;
+  }
+  .bg-badge {
+    padding: 0 5px;
+    margin-right: 2px;
+    font-size: 10px;
+    border-radius: 3px;
+    color: var(--accent-light, #a78bfa);
+    background: rgba(var(--accent-rgb), 0.15);
+  }
+  .child-mark {
+    color: #6b7280;
+  }
+  .conversation-id {
+    font-family: ui-monospace, monospace;
+    user-select: text;
   }
   .col-name {
     display: flex;

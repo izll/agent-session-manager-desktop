@@ -2485,6 +2485,10 @@ export namespace main {
 	    cacheRead: number;
 	    cacheWrite: number;
 	    responses: number;
+	    name: string;
+	    title: string;
+	    background: boolean;
+	    continues: string;
 	    projectId: string;
 	    projectName: string;
 	    sessionId: string;
@@ -2510,6 +2514,10 @@ export namespace main {
 	        this.cacheRead = source["cacheRead"];
 	        this.cacheWrite = source["cacheWrite"];
 	        this.responses = source["responses"];
+	        this.name = source["name"];
+	        this.title = source["title"];
+	        this.background = source["background"];
+	        this.continues = source["continues"];
 	        this.projectId = source["projectId"];
 	        this.projectName = source["projectName"];
 	        this.sessionId = source["sessionId"];
@@ -2543,7 +2551,6 @@ export namespace main {
 	    items: TokenUsageItem[];
 	    machines: TokenUsageMachine[];
 	    scanning: boolean;
-	    links: Record<string, string>;
 
 	    static createFrom(source: any = {}) {
 	        return new TokenUsageReport(source);
@@ -2554,7 +2561,6 @@ export namespace main {
 	        this.items = this.convertValues(source["items"], TokenUsageItem);
 	        this.machines = this.convertValues(source["machines"], TokenUsageMachine);
 	        this.scanning = source["scanning"];
-	        this.links = source["links"];
 	    }
 
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

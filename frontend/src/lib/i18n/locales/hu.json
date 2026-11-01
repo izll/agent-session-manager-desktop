@@ -1800,8 +1800,9 @@
   "tokenUsage.machineOff": "Nincs beolvasva",
   "tokenUsage.searchPlaceholder": "Keresés: név, fül, mappa, azonosító…",
   "tokenUsage.noMatch": "Erre a keresésre nincs találat.",
-  "tokenUsage.linkProject": "Projekt",
-  "tokenUsage.linkPlaceholder": "Az összetartozók közös neve",
   "tokenUsage.machinesButton": "Gépek: {on}/{total}",
-  "tokenUsage.machinesFailed": "{count} gép hibával"
+  "tokenUsage.machinesFailed": "{count} gép hibával",
+  "tokenUsage.noTab": "Fül nélkül",
+  "tokenUsage.backgroundHint": "A háttérben futott, terminál nélkül",
+  "tokenUsage.autoTitleHint": "A Claude Code az első üzenetből írta ezt a címet, elavult lehet"
 }

@@ -1800,8 +1800,9 @@
   "tokenUsage.machineOff": "ไม่อ่าน",
   "tokenUsage.searchPlaceholder": "ค้นหาชื่อ แท็บ โฟลเดอร์ รหัส…",
   "tokenUsage.noMatch": "ไม่พบผลลัพธ์สำหรับการค้นหานี้",
-  "tokenUsage.linkProject": "โปรเจกต์",
-  "tokenUsage.linkPlaceholder": "ชื่อร่วมของสิ่งที่เกี่ยวข้องกัน",
   "tokenUsage.machinesButton": "เครื่อง: {on}/{total}",
-  "tokenUsage.machinesFailed": "มีข้อผิดพลาด {count} เครื่อง"
+  "tokenUsage.machinesFailed": "มีข้อผิดพลาด {count} เครื่อง",
+  "tokenUsage.noTab": "ไม่มีแท็บ",
+  "tokenUsage.backgroundHint": "ทำงานในเบื้องหลัง ไม่มีเทอร์มินัล",
+  "tokenUsage.autoTitleHint": "ชื่อที่ Claude Code เขียนจากข้อความแรก อาจล้าสมัยแล้ว"
 }

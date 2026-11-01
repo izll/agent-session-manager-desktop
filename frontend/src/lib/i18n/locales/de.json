@@ -1800,8 +1800,9 @@
   "tokenUsage.machineOff": "Wird nicht gelesen",
   "tokenUsage.searchPlaceholder": "Name, Tab, Ordner, ID suchen…",
   "tokenUsage.noMatch": "Keine Treffer für diese Suche.",
-  "tokenUsage.linkProject": "Projekt",
-  "tokenUsage.linkPlaceholder": "Gemeinsamer Name für Zusammengehöriges",
   "tokenUsage.machinesButton": "Rechner: {on}/{total}",
-  "tokenUsage.machinesFailed": "{count} mit Fehlern"
+  "tokenUsage.machinesFailed": "{count} mit Fehlern",
+  "tokenUsage.noTab": "Ohne Tab",
+  "tokenUsage.backgroundHint": "Lief im Hintergrund, ohne Terminal",
+  "tokenUsage.autoTitleHint": "Von Claude Code aus der ersten Nachricht erstellter Titel; kann veraltet sein"
 }
