@@ -9,7 +9,11 @@
 // running: it has exactly the access of the account used to log in.
 package protocol
 
-import "encoding/json"
+import (
+	"encoding/json"
+
+	"asmgr-desktop/tokenusage"
+)
 
 // Version is what the two ends must agree on.
 //
@@ -18,7 +22,7 @@ import "encoding/json"
 // re-uploading a binary over SSH for every patch. It is bumped when a message
 // changes shape, and an exact match is required in both directions — an older
 // helper is as wrong as an older app.
-const Version = 1
+const Version = 2
 
 // Method names. Constants because both ends switch on them, and a typo would
 // otherwise surface as "unknown method" at run time.
@@ -30,6 +34,12 @@ const (
 	MethodVersion = "version"
 	// MethodRun executes one command and returns its output.
 	MethodRun = "run"
+	// MethodUsageFiles lists the agents' log files.
+	MethodUsageFiles = "usageFiles"
+	// MethodUsageRead reads token counts from those files. The server parses
+	// them itself and answers with numbers: the logs run to gigabytes and can
+	// hold credentials, so they stay where they are.
+	MethodUsageRead = "usageRead"
 )
 
 // Request is one message from the app.
@@ -93,6 +103,23 @@ type RunResult struct {
 	ExitCode int `json:"exitCode"`
 	// TimedOut says the command was killed rather than finishing.
 	TimedOut bool `json:"timedOut,omitempty"`
+}
+
+// UsageFilesResult answers MethodUsageFiles.
+type UsageFilesResult struct {
+	Files []tokenusage.FileInfo `json:"files"`
+}
+
+// UsageReadParams asks for files from where earlier reads stopped. The cursors
+// travel with the request because the helper keeps no state.
+type UsageReadParams struct {
+	Requests []tokenusage.ReadRequest `json:"requests"`
+}
+
+// UsageReadResult answers MethodUsageRead. A file the limits did not reach is
+// absent, and the app asks for it again.
+type UsageReadResult struct {
+	Results []tokenusage.FileResult `json:"results"`
 }
 
 // MaxMessageBytes caps one message in either direction.

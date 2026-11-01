@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"asmgr-desktop/remote/protocol"
+	"asmgr-desktop/tokenusage"
 )
 
 // Build is stamped in at release time so a helper can be told apart from the
@@ -131,11 +132,53 @@ func handle(request *protocol.Request) *protocol.Response {
 		}
 		response.Result = result
 
+	case protocol.MethodUsageFiles:
+		result, err := usageFiles()
+		if err != nil {
+			response.Error = err.Error()
+			return response
+		}
+		response.Result = result
+
+	case protocol.MethodUsageRead:
+		result, err := usageRead(request.Params)
+		if err != nil {
+			response.Error = err.Error()
+			return response
+		}
+		response.Result = result
+
 	default:
 		response.Error = fmt.Sprintf("unknown method %q — the app and this helper "+
 			"are different versions", request.Method)
 	}
 	return response
+}
+
+func usageFiles() (json.RawMessage, error) {
+	roots, err := tokenusage.DefaultRoots()
+	if err != nil {
+		return nil, err
+	}
+	files, err := tokenusage.ListFiles(roots)
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(protocol.UsageFilesResult{Files: files})
+}
+
+func usageRead(raw json.RawMessage) (json.RawMessage, error) {
+	var params protocol.UsageReadParams
+	if err := json.Unmarshal(raw, &params); err != nil {
+		return nil, fmt.Errorf("bad parameters: %w", err)
+	}
+	roots, err := tokenusage.DefaultRoots()
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(protocol.UsageReadResult{
+		Results: tokenusage.ReadBatch(roots, params.Requests, tokenusage.DefaultLimits),
+	})
 }
 
 func runCommand(raw json.RawMessage) (json.RawMessage, error) {

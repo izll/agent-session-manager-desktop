@@ -9,11 +9,14 @@ package main
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"asmgr-desktop/remote/protocol"
+	"asmgr-desktop/tokenusage"
 )
 
 // The helper runs commands through a login shell, because that is the only way
@@ -161,5 +164,58 @@ func TestVersionReportsTheProtocol(t *testing.T) {
 	if result.Arch == "" {
 		t.Error("the architecture is missing; a mismatch would surface as " +
 			"'exec format error' with nothing to explain it")
+	}
+}
+
+// A server answers with numbers, from logs under its own home.
+func TestUsageMethodsReadTheServersLogs(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("CLAUDE_CONFIG_DIR", "")
+	t.Setenv("CODEX_HOME", "")
+	rel := "projects/-work/aaaaaaaa-0000-0000-0000-000000000001.jsonl"
+	full := filepath.Join(home, ".claude", filepath.FromSlash(rel))
+	if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	line := `{"type":"assistant","requestId":"r","timestamp":"2026-10-20T10:00:00Z","cwd":"/work",` +
+		`"message":{"id":"m","model":"claude-opus-5-5","content":"secret words","usage":{"input_tokens":3,"output_tokens":4}}}` + "\n"
+	if err := os.WriteFile(full, []byte(line), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	listed := handle(&protocol.Request{ID: 1, Method: protocol.MethodUsageFiles})
+	if listed.Error != "" {
+		t.Fatal(listed.Error)
+	}
+	var files protocol.UsageFilesResult
+	if err := json.Unmarshal(listed.Result, &files); err != nil {
+		t.Fatal(err)
+	}
+	if len(files.Files) != 1 {
+		t.Fatalf("files = %+v", files.Files)
+	}
+
+	params, _ := json.Marshal(protocol.UsageReadParams{Requests: []tokenusage.ReadRequest{{Path: files.Files[0].Path}}})
+	read := handle(&protocol.Request{ID: 2, Method: protocol.MethodUsageRead, Params: params})
+	if read.Error != "" {
+		t.Fatal(read.Error)
+	}
+	if strings.Contains(string(read.Result), "secret") {
+		t.Fatalf("conversation text crossed the wire: %s", read.Result)
+	}
+	var result protocol.UsageReadResult
+	if err := json.Unmarshal(read.Result, &result); err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Results) != 1 || len(result.Results[0].Rows) != 1 || result.Results[0].Rows[0].Output != 4 {
+		t.Fatalf("result = %+v", result)
+	}
+}
+
+func TestUsageReadRejectsBadParameters(t *testing.T) {
+	response := handle(&protocol.Request{ID: 1, Method: protocol.MethodUsageRead, Params: json.RawMessage(`{"requests":"no"}`)})
+	if response.Error == "" {
+		t.Fatal("bad parameters were accepted")
 	}
 }

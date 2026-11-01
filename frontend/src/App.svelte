@@ -149,6 +149,7 @@
   import MainPanel from './lib/components/MainPanel/MainPanel.svelte';
   import ProjectDashboard from './lib/components/Dashboard/ProjectDashboard.svelte';
   import AllTasks from './lib/components/Dashboard/AllTasks.svelte';
+  import TokenUsage from './lib/components/Dashboard/TokenUsage.svelte';
   import UndoToast from './lib/components/common/UndoToast.svelte';
   import NewSessionDialog from './lib/components/Dialogs/NewSessionDialog.svelte';
   import NewGroupDialog from './lib/components/Dialogs/NewGroupDialog.svelte';
@@ -194,7 +195,7 @@
   import { RunningTabCommands } from '../wailsjs/go/main/App';
   import type { main } from '../wailsjs/go/models';
   import { activeProjectId, loadProjects, otherInstancePID, projects, refreshLockStatus } from './lib/stores/projects';
-  import { appView, goBack, showTasksView } from './lib/stores/navigation';
+  import { appView, goBack, showTasksView, showUsageView } from './lib/stores/navigation';
   import { openTaskCount, watchOpenCount, refreshOpenCount } from './lib/stores/taskAlerts';
   import { projectTasksOpen, watchProjectOpenCount } from './lib/stores/projectTasks';
   import { flushSettingsSaves, loadSettings, settings } from './lib/stores/settings';
@@ -1641,6 +1642,8 @@
              session's git branch would both be describing something the page
              is not about. -->
         <span class="header-session-name">{$t('allTasks.title')}</span>
+      {:else if $appView === 'usage'}
+        <span class="header-session-name">{$t('tokenUsage.title')}</span>
       {:else if $selectedSession}
         <span class="header-session-name" style={$selectedSession.color ? `color: ${$selectedSession.color}` : ''}>{$selectedSession.name}</span>
         {#if ($settings.gitBranchDisplay || 'header') === 'header'}
@@ -1791,6 +1794,19 @@
           </svg>
         </button>
         <button
+          class="btn btn-ghost btn-icon"
+          class:active-view={$appView === 'usage'}
+          data-action="token-usage"
+          on:click={() => { if ($appView === 'usage') goBack(); else showUsageView(); }}
+          title={$t('tokenUsage.title')}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 20V10"/>
+            <path d="M12 20V4"/>
+            <path d="M6 20v-6"/>
+          </svg>
+        </button>
+        <button
           class="btn btn-ghost btn-icon task-button"
           class:active-view={$appView === 'tasks'}
           on:click={() => { if ($appView === 'tasks') { goBack(); void refreshOpenCount(); } else { showTasksView(); } }}
@@ -1921,6 +1937,10 @@
       {:else if $appView === 'tasks'}
         <div class="main-view">
           <AllTasks />
+        </div>
+      {:else if $appView === 'usage'}
+        <div class="main-view">
+          <TokenUsage />
         </div>
       {/if}
     </div>

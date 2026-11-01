@@ -189,6 +189,12 @@ func copyFileNoClobber(src, dst string) error {
 	return nil
 }
 
+// TokenUsagePath is the usage database. One for the whole app, not per project:
+// the same conversation is the same conversation wherever it was opened from.
+func (s *Storage) TokenUsagePath() string {
+	return filepath.Join(s.configDir, "token-usage.db")
+}
+
 // DeletedFilesDir is where files deleted from the file browser are held
 // while their deletion can still be undone.
 func (s *Storage) DeletedFilesDir() string {

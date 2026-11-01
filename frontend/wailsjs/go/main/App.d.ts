@@ -243,6 +243,8 @@ export function GetTerminalWSPort():Promise<number>;
 
 export function GetTerminalWSToken():Promise<string>;
 
+export function GetTokenUsage(arg1:number):Promise<main.TokenUsageReport>;
+
 export function GetTrashItems():Promise<Array<main.TrashItemInfo>>;
 
 export function GetUsageRings():Promise<main.UsageRings>;
@@ -356,6 +358,8 @@ export function ReconnectServer(arg1:string):Promise<void>;
 export function RedrawWindow(arg1:string,arg2:number,arg3:string):Promise<void>;
 
 export function RefreshDetectionPatterns():Promise<main.PatternRefreshResult>;
+
+export function RefreshTokenUsage():Promise<void>;
 
 export function RefreshWindow(arg1:string,arg2:number,arg3:string):Promise<void>;
 

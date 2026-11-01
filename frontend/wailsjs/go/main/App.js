@@ -478,6 +478,10 @@ export function GetTerminalWSToken() {
   return window['go']['main']['App']['GetTerminalWSToken']();
 }
 
+export function GetTokenUsage(arg1) {
+  return window['go']['main']['App']['GetTokenUsage'](arg1);
+}
+
 export function GetTrashItems() {
   return window['go']['main']['App']['GetTrashItems']();
 }
@@ -704,6 +708,10 @@ export function RedrawWindow(arg1, arg2, arg3) {
 
 export function RefreshDetectionPatterns() {
   return window['go']['main']['App']['RefreshDetectionPatterns']();
+}
+
+export function RefreshTokenUsage() {
+  return window['go']['main']['App']['RefreshTokenUsage']();
 }
 
 export function RefreshWindow(arg1, arg2, arg3) {

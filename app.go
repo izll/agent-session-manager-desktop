@@ -97,6 +97,7 @@ type App struct {
 	// deletedFiles holds files deleted from the file browser while the
 	// deletion can be undone (deleted_files.go).
 	deletedFiles deletedFileHolds
+	tokenUsage   tokenUsageState
 }
 
 type eventThrottle struct {
@@ -264,6 +265,7 @@ func (a *App) startup(ctx context.Context) {
 		log.Printf("[notify] native desktop notification initialization failed: %v", err)
 	}
 	a.startAttentionWatcher(ctx)
+	a.startTokenUsageWatcher()
 
 	// Set dictation callbacks (instance created in main.go)
 	a.dictation.SetTerminalServer(a.termServer)
@@ -441,6 +443,7 @@ func (a *App) shutdown(ctx context.Context) {
 	// shutdown is about to invalidate.
 	a.stopAutoCheckForUpdate()
 	a.stopAttentionWatcher()
+	a.stopTokenUsage()
 	desktopNotificationCleanup(ctx)
 	a.stopPreviewPolling()
 	a.stopOrphanCleanup()
