@@ -382,8 +382,9 @@ func (m *Manager) localSecret(ctx context.Context, id string) (string, error) {
 		err    error
 	}
 	answered := make(chan answer, 1)
+	get := keyringGet
 	go func() {
-		secret, err := keyringGet(keyringService, keyringAccount(id))
+		secret, err := get(keyringService, keyringAccount(id))
 		answered <- answer{secret, err}
 	}()
 	select {

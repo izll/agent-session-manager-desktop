@@ -56,10 +56,12 @@ func TestACustomSourceListsAndFetches(t *testing.T) {
 func TestANameIsNeverCode(t *testing.T) {
 	marker := filepath.Join(t.TempDir(), "ran")
 	name := `$(touch ` + marker + `); touch ` + marker + ` 'x"`
-	list := script(t, `printf '%s\n' "$(cat <<'NAME'
-`+name+`
-NAME
-)"`)
+	// From a file: quotes this odd in a script are read differently by each sh.
+	names := filepath.Join(t.TempDir(), "names")
+	if err := os.WriteFile(names, []byte(name+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	list := script(t, `cat `+names)
 	got := filepath.Join(t.TempDir(), "argument")
 	get := script(t, `printf '%s' "$1" > `+got+`; echo pw`)
 	manager, source := customManager(t, list, get+" {name}")

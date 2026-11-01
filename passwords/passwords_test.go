@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -621,8 +622,13 @@ func TestTheFlatpakBitwardenIsUsedThroughFlatpak(t *testing.T) {
 	if len(envs[0]) != 1 || envs[0][0] != want {
 		t.Fatalf("env = %v, want %s", envs[0], want)
 	}
-	if info, err := os.Stat(strings.TrimPrefix(want, bitwardenDataDirEnv+"=")); err != nil || info.Mode().Perm() != 0o700 {
-		t.Fatalf("data dir: %v, %v", info, err)
+	info, err := os.Stat(strings.TrimPrefix(want, bitwardenDataDirEnv+"="))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Windows has no such bits to read: there the folder is under the user's profile.
+	if runtime.GOOS != "windows" && info.Mode().Perm() != 0o700 {
+		t.Fatalf("data dir mode = %v", info.Mode())
 	}
 	if err := manager.Unlock(ctx, bitwardenSourcePrefix+id, "m"); !errors.Is(err, ErrNotLoggedIn) {
 		t.Fatalf("err = %v", err)
