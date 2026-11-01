@@ -46,8 +46,16 @@ export function BrowseKeyFile(arg1) {
   return window['go']['main']['App']['BrowseKeyFile'](arg1);
 }
 
+export function BrowsePasswordFile(arg1) {
+  return window['go']['main']['App']['BrowsePasswordFile'](arg1);
+}
+
 export function CancelGitSync() {
   return window['go']['main']['App']['CancelGitSync']();
+}
+
+export function CancelPasswordInsert() {
+  return window['go']['main']['App']['CancelPasswordInsert']();
 }
 
 export function CheckForUpdate() {
@@ -130,6 +138,10 @@ export function CycleYoloMode(arg1, arg2, arg3) {
   return window['go']['main']['App']['CycleYoloMode'](arg1, arg2, arg3);
 }
 
+export function DeleteBitwardenAccount(arg1) {
+  return window['go']['main']['App']['DeleteBitwardenAccount'](arg1);
+}
+
 export function DeleteCheckpoint(arg1, arg2, arg3, arg4, arg5) {
   return window['go']['main']['App']['DeleteCheckpoint'](arg1, arg2, arg3, arg4, arg5);
 }
@@ -142,8 +154,16 @@ export function DeleteCommandGroup(arg1) {
   return window['go']['main']['App']['DeleteCommandGroup'](arg1);
 }
 
+export function DeleteCustomPasswordSource(arg1) {
+  return window['go']['main']['App']['DeleteCustomPasswordSource'](arg1);
+}
+
 export function DeleteGroup(arg1, arg2) {
   return window['go']['main']['App']['DeleteGroup'](arg1, arg2);
+}
+
+export function DeleteLocalPassword(arg1) {
+  return window['go']['main']['App']['DeleteLocalPassword'](arg1);
 }
 
 export function DeleteProject(arg1) {
@@ -366,6 +386,10 @@ export function GetNextTask(arg1) {
   return window['go']['main']['App']['GetNextTask'](arg1);
 }
 
+export function GetPasswords(arg1) {
+  return window['go']['main']['App']['GetPasswords'](arg1);
+}
+
 export function GetPreview(arg1, arg2, arg3) {
   return window['go']['main']['App']['GetPreview'](arg1, arg2, arg3);
 }
@@ -534,6 +558,10 @@ export function InitHistorySearch() {
   return window['go']['main']['App']['InitHistorySearch']();
 }
 
+export function InsertPassword(arg1, arg2, arg3, arg4, arg5, arg6) {
+  return window['go']['main']['App']['InsertPassword'](arg1, arg2, arg3, arg4, arg5, arg6);
+}
+
 export function InstallMultiplexer() {
   return window['go']['main']['App']['InstallMultiplexer']();
 }
@@ -586,6 +614,10 @@ export function ListSessionDirectory(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['ListSessionDirectory'](arg1, arg2, arg3, arg4);
 }
 
+export function LockPasswordSources() {
+  return window['go']['main']['App']['LockPasswordSources']();
+}
+
 export function LogFrontend(arg1) {
   return window['go']['main']['App']['LogFrontend'](arg1);
 }
@@ -632,6 +664,10 @@ export function MoveTaskToSession(arg1, arg2, arg3, arg4) {
 
 export function OpenAppLogFolder() {
   return window['go']['main']['App']['OpenAppLogFolder']();
+}
+
+export function OpenBitwardenLogin(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['OpenBitwardenLogin'](arg1, arg2, arg3, arg4);
 }
 
 export function OpenDiffInEditor(arg1, arg2, arg3, arg4, arg5) {
@@ -822,12 +858,24 @@ export function RunningTabCommands() {
   return window['go']['main']['App']['RunningTabCommands']();
 }
 
+export function SaveBitwardenAccount(arg1, arg2) {
+  return window['go']['main']['App']['SaveBitwardenAccount'](arg1, arg2);
+}
+
 export function SaveCommand(arg1, arg2, arg3, arg4, arg5, arg6, arg7) {
   return window['go']['main']['App']['SaveCommand'](arg1, arg2, arg3, arg4, arg5, arg6, arg7);
 }
 
 export function SaveCommandGroup(arg1, arg2) {
   return window['go']['main']['App']['SaveCommandGroup'](arg1, arg2);
+}
+
+export function SaveCustomPasswordSource(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['SaveCustomPasswordSource'](arg1, arg2, arg3, arg4);
+}
+
+export function SaveLocalPassword(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['SaveLocalPassword'](arg1, arg2, arg3, arg4);
 }
 
 export function SaveProjectCommand(arg1, arg2, arg3, arg4, arg5, arg6, arg7) {
@@ -896,6 +944,10 @@ export function SetExtraArgs(arg1, arg2, arg3, arg4) {
 
 export function SetGroupColor(arg1, arg2, arg3, arg4, arg5) {
   return window['go']['main']['App']['SetGroupColor'](arg1, arg2, arg3, arg4, arg5);
+}
+
+export function SetKeePassXCDatabase(arg1, arg2) {
+  return window['go']['main']['App']['SetKeePassXCDatabase'](arg1, arg2);
 }
 
 export function SetLastWindowIndex(arg1, arg2, arg3) {
@@ -1136,6 +1188,10 @@ export function TrashedWorktree(arg1) {
 
 export function UnfinishedTasksForSession(arg1) {
   return window['go']['main']['App']['UnfinishedTasksForSession'](arg1);
+}
+
+export function UnlockPasswordSource(arg1, arg2) {
+  return window['go']['main']['App']['UnlockPasswordSource'](arg1, arg2);
 }
 
 export function UpdateTask(arg1, arg2, arg3, arg4) {

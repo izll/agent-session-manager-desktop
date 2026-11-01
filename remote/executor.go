@@ -1,6 +1,7 @@
 package remote
 
 import (
+	"asmgr-desktop/remote/protocol"
 	"context"
 	"fmt"
 	"strings"
@@ -41,6 +42,23 @@ func (e *Executor) Run(ctx context.Context, args ...string) error {
 		// missing on the server, and "exit status 1" explains nothing.
 		return fmt.Errorf("tmux %s failed on %s: %s",
 			args[0], e.name, firstLine(result.Stderr, result.Output))
+	}
+	return nil
+}
+
+// RunInput issues a command with text on its standard input. The error says only
+// which command failed, as the text may be a secret.
+func (e *Executor) RunInput(ctx context.Context, input string, args ...string) error {
+	var result protocol.RunResult
+	err := e.helper.Call(ctx, protocol.MethodRun, protocol.RunParams{Command: e.command(args), Stdin: input}, &result)
+	if err != nil {
+		return err
+	}
+	if result.TimedOut {
+		return fmt.Errorf("tmux command timed out on %s", e.name)
+	}
+	if result.ExitCode != 0 {
+		return fmt.Errorf("tmux %s failed on %s", args[0], e.name)
 	}
 	return nil
 }

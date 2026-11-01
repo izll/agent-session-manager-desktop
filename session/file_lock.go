@@ -5,6 +5,12 @@ import (
 	"path/filepath"
 )
 
+// WithCrossProcessFileLock runs action holding the lock file at path, for a settings
+// file outside this package that several windows of the app write to.
+func WithCrossProcessFileLock(path string, action func() error) error {
+	return withCrossProcessFileLock(path, action)
+}
+
 func withCrossProcessFileLock(path string, action func() error) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err

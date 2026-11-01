@@ -3,6 +3,7 @@ package session
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -369,6 +370,10 @@ type FollowedWindow struct {
 	// tab that is not a runner, which is what the ▶/■ control keys off, so
 	// an agent or plain terminal tab looks exactly as it did.
 	RunCommand string `json:"run_command,omitempty"`
+	// CloseOnExit makes this tab go away once its process ends, and says why it was
+	// opened; see tab_close_on_exit.go. ReturnToWindow is the tab it was opened from.
+	CloseOnExit    string `json:"close_on_exit,omitempty"`
+	ReturnToWindow int    `json:"return_to_window,omitempty"`
 	// Worktree records the checkout made for this tab, when it was given one.
 	// Empty for a tab working in its session's directory, which is what every
 	// tab did before and still does by default.
@@ -4259,6 +4264,87 @@ func (i *Instance) SendTextToWindow(windowIdx int, text string, pressEnter bool)
 	return run("send-keys", "-t", target, "Enter")
 }
 
+// PasteSecretToWindow types a password into a tab.
+//
+// Through a tmux buffer filled from standard input, not send-keys: as an argument it
+// would be on a command line, which every process on the machine can read. The
+// buffer is named for this one paste, and paste-buffer -d removes it, so nothing is
+// left for `tmux list-buffers` to show; load-buffer without -w also keeps it off the
+// clipboard.
+//
+// The error names only the step that failed, so a secret cannot reach a log through
+// it.
+func (i *Instance) PasteSecretToWindow(ctx context.Context, windowIdx int, secret string, pressEnter bool) error {
+	if !secretCanBeTyped(secret) {
+		return ErrSecretCannotBeTyped
+	}
+	server := i.serverForWindow(windowIdx)
+	if !i.windowAliveContext(ctx, windowIdx) {
+		return fmt.Errorf("session not running")
+	}
+	target := fmt.Sprintf("%s:%d", i.TmuxSessionName(), windowIdx)
+	executor := i.execOn(server)
+	writer, canWrite := executor.(InputExecutor)
+	// psmux has no way known to take a buffer from standard input. A local command
+	// line on a machine that runs it is the lesser risk than refusing, except for
+	// what the command line itself would read as something else.
+	if !canWrite || !MirrorSupported() && server == "" {
+		if strings.HasPrefix(secret, "-") || strings.HasSuffix(secret, ";") {
+			return ErrSecretCannotBeTyped
+		}
+		if err := executor.Run(ctx, "send-keys", "-l", "-t", target, secret); err != nil {
+			return fmt.Errorf("could not type into the tab")
+		}
+	} else if err := pasteThroughBuffer(ctx, executor, writer, target, secret); err != nil {
+		return err
+	}
+	if !pressEnter {
+		return nil
+	}
+	return executor.Run(ctx, "send-keys", "-t", target, "Enter")
+}
+
+// pasteThroughBuffer loads and pastes. A buffer left behind holds the password where
+// any program in any tab can read it with show-buffer, so whatever went wrong it is
+// deleted, and on a context of its own: the one that just ran out is often why. That
+// includes a load reported as failed, since a server can finish one the caller has
+// stopped waiting for.
+func pasteThroughBuffer(ctx context.Context, executor Executor, writer InputExecutor, target, secret string) error {
+	buffer := "asmgr-secret-" + uuid.NewString()
+	removeBuffer := func() {
+		cleanup, cancel := context.WithTimeout(context.Background(), TmuxCommandTimeout)
+		defer cancel()
+		_ = executor.Run(cleanup, "delete-buffer", "-b", buffer)
+	}
+	if err := writer.RunInput(ctx, secret, "load-buffer", "-b", buffer, "-"); err != nil {
+		removeBuffer()
+		return fmt.Errorf("could not prepare the paste")
+	}
+	if err := executor.Run(ctx, "paste-buffer", "-d", "-b", buffer, "-t", target); err != nil {
+		removeBuffer()
+		return fmt.Errorf("could not type into the tab")
+	}
+	return nil
+}
+
+// ErrSecretCannotBeTyped refuses what would not arrive as one password.
+var ErrSecretCannotBeTyped = errors.New("error.passwordCannotBeTyped")
+
+// secretCanBeTyped refuses control characters. A paste turns a line break into Enter,
+// so a two-line secret would submit its first line and leave the second, in the
+// clear, at whatever prompt came next.
+func secretCanBeTyped(secret string) bool {
+	if secret == "" {
+		return false
+	}
+	for _, r := range secret {
+		if r < 0x20 || r == 0x7f {
+			return false
+		}
+	}
+	return true
+}
+
 // Pacing for TypeIntoFreshShell. Variables so a test can shorten them.
 var (
 	shellPromptPollInterval = 100 * time.Millisecond
@@ -4278,6 +4364,11 @@ var (
 // and stops moving it. A shell that never settles within the timeout gets the
 // command anyway; a lost command is no worse than one never sent.
 func (i *Instance) TypeIntoFreshShell(windowIdx int, text string, timeout time.Duration) error {
+	i.waitForFreshShell(windowIdx, timeout)
+	return i.SendTextToWindow(windowIdx, text, true)
+}
+
+func (i *Instance) waitForFreshShell(windowIdx int, timeout time.Duration) {
 	server := i.serverForWindow(windowIdx)
 	target := fmt.Sprintf("%s:%d", i.TmuxSessionName(), windowIdx)
 	deadline := time.Now().Add(timeout)
@@ -4297,7 +4388,6 @@ func (i *Instance) TypeIntoFreshShell(windowIdx int, text string, timeout time.D
 		}
 		last = cursor
 	}
-	return i.SendTextToWindow(windowIdx, text, true)
 }
 
 // SendPrompt sends a prompt text followed by Enter key

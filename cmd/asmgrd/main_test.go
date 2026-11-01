@@ -243,3 +243,69 @@ func TestUsageOwnersNameTheServersOwnSessions(t *testing.T) {
 		t.Fatalf("owners = %+v", result.Owners)
 	}
 }
+
+// Secrets go in on standard input, because a command line can be read by anyone.
+func TestRunPassesStandardInput(t *testing.T) {
+	params, _ := json.Marshal(protocol.RunParams{Command: "cat", Stdin: "se:cret $1"})
+	raw, err := runCommand(params)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var result protocol.RunResult
+	if err := json.Unmarshal(raw, &result); err != nil {
+		t.Fatal(err)
+	}
+	if result.Output != "se:cret $1" {
+		t.Fatalf("output = %q", result.Output)
+	}
+}
+
+// The profile is the user's to fill, and it runs before the command. Measured: one
+// with a read in it took the secret, and one that started bash executed it.
+func TestALoginProfileCannotReachTheSecret(t *testing.T) {
+	for name, profile := range map[string]string{
+		"read":  "read taken\n",
+		"shell": "bash\n",
+		"cat":   "cat > /dev/null\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			home := t.TempDir()
+			t.Setenv("HOME", home)
+			ran := filepath.Join(home, "ran")
+			if err := os.WriteFile(filepath.Join(home, ".profile"), []byte(profile), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			secret := "touch " + ran
+			params, _ := json.Marshal(protocol.RunParams{Command: "cat", Stdin: secret, TimeoutMs: 5000})
+			raw, err := runCommand(params)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var result protocol.RunResult
+			if err := json.Unmarshal(raw, &result); err != nil {
+				t.Fatal(err)
+			}
+			if result.Output != secret {
+				t.Fatalf("output = %q", result.Output)
+			}
+			if _, err := os.Stat(ran); err == nil {
+				t.Fatal("the secret was run as a command")
+			}
+		})
+	}
+}
+
+func TestACommandWithoutInputReadsNothing(t *testing.T) {
+	params, _ := json.Marshal(protocol.RunParams{Command: "cat", TimeoutMs: 5000})
+	raw, err := runCommand(params)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var result protocol.RunResult
+	if err := json.Unmarshal(raw, &result); err != nil {
+		t.Fatal(err)
+	}
+	if result.Output != "" || result.TimedOut {
+		t.Fatalf("result = %+v", result)
+	}
+}

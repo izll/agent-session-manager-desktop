@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"asmgr-desktop/mcp"
+	"asmgr-desktop/passwords"
 	"asmgr-desktop/remote"
 	"asmgr-desktop/session"
 	"asmgr-desktop/session/filters"
@@ -97,8 +98,11 @@ type App struct {
 	otherInstancePID int
 	// deletedFiles holds files deleted from the file browser while the
 	// deletion can be undone (deleted_files.go).
-	deletedFiles deletedFileHolds
-	tokenUsage   tokenUsageState
+	deletedFiles        deletedFileHolds
+	tokenUsage          tokenUsageState
+	passwordsMu         sync.Mutex
+	passwords           *passwords.Manager
+	cancelPasswordFetch context.CancelFunc
 }
 
 type eventThrottle struct {
@@ -301,6 +305,7 @@ func (a *App) startup(ctx context.Context) {
 	// processes and a project read lock, so shutdown must be able to cancel and
 	// reap it before releasing project ownership.
 	a.startOrphanCleanup(ctx)
+	go a.watchTabsClosingOnExit(ctx)
 	// Resize/redraw maintenance is deliberately asynchronous so terminal resize
 	// events do not stall the UI. Give it an application-owned lifecycle: the
 	// workers touch tmux and retain project ownership, so shutdown must cancel
@@ -445,6 +450,7 @@ func (a *App) shutdown(ctx context.Context) {
 	a.stopAutoCheckForUpdate()
 	a.stopAttentionWatcher()
 	a.stopTokenUsage()
+	a.stopPasswords()
 	desktopNotificationCleanup(ctx)
 	a.stopPreviewPolling()
 	a.stopOrphanCleanup()

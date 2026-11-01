@@ -200,3 +200,8 @@ func (s *Storage) TokenUsagePath() string {
 func (s *Storage) DeletedFilesDir() string {
 	return filepath.Join(s.configDir, "deleted-files")
 }
+
+// PasswordsPath is the password list: names only, as the secrets are elsewhere.
+func (s *Storage) PasswordsPath() string {
+	return filepath.Join(s.configDir, "passwords.json")
+}

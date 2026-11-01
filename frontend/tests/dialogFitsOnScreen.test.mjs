@@ -107,12 +107,10 @@ test('a submit button outside its form still names it', () => {
   const dir = new URL('../src/lib/components/Dialogs/', import.meta.url);
   for (const file of readdirSync(dir).filter(f => f.endsWith('.svelte'))) {
     const source = readFileSync(new URL(file, dir), 'utf8');
-    const formAt = source.indexOf('<form');
-    if (formAt < 0) continue;
-    const formEnd = source.indexOf('</form>', formAt);
-    const afterForm = source.slice(formEnd);
-    if (!afterForm.includes('type="submit"')) continue;
-    assert.match(afterForm, /type="submit" form="[a-z-]+"/,
+    if (!source.includes('<form')) continue;
+    const outsideForms = source.replace(/<form[\s\S]*?<\/form>/g, '');
+    if (!outsideForms.includes('type="submit"')) continue;
+    assert.match(outsideForms, /type="submit" form="[a-z-]+"/,
       `${file}: a submit button sits outside its form without naming it, ` +
       'so pressing it does nothing');
   }

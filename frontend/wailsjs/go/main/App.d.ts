@@ -27,7 +27,11 @@ export function BrowseDirectory(arg1:string):Promise<string>;
 
 export function BrowseKeyFile(arg1:string):Promise<string>;
 
+export function BrowsePasswordFile(arg1:string):Promise<string>;
+
 export function CancelGitSync():Promise<void>;
+
+export function CancelPasswordInsert():Promise<void>;
 
 export function CheckForUpdate():Promise<main.UpdateInfo>;
 
@@ -69,13 +73,19 @@ export function CreateTask(arg1:string,arg2:string,arg3:string,arg4:string,arg5:
 
 export function CycleYoloMode(arg1:string,arg2:number,arg3:string):Promise<boolean>;
 
+export function DeleteBitwardenAccount(arg1:string):Promise<void>;
+
 export function DeleteCheckpoint(arg1:string,arg2:number,arg3:string,arg4:string,arg5:string):Promise<void>;
 
 export function DeleteCommand(arg1:string):Promise<void>;
 
 export function DeleteCommandGroup(arg1:string):Promise<void>;
 
+export function DeleteCustomPasswordSource(arg1:string):Promise<void>;
+
 export function DeleteGroup(arg1:string,arg2:string):Promise<void>;
+
+export function DeleteLocalPassword(arg1:string):Promise<void>;
 
 export function DeleteProject(arg1:string):Promise<void>;
 
@@ -187,6 +197,8 @@ export function GetMultiplexerStatus():Promise<main.MultiplexerStatus>;
 
 export function GetNextTask(arg1:string):Promise<main.TaskInfo>;
 
+export function GetPasswords(arg1:boolean):Promise<main.PasswordList>;
+
 export function GetPreview(arg1:string,arg2:number,arg3:string):Promise<main.PreviewData>;
 
 export function GetProjectActivityStatistics(arg1:string,arg2:number):Promise<main.ProjectActivityStatistics>;
@@ -271,6 +283,8 @@ export function ImportSessions(arg1:string,arg2:Array<string>,arg3:string):Promi
 
 export function InitHistorySearch():Promise<void>;
 
+export function InsertPassword(arg1:string,arg2:string,arg3:string,arg4:number,arg5:boolean,arg6:string):Promise<void>;
+
 export function InstallMultiplexer():Promise<string>;
 
 export function InstallServerMultiplexer(arg1:string,arg2:string,arg3:string,arg4:remote.MultiplexerPlan):Promise<string>;
@@ -297,6 +311,8 @@ export function ListServerSessions(arg1:string):Promise<Array<main.RemoteSession
 
 export function ListSessionDirectory(arg1:string,arg2:string,arg3:number,arg4:string):Promise<session.BrowseListing>;
 
+export function LockPasswordSources():Promise<void>;
+
 export function LogFrontend(arg1:string):Promise<void>;
 
 export function MarkWhatsNewSeen():Promise<void>;
@@ -320,6 +336,8 @@ export function MoveTaskToProject(arg1:string,arg2:string,arg3:string):Promise<m
 export function MoveTaskToSession(arg1:string,arg2:string,arg3:string,arg4:string):Promise<main.TaskInfo>;
 
 export function OpenAppLogFolder():Promise<void>;
+
+export function OpenBitwardenLogin(arg1:string,arg2:string,arg3:number,arg4:string):Promise<number>;
 
 export function OpenDiffInEditor(arg1:string,arg2:string,arg3:string,arg4:number,arg5:string):Promise<void>;
 
@@ -415,9 +433,15 @@ export function RunCommand(arg1:string,arg2:string,arg3:number,arg4:Record<strin
 
 export function RunningTabCommands():Promise<Array<main.RunningTabCommand>>;
 
+export function SaveBitwardenAccount(arg1:string,arg2:string):Promise<string>;
+
 export function SaveCommand(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string,arg6:boolean,arg7:string):Promise<string>;
 
 export function SaveCommandGroup(arg1:string,arg2:string):Promise<string>;
+
+export function SaveCustomPasswordSource(arg1:string,arg2:string,arg3:string,arg4:string):Promise<string>;
+
+export function SaveLocalPassword(arg1:string,arg2:string,arg3:string,arg4:string):Promise<string>;
 
 export function SaveProjectCommand(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string,arg6:boolean,arg7:string):Promise<string>;
 
@@ -452,6 +476,8 @@ export function SessionMergeRefusals(arg1:string):Promise<Record<string, string>
 export function SetExtraArgs(arg1:string,arg2:number,arg3:string,arg4:string):Promise<void>;
 
 export function SetGroupColor(arg1:string,arg2:string,arg3:string,arg4:boolean,arg5:string):Promise<void>;
+
+export function SetKeePassXCDatabase(arg1:string,arg2:string):Promise<void>;
 
 export function SetLastWindowIndex(arg1:string,arg2:number,arg3:string):Promise<void>;
 
@@ -572,6 +598,8 @@ export function ToggleSubtask(arg1:string,arg2:string,arg3:string,arg4:string):P
 export function TrashedWorktree(arg1:string):Promise<main.WorktreeInfo>;
 
 export function UnfinishedTasksForSession(arg1:string):Promise<Array<main.TaskInfo>>;
+
+export function UnlockPasswordSource(arg1:string,arg2:string):Promise<void>;
 
 export function UpdateTask(arg1:string,arg2:string,arg3:Record<string, any>,arg4:string):Promise<void>;
 

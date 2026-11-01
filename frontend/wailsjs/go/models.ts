@@ -1370,6 +1370,42 @@ export namespace main {
 	        this.file = source["file"];
 	    }
 	}
+	export class PasswordList {
+	    entries: passwords.Entry[];
+	    sources: passwords.SourceStatus[];
+	    bitwardenInstalled: boolean;
+	    keyringAvailable: boolean;
+
+	    static createFrom(source: any = {}) {
+	        return new PasswordList(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.entries = this.convertValues(source["entries"], passwords.Entry);
+	        this.sources = this.convertValues(source["sources"], passwords.SourceStatus);
+	        this.bitwardenInstalled = source["bitwardenInstalled"];
+	        this.keyringAvailable = source["keyringAvailable"];
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class PatternRefreshResult {
 	    version: number;
 	    updated: boolean;
@@ -2686,6 +2722,63 @@ export namespace main {
 
 }
 
+export namespace passwords {
+
+	export class Entry {
+	    source: string;
+	    id: string;
+	    name: string;
+	    username: string;
+	    group: string;
+
+	    static createFrom(source: any = {}) {
+	        return new Entry(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.source = source["source"];
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.username = source["username"];
+	        this.group = source["group"];
+	    }
+	}
+	export class SourceStatus {
+	    source: string;
+	    available: boolean;
+	    enabled: boolean;
+	    locked: boolean;
+	    detail: string;
+	    keyFile: string;
+	    error: string;
+	    name: string;
+	    tool: string;
+	    listCommand: string;
+	    getCommand: string;
+
+	    static createFrom(source: any = {}) {
+	        return new SourceStatus(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.source = source["source"];
+	        this.available = source["available"];
+	        this.enabled = source["enabled"];
+	        this.locked = source["locked"];
+	        this.detail = source["detail"];
+	        this.keyFile = source["keyFile"];
+	        this.error = source["error"];
+	        this.name = source["name"];
+	        this.tool = source["tool"];
+	        this.listCommand = source["listCommand"];
+	        this.getCommand = source["getCommand"];
+	    }
+	}
+
+}
+
 export namespace remote {
 
 	export class CheckStep {
@@ -3135,6 +3228,8 @@ export namespace session {
 	    work_dir?: string;
 	    hide_status_line?: boolean;
 	    run_command?: string;
+	    close_on_exit?: string;
+	    return_to_window?: number;
 	    worktree_dir?: string;
 	    worktree_branch?: string;
 	    worktree_repo_root?: string;
@@ -3167,6 +3262,8 @@ export namespace session {
 	        this.work_dir = source["work_dir"];
 	        this.hide_status_line = source["hide_status_line"];
 	        this.run_command = source["run_command"];
+	        this.close_on_exit = source["close_on_exit"];
+	        this.return_to_window = source["return_to_window"];
 	        this.worktree_dir = source["worktree_dir"];
 	        this.worktree_branch = source["worktree_branch"];
 	        this.worktree_repo_root = source["worktree_repo_root"];

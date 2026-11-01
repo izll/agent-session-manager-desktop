@@ -41,6 +41,11 @@ type Executor interface {
 	Describe() string
 }
 
+// InputExecutor is an executor that can hand a command text on its standard input.
+type InputExecutor interface {
+	RunInput(ctx context.Context, input string, args ...string) error
+}
+
 // ShellExecutor is an executor that can also run arbitrary commands, not only
 // multiplexer ones.
 //
@@ -106,6 +111,12 @@ func (localExecutor) Output(ctx context.Context, args ...string) ([]byte, error)
 }
 
 func (localExecutor) Describe() string { return "local" }
+
+func (localExecutor) RunInput(ctx context.Context, input string, args ...string) error {
+	command := TmuxCommandContext(ctx, args...)
+	command.Stdin = strings.NewReader(input)
+	return command.Run()
+}
 
 // LocalExecutor is the one every session gets until told otherwise.
 var LocalExecutor Executor = localExecutor{}

@@ -22,7 +22,7 @@ import (
 // re-uploading a binary over SSH for every patch. It is bumped when a message
 // changes shape, and an exact match is required in both directions — an older
 // helper is as wrong as an older app.
-const Version = 6
+const Version = 7
 
 // Method names. Constants because both ends switch on them, and a typo would
 // otherwise surface as "unknown method" at run time.
@@ -82,6 +82,9 @@ type RunParams struct {
 	Command string `json:"command"`
 	// Dir runs the command somewhere other than the home directory.
 	Dir string `json:"dir,omitempty"`
+	// Stdin is given to the command on its standard input. For what must not be
+	// on a command line, where every process on the machine can read it.
+	Stdin string `json:"stdin,omitempty"`
 	// TimeoutMs bounds it. Zero means the helper's own default: a command with
 	// no limit at all can hold a connection open forever, and the app has no
 	// way to cancel one it cannot see.

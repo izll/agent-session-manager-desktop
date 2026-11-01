@@ -172,6 +172,8 @@
   import RecoveryCenterDialog from './lib/components/Dialogs/RecoveryCenterDialog.svelte';
   import CommandPalette from './lib/components/Dialogs/CommandPalette.svelte';
   import CommandPickerDialog from './lib/components/Dialogs/CommandPickerDialog.svelte';
+  import PasswordPickerDialog from './lib/components/Dialogs/PasswordPickerDialog.svelte';
+  import PasswordManagerDialog from './lib/components/Dialogs/PasswordManagerDialog.svelte';
   import CommandManagerDialog from './lib/components/Dialogs/CommandManagerDialog.svelte';
   import ServerManagerDialog from './lib/components/Dialogs/ServerManagerDialog.svelte';
   import SessionTemplateDialog from './lib/components/Dialogs/SessionTemplateDialog.svelte';
@@ -446,6 +448,8 @@
   let showCommandPalette = false;
   /** Saved-command library: Ctrl+P picker and its editor. */
   let showCommandPicker = false;
+  let showPasswordPicker = false;
+  let showPasswordManager = false;
   let showCommandManager = false;
   let showServerManager = false;
   /** The picker closes itself before handing over to the editor. */
@@ -494,7 +498,7 @@
     showHelpDialog || showFeedbackDialog || showUpdateDialog || showWhatsNew || showImportDialog || showFileImportDialog ||
     showSettingsDialog || showRecoveryCenter || showCommandPalette || showColorDialog || showDeleteConfirm ||
     showLogDialog || showQuickJump || showGitHistory || quickJumpPrompt || quickJumpNaming ||
-    showCommandPicker || showCommandManager || showServerManager || showTemplateDialog ||
+    showCommandPicker || showPasswordPicker || showPasswordManager || showCommandManager || showServerManager || showTemplateDialog ||
     showQuitConfirm || showStopDialog || showStartDialog || $projectTasksOpen ||
     showResumeChoice || showResumeSessionPicker || showInterruptedWork;
   $: if (prevAnyDialogOpen && !anyDialogOpen) {
@@ -909,6 +913,12 @@
       if (!dialogOpen) showCommandPicker = true;
       return;
     }
+    if (shortcutId === 'passwords.picker') {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!dialogOpen) showPasswordPicker = true;
+      return;
+    }
     if (favouriteSlotNo > 0) {
       e.preventDefault();
       e.stopPropagation();
@@ -1050,6 +1060,16 @@
     // The backend checks for a release shortly after launch and then every
     // 12 hours while the app runs. It only ever notifies — a dot on the update
     // button, not a popup that interrupts what the user is doing.
+    // A tab went by itself. If it was in front, go back to where it was opened from;
+    // after a login, offer the vault that can now be opened, unless something else has
+    // the user's attention.
+    EventsOn('tabs:closed-on-exit', async (closed: { sessionId: string; windowIdx: number; returnTo: number; reason: string }) => {
+      if (!appMounted) return;
+      await loadSessions();
+      if (get(selectedSessionId) !== closed.sessionId || get(selectedWindowIdx) !== closed.windowIdx) return;
+      selectedWindowIdx.set(closed.returnTo);
+      if (closed.reason === 'login' && !anyDialogOpen) showPasswordPicker = true;
+    });
     EventsOn('update:available', (info: { version: string; current: string }) => {
       if (!appMounted) return;
       availableUpdate = info?.version || '';
@@ -1716,6 +1736,18 @@
             <path d="M7 9l3 3-3 3M13 15h4"/>
           </svg>
         </button>
+        <button
+          class="btn btn-ghost btn-icon palette-trigger"
+          data-action="passwords"
+          on:click={() => showPasswordPicker = true}
+          title={$t('passwords.title')}
+        >
+          <!-- A key: types a saved password into the tab. -->
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="8" cy="15" r="4"/>
+            <path d="M11 12l9-9M16 7l3 3"/>
+          </svg>
+        </button>
         <!-- The machines sessions can run on. Beside the commands because both
              are things you set up once and then reach for. -->
         <button
@@ -1992,6 +2024,18 @@
     sessionId={$selectedSessionId || ''}
     windowIdx={$selectedWindowIdx}
     onOpenManager={openCommandManager}
+  />
+  <PasswordPickerDialog
+    bind:show={showPasswordPicker}
+    sessionId={$selectedSessionId || ''}
+    windowIdx={$selectedWindowIdx}
+    onOpenManager={() => { showPasswordManager = true; }}
+  />
+  <PasswordManagerDialog
+    bind:show={showPasswordManager}
+    sessionId={$selectedSessionId || ''}
+    windowIdx={$selectedWindowIdx}
+    onDone={() => { showPasswordPicker = true; }}
   />
   <CommandManagerDialog
     bind:show={showCommandManager}

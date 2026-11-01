@@ -224,6 +224,12 @@ export const SHORTCUTS: Shortcut[] = [
     defaults: [{ key: 'p', ctrl: true }],
   },
   {
+    id: 'passwords.picker',
+    category: 'search',
+    descKey: 'help.actionPasswordPicker',
+    defaults: [{ key: 'e', ctrl: true, shift: true }],
+  },
+  {
     id: 'diff.nextChange',
     category: 'navigation',
     descKey: 'help.diffNextChange',

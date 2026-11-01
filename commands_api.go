@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log"
@@ -8,6 +9,8 @@ import (
 	"time"
 
 	"asmgr-desktop/session"
+
+	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 // Frontend API for the saved-command library: the list, editing it, and
@@ -312,8 +315,10 @@ func (a *App) RunCommand(id, sessionID string, windowIdx int, values map[string]
 
 	newIdx := -1
 	switch found.RunTarget() {
-	case session.RunInNewTab, session.RunInBackground:
-		newIdx, err = a.runCommandInNewTab(sessionID, windowIdx, found.Name, text, expectedProjectID)
+	case session.RunInNewTab:
+		newIdx, err = a.runCommandInNewTab(sessionID, windowIdx, found.Name, text, "", expectedProjectID)
+	case session.RunInBackground:
+		newIdx, err = a.runCommandInNewTab(sessionID, windowIdx, found.Name, text, session.TabCloseCommand, expectedProjectID)
 	default:
 		err = a.typeCommandIntoTab(sessionID, windowIdx, text, found.SendEnter, expectedProjectID)
 	}
@@ -347,7 +352,10 @@ func (a *App) typeCommandIntoTab(sessionID string, windowIdx int, text string, p
 // It is typed into a shell rather than started as the tab's own process, so
 // pipes and variables mean what they mean at a prompt, and the output and the
 // prompt are still there once the command ends.
-func (a *App) runCommandInNewTab(sessionID string, fromWindow int, name, text, expectedProjectID string) (int, error) {
+//
+// closeReason asks for the tab to go away when the command has ended instead; nobody
+// is looking at a background tab, and left there they pile up.
+func (a *App) runCommandInNewTab(sessionID string, fromWindow int, name, text, closeReason, expectedProjectID string) (int, error) {
 	inst, err := a.storage.GetInstance(sessionID)
 	if err != nil {
 		return -1, err
@@ -373,10 +381,105 @@ func (a *App) runCommandInNewTab(sessionID string, fromWindow int, name, text, e
 	// and nothing else in the app should wait with it. The tab is kept if the
 	// command cannot be typed into it — it exists, it is saved, and an empty
 	// shell says more than a tab that vanished.
-	if err := tabInst.TypeIntoFreshShell(newIdx, text, backgroundShellTimeout); err != nil {
+	closes := closeReason != ""
+	if closeReason == session.TabCloseCommand {
+		closes, err = tabInst.RunUntilDoneInFreshShell(newIdx, text, backgroundShellTimeout)
+	} else {
+		err = tabInst.TypeIntoFreshShell(newIdx, text, backgroundShellTimeout)
+	}
+	if err != nil {
 		return newIdx, err
 	}
+	if closes {
+		a.markTabCloseOnExit(sessionID, newIdx, closeReason, fromWindow, expectedProjectID)
+	}
 	return newIdx, nil
+}
+
+// markTabCloseOnExit is best effort: without it the tab stays, which is how they were.
+func (a *App) markTabCloseOnExit(sessionID string, windowIdx int, reason string, returnTo int, projectID string) {
+	done, err := a.beginExpectedProjectMutation(projectID)
+	if err != nil {
+		return
+	}
+	defer done()
+	inst, err := a.storage.GetInstance(sessionID)
+	if err != nil {
+		return
+	}
+	inst.MarkTabCloseOnExit(windowIdx, reason, returnTo)
+	if err := a.storage.UpdateInstance(inst); err != nil {
+		log.Printf("[tabs] could not save that a tab closes itself: %v", err)
+	}
+}
+
+// TabClosedOnExit tells the interface a tab has gone by itself.
+type TabClosedOnExit struct {
+	SessionID string `json:"sessionId"`
+	WindowIdx int    `json:"windowIdx"`
+	ReturnTo  int    `json:"returnTo"`
+	Reason    string `json:"reason"`
+}
+
+const tabCloseOnExitPoll = 2 * time.Second
+
+// watchTabsClosingOnExit runs for as long as the app does. It asks about tabs of the
+// open project only: another project's wait until it is open again.
+func (a *App) watchTabsClosingOnExit(ctx context.Context) {
+	ticker := time.NewTicker(tabCloseOnExitPoll)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			a.closeExitedTabs()
+		}
+	}
+}
+
+// closeExitedTabs removes the marked tabs whose process has ended. Each is checked again
+// by its ID under the lock, as the user may have closed it and opened another that got
+// the same index. It is not sent to the trash: there is nothing in it to restore.
+func (a *App) closeExitedTabs() {
+	if a.storage == nil {
+		return
+	}
+	projectID := a.storage.GetActiveProjectID()
+	for _, inst := range a.storage.InstancesClosingTabsOnExit() {
+		for _, tab := range inst.ExitedTabsToClose() {
+			a.closeExitedTab(inst.ID, tab, projectID)
+		}
+	}
+}
+
+func (a *App) closeExitedTab(sessionID string, tab session.TabToClose, projectID string) {
+	done, err := a.beginExpectedProjectMutation(projectID)
+	if err != nil {
+		return
+	}
+	defer done()
+	inst, err := a.storage.GetInstance(sessionID)
+	if err != nil {
+		return
+	}
+	windowIdx, _, found := inst.WindowForTabID(tab.ID)
+	if !found || windowIdx != tab.Index {
+		return
+	}
+	// Loaded from the file, whose status can be old, and DeleteWindow would then leave
+	// the dead window behind in tmux.
+	inst.UpdateStatus()
+	if err := inst.DeleteWindow(windowIdx); err != nil {
+		log.Printf("[tabs] could not close an ended tab: %v", err)
+		return
+	}
+	if err := a.storage.UpdateInstance(inst); err != nil {
+		log.Printf("[tabs] could not save closing an ended tab: %v", err)
+	}
+	if a.ctx != nil {
+		runtime.EventsEmit(a.ctx, "tabs:closed-on-exit", TabClosedOnExit{sessionID, windowIdx, tab.ReturnTo, tab.Reason})
+	}
 }
 
 // backgroundShellTimeout bounds the wait for a new tab's shell to be ready.

@@ -221,7 +221,31 @@ func runCommand(raw json.RawMessage) (json.RawMessage, error) {
 	// missing. `ssh host cmd` runs a non-interactive shell, which reads no
 	// profile, so an agent installed in ~/.local/bin or through nvm is on the
 	// PATH when the user logs in and absent when we run it.
-	command := exec.CommandContext(ctx, "/bin/sh", "-lc", params.Command)
+	script := params.Command
+	var stdinPipe *os.File
+	var extraFiles []*os.File
+	if params.Stdin != "" {
+		// On a descriptor of its own until the profile has run. The shell's standard
+		// input would be open to the login profile, which is the user's to fill: one
+		// with a read in it takes the secret, and one that starts another shell
+		// runs it as a command. Measured both.
+		reader, writer, err := os.Pipe()
+		if err != nil {
+			return nil, err
+		}
+		defer reader.Close()
+		stdinPipe = writer
+		script = "exec 0<&3 3<&-; " + script
+		extraFiles = []*os.File{reader}
+	}
+	command := exec.CommandContext(ctx, "/bin/sh", "-lc", script)
+	command.ExtraFiles = extraFiles
+	if stdinPipe != nil {
+		go func(writer *os.File, text string) {
+			defer writer.Close()
+			_, _ = writer.WriteString(text)
+		}(stdinPipe, params.Stdin)
+	}
 	if params.Dir != "" {
 		command.Dir = params.Dir
 	}
