@@ -2200,6 +2200,7 @@
                tab the diff belonged to. -->
           <button
             class="tab"
+            title={renamingTabIndex === win.Index ? undefined : win.Name}
             class:active={$selectedWindowIdx === win.Index}
             class:dead={win.Dead}
             class:stopped={currentSessionStatus !== 'running'}

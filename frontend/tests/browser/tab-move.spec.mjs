@@ -321,3 +321,15 @@ test('in a note of one page the tab keys still switch tabs', async ({ page }) =>
   await page.keyboard.press('Control+PageDown');
   await expect.poll(async () => (await page.evaluate(() => window.tabMoveFixture.selected())).windowIdx).not.toBe(before);
 });
+
+// With many tabs the names are cut short, and hovering is the way to read them.
+test('a tab names itself when hovered, but not while being renamed', { tag: '@webkit' }, async ({ page }) => {
+  await gotoFixture(page);
+  const worker = tab(page, 'worker');
+  const name = (await worker.locator('.tab-name').textContent()).trim();
+  await expect(worker).toHaveAttribute('title', name);
+  await worker.locator('.tab-name').dblclick();
+  await expect(page.locator('.tab-rename-input')).toBeVisible();
+  await expect(page.locator('.tab-bar .tab:has(.tab-rename-input)')).not.toHaveAttribute('title', /./);
+});
+
