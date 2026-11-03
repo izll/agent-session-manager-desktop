@@ -215,7 +215,8 @@ type Instance struct {
 	Status    Status    `json:"status"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
-	// LastActiveAt is when an agent in this session was last seen working.
+	// LastActiveAt is when an agent in this session was last seen working, or a
+	// terminal tab in it last printed something.
 	//
 	// Distinct from UpdatedAt, which moves only when the session is started or
 	// stopped: sorting by that puts a session started this morning and busy

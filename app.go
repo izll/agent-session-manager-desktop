@@ -3585,13 +3585,14 @@ func (a *App) getSidebarUpdates(ctx context.Context) SidebarUpdate {
 	// made 1s ticks infeasible. Doing it per-session concurrently keeps
 	// total time roughly at the slowest single session.
 	type sessionResult struct {
-		instID       string
-		activity     string
-		statusLine   string
-		spinnerText  string
-		agentTabs    []TabStatusInfo
-		unavailable  []TabAvailability
-		observations []activityObservation
+		terminalOutput time.Time
+		instID         string
+		activity       string
+		statusLine     string
+		spinnerText    string
+		agentTabs      []TabStatusInfo
+		unavailable    []TabAvailability
+		observations   []activityObservation
 	}
 	resultsCh := make(chan sessionResult, len(jobs))
 
@@ -3740,6 +3741,7 @@ func (a *App) getSidebarUpdates(ctx context.Context) SidebarUpdate {
 			}
 
 			sr := sessionResult{instID: inst.ID, activity: activityStr}
+			sr.terminalOutput = inst.LastTerminalOutputContext(ctx)
 			if len(tabStatuses) > 0 {
 				best := tabStatuses[bestWindowIdx]
 				sr.statusLine = best.StatusLine
@@ -3783,11 +3785,14 @@ func (a *App) getSidebarUpdates(ctx context.Context) SidebarUpdate {
 	// sidebar treats everything active within the last minute as working now
 	// and orders those by name (utils/activityOrder.ts).
 	activeNow := make(map[string]time.Time)
+	lastOutput := make(map[string]time.Time)
 	tickTime := time.Now()
 	for sr := range resultsCh {
 		result.Activities[sr.instID] = sr.activity
 		if sr.activity == "busy" || sr.activity == "waiting" {
 			activeNow[sr.instID] = tickTime
+		} else if !sr.terminalOutput.IsZero() {
+			lastOutput[sr.instID] = sr.terminalOutput
 		}
 		if sr.statusLine != "" {
 			result.StatusLines[sr.instID] = sr.statusLine
@@ -3803,6 +3808,8 @@ func (a *App) getSidebarUpdates(ctx context.Context) SidebarUpdate {
 		}
 		result.observations = append(result.observations, sr.observations...)
 	}
+
+	addNewTerminalOutput(activeNow, lastOutput, instances)
 
 	// Persist the activity marks. The instances above were loaded fresh from
 	// disk for this tick and are discarded with it, so setting the field on
@@ -7393,8 +7400,19 @@ func formatSessionTimestamp(t time.Time) string {
 	return t.Format(time.RFC3339)
 }
 
+// addNewTerminalOutput counts a terminal tab's output as the session's activity. Only
+// when it is newer than what is known: most ticks nothing has been printed, and a time
+// in this map means a write to the file.
+func addNewTerminalOutput(active, lastOutput map[string]time.Time, instances []*session.Instance) {
+	for _, inst := range instances {
+		if at, ok := lastOutput[inst.ID]; ok && at.After(inst.LastActiveAt) {
+			active[inst.ID] = at
+		}
+	}
+}
+
 // lastActivityTime is what the sidebar's activity ordering sorts on: when an
-// agent here was last seen working, falling back to when the session was last
+// agent here was last seen working or a terminal tab last printed, falling back to when the session was last
 // started or stopped.
 //
 // The fallback matters for a session that has not run since the app started —
