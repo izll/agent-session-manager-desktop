@@ -91,12 +91,12 @@ type Settings struct {
 	// ShowUpdateBadge shows the marker for a tab whose agent has an update
 	// waiting in the session list too. Off by default: the list is busy
 	// enough, and the tab bar shows the marker anyway.
-	ShowUpdateBadge bool   `json:"show_update_badge,omitempty"`
+	ShowUpdateBadge bool `json:"show_update_badge,omitempty"`
 	// HideTabUpdateBadge hides that marker on the tabs too. Stored as "hide"
 	// so that a setting saved before it existed keeps the tabs' marker on.
-	HideTabUpdateBadge bool `json:"hide_tab_update_badge,omitempty"`
-	SplitView       bool   `json:"split_view,omitempty"`
-	MarkedSessionID string `json:"marked_session_id,omitempty"`
+	HideTabUpdateBadge bool   `json:"hide_tab_update_badge,omitempty"`
+	SplitView          bool   `json:"split_view,omitempty"`
+	MarkedSessionID    string `json:"marked_session_id,omitempty"`
 	// LastSessionID is the session that was selected when the app last closed,
 	// so it reopens where the user left off. The tab within it is remembered
 	// separately, per session (Instance.LastWindowIndex).
@@ -285,13 +285,13 @@ type Settings struct {
 	// default, so existing settings keep the size they had.
 	// Two independent defaults, like the palettes: terminal tabs and agent
 	// tabs each have their own, and neither falls back to the other.
-	TerminalFontSize    int               `json:"terminal_font_size,omitempty"`
-	AgentFontSize       int               `json:"agent_font_size,omitempty"`
-	HideViewBar         bool              `json:"hide_view_bar,omitempty"`
-	ViewOrder           []string          `json:"view_order,omitempty"`
+	TerminalFontSize int      `json:"terminal_font_size,omitempty"`
+	AgentFontSize    int      `json:"agent_font_size,omitempty"`
+	HideViewBar      bool     `json:"hide_view_bar,omitempty"`
+	ViewOrder        []string `json:"view_order,omitempty"`
 	// ViewOrderDrag is what dragging a view in the bar changes: "global",
 	// "tab", or "" to ask each time.
-	ViewOrderDrag string `json:"view_order_drag,omitempty"`
+	ViewOrderDrag       string            `json:"view_order_drag,omitempty"`
 	AgentHideViewBar    bool              `json:"agent_hide_view_bar,omitempty"`
 	HideStatusBar       bool              `json:"hide_status_bar,omitempty"`
 	AgentHideStatusBar  bool              `json:"agent_hide_status_bar,omitempty"`
@@ -1276,9 +1276,49 @@ func refreshInstanceStatuses(instances []*Instance) {
 }
 
 func refreshInstanceStatusesContext(ctx context.Context, instances []*Instance) {
-	refreshInstanceStatusesWith(ctx, instances, func(ctx context.Context, instance *Instance) {
+	remaining := refreshLocalStatusesTogether(ctx, instances)
+	refreshInstanceStatusesWith(ctx, remaining, func(ctx context.Context, instance *Instance) {
 		instance.UpdateStatusContext(ctx)
 	})
+}
+
+// refreshLocalStatusesTogether answers for every session on this computer from one
+// listing, and returns those it could not. Asking each in turn cost a process per
+// session per load, and a load happens more than once a second. A failed listing
+// answers for nobody, as with no multiplexer running: they are then asked one by one,
+// which gives each its own answer.
+func refreshLocalStatusesTogether(ctx context.Context, instances []*Instance) []*Instance {
+	var local, others []*Instance
+	for _, instance := range instances {
+		switch {
+		case instance == nil:
+		case instance.ServerID == "":
+			local = append(local, instance)
+		default:
+			others = append(others, instance)
+		}
+	}
+	if len(local) == 0 {
+		return others
+	}
+	commandCtx, cancel := context.WithTimeout(ctx, TmuxCommandTimeout)
+	defer cancel()
+	output, err := local[0].tmuxOutputContext(commandCtx, "list-sessions", "-F", "#{session_name}")
+	if err != nil {
+		return append(others, local...)
+	}
+	running := map[string]bool{}
+	for _, name := range strings.Split(string(output), "\n") {
+		running[strings.TrimSpace(name)] = true
+	}
+	for _, instance := range local {
+		if running[instance.TmuxSessionName()] {
+			instance.Status = StatusRunning
+		} else {
+			instance.Status = StatusStopped
+		}
+	}
+	return others
 }
 
 const maxConcurrentStatusRefreshes = 16

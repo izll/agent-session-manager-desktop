@@ -215,6 +215,9 @@ type Instance struct {
 	Status    Status    `json:"status"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
+	// windowSnapshot answers for this one sweep; see SnapshotLocalWindows.
+	windowSnapshot *windowSnapshot
+
 	// LastActiveAt is when an agent in this session was last seen working, or a
 	// terminal tab in it last printed something.
 	//
@@ -1131,7 +1134,13 @@ func (i *Instance) GetCaptureTargetContext(ctx context.Context, windowIdx int) s
 	prefix := fmt.Sprintf("%s_gui_%d_", baseName, windowIdx)
 	commandCtx, cancel := context.WithTimeout(ctx, TmuxCommandTimeout)
 	defer cancel()
-	output, err := i.tmuxOutputContext(commandCtx, "list-sessions", "-F", "#{session_name} #{session_attached}")
+	var output []byte
+	var err error
+	if i.windowSnapshot != nil && i.windowSnapshot.sessions != nil {
+		output, err = i.windowSnapshot.sessions.get(commandCtx, i)
+	} else {
+		output, err = i.tmuxOutputContext(commandCtx, "list-sessions", "-F", "#{session_name} #{session_attached}")
+	}
 	if err != nil {
 		captureTargetCache.Store(cacheKey, captureTargetEntry{target: baseTarget, expires: time.Now().Add(captureTargetCacheTTL)})
 		return baseTarget
@@ -3860,6 +3869,10 @@ func (i *Instance) IsAliveContext(ctx context.Context) bool {
 func (i *Instance) windowAliveContext(ctx context.Context, windowIdx int) bool {
 	serverID := i.serverForWindow(windowIdx)
 	if serverID == "" {
+		// Seen in this sweep's listing, moments ago.
+		if i.windowSnapshot != nil {
+			return true
+		}
 		return i.IsAliveContext(ctx)
 	}
 	commandCtx, cancel := context.WithTimeout(ctx, TmuxCommandTimeout)
@@ -4696,9 +4709,15 @@ func (i *Instance) getMainWindowIndexContext(ctx context.Context) (int, bool) {
 	}
 
 	sessionName := i.TmuxSessionName()
-	output, err := i.tmuxOutputContext(ctx, "list-windows", "-t", sessionName, "-F", "#{window_index}\t#{@asmgr_main}")
-	if err != nil {
-		return 0, false
+	var output []byte
+	if i.windowSnapshot != nil {
+		output = i.windowSnapshot.markers
+	} else {
+		var err error
+		output, err = i.tmuxOutputContext(ctx, "list-windows", "-t", sessionName, "-F", "#{window_index}\t#{@asmgr_main}")
+		if err != nil {
+			return 0, false
+		}
 	}
 
 	index, ok := identifyMainWindowIndex(output, i.FollowedWindows)

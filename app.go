@@ -103,6 +103,7 @@ type App struct {
 	passwordsMu         sync.Mutex
 	passwords           *passwords.Manager
 	cancelPasswordFetch context.CancelFunc
+	tabReadings         tabReadings
 }
 
 type eventThrottle struct {
@@ -3436,12 +3437,15 @@ func (a *App) getSidebarUpdates(ctx context.Context) SidebarUpdate {
 	}
 	result.ProjectID = projectID
 
+	session.SnapshotLocalWindows(ctx, instances)
+
 	// Phase 1: auto-detect + persist session IDs (sequential; touches storage).
 	// Phase 2 (below) runs the tmux capture + detection in parallel across
 	// sessions so total wall time scales with max-per-session work rather
 	// than sum-per-session work.
 	type detectJob struct {
-		inst *session.Instance
+		inst   *session.Instance
+		states map[int]session.TabState
 	}
 	var jobs []detectJob
 
@@ -3484,12 +3488,13 @@ func (a *App) getSidebarUpdates(ctx context.Context) SidebarUpdate {
 				log.Printf("[SidebarPoll] failed to capture Antigravity conversation IDs for session=%s: %v", inst.ID, err)
 			}
 		}
+		states := inst.TabStatesContext(ctx)
 		// Detected on every poll, not only while nothing is recorded: /resume
 		// inside a session moves it to another conversation, and stopping at the
 		// first answer left us pointing at the one the user had left behind.
 		// Detection reads Claude's own record of what each process is on, so a
 		// value that disagrees is the stale one; finding nothing changes nothing.
-		if inst.Agent == session.AgentClaude {
+		if inst.Agent == session.AgentClaude && a.tabReadings.conversationCheckDue(tabReadingKey(inst.ID, 0), states, 0, time.Now()) {
 			if sid := getClaudeSessionIDFromTmuxWindowContext(ctx, inst.TmuxSessionName(), 0); sid != "" && sid != inst.ResumeSessionID {
 				log.Printf("[SidebarPoll] refreshed conversation ID for session=%s", inst.ID)
 				inst.ResumeSessionID = sid
@@ -3509,7 +3514,8 @@ func (a *App) getSidebarUpdates(ctx context.Context) SidebarUpdate {
 			// conversation id was written onto every remote tab, which then
 			// tried to resume a conversation that does not exist there and
 			// came up with "no conversation found".
-			if fw.Agent == session.AgentClaude && fw.RunsOn(inst.ServerID) == "" {
+			if fw.Agent == session.AgentClaude && fw.RunsOn(inst.ServerID) == "" &&
+				a.tabReadings.conversationCheckDue(tabReadingKey(inst.ID, fw.Index), states, fw.Index, time.Now()) {
 				if sid := getClaudeSessionIDFromTmuxWindowContext(ctx, inst.TmuxSessionName(), fw.Index); sid != "" && sid != fw.ResumeSessionID {
 					log.Printf("[SidebarPoll] refreshed Claude conversation ID for tab=%s/%d", inst.ID, fw.Index)
 					fw.ResumeSessionID = sid
@@ -3565,7 +3571,7 @@ func (a *App) getSidebarUpdates(ctx context.Context) SidebarUpdate {
 			}
 		}
 
-		jobs = append(jobs, detectJob{inst: inst})
+		jobs = append(jobs, detectJob{inst: inst, states: states})
 	}
 	if mayPersist && len(terminalDirs) > 0 {
 		if err := a.storage.RecordTerminalDirsForProject(projectID, terminalDirs); err != nil {
@@ -3614,7 +3620,7 @@ func (a *App) getSidebarUpdates(ctx context.Context) SidebarUpdate {
 	var wg sync.WaitGroup
 	for _, job := range jobs {
 		wg.Add(1)
-		go func(inst *session.Instance) {
+		go func(inst *session.Instance, states map[int]session.TabState) {
 			defer wg.Done()
 			select {
 			case slots <- struct{}{}:
@@ -3684,6 +3690,24 @@ func (a *App) getSidebarUpdates(ctx context.Context) SidebarUpdate {
 			bestWindowIdx := 0
 
 			for wi, w := range windows {
+				readingKey := tabReadingKey(inst.ID, w.idx)
+				readAt := time.Now()
+				// Not a runner, whose run state comes from elsewhere.
+				if w.runCommand == "" {
+					if read, ok := a.tabReadings.usable(readingKey, states, w.idx, readAt); ok {
+						validActivityWindows[w.idx] = true
+						status := read.status
+						status.Agent = string(w.agent)
+						status.Name = w.name
+						status.HideStatusLine = w.hideLine
+						tabStatuses = append(tabStatuses, status)
+						if read.activity == session.ActivityWaiting {
+							highestActivity = session.ActivityWaiting
+							bestWindowIdx = wi
+						}
+						continue
+					}
+				}
 				reading := inst.ReadTabContext(ctx, w.idx)
 				activity, activityValid := reading.Activity, reading.Valid
 				validActivityWindows[w.idx] = activityValid
@@ -3722,6 +3746,7 @@ func (a *App) getSidebarUpdates(ctx context.Context) SidebarUpdate {
 					HideStatusLine:  w.hideLine,
 					Update:          reading.Update,
 				})
+				a.tabReadings.store(readingKey, states, w.idx, readAt, activity, activityValid, tabStatuses[len(tabStatuses)-1])
 
 				if activity == session.ActivityWaiting {
 					highestActivity = session.ActivityWaiting
@@ -3741,7 +3766,7 @@ func (a *App) getSidebarUpdates(ctx context.Context) SidebarUpdate {
 			}
 
 			sr := sessionResult{instID: inst.ID, activity: activityStr}
-			sr.terminalOutput = inst.LastTerminalOutputContext(ctx)
+			sr.terminalOutput = inst.LastTerminalOutputFrom(states, time.Now())
 			if len(tabStatuses) > 0 {
 				best := tabStatuses[bestWindowIdx]
 				sr.statusLine = best.StatusLine
@@ -3768,7 +3793,7 @@ func (a *App) getSidebarUpdates(ctx context.Context) SidebarUpdate {
 				}
 			}
 			resultsCh <- sr
-		}(job.inst)
+		}(job.inst, job.states)
 	}
 	wg.Wait()
 	close(resultsCh)
