@@ -1856,5 +1856,8 @@
   "passwords.customList": "이름을 나열하는 명령",
   "passwords.customGet": "비밀번호를 출력하는 명령",
   "error.passwordBadCommand": "이 명령은 사용할 수 없습니다. 따옴표를 확인하고, 비밀번호 명령에 {name}이 별도의 단어로 있거나 ASMGR_SECRET_NAME 변수를 사용하는지 확인하세요.",
-  "error.passwordBadServerUrl": "서버 주소는 https:// 또는 http://로 시작해야 하며 사용자 이름을 포함할 수 없습니다."
+  "error.passwordBadServerUrl": "서버 주소는 https:// 또는 http://로 시작해야 하며 사용자 이름을 포함할 수 없습니다.",
+  "conversations.duplicate": "같은 Claude 대화({id})가 여러 곳에서 열려 있습니다: {places}. 모두 같은 기록에 쓰므로 한 곳에서만 열어 두세요.",
+  "conversations.outsideApp": "앱 외부",
+  "conversations.duplicateTab": "이 Claude 대화가 여기에서도 열려 있습니다: {places}"
 }

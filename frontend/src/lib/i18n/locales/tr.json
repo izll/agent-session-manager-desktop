@@ -1856,5 +1856,8 @@
   "passwords.customList": "Adları listeleyen komut",
   "passwords.customGet": "Parolayı yazan komut",
   "error.passwordBadCommand": "Bu komut kullanılamaz. Tırnakları ve parola komutunun {name} ifadesini ayrı bir sözcük olarak içerdiğini ya da ASMGR_SECRET_NAME değişkenini kullandığını denetleyin.",
-  "error.passwordBadServerUrl": "Sunucu adresi https:// veya http:// ile başlamalı ve kullanıcı adı içermemelidir."
+  "error.passwordBadServerUrl": "Sunucu adresi https:// veya http:// ile başlamalı ve kullanıcı adı içermemelidir.",
+  "conversations.duplicate": "Aynı Claude konuşması ({id}) birden fazla yerde açık: {places}. Hepsi geçmişine yazdığı için yalnızca birinde açık bırakın.",
+  "conversations.outsideApp": "uygulamanın dışında",
+  "conversations.duplicateTab": "Claude konuşması burada da açık: {places}"
 }

@@ -1856,5 +1856,8 @@
   "passwords.customList": "Команда, що виводить імена",
   "passwords.customGet": "Команда, що виводить пароль",
   "error.passwordBadCommand": "Цю команду не можна використати. Перевірте лапки й те, що команда пароля містить {name} окремим словом або використовує змінну ASMGR_SECRET_NAME.",
-  "error.passwordBadServerUrl": "Адреса сервера має починатися з https:// або http:// і не містити імені користувача."
+  "error.passwordBadServerUrl": "Адреса сервера має починатися з https:// або http:// і не містити імені користувача.",
+  "conversations.duplicate": "Та сама розмова Claude ({id}) відкрита в кількох місцях: {places}. Усі пишуть у її історію, тож залиште її відкритою лише в одному.",
+  "conversations.outsideApp": "поза застосунком",
+  "conversations.duplicateTab": "Її розмова Claude відкрита ще тут: {places}"
 }

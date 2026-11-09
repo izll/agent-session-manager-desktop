@@ -1856,5 +1856,8 @@
   "passwords.customList": "A neveket listázó parancs",
   "passwords.customGet": "A jelszót kiíró parancs",
   "error.passwordBadCommand": "Ez a parancs nem használható. Ellenőrizd az idézőjeleket, és hogy a jelszóparancsban a {name} külön szóként szerepel, vagy az ASMGR_SECRET_NAME változót használja.",
-  "error.passwordBadServerUrl": "A szerver címe https:// vagy http:// előtaggal kezdődjön, felhasználónév nélkül."
+  "error.passwordBadServerUrl": "A szerver címe https:// vagy http:// előtaggal kezdődjön, felhasználónév nélkül.",
+  "conversations.duplicate": "Ugyanaz a Claude-beszélgetés ({id}) több helyen fut: {places}. Mindegyik ugyanabba az előzménybe ír, ezért csak egy helyen hagyd nyitva.",
+  "conversations.outsideApp": "az alkalmazáson kívül",
+  "conversations.duplicateTab": "A Claude-beszélgetése itt is fut: {places}"
 }

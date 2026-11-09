@@ -1856,5 +1856,8 @@
   "passwords.customList": "列出名称的命令",
   "passwords.customGet": "输出密码的命令",
   "error.passwordBadCommand": "无法使用此命令。请检查引号，并确认密码命令中 {name} 是单独的词，或使用了 ASMGR_SECRET_NAME 变量。",
-  "error.passwordBadServerUrl": "服务器地址必须以 https:// 或 http:// 开头，且不含用户名。"
+  "error.passwordBadServerUrl": "服务器地址必须以 https:// 或 http:// 开头，且不含用户名。",
+  "conversations.duplicate": "同一个 Claude 对话（{id}）在多处打开：{places}。它们都会写入同一份历史，请只在一处保持打开。",
+  "conversations.outsideApp": "应用之外",
+  "conversations.duplicateTab": "它的 Claude 对话也在这里打开着：{places}"
 }

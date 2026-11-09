@@ -104,6 +104,8 @@ type App struct {
 	passwords           *passwords.Manager
 	cancelPasswordFetch context.CancelFunc
 	tabReadings         tabReadings
+	duplicatesMu        sync.Mutex
+	duplicates          []DuplicateConversation
 }
 
 type eventThrottle struct {
@@ -307,6 +309,7 @@ func (a *App) startup(ctx context.Context) {
 	// reap it before releasing project ownership.
 	a.startOrphanCleanup(ctx)
 	go a.watchTabsClosingOnExit(ctx)
+	go a.watchDuplicateConversations(ctx)
 	// Resize/redraw maintenance is deliberately asynchronous so terminal resize
 	// events do not stall the UI. Give it an application-owned lifecycle: the
 	// workers touch tmux and retain project ownership, so shutdown must cancel
@@ -3353,8 +3356,12 @@ type SidebarUpdate struct {
 	// list itself is only reloaded on events (startup, dialogs). Without this
 	// the sidebar showed a live activity dot on a session that the ordering
 	// still placed by its startup-time snapshot.
-	LastActive   map[string]string `json:"lastActive"`
-	observations []activityObservation
+	LastActive map[string]string `json:"lastActive"`
+	// ConversationsChanged: a tab was found on another conversation than the one
+	// recorded, as after /resume, and the record was updated. The session list holds
+	// the recorded one, so it has to be loaded again to show it.
+	ConversationsChanged bool `json:"conversationsChanged,omitempty"`
+	observations         []activityObservation
 }
 
 // sidebarSweepBudget is how long one pass over every session may take.
@@ -3562,6 +3569,8 @@ func (a *App) getSidebarUpdates(ctx context.Context) SidebarUpdate {
 		if mayPersist && needSave {
 			if err := a.storage.MergeResumeSessionIDsForProject(projectID, inst); err != nil {
 				log.Printf("[SidebarPoll] failed to save auto-detected session IDs for session=%s: %v", inst.ID, err)
+			} else {
+				result.ConversationsChanged = true
 			}
 		}
 

@@ -16,6 +16,7 @@
   import { askNewSessionFor, beginTabDrag, endTabDrag, tabMovePrompt } from '../../utils/tabMove';
   import Toast from '../common/Toast.svelte';
   import { sessions, selectedSessionId, selectedWindowIdx, selectWindow, selectedSession, startSession, stopSession, stopTab, startTabCommand, stopTabCommand, restartTab, deleteSession, deleteTab, toggleFavorite, renameTab, reorderTab, loadSessions } from '../../stores/sessions';
+  import { duplicateTabs, duplicateTabKey } from '../../stores/duplicateConversations';
   import type { Session } from '../../stores/sessions';
   import { agents, getAgentName } from '../../stores/agents';
   import { get } from 'svelte/store';
@@ -2289,6 +2290,11 @@
                 </svg>
               </span>
             {/if}
+            {#if $duplicateTabs.has(duplicateTabKey($selectedSessionId || '', win.Index))}
+              <span class="tab-duplicate-badge" data-duplicate
+                title={$t('conversations.duplicateTab', { places: ($duplicateTabs.get(duplicateTabKey($selectedSessionId || '', win.Index)) || [])
+                  .map((place) => place || $t('conversations.outsideApp')).join(', ') })}>⚠</span>
+            {/if}
             {#if tabHidesStatusByIdx[win.Index]}
               <span class="tab-nostatus-badge" title={$t('tabBar.statusHiddenBadge')}>
                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -3078,6 +3084,12 @@
     flex: none;
     color: #7dd3fc;
     opacity: 0.85;
+  }
+
+  .tab-duplicate-badge {
+    color: #fbbf24;
+    font-size: 11px;
+    flex-shrink: 0;
   }
 
   .tab-nostatus-badge {

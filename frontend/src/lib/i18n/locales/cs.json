@@ -1856,5 +1856,8 @@
   "passwords.customList": "Příkaz, který vypíše názvy",
   "passwords.customGet": "Příkaz, který vypíše heslo",
   "error.passwordBadCommand": "Tento příkaz nelze použít. Zkontrolujte uvozovky a to, zda příkaz pro heslo obsahuje {name} jako samostatné slovo nebo používá proměnnou ASMGR_SECRET_NAME.",
-  "error.passwordBadServerUrl": "Adresa serveru musí začínat https:// nebo http:// a nesmí obsahovat uživatelské jméno."
+  "error.passwordBadServerUrl": "Adresa serveru musí začínat https:// nebo http:// a nesmí obsahovat uživatelské jméno.",
+  "conversations.duplicate": "Stejná konverzace Claude ({id}) je otevřená na více místech: {places}. Všechna zapisují do její historie, nechte ji proto otevřenou jen na jednom.",
+  "conversations.outsideApp": "mimo aplikaci",
+  "conversations.duplicateTab": "Její konverzace Claude je otevřená i zde: {places}"
 }

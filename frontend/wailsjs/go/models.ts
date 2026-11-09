@@ -762,6 +762,57 @@ export namespace main {
 	        this.rules = source["rules"];
 	    }
 	}
+	export class DuplicateTab {
+	    sessionId: string;
+	    windowIdx: number;
+	    place: number;
+
+	    static createFrom(source: any = {}) {
+	        return new DuplicateTab(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.sessionId = source["sessionId"];
+	        this.windowIdx = source["windowIdx"];
+	        this.place = source["place"];
+	    }
+	}
+	export class DuplicateConversation {
+	    conversationId: string;
+	    places: string[];
+	    tabs: DuplicateTab[];
+
+	    static createFrom(source: any = {}) {
+	        return new DuplicateConversation(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.conversationId = source["conversationId"];
+	        this.places = source["places"];
+	        this.tabs = this.convertValues(source["tabs"], DuplicateTab);
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+
 	export class FeedbackLinks {
 	    github: string;
 	    email: string;
@@ -2214,6 +2265,7 @@ export namespace main {
 	    tabStatuses: Record<string, Array<TabStatusInfo>>;
 	    tabAvailability: Record<string, Array<TabAvailability>>;
 	    lastActive: Record<string, string>;
+	    conversationsChanged?: boolean;
 
 	    static createFrom(source: any = {}) {
 	        return new SidebarUpdate(source);
@@ -2228,6 +2280,7 @@ export namespace main {
 	        this.tabStatuses = this.convertValues(source["tabStatuses"], Array<TabStatusInfo>, true);
 	        this.tabAvailability = this.convertValues(source["tabAvailability"], Array<TabAvailability>, true);
 	        this.lastActive = source["lastActive"];
+	        this.conversationsChanged = source["conversationsChanged"];
 	    }
 
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

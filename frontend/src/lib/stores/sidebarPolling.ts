@@ -6,6 +6,9 @@ import { activeProjectId } from './projects';
 
 let listening = false;
 let cancelFn: (() => void) | null = null;
+// Loads the session list again. Passed in rather than imported, as the sessions store
+// imports this module.
+let reloadSessions: (() => void) | null = null;
 
 // Cache the last payload so we only notify Svelte stores when something
 // actually changed. Without this, every 2s sidebar tick publishes a fresh
@@ -84,9 +87,13 @@ function handleUpdate(data: any) {
     lastActiveJSON = la;
     lastActive.set(nextLastActive);
   }
+  // A tab went to another conversation, as /resume does, and the list still holds the
+  // one it was on: the status bar showed the old id until the app was restarted.
+  if (data.conversationsChanged) reloadSessions?.();
 }
 
-export function startSidebarPolling() {
+export function startSidebarPolling(onConversationsChanged?: () => void) {
+  if (onConversationsChanged) reloadSessions = onConversationsChanged;
   if (listening) return;
   listening = true;
 

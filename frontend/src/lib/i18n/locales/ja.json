@@ -1856,5 +1856,8 @@
   "passwords.customList": "名前を一覧表示するコマンド",
   "passwords.customGet": "パスワードを出力するコマンド",
   "error.passwordBadCommand": "このコマンドは使用できません。引用符を確認し、パスワードのコマンドに {name} が独立した語として含まれるか、ASMGR_SECRET_NAME 変数を使っているか確認してください。",
-  "error.passwordBadServerUrl": "サーバーのアドレスは https:// または http:// で始め、ユーザー名を含めないでください。"
+  "error.passwordBadServerUrl": "サーバーのアドレスは https:// または http:// で始め、ユーザー名を含めないでください。",
+  "conversations.duplicate": "同じ Claude の会話 ({id}) が複数の場所で開かれています: {places}。どれも同じ履歴に書き込むため、1 か所だけで開いてください。",
+  "conversations.outsideApp": "アプリの外",
+  "conversations.duplicateTab": "この Claude の会話はここでも開かれています: {places}"
 }

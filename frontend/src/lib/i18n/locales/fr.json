@@ -1856,5 +1856,8 @@
   "passwords.customList": "Commande qui liste les noms",
   "passwords.customGet": "Commande qui affiche le mot de passe",
   "error.passwordBadCommand": "Cette commande est inutilisable. Vérifiez les guillemets, et que la commande du mot de passe contient {name} comme mot séparé ou utilise la variable ASMGR_SECRET_NAME.",
-  "error.passwordBadServerUrl": "L'adresse du serveur doit commencer par https:// ou http://, sans nom d'utilisateur."
+  "error.passwordBadServerUrl": "L'adresse du serveur doit commencer par https:// ou http://, sans nom d'utilisateur.",
+  "conversations.duplicate": "La même conversation Claude ({id}) est ouverte à plusieurs endroits : {places}. Tous écrivent dans son historique : ne la gardez ouverte qu'à un seul endroit.",
+  "conversations.outsideApp": "hors de l'application",
+  "conversations.duplicateTab": "Sa conversation Claude est aussi ouverte ici : {places}"
 }

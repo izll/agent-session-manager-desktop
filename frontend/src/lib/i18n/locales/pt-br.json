@@ -1856,5 +1856,8 @@
   "passwords.customList": "Comando que lista os nomes",
   "passwords.customGet": "Comando que mostra a senha",
   "error.passwordBadCommand": "Este comando não pode ser usado. Verifique as aspas e se o comando da senha contém {name} como palavra separada ou usa a variável ASMGR_SECRET_NAME.",
-  "error.passwordBadServerUrl": "O endereço do servidor deve começar com https:// ou http://, sem nome de usuário."
+  "error.passwordBadServerUrl": "O endereço do servidor deve começar com https:// ou http://, sem nome de usuário.",
+  "conversations.duplicate": "A mesma conversa do Claude ({id}) está aberta em vários lugares: {places}. Todos escrevem no histórico dela, então deixe-a aberta em um só.",
+  "conversations.outsideApp": "fora do aplicativo",
+  "conversations.duplicateTab": "A conversa do Claude dela também está aberta aqui: {places}"
 }

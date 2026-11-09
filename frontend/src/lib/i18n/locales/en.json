@@ -1856,5 +1856,8 @@
   "passwords.customList": "Command that lists names",
   "passwords.customGet": "Command that prints the password",
   "error.passwordBadCommand": "This command cannot be used. Check the quotes, and that the password command contains {name} as a separate word, or uses the ASMGR_SECRET_NAME variable.",
-  "error.passwordBadServerUrl": "The server address has to start with https:// or http://, without a user name in it."
+  "error.passwordBadServerUrl": "The server address has to start with https:// or http://, without a user name in it.",
+  "conversations.duplicate": "The same Claude conversation ({id}) is open in several places: {places}. Both write its history, so keep it open in only one.",
+  "conversations.outsideApp": "outside the app",
+  "conversations.duplicateTab": "Its Claude conversation is open here too: {places}"
 }

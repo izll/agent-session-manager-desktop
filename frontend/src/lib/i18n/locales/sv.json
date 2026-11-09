@@ -1856,5 +1856,8 @@
   "passwords.customList": "Kommando som listar namnen",
   "passwords.customGet": "Kommando som skriver lösenordet",
   "error.passwordBadCommand": "Kommandot kan inte användas. Kontrollera citattecknen och att lösenordskommandot innehåller {name} som ett eget ord eller använder variabeln ASMGR_SECRET_NAME.",
-  "error.passwordBadServerUrl": "Serveradressen måste börja med https:// eller http://, utan användarnamn."
+  "error.passwordBadServerUrl": "Serveradressen måste börja med https:// eller http://, utan användarnamn.",
+  "conversations.duplicate": "Samma Claude-konversation ({id}) är öppen på flera ställen: {places}. Alla skriver i dess historik, så ha den öppen på bara ett ställe.",
+  "conversations.outsideApp": "utanför appen",
+  "conversations.duplicateTab": "Dess Claude-konversation är öppen även här: {places}"
 }

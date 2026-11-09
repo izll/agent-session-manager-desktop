@@ -310,6 +310,10 @@ export function GetDiffHiddenRules(arg1, arg2, arg3) {
   return window['go']['main']['App']['GetDiffHiddenRules'](arg1, arg2, arg3);
 }
 
+export function GetDuplicateConversations() {
+  return window['go']['main']['App']['GetDuplicateConversations']();
+}
+
 export function GetExtraArgs(arg1, arg2) {
   return window['go']['main']['App']['GetExtraArgs'](arg1, arg2);
 }

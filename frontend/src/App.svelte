@@ -215,6 +215,9 @@
   import { focusTerminal } from './lib/utils/focus';
   import { shortcutForEvent, capturingShortcut } from './lib/stores/shortcuts';
   import Toast from './lib/components/common/Toast.svelte';
+  import { describeDuplicateConversations } from './lib/utils/duplicateConversations';
+  import { setDuplicateConversations } from './lib/stores/duplicateConversations';
+  import { GetDuplicateConversations } from '../wailsjs/go/main/App';
   import CodexDaemonNotice from './lib/components/common/CodexDaemonNotice.svelte';
   import DialogCloseButton from './lib/components/common/DialogCloseButton.svelte';
 
@@ -360,6 +363,9 @@
   // Outcomes reported from anywhere, cleared after showing for the same
   // reason as the errors above.
   let showNoticeToast = false;
+  let showDuplicateToast = false;
+  let duplicateMessage = '';
+  let duplicateRevision = 0;
   let noticeMessage = '';
   let noticeRevision = 0;
   $: if ($appNotice) {
@@ -1070,6 +1076,17 @@
       selectedWindowIdx.set(closed.returnTo);
       if (closed.reason === 'login' && !anyDialogOpen) showPasswordPicker = true;
     });
+    // Two processes on one conversation write it over each other. It stays on screen,
+    // as it is something to act on, and is said again only when it changes.
+    void GetDuplicateConversations().then(setDuplicateConversations).catch(() => {});
+    EventsOn('conversations:duplicate', (found: { conversationId: string; places: string[] }[]) => {
+      if (!appMounted) return;
+      setDuplicateConversations(found);
+      if (!found?.length) return;
+      duplicateMessage = describeDuplicateConversations(found, $t);
+      duplicateRevision += 1;
+      showDuplicateToast = true;
+    });
     EventsOn('update:available', (info: { version: string; current: string }) => {
       if (!appMounted) return;
       availableUpdate = info?.version || '';
@@ -1132,7 +1149,7 @@
     if (!appMounted) return;
 
     // Start combined sidebar polling (activities + status lines)
-    startSidebarPolling();
+    startSidebarPolling(() => void loadSessions());
 
     // What a restart interrupted. Not awaited: a session on a server can take
     // a few seconds to answer, and nothing else should wait for that.
@@ -2223,6 +2240,7 @@
      switching project — failed in silence. -->
 <Toast bind:show={showSessionError} message={sessionErrorMessage} revision={sessionErrorRevision} variant="error" duration={9000} />
 
+<Toast bind:show={showDuplicateToast} message={duplicateMessage} revision={duplicateRevision} variant="warning" duration={0} />
 <Toast bind:show={showNoticeToast} message={noticeMessage} revision={noticeRevision} variant="success" duration={5000} />
 <Toast bind:show={showReopenToast} message={reopenToastMessage} revision={reopenToastRevision} variant={reopenToastVariant} duration={reopenToastVariant === 'success' ? 5000 : 9000} />
 

@@ -1856,5 +1856,8 @@
   "passwords.customList": "الأمر الذي يعرض الأسماء",
   "passwords.customGet": "الأمر الذي يطبع كلمة المرور",
   "error.passwordBadCommand": "لا يمكن استخدام هذا الأمر. تحقق من علامات الاقتباس ومن أن أمر كلمة المرور يتضمن {name} ككلمة منفصلة أو يستخدم المتغير ASMGR_SECRET_NAME.",
-  "error.passwordBadServerUrl": "يجب أن يبدأ عنوان الخادم بـ https:// أو http:// من دون اسم مستخدم."
+  "error.passwordBadServerUrl": "يجب أن يبدأ عنوان الخادم بـ https:// أو http:// من دون اسم مستخدم.",
+  "conversations.duplicate": "محادثة Claude نفسها ({id}) مفتوحة في عدة أماكن: {places}. جميعها تكتب في سجلها، لذا أبقها مفتوحة في مكان واحد فقط.",
+  "conversations.outsideApp": "خارج التطبيق",
+  "conversations.duplicateTab": "محادثة Claude الخاصة بها مفتوحة هنا أيضًا: {places}"
 }

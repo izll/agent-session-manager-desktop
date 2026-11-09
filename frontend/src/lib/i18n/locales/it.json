@@ -1856,5 +1856,8 @@
   "passwords.customList": "Comando che elenca i nomi",
   "passwords.customGet": "Comando che stampa la password",
   "error.passwordBadCommand": "Questo comando non è utilizzabile. Controlla le virgolette e che il comando della password contenga {name} come parola a sé o usi la variabile ASMGR_SECRET_NAME.",
-  "error.passwordBadServerUrl": "L'indirizzo del server deve iniziare con https:// o http://, senza nome utente."
+  "error.passwordBadServerUrl": "L'indirizzo del server deve iniziare con https:// o http://, senza nome utente.",
+  "conversations.duplicate": "La stessa conversazione di Claude ({id}) è aperta in più punti: {places}. Tutti scrivono nella sua cronologia, quindi tienila aperta in uno solo.",
+  "conversations.outsideApp": "fuori dall'app",
+  "conversations.duplicateTab": "La sua conversazione di Claude è aperta anche qui: {places}"
 }

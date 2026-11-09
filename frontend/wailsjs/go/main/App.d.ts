@@ -159,6 +159,8 @@ export function GetDiffFolder(arg1:string,arg2:number):Promise<main.DiffFolder>;
 
 export function GetDiffHiddenRules(arg1:string,arg2:number,arg3:string):Promise<main.DiffHiddenRules>;
 
+export function GetDuplicateConversations():Promise<Array<main.DuplicateConversation>>;
+
 export function GetExtraArgs(arg1:string,arg2:number):Promise<string>;
 
 export function GetFullDiff(arg1:string,arg2:number,arg3:string):Promise<main.DiffData>;

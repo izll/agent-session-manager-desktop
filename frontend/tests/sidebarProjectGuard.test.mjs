@@ -58,7 +58,8 @@ const result = await build({
 
 globalThis.__activeProjectId = 'project-b';
 const module = await import(`data:text/javascript;base64,${Buffer.from(result.outputFiles[0].text).toString('base64')}#${Date.now()}`);
-module.startSidebarPolling();
+let reloads = 0;
+module.startSidebarPolling(() => { reloads++; });
 
 assert.equal(typeof globalThis.__sidebarHandler, 'function');
 globalThis.__sidebarHandler({
@@ -89,6 +90,13 @@ globalThis.__sidebarHandler({
 assert.deepEqual(globalThis.__activities, { shared: 'waiting' });
 assert.deepEqual(globalThis.__statusLines, { shared: 'current project' });
 assert.deepEqual(globalThis.__lastActive, { shared: '2026-09-04T09:00:00Z' });
+
+assert.equal(reloads, 0, 'nothing changed, nothing to load');
+// After /resume the recorded conversation changes, and the list must show it.
+globalThis.__sidebarHandler({ projectId: 'project-a', conversationsChanged: true });
+assert.equal(reloads, 0, 'another project\'s change must not reload this one');
+globalThis.__sidebarHandler({ projectId: 'project-b', conversationsChanged: true });
+assert.equal(reloads, 1, 'a changed conversation reloads the list');
 
 module.stopSidebarPolling();
 delete globalThis.__sidebarHandler;

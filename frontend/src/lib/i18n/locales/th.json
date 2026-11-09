@@ -1856,5 +1856,8 @@
   "passwords.customList": "คำสั่งแสดงรายชื่อ",
   "passwords.customGet": "คำสั่งพิมพ์รหัสผ่าน",
   "error.passwordBadCommand": "ใช้คำสั่งนี้ไม่ได้ ตรวจสอบเครื่องหมายคำพูด และคำสั่งรหัสผ่านต้องมี {name} เป็นคำแยกต่างหากหรือใช้ตัวแปร ASMGR_SECRET_NAME",
-  "error.passwordBadServerUrl": "ที่อยู่เซิร์ฟเวอร์ต้องขึ้นต้นด้วย https:// หรือ http:// และไม่มีชื่อผู้ใช้"
+  "error.passwordBadServerUrl": "ที่อยู่เซิร์ฟเวอร์ต้องขึ้นต้นด้วย https:// หรือ http:// และไม่มีชื่อผู้ใช้",
+  "conversations.duplicate": "บทสนทนา Claude เดียวกัน ({id}) เปิดอยู่หลายที่: {places} ทุกที่เขียนลงประวัติเดียวกัน จึงควรเปิดไว้เพียงที่เดียว",
+  "conversations.outsideApp": "นอกแอป",
+  "conversations.duplicateTab": "บทสนทนา Claude ของแท็บนี้เปิดอยู่ที่: {places} ด้วย"
 }

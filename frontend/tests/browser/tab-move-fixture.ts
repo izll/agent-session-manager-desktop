@@ -4,6 +4,7 @@ import TabMoveFixture from './tab-move-fixture.svelte';
 import { sessions, selectedSessionId, selectedWindowIdx, type Session } from '../../src/lib/stores/sessions';
 import { activeProjectId } from '../../src/lib/stores/projects';
 import { appError, appNotice } from '../../src/lib/stores/appErrors';
+import { setDuplicateConversations } from '../../src/lib/stores/duplicateConversations';
 
 // Five sessions of one project: the source with one tab besides its own
 // window, a running target, a stopped one, one on a server that a local tab
@@ -112,6 +113,9 @@ appNotice.subscribe(message => { if (message) { notices.push(message); appNotice
 appError.subscribe(message => { if (message) { errors.push(message); appError.set(null); } });
 
 (window as any).tabMoveFixture = {
+  markDuplicate: (sessionId: string, windowIdx: number) => setDuplicateConversations(
+    [{ conversationId: 'c', places: ['Source › worker #1', 'Dest › other #4', ''], tabs: [{ sessionId, windowIdx, place: 0 }] }]),
+  clearDuplicates: () => setDuplicateConversations([]),
   calls: () => structuredClone(calls),
   notices: () => [...notices],
   errors: () => [...errors],

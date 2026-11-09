@@ -1856,5 +1856,8 @@
   "passwords.customList": "Polecenie wypisujące nazwy",
   "passwords.customGet": "Polecenie wypisujące hasło",
   "error.passwordBadCommand": "Tego polecenia nie można użyć. Sprawdź cudzysłowy oraz czy polecenie hasła zawiera {name} jako osobne słowo lub używa zmiennej ASMGR_SECRET_NAME.",
-  "error.passwordBadServerUrl": "Adres serwera musi zaczynać się od https:// lub http:// i nie może zawierać nazwy użytkownika."
+  "error.passwordBadServerUrl": "Adres serwera musi zaczynać się od https:// lub http:// i nie może zawierać nazwy użytkownika.",
+  "conversations.duplicate": "Ta sama rozmowa Claude ({id}) jest otwarta w kilku miejscach: {places}. Wszystkie zapisują jej historię, więc zostaw ją otwartą tylko w jednym.",
+  "conversations.outsideApp": "poza aplikacją",
+  "conversations.duplicateTab": "Jej rozmowa Claude jest otwarta także tutaj: {places}"
 }

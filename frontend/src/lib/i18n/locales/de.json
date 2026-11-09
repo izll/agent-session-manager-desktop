@@ -1856,5 +1856,8 @@
   "passwords.customList": "Befehl, der die Namen auflistet",
   "passwords.customGet": "Befehl, der das Passwort ausgibt",
   "error.passwordBadCommand": "Dieser Befehl kann nicht verwendet werden. Prüfe die Anführungszeichen und ob der Passwortbefehl {name} als eigenes Wort enthält oder die Variable ASMGR_SECRET_NAME nutzt.",
-  "error.passwordBadServerUrl": "Die Serveradresse muss mit https:// oder http:// beginnen und darf keinen Benutzernamen enthalten."
+  "error.passwordBadServerUrl": "Die Serveradresse muss mit https:// oder http:// beginnen und darf keinen Benutzernamen enthalten.",
+  "conversations.duplicate": "Dieselbe Claude-Unterhaltung ({id}) ist an mehreren Stellen offen: {places}. Alle schreiben in ihren Verlauf, lass sie also nur an einer Stelle offen.",
+  "conversations.outsideApp": "außerhalb der App",
+  "conversations.duplicateTab": "Ihre Claude-Unterhaltung ist auch hier offen: {places}"
 }

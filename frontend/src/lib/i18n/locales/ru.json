@@ -1856,5 +1856,8 @@
   "passwords.customList": "Команда, выводящая имена",
   "passwords.customGet": "Команда, выводящая пароль",
   "error.passwordBadCommand": "Эту команду нельзя использовать. Проверьте кавычки и то, что команда пароля содержит {name} отдельным словом или использует переменную ASMGR_SECRET_NAME.",
-  "error.passwordBadServerUrl": "Адрес сервера должен начинаться с https:// или http:// и не содержать имени пользователя."
+  "error.passwordBadServerUrl": "Адрес сервера должен начинаться с https:// или http:// и не содержать имени пользователя.",
+  "conversations.duplicate": "Один и тот же разговор Claude ({id}) открыт в нескольких местах: {places}. Все пишут в его историю, поэтому оставьте его открытым только в одном.",
+  "conversations.outsideApp": "вне приложения",
+  "conversations.duplicateTab": "Её разговор Claude открыт ещё здесь: {places}"
 }

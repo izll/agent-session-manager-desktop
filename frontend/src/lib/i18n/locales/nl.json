@@ -1856,5 +1856,8 @@
   "passwords.customList": "Opdracht die de namen toont",
   "passwords.customGet": "Opdracht die het wachtwoord toont",
   "error.passwordBadCommand": "Deze opdracht kan niet worden gebruikt. Controleer de aanhalingstekens en of de wachtwoordopdracht {name} als apart woord bevat of de variabele ASMGR_SECRET_NAME gebruikt.",
-  "error.passwordBadServerUrl": "Het serveradres moet beginnen met https:// of http://, zonder gebruikersnaam."
+  "error.passwordBadServerUrl": "Het serveradres moet beginnen met https:// of http://, zonder gebruikersnaam.",
+  "conversations.duplicate": "Hetzelfde Claude-gesprek ({id}) is op meerdere plekken open: {places}. Ze schrijven allemaal in de geschiedenis, dus houd het maar op één plek open.",
+  "conversations.outsideApp": "buiten de app",
+  "conversations.duplicateTab": "Het Claude-gesprek is ook hier open: {places}"
 }

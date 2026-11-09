@@ -1856,5 +1856,8 @@
   "passwords.customList": "Lệnh liệt kê tên",
   "passwords.customGet": "Lệnh in mật khẩu",
   "error.passwordBadCommand": "Không thể dùng lệnh này. Hãy kiểm tra dấu ngoặc kép và lệnh mật khẩu có chứa {name} thành một từ riêng hoặc dùng biến ASMGR_SECRET_NAME.",
-  "error.passwordBadServerUrl": "Địa chỉ máy chủ phải bắt đầu bằng https:// hoặc http:// và không chứa tên người dùng."
+  "error.passwordBadServerUrl": "Địa chỉ máy chủ phải bắt đầu bằng https:// hoặc http:// và không chứa tên người dùng.",
+  "conversations.duplicate": "Cùng một cuộc trò chuyện Claude ({id}) đang mở ở nhiều nơi: {places}. Tất cả đều ghi vào lịch sử của nó, nên chỉ để mở ở một nơi.",
+  "conversations.outsideApp": "bên ngoài ứng dụng",
+  "conversations.duplicateTab": "Cuộc trò chuyện Claude của tab này cũng đang mở tại: {places}"
 }

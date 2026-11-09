@@ -333,3 +333,22 @@ test('a tab names itself when hovered, but not while being renamed', { tag: '@we
   await expect(page.locator('.tab-bar .tab:has(.tab-rename-input)')).not.toHaveAttribute('title', /./);
 });
 
+// One Claude conversation in two tabs writes its history from both.
+test('a tab sharing its conversation is marked, and only that one', async ({ page }) => {
+  await gotoFixture(page);
+  await expect(page.locator('[data-duplicate]')).toHaveCount(0);
+  await page.evaluate(() => window.tabMoveFixture.markDuplicate('src', 1));
+  await expect(tab(page, 'worker').locator('[data-duplicate]')).toBeVisible();
+  // It names where else, and not itself.
+  const title = await tab(page, 'worker').locator('[data-duplicate]').getAttribute('title');
+  expect(title).toContain('Dest › other #4');
+  expect(title).not.toContain('worker');
+  expect(title).not.toContain('{places}');
+  await expect(page.locator('[data-duplicate]')).toHaveCount(1);
+  await page.evaluate(() => window.tabMoveFixture.markDuplicate('dst', 1));
+  await expect(page.locator('[data-duplicate]')).toHaveCount(0);
+  await page.evaluate(() => window.tabMoveFixture.markDuplicate('src', 1));
+  await page.evaluate(() => window.tabMoveFixture.clearDuplicates());
+  await expect(page.locator('[data-duplicate]')).toHaveCount(0);
+});
+

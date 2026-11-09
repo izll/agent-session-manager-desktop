@@ -24,3 +24,6 @@ func processAlive(pid int) bool {
 	}
 	return exitCode == windowsStillActive
 }
+
+// ProcessAlive is processAlive for callers outside this package.
+func ProcessAlive(pid int) bool { return processAlive(pid) }

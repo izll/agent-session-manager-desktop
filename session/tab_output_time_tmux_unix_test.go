@@ -211,4 +211,3 @@ func TestASnapshotKnowsTheMainWindowByItsMarker(t *testing.T) {
 		t.Fatalf("main = %d", main)
 	}
 }
-
