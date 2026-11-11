@@ -9,8 +9,6 @@ import (
 	"time"
 
 	"asmgr-desktop/session"
-
-	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 // Frontend API for the saved-command library: the list, editing it, and
@@ -478,7 +476,7 @@ func (a *App) closeExitedTab(sessionID string, tab session.TabToClose, projectID
 		log.Printf("[tabs] could not save closing an ended tab: %v", err)
 	}
 	if a.ctx != nil {
-		runtime.EventsEmit(a.ctx, "tabs:closed-on-exit", TabClosedOnExit{sessionID, windowIdx, tab.ReturnTo, tab.Reason})
+		emitEvent(a.ctx, "tabs:closed-on-exit", TabClosedOnExit{sessionID, windowIdx, tab.ReturnTo, tab.Reason})
 	}
 }
 

@@ -4,6 +4,7 @@ import {main} from '../models';
 import {whatsnew} from '../models';
 import {session} from '../models';
 import {remote} from '../models';
+import {mobile} from '../models';
 
 export function AcceptServerHostKey(arg1:string,arg2:string):Promise<void>;
 
@@ -48,6 +49,8 @@ export function CreateBackup(arg1:string):Promise<void>;
 export function CreateCheckpoint(arg1:string,arg2:number,arg3:string,arg4:string,arg5:string):Promise<main.Checkpoint>;
 
 export function CreateGroup(arg1:string,arg2:string):Promise<main.GroupInfo>;
+
+export function CreateMobilePairing():Promise<main.MobilePairing>;
 
 export function CreateProject(arg1:string):Promise<main.ProjectInfo>;
 
@@ -195,6 +198,10 @@ export function GetLockStatus():Promise<main.LockStatusInfo>;
 
 export function GetLog(arg1:string):Promise<main.AppLog>;
 
+export function GetMobileSetup():Promise<main.MobileSetup>;
+
+export function GetMobileStatus():Promise<main.MobileStatus>;
+
 export function GetMultiplexerStatus():Promise<main.MultiplexerStatus>;
 
 export function GetNextTask(arg1:string):Promise<main.TaskInfo>;
@@ -304,6 +311,8 @@ export function ListBackgroundAgents():Promise<Array<main.BackgroundAgentInfo>>;
 export function ListCheckpoints(arg1:string,arg2:number,arg3:string):Promise<main.CheckpointList>;
 
 export function ListGitBranches(arg1:string,arg2:number,arg3:string):Promise<main.GitBranchList>;
+
+export function ListMobileDevices():Promise<Array<mobile.Device>>;
 
 export function ListOnlineSchemes():Promise<Array<main.OnlineSchemeInfo>>;
 
@@ -431,6 +440,8 @@ export function RevertDiffFile(arg1:string,arg2:string,arg3:boolean,arg4:number,
 
 export function RevertDiffHunk(arg1:string,arg2:string,arg3:number,arg4:string,arg5:string):Promise<void>;
 
+export function RevokeMobileDevice(arg1:string):Promise<void>;
+
 export function RunCommand(arg1:string,arg2:string,arg3:number,arg4:Record<string, string>,arg5:string):Promise<number>;
 
 export function RunningTabCommands():Promise<Array<main.RunningTabCommand>>;
@@ -482,6 +493,8 @@ export function SetGroupColor(arg1:string,arg2:string,arg3:string,arg4:boolean,a
 export function SetKeePassXCDatabase(arg1:string,arg2:string):Promise<void>;
 
 export function SetLastWindowIndex(arg1:string,arg2:number,arg3:string):Promise<void>;
+
+export function SetMobileAccess(arg1:boolean,arg2:number):Promise<main.MobileStatus>;
 
 export function SetProjectNotePages(arg1:Array<session.NotePage>,arg2:string):Promise<void>;
 

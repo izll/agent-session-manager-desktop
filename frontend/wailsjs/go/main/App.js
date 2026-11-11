@@ -90,6 +90,10 @@ export function CreateGroup(arg1, arg2) {
   return window['go']['main']['App']['CreateGroup'](arg1, arg2);
 }
 
+export function CreateMobilePairing() {
+  return window['go']['main']['App']['CreateMobilePairing']();
+}
+
 export function CreateProject(arg1) {
   return window['go']['main']['App']['CreateProject'](arg1);
 }
@@ -382,6 +386,14 @@ export function GetLog(arg1) {
   return window['go']['main']['App']['GetLog'](arg1);
 }
 
+export function GetMobileSetup() {
+  return window['go']['main']['App']['GetMobileSetup']();
+}
+
+export function GetMobileStatus() {
+  return window['go']['main']['App']['GetMobileStatus']();
+}
+
 export function GetMultiplexerStatus() {
   return window['go']['main']['App']['GetMultiplexerStatus']();
 }
@@ -600,6 +612,10 @@ export function ListCheckpoints(arg1, arg2, arg3) {
 
 export function ListGitBranches(arg1, arg2, arg3) {
   return window['go']['main']['App']['ListGitBranches'](arg1, arg2, arg3);
+}
+
+export function ListMobileDevices() {
+  return window['go']['main']['App']['ListMobileDevices']();
 }
 
 export function ListOnlineSchemes() {
@@ -854,6 +870,10 @@ export function RevertDiffHunk(arg1, arg2, arg3, arg4, arg5) {
   return window['go']['main']['App']['RevertDiffHunk'](arg1, arg2, arg3, arg4, arg5);
 }
 
+export function RevokeMobileDevice(arg1) {
+  return window['go']['main']['App']['RevokeMobileDevice'](arg1);
+}
+
 export function RunCommand(arg1, arg2, arg3, arg4, arg5) {
   return window['go']['main']['App']['RunCommand'](arg1, arg2, arg3, arg4, arg5);
 }
@@ -956,6 +976,10 @@ export function SetKeePassXCDatabase(arg1, arg2) {
 
 export function SetLastWindowIndex(arg1, arg2, arg3) {
   return window['go']['main']['App']['SetLastWindowIndex'](arg1, arg2, arg3);
+}
+
+export function SetMobileAccess(arg1, arg2) {
+  return window['go']['main']['App']['SetMobileAccess'](arg1, arg2);
 }
 
 export function SetProjectNotePages(arg1, arg2) {

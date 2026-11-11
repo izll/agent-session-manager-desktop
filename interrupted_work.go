@@ -8,8 +8,6 @@ import (
 	"time"
 
 	"asmgr-desktop/session"
-
-	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 // Picking up where a restart left off.
@@ -545,7 +543,7 @@ func (a *App) ReopenInterruptedSessions(ids []string, expectedProjectID string) 
 		return a.reopenInterruptedSession(id, record, expectedProjectID)
 	}, func(result ReopenResult) {
 		if a.ctx != nil {
-			runtime.EventsEmit(a.ctx, interruptedProgressEvent, result)
+			emitEvent(a.ctx, interruptedProgressEvent, result)
 		}
 	})
 

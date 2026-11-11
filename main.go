@@ -56,6 +56,11 @@ func main() {
 	// burst or seconds apart — are invisible at second resolution.
 	log.SetFlags(log.Ldate | log.Lmicroseconds)
 
+	// The phone's page without a window: see headless.go.
+	if len(os.Args) > 1 && os.Args[1] == "--serve" {
+		os.Exit(runHeadless(os.Args[2:]))
+	}
+
 	// Create an instance of the app structure
 	app := NewApp()
 

@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"asmgr-desktop/mcp"
+	"asmgr-desktop/mobile"
 	"asmgr-desktop/passwords"
 	"asmgr-desktop/remote"
 	"asmgr-desktop/session"
@@ -105,6 +106,10 @@ type App struct {
 	cancelPasswordFetch context.CancelFunc
 	tabReadings         tabReadings
 	duplicatesMu        sync.Mutex
+	mobileMu            sync.Mutex
+	mobileServer        *mobile.Server
+	mobileDevices       *mobile.Devices
+	mobilePort          int
 	duplicates          []DuplicateConversation
 }
 
@@ -170,7 +175,7 @@ func (a *App) startup(ctx context.Context) {
 	// A Codex conversation continued through its background server runs without
 	// YOLO; the user is told and offered to stop the server.
 	session.SetCodexDaemonHeldHandler(func(notice session.CodexDaemonHeldNotice) {
-		runtime.EventsEmit(ctx, codexDaemonHeldEvent, a.codexDaemonHeldPayload(notice))
+		emitEvent(ctx, codexDaemonHeldEvent, a.codexDaemonHeldPayload(notice))
 	})
 
 	// Clear the "before" files left by external diffs. Done here rather than
@@ -201,7 +206,7 @@ func (a *App) startup(ctx context.Context) {
 	// Initialize storage
 	storage, err := session.NewStorage()
 	if err != nil {
-		runtime.LogError(ctx, fmt.Sprintf("Failed to initialize storage: %v", err))
+		logStartupError(ctx, fmt.Sprintf("Failed to initialize storage: %v", err))
 		return
 	}
 	a.storage = storage
@@ -250,7 +255,7 @@ func (a *App) startup(ctx context.Context) {
 
 	statsRecorder, err := NewActivityStatsRecorder()
 	if err != nil {
-		runtime.LogError(ctx, fmt.Sprintf("Failed to initialize activity statistics: %v", err))
+		logStartupError(ctx, fmt.Sprintf("Failed to initialize activity statistics: %v", err))
 	} else {
 		a.activityStats = statsRecorder
 	}
@@ -264,7 +269,7 @@ func (a *App) startup(ctx context.Context) {
 	a.termServer.typingSignal = &a.lastTypingSignal
 	a.termServer.beginAttach = a.beginTerminalAttach
 	if err := a.termServer.Start(); err != nil {
-		runtime.LogError(ctx, fmt.Sprintf("Failed to start terminal server: %v", err))
+		logStartupError(ctx, fmt.Sprintf("Failed to start terminal server: %v", err))
 	}
 
 	// Attention notifications (desktop/ntfy when an agent starts waiting).
@@ -275,34 +280,37 @@ func (a *App) startup(ctx context.Context) {
 	a.startAttentionWatcher(ctx)
 	a.startTokenUsageWatcher()
 
-	// Set dictation callbacks (instance created in main.go)
-	a.dictation.SetTerminalServer(a.termServer)
-	a.dictation.SetStateChangeCallback(func(listening bool) {
-		runtime.EventsEmit(ctx, "dictation:state", listening)
-	})
-	a.dictation.SetErrorCallback(func(title, message string) {
-		runtime.EventsEmit(ctx, "dictation:error", map[string]string{
-			"title":   title,
-			"message": message,
+	// Set dictation callbacks (instance created in main.go). There is none without a
+	// window, as with --serve: dictation types into the window's terminals.
+	if a.dictation != nil {
+		a.dictation.SetTerminalServer(a.termServer)
+		a.dictation.SetStateChangeCallback(func(listening bool) {
+			emitEvent(ctx, "dictation:state", listening)
 		})
-	})
-	// Throttle voice level events to ~10Hz for smooth UI without flooding Wails events
-	voiceEvents := eventThrottle{interval: 80 * time.Millisecond}
-	a.dictation.SetVoiceLevelCallback(func(level float64) {
-		if !voiceEvents.allow(time.Now()) {
-			return
-		}
-		runtime.EventsEmit(ctx, "dictation:voiceLevel", level)
-	})
-	a.dictation.SetInterimTextCallback(func(text string) {
-		runtime.EventsEmit(ctx, "dictation:interimText", text)
-	})
-	a.dictation.SetFieldTextCallback(func(text string) {
-		runtime.EventsEmit(ctx, "dictation:fieldText", text)
-	})
-	a.dictation.SetFieldDeleteCallback(func(count int) {
-		runtime.EventsEmit(ctx, "dictation:fieldDelete", count)
-	})
+		a.dictation.SetErrorCallback(func(title, message string) {
+			emitEvent(ctx, "dictation:error", map[string]string{
+				"title":   title,
+				"message": message,
+			})
+		})
+		// Throttle voice level events to ~10Hz for smooth UI without flooding Wails events
+		voiceEvents := eventThrottle{interval: 80 * time.Millisecond}
+		a.dictation.SetVoiceLevelCallback(func(level float64) {
+			if !voiceEvents.allow(time.Now()) {
+				return
+			}
+			emitEvent(ctx, "dictation:voiceLevel", level)
+		})
+		a.dictation.SetInterimTextCallback(func(text string) {
+			emitEvent(ctx, "dictation:interimText", text)
+		})
+		a.dictation.SetFieldTextCallback(func(text string) {
+			emitEvent(ctx, "dictation:fieldText", text)
+		})
+		a.dictation.SetFieldDeleteCallback(func(count int) {
+			emitEvent(ctx, "dictation:fieldDelete", count)
+		})
+	}
 
 	// Clean up orphaned GUI tmux sessions from previous runs. This owns tmux
 	// processes and a project read lock, so shutdown must be able to cancel and
@@ -310,6 +318,8 @@ func (a *App) startup(ctx context.Context) {
 	a.startOrphanCleanup(ctx)
 	go a.watchTabsClosingOnExit(ctx)
 	go a.watchDuplicateConversations(ctx)
+	// After the project lock above: only its owner may let a phone in.
+	a.startMobileIfEnabled()
 	// Resize/redraw maintenance is deliberately asynchronous so terminal resize
 	// events do not stall the UI. Give it an application-owned lifecycle: the
 	// workers touch tmux and retain project ownership, so shutdown must cancel
@@ -421,7 +431,7 @@ func (a *App) checkForUpdateIfDue(ctx context.Context) {
 	}
 
 	log.Printf("[update] %s available (running %s)", latest, Version)
-	runtime.EventsEmit(ctx, "update:available", map[string]string{
+	emitEvent(ctx, "update:available", map[string]string{
 		"version": latest,
 		"current": Version,
 	})
@@ -434,6 +444,7 @@ func (a *App) IsDevMode() bool {
 
 // shutdown is called when the app is closing
 func (a *App) shutdown(ctx context.Context) {
+	a.stopMobile()
 	// Installing the replacement executable is a transaction that must not be
 	// interrupted by our own process teardown. Close the gate before stopping
 	// other services so no new Wails update request can race this shutdown, and
@@ -812,6 +823,10 @@ func (a *App) SelectProject(id string) error {
 
 	a.projectMu.Lock()
 	defer a.projectMu.Unlock()
+	// Serving follows owning: off in a project another window owns, and as this
+	// project's setting says in one this window does. Deferred after the lock, so it
+	// runs while that is still held, on every way out.
+	defer a.reconcileMobileWithProject()
 	// Once the active project changes, its running sessions are no longer part
 	// of sidebar polling. Capture their Codex IDs while we still own that
 	// project's lock and before switching storage to the new project.
@@ -2354,7 +2369,7 @@ func (a *App) setSessionAutoYes(inst *session.Instance, autoYes bool, expectedPr
 		// Event delivery is asynchronous relative to SelectProject. Include the
 		// frontend-captured project identity so a delayed event from project A
 		// cannot tear down an identically named terminal already shown for B.
-		runtime.EventsEmit(a.ctx, "session:restarted", SessionRestartedEvent{
+		emitEvent(a.ctx, "session:restarted", SessionRestartedEvent{
 			SessionID: id,
 			ProjectID: expectedProjectID,
 		})
@@ -2702,10 +2717,10 @@ func (a *App) ForkToNewSession(id, name, sessionID, expectedProjectID string) (*
 	// there is nothing to keep. The error goes to the caller, which is what puts
 	// it in front of the user instead of only in the log.
 	if err := newInst.StartWithResume(""); err != nil {
-		runtime.LogWarning(a.ctx, fmt.Sprintf("Failed to auto-start forked session: %v", err))
+		logStartupError(a.ctx, fmt.Sprintf("Failed to auto-start forked session: %v", err))
 		delErr := a.storage.RemoveInstance(newInst.ID)
 		if delErr != nil {
-			runtime.LogWarning(a.ctx, fmt.Sprintf("Failed to clean up the forked session: %v", delErr))
+			logStartupError(a.ctx, fmt.Sprintf("Failed to clean up the forked session: %v", delErr))
 		}
 		return nil, errors.Join(err, delErr)
 	}
@@ -3918,7 +3933,7 @@ func (a *App) startPreviewPolling(ctx context.Context) {
 			if isDevMode {
 				log.Printf("[SidebarEmit] activities=%v", data.Activities)
 			}
-			runtime.EventsEmit(a.ctx, "sidebar:update", data)
+			emitEvent(a.ctx, "sidebar:update", data)
 
 		case <-ctx.Done():
 			return
@@ -4015,13 +4030,13 @@ func (a *App) readPTY(ptyID string, ptmx session.TerminalStream) {
 		n, err := ptmx.Read(buf)
 		if err != nil {
 			if err != io.EOF {
-				runtime.LogError(a.ctx, fmt.Sprintf("PTY read error: %v", err))
+				logStartupError(a.ctx, fmt.Sprintf("PTY read error: %v", err))
 			}
 			break
 		}
 		if n > 0 {
 			// Emit immediately - let frontend batch the rendering
-			runtime.EventsEmit(a.ctx, eventName, string(buf[:n]))
+			emitEvent(a.ctx, eventName, string(buf[:n]))
 		}
 	}
 	// Cleanup
@@ -4121,7 +4136,7 @@ func (a *App) detachSessionIfCurrent(ptyID string, expected session.TerminalStre
 		go func(c *exec.Cmd) { _ = c.Wait() }(ps.cmd)
 	}
 
-	runtime.EventsEmit(a.ctx, "pty:closed:"+ptyID, nil)
+	emitEvent(a.ctx, "pty:closed:"+ptyID, nil)
 	return nil
 }
 

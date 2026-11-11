@@ -32,6 +32,7 @@
   import ShortcutEditor from '../Settings/ShortcutEditor.svelte';
   import { t, loadTranslations } from '../../i18n';
   import DialogCloseButton from '../common/DialogCloseButton.svelte';
+  import MobileAccessSection from './MobileAccessSection.svelte';
   import ViewOrderEditor from '../common/ViewOrderEditor.svelte';
   import { normalizeViewOrder, isDefaultViewOrder } from '../../utils/viewOrder';
 
@@ -1347,6 +1348,11 @@
                   on:input={(e) => saveSettings({ externalEditor: e.currentTarget.value })}
                 />
               </div>
+          </div>
+
+          <div class="settings-section">
+            <h3>{$t('mobile.title')}</h3>
+            <MobileAccessSection />
           </div>
 
           <div class="settings-section">

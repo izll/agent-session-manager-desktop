@@ -205,3 +205,8 @@ func (s *Storage) DeletedFilesDir() string {
 func (s *Storage) PasswordsPath() string {
 	return filepath.Join(s.configDir, "passwords.json")
 }
+
+// MobileDevicesPath is the list of phones let in, secrets hashed.
+func (s *Storage) MobileDevicesPath() string {
+	return filepath.Join(s.configDir, "mobile-devices.json")
+}

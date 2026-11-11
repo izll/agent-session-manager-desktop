@@ -265,6 +265,10 @@ type Settings struct {
 	NotifyDesktop   bool   `json:"notify_desktop,omitempty"`
 	NotifyNtfy      bool   `json:"notify_ntfy,omitempty"`
 	NtfyURL         string `json:"ntfy_url,omitempty"`
+	// MobileEnabled serves the phone's page on 127.0.0.1:MobilePort; see the mobile
+	// package. Off by default: whoever pairs a device types into the terminals.
+	MobileEnabled bool `json:"mobile_enabled,omitempty"`
+	MobilePort    int  `json:"mobile_port,omitempty"`
 	// ExternalEditor is the command used for "open in editor", empty to use
 	// whichever of VS Code and its forks is found on PATH.
 	//

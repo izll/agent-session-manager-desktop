@@ -16,8 +16,6 @@ import (
 	"asmgr-desktop/session"
 	"asmgr-desktop/tokenusage"
 	"asmgr-desktop/tokenusage/store"
-
-	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 // How many tokens each session used, on this computer and on the servers the
@@ -489,10 +487,10 @@ func (a *App) recordTokenUsageScan(ctx context.Context, usage *store.Store, mach
 // replace it.
 var emitTokenUsageEvent = func(ctx context.Context, name string, data any) {
 	if data == nil {
-		runtime.EventsEmit(ctx, name)
+		emitEvent(ctx, name)
 		return
 	}
-	runtime.EventsEmit(ctx, name, data)
+	emitEvent(ctx, name, data)
 }
 
 func (a *App) emitTokenUsage(name string, data any) {

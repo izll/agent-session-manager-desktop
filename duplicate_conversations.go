@@ -13,8 +13,6 @@ import (
 	"time"
 
 	"asmgr-desktop/session"
-
-	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 // One Claude conversation open in two places at once.
@@ -228,7 +226,7 @@ func (a *App) watchDuplicateConversations(ctx context.Context) {
 		a.duplicatesMu.Unlock()
 		// Empty too, so marks on tabs go once it is sorted out.
 		if a.ctx != nil {
-			wailsruntime.EventsEmit(a.ctx, "conversations:duplicate", duplicates)
+			emitEvent(a.ctx, "conversations:duplicate", duplicates)
 		}
 		if len(duplicates) == 0 {
 			continue
