@@ -777,12 +777,29 @@ test('CommandPicker snapshots its target and suppresses duplicate execution', as
   await page.evaluate(() => window.dialogRacesFixture.resolveRun());
 });
 
-// A background command opens a tab of its own. The tab bar has to learn about
-// it, but the user stays on the tab they picked the command from.
-test('CommandPicker shows a background command\'s new tab without switching to it', async ({ page }) => {
+// A background command runs with no tab at all: the tab bar has nothing to
+// learn, and the user stays on the tab they picked the command from.
+test('CommandPicker runs a background command without a tab', async ({ page }) => {
   await gotoDialogRacesFixture(page, 'command');
   const row = page.locator('.cmd-row').filter({ hasText: 'Background build' });
   await expect(row.locator('.cmd-badge')).toBeVisible();
+  const before = await page.evaluate(() => window.dialogRacesFixture.selectedWindow());
+  const loadsBefore = await page.evaluate(() => window.dialogRacesFixture.recoverySessionLoads());
+
+  await row.click();
+  await expect.poll(() => page.evaluate(() => window.dialogRacesFixture.runCalls().length)).toBe(1);
+  await page.evaluate(() => window.dialogRacesFixture.resolveRun(-1));
+
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  expect(await page.evaluate(() => window.dialogRacesFixture.recoverySessionLoads())).toBe(loadsBefore);
+  expect(await page.evaluate(() => window.dialogRacesFixture.selectedWindow())).toBe(before);
+});
+
+// On Windows a background command gets a tab after all: the tab bar learns of it,
+// but the user stays where they were.
+test('CommandPicker shows the tab a background command got on Windows', async ({ page }) => {
+  await gotoDialogRacesFixture(page, 'command');
+  const row = page.locator('.cmd-row').filter({ hasText: 'Background build' });
   const before = await page.evaluate(() => window.dialogRacesFixture.selectedWindow());
   const loadsBefore = await page.evaluate(() => window.dialogRacesFixture.recoverySessionLoads());
 

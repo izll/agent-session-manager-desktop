@@ -295,9 +295,9 @@ func (a *App) DeleteCommandGroup(id string) error {
 // given placeholder values, and records that it was used.
 //
 // A command that runs in a tab of its own gets a new terminal tab instead,
-// and that tab's index is returned; otherwise the result is -1. Both tab
-// targets open the same way — whether to select the new tab is the caller's
-// to decide from the command's runIn, since only the UI can switch tabs.
+// and that tab's index is returned; otherwise the result is -1. One run in
+// the background has no tab — except on Windows, where it gets one after all
+// and its index is returned the same way.
 func (a *App) RunCommand(id, sessionID string, windowIdx int, values map[string]string, expectedProjectID string) (int, error) {
 	found, err := a.findCommand(id)
 	if err != nil {
@@ -316,7 +316,7 @@ func (a *App) RunCommand(id, sessionID string, windowIdx int, values map[string]
 	case session.RunInNewTab:
 		newIdx, err = a.runCommandInNewTab(sessionID, windowIdx, found.Name, text, "", expectedProjectID)
 	case session.RunInBackground:
-		newIdx, err = a.runCommandInNewTab(sessionID, windowIdx, found.Name, text, session.TabCloseCommand, expectedProjectID)
+		newIdx, err = a.runCommandInBackground(sessionID, windowIdx, found.Name, text, expectedProjectID)
 	default:
 		err = a.typeCommandIntoTab(sessionID, windowIdx, text, found.SendEnter, expectedProjectID)
 	}
@@ -351,8 +351,8 @@ func (a *App) typeCommandIntoTab(sessionID string, windowIdx int, text string, p
 // pipes and variables mean what they mean at a prompt, and the output and the
 // prompt are still there once the command ends.
 //
-// closeReason asks for the tab to go away when the command has ended instead; nobody
-// is looking at a background tab, and left there they pile up.
+// closeReason asks for the tab to go away once its shell leaves, which a login line
+// arranges for itself when it worked.
 func (a *App) runCommandInNewTab(sessionID string, fromWindow int, name, text, closeReason, expectedProjectID string) (int, error) {
 	inst, err := a.storage.GetInstance(sessionID)
 	if err != nil {
@@ -379,16 +379,10 @@ func (a *App) runCommandInNewTab(sessionID string, fromWindow int, name, text, c
 	// and nothing else in the app should wait with it. The tab is kept if the
 	// command cannot be typed into it — it exists, it is saved, and an empty
 	// shell says more than a tab that vanished.
-	closes := closeReason != ""
-	if closeReason == session.TabCloseCommand {
-		closes, err = tabInst.RunUntilDoneInFreshShell(newIdx, text, backgroundShellTimeout)
-	} else {
-		err = tabInst.TypeIntoFreshShell(newIdx, text, backgroundShellTimeout)
-	}
-	if err != nil {
+	if err := tabInst.TypeIntoFreshShell(newIdx, text, backgroundShellTimeout); err != nil {
 		return newIdx, err
 	}
-	if closes {
+	if closeReason != "" {
 		a.markTabCloseOnExit(sessionID, newIdx, closeReason, fromWindow, expectedProjectID)
 	}
 	return newIdx, nil

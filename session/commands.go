@@ -66,11 +66,12 @@ type SavedCommand struct {
 	InBackground bool `json:"in_background,omitempty"`
 	// RunIn is where the command runs: RunInCurrent types it into the tab it
 	// was picked from, RunInNewTab opens a tab and switches to it, and
-	// RunInBackground opens one without switching, so a build or a server
-	// does not take over the tab it was started from.
+	// RunInBackground runs it with no tab at all, telling the user only when
+	// it fails — for a build or a sync, not for a server, which nobody could
+	// then watch or stop.
 	//
-	// A tab of its own always runs the command: typing it into a tab nobody
-	// is looking at would do nothing.
+	// The last two always run the command: typing it somewhere nobody is
+	// looking would do nothing.
 	RunIn     string    `json:"run_in,omitempty"`
 	CreatedAt time.Time `json:"created_at,omitempty"`
 	UsedAt    time.Time `json:"used_at,omitempty"`
@@ -99,14 +100,15 @@ func ValidRunIn(target string) bool {
 //
 // An unset RunIn means one of two different things, which is why the old
 // flag cannot simply be dropped: with InBackground set, the command was
-// saved to run in a tab of its own, and answering "current" would move a
-// running server into the tab the user was reading.
+// saved to run in a tab of its own — mostly a server — and answering
+// "current" would move it into the tab the user was reading. Not today's
+// background either: that has no tab, and a server there could not be stopped.
 func (c *SavedCommand) RunTarget() string {
 	if ValidRunIn(c.RunIn) {
 		return c.RunIn
 	}
 	if c.InBackground {
-		return RunInBackground
+		return RunInNewTab
 	}
 	return RunInCurrent
 }

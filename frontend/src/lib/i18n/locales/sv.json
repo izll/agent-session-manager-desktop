@@ -1173,10 +1173,10 @@
   "commands.runIn": "Var det körs",
   "commands.runIn.current": "I den här fliken",
   "commands.runIn.newtab": "I en ny flik",
-  "commands.runIn.background": "I en ny flik, i bakgrunden",
+  "commands.runIn.background": "I bakgrunden",
   "commands.runIn.currentHint": "Skriver kommandot i fliken du öppnade det från.",
   "commands.runIn.newtabHint": "Öppnar en ny terminalflik med kommandots namn, kör det där och växlar till den.",
-  "commands.runIn.backgroundHint": "Öppnar en ny terminalflik med kommandots namn och kör det där, utan att byta till den. Fliken stängs när kommandot är klart; misslyckas det stannar den öppen så att du kan läsa varför.",
+  "commands.runIn.backgroundHint": "Kör kommandot utan flik, på maskinen och i mappen för fliken du valde det från. Du hör bara av det om det misslyckas.",
   "commands.runIn.newtabBadge": "ny flik",
   "commands.runIn.backgroundBadge": "bakgrund",
   "commands.suggestTitle": "Det här projektet kan köra",
@@ -1892,5 +1892,6 @@
   "mobile.guide.serve": "Kör detta i en terminal. Första gången kan en länk be dig aktivera HTTPS för ditt tailnet.",
   "mobile.guide.phone": "Installera Tailscale på telefonen från appbutiken och logga in med samma konto. Tryck sedan på Parkoppla en telefon nedan och skanna QR-koden.",
   "mobile.guide.copy": "Kopiera",
-  "mobile.guide.copied": "Kopierat"
+  "mobile.guide.copied": "Kopierat",
+  "commands.backgroundFailed": "{name} misslyckades (slutkod {code}):"
 }

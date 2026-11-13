@@ -2,9 +2,7 @@ package session
 
 import (
 	"fmt"
-	"path"
 	"strings"
-	"time"
 )
 
 // A tab that goes away when what it was opened for has ended.
@@ -14,6 +12,8 @@ import (
 
 // Why a tab closes itself, which also says what happens next.
 const (
+	// TabCloseCommand is kept for tabs saved by versions that ran background
+	// commands in a tab: they still close when their command ends.
 	TabCloseCommand = "command"
 	TabCloseLogin   = "login"
 )
@@ -64,46 +64,6 @@ func (i *Instance) TabProcessExited(windowIdx int) bool {
 	output, err := i.tmuxOutputOn(i.serverForWindow(windowIdx),
 		"display-message", "-p", "-t", target, "#{window_index}:#{pane_dead}")
 	return err == nil && strings.TrimSpace(string(output)) == fmt.Sprintf("%d:1", windowIdx)
-}
-
-// RunUntilDoneInFreshShell runs a command in a just-opened tab so that the tab's shell
-// leaves when the command ends, and says whether it was able to arrange that. In a
-// shell it does not know it types the command as it is, and the tab stays.
-func (i *Instance) RunUntilDoneInFreshShell(windowIdx int, text string, timeout time.Duration) (bool, error) {
-	i.waitForFreshShell(windowIdx, timeout)
-	target := fmt.Sprintf("%s:%d", i.TmuxSessionName(), windowIdx)
-	shell := ""
-	if output, err := i.tmuxOutputOn(i.serverForWindow(windowIdx),
-		"display-message", "-p", "-t", target, "#{pane_current_command}"); err == nil {
-		shell = strings.TrimSpace(string(output))
-	}
-	line, leaves := commandThatLeavesItsShell(text, shell)
-	return leaves, i.SendTextToWindow(windowIdx, line, true)
-}
-
-// commandThatLeavesItsShell wraps a command so its tab's shell exits once it has ended:
-// by itself, by Ctrl+C or by being stopped. A real failure keeps the shell, and with it
-// the reason on the screen, which would otherwise be gone with the tab.
-//
-// It runs in a shell of its own, because an interactive shell drops the rest of a line
-// after Ctrl+C: nothing written after the command would run. That shell ignores the
-// interrupt, so it can see how the command ended, and reports only what matters. The
-// parentheses and the line break keep a trailing & or comment in the command from
-// touching what follows it. An alias or function from the user's own shell files is the
-// price: it is not known to this shell.
-func commandThatLeavesItsShell(text, shell string) (string, bool) {
-	inner := ""
-	switch path.Base(strings.TrimPrefix(shell, "-")) {
-	case "bash", "zsh", "ksh":
-		inner = path.Base(strings.TrimPrefix(shell, "-"))
-	case "sh", "dash", "ash", "fish":
-		inner = "sh"
-	default:
-		return text, false
-	}
-	script := "trap : INT TERM\n( " + text + "\n)\nstatus=$?\n" +
-		"case $status in 0|130|143) exit 0 ;; esac\nexit $status"
-	return inner + " -c '" + strings.ReplaceAll(script, "'", `'\''`) + "' && exit", true
 }
 
 // InstancesClosingTabsOnExit lists the open project's sessions that have such a tab.

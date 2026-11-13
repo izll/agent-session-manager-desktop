@@ -216,6 +216,7 @@
   import { shortcutForEvent, capturingShortcut } from './lib/stores/shortcuts';
   import Toast from './lib/components/common/Toast.svelte';
   import { describeDuplicateConversations } from './lib/utils/duplicateConversations';
+  import { describeBackgroundFailure, joinBackgroundFailures, type BackgroundFailure } from './lib/utils/backgroundFailure';
   import { setDuplicateConversations } from './lib/stores/duplicateConversations';
   import { GetDuplicateConversations } from '../wailsjs/go/main/App';
   import CodexDaemonNotice from './lib/components/common/CodexDaemonNotice.svelte';
@@ -364,6 +365,9 @@
   // reason as the errors above.
   let showNoticeToast = false;
   let showDuplicateToast = false;
+  let showBackgroundFailure = false;
+  let backgroundFailureMessage = '';
+  let backgroundFailureRevision = 0;
   let duplicateMessage = '';
   let duplicateRevision = 0;
   let noticeMessage = '';
@@ -1086,6 +1090,16 @@
       duplicateMessage = describeDuplicateConversations(found, $t);
       duplicateRevision += 1;
       showDuplicateToast = true;
+    });
+    // A command run in the background has no tab: a failure is all the user hears.
+    EventsOn('commands:background-failed', (failure: BackgroundFailure) => {
+      if (!appMounted || !failure) return;
+      backgroundFailureMessage = joinBackgroundFailures(
+        showBackgroundFailure ? backgroundFailureMessage : '',
+        describeBackgroundFailure(failure, $t),
+      );
+      backgroundFailureRevision += 1;
+      showBackgroundFailure = true;
     });
     EventsOn('update:available', (info: { version: string; current: string }) => {
       if (!appMounted) return;
@@ -2240,6 +2254,7 @@
      switching project — failed in silence. -->
 <Toast bind:show={showSessionError} message={sessionErrorMessage} revision={sessionErrorRevision} variant="error" duration={9000} />
 
+<Toast bind:show={showBackgroundFailure} message={backgroundFailureMessage} revision={backgroundFailureRevision} variant="error" duration={0} />
 <Toast bind:show={showDuplicateToast} message={duplicateMessage} revision={duplicateRevision} variant="warning" duration={0} />
 <Toast bind:show={showNoticeToast} message={noticeMessage} revision={noticeRevision} variant="success" duration={5000} />
 <Toast bind:show={showReopenToast} message={reopenToastMessage} revision={reopenToastRevision} variant={reopenToastVariant} duration={reopenToastVariant === 'success' ? 5000 : 9000} />

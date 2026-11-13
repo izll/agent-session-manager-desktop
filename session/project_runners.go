@@ -117,9 +117,8 @@ func gradleSuggestions(dir string) []RunnerSuggestion {
 				Tool: "gradle", Name: task.name,
 				Command: wrapper + " " + task.task,
 				// A server keeps running: it belongs in a tab of its own,
-				// left in the background so starting it does not take over
-				// the tab it was started from.
-				RunIn: RunInBackground,
+				// where its log shows and closing the tab stops it.
+				RunIn: RunInNewTab,
 			})
 		}
 	}
@@ -146,7 +145,7 @@ func mavenSuggestions(dir string) []RunnerSuggestion {
 	} {
 		if strings.Contains(pom, plugin.artifact) {
 			out = append(out, RunnerSuggestion{
-				Tool: "maven", Name: plugin.name, Command: plugin.goal, RunIn: RunInBackground,
+				Tool: "maven", Name: plugin.name, Command: plugin.goal, RunIn: RunInNewTab,
 			})
 		}
 	}
@@ -194,14 +193,10 @@ func npmSuggestions(dir string) []RunnerSuggestion {
 	return out
 }
 
-// npmRunTarget guesses from the script's name whether it keeps running.
-// Wrong either way it is only a default the user can change, so this errs
-// towards a new tab, which is visible, over the background, which is not.
-func npmRunTarget(name string) string {
-	switch name {
-	case "dev", "start", "serve", "watch", "preview":
-		return RunInBackground
-	}
+// npmRunTarget is where an npm script runs: a tab of its own, whether it ends or
+// keeps serving. The background has no tab, so a server there could be neither
+// watched nor stopped.
+func npmRunTarget(string) string {
 	return RunInNewTab
 }
 
@@ -270,7 +265,7 @@ func dockerSuggestions(dir string) []RunnerSuggestion {
 			continue
 		}
 		return []RunnerSuggestion{
-			{Tool: "docker", Name: "Compose up", Command: "docker compose up", RunIn: RunInBackground},
+			{Tool: "docker", Name: "Compose up", Command: "docker compose up", RunIn: RunInNewTab},
 			{Tool: "docker", Name: "Compose down", Command: "docker compose down", RunIn: RunInNewTab},
 		}
 	}
@@ -300,7 +295,7 @@ func tomcatSuggestions(dir string) []RunnerSuggestion {
 	// shows the log and closing it stops the server. `startup` daemonises,
 	// leaving a server running behind a tab that looks finished.
 	return []RunnerSuggestion{
-		{Tool: "tomcat", Name: "Tomcat run", Command: script + " run", RunIn: RunInBackground},
+		{Tool: "tomcat", Name: "Tomcat run", Command: script + " run", RunIn: RunInNewTab},
 	}
 }
 

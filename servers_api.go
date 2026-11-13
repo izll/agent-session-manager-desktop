@@ -653,6 +653,11 @@ func (a *App) ListServerSessions(serverID string) ([]RemoteSessionInfo, error) {
 			return ""
 		}
 
+		// A background command's hidden session is the app's, not the user's.
+		if session.IsBackgroundJobSession(at(0)) {
+			continue
+		}
+
 		info := RemoteSessionInfo{
 			Name:     at(0),
 			Attached: at(2) == "1",

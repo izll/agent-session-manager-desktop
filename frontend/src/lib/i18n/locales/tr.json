@@ -1173,10 +1173,10 @@
   "commands.runIn": "Nerede çalışsın",
   "commands.runIn.current": "Bu sekmede",
   "commands.runIn.newtab": "Yeni bir sekmede",
-  "commands.runIn.background": "Yeni bir sekmede, arka planda",
+  "commands.runIn.background": "Arka planda",
   "commands.runIn.currentHint": "Komutu, onu açtığınız sekmeye yazar.",
   "commands.runIn.newtabHint": "Komutun adıyla yeni bir terminal sekmesi açar, komutu orada çalıştırır ve o sekmeye geçer.",
-  "commands.runIn.backgroundHint": "Komutun adıyla yeni bir terminal sekmesi açar ve komutu orada, sekmeye geçmeden çalıştırır. Komut bitince sekme kapanır; başarısız olursa nedenini okuyabilmeniz için açık kalır.",
+  "commands.runIn.backgroundHint": "Komutu sekme açmadan, seçtiğiniz sekmenin makinesinde ve klasöründe çalıştırır. Yalnızca başarısız olursa haber verir.",
   "commands.runIn.newtabBadge": "yeni sekme",
   "commands.runIn.backgroundBadge": "arka plan",
   "commands.suggestTitle": "Bu proje şunları çalıştırabilir",
@@ -1892,5 +1892,6 @@
   "mobile.guide.serve": "Bunu bir terminalde çalıştırın. İlk seferde bir bağlantı tailnet'iniz için HTTPS'i etkinleştirmenizi isteyebilir.",
   "mobile.guide.phone": "Telefona uygulama mağazasından Tailscale'i yükleyin ve aynı hesapla giriş yapın. Sonra aşağıdaki Telefon eşle düğmesine basıp QR kodunu tarayın.",
   "mobile.guide.copy": "Kopyala",
-  "mobile.guide.copied": "Kopyalandı"
+  "mobile.guide.copied": "Kopyalandı",
+  "commands.backgroundFailed": "{name} başarısız oldu (çıkış kodu {code}):"
 }

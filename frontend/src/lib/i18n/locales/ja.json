@@ -1173,10 +1173,10 @@
   "commands.runIn": "実行する場所",
   "commands.runIn.current": "このタブ",
   "commands.runIn.newtab": "新しいタブ",
-  "commands.runIn.background": "新しいタブ（バックグラウンド）",
+  "commands.runIn.background": "バックグラウンドで",
   "commands.runIn.currentHint": "呼び出したタブにコマンドを入力します。",
   "commands.runIn.newtabHint": "コマンド名の新しいターミナルタブを開いてそこで実行し、そのタブに切り替えます。",
-  "commands.runIn.backgroundHint": "コマンド名の新しいターミナルタブを開いて実行します。タブは切り替えません。コマンドが終わるとタブは閉じます。失敗した場合は理由を読めるように開いたままになります。",
+  "commands.runIn.backgroundHint": "タブを開かずに、選んだタブと同じマシン・フォルダーでコマンドを実行します。失敗したときだけ通知します。",
   "commands.runIn.newtabBadge": "新しいタブ",
   "commands.runIn.backgroundBadge": "バックグラウンド",
   "commands.suggestTitle": "このプロジェクトで実行できること",
@@ -1892,5 +1892,6 @@
   "mobile.guide.serve": "ターミナルでこれを実行します。初回はリンクで tailnet の HTTPS を有効にするよう求められる場合があります。",
   "mobile.guide.phone": "スマートフォンにアプリストアから Tailscale をインストールし、同じアカウントでログインします。次に下の「スマートフォンをペアリング」を押して QR コードを読み取ります。",
   "mobile.guide.copy": "コピー",
-  "mobile.guide.copied": "コピーしました"
+  "mobile.guide.copied": "コピーしました",
+  "commands.backgroundFailed": "{name} が失敗しました (終了コード {code}):"
 }

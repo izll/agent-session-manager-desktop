@@ -1173,10 +1173,10 @@
   "commands.runIn": "Waar het draait",
   "commands.runIn.current": "In dit tabblad",
   "commands.runIn.newtab": "In een nieuw tabblad",
-  "commands.runIn.background": "In een nieuw tabblad, op de achtergrond",
+  "commands.runIn.background": "Op de achtergrond",
   "commands.runIn.currentHint": "Typt de opdracht in het tabblad waaruit je hem opende.",
   "commands.runIn.newtabHint": "Opent een nieuw terminaltabblad met de naam van de opdracht, voert hem daar uit en wisselt ernaartoe.",
-  "commands.runIn.backgroundHint": "Opent een nieuw terminaltabblad met de naam van de opdracht en voert die daar uit, zonder ernaartoe te gaan. Het tabblad sluit als de opdracht eindigt; mislukt die, dan blijft het open zodat je de reden kunt lezen.",
+  "commands.runIn.backgroundHint": "Voert de opdracht uit zonder tabblad, op de machine en in de map van het tabblad waar je hem koos. Je hoort er alleen van als hij mislukt.",
   "commands.runIn.newtabBadge": "nieuw tabblad",
   "commands.runIn.backgroundBadge": "achtergrond",
   "commands.suggestTitle": "Dit project kan uitvoeren",
@@ -1892,5 +1892,6 @@
   "mobile.guide.serve": "Voer dit uit in een terminal. De eerste keer kan een link vragen om HTTPS voor je tailnet in te schakelen.",
   "mobile.guide.phone": "Installeer Tailscale op de telefoon via de appwinkel en log in met hetzelfde account. Druk daarna hieronder op Telefoon koppelen en scan de QR-code.",
   "mobile.guide.copy": "Kopiëren",
-  "mobile.guide.copied": "Gekopieerd"
+  "mobile.guide.copied": "Gekopieerd",
+  "commands.backgroundFailed": "{name} is mislukt (afsluitcode {code}):"
 }

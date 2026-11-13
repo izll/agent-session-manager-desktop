@@ -1161,10 +1161,10 @@
   "commands.runIn": "Where it runs",
   "commands.runIn.current": "This tab",
   "commands.runIn.newtab": "A new tab",
-  "commands.runIn.background": "A new tab, in the background",
+  "commands.runIn.background": "In the background",
   "commands.runIn.currentHint": "Types the command into the tab you picked it from.",
   "commands.runIn.newtabHint": "Opens a new terminal tab named after the command, runs it there and switches to it.",
-  "commands.runIn.backgroundHint": "Opens a new terminal tab named after the command and runs it there, without switching to it. The tab closes when the command ends; if it fails, the tab stays so you can read why.",
+  "commands.runIn.backgroundHint": "Runs the command with no tab, on the machine and in the folder of the tab you picked it from. You hear of it only if it fails.",
   "commands.runIn.newtabBadge": "new tab",
   "commands.runIn.backgroundBadge": "background",
   "commands.suggestTitle": "This project can run",
@@ -1892,5 +1892,6 @@
   "mobile.guide.serve": "Run this in a terminal. The first time it may ask you, with a link, to enable HTTPS for your tailnet.",
   "mobile.guide.phone": "Install Tailscale on the phone from its app store and log in with the same account. Then press Pair a phone below and scan the QR code.",
   "mobile.guide.copy": "Copy",
-  "mobile.guide.copied": "Copied"
+  "mobile.guide.copied": "Copied",
+  "commands.backgroundFailed": "{name} failed (exit code {code}):"
 }

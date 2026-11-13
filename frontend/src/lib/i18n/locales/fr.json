@@ -1173,10 +1173,10 @@
   "commands.runIn": "Où l'exécuter",
   "commands.runIn.current": "Dans cet onglet",
   "commands.runIn.newtab": "Dans un nouvel onglet",
-  "commands.runIn.background": "Dans un nouvel onglet, en arrière-plan",
+  "commands.runIn.background": "En arrière-plan",
   "commands.runIn.currentHint": "Saisit la commande dans l'onglet depuis lequel vous l'avez lancée.",
   "commands.runIn.newtabHint": "Ouvre un nouvel onglet de terminal nommé d'après la commande, l'y exécute et y bascule.",
-  "commands.runIn.backgroundHint": "Ouvre un nouvel onglet de terminal au nom de la commande et l'y exécute, sans y basculer. L'onglet se ferme à la fin de la commande ; en cas d'échec, il reste ouvert pour que vous puissiez en lire la raison.",
+  "commands.runIn.backgroundHint": "Exécute la commande sans onglet, sur la machine et dans le dossier de l'onglet d'où vous l'avez choisie. Vous n'en entendez parler qu'en cas d'échec.",
   "commands.runIn.newtabBadge": "nouvel onglet",
   "commands.runIn.backgroundBadge": "arrière-plan",
   "commands.suggestTitle": "Ce projet peut exécuter",
@@ -1892,5 +1892,6 @@
   "mobile.guide.serve": "Lancez ceci dans un terminal. La première fois, un lien peut vous demander d'activer HTTPS pour votre tailnet.",
   "mobile.guide.phone": "Installez Tailscale sur le téléphone depuis sa boutique d'applications et connectez-vous avec le même compte. Puis appuyez sur Associer un téléphone ci-dessous et scannez le QR code.",
   "mobile.guide.copy": "Copier",
-  "mobile.guide.copied": "Copié"
+  "mobile.guide.copied": "Copié",
+  "commands.backgroundFailed": "{name} a échoué (code de sortie {code}) :"
 }

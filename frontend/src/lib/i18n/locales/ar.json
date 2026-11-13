@@ -1173,10 +1173,10 @@
   "commands.runIn": "مكان التشغيل",
   "commands.runIn.current": "هذه العلامة",
   "commands.runIn.newtab": "علامة تبويب جديدة",
-  "commands.runIn.background": "علامة تبويب جديدة، في الخلفية",
+  "commands.runIn.background": "في الخلفية",
   "commands.runIn.currentHint": "يكتب الأمر في علامة التبويب التي استدعيته منها.",
   "commands.runIn.newtabHint": "يفتح علامة تبويب طرفية جديدة باسم الأمر، ويشغّله فيها، وينتقل إليها.",
-  "commands.runIn.backgroundHint": "يفتح علامة تبويب طرفية جديدة باسم الأمر ويشغّله فيها من دون الانتقال إليها. تُغلق العلامة عند انتهاء الأمر؛ وإذا فشل تبقى مفتوحة لتتمكن من قراءة السبب.",
+  "commands.runIn.backgroundHint": "يشغّل الأمر دون علامة تبويب، على الجهاز وفي مجلد علامة التبويب التي اخترته منها. لا يُبلغك إلا إذا فشل.",
   "commands.runIn.newtabBadge": "علامة جديدة",
   "commands.runIn.backgroundBadge": "خلفية",
   "commands.suggestTitle": "ما يمكن لهذا المشروع تشغيله",
@@ -1892,5 +1892,6 @@
   "mobile.guide.serve": "شغّل هذا في طرفية. في المرة الأولى قد يطلب منك رابط تفعيل HTTPS لـ tailnet الخاصة بك.",
   "mobile.guide.phone": "ثبّت Tailscale على الهاتف من متجر التطبيقات وسجّل الدخول بالحساب نفسه. ثم اضغط إقران هاتف أدناه وامسح رمز QR.",
   "mobile.guide.copy": "نسخ",
-  "mobile.guide.copied": "تم النسخ"
+  "mobile.guide.copied": "تم النسخ",
+  "commands.backgroundFailed": "فشل {name} (رمز الخروج {code}):"
 }

@@ -1173,10 +1173,10 @@
   "commands.runIn": "Kde se spustí",
   "commands.runIn.current": "V této kartě",
   "commands.runIn.newtab": "V nové kartě",
-  "commands.runIn.background": "V nové kartě, na pozadí",
+  "commands.runIn.background": "Na pozadí",
   "commands.runIn.currentHint": "Napíše příkaz do karty, ze které jsi ho vyvolal.",
   "commands.runIn.newtabHint": "Otevře novou kartu terminálu pojmenovanou podle příkazu, spustí ho v ní a přepne se na ni.",
-  "commands.runIn.backgroundHint": "Otevře novou kartu terminálu s názvem příkazu a spustí ho v ní, aniž by se na ni přepnul. Karta se zavře, až příkaz skončí; pokud selže, zůstane otevřená, abyste si mohli přečíst důvod.",
+  "commands.runIn.backgroundHint": "Spustí příkaz bez karty, na počítači a ve složce karty, ze které jste jej vybrali. Ozve se jen při chybě.",
   "commands.runIn.newtabBadge": "nová karta",
   "commands.runIn.backgroundBadge": "pozadí",
   "commands.suggestTitle": "Tento projekt umí spustit",
@@ -1892,5 +1892,6 @@
   "mobile.guide.serve": "Spusťte v terminálu. Napoprvé vás odkaz může požádat o zapnutí HTTPS pro váš tailnet.",
   "mobile.guide.phone": "Nainstalujte Tailscale do telefonu z obchodu s aplikacemi a přihlaste se stejným účtem. Pak níže stiskněte Spárovat telefon a naskenujte QR kód.",
   "mobile.guide.copy": "Kopírovat",
-  "mobile.guide.copied": "Zkopírováno"
+  "mobile.guide.copied": "Zkopírováno",
+  "commands.backgroundFailed": "{name} selhal (návratový kód {code}):"
 }

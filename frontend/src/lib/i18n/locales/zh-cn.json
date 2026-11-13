@@ -1173,10 +1173,10 @@
   "commands.runIn": "在哪里运行",
   "commands.runIn.current": "当前标签页",
   "commands.runIn.newtab": "新标签页",
-  "commands.runIn.background": "新标签页，后台",
+  "commands.runIn.background": "在后台",
   "commands.runIn.currentHint": "将命令输入到你调用它的标签页中。",
   "commands.runIn.newtabHint": "以命令名称打开一个新的终端标签页，在其中运行并切换过去。",
-  "commands.runIn.backgroundHint": "打开一个以命令命名的新终端标签页并在其中运行，不切换过去。命令结束后标签页会关闭；如果失败，标签页会保留，以便你查看原因。",
+  "commands.runIn.backgroundHint": "不打开标签页，在你选择它的那个标签页所在的机器和文件夹中运行命令。只有失败时才会通知。",
   "commands.runIn.newtabBadge": "新标签页",
   "commands.runIn.backgroundBadge": "后台",
   "commands.suggestTitle": "此项目可以运行",
@@ -1892,5 +1892,6 @@
   "mobile.guide.serve": "在终端中运行。首次运行时可能会通过链接要求你为 tailnet 启用 HTTPS。",
   "mobile.guide.phone": "在手机的应用商店中安装 Tailscale，并用同一账号登录。然后点下方的“配对手机”并扫描二维码。",
   "mobile.guide.copy": "复制",
-  "mobile.guide.copied": "已复制"
+  "mobile.guide.copied": "已复制",
+  "commands.backgroundFailed": "{name} 失败（退出码 {code}）："
 }

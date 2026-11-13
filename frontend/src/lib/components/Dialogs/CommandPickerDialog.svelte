@@ -169,9 +169,14 @@
     requestAnimationFrame(() => valueInputs[0]?.focus());
   }
 
-  /** Both tab targets open a tab; only "newtab" switches to it. */
+  // Marked in the list as not typed into this tab: a new tab, or none at all.
   function ownTab(c: Cmd): boolean {
     return c.runIn === 'newtab' || c.runIn === 'background';
+  }
+
+  // Only a new tab adds to the tab bar; the background has none.
+  function opensTab(c: Cmd): boolean {
+    return c.runIn === 'newtab';
   }
 
   async function run(c: Cmd, vals: Record<string, string>) {
@@ -185,12 +190,11 @@
     error = '';
     try {
       const newIdx = await App.RunCommand(c.id, targetSession, targetWindow, submittedValues, targetProject);
-      // Either tab target opened a tab of its own: show it in the tab bar.
-      // Only "newtab" also moves the selection there; "background" leaves it
-      // where the user is, which is the whole difference between the two.
-      if (ownTab(c)) {
+      // A new tab shows in the tab bar and takes the selection. A background
+      // command gets a tab only on Windows, and then only shows it.
+      if (opensTab(c) || newIdx >= 0) {
         await loadSessions();
-        if (c.runIn === 'newtab' && newIdx >= 0 && get(selectedSessionId) === targetSession) {
+        if (newIdx >= 0 && get(selectedSessionId) === targetSession) {
           selectedWindowIdx.set(newIdx);
         }
       }
@@ -198,7 +202,7 @@
       close();
     } catch (e) {
       // The tab can exist even when the command could not be typed into it.
-      if (ownTab(c)) void loadSessions();
+      if (opensTab(c)) void loadSessions();
       if (!show || generation !== operationGeneration || targetProject !== get(activeProjectId)) return;
       error = String(e);
       pending = null;

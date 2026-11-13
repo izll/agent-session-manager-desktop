@@ -3,6 +3,7 @@
 package main
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -117,11 +118,9 @@ func TestATabReusingAnIndexIsLeftAlone(t *testing.T) {
 	}
 }
 
-// From the command library to a closed tab, on a real shell in a real tab. A command
-// that opens a tab to be looked at keeps it.
-func TestABackgroundCommandsTabClosesAndANewTabsDoesNot(t *testing.T) {
+func backgroundTestApp(t *testing.T) (*App, func(args ...string) ([]byte, error), *session.Instance) {
+	t.Helper()
 	tmux := isolatedTmuxServer(t)
-	t.Setenv("SHELL", "/bin/sh")
 	app := passwordTestApp(t)
 	inst := &session.Instance{ID: "cmds", Name: "cmds", Path: t.TempDir(), Status: session.StatusRunning}
 	if err := app.storage.AddInstance(inst); err != nil {
@@ -130,37 +129,170 @@ func TestABackgroundCommandsTabClosesAndANewTabsDoesNot(t *testing.T) {
 	if _, err := tmux("new-session", "-d", "-s", inst.TmuxSessionName(), "sleep 60"); err != nil {
 		t.Fatal(err)
 	}
-	project := app.storage.GetActiveProjectID()
-	run := func(name, runIn string) int {
-		id, err := app.SaveCommand("", name, "true", "", "", true, runIn)
-		if err != nil {
-			t.Fatal(err)
-		}
-		index, err := app.RunCommand(id, "cmds", 0, nil, project)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return index
-	}
-	foreground := run("stays", session.RunInNewTab)
-	background := run("goes", session.RunInBackground)
+	return app, tmux, inst
+}
 
+func runSaved(t *testing.T, app *App, command, runIn string) int {
+	t.Helper()
+	id, err := app.SaveCommand("", "Fájl megnyitás", command, "", "", true, runIn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	index, err := app.RunCommand(id, "cmds", 0, nil, app.storage.GetActiveProjectID())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return index
+}
+
+// In the background means no tab at all, in the folder of the tab it came from.
+func TestABackgroundCommandOpensNoTab(t *testing.T) {
+	app, _, inst := backgroundTestApp(t)
+	if index := runSaved(t, app, "printf ok > marker", session.RunInBackground); index != -1 {
+		t.Fatalf("index = %d", index)
+	}
+	saved, _ := app.storage.GetInstance("cmds")
+	if len(saved.FollowedWindows) != 0 {
+		t.Fatalf("tabs = %+v", saved.FollowedWindows)
+	}
 	deadline := time.Now().Add(5 * time.Second)
 	for {
-		app.closeExitedTabs()
-		saved, err := app.storage.GetInstance("cmds")
-		if err != nil {
-			t.Fatal(err)
-		}
-		if saved.GetFollowedWindowRecord(background) == nil {
-			if saved.GetFollowedWindowRecord(foreground) == nil {
-				t.Fatal("the new tab went too")
-			}
+		if data, err := os.ReadFile(filepath.Join(inst.Path, "marker")); err == nil && string(data) == "ok" {
 			return
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("the background tab is still there: %+v", saved.FollowedWindows)
+			t.Fatal("the command did not run")
 		}
 		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+// A failure is reported once, with what it printed, and leaves nothing behind.
+func TestAFailedBackgroundCommandIsReportedOnce(t *testing.T) {
+	app, tmux, _ := backgroundTestApp(t)
+	var reports []BackgroundCommandFailure
+	app.backgroundFailed = func(failure BackgroundCommandFailure) { reports = append(reports, failure) }
+	runSaved(t, app, "echo boom; exit 4", session.RunInBackground)
+	deadline := time.Now().Add(5 * time.Second)
+	for len(reports) == 0 {
+		if time.Now().After(deadline) {
+			t.Fatal("no report")
+		}
+		app.checkBackgroundJobs()
+		time.Sleep(50 * time.Millisecond)
+	}
+	if len(reports) != 1 || reports[0].Name != "Fájl megnyitás" || reports[0].ExitCode != 4 || !strings.Contains(reports[0].Output, "boom") {
+		t.Fatalf("reports = %+v", reports)
+	}
+	app.checkBackgroundJobs()
+	if len(reports) != 1 {
+		t.Fatalf("reported again: %+v", reports)
+	}
+	if sessions, _ := tmux("list-sessions", "-F", "#{session_name}"); strings.Contains(string(sessions), "asm_bg_") {
+		t.Fatalf("left behind: %s", sessions)
+	}
+}
+
+// One that worked is just forgotten.
+func TestASuccessfulBackgroundCommandIsForgotten(t *testing.T) {
+	app, _, _ := backgroundTestApp(t)
+	var reports []BackgroundCommandFailure
+	app.backgroundFailed = func(failure BackgroundCommandFailure) { reports = append(reports, failure) }
+	runSaved(t, app, "true", session.RunInBackground)
+	deadline := time.Now().Add(5 * time.Second)
+	for app.backgroundJobCount() > 0 {
+		if time.Now().After(deadline) {
+			t.Fatal("still watched")
+		}
+		app.checkBackgroundJobs()
+		time.Sleep(50 * time.Millisecond)
+	}
+	if len(reports) != 0 {
+		t.Fatalf("reports = %+v", reports)
+	}
+}
+
+// A new tab is still a tab, with the command's output in it.
+func TestANewTabCommandStillOpensItsTab(t *testing.T) {
+	t.Setenv("SHELL", "/bin/sh")
+	app, _, _ := backgroundTestApp(t)
+	index := runSaved(t, app, "true", session.RunInNewTab)
+	saved, _ := app.storage.GetInstance("cmds")
+	if record := saved.GetFollowedWindowRecord(index); record == nil || record.CloseOnExit != "" {
+		t.Fatalf("record = %+v", record)
+	}
+}
+
+// A tmux that cannot be asked (a dropped connection) is no answer: the job stays
+// watched, and only a long silence lets it go — without a report either way.
+func TestAnUnanswerableBackgroundJobIsKeptForAWhile(t *testing.T) {
+	app, _, inst := backgroundTestApp(t)
+	var reports []BackgroundCommandFailure
+	app.backgroundFailed = func(failure BackgroundCommandFailure) { reports = append(reports, failure) }
+	app.background.jobs = []backgroundJob{{name: "Távoli", inst: inst, job: session.BackgroundJob{Name: "asm_bg_x", Server: "nowhere"}}}
+	app.checkBackgroundJobs()
+	if app.backgroundJobCount() != 1 {
+		t.Fatal("dropped after one unanswered check")
+	}
+	for range backgroundUnansweredLimit {
+		app.checkBackgroundJobs()
+	}
+	if app.backgroundJobCount() != 0 || len(reports) != 0 {
+		t.Fatalf("jobs = %d, reports = %+v", app.backgroundJobCount(), reports)
+	}
+}
+
+// A job started before the app last quit is still reported, by its name.
+func TestALeftoverBackgroundJobIsWatchedAgain(t *testing.T) {
+	app, _, inst := backgroundTestApp(t)
+	var reports []BackgroundCommandFailure
+	app.backgroundFailed = func(failure BackgroundCommandFailure) { reports = append(reports, failure) }
+	if _, err := inst.StartBackgroundCommand(context.Background(), 0, "Régi", "exit 6"); err != nil {
+		t.Fatal(err)
+	}
+	app.adoptBackgroundJobs()
+	app.adoptBackgroundJobs()
+	if app.backgroundJobCount() != 1 {
+		t.Fatalf("jobs = %d", app.backgroundJobCount())
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for len(reports) == 0 && time.Now().Before(deadline) {
+		app.checkBackgroundJobs()
+		time.Sleep(50 * time.Millisecond)
+	}
+	if len(reports) != 1 || reports[0].Name != "Régi" || reports[0].ExitCode != 6 {
+		t.Fatalf("reports = %+v", reports)
+	}
+}
+
+// Picked while another project was being switched to: it does not run at all.
+func TestABackgroundCommandForAnotherProjectDoesNotRun(t *testing.T) {
+	app, _, _ := backgroundTestApp(t)
+	id, err := app.SaveCommand("", "Build", "true", "", "", true, session.RunInBackground)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := app.RunCommand(id, "cmds", 0, nil, "some-other-project"); err == nil {
+		t.Fatal("ran for another project")
+	}
+	if app.backgroundJobCount() != 0 {
+		t.Fatal("started anyway")
+	}
+}
+
+// Under remain-on-exit a command that worked leaves a dead pane: it is cleared too.
+func TestASuccessfulBackgroundCommandLeavesNothingUnderRemainOnExit(t *testing.T) {
+	app, tmux, _ := backgroundTestApp(t)
+	if _, err := tmux("set-option", "-g", "remain-on-exit", "on"); err != nil {
+		t.Fatal(err)
+	}
+	runSaved(t, app, "true", session.RunInBackground)
+	deadline := time.Now().Add(5 * time.Second)
+	for app.backgroundJobCount() > 0 && time.Now().Before(deadline) {
+		app.checkBackgroundJobs()
+		time.Sleep(50 * time.Millisecond)
+	}
+	if sessions, _ := tmux("list-sessions", "-F", "#{session_name}"); strings.Contains(string(sessions), "asm_bg_") {
+		t.Fatalf("left behind: %s", sessions)
 	}
 }

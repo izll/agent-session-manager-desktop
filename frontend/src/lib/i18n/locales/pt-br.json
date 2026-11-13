@@ -1173,10 +1173,10 @@
   "commands.runIn": "Onde executar",
   "commands.runIn.current": "Nesta aba",
   "commands.runIn.newtab": "Em uma nova aba",
-  "commands.runIn.background": "Em uma nova aba, em segundo plano",
+  "commands.runIn.background": "Em segundo plano",
   "commands.runIn.currentHint": "Digita o comando na aba de onde você o abriu.",
   "commands.runIn.newtabHint": "Abre uma nova aba de terminal com o nome do comando, executa-o lá e muda para ela.",
-  "commands.runIn.backgroundHint": "Abre uma nova aba de terminal com o nome do comando e o executa nela, sem mudar para ela. A aba fecha quando o comando termina; se falhar, ela fica aberta para você ler o motivo.",
+  "commands.runIn.backgroundHint": "Executa o comando sem aba, na máquina e na pasta da aba de onde você o escolheu. Só avisa se falhar.",
   "commands.runIn.newtabBadge": "nova aba",
   "commands.runIn.backgroundBadge": "segundo plano",
   "commands.suggestTitle": "Este projeto pode executar",
@@ -1892,5 +1892,6 @@
   "mobile.guide.serve": "Execute isto em um terminal. Na primeira vez, um link pode pedir que você ative o HTTPS na sua tailnet.",
   "mobile.guide.phone": "Instale o Tailscale no celular pela loja de aplicativos e entre com a mesma conta. Depois toque em Parear um celular abaixo e leia o QR code.",
   "mobile.guide.copy": "Copiar",
-  "mobile.guide.copied": "Copiado"
+  "mobile.guide.copied": "Copiado",
+  "commands.backgroundFailed": "{name} falhou (código de saída {code}):"
 }

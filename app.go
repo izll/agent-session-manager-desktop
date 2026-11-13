@@ -105,12 +105,15 @@ type App struct {
 	passwords           *passwords.Manager
 	cancelPasswordFetch context.CancelFunc
 	tabReadings         tabReadings
-	duplicatesMu        sync.Mutex
-	mobileMu            sync.Mutex
-	mobileServer        *mobile.Server
-	mobileDevices       *mobile.Devices
-	mobilePort          int
-	duplicates          []DuplicateConversation
+	background          backgroundJobs
+	// backgroundFailed replaces the event in tests.
+	backgroundFailed func(BackgroundCommandFailure)
+	duplicatesMu     sync.Mutex
+	mobileMu         sync.Mutex
+	mobileServer     *mobile.Server
+	mobileDevices    *mobile.Devices
+	mobilePort       int
+	duplicates       []DuplicateConversation
 }
 
 type eventThrottle struct {
@@ -318,6 +321,7 @@ func (a *App) startup(ctx context.Context) {
 	a.startOrphanCleanup(ctx)
 	go a.watchTabsClosingOnExit(ctx)
 	go a.watchDuplicateConversations(ctx)
+	go a.watchBackgroundJobs(ctx)
 	// After the project lock above: only its owner may let a phone in.
 	a.startMobileIfEnabled()
 	// Resize/redraw maintenance is deliberately asynchronous so terminal resize

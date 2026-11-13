@@ -1173,10 +1173,10 @@
   "commands.runIn": "Wo es läuft",
   "commands.runIn.current": "In diesem Tab",
   "commands.runIn.newtab": "In einem neuen Tab",
-  "commands.runIn.background": "In einem neuen Tab, im Hintergrund",
+  "commands.runIn.background": "Im Hintergrund",
   "commands.runIn.currentHint": "Schreibt den Befehl in den Tab, aus dem du ihn aufgerufen hast.",
   "commands.runIn.newtabHint": "Öffnet einen neuen Terminal-Tab mit dem Namen des Befehls, führt ihn dort aus und wechselt dorthin.",
-  "commands.runIn.backgroundHint": "Öffnet einen neuen Terminal-Tab mit dem Namen des Befehls und führt ihn dort aus, ohne dorthin zu wechseln. Der Tab schließt sich, wenn der Befehl endet; schlägt er fehl, bleibt der Tab offen, damit du den Grund lesen kannst.",
+  "commands.runIn.backgroundHint": "Führt den Befehl ohne Tab aus, auf dem Rechner und im Ordner des Tabs, aus dem du ihn gewählt hast. Du hörst nur davon, wenn er fehlschlägt.",
   "commands.runIn.newtabBadge": "neuer Tab",
   "commands.runIn.backgroundBadge": "Hintergrund",
   "commands.suggestTitle": "Dieses Projekt kann ausführen",
@@ -1892,5 +1892,6 @@
   "mobile.guide.serve": "Führe dies in einem Terminal aus. Beim ersten Mal wirst du eventuell über einen Link gebeten, HTTPS für dein Tailnet zu aktivieren.",
   "mobile.guide.phone": "Installiere Tailscale auf dem Telefon aus dem App-Store und melde dich mit demselben Konto an. Drücke dann unten Telefon koppeln und scanne den QR-Code.",
   "mobile.guide.copy": "Kopieren",
-  "mobile.guide.copied": "Kopiert"
+  "mobile.guide.copied": "Kopiert",
+  "commands.backgroundFailed": "{name} ist fehlgeschlagen (Exit-Code {code}):"
 }

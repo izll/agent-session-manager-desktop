@@ -1173,10 +1173,10 @@
   "commands.runIn": "Hol fusson",
   "commands.runIn.current": "Ezen a fülön",
   "commands.runIn.newtab": "Új fülön",
-  "commands.runIn.background": "Új fülön, a háttérben",
+  "commands.runIn.background": "A háttérben",
   "commands.runIn.currentHint": "A parancsot abba a fülbe írja, ahonnan előhívtad.",
   "commands.runIn.newtabHint": "Új terminálfület nyit a parancs nevével, ott futtatja, és át is vált rá.",
-  "commands.runIn.backgroundHint": "Új terminálfület nyit a parancs nevével, ott futtatja, és nem vált át rá. A fül bezárul, ha a parancs véget ér; ha hibával áll le, nyitva marad, hogy lásd az okát.",
+  "commands.runIn.backgroundHint": "Fül nélkül futtatja a parancsot, azon a gépen és abban a mappában, ahol a fül van, ahonnan elindítottad. Csak akkor szól, ha hibával áll le.",
   "commands.runIn.newtabBadge": "új fül",
   "commands.runIn.backgroundBadge": "háttér",
   "commands.suggestTitle": "Ez a projekt tudja futtatni",
@@ -1892,5 +1892,6 @@
   "mobile.guide.serve": "Futtasd egy terminálban. Első alkalommal egy linken kérheti, hogy engedélyezd a HTTPS-t a tailneteden.",
   "mobile.guide.phone": "Telepítsd a telefonra a Tailscale-t az alkalmazásboltból, és jelentkezz be ugyanazzal a fiókkal. Utána lent nyomd meg a Telefon párosítása gombot, és olvasd be a QR-kódot.",
   "mobile.guide.copy": "Másolás",
-  "mobile.guide.copied": "Másolva"
+  "mobile.guide.copied": "Másolva",
+  "commands.backgroundFailed": "{name} hibával állt le (kilépési kód: {code}):"
 }

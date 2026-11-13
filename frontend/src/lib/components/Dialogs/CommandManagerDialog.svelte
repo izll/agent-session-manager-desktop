@@ -226,8 +226,8 @@
     editing = true;
   }
 
-  // Both tab targets open a tab of their own, which is what forces the
-  // command to run; only switching to it differs.
+  // A tab of its own or none at all: either way nobody types into it, so the
+  // command always runs.
   $: ownTab = fRunIn === 'newtab' || fRunIn === 'background';
 
   $: runInOptions = [

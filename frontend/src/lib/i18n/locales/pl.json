@@ -1173,10 +1173,10 @@
   "commands.runIn": "Gdzie uruchomić",
   "commands.runIn.current": "W tej karcie",
   "commands.runIn.newtab": "W nowej karcie",
-  "commands.runIn.background": "W nowej karcie, w tle",
+  "commands.runIn.background": "W tle",
   "commands.runIn.currentHint": "Wpisuje polecenie w karcie, z której je wywołałeś.",
   "commands.runIn.newtabHint": "Otwiera nową kartę terminala nazwaną jak polecenie, uruchamia je tam i przełącza się na nią.",
-  "commands.runIn.backgroundHint": "Otwiera nową kartę terminala z nazwą polecenia i uruchamia je tam, bez przełączania. Karta zamyka się po zakończeniu polecenia; jeśli się nie powiedzie, zostaje otwarta, aby można było przeczytać przyczynę.",
+  "commands.runIn.backgroundHint": "Uruchamia polecenie bez karty, na maszynie i w folderze karty, z której je wybrano. Dowiesz się o nim tylko w razie błędu.",
   "commands.runIn.newtabBadge": "nowa karta",
   "commands.runIn.backgroundBadge": "w tle",
   "commands.suggestTitle": "Ten projekt może uruchomić",
@@ -1892,5 +1892,6 @@
   "mobile.guide.serve": "Uruchom to w terminalu. Za pierwszym razem link może poprosić o włączenie HTTPS w tailnecie.",
   "mobile.guide.phone": "Zainstaluj Tailscale na telefonie ze sklepu z aplikacjami i zaloguj się tym samym kontem. Potem naciśnij poniżej Sparuj telefon i zeskanuj kod QR.",
   "mobile.guide.copy": "Kopiuj",
-  "mobile.guide.copied": "Skopiowano"
+  "mobile.guide.copied": "Skopiowano",
+  "commands.backgroundFailed": "{name} zakończyło się błędem (kod wyjścia {code}):"
 }

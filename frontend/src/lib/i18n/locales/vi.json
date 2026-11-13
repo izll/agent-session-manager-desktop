@@ -1173,10 +1173,10 @@
   "commands.runIn": "Chạy ở đâu",
   "commands.runIn.current": "Tab này",
   "commands.runIn.newtab": "Tab mới",
-  "commands.runIn.background": "Tab mới, ở chế độ nền",
+  "commands.runIn.background": "Chạy nền",
   "commands.runIn.currentHint": "Nhập lệnh vào tab bạn đã gọi nó từ đó.",
   "commands.runIn.newtabHint": "Mở một tab terminal mới mang tên lệnh, chạy lệnh ở đó và chuyển sang tab đó.",
-  "commands.runIn.backgroundHint": "Mở một tab terminal mới mang tên lệnh và chạy lệnh ở đó mà không chuyển sang. Tab tự đóng khi lệnh kết thúc; nếu lệnh lỗi, tab vẫn mở để bạn đọc lý do.",
+  "commands.runIn.backgroundHint": "Chạy lệnh không mở tab, trên máy và trong thư mục của tab bạn đã chọn. Chỉ báo khi lệnh lỗi.",
   "commands.runIn.newtabBadge": "tab mới",
   "commands.runIn.backgroundBadge": "nền",
   "commands.suggestTitle": "Dự án này có thể chạy",
@@ -1892,5 +1892,6 @@
   "mobile.guide.serve": "Chạy lệnh này trong terminal. Lần đầu có thể có liên kết yêu cầu bật HTTPS cho tailnet của bạn.",
   "mobile.guide.phone": "Cài Tailscale trên điện thoại từ kho ứng dụng và đăng nhập cùng tài khoản. Sau đó nhấn Ghép nối điện thoại bên dưới và quét mã QR.",
   "mobile.guide.copy": "Sao chép",
-  "mobile.guide.copied": "Đã sao chép"
+  "mobile.guide.copied": "Đã sao chép",
+  "commands.backgroundFailed": "{name} bị lỗi (mã thoát {code}):"
 }

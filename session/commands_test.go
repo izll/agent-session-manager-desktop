@@ -309,7 +309,7 @@ func TestRunTargetResolvesTheOlderFlag(t *testing.T) {
 		want string
 	}{
 		{"unset means the current tab", SavedCommand{}, RunInCurrent},
-		{"the old flag means a tab of its own", SavedCommand{InBackground: true}, RunInBackground},
+		{"the old flag means a tab of its own", SavedCommand{InBackground: true}, RunInNewTab},
 		{"RunIn wins over the old flag", SavedCommand{InBackground: true, RunIn: RunInCurrent}, RunInCurrent},
 		{"a new tab is kept", SavedCommand{RunIn: RunInNewTab}, RunInNewTab},
 		{"an unknown value falls back", SavedCommand{RunIn: "elsewhere"}, RunInCurrent},

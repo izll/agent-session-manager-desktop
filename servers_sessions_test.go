@@ -69,6 +69,21 @@ func TestTheServerListingIsOneCommand(t *testing.T) {
 	}
 }
 
+// A command run in the background has a hidden session of its own. It is not a
+// session the user made, and listing it would offer to attach or kill it.
+func TestTheServerListingLeavesOutBackgroundCommands(t *testing.T) {
+	source, err := os.ReadFile("servers_api.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(source)
+	at := strings.Index(text, "func (a *App) ListServerSessions(")
+	body := text[at : at+strings.Index(text[at:], "\n}\n")]
+	if !strings.Contains(body, "session.IsBackgroundJobSession(") {
+		t.Error("background command sessions are listed as the user's own")
+	}
+}
+
 // A session the app does not know about must not be presented as the user's
 // own work, and one this machine made but lost track of must be visible as
 // exactly that.

@@ -131,8 +131,8 @@ func TestGradleSuggestionsFollowTheBuildScript(t *testing.T) {
 	}
 	// A long-running server belongs in a tab of its own.
 	for _, s := range got {
-		if s.Command == wrapper+" bootRun" && s.RunIn != RunInBackground {
-			t.Errorf("bootRun runs in %q, want %q", s.RunIn, RunInBackground)
+		if s.Command == wrapper+" bootRun" && s.RunIn != RunInNewTab {
+			t.Errorf("bootRun runs in %q, want %q", s.RunIn, RunInNewTab)
 		}
 	}
 }
@@ -222,5 +222,22 @@ func TestEverySuggestionHasAValidRunTarget(t *testing.T) {
 		if strings.TrimSpace(s.Name) == "" || strings.TrimSpace(s.Command) == "" {
 			t.Errorf("suggestion %+v has an empty name or command", s)
 		}
+	}
+}
+
+// A server keeps running: in the background it would have no tab to show its log
+// in and nothing to stop it with. Every suggestion that starts one gets a tab.
+func TestNoSuggestedServerRunsInTheBackground(t *testing.T) {
+	for _, name := range []string{"dev", "start", "serve", "watch", "preview"} {
+		if target := npmRunTarget(name); target != RunInNewTab {
+			t.Errorf("npm %s runs in %q", name, target)
+		}
+	}
+	data, err := os.ReadFile("project_runners.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), "RunInBackground") {
+		t.Error("a runner suggestion still runs in the background")
 	}
 }

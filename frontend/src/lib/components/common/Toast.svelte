@@ -176,6 +176,8 @@
   }
 
   .toast-message {
+    /* A failure's output keeps its lines. */
+    white-space: pre-line;
     flex: 1;
     min-width: 0;
     font-size: 13px;

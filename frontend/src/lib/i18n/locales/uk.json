@@ -1173,10 +1173,10 @@
   "commands.runIn": "Де запускати",
   "commands.runIn.current": "У цій вкладці",
   "commands.runIn.newtab": "У новій вкладці",
-  "commands.runIn.background": "У новій вкладці, у фоні",
+  "commands.runIn.background": "У фоні",
   "commands.runIn.currentHint": "Вводить команду у вкладку, з якої ви її викликали.",
   "commands.runIn.newtabHint": "Відкриває нову вкладку термінала з назвою команди, запускає її там і перемикається на неї.",
-  "commands.runIn.backgroundHint": "Відкриває нову вкладку термінала з назвою команди й виконує її там, не перемикаючись. Вкладка закривається, коли команда завершиться; у разі помилки вона лишається відкритою, щоб можна було прочитати причину.",
+  "commands.runIn.backgroundHint": "Виконує команду без вкладки, на тій машині й у тій папці, де вкладка, з якої ви її вибрали. Повідомляє лише про помилку.",
   "commands.runIn.newtabBadge": "нова вкладка",
   "commands.runIn.backgroundBadge": "фон",
   "commands.suggestTitle": "Цей проект може запустити",
@@ -1892,5 +1892,6 @@
   "mobile.guide.serve": "Виконайте це в терміналі. Першого разу посилання може попросити ввімкнути HTTPS для вашого tailnet.",
   "mobile.guide.phone": "Установіть Tailscale на телефон із магазину застосунків і увійдіть у той самий обліковий запис. Потім натисніть нижче «Під'єднати телефон» і відскануйте QR-код.",
   "mobile.guide.copy": "Копіювати",
-  "mobile.guide.copied": "Скопійовано"
+  "mobile.guide.copied": "Скопійовано",
+  "commands.backgroundFailed": "{name} завершилася з помилкою (код виходу {code}):"
 }

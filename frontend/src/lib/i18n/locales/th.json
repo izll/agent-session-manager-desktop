@@ -1173,10 +1173,10 @@
   "commands.runIn": "รันที่ใด",
   "commands.runIn.current": "แท็บนี้",
   "commands.runIn.newtab": "แท็บใหม่",
-  "commands.runIn.background": "แท็บใหม่ เบื้องหลัง",
+  "commands.runIn.background": "ทำงานเบื้องหลัง",
   "commands.runIn.currentHint": "พิมพ์คำสั่งลงในแท็บที่คุณเรียกใช้",
   "commands.runIn.newtabHint": "เปิดแท็บเทอร์มินัลใหม่ตามชื่อคำสั่ง รันในนั้น แล้วสลับไปที่แท็บนั้น",
-  "commands.runIn.backgroundHint": "เปิดแท็บเทอร์มินัลใหม่ตามชื่อคำสั่งและรันที่นั่นโดยไม่สลับไป แท็บจะปิดเมื่อคำสั่งจบ หากล้มเหลวแท็บจะยังเปิดอยู่เพื่อให้อ่านสาเหตุได้",
+  "commands.runIn.backgroundHint": "รันคำสั่งโดยไม่เปิดแท็บ บนเครื่องและในโฟลเดอร์ของแท็บที่คุณเลือก จะแจ้งเฉพาะเมื่อล้มเหลว",
   "commands.runIn.newtabBadge": "แท็บใหม่",
   "commands.runIn.backgroundBadge": "เบื้องหลัง",
   "commands.suggestTitle": "โครงการนี้รันได้",
@@ -1892,5 +1892,6 @@
   "mobile.guide.serve": "รันคำสั่งนี้ในเทอร์มินัล ครั้งแรกอาจมีลิงก์ขอให้เปิด HTTPS สำหรับ tailnet ของคุณ",
   "mobile.guide.phone": "ติดตั้ง Tailscale บนโทรศัพท์จากร้านแอปและเข้าสู่ระบบด้วยบัญชีเดียวกัน จากนั้นกดจับคู่โทรศัพท์ด้านล่างแล้วสแกน QR",
   "mobile.guide.copy": "คัดลอก",
-  "mobile.guide.copied": "คัดลอกแล้ว"
+  "mobile.guide.copied": "คัดลอกแล้ว",
+  "commands.backgroundFailed": "{name} ล้มเหลว (รหัสออก {code}):"
 }
