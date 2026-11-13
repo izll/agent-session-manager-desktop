@@ -92,9 +92,12 @@ let stored: Record<string, unknown> = {
 
 const hiddenCalls: string[][] = [];
 // ?folder=inner: the session chose /repo/inner for its diff, while the Files
-// view still shows the tab's /repo. ?locked=ownFolder|remote: it cannot.
+// view still shows the tab's /repo.
 let diffDir = params.get('folder') ? `/repo/${params.get('folder')}` : '';
-const folderLock = params.get('locked') ?? '';
+// ?scope=tab: a tab with a folder of its own, which chooses for itself.
+const folderScope = params.get('scope') ?? 'session';
+// ?linked=/a,/b: folders linked to the tab, offered in the folder menu.
+const linkedFolders = (params.get('linked') ?? '').split(',').filter(Boolean);
 const diffDirCalls: string[] = [];
 (window as any).diffHidden = {
   calls: () => hiddenCalls,
@@ -107,8 +110,10 @@ const backend = new Proxy({
   GetSettings: async () => ({ ...stored }),
   SaveSettings: async (next: Record<string, unknown>) => { stored = { ...next }; },
   GetTabWorkingDirectory: async () => '/repo',
-  GetDiffFolder: async () => ({ path: diffDir || '/repo', tabDir: '/repo', custom: !!diffDir, locked: folderLock }),
+  GetDiffFolder: async () => ({ path: diffDir || '/repo', tabDir: '/repo', custom: !!diffDir, scope: folderScope, serverId: '' }),
+  SetDiffDir: async (_s: string, _w: number, dir: string) => { diffDirCalls.push(dir); diffDir = dir; },
   SetSessionDiffDir: async (_s: string, dir: string) => { diffDirCalls.push(dir); diffDir = dir; },
+  GetTabLinkedFolders: async () => linkedFolders.map((path) => ({ path, isGitRepo: true, missing: false })),
   BrowseDirectory: async () => '/repo/picked',
   GetSessions: async () => [],
   GetGroups: async () => [],

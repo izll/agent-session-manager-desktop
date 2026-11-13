@@ -20,6 +20,17 @@ export async function setDiffFolder(sessionId: string, dir: string): Promise<voi
 }
 
 /**
+ * Makes `dir` the folder one tab's diff shows. For a tab in the session's own
+ * directory that is the session's choice; one with a folder of its own keeps its
+ * own. Empty goes back to the tab's folder.
+ */
+export async function setTabDiffFolder(sessionId: string, windowIdx: number, dir: string): Promise<void> {
+  await App.SetDiffDir(sessionId, windowIdx, dir, get(activeProjectId));
+  diffFolderVersion.update((n) => n + 1);
+  await loadSessions();
+}
+
+/**
  * Asks for a folder, starting in `startIn`, and makes it the session's diff
  * folder. False when the picker was cancelled.
  */

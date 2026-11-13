@@ -50,8 +50,8 @@ assert.match(
 // repository's diff while the revert targets the new one.
 assert.match(
   diff,
-  /\$: diffKey = `\$\{\$activeProjectId\}:\$\{\$selectedSessionId \?\? ''\}:\$\{\$selectedWindowIdx \?\? 0\}`/,
-  'the diff must be keyed on project, session, and tab',
+  /\$: diffKey = `\$\{\$activeProjectId\}:\$\{\$selectedSessionId \?\? ''\}:\$\{\$selectedWindowIdx \?\? 0\}(\$\{fixedRoot \? ':' \+ fixedRoot : ''\})?`/,
+  'the diff must be keyed on project, session, and tab (and a fixed folder, when it shows one)',
 );
 assert.match(diff, /if \(active && diffKey !== lastSessionId\)/, 'the guard must compare the tab key');
 

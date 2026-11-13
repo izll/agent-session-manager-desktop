@@ -4584,6 +4584,10 @@ func (a *App) browseInstance(id string, windowIdx int) (*session.Instance, error
 			inst.BrowseRoot = dir
 		}
 		inst.DiffRoot = diffDirFor(inst, windowIdx)
+		// Only the tab's own: a tab closed since has none, not the session's.
+		if linked := inst.LinkedDirsFor(windowIdx); len(linked) > 0 && a.tabExists(inst, windowIdx) {
+			inst.LinkedRoots = linked
+		}
 	}
 	return inst, nil
 }
@@ -4727,6 +4731,12 @@ func validateRootSnapshot(inst *session.Instance, expectedRoot, message string) 
 			return resolved, nil
 		}
 	}
+	// And a folder linked to the tab, from the linked folders' window.
+	for _, linked := range inst.LinkedRoots {
+		if resolved, ok := sameRoot(linked, expectedRoot); ok {
+			return resolved, nil
+		}
+	}
 	return "", fmt.Errorf("%s", message)
 }
 
@@ -4743,8 +4753,7 @@ func sameRoot(actualRoot, expectedRoot string) (string, bool) {
 	}
 	actualResolved, actualResolveErr := filepath.EvalSymlinks(actualAbs)
 	expectedResolved, expectedResolveErr := filepath.EvalSymlinks(expectedAbs)
-	if actualResolveErr != nil || expectedResolveErr != nil ||
-		session.CanonicalProjectPath(actualResolved) != session.CanonicalProjectPath(expectedResolved) {
+	if actualResolveErr != nil || expectedResolveErr != nil || session.CanonicalProjectPath(actualResolved) != session.CanonicalProjectPath(expectedResolved) {
 		return "", false
 	}
 	return actualResolved, true

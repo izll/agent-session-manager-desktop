@@ -38,7 +38,7 @@ const backend = new Proxy({
   SendPromptToWindow: async (...args: unknown[]) => { promptsSent.push(args); },
   GetVoiceLevel: async () => 0,
   GetTabWorkingDirectory: async () => '/fixture',
-  GetDiffFolder: async () => ({ path: '/fixture', tabDir: '/fixture', custom: false, locked: '' }),
+  GetDiffFolder: async () => ({ path: '/fixture', tabDir: '/fixture', custom: false, scope: 'session', serverId: '' }),
   // The diff controls ask about the TAB's directory, not the session's — a tab
   // can be opened in one of its own. Without this the proxy below answers
   // undefined and the fixture's repository looks like a plain folder, so the

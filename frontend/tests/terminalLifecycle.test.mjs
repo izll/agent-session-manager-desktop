@@ -154,7 +154,7 @@ assert.match(quickJump, /if \(mutationPending\) return/);
 assert.match(palette, /generation === templateLoadGeneration && projectId === \$activeProjectId/);
 assert.match(mainPanel, /`\$\{\$activeProjectId\}:\$\{currentSession\.id\}:\$\{\$selectedWindowIdx\}`/,
   'the optimistic notes preview must not cross project identity');
-assert.match(browser, /browseKey = `\$\{\$activeProjectId\}:\$\{\$selectedSessionId/,
+assert.match(browser, /browseKey = (fixedRoot \? `fixed:\$\{fixedRoot\}` : )?`\$\{\$activeProjectId\}:\$\{\$selectedSessionId/,
   'file and scroll memory must include the project');
 assert.match(taskPanel, /const targetKey = `\$\{projectId\}:\$\{sessionId \?\? ''\}`/);
 assert.match(taskPanel, /await checkTaskMasterStatus\(''\)[\s\S]*?await loadTasks\(''\)/,

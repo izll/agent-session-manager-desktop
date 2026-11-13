@@ -135,7 +135,7 @@ test('project switching reapplies project-scoped diff and dictation panel geomet
   const pageErrors = [];
   page.on('pageerror', (error) => pageErrors.push(error.message));
   await gotoProjectLayoutFixture(page);
-  await page.locator('.split-btn').filter({ hasText: /Diff/ }).click();
+  await page.locator('[data-diff-above-button]').click();
   await expect(page.locator('.diff-above')).toHaveCSS('height', '180px');
   const buffer = page.locator('.dictation-buffer');
   await expect(buffer).toBeVisible();
@@ -181,7 +181,7 @@ test('layout gestures cannot save old-project geometry after a project switch', 
   const pageErrors = [];
   page.on('pageerror', (error) => pageErrors.push(error.message));
   await gotoProjectLayoutFixture(page);
-  await page.locator('.split-btn').filter({ hasText: /Diff/ }).click();
+  await page.locator('[data-diff-above-button]').click();
   const splitter = page.locator('.diff-splitter');
   const splitterBox = await splitter.boundingBox();
   await page.mouse.move(splitterBox.x + 10, splitterBox.y + 2);
@@ -1127,4 +1127,23 @@ test('project-aware FileBrowser and Diff guards accept their current file respon
   });
   expect(narrowWidths.browser).toBeGreaterThanOrEqual(115);
   expect(narrowWidths.diff).toBeGreaterThanOrEqual(115);
+});
+
+// The right of the view bar is icons only: each says what it is in its tooltip and
+// to a screen reader, and the bar stays short enough to read.
+test('the buttons on the right of the view bar are icons with tooltips', async ({ page }) => {
+  await gotoProjectLayoutFixture(page);
+  const buttons = page.locator('.view-tabs-right button');
+  await expect(buttons.first()).toBeVisible();
+  const seen = await buttons.evaluateAll((all) => all.map((b) => ({
+    text: b.textContent.trim(), title: b.getAttribute('title') || '', label: b.getAttribute('aria-label') || '',
+  })));
+  expect(seen.length).toBeGreaterThanOrEqual(4);
+  for (const button of seen) {
+    expect(button.text, JSON.stringify(button)).toBe('');
+    expect(button.title, JSON.stringify(button)).not.toBe('');
+    expect(button.label, JSON.stringify(button)).not.toBe('');
+  }
+  // The linked folders come first.
+  await expect(buttons.first()).toHaveAttribute('data-linked-folders-button', '');
 });

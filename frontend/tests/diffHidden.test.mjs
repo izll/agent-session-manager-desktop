@@ -198,7 +198,8 @@ test('the menu jumps to the file and to its folder in the file browser', () => {
   assert.match(menu, /showFolderInFiles\(folder\)/);
   // Named as the Files view names it, which differs once the session has
   // chosen a folder for its diff.
-  assert.match(diffSrc, /function showFolderInFiles\(dir: string\) \{\s*closeFileMenu\(\);\s*const target = filesPathOf\(dir\.replace[\s\S]*?requestFolderJump\(target\);/);
+  // In the linked folders' window the jump stays in that window.
+  assert.match(diffSrc, /function showFolderInFiles\(dir: string\) \{\s*closeFileMenu\(\);\s*if \(fixedRoot\) \{\s*dispatch\('openinfiles'[\s\S]*?const target = filesPathOf\(dir\.replace[\s\S]*?requestFolderJump\(target\);/);
   assert.match(diffSrc, /function showFileInFiles\(path: string\) \{\s*closeFileMenu\(\);\s*openFileInBrowser\(path\);/);
   // A file at the root has no folder item.
   assert.match(menu, /\{#if folder\}\s*<button[^>]*\s+data-action="show-folder-in-files"/);

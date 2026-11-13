@@ -21,7 +21,7 @@ const terminal = readFileSync(
 // and separate projects may legitimately reuse both ids.
 assert.match(
   browser,
-  /\$: browseKey = `\$\{\$activeProjectId\}:\$\{\$selectedSessionId \?\? ''\}:\$\{\$selectedWindowIdx \?\? 0\}`/,
+  /\$: browseKey = (fixedRoot \? `fixed:\$\{fixedRoot\}` : )?`\$\{\$activeProjectId\}:\$\{\$selectedSessionId \?\? ''\}:\$\{\$selectedWindowIdx \?\? 0\}`/,
   'the tree must be keyed on project, session, and tab',
 );
 assert.match(

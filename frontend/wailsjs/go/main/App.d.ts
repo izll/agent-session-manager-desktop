@@ -16,6 +16,8 @@ export function AddRunnerSuggestion(arg1:string,arg2:string,arg3:string):Promise
 
 export function AddSubtask(arg1:string,arg2:string,arg3:string,arg4:string):Promise<main.SubtaskInfo>;
 
+export function AddTabLinkedFolder(arg1:string,arg2:number,arg3:string,arg4:string):Promise<Array<main.LinkedFolder>>;
+
 export function AssignToGroup(arg1:string,arg2:string,arg3:string):Promise<void>;
 
 export function AttachBackgroundAgent(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string):Promise<string>;
@@ -250,6 +252,8 @@ export function GetSidebarUpdates():Promise<main.SidebarUpdate>;
 
 export function GetStatusLines():Promise<Record<string, string>>;
 
+export function GetTabLinkedFolders(arg1:string,arg2:number):Promise<Array<main.LinkedFolder>>;
+
 export function GetTabNotePages(arg1:string,arg2:number):Promise<Array<session.NotePage>>;
 
 export function GetTabOrder(arg1:string):Promise<Array<number>>;
@@ -402,6 +406,8 @@ export function RemoveDiffHiddenRules(arg1:string,arg2:number,arg3:string,arg4:A
 
 export function RemoveQuickJump(arg1:string,arg2:number,arg3:string):Promise<void>;
 
+export function RemoveTabLinkedFolder(arg1:string,arg2:number,arg3:string,arg4:string):Promise<Array<main.LinkedFolder>>;
+
 export function RenameGroup(arg1:string,arg2:string,arg3:string):Promise<void>;
 
 export function RenameSession(arg1:string,arg2:string,arg3:string):Promise<void>;
@@ -489,6 +495,8 @@ export function SendPromptToWindow(arg1:string,arg2:number,arg3:string,arg4:stri
 export function SendTaskToAgent(arg1:string,arg2:string,arg3:number,arg4:string):Promise<void>;
 
 export function SessionMergeRefusals(arg1:string):Promise<Record<string, string>>;
+
+export function SetDiffDir(arg1:string,arg2:number,arg3:string,arg4:string):Promise<void>;
 
 export function SetExtraArgs(arg1:string,arg2:number,arg3:string,arg4:string):Promise<void>;
 

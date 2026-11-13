@@ -31,7 +31,7 @@ func diffFolderTestApp(t *testing.T, tabs ...session.FollowedWindow) (app *App, 
 func TestTheDiffFollowsTheTabUntilAFolderIsChosen(t *testing.T) {
 	app, parent, inner, project := diffFolderTestApp(t)
 
-	if got := app.GetDiffFolder("s", 0); got.Path != parent || got.Custom || got.Locked != "" {
+	if got := app.GetDiffFolder("s", 0); got.Path != parent || got.Custom {
 		t.Errorf("before choosing: %+v, want the session's folder", got)
 	}
 	if app.TabIsGitRepo("s", 0) {
@@ -85,8 +85,8 @@ func TestATabWithItsOwnFolderKeepsIt(t *testing.T) {
 		t.Fatalf("main tab: %v", err)
 	}
 	got := app.GetDiffFolder("s", 1)
-	if got.Path != other || got.Custom || got.Locked != "ownFolder" {
-		t.Errorf("own-folder tab: %+v, want %s and locked", got, other)
+	if got.Path != other || got.Custom || got.Scope != "tab" {
+		t.Errorf("own-folder tab: %+v, want %s, its own to choose", got, other)
 	}
 	if _, err := app.GetFullDiffFileList("s", 1, inner); err == nil {
 		t.Error("the own-folder tab accepted the session's diff folder as its root")
@@ -141,7 +141,60 @@ func TestADeletedDiffFolderFallsBackToTheTab(t *testing.T) {
 	}
 }
 
-func TestADiffFolderIsForSessionsOnThisComputer(t *testing.T) {
+// A tab with a folder of its own chooses its own diff folder; the session's tabs
+// and its choice are left as they were.
+func TestATabWithItsOwnFolderCanChooseItsDiffFolder(t *testing.T) {
+	other := checkpointTestRepo(t)
+	app, parent, inner, project := diffFolderTestApp(t,
+		session.FollowedWindow{ID: "own", Index: 1, Name: "own", Agent: session.AgentTerminal, WorkDir: other})
+	if err := app.SetDiffDir("s", 1, inner, project); err != nil {
+		t.Fatalf("choose for the tab: %v", err)
+	}
+	if got := app.GetDiffFolder("s", 1); got.Path != inner || !got.Custom || got.TabDir != other || got.Scope != "tab" {
+		t.Errorf("tab: %+v, want %s over %s", got, inner, other)
+	}
+	if files, err := app.GetFullDiffFileList("s", 1, inner); err != nil || len(files) != 1 {
+		t.Errorf("the tab's chosen folder: %+v, %v", files, err)
+	}
+	if got := app.GetDiffFolder("s", 0); got.Path != parent || got.Custom {
+		t.Errorf("the session's tab changed with it: %+v", got)
+	}
+	inst, _ := app.storage.GetInstance("s")
+	if inst.DiffDir != "" {
+		t.Errorf("the session's choice changed: %q", inst.DiffDir)
+	}
+	// Back to its own folder, by clearing or by choosing it.
+	for _, dir := range []string{"", other} {
+		if err := app.SetDiffDir("s", 1, inner, project); err != nil {
+			t.Fatal(err)
+		}
+		if err := app.SetDiffDir("s", 1, dir, project); err != nil {
+			t.Fatalf("reset with %q: %v", dir, err)
+		}
+		if got := app.GetDiffFolder("s", 1); got.Path != other || got.Custom {
+			t.Errorf("reset with %q: %+v", dir, got)
+		}
+	}
+}
+
+// A tab in the session's folder chooses for all of those: the session's choice.
+func TestATabInTheSessionFolderChoosesForTheSession(t *testing.T) {
+	app, _, inner, project := diffFolderTestApp(t)
+	if err := app.SetDiffDir("s", 0, inner, project); err != nil {
+		t.Fatal(err)
+	}
+	if got := app.GetDiffFolder("s", 0); got.Path != inner || !got.Custom || got.Scope != "session" {
+		t.Errorf("got %+v", got)
+	}
+	if inst, _ := app.storage.GetInstance("s"); inst.DiffDir != inner {
+		t.Errorf("session's choice = %q", inst.DiffDir)
+	}
+}
+
+// On a server the folder would be the server's, but the diff, the files and their
+// writes are not all routed there yet: reading a same-named folder on this computer
+// instead would be worse than refusing.
+func TestADiffFolderOnAServerIsRefusedForNow(t *testing.T) {
 	app, _, inner, project := diffFolderTestApp(t)
 	inst, err := app.storage.GetInstance("s")
 	if err != nil {
@@ -151,10 +204,25 @@ func TestADiffFolderIsForSessionsOnThisComputer(t *testing.T) {
 	if err := app.storage.UpdateInstance(inst); err != nil {
 		t.Fatal(err)
 	}
-	if err := app.SetSessionDiffDir("s", inner, project); err == nil {
+	if err := app.SetDiffDir("s", 0, inner, project); err == nil {
 		t.Error("a diff folder was accepted for a session on a server")
 	}
-	if got := app.GetDiffFolder("s", 0); got.Locked != "remote" {
-		t.Errorf("server session: %+v, want it locked as remote", got)
+	if got := app.GetDiffFolder("s", 0); got.Custom || got.ServerID != "srv1" {
+		t.Errorf("server session: %+v", got)
+	}
+}
+
+// Choosing the folder the pane has cd-ed into is a choice, not "follow the tab":
+// only the tab's configured folder means that.
+func TestChoosingTheFolderThePaneIsInStillChoosesIt(t *testing.T) {
+	other := checkpointTestRepo(t)
+	app, _, inner, project := diffFolderTestApp(t,
+		session.FollowedWindow{ID: "own", Index: 1, Name: "own", Agent: session.AgentTerminal, WorkDir: other})
+	if err := app.SetDiffDir("s", 1, inner, project); err != nil {
+		t.Fatal(err)
+	}
+	inst, _ := app.storage.GetInstance("s")
+	if record := inst.GetFollowedWindowRecord(1); record == nil || record.DiffDir != inner {
+		t.Fatalf("record = %+v", record)
 	}
 }

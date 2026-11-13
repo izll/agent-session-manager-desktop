@@ -22,6 +22,10 @@ export function AddSubtask(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['AddSubtask'](arg1, arg2, arg3, arg4);
 }
 
+export function AddTabLinkedFolder(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['AddTabLinkedFolder'](arg1, arg2, arg3, arg4);
+}
+
 export function AssignToGroup(arg1, arg2, arg3) {
   return window['go']['main']['App']['AssignToGroup'](arg1, arg2, arg3);
 }
@@ -490,6 +494,10 @@ export function GetStatusLines() {
   return window['go']['main']['App']['GetStatusLines']();
 }
 
+export function GetTabLinkedFolders(arg1, arg2) {
+  return window['go']['main']['App']['GetTabLinkedFolders'](arg1, arg2);
+}
+
 export function GetTabNotePages(arg1, arg2) {
   return window['go']['main']['App']['GetTabNotePages'](arg1, arg2);
 }
@@ -794,6 +802,10 @@ export function RemoveQuickJump(arg1, arg2, arg3) {
   return window['go']['main']['App']['RemoveQuickJump'](arg1, arg2, arg3);
 }
 
+export function RemoveTabLinkedFolder(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['RemoveTabLinkedFolder'](arg1, arg2, arg3, arg4);
+}
+
 export function RenameGroup(arg1, arg2, arg3) {
   return window['go']['main']['App']['RenameGroup'](arg1, arg2, arg3);
 }
@@ -968,6 +980,10 @@ export function SendTaskToAgent(arg1, arg2, arg3, arg4) {
 
 export function SessionMergeRefusals(arg1) {
   return window['go']['main']['App']['SessionMergeRefusals'](arg1);
+}
+
+export function SetDiffDir(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['SetDiffDir'](arg1, arg2, arg3, arg4);
 }
 
 export function SetExtraArgs(arg1, arg2, arg3, arg4) {

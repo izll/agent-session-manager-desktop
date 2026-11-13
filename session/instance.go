@@ -304,6 +304,12 @@ type Instance struct {
 	// (DiffDir), when it applies to the tab being asked about. Set per call
 	// alongside BrowseRoot, and for the same reason not persisted.
 	DiffRoot string `json:"-"`
+	// LinkedRoots are the folders linked to the tab being asked about, roots a
+	// request may name as well. Set per call alongside BrowseRoot.
+	LinkedRoots []string `json:"-"`
+	// LinkedDirs are the folders linked to the session's own window; a tab keeps
+	// its own in its record.
+	LinkedDirs []string `json:"linked_dirs,omitempty"`
 	// DiffDir is the folder the diff and the git history show for the tabs that
 	// work in the session's own directory — a repository inside a folder that
 	// holds several, say. Empty follows the tab, as it always did.
@@ -364,7 +370,12 @@ type FollowedWindow struct {
 	TextColor        string     `json:"text_color,omitempty"`         // Tab text color (empty uses the theme default)
 	BackgroundColor  string     `json:"background_color,omitempty"`   // Tab background color (empty uses the theme default)
 	WorkDir          string     `json:"work_dir,omitempty"`           // Tab working directory (empty = session path)
-	HideStatusLine   bool       `json:"hide_status_line,omitempty"`   // Don't show this tab's status line in the session list
+	// DiffDir is the folder this tab's diff and git history show, chosen for the tab
+	// itself; empty follows the session's choice or the tab's own folder.
+	DiffDir string `json:"diff_dir,omitempty"`
+	// LinkedDirs are other folders kept with this tab, to see their diff and files.
+	LinkedDirs     []string `json:"linked_dirs,omitempty"`
+	HideStatusLine bool     `json:"hide_status_line,omitempty"` // Don't show this tab's status line in the session list
 	// RunCommand makes this tab the home of one build or server command,
 	// started and stopped from the tab bar rather than retyped.
 	//
@@ -2223,10 +2234,62 @@ func (i *Instance) UsesSessionDirectory(windowIdx int) bool {
 // otherwise show the session's directory: one with a folder of its own is
 // showing that folder on purpose.
 func (i *Instance) DiffDirFor(windowIdx int) string {
+	// A tab's own choice comes first, wherever the tab works.
+	for _, window := range i.FollowedWindows {
+		if window.Index == windowIdx && window.DiffDir != "" {
+			return window.DiffDir
+		}
+	}
 	if i.DiffDir == "" || !i.UsesSessionDirectory(windowIdx) {
 		return ""
 	}
 	return i.DiffDir
+}
+
+// HasTabContext reports whether windowIdx names one of the session's windows: a tab it
+// keeps a record of, or its own window as tmux has it now. A tab closed since a
+// request was made is neither, and must not be answered for by the session's own
+// window. Without tmux to ask — stopped, or no answer — an index with no record is
+// taken to be the session's own window, as before: no tab closes while nothing runs.
+func (i *Instance) HasTabContext(ctx context.Context, windowIdx int) bool {
+	if i.GetFollowedWindowRecord(windowIdx) != nil {
+		return true
+	}
+	main, ok := i.getMainWindowIndexContext(ctx)
+	return !ok || main == windowIdx
+}
+
+// LinkedDirsFor returns the folders linked to a tab.
+func (i *Instance) LinkedDirsFor(windowIdx int) []string {
+	for _, window := range i.FollowedWindows {
+		if window.Index == windowIdx {
+			return window.LinkedDirs
+		}
+	}
+	return i.LinkedDirs
+}
+
+// SetLinkedDirs replaces the folders linked to a tab.
+func (i *Instance) SetLinkedDirs(windowIdx int, dirs []string) {
+	for at := range i.FollowedWindows {
+		if i.FollowedWindows[at].Index == windowIdx {
+			i.FollowedWindows[at].LinkedDirs = dirs
+			return
+		}
+	}
+	i.LinkedDirs = dirs
+}
+
+// SetTabDiffDir records a tab's own diff folder; empty goes back to the default.
+// False for a tab with no record, which is the session's own window.
+func (i *Instance) SetTabDiffDir(windowIdx int, dir string) bool {
+	for at := range i.FollowedWindows {
+		if i.FollowedWindows[at].Index == windowIdx {
+			i.FollowedWindows[at].DiffDir = dir
+			return true
+		}
+	}
+	return false
 }
 
 func (i *Instance) newTerminalWindowOn(serverID string, name string, workDir string, detached bool) (int, error) {

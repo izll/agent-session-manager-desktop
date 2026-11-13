@@ -734,7 +734,8 @@ export namespace main {
 	    path: string;
 	    tabDir: string;
 	    custom: boolean;
-	    locked: string;
+	    scope: string;
+	    serverId: string;
 
 	    static createFrom(source: any = {}) {
 	        return new DiffFolder(source);
@@ -745,7 +746,8 @@ export namespace main {
 	        this.path = source["path"];
 	        this.tabDir = source["tabDir"];
 	        this.custom = source["custom"];
-	        this.locked = source["locked"];
+	        this.scope = source["scope"];
+	        this.serverId = source["serverId"];
 	    }
 	}
 	export class DiffHiddenRules {
@@ -1278,6 +1280,22 @@ export namespace main {
 		    }
 		    return a;
 		}
+	}
+	export class LinkedFolder {
+	    path: string;
+	    isGitRepo: boolean;
+	    missing: boolean;
+
+	    static createFrom(source: any = {}) {
+	        return new LinkedFolder(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.path = source["path"];
+	        this.isGitRepo = source["isGitRepo"];
+	        this.missing = source["missing"];
+	    }
 	}
 	export class LockStatusInfo {
 	    locked: boolean;
@@ -3401,6 +3419,8 @@ export namespace session {
 	    text_color?: string;
 	    background_color?: string;
 	    work_dir?: string;
+	    diff_dir?: string;
+	    linked_dirs?: string[];
 	    hide_status_line?: boolean;
 	    run_command?: string;
 	    close_on_exit?: string;
@@ -3435,6 +3455,8 @@ export namespace session {
 	        this.text_color = source["text_color"];
 	        this.background_color = source["background_color"];
 	        this.work_dir = source["work_dir"];
+	        this.diff_dir = source["diff_dir"];
+	        this.linked_dirs = source["linked_dirs"];
 	        this.hide_status_line = source["hide_status_line"];
 	        this.run_command = source["run_command"];
 	        this.close_on_exit = source["close_on_exit"];

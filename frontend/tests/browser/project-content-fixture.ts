@@ -24,7 +24,7 @@ const backend = new Proxy({
     };
   },
   GetTabWorkingDirectory: async () => '/canonical/project-a',
-  GetDiffFolder: async () => ({ path: '/canonical/project-a', tabDir: '/canonical/project-a', custom: false, locked: '' }),
+  GetDiffFolder: async () => ({ path: '/canonical/project-a', tabDir: '/canonical/project-a', custom: false, scope: 'session', serverId: '' }),
   GetSessionDiffFileList: async () => ([{
     path: 'diff.txt', oldPath: '', status: 'modified', added: 1, removed: 1, binary: false,
   }]),

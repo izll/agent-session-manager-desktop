@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onDestroy, tick } from 'svelte';
+  import { onDestroy, tick, createEventDispatcher } from 'svelte';
   import { requestFileJump, requestFolderJump } from '../../stores/fileJump';
 
   /**
@@ -110,6 +110,11 @@
       line = firstHunk ? parseHunkHeader(firstHunk.header).newStart : undefined;
     }
 
+    // In the linked folders' window the files sit beside the diff, in that window.
+    if (fixedRoot) {
+      dispatch('openinfiles', { path, line });
+      return;
+    }
     const target = filesPathOf(path);
     if (target === null) {
       editorError = $t('diffFolder.outsideFiles');
@@ -139,22 +144,43 @@
 
   $: folderTitle = !diffFolder
     ? ''
-    : diffFolder.locked === 'ownFolder'
-      ? $t('diffFolder.ownFolder', { path: diffFolder.path })
-      : diffFolder.locked === 'remote'
-        ? $t('diffFolder.remote', { path: diffFolder.path })
-        : $t('diffFolder.current', { path: diffFolder.path });
+    : diffFolder.serverId
+      ? $t('diffFolder.remote', { path: diffFolder.path })
+      : $t('diffFolder.current', { path: diffFolder.path });
 
   let folderMenu: { x: number; y: number } | null = null;
+  /** The tab's linked folders, offered in the menu as ready choices. */
+  let menuLinkedFolders: main.LinkedFolder[] = [];
 
-  function toggleFolderMenu(e: MouseEvent) {
+  async function toggleFolderMenu(e: MouseEvent) {
     if (folderMenu) {
       closeFolderMenu();
       return;
     }
     const box = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    // Open at once; the linked folders join it when they are read.
+    menuLinkedFolders = [];
     folderMenu = { x: box.left, y: box.bottom + 4 };
     claimMenu(closeFolderMenu);
+    const sessionId = get(selectedSessionId);
+    const asked = folderMenu;
+    try {
+      const linked = sessionId ? (await App.GetTabLinkedFolders(sessionId, tabIdx())) || [] : [];
+      if (folderMenu === asked) menuLinkedFolders = linked;
+    } catch {
+      // The menu still offers the rest.
+    }
+  }
+
+  async function useFolder(dir: string) {
+    closeFolderMenu();
+    const sessionId = get(selectedSessionId);
+    if (!sessionId) return;
+    try {
+      await setTabDiffFolder(sessionId, tabIdx(), dir);
+    } catch (e) {
+      editorError = String(e);
+    }
   }
 
   function closeFolderMenu() {
@@ -164,14 +190,11 @@
   }
 
   async function useSessionFolder() {
-    closeFolderMenu();
-    const sessionId = get(selectedSessionId);
-    if (!sessionId || !diffFolder?.custom) return;
-    try {
-      await setDiffFolder(sessionId, '');
-    } catch (e) {
-      editorError = String(e);
+    if (!diffFolder?.custom) {
+      closeFolderMenu();
+      return;
     }
+    await useFolder('');
   }
 
   async function chooseOtherFolder() {
@@ -179,7 +202,8 @@
     const sessionId = get(selectedSessionId);
     if (!sessionId || !diffFolder) return;
     try {
-      await chooseDiffFolder(sessionId, diffFolder.path);
+      const picked = await App.BrowseDirectory(diffFolder.path);
+      if (picked) await setTabDiffFolder(sessionId, tabIdx(), picked);
     } catch (e) {
       editorError = String(e);
     }
@@ -197,7 +221,7 @@
   import * as App from '../../../../wailsjs/go/main/App';
   import { ClipboardSetText } from '../../../../wailsjs/runtime/runtime';
   import type { main, session } from '../../../../wailsjs/go/models';
-  import { diffFolderVersion, chooseDiffFolder, setDiffFolder } from '../../stores/diffFolder';
+  import { diffFolderVersion, setTabDiffFolder } from '../../stores/diffFolder';
   import { rebasePath } from '../../utils/rebasePath';
   import ConfirmDialog from '../Dialogs/ConfirmDialog.svelte';
   import { t } from '../../i18n';
@@ -245,6 +269,10 @@
    *  terminal sits beside what is being typed into. */
   export let takeFocus = false;
   export let initialMode: 'session' | 'full' = 'session';
+  /** A folder to show instead of the tab's: one linked to it, opened in the
+   *  linked folders' window. It has no folder of its own to choose. */
+  export let fixedRoot = '';
+  const dispatch = createEventDispatcher<{ openinfiles: { path: string; line?: number; folder?: boolean } }>();
 
   interface DiffData {
     content: string;
@@ -473,6 +501,10 @@
   /** The browser names a folder without its trailing slash. */
   function showFolderInFiles(dir: string) {
     closeFileMenu();
+    if (fixedRoot) {
+      dispatch('openinfiles', { path: dir.replace(/\/+$/, ''), folder: true });
+      return;
+    }
     const target = filesPathOf(dir.replace(/\/+$/, ''));
     if (target === null) {
       editorError = $t('diffFolder.outsideFiles');
@@ -609,7 +641,7 @@
     }
     // Keyed on session AND tab, matching the guard that calls this: a tab with
     // its own directory is a different diff even within one session.
-    lastSessionId = `${projectId}:${sessionId}:${windowIdx}`;
+    lastSessionId = `${projectId}:${sessionId}:${windowIdx}${fixedRoot ? ':' + fixedRoot : ''}`;
     loading = files.length === 0;
     error = '';
 
@@ -624,7 +656,9 @@
       // opened, so the cost of listing does not depend on what the files hold.
       // The tab's working directory, or the folder the session chose for its
       // diff.
-      const folder = await App.GetDiffFolder(sessionId, windowIdx);
+      const folder = fixedRoot
+        ? ({ path: fixedRoot, tabDir: fixedRoot, custom: false, scope: 'tab', serverId: '' } as main.DiffFolder)
+        : await App.GetDiffFolder(sessionId, windowIdx);
       const root = folder?.path || '';
       if (generation !== loadGeneration || projectId !== get(activeProjectId) || sessionId !== get(selectedSessionId) ||
           windowIdx !== tabIdx() || mode !== diffMode || !active) return;
@@ -714,7 +748,8 @@
    */
   function rememberOpenFile(path: string) {
     const sessionId = get(selectedSessionId);
-    if (!sessionId) return;
+    // A linked folder's diff is a visit: the tab's own diff keeps its place.
+    if (!sessionId || fixedRoot) return;
     const current = get(settings).diffLastFile ?? {};
     const target = `${get(activeProjectId)}:${sessionId}:${tabIdx()}:${diffMode}`;
     if (current[target] === path) return;
@@ -743,7 +778,7 @@
     // Back to what was open before the tab switch, if it is still in the diff.
     const sessionId = get(selectedSessionId);
     const projectId = get(activeProjectId);
-    const remembered = sessionId
+    const remembered = sessionId && !fixedRoot
       ? get(settings).diffLastFile?.[`${projectId}:${sessionId}:${tabIdx()}:${diffMode}`] ??
         // Backward-compatible read of settings written before project identity
         // became part of this UI-state key. The next selection writes the new
@@ -762,7 +797,7 @@
   // parsed its enormous diff in the background — freezing the UI on a plain tab
   // switch. Gating on `active` means the diff only ever runs when you're looking
   // at it.
-  $: diffKey = `${$activeProjectId}:${$selectedSessionId ?? ''}:${$selectedWindowIdx ?? 0}`;
+  $: diffKey = `${$activeProjectId}:${$selectedSessionId ?? ''}:${$selectedWindowIdx ?? 0}${fixedRoot ? ':' + fixedRoot : ''}`;
   $: if (active && diffKey !== lastSessionId) {
     loadDiff();
   }
@@ -1950,6 +1985,8 @@
       return;
     }
     if (!active) return;
+    // The linked folders' window is over this one: its own diff takes the keys.
+    if (!fixedRoot && document.querySelector('[data-linked-folders]')) return;
     if (matchesShortcut(event, 'diff.nextChange')) {
       event.preventDefault();
       void stepChange(1);
@@ -2158,12 +2195,12 @@
   <div class="diff-header">
     <div class="header-left">
       <span class="diff-title">{diffMode === 'session' ? $t('diff.session') : $t('diff.full')}</span>
-      {#if diffFolder?.path}
+      {#if diffFolder?.path && !fixedRoot}
         <button
           class="folder-chip"
           class:custom={diffFolder.custom}
           data-diff-folder
-          disabled={!!diffFolder.locked}
+          disabled={!!diffFolder.serverId}
           title={folderTitle}
           aria-haspopup="menu"
           aria-expanded={!!folderMenu}
@@ -2173,7 +2210,7 @@
             <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
           </svg>
           <span class="folder-name">{folderName(diffFolder.path)}</span>
-          {#if !diffFolder.locked}
+          {#if !diffFolder.serverId}
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
           {/if}
         </button>
@@ -2933,13 +2970,19 @@
   >
     <button class="context-menu-item" role="menuitemradio" aria-checked={!diffFolder.custom}
       data-action="session-folder" title={diffFolder.tabDir} on:click={useSessionFolder}>
-      <span class="check">{diffFolder.custom ? '' : '✓'}</span>{$t('diffFolder.sessionFolder')}
+      <span class="check">{diffFolder.custom ? '' : '✓'}</span>{diffFolder.scope === 'tab' ? $t('diffFolder.tabFolder') : $t('diffFolder.sessionFolder')}
     </button>
     {#if diffFolder.custom}
       <button class="context-menu-item" role="menuitemradio" aria-checked="true" title={diffFolder.path} disabled>
         <span class="check">✓</span><span class="menu-path">{diffFolder.path}</span>
       </button>
     {/if}
+    {#each menuLinkedFolders.filter((f) => f.path !== diffFolder?.path && !f.missing) as linked (linked.path)}
+      <button class="context-menu-item" role="menuitemradio" aria-checked="false" data-action="linked-folder"
+        title={linked.path} on:click={() => useFolder(linked.path)}>
+        <span class="check"></span><span class="menu-path">{linked.path}</span>
+      </button>
+    {/each}
     <div class="menu-divider"></div>
     <button class="context-menu-item" data-action="other-folder" on:click={chooseOtherFolder}>
       <span class="check"></span>{$t('diffFolder.other')}

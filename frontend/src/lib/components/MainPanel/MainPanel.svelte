@@ -12,6 +12,7 @@
   import TaskPanel from './TaskPanel.svelte';
   import ForkDialog from '../Dialogs/ForkDialog.svelte';
   import CheckpointsDialog from '../Dialogs/CheckpointsDialog.svelte';
+  import LinkedFoldersDialog from '../Dialogs/LinkedFoldersDialog.svelte';
   import ViewOrderDropDialog from '../Dialogs/ViewOrderDropDialog.svelte';
   import { activities } from '../../stores/activities';
   import { checkpointsUnavailable, sessionAgentBusy } from '../../utils/checkpoints';
@@ -569,6 +570,23 @@
   $: checkpointsReason = checkpointsUnavailable({ remote: !!currentTabServer, isGitRepo: tabIsGitRepo });
   $: checkpointsAgentBusy = sessionAgentBusy(checkpointsTarget.sessionId, $activities, $tabStatuses);
 
+  // Folders linked to the tab: their diff and files, in a window of their own.
+  let showLinkedFolders = false;
+  let linkedFoldersTarget = { projectId: '', sessionId: '', windowIdx: 0, serverId: '', startPath: '' };
+
+  function openLinkedFolders() {
+    const sessionId = $selectedSessionId;
+    if (!sessionId) return;
+    linkedFoldersTarget = {
+      projectId: $activeProjectId,
+      sessionId,
+      windowIdx: $selectedWindowIdx ?? 0,
+      serverId: currentTabServer || '',
+      startPath: currentTabPath || '',
+    };
+    showLinkedFolders = true;
+  }
+
   async function openCheckpoints() {
     const sessionId = $selectedSessionId;
     const windowIdx = $selectedWindowIdx ?? 0;
@@ -1052,25 +1070,41 @@
           {/each}
         </div>
         <div class="view-tabs-right">
+          <!-- First of these, as asked: the diff and the files of folders kept with
+               this tab, beside its own. Any tab has folders, so it is always on. -->
+          <button
+            class="split-btn icon-only"
+            data-linked-folders-button
+            on:click={openLinkedFolders}
+            disabled={!$selectedSessionId}
+            title={$t('linkedFolders.button')}
+            aria-label={$t('linkedFolders.button')}
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+              <path d="M10 14h4M12 12v4"/>
+            </svg>
+          </button>
           <!-- Here rather than in the history or the branch badge: a
                checkpoint is taken of the working tree, right before handing it
                to the agent in this tab, and this bar is what sits beside the
                agent. Disabled with the reason, like the Diff button, outside a
                local repository. -->
           <button
-            class="split-btn"
+            class="split-btn icon-only"
+            data-checkpoints-button
             on:click={openCheckpoints}
             disabled={!!checkpointsReason}
+            aria-label={$t('checkpoints.button')}
             title={checkpointsReason === 'remote'
               ? $t('error.checkpointsRemote')
               : checkpointsReason === 'notRepository'
                 ? $t('error.checkpointsNotRepository')
-                : $t('checkpoints.buttonTitle')}
+                : `${$t('checkpoints.button')} – ${$t('checkpoints.buttonTitle')}`}
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M4 22V4a1 1 0 0 1 1-1h11l-2 4 2 4H5"/>
             </svg>
-            {$t('checkpoints.button')}
           </button>
           <!-- Shows the diff above the current view instead of replacing it.
                Hidden rather than disabled, unlike the Diff button beside Files:
@@ -1078,34 +1112,38 @@
                reachable, so its absence takes nothing away. -->
           {#if tabIsGitRepo}
             <button
-              class="split-btn"
+              class="split-btn icon-only"
+              data-diff-above-button
               class:active={diffAbove}
               on:click={toggleDiffAbove}
+              aria-label={$t('diff.above')}
               title={diffAbove ? $t('diff.hideAbove') : $t('diff.showAbove')}
             >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <rect x="3" y="4" width="18" height="16" rx="2"/>
                 <line x1="3" y1="12" x2="21" y2="12"/>
               </svg>
-              {$t('diff.above')}
             </button>
           {/if}
           <button
-            class="split-btn"
+            class="split-btn icon-only"
+            data-split-button
             class:active={splitEnabled}
             on:click={toggleSplitView}
             disabled={activeView !== 'terminal'}
-            title={splitEnabled ? $t('split.close') : $t('split.pinCurrent')}
+            aria-label={$t('split.label')}
+            title={`${$t('split.label')} – ${splitEnabled ? $t('split.close') : $t('split.pinCurrent')}`}
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <rect x="3" y="4" width="18" height="16" rx="2"/>
               <line x1="12" y1="4" x2="12" y2="20"/>
             </svg>
-            {$t('split.label')}
           </button>
           {#if canAutoYes}
             <button
-              class="yolo-btn"
+              class="yolo-btn icon-only"
+              data-yolo-button
+              aria-label={$t('mainPanel.yoloLabel')}
               class:active={liveYolo}
               class:not-in-effect={yoloButton.notInEffect}
               on:click|stopPropagation={async () => {
@@ -1118,40 +1156,40 @@
                   console.error('YOLO cycle failed:', e);
                 }
               }}
-              title={yoloButton.notInEffect ? $t('sessionItem.yoloNotInEffect') : liveYolo ? $t('mainPanel.yoloOn') : $t('mainPanel.yoloEnable')}
+              title={`${$t('mainPanel.yoloLabel')} – ${yoloButton.notInEffect ? $t('sessionItem.yoloNotInEffect') : liveYolo ? $t('mainPanel.yoloOn') : $t('mainPanel.yoloEnable')}`}
             >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <!-- Filled while on: the icon alone has to say it. -->
+              <svg width="15" height="15" viewBox="0 0 24 24" fill={liveYolo ? 'currentColor' : 'none'} stroke="currentColor" stroke-width="2">
                 <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
               </svg>
-              {liveYolo ? $t('mainPanel.yoloLabel') + ' ⚡' : $t('mainPanel.yoloLabel')}
             </button>
           {/if}
           {#if canFork}
-            <button class="fork-btn" on:click={() => showForkDialog = true} title={$t('mainPanel.forkTitle')}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <button class="fork-btn icon-only" data-fork-button on:click={() => showForkDialog = true}
+              aria-label={$t('mainPanel.fork')} title={`${$t('mainPanel.fork')} – ${$t('mainPanel.forkTitle')}`}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <circle cx="12" cy="18" r="3"/>
                 <circle cx="6" cy="6" r="3"/>
                 <circle cx="18" cy="6" r="3"/>
                 <path d="M6 9v3a3 3 0 003 3h6a3 3 0 003-3V9"/>
                 <path d="M12 12v3"/>
               </svg>
-              {$t('mainPanel.fork')}
             </button>
           {/if}
           {#if terminalAttached}
-            <button class="terminal-btn detach" on:click={() => terminalComponent?.detach()} title={$t('mainPanel.detachTitle')}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <button class="terminal-btn detach icon-only" data-detach-button on:click={() => terminalComponent?.detach()}
+              aria-label={$t('mainPanel.detach')} title={$t('mainPanel.detachTitle')}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M18 6L6 18M6 6l12 12"/>
               </svg>
-              {$t('mainPanel.detach')}
             </button>
           {:else if currentSession?.status === 'running'}
-            <button class="terminal-btn attach" on:click={() => terminalComponent?.attach()} title={$t('mainPanel.attachTitle')}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <button class="terminal-btn attach icon-only" data-attach-button on:click={() => terminalComponent?.attach()}
+              aria-label={$t('mainPanel.attach')} title={$t('mainPanel.attachTitle')}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <polyline points="4 17 10 11 4 5"/>
                 <line x1="12" y1="19" x2="20" y2="19"/>
               </svg>
-              {$t('mainPanel.attach')}
             </button>
           {/if}
         </div>
@@ -1348,6 +1386,14 @@
 
 <ForkDialog bind:show={showForkDialog} />
 
+<LinkedFoldersDialog
+  bind:show={showLinkedFolders}
+  projectId={linkedFoldersTarget.projectId}
+  sessionId={linkedFoldersTarget.sessionId}
+  windowIdx={linkedFoldersTarget.windowIdx}
+  serverId={linkedFoldersTarget.serverId}
+  startPath={linkedFoldersTarget.startPath}
+/>
 <CheckpointsDialog
   bind:show={showCheckpoints}
   projectId={checkpointsTarget.projectId}
@@ -1800,6 +1846,11 @@
   .split-btn:hover:not(:disabled),
   .split-btn.active { color: var(--accent-lighter); background: rgba(var(--accent-rgb), 0.16); border-color: rgba(var(--accent-rgb), 0.38); }
   .split-btn:disabled { opacity: .35; cursor: not-allowed; }
+  /* An icon says it with the tooltip: the bar had grown too long to read. */
+  .split-btn.icon-only,
+  .yolo-btn.icon-only,
+  .fork-btn.icon-only,
+  .terminal-btn.icon-only { padding: 5px 7px; }
 
   @media (max-width: 820px) {
     .terminal-layout.split {

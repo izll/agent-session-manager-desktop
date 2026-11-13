@@ -60,8 +60,24 @@ test('a jump to the Files view names the file as the Files view sees it', async 
   await expect.poll(() => page.evaluate(() => window.diffHidden.fileJump()?.path)).toBe('inner/added.txt');
 });
 
-test('a tab with a folder of its own cannot have another chosen', async ({ page }) => {
-  await open(page, '&locked=ownFolder');
-  await expect(chip(page)).toBeDisabled();
-  await expect(chip(page)).toHaveAttribute('title', /\/repo/);
+// A tab working in a folder of its own chooses its own diff folder.
+test('a tab with a folder of its own chooses for itself', async ({ page }) => {
+  await open(page, '&scope=tab');
+  await expect(chip(page)).toBeEnabled();
+  await chip(page).click();
+  await expect(folderItem(page, 'session-folder')).toHaveText(/The tab's folder|A fül mappája/);
+  await folderItem(page, 'other-folder').click();
+  await expect.poll(() => calls(page)).toEqual(['/repo/picked']);
+  await expect(chip(page)).toHaveText('picked');
+});
+
+// The folders linked to the tab are ready choices.
+test('the folders linked to the tab are offered', async ({ page }) => {
+  await open(page, '&linked=/repo/lib,/repo/docs');
+  await chip(page).click();
+  const linked = page.locator('.diff-folder-menu [data-action="linked-folder"]');
+  await expect(linked).toHaveCount(2);
+  await linked.first().click();
+  await expect.poll(() => calls(page)).toEqual(['/repo/lib']);
+  await expect(chip(page)).toHaveText('lib');
 });

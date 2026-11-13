@@ -27,6 +27,22 @@
   import { reportError } from '../../stores/appErrors';
 
   export let active = false;
+  /** A folder to show instead of the tab's: one linked to it, opened in the
+   *  linked folders' window, which hands it its jumps itself. */
+  export let fixedRoot = '';
+
+  /** Opens a file or folder of the fixed root, as a jump from the diff would —
+   *  once the root is listed: before that there is nothing to open it in. */
+  export function openPath(path: string, line?: number, folder = false) {
+    localJump = { path, line, folder };
+  }
+  let localJump: { path: string; line?: number; folder: boolean } | null = null;
+
+  /** Runs `action` once unsaved edits here are saved or let go; for the window
+   *  this sits in, which closes or switches it away. */
+  export function whenLeaving(action: () => void, onCancel: (() => void) | null = null) {
+    guardUnsaved(action, onCancel);
+  }
 
   const dispatch = createEventDispatcher();
 
@@ -450,7 +466,7 @@
     const sessionId = get(selectedSessionId);
     if (!sessionId) return;
     const generation = treeGeneration;
-    const expectedRoot = path === '' ? '' : rootAbsPath;
+    const expectedRoot = path === '' ? fixedRoot : rootAbsPath;
     if (path !== '' && !expectedRoot) return;
 
     loadingDirs = new Set(loadingDirs).add(path);
@@ -1073,7 +1089,9 @@
   // Project identity is part of the tab. Project A and B may both contain
   // session "1" / window 0; sharing their remembered path would open A's last
   // file automatically in B and reuse its scroll position.
-  $: browseKey = `${$activeProjectId}:${$selectedSessionId ?? ''}:${$selectedWindowIdx ?? 0}`;
+  // With a fixed root the window it sits in is bound to one tab and guards its own
+  // way out; only another root is another tree.
+  $: browseKey = fixedRoot ? `fixed:${fixedRoot}` : `${$activeProjectId}:${$selectedSessionId ?? ''}:${$selectedWindowIdx ?? 0}`;
 
   $: if (active && browseKey !== loadedBrowseKey) {
     requestBrowseTarget(browseKey, $selectedSessionId, $selectedWindowIdx ?? 0);
@@ -1148,8 +1166,14 @@
    *  its root is listed: a jump taken before that (the browser mounted by the
    *  very switch the jump asked for) found no root, read nothing, and was
    *  cleared on the way — the file never opened and the tree never moved. */
-  $: if (active && loadedBrowseKey === browseKey && rootAbsPath && $pendingFileJump) {
+  $: if (!fixedRoot && active && loadedBrowseKey === browseKey && rootAbsPath && $pendingFileJump) {
     const jump = $pendingFileJump;
+    if (jump.folder) void openRequestedFolder(jump.path);
+    else void openRequestedFile(jump.path, jump.line);
+  }
+  $: if (fixedRoot && active && loadedBrowseKey === browseKey && rootAbsPath && localJump) {
+    const jump = localJump;
+    localJump = null;
     if (jump.folder) void openRequestedFolder(jump.path);
     else void openRequestedFile(jump.path, jump.line);
   }
