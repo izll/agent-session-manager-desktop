@@ -315,11 +315,13 @@ select option:checked {
    right edge, and every button there is the ✕'s size and look: the history's
    maximise button was 30px, the task dialogs' microphone a bare 14px glyph,
    the new-session template link underlined text. */
+/* Low on purpose: the header names the window, the content is what it is for.
+   24px across, so the title lines up with the body below it. */
 .dialog-header {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 20px 24px;
+  padding: 12px 24px;
   background: linear-gradient(180deg, rgba(var(--accent-rgb), 0.1) 0%, transparent 100%);
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
@@ -327,7 +329,7 @@ select option:checked {
 .dialog-header h2 {
   flex: 0 1 auto;
   min-width: 0;
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 600;
   margin: 0;
   overflow: hidden;
@@ -388,8 +390,8 @@ select option:checked {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   padding: 0;
   background: rgba(255, 255, 255, 0.05);
   border: none;
@@ -455,8 +457,8 @@ select option:checked {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   background: rgba(255, 255, 255, 0.05);
   border: none;
   border-radius: 8px;

@@ -127,7 +127,7 @@
   }
 
   .dialog-title {
-    font-size: 18px;
+    font-size: 16px;
     font-weight: 600;
     color: #e4e4e7;
     margin: 0 0 12px;

@@ -66,10 +66,10 @@ test('every dialog header closes with the shared button', () => {
   assert.deepEqual(wrong, []);
 });
 
-test('the shared close button is the 20px icon, labelled', () => {
+test('the shared close button is the 16px icon, labelled', () => {
   const button = readFileSync(new URL('../src/lib/components/common/DialogCloseButton.svelte', import.meta.url), 'utf8');
   assert.match(button, /class="close-btn"/);
-  assert.match(button, /<svg width="20" height="20"/, 'the ✕ is 20px, as in Settings');
+  assert.match(button, /<svg width="16" height="16"/, 'the ✕ is 16px, in the low header');
   assert.match(button, /aria-label=\{label \?\? \$t\('common\.close'\)\}/, 'an icon-only button needs a name');
 });
 

@@ -48,8 +48,8 @@ test.beforeAll(async ({ browser }) => {
 });
 
 test('Settings, the reference, has the shared chrome', () => {
-  expect(reference.close).toMatchObject({ width: 32, height: 32, icon: [20, 20], label: 'Close' });
-  expect(reference.title['font-size']).toBe('18px');
+  expect(reference.close).toMatchObject({ width: 28, height: 28, icon: [16, 16], label: 'Close' });
+  expect(reference.title['font-size']).toBe('16px');
   expect(reference.header['padding-left']).toBe('24px');
   expect(reference.panel['border-top-left-radius']).toBe('16px');
 });
@@ -139,9 +139,10 @@ test.beforeAll(async ({ browser }) => {
 });
 
 test('Settings, the reference, has the header convention', () => {
-  expect(referenceHeader.height).toBe(73);
+  // Kept low: a dialog's header is a label, not a banner.
+  expect(referenceHeader.height).toBe(53);
   expect(referenceHeader.style.gap).toBe('12px');
-  expect(referenceHeader.title).toMatchObject({ left: 24, 'font-size': '18px', 'white-space': 'nowrap', 'text-overflow': 'ellipsis' });
+  expect(referenceHeader.title).toMatchObject({ left: 24, 'font-size': '16px', 'white-space': 'nowrap', 'text-overflow': 'ellipsis' });
   expect(referenceHeader.buttons).toHaveLength(1);
 });
 
@@ -162,7 +163,7 @@ for (const dialog of HEADER_DIALOGS) {
     // Cut short, it says the rest on hover.
     if (truncated) expect(tooltip).toBe(text);
 
-    // The ✕: last, at the right padding, the full 32px box.
+    // The ✕: last, at the right padding, the full 28px box.
     const close = measured.buttons.at(-1);
     const refClose = ref.buttons.at(-1);
     expect(close.close).toBe(true);
