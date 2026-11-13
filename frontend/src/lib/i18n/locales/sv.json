@@ -1893,5 +1893,8 @@
   "mobile.guide.phone": "Installera Tailscale på telefonen från appbutiken och logga in med samma konto. Tryck sedan på Parkoppla en telefon nedan och skanna QR-koden.",
   "mobile.guide.copy": "Kopiera",
   "mobile.guide.copied": "Kopierat",
-  "commands.backgroundFailed": "{name} misslyckades (slutkod {code}):"
+  "commands.backgroundFailed": "{name} misslyckades (slutkod {code}):",
+  "terminal.copyMode.label": "Rullningsläge – utdata pausad",
+  "terminal.copyMode.leave": "Tillbaka till live",
+  "terminal.copyMode.hint": "När du rullar tillbaka visar tmux en stillbild av fliken. Tryck q eller klicka här för att se utdata live igen."
 }

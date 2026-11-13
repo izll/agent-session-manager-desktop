@@ -1893,5 +1893,8 @@
   "mobile.guide.phone": "ثبّت Tailscale على الهاتف من متجر التطبيقات وسجّل الدخول بالحساب نفسه. ثم اضغط إقران هاتف أدناه وامسح رمز QR.",
   "mobile.guide.copy": "نسخ",
   "mobile.guide.copied": "تم النسخ",
-  "commands.backgroundFailed": "فشل {name} (رمز الخروج {code}):"
+  "commands.backgroundFailed": "فشل {name} (رمز الخروج {code}):",
+  "terminal.copyMode.label": "وضع التمرير – الإخراج متوقف",
+  "terminal.copyMode.leave": "العودة إلى العرض المباشر",
+  "terminal.copyMode.hint": "أثناء التمرير يعرض tmux صورة ثابتة لعلامة التبويب هذه. اضغط q أو انقر هنا لرؤية الإخراج المباشر مجددًا."
 }

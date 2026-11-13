@@ -1893,5 +1893,8 @@
   "mobile.guide.phone": "Installa Tailscale sul telefono dal suo store e accedi con lo stesso account. Poi premi Associa un telefono qui sotto e scansiona il QR code.",
   "mobile.guide.copy": "Copia",
   "mobile.guide.copied": "Copiato",
-  "commands.backgroundFailed": "{name} non è riuscito (codice di uscita {code}):"
+  "commands.backgroundFailed": "{name} non è riuscito (codice di uscita {code}):",
+  "terminal.copyMode.label": "Modalità scorrimento – output in pausa",
+  "terminal.copyMode.leave": "Torna alla vista live",
+  "terminal.copyMode.hint": "Durante lo scorrimento tmux mostra un'immagine ferma di questa scheda. Premi q o fai clic qui per rivedere l'output live."
 }

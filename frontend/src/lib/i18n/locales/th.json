@@ -1893,5 +1893,8 @@
   "mobile.guide.phone": "ติดตั้ง Tailscale บนโทรศัพท์จากร้านแอปและเข้าสู่ระบบด้วยบัญชีเดียวกัน จากนั้นกดจับคู่โทรศัพท์ด้านล่างแล้วสแกน QR",
   "mobile.guide.copy": "คัดลอก",
   "mobile.guide.copied": "คัดลอกแล้ว",
-  "commands.backgroundFailed": "{name} ล้มเหลว (รหัสออก {code}):"
+  "commands.backgroundFailed": "{name} ล้มเหลว (รหัสออก {code}):",
+  "terminal.copyMode.label": "โหมดเลื่อน – หยุดแสดงผลชั่วคราว",
+  "terminal.copyMode.leave": "กลับไปที่การแสดงผลสด",
+  "terminal.copyMode.hint": "ขณะเลื่อนย้อนกลับ tmux จะแสดงภาพนิ่งของแท็บนี้ กด q หรือคลิกที่นี่เพื่อดูผลลัพธ์สดอีกครั้ง"
 }

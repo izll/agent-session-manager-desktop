@@ -1893,5 +1893,8 @@
   "mobile.guide.phone": "Cài Tailscale trên điện thoại từ kho ứng dụng và đăng nhập cùng tài khoản. Sau đó nhấn Ghép nối điện thoại bên dưới và quét mã QR.",
   "mobile.guide.copy": "Sao chép",
   "mobile.guide.copied": "Đã sao chép",
-  "commands.backgroundFailed": "{name} bị lỗi (mã thoát {code}):"
+  "commands.backgroundFailed": "{name} bị lỗi (mã thoát {code}):",
+  "terminal.copyMode.label": "Chế độ cuộn – đầu ra tạm dừng",
+  "terminal.copyMode.leave": "Quay lại trực tiếp",
+  "terminal.copyMode.hint": "Khi cuộn lên, tmux hiển thị ảnh tĩnh của tab này. Nhấn q hoặc bấm vào đây để xem lại đầu ra trực tiếp."
 }

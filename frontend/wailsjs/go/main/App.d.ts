@@ -262,6 +262,8 @@ export function GetTasks(arg1:string):Promise<Array<main.TaskInfo>>;
 
 export function GetTasksByStatus(arg1:string,arg2:string):Promise<Array<main.TaskInfo>>;
 
+export function GetTerminalScroll(arg1:string,arg2:number):Promise<session.PaneScroll>;
+
 export function GetTerminalWSPort():Promise<number>;
 
 export function GetTerminalWSToken():Promise<string>;
@@ -305,6 +307,8 @@ export function IsDevMode():Promise<boolean>;
 export function KeyringAvailable():Promise<boolean>;
 
 export function KillServerSession(arg1:string,arg2:string):Promise<void>;
+
+export function LeaveTerminalScroll(arg1:string,arg2:number):Promise<session.PaneScroll>;
 
 export function ListBackgroundAgents():Promise<Array<main.BackgroundAgentInfo>>;
 
@@ -527,6 +531,8 @@ export function SetTabViewOrder(arg1:string,arg2:number,arg3:Array<string>,arg4:
 export function SetTokenUsageMachineEnabled(arg1:string,arg2:boolean):Promise<void>;
 
 export function SetWindowAutoYes(arg1:string,arg2:number,arg3:boolean,arg4:string):Promise<void>;
+
+export function SettleTerminalScroll(arg1:string,arg2:number):Promise<session.PaneScroll>;
 
 export function StartSession(arg1:string,arg2:string):Promise<void>;
 

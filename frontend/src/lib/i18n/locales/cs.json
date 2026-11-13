@@ -1893,5 +1893,8 @@
   "mobile.guide.phone": "Nainstalujte Tailscale do telefonu z obchodu s aplikacemi a přihlaste se stejným účtem. Pak níže stiskněte Spárovat telefon a naskenujte QR kód.",
   "mobile.guide.copy": "Kopírovat",
   "mobile.guide.copied": "Zkopírováno",
-  "commands.backgroundFailed": "{name} selhal (návratový kód {code}):"
+  "commands.backgroundFailed": "{name} selhal (návratový kód {code}):",
+  "terminal.copyMode.label": "Režim posouvání – výstup pozastaven",
+  "terminal.copyMode.leave": "Zpět na živý výstup",
+  "terminal.copyMode.hint": "Při posouvání zobrazuje tmux statický obraz této karty. Stiskněte q nebo klikněte sem, abyste znovu viděli živý výstup."
 }

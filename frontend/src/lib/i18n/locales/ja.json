@@ -1893,5 +1893,8 @@
   "mobile.guide.phone": "スマートフォンにアプリストアから Tailscale をインストールし、同じアカウントでログインします。次に下の「スマートフォンをペアリング」を押して QR コードを読み取ります。",
   "mobile.guide.copy": "コピー",
   "mobile.guide.copied": "コピーしました",
-  "commands.backgroundFailed": "{name} が失敗しました (終了コード {code}):"
+  "commands.backgroundFailed": "{name} が失敗しました (終了コード {code}):",
+  "terminal.copyMode.label": "スクロールモード – 出力は一時停止中",
+  "terminal.copyMode.leave": "ライブ表示に戻る",
+  "terminal.copyMode.hint": "スクロール中、tmux はこのタブの静止画を表示します。q を押すか、ここをクリックするとライブ出力に戻ります。"
 }

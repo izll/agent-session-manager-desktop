@@ -1893,5 +1893,8 @@
   "mobile.guide.phone": "Telefona uygulama mağazasından Tailscale'i yükleyin ve aynı hesapla giriş yapın. Sonra aşağıdaki Telefon eşle düğmesine basıp QR kodunu tarayın.",
   "mobile.guide.copy": "Kopyala",
   "mobile.guide.copied": "Kopyalandı",
-  "commands.backgroundFailed": "{name} başarısız oldu (çıkış kodu {code}):"
+  "commands.backgroundFailed": "{name} başarısız oldu (çıkış kodu {code}):",
+  "terminal.copyMode.label": "Kaydırma modu – çıktı duraklatıldı",
+  "terminal.copyMode.leave": "Canlıya dön",
+  "terminal.copyMode.hint": "Geri kaydırırken tmux bu sekmenin durağan bir görüntüsünü gösterir. Canlı çıktıyı yeniden görmek için q'ya basın veya buraya tıklayın."
 }

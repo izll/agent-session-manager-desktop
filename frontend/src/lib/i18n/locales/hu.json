@@ -1893,5 +1893,8 @@
   "mobile.guide.phone": "Telepítsd a telefonra a Tailscale-t az alkalmazásboltból, és jelentkezz be ugyanazzal a fiókkal. Utána lent nyomd meg a Telefon párosítása gombot, és olvasd be a QR-kódot.",
   "mobile.guide.copy": "Másolás",
   "mobile.guide.copied": "Másolva",
-  "commands.backgroundFailed": "{name} hibával állt le (kilépési kód: {code}):"
+  "commands.backgroundFailed": "{name} hibával állt le (kilépési kód: {code}):",
+  "terminal.copyMode.label": "Görgetési mód – a kimenet áll",
+  "terminal.copyMode.leave": "Vissza az élő nézetre",
+  "terminal.copyMode.hint": "Görgetés közben a tmux állóképet mutat erről a fülről. Nyomj q-t, vagy kattints ide, hogy újra az élő kimenetet lásd."
 }

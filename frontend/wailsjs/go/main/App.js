@@ -514,6 +514,10 @@ export function GetTasksByStatus(arg1, arg2) {
   return window['go']['main']['App']['GetTasksByStatus'](arg1, arg2);
 }
 
+export function GetTerminalScroll(arg1, arg2) {
+  return window['go']['main']['App']['GetTerminalScroll'](arg1, arg2);
+}
+
 export function GetTerminalWSPort() {
   return window['go']['main']['App']['GetTerminalWSPort']();
 }
@@ -600,6 +604,10 @@ export function KeyringAvailable() {
 
 export function KillServerSession(arg1, arg2) {
   return window['go']['main']['App']['KillServerSession'](arg1, arg2);
+}
+
+export function LeaveTerminalScroll(arg1, arg2) {
+  return window['go']['main']['App']['LeaveTerminalScroll'](arg1, arg2);
 }
 
 export function ListBackgroundAgents() {
@@ -1044,6 +1052,10 @@ export function SetTokenUsageMachineEnabled(arg1, arg2) {
 
 export function SetWindowAutoYes(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['SetWindowAutoYes'](arg1, arg2, arg3, arg4);
+}
+
+export function SettleTerminalScroll(arg1, arg2) {
+  return window['go']['main']['App']['SettleTerminalScroll'](arg1, arg2);
 }
 
 export function StartSession(arg1, arg2) {

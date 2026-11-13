@@ -1893,5 +1893,8 @@
   "mobile.guide.phone": "Instale o Tailscale no celular pela loja de aplicativos e entre com a mesma conta. Depois toque em Parear um celular abaixo e leia o QR code.",
   "mobile.guide.copy": "Copiar",
   "mobile.guide.copied": "Copiado",
-  "commands.backgroundFailed": "{name} falhou (código de saída {code}):"
+  "commands.backgroundFailed": "{name} falhou (código de saída {code}):",
+  "terminal.copyMode.label": "Modo de rolagem – saída pausada",
+  "terminal.copyMode.leave": "Voltar ao vivo",
+  "terminal.copyMode.hint": "Durante a rolagem, o tmux mostra uma imagem parada desta aba. Pressione q ou clique aqui para ver a saída ao vivo novamente."
 }

@@ -1893,5 +1893,8 @@
   "mobile.guide.phone": "在手机的应用商店中安装 Tailscale，并用同一账号登录。然后点下方的“配对手机”并扫描二维码。",
   "mobile.guide.copy": "复制",
   "mobile.guide.copied": "已复制",
-  "commands.backgroundFailed": "{name} 失败（退出码 {code}）："
+  "commands.backgroundFailed": "{name} 失败（退出码 {code}）：",
+  "terminal.copyMode.label": "滚动模式 – 输出已暂停",
+  "terminal.copyMode.leave": "返回实时视图",
+  "terminal.copyMode.hint": "向上滚动时，tmux 显示的是此标签页的静止画面。按 q 或点击这里即可重新查看实时输出。"
 }

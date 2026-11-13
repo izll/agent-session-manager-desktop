@@ -1893,5 +1893,8 @@
   "mobile.guide.phone": "휴대폰에 앱 스토어에서 Tailscale을 설치하고 같은 계정으로 로그인하세요. 그런 다음 아래 휴대폰 페어링을 누르고 QR 코드를 스캔하세요.",
   "mobile.guide.copy": "복사",
   "mobile.guide.copied": "복사됨",
-  "commands.backgroundFailed": "{name} 실패 (종료 코드 {code}):"
+  "commands.backgroundFailed": "{name} 실패 (종료 코드 {code}):",
+  "terminal.copyMode.label": "스크롤 모드 – 출력 일시 중지",
+  "terminal.copyMode.leave": "실시간 보기로 돌아가기",
+  "terminal.copyMode.hint": "스크롤하는 동안 tmux는 이 탭의 정지 화면을 보여 줍니다. q를 누르거나 여기를 클릭하면 실시간 출력이 다시 보입니다."
 }

@@ -1893,5 +1893,8 @@
   "mobile.guide.phone": "Zainstaluj Tailscale na telefonie ze sklepu z aplikacjami i zaloguj się tym samym kontem. Potem naciśnij poniżej Sparuj telefon i zeskanuj kod QR.",
   "mobile.guide.copy": "Kopiuj",
   "mobile.guide.copied": "Skopiowano",
-  "commands.backgroundFailed": "{name} zakończyło się błędem (kod wyjścia {code}):"
+  "commands.backgroundFailed": "{name} zakończyło się błędem (kod wyjścia {code}):",
+  "terminal.copyMode.label": "Tryb przewijania – wyjście wstrzymane",
+  "terminal.copyMode.leave": "Wróć do podglądu na żywo",
+  "terminal.copyMode.hint": "Podczas przewijania tmux pokazuje nieruchomy obraz tej karty. Naciśnij q lub kliknij tutaj, aby znów widzieć wyjście na żywo."
 }

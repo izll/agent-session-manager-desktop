@@ -1893,5 +1893,8 @@
   "mobile.guide.phone": "Installeer Tailscale op de telefoon via de appwinkel en log in met hetzelfde account. Druk daarna hieronder op Telefoon koppelen en scan de QR-code.",
   "mobile.guide.copy": "Kopiëren",
   "mobile.guide.copied": "Gekopieerd",
-  "commands.backgroundFailed": "{name} is mislukt (afsluitcode {code}):"
+  "commands.backgroundFailed": "{name} is mislukt (afsluitcode {code}):",
+  "terminal.copyMode.label": "Scrollmodus – uitvoer gepauzeerd",
+  "terminal.copyMode.leave": "Terug naar live",
+  "terminal.copyMode.hint": "Tijdens het terugscrollen toont tmux een stilstaand beeld van dit tabblad. Druk op q of klik hier om de live-uitvoer weer te zien."
 }

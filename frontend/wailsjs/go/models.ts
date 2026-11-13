@@ -3465,6 +3465,20 @@ export namespace session {
 	}
 
 
+	export class PaneScroll {
+	    inMode: boolean;
+	    scrolled: boolean;
+
+	    static createFrom(source: any = {}) {
+	        return new PaneScroll(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.inMode = source["inMode"];
+	        this.scrolled = source["scrolled"];
+	    }
+	}
 	export class PanelGeometry {
 	    x: number;
 	    y: number;

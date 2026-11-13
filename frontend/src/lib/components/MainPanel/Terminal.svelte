@@ -6,7 +6,8 @@
   import { activeProjectId } from '../../stores/projects';
   import { get } from 'svelte/store';
   import { EventsOn } from '../../../../wailsjs/runtime/runtime';
-  import { LogFrontend, SetTabFontSize } from '../../../../wailsjs/go/main/App';
+  import { LogFrontend, SetTabFontSize, GetTerminalScroll, SettleTerminalScroll, LeaveTerminalScroll } from '../../../../wailsjs/go/main/App';
+  import { createCopyModeWatch, type PaneScroll } from '../../utils/copyModeWatch';
   import { TerminalPool } from '../../utils/terminalPool';
   import { setTerminalRenderer, setTerminalCopyMode, setTerminalFontFamily, setTerminalThemeContext, defaultTerminalRenderer, TERMINAL_REFUSED_EVENT, type TerminalRefusedDetail } from '../../utils/terminal';
   import { refusalMessageKey } from '../../utils/terminalRefusal';
@@ -40,6 +41,31 @@
 
   $: targetSessionId = sessionId === undefined ? $selectedSessionId : sessionId;
   $: targetWindowIdx = windowIdx === undefined ? $selectedWindowIdx : windowIdx;
+
+  // tmux copy mode freezes the picture while the agent goes on working, and the app
+  // hides tmux's own indicator of it: say so here, and offer the way out.
+  let paneScroll: PaneScroll = { inMode: false, scrolled: false };
+  const copyModeWatch = createCopyModeWatch(
+    { read: GetTerminalScroll, settle: SettleTerminalScroll },
+    (state) => { paneScroll = state; },
+  );
+  $: if (mounted && active && targetSessionId && typeof targetWindowIdx === 'number' && targetWindowIdx >= 0) {
+    copyModeWatch.show(targetSessionId, targetWindowIdx);
+  } else {
+    copyModeWatch.hide();
+  }
+
+  async function leaveCopyMode() {
+    const sid = currentTargetSessionId();
+    const idx = currentTargetWindowIdx();
+    if (!sid) return;
+    try {
+      paneScroll = await LeaveTerminalScroll(sid, idx);
+    } catch {
+      // Still in it: the next read says so.
+    }
+    focusActive();
+  }
 
   function currentTargetSessionId(): string | null {
     return sessionId === undefined ? get(selectedSessionId) : sessionId;
@@ -509,6 +535,7 @@
 
   onDestroy(async () => {
     mounted = false;
+    copyModeWatch.hide();
     poolChangeGeneration++;
     for (const timeout of pendingTimeouts) clearTimeout(timeout);
     pendingTimeouts.clear();
@@ -894,6 +921,14 @@
       <span>{$t('terminal.refreshing')}</span>
     </div>
   {/if}
+  {#if paneScroll.inMode}
+    <button class="copy-mode-badge" data-copy-mode-badge title={$t('terminal.copyMode.hint')}
+      on:mousedown|stopPropagation on:click={leaveCopyMode}>
+      <span class="copy-mode-dot"></span>
+      <span>{$t('terminal.copyMode.label')}</span>
+      <span class="copy-mode-leave">{$t('terminal.copyMode.leave')}</span>
+    </button>
+  {/if}
   {#if searchOpen}
     <div class="terminal-search">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
@@ -967,6 +1002,38 @@
   }
   .search-nav:hover { color: #e4e4e7; background: rgba(var(--accent-rgb), 0.15); }
   .search-nav.close { font-size: 15px; line-height: 1; }
+
+  /* Bottom right, out of the way of the search box: the pane behind it is frozen,
+     and this is the only thing on screen that says so. */
+  .copy-mode-badge {
+    position: absolute;
+    right: 14px;
+    bottom: 10px;
+    z-index: 6;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 10px;
+    border-radius: 8px;
+    border: 1px solid rgba(250, 204, 21, 0.45);
+    background: rgba(24, 24, 28, 0.92);
+    color: #fde68a;
+    font-size: 12px;
+    cursor: pointer;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+  }
+  .copy-mode-badge:hover { border-color: rgba(250, 204, 21, 0.8); }
+  .copy-mode-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #facc15;
+  }
+  .copy-mode-leave {
+    color: #e4e4e7;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
 
   /* Centred and non-interactive: it reports on the pane behind it rather than
      replacing it, so the stale content stays visible and clickable. */

@@ -1893,5 +1893,8 @@
   "mobile.guide.phone": "Install Tailscale on the phone from its app store and log in with the same account. Then press Pair a phone below and scan the QR code.",
   "mobile.guide.copy": "Copy",
   "mobile.guide.copied": "Copied",
-  "commands.backgroundFailed": "{name} failed (exit code {code}):"
+  "commands.backgroundFailed": "{name} failed (exit code {code}):",
+  "terminal.copyMode.label": "Scroll mode – output is paused",
+  "terminal.copyMode.leave": "Back to live",
+  "terminal.copyMode.hint": "tmux is showing a still picture of this tab while it is scrolled back. Press q, or click here, to see the live output again."
 }
