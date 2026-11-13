@@ -6,6 +6,60 @@ Entries describe what changed for someone using the app. Internal refactoring,
 test and CI work is left out unless it changed behaviour. Dates are release
 dates; the format follows [Keep a Changelog](https://keepachangelog.com).
 
+## 1.1.27 — 2026-11-13
+
+### Added
+
+- **Linked folders.** A tab can keep other folders beside its own. The first
+  button on the right of the view bar opens them in a window of their own, which
+  can be maximised: each folder's diff, its files, which can be edited there, and
+  its commit history. "Show in files" from that diff opens the file in the same
+  window. Unsaved edits are asked about before the window closes or switches
+  away. Folders on this computer only for now.
+- **A diff folder for every tab.** A tab working in a folder of its own can now
+  choose another folder for its diff too, where before only the session's tabs
+  could. The diff's folder menu also offers the tab's linked folders.
+- **A warning when one Claude conversation runs in two places.** Every restart of
+  the multiplexer used to resume such a conversation in both tabs, each writing
+  its own idea of the history. A warning stays until it is closed, a desktop
+  notification goes out when those are on, and each affected tab shows a ⚠ whose
+  tooltip names the other places. Not on Windows.
+- **A frozen-looking tab says why.** A pane in tmux's scroll mode shows a still
+  picture while its agent goes on working. Switching to a tab now ends that mode
+  when it is at the bottom, where it keeps nothing; scrolled back, a badge in the
+  corner says the output is paused, and clicking it returns to the live output.
+- **Groundwork for using the app from a phone**, over Tailscale: Settings →
+  Mobile access turns on a server that only listens on this computer, pairs a
+  phone by QR code, lists and revokes paired devices, and checks the Tailscale
+  setup step by step with a guide to copy commands from. `asmgr-desktop --serve`
+  runs it without a window. The phone itself only gets as far as pairing in this
+  version; the views to use it come next.
+- **Tab names on hover**, for when many tabs cut them short.
+
+### Changed
+
+- **A command run "in the background" opens no tab at all.** It runs hidden, on the
+  machine and in the folder of the tab it was picked from, in your own shell with
+  its startup files, and you hear of it only when it fails: a notice with its name,
+  exit code and last lines. It gets no input, so a question it asks fails it rather
+  than leaving it waiting, and a folder that no longer exists is a failure too, not
+  a reason to run in your home folder. On Windows it still gets a tab. Suggested
+  commands that start a server (npm dev and start, bootRun, docker compose up,
+  Tomcat) now run in a new tab, where they can be watched and stopped; so do
+  commands saved with the old "in background" setting.
+- **A terminal tab's output counts as activity** in the session list's ordering, so a
+  session worked in through its shells no longer sinks down the list.
+- **The buttons on the right of the view bar are icons**, with what they do in their
+  tooltips, and **dialog headers are lower**.
+
+### Fixed
+
+- **The app does much less at rest with many tabs.** The session list read every tab
+  from scratch every second; it now reads again only a tab whose screen can have
+  changed. Measured with few agents at work: the multiplexer went from 18% CPU to 1%.
+- **The status bar shows the new conversation after /resume** at once, instead of
+  after a restart of the app.
+
 ## 1.1.26 — 2026-11-02
 
 ### Added
